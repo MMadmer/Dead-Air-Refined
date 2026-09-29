@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Options -> Sound and Controls: subsection headers (ui_mm_grp_<group>, dead_air_x64_sound_options.ltx and dead_air_x64_controls_options.ltx) and the captions those files rename rows to. -->
+	<string id="ui_mm_grp_volume">
+		<text>Громкость</text>
+	</string>
+	<string id="ui_mm_grp_playback">
+		<text>Воспроизведение</text>
+	</string>
+	<string id="ui_mm_grp_subtitles">
+		<text>Субтитры</text>
+	</string>
+	<string id="ui_mm_grp_mouse">
+		<text>Мышь и прицеливание</text>
+	</string>
+	<string id="ui_mm_grp_keys">
+		<text>Клавиши</text>
+	</string>
+	<string id="ui_mm_da_volume_sounds">
+		<text>Звуки</text>
+	</string>
+	<string id="ui_mm_da_volume_music">
+		<text>Музыка</text>
+	</string>
+	<string id="ui_mm_da_eax">
+		<text>Эффекты окружения (EAX)</text>
+	</string>
+	<string id="ui_mm_da_subtitles">
+		<text>Субтитры к речи</text>
+	</string>
+	<string id="ui_mm_da_sound_captions">
+		<text>Подписи к звукам</text>
+	</string>
+	<string id="ui_mm_da_keyb_default">
+		<text>Стандартные клавиши</text>
+	</string>
+	<string id="ui_mm_da_kb_firemode_next">
+		<text>Смена режима стрельбы</text>
+	</string>
+	<string id="ui_mm_da_kb_reload">
+		<text>Перезарядка / протереть маску</text>
+	</string>
+	<!-- Options -> Sound: the hint of every row (st_da_x64_sound_hint_<row>). -->
+	<string id="st_da_x64_sound_hint_master_volume">
+		<text>Громкость всех звуков игры, кроме музыки.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_music_volume">
+		<text>Громкость музыки в меню и в игре.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_snd_device">
+		<text>Устройство, через которое играет звук. Меняется после перезапуска игры.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_eax">
+		<text>Эхо и отражения звука по месту: в помещении, в тоннеле и под открытым небом звук разный.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_dynamic_music">
+		<text>В перестрелке с людьми играет боевая музыка, обычная на это время стихает.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_cc_captioning">
+		<text>Субтитры к речи: без них, только к сюжетным репликам или ко всем репликам персонажей.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_cc_icc">
+		<text>Подписи к звукам, например к скрипу двери. Работают, когда включены субтитры к речи.</text>
+	</string>
+	<!-- Options -> Controls: the hint of every row (st_da_x64_controls_hint_<row>). -->
+	<string id="st_da_x64_controls_hint_mouse_sense">
+		<text>Скорость поворота камеры мышью.</text>
+	</string>
+	<string id="st_da_x64_controls_hint_invert_mouse">
+		<text>Движение мыши вперёд опускает взгляд, назад - поднимает.</text>
+	</string>
+	<string id="st_da_x64_controls_hint_aim_toggle">
+		<text>Прицеливание переключается нажатием, а не держится, пока зажата клавиша.</text>
+	</string>
+	<string id="st_da_x64_controls_hint_keyb_default">
+		<text>Сразу возвращает всем действиям стандартные клавиши, а ячейкам быстрого доступа - стандартные предметы.</text>
+	</string>
+	<!-- Options -> Controls, the key list: the hint of an action row is its caption id plus _hint. -->
+	<string id="kb_forward_hint">
+		<text>Идти вперёд, пока клавиша зажата.</text>
+	</string>
+	<string id="kb_backward_hint">
+		<text>Идти назад, пока клавиша зажата.</text>
+	</string>
+	<string id="kb_left_strafe_hint">
+		<text>Шагать влево, пока клавиша зажата. Прерывает бег.</text>
+	</string>
+	<string id="kb_right_strafe_hint">
+		<text>Шагать вправо, пока клавиша зажата. Прерывает бег.</text>
+	</string>
+	<string id="kb_jump_hint">
+		<text>Прыжок. Зажмите у уступа, чтобы забраться, и при жёстком приземлении, чтобы перекатиться.</text>
+	</string>
+	<string id="kb_crouch_hint">
+		<text>Присесть; вместе с «Шагом» - пригнуться ниже. Удержание или нажатие выбирается на вкладке «Игра».</text>
+	</string>
+	<string id="kb_always_run_hint">
+		<text>Идти медленно и тихо, пока клавиша зажата.</text>
+	</string>
+	<string id="kb_sprint_hint">
+		<text>Включить или выключить бег. Зажатая при прицеливании - задержать дыхание, чтобы прицел меньше качался.</text>
+	</string>
+	<string id="kb_left_lookout_hint">
+		<text>Выглянуть из-за укрытия влево, пока клавиша зажата.</text>
+	</string>
+	<string id="kb_right_lookout_hint">
+		<text>Выглянуть из-за укрытия вправо, пока клавиша зажата.</text>
+	</string>
+	<string id="kb_weapon2_hint">
+		<text>Достать или убрать оружие из основного слота.</text>
+	</string>
+	<string id="kb_weapon3_hint">
+		<text>Достать или убрать оружие из дополнительного слота.</text>
+	</string>
+	<string id="kb_weapon5_hint">
+		<text>Достать или убрать пистолет.</text>
+	</string>
+	<string id="kb_weapon1_hint">
+		<text>Достать или убрать нож.</text>
+	</string>
+	<string id="kb_weapon7_hint">
+		<text>Достать или убрать гранату или бинокль - что лежит в их общем слоте.</text>
+	</string>
+	<string id="kb_weapon6_hint">
+		<text>Достать или убрать болт - им проверяют путь на аномалии.</text>
+	</string>
+	<string id="kb_weapon4_hint">
+		<text>Быстрый удар ножом, не убирая оружие из рук. Нужен нож в слоте ножа.</text>
+	</string>
+	<string id="kb_wpn_next_hint">
+		<text>Перезарядить оружие следующим типом патронов из рюкзака; с гранатой в руке - сменить тип гранаты.</text>
+	</string>
+	<string id="kb_next_slot_hint">
+		<text>Взять оружие из следующего слота. Колесо мыши делает то же, если вы не целитесь.</text>
+	</string>
+	<string id="kb_prev_slot_hint">
+		<text>Взять оружие из предыдущего слота.</text>
+	</string>
+	<string id="kb_fire_hint">
+		<text>Выстрел или удар, бросок гранаты или болта. С пустыми руками - поднять предмет и нести его.</text>
+	</string>
+	<string id="kb_zoom_hint">
+		<text>Прицелиться, пока клавиша зажата. С ножом - сильный удар, с гранатой - замах для дальнего броска.</text>
+	</string>
+	<string id="kb_reload_hint">
+		<text>Перезарядить оружие или устранить задержку. Зажать на секунду - протереть стекло маски.</text>
+	</string>
+	<string id="kb_func_hint">
+		<text>Переключиться на подствольный гранатомёт и обратно, если он установлен.</text>
+	</string>
+	<string id="kb_firemode_next_hint">
+		<text>Переключить режим огня: одиночный, очередь, автоматический - какие есть у оружия.</text>
+	</string>
+	<string id="kb_inventory_hint">
+		<text>Открыть или закрыть рюкзак.</text>
+	</string>
+	<string id="kb_active_jobs_hint">
+		<text>Достать или убрать КПК.</text>
+	</string>
+	<string id="kb_torch_hint">
+		<text>Включить или выключить налобный фонарь. Сначала его нужно один раз применить из рюкзака.</text>
+	</string>
+	<string id="kb_detector_hint">
+		<text>Достать или убрать то, что в слоте детектора: детектор, фонарик, химсвет или зажигалку.</text>
+	</string>
+	<string id="kb_night_vision_hint">
+		<text>Включить или выключить ночное видение шлема или костюма, если оно в них есть.</text>
+	</string>
+	<string id="kb_quick_use_1_hint">
+		<text>Использовать предмет из ячейки быстрого доступа 1. Еду и лекарства кладут в ячейки в рюкзаке.</text>
+	</string>
+	<string id="kb_quick_use_2_hint">
+		<text>Использовать предмет из ячейки быстрого доступа 2. Еду и лекарства кладут в ячейки в рюкзаке.</text>
+	</string>
+	<string id="kb_quick_use_3_hint">
+		<text>Использовать предмет из ячейки быстрого доступа 3. Еду и лекарства кладут в ячейки в рюкзаке.</text>
+	</string>
+	<string id="kb_quick_use_4_hint">
+		<text>Использовать предмет из ячейки быстрого доступа 4. Еду и лекарства кладут в ячейки в рюкзаке.</text>
+	</string>
+	<string id="kb_map_hint">
+		<text>Открыть КПК сразу на карте.</text>
+	</string>
+	<string id="kb_custom1_hint">
+		<text>Напарники: по кругу агрессивный, пассивный и оборонительный режим боя.</text>
+	</string>
+	<string id="kb_custom2_hint">
+		<text>Напарники: ждать на месте или следовать за вами.</text>
+	</string>
+	<string id="kb_custom3_hint">
+		<text>Напарники: зажмите, наведите на место и отпустите - они займут эту позицию.</text>
+	</string>
+	<string id="kb_custom4_hint">
+		<text>Напарники: включить или выключить скрытное передвижение.</text>
+	</string>
+	<string id="kb_custom5_hint">
+		<text>Напарники: разрешить или запретить им подбирать вещи и обыскивать тела.</text>
+	</string>
+	<string id="kb_scores_hint">
+		<text>Показать текущие задания, пока клавиша зажата.</text>
+	</string>
+	<string id="kb_pause_hint">
+		<text>Поставить игру на паузу или снять с паузы.</text>
+	</string>
+	<string id="kb_use_hint">
+		<text>Подобрать предмет, поговорить, обыскать тело, открыть дверь. Зажатая - подбирать всё подряд.</text>
+	</string>
+	<string id="kb_screenshot_hint">
+		<text>Сохранить снимок экрана.</text>
+	</string>
+	<string id="ui_mm_save_game_hint">
+		<text>Быстрое сохранение. Если включены сохранения у костров - только рядом с горящим костром.</text>
+	</string>
+	<string id="ui_mm_load_game_hint">
+		<text>Загрузить последнее быстрое сохранение.</text>
+	</string>
+	<string id="kb_quit_hint">
+		<text>Закрыть открытое окно, а если окон нет - выйти в главное меню.</text>
+	</string>
+	<string id="kb_console_hint">
+		<text>Открыть консоль.</text>
+	</string>
+	<!-- The weather dialog of the main menu (atmosfear_options.script): its headers and row captions, and the hint of every row (st_da_x64_weather_hint_<row>). -->
+	<string id="ui_mm_grp_af_periods">
+		<text>Погода по локациям</text>
+	</string>
+	<string id="ui_mm_af_period_good">
+		<text>Хороший период</text>
+	</string>
+	<string id="ui_mm_af_period_bad">
+		<text>Плохой период</text>
+	</string>
+	<string id="ui_mm_af_enable">
+		<text>Включены</text>
+	</string>
+	<string id="ui_mm_af_freq">
+		<text>Частота</text>
+	</string>
+	<string id="ui_mm_af_task">
+		<text>Задание найти укрытие</text>
+	</string>
+	<string id="st_da_x64_weather_hint_enable_blowout">
+		<text>Выбросы: волна, убивающая всех под открытым небом. Пережить её можно только в укрытии.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_blowout_freq">
+		<text>Как часто случаются выбросы; точное время каждый раз выпадает случайно.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_blowout_task">
+		<text>Давать ли задание найти укрытие, когда приближается выброс.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_enable_psi_storm">
+		<text>Пси-штормы: пси-удары и разряды по открытой местности. Спасает от них только укрытие.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_psi_storm_freq">
+		<text>Как часто случаются пси-штормы; точное время каждый раз выпадает случайно.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_psi_storm_task">
+		<text>Давать ли задание найти укрытие, когда приближается пси-шторм.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_enable_fallout">
+		<text>Осадки: радиоактивный или кислотный дождь, который ранит всех вне укрытия.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_fallout_freq">
+		<text>Как часто выпадают радиоактивные и кислотные осадки.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_fallout_task">
+		<text>Давать ли задание найти укрытие, когда начинаются осадки.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_period">
+		<text>Погода на локации: слева - в хороший период, справа - в плохой. Периоды сменяют друг друга.</text>
+	</string>
+</string_table>

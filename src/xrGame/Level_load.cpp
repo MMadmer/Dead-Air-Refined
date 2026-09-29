@@ -44,6 +44,23 @@ bool is_liquid(const CDB::TRI& tri)
     return mtl && mtl->Flags.test(SGameMtl::flLiquid);
 }
 
+// Least |n.y| a liquid face may have and still count as a water SURFACE: 45 degrees. The liquid
+// material is on more than water sheets - the rookie village cellars on Cordon carry it on their
+// floors and on 2.3 m walls. A wall projects to a sliver in XZ, misses every texel centre and was
+// stamped by its centroid at its TOP vertex, so the field put a surface over the cellar a metre
+// above the eye of anyone standing in it. A waterfall's face is not a surface to stand under either.
+constexpr float water_surface_min_ny = 0.7071f;
+
+bool is_water_surface(const CDB::TRI& tri, const Fvector* verts)
+{
+    if (!is_liquid(tri))
+        return false;
+    Fvector n;
+    n.mknormal_non_normalized(verts[tri.verts[0]], verts[tri.verts[1]], verts[tri.verts[2]]);
+    const float len = n.magnitude();
+    return len > EPS_S && _abs(n.y) >= water_surface_min_ny * len;
+}
+
 // ---- The baked water field -------------------------------------------------------------------
 // Metres of channel A, the clamp DESIGN2 puts on the distance to the nearest bank. It doubles as
 // the distance transform's infinity: the chamfer sweep only ever grows away from its seeds, so
@@ -300,7 +317,7 @@ void bake_water_field(CObjectSpace& space)
     for (u32 i = 0; i < count; ++i)
     {
         const CDB::TRI& tri = tris[i];
-        if (!is_liquid(tri))
+        if (!is_water_surface(tri, verts))
             continue;
 
         const Fvector& va = verts[tri.verts[0]];
@@ -490,7 +507,7 @@ void measure_water_body(CObjectSpace& space)
     for (u32 i = 0; i < count; i += stride)
     {
         const CDB::TRI& tri = tris[i];
-        if (!is_liquid(tri))
+        if (!is_water_surface(tri, verts))
             continue;
         for (int k = 0; k < 3; ++k)
             extent.modify(verts[tri.verts[k]]);
@@ -509,7 +526,7 @@ void measure_water_body(CObjectSpace& space)
     for (u32 i = 0; i < count; i += stride)
     {
         const CDB::TRI& tri = tris[i];
-        if (!is_liquid(tri))
+        if (!is_water_surface(tri, verts))
             continue;
 
         Fvector c;

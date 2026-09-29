@@ -17,10 +17,12 @@ CUIEditKeyBind::CUIEditKeyBind(bool primary, bool isGamepadBinds /*= false*/)
     m_opt_backup_value = NULL;
     m_action = NULL;
     UI().Focus().RegisterFocusable(this);
+    pInput->RegisterKeyMapChangeWatcher(this, REG_PRIORITY_NORMAL);
 }
 
 CUIEditKeyBind::~CUIEditKeyBind()
 {
+    pInput->RemoveKeyMapChangeWatcher(this);
     UI().Focus().UnregisterFocusable(this);
 }
 

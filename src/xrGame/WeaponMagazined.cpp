@@ -1,6 +1,7 @@
 #include "pch_script.h"
 
 #include "WeaponMagazined.h"
+#include "da_ai.h"
 #include "Actor.h"
 #include "ParticlesObject.h"
 #include "Scope.h"
@@ -611,6 +612,13 @@ void CWeaponMagazined::state_Fire(float dt)
 
         if (!E->g_stateFire())
             StopShooting();
+        // [ai:core] hook: an AI stalker's round leaves only at a target in its sight or as suppression; the single
+        // shot a fire state always owes is cancelled too.
+        if (!da_ai_may_fire(*E))
+        {
+            m_bFireSingleShot = false;
+            StopShooting();
+        }
 
         if (m_iShotNum == 0)
         {
@@ -928,6 +936,8 @@ void CWeaponMagazined::OnShot()
         else if (m_sounds.FindSoundItem("sndReloadMisfire", false))
             PlaySound("sndReloadMisfire", get_LastFP());
     }
+
+    da_ai_sense_on_shot(*this);
 }
 
 void CWeaponMagazined::OnEmptyClick() { PlaySound("sndEmptyClick", get_LastFP()); }
@@ -1049,6 +1059,7 @@ void CWeaponMagazined::switch2_Reload()
     OnZoomOut();
 
     PlayReloadSound();
+    da_ai_sense_on_reload(*this);
     PlayAnimReload();
     SetPending(true);
 }

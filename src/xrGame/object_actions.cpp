@@ -19,6 +19,7 @@
 #include "stalker_animation_manager.h"
 #include "object_handler_planner.h"
 #include "object_handler_planner_impl.h"
+#include "da_ai_tactics.h"
 
 //////////////////////////////////////////////////////////////////////////
 // CObjectActionCommand
@@ -236,7 +237,7 @@ void CObjectActionFire::initialize()
     VERIFY(object().inventory().ActiveItem());
     VERIFY(object().inventory().ActiveItem()->object().ID() == m_item->object().ID());
 
-    if (!m_object->can_kill_member())
+    if (!m_object->can_kill_member() && DaAi::Tactics::fire_continues(*m_object))
         object().inventory().Action(kWPN_FIRE, CMD_START);
     else
         object().inventory().Action(kWPN_FIRE, CMD_STOP);
@@ -250,7 +251,8 @@ void CObjectActionFire::execute()
     VERIFY(object().inventory().ActiveItem());
     VERIFY(object().inventory().ActiveItem()->object().ID() == m_item->object().ID());
 
-    if (!m_object->can_kill_member())
+    // A queue continues only while the fire gate allows a shot (target seen and identified, or honest suppression).
+    if (!m_object->can_kill_member() && DaAi::Tactics::fire_continues(*m_object))
     {
         CWeapon* weapon = smart_cast<CWeapon*>(object().inventory().ActiveItem());
         if (!weapon || (weapon->GetState() != CWeapon::eFire))
@@ -284,7 +286,7 @@ void CObjectActionFireNoReload::initialize()
     VERIFY(object().inventory().ActiveItem());
     VERIFY(object().inventory().ActiveItem()->object().ID() == m_item->object().ID());
 
-    if (!m_object->can_kill_member())
+    if (!m_object->can_kill_member() && DaAi::Tactics::fire_continues(*m_object))
         object().inventory().Action(kWPN_FIRE, CMD_START);
     else
         object().inventory().Action(kWPN_FIRE, CMD_STOP);
@@ -306,7 +308,7 @@ void CObjectActionFireNoReload::execute()
 
     if (m_fired)
     {
-        if (!m_object->can_kill_member())
+        if (!m_object->can_kill_member() && DaAi::Tactics::fire_continues(*m_object))
             return;
 
         object().inventory().Action(kWPN_FIRE, CMD_STOP);
@@ -314,7 +316,7 @@ void CObjectActionFireNoReload::execute()
         return;
     }
 
-    if (m_object->can_kill_member())
+    if (m_object->can_kill_member() || !DaAi::Tactics::fire_continues(*m_object))
         return;
 
     CWeapon* weapon = smart_cast<CWeapon*>(object().inventory().ActiveItem());

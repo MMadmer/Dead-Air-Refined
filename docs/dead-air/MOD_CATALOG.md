@@ -417,8 +417,9 @@ At every start, before the first script runs, XMS decides once for the whole pro
 Protection is a switch that **stays on once it is on**:
 
 - it turns on by itself at the first start with an enabled catalog module - installed
-  through the Mod Browser, or listed in the last verified catalog (`[mods]`, not
-  `[withdrawn]`) under its own repository, however it got onto the disk;
+  through the Mod Browser (or installed by hand and found to be a release byte for byte,
+  14.1), or listed in the last verified catalog (`[mods]`, not `[withdrawn]`) under its own
+  repository, however it got onto the disk;
 - the player can turn it on at any time in the Mods window;
 - only the player turns it off, in the Mods window, after a warning, and only while no
   catalog module is enabled.
@@ -448,7 +449,7 @@ shader `.s` files are Lua too).
 | Guarded | |
 |---|---|
 | `load`, `loadstring`, `loadfile`, `dofile`, `require` | text chunks only - never bytecode |
-| `marshal.encode/decode/clone` | no functions: a function travels as bytecode |
+| `marshal.encode/decode/clone` | no functions: a function travels as bytecode (a table's `__persist` always hands one over); a userdata's `__persist` that returns Lua source instead, as the game's `CTime` does, is text and passes - every save holds CTimes |
 | `io.open`, `io.lines`, `io.input`, `io.output`, `os.remove`, `os.rename`, `lfs.*` | the path rules of 9.3 |
 | `getFS()`: `w_open`, `file_copy`, `file_rename`, `file_delete`, `dir_delete`, `append_path` | the path rules of 9.3 |
 | `ini_file:save`, `ini_file:save_as` | the path rules of 9.3 |
@@ -882,8 +883,18 @@ Browser". An installed copy whose repository matches keeps working, and `[revoke
 switches it off at the next start, with the revocation's own text. A copy the browser
 installed takes no more updates (the catalog checks no release of it) and its status line
 says so: "Withdrawn from the Mod Browser by its author: no more updates". A copy installed
-by hand is no catalog module any more: it updates from its repository like any module
-outside the catalog, with the disclaimer. `xms_catalog` lists the withdrawn ids too.
+by hand that is byte for byte a release of the module (14.1) is taken for a browser
+installation and gets exactly that; any other copy installed by hand is no catalog module any
+more: it updates from its repository like any module outside the catalog, with the
+disclaimer. `xms_catalog` lists the withdrawn ids too.
+
+**The same id is not the same module.** Whatever the browser knows of a listed id - the
+"installed" badge, the card, the rating and the reviews, writing a review - it attaches to
+an installed module only when that module is the catalog's: installed through the browser, or
+naming the listed repository in its own `[update] github`. Another author's module that
+happens to carry a listed id stays theirs: the browser offers the listed one as not installed,
+and its installation is refused while the other folder is there ("another module with this id
+is installed").
 
 **Disclaimer.** Every installation and every update started from the Mods window - Install,
 Update, Update all - first asks for confirmation with the disclaimer of the author of Dead
@@ -891,6 +902,71 @@ Air: Refined: modules are made by third parties, the author of the game is not r
 for them, the safety measures described here are taken but give no absolute guarantee.
 Cancel is the default. The browser view carries the same sentence at its foot. The console
 (`xms_update`) asks nothing and writes the disclaimer to the log.
+
+### 14.1 A module installed by hand
+
+A player may unpack a release package into the game folder themselves (MOD_UPDATES 2.3: the
+package is the manual installation) or copy a module over from another computer. When such a
+module is **byte for byte** a release the catalog stands behind, the game records it exactly as
+the browser records its own installation - the same `[installed]` line of `state.ltx` - and from
+then on it is one: updates held to the catalog's rules, the "installed" state, removal, the
+withdrawal and revocation notices, protected mode.
+
+**When it is looked at.** During the update check (MOD_UPDATES 3.1), for every module that is
+not a browser installation yet and whose own `[update] github` is the repository `[mods]` or
+`[withdrawn]` names for its id. A module with a listed id and another repository is another
+author's and is never looked at. Without an accepted catalog nothing is decided; the next
+catalog the game accepts - the browser loads it when it is first opened, or `xms_catalog
+refresh` - sends the modules that were not held against it through the check again.
+
+**Byte for byte.** The files the game would see in the folder - every file, walked the way XMS
+walks it - against the file index of the release: the same paths (ASCII case ignored, as on
+Windows), sizes and SHA-256, nothing missing and nothing besides. `Thumbs.db` and `desktop.ini`,
+Explorer's own, do not count; anything else XMS walks past - a dot-name such as `.git`, a
+hidden or system file, a link - keeps the folder from being a release copy, because a catalog
+update replaces the folder whole and would take it along. The comparison is one SHA-256 over
+the sorted lines `<path in ASCII lower case>\t<size>\t<sha256>\n`, made the same way for the
+folder and for the index. It never looks at the packages: a package's bytes carry its entries'
+modification times and a descriptor's ECDSA signature is different at every packaging, so
+neither says anything about content - the index's per-file SHA-256 does. XFined Editor writes
+no time, random value or path of the author's machine into a module's files, so an unchanged
+project exports the same files every time; generated files that read the linked game (a mode's
+menu layout, a baked spawn) follow that game, and a copy exported against another installation
+may honestly differ.
+
+**Which release.** The one of the installed `mod.ltx` version. The same version as the latest
+release is the latest release; an older one is fetched by its tag, `v<version>` - or
+`v<version>-r<N>` (2 to 5), which XFined Editor uses when a version goes out again after a
+deletion (MOD_UPDATES 2.5) - from `https://github.com/<owner>/<repo>/releases/download/<tag>/`,
+the descriptor first and the index it names. No GitHub API is asked. A version above the latest
+release, below the lowest listed one or with no release under those tags is no release of the
+catalog.
+
+**What the catalog must say.** The descriptor carries a valid signature by the author key the
+catalog names for the module - that signature is what ties the index, and every file through
+it, to the catalog. Then, for the release found:
+
+| The release is | Result |
+|---|---|
+| revoked or held (`[revoked]`, its version or `*`, or its key) | not taken; the start disables the module with the revocation's text, as it does a browser installation |
+| the current card's, and VirusTotal's verdict on it is `block` | not taken |
+| against the path or content policy (section 8), or its card names another `mod.ltx` | not taken |
+| withdrawn by its author (`[withdrawn]`) | taken - and then says "Withdrawn from the Mod Browser by its author: no more updates", as a browser installation does |
+| otherwise | taken |
+
+**What is not taken stays untouched.** A module whose files are no release - edited, holding
+files of the player's, the author's own build of an unpublished version - stays a module
+installed by hand; nothing in it is changed or deleted. The Mods window says "Installed by
+hand; its files differ from every release in the Mod Browser" where it would say "up to date",
+and such a copy is never offered its own version again as the author's fix (MOD_UPDATES 3.1):
+what differs is the player's. A higher version is offered as usual.
+
+**The record.** `modules\.catalog\local.txt`, the game's own (no script writes under
+`modules\`, 9.3): the SHA-256 of every file of the modules looked at, reused while a file's size
+and write time hold, so a check reads the folder's listing and hashes only what changed; the
+verdict on a module that was not taken, kept while its files, the accepted serial and the latest
+release's index stay the same, so nothing is fetched again for it; and a line per adoption
+(`a <id> <version> <index sha256> <date>`). Deleting the file costs one more hashing.
 
 ## 15. QA
 
@@ -909,6 +985,17 @@ Cancel is the default. The browser view carries the same sentence at its foot. T
   id in both `[mods]` and `[withdrawn]` (refused), and two browser-installed modules
   withdrawn later - one keeps working without updates and says so, the other, revoked after
   its withdrawal, is switched off.
+- Game, modules installed by hand (14.1): `tools\qa\mods\Run-ModsQa.ps1 -Scenario Adopt
+  [-RealRelease <folder>]` (fixture: `catalog_qa.py adopt`). No catalog cached at the start, so
+  the first check takes nothing; the browser view loads the catalog and the modules are held
+  against it: an older release copied exactly (Thumbs.db beside it) is taken through its tag and
+  offered the update, a copy of the latest one is taken and up to date, a withdrawn module's copy
+  is taken and refused its update, and not taken are an edited copy, one with a file of the
+  player's, one with `.git`, an unpublished version, a release signed by another key, one below
+  the lowest listed version and a held one; another author's module under a listed id is never
+  looked at and the browser does not call it installed. `-RealRelease` adds a real published
+  module: `tags\<tag>\` with the assets of each release (the public catalog's
+  `darf-overnight-delivery`), unpacked from its package and held against its real signature.
 - Editor: `tools\qa\test_mod_catalog.py` - the author key, the signed descriptor, the
   thumbnail, the submission issue and the catalog's verdict against the GitHub mock,
   VirusTotal against its mock (a package without a report is a `required` finding), the

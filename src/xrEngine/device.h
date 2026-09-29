@@ -62,6 +62,13 @@ public:
     // Rendering resolution
     u32 dwWidth{};
     u32 dwHeight{};
+    // The size the 3D scene is rendered at before an upscaler brings it to dwWidth x dwHeight
+    // (the renderer sets it before its targets are created); equal to it without an upscaler.
+    u32 dwRenderWidth{};
+    u32 dwRenderHeight{};
+    // Frames shown per frame rendered: 2..4 while frame generation runs, else 1 (the renderer
+    // sets it). The FPS limiter paces rendered frames, so its limit keeps counting shown ones.
+    u32 dwFramesPerRender{ 1 };
 
     float fWidth_2{};
     float fHeight_2{};

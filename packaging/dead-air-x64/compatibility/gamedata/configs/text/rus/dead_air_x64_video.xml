@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Subsection headers of the video tab (dead_air_x64_video_options.ltx, [groups]). -->
+	<string id="ui_mm_grp_screen">
+		<text>Экран</text>
+	</string>
+	<string id="ui_mm_grp_quality">
+		<text>Качество</text>
+	</string>
+	<string id="ui_mm_grp_aa">
+		<text>Сглаживание и масштабирование</text>
+	</string>
+	<string id="ui_mm_grp_rtx">
+		<text>RTX</text>
+	</string>
+	<string id="ui_mm_grp_image">
+		<text>Изображение</text>
+	</string>
+	<string id="ui_mm_grp_effects">
+		<text>Эффекты</text>
+	</string>
+	<string id="ui_mm_grp_color">
+		<text>Цветокоррекция</text>
+	</string>
+	<!-- Captions of the video rows that have no stock string (dead_air_x64_video_options.ltx, [captions]). -->
+	<string id="ui_mm_da_renderer">
+		<text>Рендер</text>
+	</string>
+	<string id="ui_mm_da_aa">
+		<text>Сглаживание</text>
+	</string>
+	<string id="ui_mm_da_fsr">
+		<text>AMD FSR</text>
+	</string>
+	<string id="ui_mm_da_dlss">
+		<text>NVIDIA DLSS</text>
+	</string>
+	<string id="ui_mm_da_framegen">
+		<text>Генерация кадров</text>
+	</string>
+	<string id="ui_mm_da_upscale_sharpness">
+		<text>Резкость FSR/DLSS</text>
+	</string>
+	<string id="ui_mm_da_async_compute">
+		<text>Асинхронные вычисления</text>
+	</string>
+	<string id="ui_mm_da_dstorage">
+		<text>Загрузка текстур через DirectStorage</text>
+	</string>
+	<string id="ui_mm_da_rt_reflections">
+		<text>Отражения (трассировка лучей)</text>
+	</string>
+	<string id="ui_mm_da_rt_shadows">
+		<text>Тени от солнца (трассировка лучей)</text>
+	</string>
+	<string id="ui_mm_da_rtao">
+		<text>Затенение окружения (трассировка лучей)</text>
+	</string>
+	<string id="ui_mm_da_rt_quality">
+		<text>Качество трассировки</text>
+	</string>
+	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
+	<string id="st_opt_renderer_r2">
+		<text>DirectX 10 (R2)</text>
+	</string>
+	<string id="st_opt_renderer_r2.5">
+		<text>DirectX 10 (R2.5)</text>
+	</string>
+	<string id="st_opt_renderer_r3">
+		<text>DirectX 10 (R3)</text>
+	</string>
+	<string id="st_opt_renderer_r4">
+		<text>DirectX 11</text>
+	</string>
+	<string id="st_opt_renderer_r5">
+		<text>DirectX 12</text>
+	</string>
+	<string id="st_opt_st_aa_off">
+		<text>Отключено</text>
+	</string>
+	<string id="st_opt_st_aa_fxaa">
+		<text>FXAA</text>
+	</string>
+	<string id="st_opt_st_aa_smaa">
+		<text>SMAA</text>
+	</string>
+	<string id="st_opt_st_aa_taa">
+		<text>TAA</text>
+	</string>
+	<string id="st_opt_st_fsr_off">
+		<text>Отключено</text>
+	</string>
+	<string id="st_opt_st_fsr_native">
+		<text>Нативное (AA)</text>
+	</string>
+	<string id="st_opt_st_fsr_quality">
+		<text>Качество</text>
+	</string>
+	<string id="st_opt_st_fsr_balanced">
+		<text>Баланс</text>
+	</string>
+	<string id="st_opt_st_fsr_performance">
+		<text>Производительность</text>
+	</string>
+	<string id="st_opt_st_fsr_ultra_performance">
+		<text>Ультрапроизводительность</text>
+	</string>
+	<string id="st_opt_st_dlss_off">
+		<text>Отключено</text>
+	</string>
+	<string id="st_opt_st_dlss_dlaa">
+		<text>DLAA</text>
+	</string>
+	<string id="st_opt_st_dlss_quality">
+		<text>Качество</text>
+	</string>
+	<string id="st_opt_st_dlss_balanced">
+		<text>Баланс</text>
+	</string>
+	<string id="st_opt_st_dlss_performance">
+		<text>Производительность</text>
+	</string>
+	<string id="st_opt_st_dlss_ultra_performance">
+		<text>Ультрапроизводительность</text>
+	</string>
+	<string id="st_opt_st_fg_off">
+		<text>Отключено</text>
+	</string>
+	<string id="st_opt_st_fg_fsr">
+		<text>AMD FSR</text>
+	</string>
+	<string id="st_opt_st_fg_dlss">
+		<text>NVIDIA DLSS 2x</text>
+	</string>
+	<string id="st_opt_st_fg_dlss_x3">
+		<text>NVIDIA DLSS 3x</text>
+	</string>
+	<string id="st_opt_st_fg_dlss_x4">
+		<text>NVIDIA DLSS 4x</text>
+	</string>
+	<string id="st_opt_st_async_off">
+		<text>Выкл</text>
+	</string>
+	<string id="st_opt_st_async_auto">
+		<text>Авто</text>
+	</string>
+	<string id="st_opt_st_async_on">
+		<text>Вкл</text>
+	</string>
+	<string id="st_opt_st_rt_low">
+		<text>Низкое</text>
+	</string>
+	<string id="st_opt_st_rt_medium">
+		<text>Среднее</text>
+	</string>
+	<string id="st_opt_st_rt_high">
+		<text>Высокое</text>
+	</string>
+	<!-- Hints of the video tab: st_da_x64_video_hint_<row>, and the reasons a row is greyed out. -->
+	<string id="st_da_x64_video_hint_renderer">
+		<text>DirectX 11 или DirectX 12: картинка и эффекты те же. Генерация кадров есть только на DirectX 12. Меняется после перезапуска игры.</text>
+	</string>
+	<string id="st_da_x64_video_hint_renderer_no_dx12">
+		<text>Видеокарта или драйвер не поддерживают DirectX 12 в нужном игре объёме, поэтому доступен только DirectX 11.</text>
+	</string>
+	<string id="st_da_x64_video_hint_resolution">
+		<text>Разрешение экрана. С AMD FSR или NVIDIA DLSS игра рисует кадр в меньшем разрешении и увеличивает его до этого.</text>
+	</string>
+	<string id="st_da_x64_video_hint_window_mode">
+		<text>Оконный, полноэкранный без рамки или полноэкранный режим.</text>
+	</string>
+	<string id="st_da_x64_video_hint_fps_limit">
+		<text>Потолок частоты кадров. Разгружает видеокарту, когда больше кадров не нужно.</text>
+	</string>
+	<string id="st_da_x64_video_hint_vsync">
+		<text>Подстраивает кадры под частоту монитора: убирает разрывы картинки, но добавляет небольшую задержку управления.</text>
+	</string>
+	<string id="st_da_x64_video_hint_preset">
+		<text>Качество графики целиком: дальности прорисовки и теней, трава, отражения и эффекты. Сглаживание выбирается отдельно. Чем выше, тем тяжелее для видеокарты. На DirectX 12 два старших пресета затеняют ровные и тёмные участки в пониженном разрешении.</text>
+	</string>
+	<string id="st_da_x64_video_hint_level_texture_unload">
+		<text>Освобождает видеопамять и оперативную память после выхода с локации. Может немного увеличить время следующей загрузки.</text>
+	</string>
+	<string id="st_da_x64_video_hint_aa">
+		<text>Сглаживание лесенок на краях. FXAA - самое лёгкое и мягкое, SMAA - чётче, TAA - самое гладкое: собирает картинку из нескольких кадров, в движении чуть мягче.</text>
+	</string>
+	<string id="st_da_x64_video_hint_aa_upscaler">
+		<text>Сглаживание сейчас делает AMD FSR или NVIDIA DLSS. Чтобы выбрать его здесь, отключите их.</text>
+	</string>
+	<string id="st_da_x64_video_hint_fsr">
+		<text>AMD FSR рисует кадр в меньшем разрешении и восстанавливает его до экранного: больше кадров в секунду ценой части чёткости. «Нативное (AA)» - без уменьшения, только сглаживание. Работает на любой видеокарте. Включается вместо NVIDIA DLSS.</text>
+	</string>
+	<string id="st_da_x64_video_hint_dlss">
+		<text>NVIDIA DLSS делает то же, что AMD FSR, но нейросетью видеокарт GeForce RTX. DLAA - без уменьшения, только сглаживание. Включается вместо AMD FSR.</text>
+	</string>
+	<string id="st_da_x64_video_hint_framegen">
+		<text>Видеокарта дорисовывает промежуточные кадры между настоящими: движение плавнее, но управление чуть запаздывает. Лучше всего работает от 60 кадров в секунду. Только на DirectX 12; в списке то, что умеет видеокарта.</text>
+	</string>
+	<string id="st_da_x64_video_hint_framegen_hags">
+		<text>Видеокарта дорисовывает промежуточные кадры между настоящими: движение плавнее, но управление чуть запаздывает. Лучше всего работает от 60 кадров в секунду. Только на DirectX 12; в списке то, что умеет видеокарта. Если видеокарта GeForce RTX 40 или новее, для NVIDIA DLSS включите в Windows «Планирование графического процессора с аппаратным ускорением» (Параметры - Система - Дисплей - Графика) и перезагрузите компьютер.</text>
+	</string>
+	<string id="st_da_x64_video_hint_framegen_dx11">
+		<text>Генерация кадров работает только на DirectX 12: выберите его в строке «Рендер» и перезапустите игру.</text>
+	</string>
+	<string id="st_da_x64_video_hint_framegen_unsupported">
+		<text>Видеокарта или драйвер не поддерживают генерацию кадров.</text>
+	</string>
+	<string id="st_da_x64_video_hint_upscale_sharpness">
+		<text>Резкость картинки после AMD FSR или NVIDIA DLSS: 0 - без дополнительной резкости.</text>
+	</string>
+	<string id="st_da_x64_video_hint_upscale_sharpness_off">
+		<text>Резкость для AMD FSR и NVIDIA DLSS: работает, только когда одно из них включено.</text>
+	</string>
+	<string id="st_da_x64_video_hint_async_compute">
+		<text>DirectX 12: затенение GTAO и рябь воды считаются параллельно с тенями и G-буфером. Картинка та же, кадр короче там, где видеокарта от этого выигрывает; «Авто» включает только там (на картах NVIDIA по замерам медленнее, там выключено).</text>
+	</string>
+	<string id="st_da_x64_video_hint_async_compute_dx11">
+		<text>Только для DirectX 12.</text>
+	</string>
+	<string id="st_da_x64_video_hint_async_compute_unsupported">
+		<text>Видеокарта или драйвер не дают отдельную очередь вычислений.</text>
+	</string>
+	<string id="st_da_x64_video_hint_dstorage">
+		<text>DirectX 12: текстуры уровня загружаются через Microsoft DirectStorage, поэтому уровни грузятся быстрее. Картинка та же. Действует со следующей загрузки.</text>
+	</string>
+	<string id="st_da_x64_video_hint_dstorage_dx11">
+		<text>DirectStorage работает только на DirectX 12: выберите его в строке «Рендер» и перезапустите игру.</text>
+	</string>
+	<string id="st_da_x64_video_hint_dstorage_unavailable">
+		<text>DirectStorage не запустился на этой системе (нет его файлов или Windows отказала): текстуры загружаются обычным способом.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rt_reflections">
+		<text>Вода и лужи отражают мир, просчитанный аппаратной трассировкой лучей: в том числе то, что за краем экрана или скрыто, до дальнего берега.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rt_shadows">
+		<text>Тени от зданий, рельефа и других неподвижных объектов считаются трассировкой лучей: точные на любом расстоянии, с мягкими краями. Деревья, трава, персонажи и движущиеся предметы сохраняют карты теней, поэтому их тени по-прежнему качаются на ветру.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rtao">
+		<text>Затенение окружения трассировкой лучей вместо экранного: контактные тени и от того, чего нет на экране.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rt_quality">
+		<text>Разрешение и дальность эффектов трассировки. Низкое: жёсткие тени, затенение в половинном разрешении, короткие отражения. Высокое: полное разрешение и самые дальние отражения.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rt_dx11">
+		<text>Трассировке лучей нужен DirectX 12: выберите его в строке «Рендер» и перезапустите игру.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rt_dx11_nohw">
+		<text>Трассировке лучей нужны DirectX 12 и видеокарта с аппаратной трассировкой лучей.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rt_unsupported">
+		<text>Видеокарта или драйвер не поддерживают аппаратную трассировку лучей (DXR 1.1): нужны GeForce RTX, Radeon RX 6000 и новее, Intel Arc.</text>
+	</string>
+	<string id="st_da_x64_video_hint_rt_quality_off">
+		<text>Качество эффектов трассировки: действует, только когда включён хотя бы один из них.</text>
+	</string>
+	<string id="st_da_x64_video_hint_gamma">
+		<text>Гамма изображения: делает средние тона светлее или темнее.</text>
+	</string>
+	<string id="st_da_x64_video_hint_contrast">
+		<text>Контраст изображения: разница между светлыми и тёмными участками.</text>
+	</string>
+	<string id="st_da_x64_video_hint_brightness">
+		<text>Яркость изображения: вся картинка светлее или темнее.</text>
+	</string>
+	<string id="st_da_x64_video_hint_fov">
+		<text>Угол обзора камеры, в градусах.</text>
+	</string>
+	<string id="st_da_x64_video_hint_hud_fov">
+		<text>Угол обзора рук и оружия: меньше - оружие крупнее и ближе, больше - мельче.</text>
+	</string>
+	<string id="st_da_x64_video_hint_detail_height">
+		<text>Высота травы. Меняется после перезагрузки уровня.</text>
+	</string>
+	<string id="st_da_x64_video_hint_sun_shafts">
+		<text>Яркость экранных солнечных лучей. На двух самых низких пресетах этих лучей нет.</text>
+	</string>
+	<string id="st_da_x64_video_hint_sharp">
+		<text>Резкость мелких деталей (LumaSharpen). 0 - выключено.</text>
+	</string>
+	<string id="st_da_x64_video_hint_bloom">
+		<text>Сила свечения вокруг ярких источников света.</text>
+	</string>
+	<string id="st_da_x64_video_hint_aberration">
+		<text>Цветная кайма к краям кадра, как у объектива. В центре кадра эффекта нет.</text>
+	</string>
+	<string id="st_da_x64_video_hint_dof">
+		<text>Размывает дальний план: у горизонта, при перезарядке и при прицеливании без оптики.</text>
+	</string>
+	<string id="st_da_x64_video_hint_technicolor">
+		<text>Фильтр Technicolor: плёночная палитра для всей картинки.</text>
+	</string>
+	<string id="st_da_x64_video_hint_vignette">
+		<text>Плёночное зерно поверх картинки, заметнее на светлых участках.</text>
+	</string>
+	<string id="st_da_x64_video_hint_color_r">
+		<text>Доля красного в картинке: 0.50 - нейтрально, выше - больше красного, ниже - меньше.</text>
+	</string>
+	<string id="st_da_x64_video_hint_color_g">
+		<text>Доля зелёного в картинке: 0.50 - нейтрально, выше - больше зелёного, ниже - меньше.</text>
+	</string>
+	<string id="st_da_x64_video_hint_color_b">
+		<text>Доля синего в картинке: 0.50 - нейтрально, выше - больше синего, ниже - меньше.</text>
+	</string>
+	<string id="st_da_x64_video_hint_vibrance">
+		<text>Насыщенность цветов: 0 - без изменений, выше - сочнее, ниже - блёклее.</text>
+	</string>
+</string_table>

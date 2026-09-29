@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- A sleep the forecast says would be the last is not slept (dead_air_x64_sleep.script); the
+	     lead-in names what would do it: radiation, bleeding, hunger, or the fields around. -->
+	<string id="st_da_x64_sleep_lethal">
+		<text>Если сейчас усну, могу не проснуться.</text>
+	</string>
+	<string id="st_da_x64_sleep_lethal_radiation">
+		<text>Радиация жжёт изнутри. Если сейчас усну, могу не проснуться.</text>
+	</string>
+	<string id="st_da_x64_sleep_lethal_bleeding">
+		<text>Кровь не унимается. Если сейчас усну, могу не проснуться.</text>
+	</string>
+	<string id="st_da_x64_sleep_lethal_hunger">
+		<text>Голод выжал все силы. Если сейчас усну, могу не проснуться.</text>
+	</string>
+	<string id="st_da_x64_sleep_lethal_zone">
+		<text>Это место давит на голову. Если сейчас усну, могу не проснуться.</text>
+	</string>
+</string_table>

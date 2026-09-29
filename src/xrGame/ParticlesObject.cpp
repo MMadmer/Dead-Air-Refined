@@ -137,6 +137,7 @@ void CParticlesObject::Play(bool bHudMode)
     if (GEnv.isDedicatedServer)
         return;
 
+    ScopeLock lock{ &render_lock };
     IParticleCustom* V = smart_cast<IParticleCustom*>(renderable.visual);
     VERIFY(V);
     if (!V)
@@ -156,6 +157,7 @@ void CParticlesObject::play_at_pos(const Fvector& pos, BOOL xform)
     if (GEnv.isDedicatedServer)
         return;
 
+    ScopeLock lock{ &render_lock };
     IParticleCustom* V = smart_cast<IParticleCustom*>(renderable.visual);
     VERIFY(V);
     if (!V)
@@ -175,6 +177,7 @@ void CParticlesObject::Stop(BOOL bDefferedStop)
     if (GEnv.isDedicatedServer)
         return;
 
+    ScopeLock lock{ &render_lock };
     IParticleCustom* V = smart_cast<IParticleCustom*>(renderable.visual);
     VERIFY(V);
     if (!V)
@@ -193,9 +196,12 @@ void CParticlesObject::shedule_Update(u32 _dt)
     // Update
     if (m_bDead)
         return;
+    ScopeLock lock{ &render_lock };
     u32 dt = Device.dwTimeGlobal - dwLastTime;
     if (dt)
     {
+        // Claimed before the update, see renderable_Render.
+        dwLastTime = Device.dwTimeGlobal;
         if (0)
         { //.psDeviceFlags.test(mtParticles))	{    //. AlexMX comment this line// NO UNCOMMENT - DON'T WORK PROPERLY
             mt_dt = dt;
@@ -211,7 +217,6 @@ void CParticlesObject::shedule_Update(u32 _dt)
                 return;
             V->OnFrame(dt);
         }
-        dwLastTime = Device.dwTimeGlobal;
     }
     UpdateSpatial();
 }
@@ -222,6 +227,7 @@ void CParticlesObject::PerformAllTheWork(u32 _dt)
         return;
 
     // Update
+    ScopeLock lock{ &render_lock };
     u32 dt = Device.dwTimeGlobal - dwLastTime;
     if (dt)
     {
@@ -229,8 +235,9 @@ void CParticlesObject::PerformAllTheWork(u32 _dt)
         VERIFY(V);
         if (!V)
             return;
-        V->OnFrame(dt);
+        // Claimed before the update, see renderable_Render.
         dwLastTime = Device.dwTimeGlobal;
+        V->OnFrame(dt);
     }
     UpdateSpatial();
 }
@@ -242,6 +249,7 @@ void CParticlesObject::PerformAllTheWork_mt()
 
     if (0 == mt_dt)
         return; //???
+    ScopeLock lock{ &render_lock };
     IParticleCustom* V = smart_cast<IParticleCustom*>(renderable.visual);
     VERIFY(V);
     if (!V)
@@ -255,6 +263,7 @@ void CParticlesObject::SetXFORM(const Fmatrix& m)
     if (GEnv.isDedicatedServer)
         return;
 
+    ScopeLock lock{ &render_lock };
     IParticleCustom* V = smart_cast<IParticleCustom*>(renderable.visual);
     VERIFY(V);
     if (!V)
@@ -269,6 +278,7 @@ void CParticlesObject::UpdateParent(const Fmatrix& m, const Fvector& vel)
     if (GEnv.isDedicatedServer)
         return;
 
+    ScopeLock lock{ &render_lock };
     IParticleCustom* V = smart_cast<IParticleCustom*>(renderable.visual);
     VERIFY(V);
     if (!V)
@@ -308,6 +318,8 @@ void CParticlesObject::renderable_Render(u32 context_id, IRenderable* root)
     // OnFrame pushes and pops its child vectors while another task walks them in add_Visual,
     // and the same stopped child gets handed to model_Delete twice - the reported crashes in
     // CParticleManager::Update (garbage action list) and CModelPool::DeleteQueue (double free).
+    // Every other way in (Play, Stop, the transform) takes the same lock: effects are created,
+    // started and stopped from task workers too (see CPS_Instance) while the graphs are built.
     ScopeLock lock{ &render_lock };
 
     if (!renderable.visual)
@@ -319,8 +331,10 @@ void CParticlesObject::renderable_Render(u32 context_id, IRenderable* root)
         VERIFY(V);
         if (!V)
             return;
-        V->OnFrame(dt);
+        // Claimed before the update: a render pass that reaches this object again in the same
+        // frame only adds the visual.
         dwLastTime = Device.dwTimeGlobal;
+        V->OnFrame(dt);
     }
 
     GEnv.Render->add_Visual(context_id, root, renderable.visual, renderable.xform);

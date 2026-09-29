@@ -352,6 +352,10 @@ luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_
         .def("set_actor_position", (void (CScriptGameObject::*)(Fvector))&CScriptGameObject::SetActorPosition)
         .def("set_actor_position", (void (CScriptGameObject::*)(Fvector, bool))&CScriptGameObject::SetActorPosition)
         .def("set_actor_position", (void (CScriptGameObject::*)(Fvector, bool, bool))&CScriptGameObject::SetActorPosition)
+        // The form scripts written for the original engine use: the position plus level and game
+        // vertex ids, which that engine ignored. With several overloads luabind calls only an exact
+        // match and drops anything else without a word, so this form has to be bound as well.
+        .def("set_actor_position", +[](CScriptGameObject* self, Fvector pos, u32, u32) { self->SetActorPosition(pos); })
         .def("set_actor_direction", &CScriptGameObject::SetActorDirection)
         .def("disable_hit_marks", (void (CScriptGameObject::*)(bool)) & CScriptGameObject::DisableHitMarks)
         .def("disable_hit_marks", (bool (CScriptGameObject::*)() const) & CScriptGameObject::DisableHitMarks)

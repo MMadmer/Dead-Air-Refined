@@ -24,6 +24,7 @@
 #include "xrEngine/profiler.h"
 #include "agent_enemy_manager.h"
 #include "script_game_object.h"
+#include "da_ai_knowledge.h"
 
 CMemoryManager::CMemoryManager(CEntityAlive* entity_alive, CSound_UserDataVisitor* visitor)
 {
@@ -104,6 +105,7 @@ void CMemoryManager::update_enemies(const bool& registered_in_combat)
 
         update(sound().objects(), true);
         update(hit().objects(), true);
+        DaAi::Know::add_candidates(*m_stalker, true);
 
 #ifdef _DEBUG
         g_enemy_manager_second_update = true;
@@ -134,6 +136,10 @@ void CMemoryManager::update(float time_delta)
     update(sound().objects(), registered_in_combat ? true : false);
     update(hit().objects(), registered_in_combat ? true : false);
 
+    // A stalker's enemy candidates come from its own beliefs, never from the group's shared entries (H1, H13).
+    if (m_stalker)
+        DaAi::Know::add_candidates(*m_stalker, registered_in_combat);
+
     update_enemies(registered_in_combat);
     item().update();
     danger().update();
@@ -143,6 +149,10 @@ void CMemoryManager::update(float time_delta)
 
 void CMemoryManager::enable(const IGameObject* object, bool enable)
 {
+    // A stalker that gives up on a creature forgets its own belief; the shared entries are the group's.
+    if (!enable && object && m_stalker && DaAi::Know::active(*m_stalker))
+        DaAi::Know::forget(*m_stalker, object->ID());
+
     visual().enable(object, enable);
     sound().enable(object, enable);
     hit().enable(object, enable);
@@ -152,6 +162,7 @@ template <typename T>
 void CMemoryManager::update(const xr_vector<T>& objects, bool add_enemies)
 {
     squad_mask_type mask = m_stalker ? m_stalker->agent_manager().member().mask(m_stalker) : 0;
+    const bool know = m_stalker && DaAi::Know::active(*m_stalker);
     auto I = objects.cbegin();
     auto E = objects.cend();
     for (; I != E; ++I)
@@ -165,6 +176,26 @@ void CMemoryManager::update(const xr_vector<T>& objects, bool add_enemies)
 
         if (m_stalker && !(*I).m_squad_mask.test(mask))
             continue;
+
+        // A shared entry carries the position and time of its last writer: a stalker's dangers and enemies come from
+        // its own observations (C28), only items stay pooled. The hearing sense builds heard and hit dangers and
+        // beliefs while it is on; off, the stalker's own entries stand in as the stock engine had them.
+        if (know)
+        {
+            if constexpr (!std::is_same_v<T, CVisibleObject>)
+            {
+                if (!DaAi::feature(DaAi::Feature::hearing))
+                {
+                    danger().add(*I);
+                    DaAi::Know::observe_pooled(*m_stalker, *I);
+                }
+            }
+            if (smart_cast<const CEntityAlive*>((*I).m_object))
+                continue;
+            if ((*I).m_object)
+                item().add((*I).m_object);
+            continue;
+        }
 
         danger().add(*I);
 
@@ -188,6 +219,10 @@ CMemoryInfo CMemoryManager::memory(const IGameObject* object) const
 {
     CMemoryInfo result;
     if (!this->object().g_Alive())
+        return (result);
+
+    // A stalker answers from its own knowledge (H1).
+    if (m_stalker && DaAi::Know::memory_info(*m_stalker, object, result))
         return (result);
 
     u32 level_time = 0;
@@ -241,6 +276,9 @@ u32 CMemoryManager::memory_time(const IGameObject* object) const
     if (!this->object().g_Alive())
         return (0);
 
+    if (m_stalker && DaAi::Know::memory_time(*m_stalker, object, result))
+        return (result);
+
     [[maybe_unused]] auto game_object = smart_cast<const CGameObject*>(object);
     VERIFY(game_object);
 
@@ -273,6 +311,9 @@ Fvector CMemoryManager::memory_position(const IGameObject* object) const
     u32 time = 0;
     Fvector result = Fvector().set(0.f, 0.f, 0.f);
     if (!this->object().g_Alive())
+        return (result);
+
+    if (m_stalker && DaAi::Know::memory_position(*m_stalker, object, result))
         return (result);
 
     [[maybe_unused]] auto game_object = smart_cast<const CGameObject*>(object);
@@ -340,6 +381,13 @@ void CMemoryManager::make_object_visible_somewhen(const CEntityAlive* enemy)
     // Callers pass memory().enemy().selected(), which is routinely null (enemy died this frame).
     if (!enemy || enemy->getDestroy())
         return;
+
+    // For a stalker this is a rumour at a snapshot with an error (C15), never an exact sighting.
+    if (m_stalker && DaAi::Know::active(*m_stalker))
+    {
+        DaAi::Know::rumour(*m_stalker, enemy, -1.f, DaAi::Source::script);
+        return;
+    }
 
     squad_mask_type mask = stalker().agent_manager().member().mask(&stalker());
     MemorySpace::CVisibleObject* obj = visual().visible_object(enemy);

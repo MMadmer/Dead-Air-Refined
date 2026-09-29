@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "WeaponMagazinedWGrenade.h"
+#include "da_ai.h"
 #include "Entity.h"
 #include "ParticlesObject.h"
 #include "GrenadeLauncher.h"
@@ -129,6 +130,7 @@ void CWeaponMagazinedWGrenade::switch2_Reload()
     if (m_bGrenadeMode)
     {
         PlaySound("sndReloadG", get_LastFP2());
+        da_ai_sense_on_reload(*this);
 
         PlayHUDMotion("anm_reload_g", "anim_reload_g", FALSE, this, GetState());
         SetPending(TRUE);
@@ -145,6 +147,7 @@ void CWeaponMagazinedWGrenade::OnShot()
         PlaySound("sndShotG", get_LastFP2());
         AddShotEffector();
         StartFlameParticles2();
+        da_ai_sense_on_shot(*this);
     }
     else
         inherited::OnShot();

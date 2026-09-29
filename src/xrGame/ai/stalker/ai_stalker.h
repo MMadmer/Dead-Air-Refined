@@ -49,6 +49,11 @@ class action;
 
 enum ECriticalWoundType : u32;
 
+namespace DaAi
+{
+struct NpcState;
+}
+
 class CALifeSimulator;
 class CCharacterPhysicsSupport;
 class CWeapon;
@@ -810,6 +815,14 @@ public:
 private:
     ignored_touched_objects_type m_ignored_touched_objects;
 
+    // Human NPC AI state, owned by the DaAi registry (da_ai_npc.cpp); null while the stalker has none.
+    DaAi::NpcState* m_da_ai{};
+
+public:
+    DaAi::NpcState* da_ai() const { return m_da_ai; }
+    void da_ai(DaAi::NpcState* state) { m_da_ai = state; }
+
+private:
     DECLARE_SCRIPT_REGISTER_FUNCTION(CGameObject, CScriptActionPlannerExport);
 };
 

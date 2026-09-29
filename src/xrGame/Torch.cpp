@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "Torch.h"
+#include "da_ai.h"
 #include "Entity.h"
 #include "Actor.h"
 #include "xrEngine/LightAnimLibrary.h"
@@ -233,6 +234,7 @@ void CTorch::Switch()
 void CTorch::Switch(bool light_on)
 {
     m_switched_on = light_on;
+    da_ai_sense_on_torch(*this, light_on);
     if (can_use_dynamic_lights())
     {
         light_render->set_active(light_on);
@@ -254,6 +256,7 @@ void CTorch::Switch(bool light_on)
 void CTorch::Switch2(bool light_on)
 {
     m_switched_on = light_on;
+    da_ai_sense_on_torch(*this, light_on);
     if (can_use_dynamic_lights())
     {
         light_render2->set_active(light_on);

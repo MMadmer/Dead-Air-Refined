@@ -18,6 +18,10 @@
 -- story_quests. A squad answers to one of the first three by its config: a story id
 -- means the game placed it on purpose, a monster faction means mutants, the rest are
 -- random stalkers. What a MODULE spawns (NQ spawn.*, its spawn layer) is never touched.
+--
+-- The start kit ([start_kit] of the manifest) lives here too: what a new game of the
+-- mode begins with in place of the new-game screen's loadout. It needs no world - a
+-- module may declare a kit and keep the whole original game.
 
 local installed = false
 local context = nil		-- "fill" | "respawn" | "story" while one of those creates squads
@@ -202,7 +206,151 @@ local function on_update()
 	end
 end
 
+-- ============================================================================ the start kit
+-- A module's [start_kit] replaces the new-game screen's loadout: the faction's kit, the
+-- extra kits and, with `perks = false`, the perks. The game hands those out in its own
+-- on_game_load (ui_mm_faction_select), so the kit is settled on the first update after
+-- it - still before the first quest runs (NQ starts one update later), so nothing a quest
+-- gives at its start is taken back. Only a NEW game: new_game_faction is what the game
+-- itself reads to know one, and it is gone before a save is ever loaded.
+-- The PDA holds every PDA page and the bolt is thrown forever; the rest are Dead Air's
+-- scripted props, the ones its Azazel mode never moves either (azazel_mode.script).
+local KIT_UNTOUCHED = {
+	device_pda = true, bolt = true, detector_fake = true, medkit_script = true,
+	bandage_script = true, anim_binoc = true, anim_knife = true, hand_radio = true,
+	hand_radio_r = true, stick_bred = true, stick_kolbasa = true, stick_kolbasa_bred = true,
+	cigarette = true, guitar_a = true, harmonica_a = true,
+}
+-- the perks the new-game screen grants as info portions (ui_mm_faction_select, 8..16)
+local SCREEN_PERKS = {
+	"perk_knife_master", "perk_craft", "perk_strong_stomach", "perk_lead_backpack",
+	"perk_steady_hands", "perk_butcher", "perk_authority", "perk_thoroughness", "perk_geologist",
+}
+local kit_new_game = false
+
+local function kit_untouched(section)
+	if (KIT_UNTOUCHED[section]) then return true end
+	local ok, cls = pcall(function() return system_ini():r_string_ex(section, "class") end)
+	return ok and cls == "D_PDA"
+end
+
+-- The [start_kit] of one manifest, nil when it has none. The format is Dead Air's own
+-- (plugins\faction_loadouts.ltx): a bare section is one of it, `section = N` is N, and
+-- money and perks are the two keys that are not items.
+function parse_kit(text)
+	local kit, inside = nil, false
+	for raw in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		local line = string.match((string.gsub(raw, ";.*$", "")), "^%s*(.-)%s*$") or ""
+		local header = string.match(line, "^%[([^%]]+)%]")
+		if (header) then
+			inside = string.lower(header) == "start_kit"
+			if (inside and not kit) then kit = { perks = true, items = {} } end
+		elseif (inside and line ~= "") then
+			local key, value = string.match(line, "^([^=]-)%s*=%s*(.*)$")
+			key = key or line
+			if (key == "money") then
+				kit.money = math.max(0, math.floor(tonumber(value) or 0))
+			elseif (key == "perks") then
+				kit.perks = not (value == "false" or value == "0" or value == "no" or value == "off")
+			elseif (key ~= "") then
+				kit.items[#kit.items + 1] = { section = key, count = math.floor(tonumber(value) or 1) }
+			end
+		end
+	end
+	return kit
+end
+
+-- The kit of the first module in the load order that applies and declares one; a second
+-- one is logged and ignored, the way a second Player Start is.
+local function mode_kit()
+	if not (xms and xms.modules and xms.module_applies and xms.read_file) then return nil end
+	local kit
+	for _, m in ipairs(xms.modules() or {}) do
+		if (m.enabled and xms.module_applies(m.id)) then
+			local text = xms.read_file(m.id, "mod.ltx")
+			local k = text and parse_kit(text)
+			if (k and kit) then
+				printf("! xms_world: the start kit of " .. m.id .. " is ignored - " .. kit.module .. " declared one first")
+			elseif (k) then
+				k.module = m.id
+				kit = k
+			end
+		end
+	end
+	return kit
+end
+
+-- The inventory becomes exactly the kit. What the player holds of it stays where it is -
+-- the knife keeps its slot rather than coming back in the backpack - the rest goes, and
+-- only the shortfall is created. Silent: a setup, not a handover.
+function settle_kit(kit)
+	local a, sim = db.actor, alife()
+	if not (a and sim) then return end
+	local want = {}
+	for _, row in ipairs(kit.items) do
+		if (row.count >= 1) then want[row.section] = (want[row.section] or 0) + row.count end
+	end
+	-- equipped first, then the rest of the inventory
+	local order, seen = {}, {}
+	local function note(id)
+		if (id and not seen[id]) then
+			seen[id] = true
+			order[#order + 1] = id
+		end
+	end
+	for slot = 0, 16 do
+		local ok, item = pcall(a.item_in_slot, a, slot)
+		if (ok and item) then note(item:id()) end
+	end
+	pcall(a.iterate_inventory, a, function(_, item)
+		if (item) then note(item:id()) end
+	end, a)
+	-- an item the game created a moment ago may still be only a server child of the actor
+	pcall(function()
+		local se_actor = sim:object(a:id())
+		if (se_actor) then
+			for id in sim:get_children(se_actor) do note(id) end
+		end
+	end)
+	local kept, taken, given = 0, 0, 0
+	for _, id in ipairs(order) do
+		local se = sim:object(id)
+		local section = se and se:section_name()
+		if (section and not kit_untouched(section)) then
+			if ((want[section] or 0) > 0) then
+				want[section] = want[section] - 1
+				kept = kept + 1
+			elseif (pcall(function() sim:release(se, true) end)) then
+				taken = taken + 1
+			end
+		end
+	end
+	local ini = system_ini()
+	for section, n in pairs(want) do
+		if (n > 0) then
+			-- a section the game does not have would stop it: the kit leaves it out instead
+			if (ini:section_exist(section)) then
+				given = given + (xms_nq_util.give_items(section, n) or 0)
+			else
+				printf("! xms_world: start kit item " .. section .. " is not a section of the game - left out")
+			end
+		end
+	end
+	if (kit.money) then a:give_money(kit.money - a:money()) end
+	if (kit.perks == false) then
+		for _, perk in ipairs(SCREEN_PERKS) do
+			if (a:has_info(perk)) then a:disable_info_portion(perk) end
+		end
+	end
+	printf("* xms_world: start kit of " .. kit.module .. ": " .. kept .. " kept, " .. taken .. " taken, " .. given .. " given")
+end
+
 local function on_first_update()
+	if (kit_new_game) then
+		kit_new_game = false
+		local kit = mode_kit()
+		if (kit) then settle_kit(kit) end
+	end
 	settle_at = time_global() + 3000
 	RegisterScriptCallback("actor_on_update", on_update)
 end
@@ -235,6 +383,10 @@ local function on_npc_spawn(npc, se_obj)
 end
 
 function on_game_start()
+	-- a new game: the screen's faction still waits for ui_mm_faction_select to read it
+	local cfg = axr_main and axr_main.config
+	local faction = cfg and cfg:r_value("character_creation", "new_game_faction", 3)
+	kit_new_game = faction ~= nil and faction ~= ""
 	RegisterScriptCallback("actor_on_first_update", on_first_update)
 	RegisterScriptCallback("on_game_load", on_game_load)
 	RegisterScriptCallback("npc_on_net_spawn", on_npc_spawn)

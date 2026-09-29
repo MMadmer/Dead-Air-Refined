@@ -14,8 +14,14 @@
 #include "xrAICore/Navigation/level_graph.h"
 #include "entity_alive.h"
 #include "memory_space_impl.h"
+#include "da_ai_comms.h"
 
-void CAgentMemoryManager::update() { reset_memory_masks(); }
+void CAgentMemoryManager::update()
+{
+    // With comms, combat members no longer pool what they perceive (H2); masks change only when a member leaves.
+    if (DaAi::Comms::pooling_allowed(object()))
+        reset_memory_masks();
+}
 void CAgentMemoryManager::remove_links(IGameObject* object) {}
 template <typename T>
 IC void CAgentMemoryManager::reset_memory_masks(T& objects)

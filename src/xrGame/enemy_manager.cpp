@@ -26,6 +26,7 @@
 #include "movement_manager.h"
 #include "agent_manager.h"
 #include "agent_enemy_manager.h"
+#include "da_ai_knowledge.h"
 
 static const u32 ENEMY_INERTIA_TIME_TO_SOMEBODY = 3000;
 static const u32 ENEMY_INERTIA_TIME_TO_ACTOR = 0;
@@ -34,6 +35,27 @@ static const u32 ENEMY_INERTIA_TIME_FROM_ACTOR = 6000;
 #ifdef _DEBUG
 bool g_enemy_manager_second_update = false;
 #endif // _DEBUG
+
+namespace
+{
+// Distance to a candidate as the observer knows it: a stalker measures to its belief, not to the object (W3); an
+// unknown one counts as far away.
+float known_distance(const CCustomMonster& observer, const CAI_Stalker* stalker, const CEntityAlive& object)
+{
+    if (!stalker || !DaAi::Know::active(*stalker))
+        return observer.Position().distance_to(object.Position());
+    const float distance = DaAi::Know::known_distance(*stalker, object);
+    return distance < 0.f ? flt_max : distance;
+}
+
+float known_distance_sqr(const CCustomMonster& observer, const CAI_Stalker* stalker, const CEntityAlive& object)
+{
+    if (!stalker || !DaAi::Know::active(*stalker))
+        return observer.Position().distance_to_sqr(object.Position());
+    const float distance = DaAi::Know::known_distance(*stalker, object);
+    return distance < 0.f ? flt_max : _sqr(distance);
+}
+} // namespace
 
 #define USE_EVALUATOR
 
@@ -68,10 +90,19 @@ bool CEnemyManager::useful(const CEntityAlive* entity_alive) const
 
     if (m_object->human_being() && !entity_alive->human_being() && !expedient(entity_alive) &&
         (evaluate(entity_alive) >= m_ignore_monster_threshold) &&
-        (m_object->Position().distance_to(entity_alive->Position()) >= m_max_ignore_distance))
+        (known_distance(*m_object, m_stalker, *entity_alive) >= m_max_ignore_distance))
         return (false);
 
-    return (m_useful_callback ? m_useful_callback(m_object->lua_game_object(), entity_alive->lua_game_object()) : true);
+    if (!m_useful_callback)
+        return (true);
+    // A stalker reuses the script's recent answer about this target: the callback is a Lua call per candidate and
+    // memory update, and the checks above still run every time.
+    if (bool cached{}; m_stalker && DaAi::Know::cached_enemy_callback(*m_stalker, entity_alive->ID(), cached))
+        return (cached);
+    const bool result = m_useful_callback(m_object->lua_game_object(), entity_alive->lua_game_object());
+    if (m_stalker)
+        DaAi::Know::store_enemy_callback(*m_stalker, entity_alive->ID(), result);
+    return (result);
 }
 
 float CEnemyManager::do_evaluate(const CEntityAlive* object) const { return (m_object->evaluate(this, object)); }
@@ -91,8 +122,7 @@ float CEnemyManager::evaluate(const CEntityAlive* object) const
         if (m_stalker && m_stalker->agent_manager().enemy().assigned_wounded(object, m_stalker))
             return (0.f);
 
-        float distance = m_object->Position().distance_to_sqr(object->Position());
-        return (distance);
+        return (known_distance_sqr(*m_object, m_stalker, *object));
     }
 
     float penalty = 10000.f;
@@ -128,8 +158,13 @@ float CEnemyManager::evaluate(const CEntityAlive* object) const
     ai().ef_storage().non_alife().member() = m_object;
     ai().ef_storage().non_alife().enemy() = object;
 
-    float distance = m_object->Position().distance_to_sqr(object->Position());
-    return (penalty + distance / 100.f + ai().ef_storage().m_pfVictoryProbability->ffGetValue() / 100.f);
+    float distance = known_distance_sqr(*m_object, m_stalker, *object);
+    // The odds read the enemy's weapon and health: a stalker judges only an enemy in its own sight, others are even.
+    CPatternFunction& odds = *ai().ef_storage().m_pfVictoryProbability;
+    const float victory = !m_stalker || !DaAi::Know::active(*m_stalker) || DaAi::Know::sees_now(*m_stalker, object) ?
+        odds.ffGetValue() :
+        (odds.ffGetMinResultValue() + odds.ffGetMaxResultValue()) / 2.f;
+    return (penalty + distance / 100.f + victory / 100.f);
 #else // USE_EVALUATOR
     float distance = m_object->Position().distance_to_sqr(object->Position());
     return (1000.f * (visible ? 0.f : 1.f) + distance);
@@ -145,8 +180,12 @@ bool CEnemyManager::expedient(const CEntityAlive* object) const
     if (ai().ef_storage().m_pfExpediency->dwfGetDiscreteValue())
         return (true);
 
-    if (m_object->memory().hit().hit(ai().ef_storage().non_alife().enemy()))
-        return (true);
+    // A stalker counts only a hit it took itself; the shared pool entry also carries its mates' hits.
+    if (const CHitObject* hit = m_object->memory().hit().hit(ai().ef_storage().non_alife().enemy()))
+    {
+        return !m_stalker || !DaAi::Know::active(*m_stalker) ||
+            hit->m_squad_mask.test(m_stalker->memory().visual().mask());
+    }
     return (false);
 }
 

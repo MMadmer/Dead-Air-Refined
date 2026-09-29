@@ -25,6 +25,8 @@
 #include "client_spawn_manager.h"
 #include "memory_manager.h"
 #include "xrEngine/IGame_Persistent.h"
+#include "da_ai_senses.h"
+#include "stalker_sound_data_visitor.h" // [ai:comms] hook
 
 #ifndef MASTER_GOLD
 #include "Actor.h"
@@ -85,13 +87,19 @@ IC void CSoundMemoryManager::update_sound_threshold()
     VERIFY(_valid(m_min_sound_threshold));
     VERIFY(!fis_zero(m_decrease_factor));
     VERIFY(m_sound_decrease_quant);
-    // t = std::max(t*f^((tc - tl)/tq),min_threshold)
-
-    const float exponent = std::exp(float(Device.dwTimeGlobal - m_last_sound_time) / float(m_sound_decrease_quant) * std::log(m_decrease_factor));
-
-    m_sound_threshold = std::max(m_self_sound_factor * m_sound_threshold * exponent, m_min_sound_threshold);
+    m_sound_threshold = masking_threshold();
 
     VERIFY(_valid(m_sound_threshold));
+}
+
+float CSoundMemoryManager::masking_threshold() const
+{
+    // t = std::max(t*f^((tc - tl)/tq),min_threshold)
+
+    const float exponent = std::exp(
+        float(Device.dwTimeGlobal - m_last_sound_time) / float(m_sound_decrease_quant) * std::log(m_decrease_factor));
+
+    return std::max(m_self_sound_factor * m_sound_threshold * exponent, m_min_sound_threshold);
 }
 
 IC u32 CSoundMemoryManager::priority(const MemorySpace::CSoundObject& sound) const
@@ -125,8 +133,11 @@ void CSoundMemoryManager::feel_sound_new(
     if (!m_sounds)
         return;
 
-    if (user_data)
+    // [ai:sense] begin visitor_early
+    // Stalkers decode voices only after the hearing threshold (the [ai:comms] visitor block).
+    if (user_data && !DaAi::Sense::late_visitor(m_stalker))
         user_data->accept(m_visitor);
+    // [ai:sense] end visitor_early
 
     IGameObject* self = m_object;
     VERIFY(self);
@@ -166,10 +177,26 @@ void CSoundMemoryManager::feel_sound_new(
     if (is_sound_type(sound_type, SOUND_TYPE_WORLD))
         sound_power *= m_world_factor;
 
+    // Stalkers receive the sound through walls, rain and their own ears; the kinds the noise bus carries for humans
+    // arrive here with no power.
+    DaAi::Sense::Heard heard;
+    const bool da_hearing = m_stalker &&
+        DaAi::Sense::engine_sound(*m_stalker, object, u32(sound_type), position, sound_power, m_sound_threshold, heard);
+
     VERIFY(_valid(sound_power));
     if (sound_power >= m_sound_threshold)
     {
-        if (is_sound_type(sound_type, SOUND_TYPE_WEAPON_SHOOTING))
+        // [ai:comms] begin visitor
+        // A voice is understood only once it is heard; masking = how far recent loud sounds raised the threshold.
+        if (user_data && m_stalker)
+        {
+            if (auto* visitor = smart_cast<CStalkerSoundDataVisitor*>(m_visitor))
+                visitor->heard(*user_data, position, sound_power, m_sound_threshold / _max(m_min_sound_threshold, EPS));
+        }
+        // [ai:comms] end visitor
+
+        // A stalker gets a sound estimate instead of the shooter's exact position as a fake hit.
+        if (!da_hearing && is_sound_type(sound_type, SOUND_TYPE_WEAPON_SHOOTING))
         {
             // this is fake!
             CEntityAlive* _entity_alive = smart_cast<CEntityAlive*>(object);
@@ -177,6 +204,8 @@ void CSoundMemoryManager::feel_sound_new(
                 (_entity_alive->g_Team() != entity_alive->g_Team()))
                 m_object->memory().hit().add(_entity_alive);
         }
+        const bool estimated =
+            da_hearing && DaAi::Sense::on_heard(*m_stalker, object, u32(sound_type), position, sound_power, heard);
         if (!m_stalker || !m_stalker->memory().enemy().selected())
             add(object, sound_type, position, sound_power);
         else
@@ -189,6 +218,18 @@ void CSoundMemoryManager::feel_sound_new(
                 // COMBAT_SOUND_PERCEIVE_RADIUS_SQR;
                 //				if (is_shooting || is_colliding || very_close)
                 add(object, sound_type, position, sound_power);
+            }
+        }
+
+        // The entry keeps where the NPC thinks the sound came from, not where its source really is.
+        if (estimated && heard.store)
+        {
+            const auto entry = std::find(m_sounds->begin(), m_sounds->end(), object_id(object));
+            if (entry != m_sounds->end())
+            {
+                entry->m_object_params.m_position = heard.estimate.pos;
+                if (heard.estimate.vertex != u32(-1))
+                    entry->m_object_params.m_level_vertex_id = heard.estimate.vertex;
             }
         }
     }

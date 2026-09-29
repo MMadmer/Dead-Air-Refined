@@ -17,9 +17,43 @@
 #include "visual_memory_manager.h"
 #include "enemy_manager.h"
 #include "danger_manager.h"
+#include "da_ai_comms.h"
 
 CStalkerSoundDataVisitor::~CStalkerSoundDataVisitor() {}
+
+// With comms on, a heard voice is decoded by the hearer (Comms::on_heard_voice) after the hearing threshold and
+// never hands over the speaker's enemy or danger. With comms off, the stock transfer runs once per sound event:
+// in the early call of the sound memory manager while that call exists, after the threshold once it is gone.
 void CStalkerSoundDataVisitor::visit(CStalkerSoundData* data)
+{
+    const bool comms = DaAi::feature(DaAi::Feature::comms) && object().da_ai();
+    if (!m_position)
+    {
+        m_stock_data = nullptr;
+        if (comms)
+            return;
+        m_stock_data = data;
+        stock_visit(data);
+        return;
+    }
+
+    if (comms)
+        DaAi::Comms::on_heard_voice(object(), *data, *m_position, m_power, m_masking);
+    else if (m_stock_data != data)
+        stock_visit(data);
+    m_stock_data = nullptr;
+}
+
+void CStalkerSoundDataVisitor::heard(CSound_UserData& data, const Fvector& position, float power, float masking)
+{
+    m_position = &position;
+    m_power = power;
+    m_masking = masking;
+    data.accept(this);
+    m_position = nullptr;
+}
+
+void CStalkerSoundDataVisitor::stock_visit(CStalkerSoundData* data)
 {
     if (object().memory().enemy().selected())
         return;

@@ -1,9 +1,13 @@
-#include "StdAfx.h"
+#include "pch_script.h"
 #include "UIKeyBinding.h"
 #include "UIXmlInit.h"
 #include "xrUICore/XML/xrUIXmlParser.h"
 #include "UIEditKeyBind.h"
 #include "xrUICore/ScrollView/UIScrollView.h"
+#include "xrUICore/Buttons/UIBtnHint.h"
+#include "xrUICore/Cursor/UICursor.h"
+#include "xrUICore/ui_base.h"
+#include "xrEngine/StringTable/StringTable.h"
 #include "xrEngine/xr_level_controller.h"
 
 CUIKeyBinding::CUIKeyBinding()
@@ -15,13 +19,6 @@ CUIKeyBinding::CUIKeyBinding()
         AttachChild(&header);
 
     AttachChild(&m_frame);
-
-    pInput->RegisterKeyMapChangeWatcher(this, REG_PRIORITY_NORMAL);
-}
-
-CUIKeyBinding::~CUIKeyBinding()
-{
-    pInput->RemoveKeyMapChangeWatcher(this);
 }
 
 void CUIKeyBinding::InitFromXml(CUIXml& xml_doc, LPCSTR path)
@@ -58,6 +55,12 @@ void CUIKeyBinding::FillUpList(CUIXml& xml_doc_ui, LPCSTR path_ui)
         CUIXmlInit::InitStatic(xml_doc_ui, strconcat(sizeof(buf), buf, path_ui, ":scroll_view:item_key"), 0, item);
         item->TextItemControl()->SetTextST(commandId);
         m_scroll_wnd->AddWindow(item, true);
+
+        // The string "<caption id>_hint", where there is one, is the row's hover hint (see Update).
+        string256 hint;
+        strconcat(hint, commandId, "_hint");
+        if (StringTable().has_translation(hint))
+            m_rowHints.emplace_back(item, hint);
 
 #ifdef DEBUG
         if (kNOTBINDED == ActionNameToId(command))
@@ -119,19 +122,111 @@ void CUIKeyBinding::FillUpList(CUIXml& xml_doc_ui, LPCSTR path_ui)
 #endif
 }
 
-void CUIKeyBinding::OnKeyMapChanged()
+void CUIKeyBinding::Update()
 {
-    for (CUIWindow* item : m_scroll_wnd->Items())
+    // A row scrolled out of sight still lies under the cursor somewhere on the tab and, never drawn,
+    // would hold the one static hint the controls around the list use: the rows offer their hints
+    // only while the cursor is over the visible part of the list.
+    if (m_scroll_wnd)
     {
-        for (CUIWindow* wnd : item->GetChildWndList())
+        Frect view;
+        m_scroll_wnd->GetAbsoluteRect(view);
+        Fvector2 cursor = GetUICursor().GetCursorPosition();
+        const bool offered = GetUICursor().IsVisible() && view.in(cursor);
+        if (offered != m_rowHintsOffered)
         {
-            CUIEditKeyBind* keybind = smart_cast<CUIEditKeyBind*>(wnd);
-            if (!keybind)
-                continue;
-
-            keybind->SetValue(); // re-apply
+            m_rowHintsOffered = offered;
+            for (auto& [row, hint] : m_rowHints)
+            {
+                row->m_stat_hint_text = offered ? hint : shared_str{};
+                if (!offered && g_statHint->Owner() == row)
+                    g_statHint->Discard();
+            }
         }
     }
+    CUIWindow::Update();
+}
+
+namespace
+{
+// The key list for a script that lays it out itself (the Controls page): the groups of
+// ui_keybinding.xml in order, { name = <caption id>, actions = { { caption = <caption id>,
+// action = <action> }, ... } } each. An action the engine does not know is left out, and the PDA
+// map joins the backpack group when the file has no row for it, as in FillUpList.
+luabind::object key_binding_actions(lua_State* L)
+{
+    CUIXml xml_doc;
+    xml_doc.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "ui_keybinding.xml");
+
+    struct key_group
+    {
+        shared_str name;
+        xr_vector<std::pair<shared_str, shared_str>> actions;
+    };
+    xr_vector<key_group> groups;
+    bool hasMap = false;
+
+    const int groupsCount = static_cast<int>(xml_doc.GetNodesNum("", 0, "group"));
+    for (int i = 0; i < groupsCount; ++i)
+    {
+        key_group& group = groups.emplace_back();
+        group.name = xml_doc.ReadAttrib("group", i, "name");
+
+        const int commandsCount = static_cast<int>(xml_doc.GetNodesNum("group", i, "command"));
+        xml_doc.SetLocalRoot(xml_doc.NavigateToNode("group", i));
+        for (int j = 0; j < commandsCount; ++j)
+        {
+            const shared_str action = xml_doc.ReadAttrib("command", j, "exe");
+            hasMap |= action == "map";
+            if (ActionNameToPtr(action.c_str(), true))
+                group.actions.emplace_back(xml_doc.ReadAttrib("command", j, "id"), action);
+        }
+        xml_doc.SetLocalRoot(xml_doc.GetRoot());
+    }
+
+    if (!hasMap && ActionNameToPtr("map", true))
+    {
+        for (key_group& group : groups)
+        {
+            if (group.name == "kb_grp_inventory")
+                group.actions.emplace_back("kb_map", "map");
+        }
+    }
+
+    luabind::object result = luabind::newtable(L);
+    int groupIndex = 1;
+    for (const key_group& group : groups)
+    {
+        if (group.actions.empty())
+            continue;
+
+        luabind::object actions = luabind::newtable(L);
+        int actionIndex = 1;
+        for (const auto& [caption, action] : group.actions)
+        {
+            luabind::object entry = luabind::newtable(L);
+            entry["caption"] = caption.c_str();
+            entry["action"] = action.c_str();
+            actions[actionIndex++] = entry;
+        }
+
+        luabind::object entry = luabind::newtable(L);
+        entry["name"] = group.name.c_str();
+        entry["actions"] = actions;
+        result[groupIndex++] = entry;
+    }
+    return result;
+}
+} // namespace
+
+void CUIKeyBinding::script_register(lua_State* luaState)
+{
+    using namespace luabind;
+
+    module(luaState)
+    [
+        def("key_binding_actions", &key_binding_actions)
+    ];
 }
 
 #ifdef DEBUG

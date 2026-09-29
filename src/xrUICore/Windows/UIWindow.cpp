@@ -304,7 +304,8 @@ bool CUIWindow::OnMouseDown(int mouse_btn) { return false; }
 void CUIWindow::OnMouseUp(int mouse_btn) {}
 void CUIWindow::OnFocusReceive()
 {
-    m_dwFocusReceiveTime = Device.dwTimeGlobal;
+    // Real time: a dialog over the paused game (the options from the pause menu) sees no game time pass.
+    m_dwFocusReceiveTime = Device.dwTimeContinual;
     m_bCursorOverWindow = true;
 
     if (GetMessageTarget())

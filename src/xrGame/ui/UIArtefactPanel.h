@@ -14,6 +14,8 @@ protected:
     float m_fScale;
     Fvector2 m_cell_size;
     xr_vector<Frect> m_vRects;
+    // One per rect: an artefact may keep its icon in a texture of its own.
+    xr_vector<ui_shader> m_vShaders;
     CUIStaticItem m_StaticItem;
 
 public:

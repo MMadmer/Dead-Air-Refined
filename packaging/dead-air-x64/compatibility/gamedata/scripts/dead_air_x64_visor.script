@@ -20,6 +20,13 @@
 --      is told when the sweep BEGINS, and it does the rest. Which is not when the player asks:
 --      the cleaning item has to become the item in the hands first, and whatever was there has
 --      to be put away before that.
+--
+--   3. WHETHER THERE IS GLASS AT ALL. The drops stand on a mask's visor, so they exist only while
+--      a mask HUD is up. The base driver also rains on the screen with the mask HUD option
+--      switched off, as though the eye were a camera lens; here that switch means no visor and no
+--      drops. A rate cannot say it - zero is a mask in dry weather, whose water stays on and runs
+--      off - so it goes down visor_worn, and without it the renderer neither steps nor draws the
+--      water, whether the rain or a dunk would have put it there.
 
 local wipe_section = "animation_clean_mask" -- the item the cleaning animation rides on
 local wipe_slot = 13
@@ -33,20 +40,18 @@ local wipe_len = 0.55
 
 local was_wiping = false
 local pushed = -1
+local pushed_worn = nil
 local pushed_at = 0
 
 local function mask_worn()
-    -- Same test the base driver makes: a mask HUD is up, or the mask HUD is switched off
-    -- entirely, in which case the drops are unconditional.
+    -- A mask HUD is up. The option is read as well as the HUD: the base driver takes the HUD down
+    -- on its own clock, up to a tenth of a second after the switch, and the drops go with the switch.
     if not dinamic_hud then
-        return true
+        return false
     end
-    local opt = true
-    if axr_main and axr_main.config then
-        opt = axr_main.config:r_value("mm_options", "enable_mask_hud", 1, false)
-    end
-    if opt == false then
-        return true
+    if axr_main and axr_main.config
+        and axr_main.config:r_value("mm_options", "enable_mask_hud", 1, false) == false then
+        return false
     end
     return dinamic_hud.ishud() and true or false
 end
@@ -56,6 +61,8 @@ local function update()
         return
     end
 
+    local worn = mask_worn()
+
     -- The wetting rate.
     local rate = 0
     -- get_rain_exposure and NOT get_rain_volume. The volume is a sound level with the old
@@ -63,16 +70,17 @@ local function update()
     -- dousing and were tuned against a number that dies at night - so read as a wetting rate it
     -- dried the visor in every night storm and brought the drops back for the length of a
     -- lightning flash. The exposure is density times sky cover and nothing else.
-    if mask_worn() and level.rain_factor() ~= 0 then
+    if worn and level.rain_factor() ~= 0 then
         rate = level.get_rain_exposure() or 0
         if rate < 0 then rate = 0 elseif rate > 1 then rate = 1 end
     end
-    -- Only when it has actually moved, and in any case once a second: the channel is ours, but a
-    -- value that is only ever pushed on change is one lost load screen away from being stale.
+    -- Only when something has actually moved, and in any case once a second: the channels are
+    -- ours, but a value that is only ever pushed on change is one lost load screen away from
+    -- being stale.
     local now = time_global()
-    if math.abs(rate - pushed) > 0.01 or (now - pushed_at) > 1000 then
-        pushed = rate
-        pushed_at = now
+    if worn ~= pushed_worn or math.abs(rate - pushed) > 0.01 or (now - pushed_at) > 1000 then
+        pushed, pushed_worn, pushed_at = rate, worn, now
+        get_console():execute(worn and "visor_worn 1" or "visor_worn 0")
         get_console():execute(string.format("visor_rate %.3f", rate))
     end
 
@@ -83,7 +91,7 @@ local function update()
         local item = db.actor:item_in_slot(wipe_slot)
         wiping = item and item:section() == wipe_section or false
     end
-    if wiping and not was_wiping then
+    if wiping and not was_wiping and worn then
         get_console():execute(string.format("visor_wipe %.2f %.2f", wipe_delay, wipe_len))
     end
     was_wiping = wiping

@@ -479,6 +479,17 @@ void CALifeUpdateManager::teleport_object(
         return;
     }
 
+    // A squad member travels with its squad. Moved alone it was switched offline outside the
+    // squad (own schedule entry) while the roster kept it, and the squad's next offline switch
+    // re-synced it onto this level: a member registered on the level on its own. The online
+    // commander's game path does this at a level border (GE_TELEPORT_OBJECT), TeleportSquad for
+    // every member.
+    if (const auto* member = smart_cast<CSE_ALifeMonsterAbstract*>(object); member && member->m_group_id != 0xffff)
+    {
+        if (auto* group = smart_cast<CSE_ALifeOnlineOfflineGroup*>(objects().object(member->m_group_id, true)))
+            object = group;
+    }
+
 #ifdef DEBUG
     if (psAI_Flags.test(aiALife))
     {
@@ -500,6 +511,22 @@ void CALifeUpdateManager::teleport_object(
     CSE_ALifeMonsterAbstract* monster_abstract = smart_cast<CSE_ALifeMonsterAbstract*>(object);
     if (monster_abstract)
         monster_abstract->m_tNextGraphID = object->m_tGraphID;
+
+    // members stand where the squad's offline update would put them, off every registry
+    if (const auto* group = smart_cast<CSE_ALifeOnlineOfflineGroup*>(object))
+    {
+        for (const auto& entry : group->squad_members())
+        {
+            CSE_ALifeMonsterAbstract* member = entry.second;
+            if (!CSE_Abstract::is_live_object(member))
+                continue;
+            member->o_Position = group->o_Position;
+            member->m_tNodeID = group->m_tNodeID;
+            member->m_tGraphID = group->m_tGraphID;
+            member->m_fDistance = group->m_fDistance;
+            member->m_tNextGraphID = group->m_tGraphID;
+        }
+    }
 }
 
 void CALifeUpdateManager::add_restriction(

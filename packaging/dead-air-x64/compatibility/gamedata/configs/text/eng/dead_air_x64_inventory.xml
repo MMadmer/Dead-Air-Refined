@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- The sort and filter row of the actor menu (actor_menu_tools.xml). Hints only, and a -
+	     plain hyphen: the 4:3 hint font draws no em dash. A second click on the active filter
+	     shows everything again. -->
+	<string id="st_da_inv_sort_actor">
+		<text>Sort the backpack: merge partial ammo boxes, bottles and multi-use items into full ones and close the gaps</text>
+	</string>
+	<string id="st_da_inv_sort_loot">
+		<text>Sort the contents: merge partial ammo boxes, bottles and multi-use items into full ones and close the gaps</text>
+	</string>
+	<string id="st_da_inv_sort_trader">
+		<text>Sort the trader's goods: merge multi-use items and close the gaps</text>
+	</string>
+	<string id="st_da_inv_filter_all">
+		<text>Show all items</text>
+	</string>
+	<string id="st_da_inv_filter_weapons">
+		<text>Weapons and ammo: weapons, ammunition, grenades, attachments</text>
+	</string>
+	<string id="st_da_inv_filter_armour">
+		<text>Armour: suits, helmets, backpacks</text>
+	</string>
+	<string id="st_da_inv_filter_food">
+		<text>Food and drink</text>
+	</string>
+	<string id="st_da_inv_filter_medicine">
+		<text>Medicine: medkits, bandages, drugs, anti-rad</text>
+	</string>
+	<string id="st_da_inv_filter_artefacts">
+		<text>Artefacts and containers</text>
+	</string>
+	<string id="st_da_inv_filter_misc">
+		<text>Misc: tools, devices, quest items, valuables and everything else</text>
+	</string>
+</string_table>

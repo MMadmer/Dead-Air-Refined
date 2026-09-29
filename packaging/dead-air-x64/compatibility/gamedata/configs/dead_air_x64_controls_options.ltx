@@ -1,0 +1,31 @@
+; Options -> Controls: how the list is laid out (ui_mm_opt_controls.script). The rules of the file
+; are the ones of every page that is one list, see dead_air_x64_option_list.script: [rows],
+; [groups], [group_<id>], [captions]. The control of row <row> is the node <control>_<row> of
+; <controls_page> in configs\ui\ui_mm_opt.xml and ui_mm_opt_16.xml; the hint of a row is the string
+; st_da_x64_controls_hint_<row>.
+;
+; After these rows comes the key list: a subsection per group of configs\ui\ui_keybinding.xml, a row
+; per action. A key row's id is its caption id (kb_jump), its hint the string <caption id>_hint
+; (kb_jump_hint), and [captions] below renames it like any row.
+
+[rows]
+mouse_sense  = track, mouse_sens, %.2f
+invert_mouse = check, mouse_invert
+aim_toggle   = check, wpn_aim_toggle
+keyb_default = button, btn_keyb_default
+
+[groups]
+order = mouse, keys
+
+[group_mouse]
+rows = mouse_sense, invert_mouse, aim_toggle
+
+[group_keys]
+rows = keyb_default
+
+[captions]
+keyb_default = ui_mm_da_keyb_default
+; "Reload weapon / wipe the mask" does not fit beside the key cells.
+kb_reload    = ui_mm_da_kb_reload
+; The stock Russian caption of this action misses a case ending.
+kb_firemode_next = ui_mm_da_kb_firemode_next

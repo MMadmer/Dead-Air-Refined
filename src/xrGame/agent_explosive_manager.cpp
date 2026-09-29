@@ -18,6 +18,7 @@
 #include "memory_manager.h"
 #include "visual_memory_manager.h"
 #include "danger_object_location.h"
+#include "da_ai_tactics.h"
 
 const float GRENADE_RADIUS = 10.f;
 const u32 AFTER_GRENADE_DESTROYED_INTERVAL = 1000;
@@ -60,7 +61,12 @@ void CAgentExplosiveManager::register_explosive(const CExplosive* explosive, con
     if (missile && (missile->destroy_time() > Device.dwTimeGlobal))
         interval = missile->destroy_time() - Device.dwTimeGlobal + AFTER_GRENADE_DESTROYED_INTERVAL;
 
-    object().location().add(xr_new<CDangerObjectLocation>(game_object, Device.dwTimeGlobal, interval, GRENADE_RADIUS));
+    // H12: the grenade's danger area is known only to the members who saw the grenade or were warned of it; they add
+    // their own bits (their item memory, a delivered warning), so the registration itself marks nobody.
+    using mask_type = MemorySpace::squad_mask_type;
+    const mask_type mask = DaAi::Tactics::grenade_danger_own_only() ? mask_type(0) : mask_type(-1);
+    object().location().add(
+        xr_new<CDangerObjectLocation>(game_object, Device.dwTimeGlobal, interval, GRENADE_RADIUS, mask));
 }
 
 bool CAgentExplosiveManager::process_explosive(CMemberOrder& member)

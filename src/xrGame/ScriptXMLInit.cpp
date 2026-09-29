@@ -14,6 +14,7 @@
 #include "ui/ServerList.h"
 #include "ui/UIMapList.h"
 #include "ui/UIKeyBinding.h"
+#include "ui/UIEditKeyBind.h"
 #include "xrUICore/EditBox/UIEditBox.h"
 #include "xrUICore/Static/UIAnimatedStatic.h"
 #include "ui/UISleepStatic.h"
@@ -311,6 +312,20 @@ void CScriptXmlInit::script_register(lua_State* luaState)
             .def("InitCDkey", &CScriptXmlInit::InitCDkey)
             .def("InitMPPlayerName", &CScriptXmlInit::InitMPPlayerName)
             .def("InitKeyBinding", &CScriptXmlInit::InitKeyBinding)
+            // One key cell of an action, as the key list puts two in each of its rows: the node gives
+            // its place and text colour, and it saves into the key_binding options group like theirs.
+            // nil for an action the engine does not know.
+            .def("InitKeyBind", +[](CScriptXmlInit* self, pcstr path, CUIWindow* parent, pcstr action, bool primary) -> CUIStatic*
+            {
+                if (!action || !ActionNameToPtr(action, true))
+                    return nullptr;
+                CUIEditKeyBind* pWnd = xr_new<CUIEditKeyBind>(primary);
+                CUIXmlInit::InitStatic(self->m_xml, path, 0, pWnd);
+                pWnd->InitKeyBind(pWnd->GetWndPos(), pWnd->GetWndSize());
+                pWnd->AssignProps(action, "key_binding");
+                _attach_child(pWnd, parent);
+                return pWnd;
+            })
             .def("InitMMShniaga", &CScriptXmlInit::InitMMShniaga)
             .def("InitScrollView", &CScriptXmlInit::InitScrollView)
             .def("InitList", &CScriptXmlInit::InitListWnd)

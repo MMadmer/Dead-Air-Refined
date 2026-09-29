@@ -14,7 +14,17 @@
 #include "Include/xrRender/Kinematics.h"
 #include "xrCore/Animation/Bone.hpp"
 
+#include <mutex>
+
 const bool use_additional_radius = true;
+
+namespace
+{
+// The path builds of different stalkers run as parallel frame tasks and meet the same physics
+// objects. Rebuilding one area from two tasks tore its vector apart: double frees of the old
+// buffer and vertex ids stored into freed blocks. Rebuilds are rare, so one lock serves them all.
+std::mutex g_obstacle_compute_lock;
+} // namespace
 
 static const Fvector local_points[8] = {Fvector().set(-1.f, -1.f, -1.f), Fvector().set(-1.f, -1.f, +1.f),
     Fvector().set(-1.f, +1.f, +1.f), Fvector().set(-1.f, +1.f, -1.f), Fvector().set(+1.f, +1.f, +1.f),
@@ -246,5 +256,22 @@ void ai_obstacle::compute_impl()
     m_crc = crc32(&*m_area.begin(), m_area.size() * sizeof(m_area[0]));
 }
 
-void ai_obstacle::on_move() { m_actual = false; }
+void ai_obstacle::compute_locked()
+{
+    std::lock_guard lock(g_obstacle_compute_lock);
+    // Another task built it while this one waited: the overlap that used to tear the area.
+    if (m_actual.load(std::memory_order_relaxed))
+    {
+        static std::atomic<u32> overlaps{};
+        if (overlaps.fetch_add(1, std::memory_order_relaxed) < 4)
+            Msg("~ ai_obstacle: parallel rebuild of [%s] serialized", m_object->cName().c_str());
+        return;
+    }
+
+    compute_impl();
+    m_actual.store(true, std::memory_order_release);
+}
+
+// Only UpdateCL invalidates, on the main thread, never while the parallel frame tasks read the area.
+void ai_obstacle::on_move() { m_actual.store(false, std::memory_order_relaxed); }
 float ai_obstacle::distance_to(const Fvector& position) const { return (position.distance_to(m_object->Position())); }

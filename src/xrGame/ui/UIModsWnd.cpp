@@ -499,7 +499,8 @@ void CUIModsWnd::BuildItems()
             Item& item = m_items.emplace_back();
             item.id = module.id;
             item.module = index;
-            item.entry = m_catalog->Find(module.id);
+            // another author's module under a listed id is not the catalog's: no card, rating or reviews
+            item.entry = XMS::Catalog::IsCatalogModule(module) ? m_catalog->Find(module.id) : nullptr;
             item.name = mods_display(module.name);
             item.author = mods_display(module.author);
             item.description = mods_multiline(mods_display(module.description));
@@ -549,7 +550,7 @@ void CUIModsWnd::BuildItems()
             Item item;
             item.id = entry.id;
             item.entry = &entry;
-            if (const XMS::Module* module = XMS::FindModule(entry.id.c_str()))
+            if (const XMS::Module* module = XMS::FindModule(entry.id.c_str()); module && XMS::Catalog::IsCatalogModule(*module))
                 item.module = static_cast<size_t>(module - XMS::Modules().data());
             fromCard(item, entry);
             item.tagsText = mods_tags_text(item.tags);
@@ -1091,6 +1092,9 @@ void CUIModsWnd::RefreshDetails()
         break;
     case State::Failed: text = mods_format("st_mods_status_failed", status->message.c_str()), color = m_badColor; break;
     }
+    // installed by hand and not byte for byte a release of the browser: "up to date" would claim too much
+    if (installed && status && status->handModified && state == State::Current)
+        text = mods_text("st_mods_status_local_modified").c_str(), color = m_warnColor;
     // what an update would say matters no more; one already on its way still does
     if (item->withdrawn && !mods_in_flight(state) && state != State::Staged)
         text = mods_text("st_mods_status_author_withdrawn").c_str(), color = m_warnColor;

@@ -1,6 +1,6 @@
 LIBRARY xrEngine
 EXPORTS
-    ??0CApplication@@QEAA@PEBDPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$00@std@@@Z @1
+    ??0CApplication@@QEAA@PEBDPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$01@std@@@Z @1
     ??0CAviPlayerCustom@@QEAA@AEBV0@@Z @2
     ??0CAviPlayerCustom@@QEAA@XZ @3
     ??0CCC_Float@@QEAA@$$QEAV0@@Z @4
@@ -506,7 +506,7 @@ EXPORTS
     ?BeforeFrame@CRenderDevice@@QEAA_NXZ @504
     ?Begin_tips@CConsole@@IEAAXXZ @505
     ?Bolt@CEffect_Thunderbolt@@AEAAXAEBVCEnvDescriptorMixer@@@Z @506
-    ?Born@CEffect_Rain@@AEAAXAEAUItem@1@M@Z @507
+    ?Born@CEffect_Rain@@AEAAXAEAUItem@1@MAEBU?$_vector3@M@@@Z @507
     ?BuildState@CCF_Skeleton@@AEAAXXZ @508
     ?BuildTopLevel@CCF_Skeleton@@AEAAXXZ @509
     ?CCC_DeregisterInput@@YAXXZ @510
@@ -540,7 +540,7 @@ EXPORTS
     ?CreateConsoleWnd@CTextConsole@@AEAAXXZ @538
     ?CreateLevel@IGame_Persistent@@UEAAPEAVIGame_Level@@XZ @539
     ?CreateLogWnd@CTextConsole@@AEAAXXZ @540
-    ?CreateRendererList@CEngineAPI@@QEAAXAEBV?$array@PEAVRendererModule@@$00@std@@@Z @541
+    ?CreateRendererList@CEngineAPI@@QEAAXAEBV?$array@PEAVRendererModule@@$01@std@@@Z @541
     ?CurrentEntity@IGame_Level@@QEBAPEAVIGameObject@@XZ @542
     ?CurrentFrame@CTheoraStream@@QEAAPEAUyuv_buffer@@XZ @543
     ?CurrentHeight_@CGameFont@@UEAAMXZ @544
@@ -772,7 +772,7 @@ EXPORTS
     ?InitBackend@ide@editor@xray@@QEAAXXZ @770
     ?InitDefault@CLAItem@@QEAAXXZ @771
     ?Initialize@CConsole@@UEAAXXZ @772
-    ?Initialize@CEngine@@QEAAXPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$00@std@@@Z @773
+    ?Initialize@CEngine@@QEAAXPEAVGameModule@@AEBV?$array@PEAVRendererModule@@$01@std@@@Z @773
     ?Initialize@CEngineAPI@@QEAAXPEAVGameModule@@@Z @774
     ?Initialize@CGameFont@@UEAAXPEBD0@Z @775
     ?Initialize@CRenderDevice@@QEAAXXZ @776
@@ -1240,7 +1240,7 @@ EXPORTS
     ?feel_vision_get_vispoint@Vision@Feel@@QEAA?AU?$_vector3@M@@PEAVIGameObject@@@Z @1238
     ?feel_vision_query@Vision@Feel@@QEAAXAEAUFmatrix@@AEAU?$_vector3@M@@@Z @1239
     ?feel_vision_relcase@Vision@Feel@@QEAAXPEAVIGameObject@@@Z @1240
-    ?feel_vision_update@Vision@Feel@@QEAAXPEAVIGameObject@@AEAU?$_vector3@M@@MM@Z @1241
+    ?feel_vision_update@Vision@Feel@@QEAAXPEAVIGameObject@@AEAU?$_vector3@M@@MMI@Z @1241
     ?fill_tips@CCC_Float@@UEAAXAEAV?$vector@Vshared_str@@V?$xalloc@Vshared_str@@@@@std@@I@Z @1242
     ?fill_tips@CCC_Integer@@UEAAXAEAV?$vector@Vshared_str@@V?$xalloc@Vshared_str@@@@@std@@I@Z @1243
     ?fill_tips@CCC_Mask@@UEAAXAEAV?$vector@Vshared_str@@V?$xalloc@Vshared_str@@@@@std@@I@Z @1244
@@ -1366,7 +1366,7 @@ EXPORTS
     ?o_new@Vision@Feel@@AEAAXPEAVIGameObject@@@Z @1364
     ?o_remove@CObjectList@@QEAA_NAEAV?$vector@PEAVIGameObject@@V?$xalloc@PEAVIGameObject@@@@@std@@PEAVIGameObject@@@Z @1365
     ?o_sleep@CObjectList@@QEAAXPEAVIGameObject@@@Z @1366
-    ?o_trace@Vision@Feel@@AEAAXAEAU?$_vector3@M@@MM@Z @1367
+    ?o_trace@Vision@Feel@@AEAAXAEAU?$_vector3@M@@MMI@Z @1367
     ?on_device_create@CEnvDescriptor@@QEAAXXZ @1368
     ?on_device_destroy@CEnvDescriptor@@QEAAXXZ @1369
     ?on_frame@line_edit_control@text_editor@@QEAAXXZ @1370
@@ -1510,3 +1510,6 @@ EXPORTS
     ?RefreshCurrentEnvironmentResources@CEnvironment@@QEAAXXZ @1508
     ?SetCurrentEnvironmentPair@CEnvironment@@QEAAXPEAVCEnvDescriptor@@0@Z @1509
     ?SetSeason@CEnvironment@@QEAAXM@Z @1510
+    ?feel_vision_retrace@Vision@Feel@@QEAA_NPEBVIGameObject@@AEAU?$_vector3@M@@MMI@Z @1511
+    ?feel_vision_transparency@Vision@Feel@@QEBAMPEBVIGameObject@@@Z @1512
+    ?o_trace_item@Vision@Feel@@AEAAXAEAUfeel_visible_Item@12@AEAU?$_vector3@M@@MMI@Z @1513

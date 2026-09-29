@@ -1,5 +1,6 @@
 #include "pch_script.h"
 #include "xrEngine/XR_IOConsole.h"
+#include "da_ai.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xms_world.h"
 #include "xrMaterialSystem/GameMtlLib.h"
@@ -78,6 +79,8 @@
 #include "CharacterPhysicsSupport.h"
 #include "PHMovementControl.h"
 #include "Include/xrRender/Kinematics.h"
+#include "CustomMonster.h"
+#include "ai_object_location.h"
 #endif // DEBUG
 
 string_path g_last_saved_game;
@@ -2906,6 +2909,103 @@ public:
     }
 };
 
+// qa_water_dry_under [radius] [goto] [pitch] [x z]: floors a character can stand on BELOW a sheet of the
+// water field with something solid in between - a cellar under a pond whose plane runs on under
+// the bank, the ground floor under a flooded storey. The bare field calls all of them under water;
+// the column test must not. Lists the nearest few around the actor (or around x z) and, with
+// goto = 1, puts the actor on the nearest one.
+class CCC_QaWaterDryUnder : public IConsole_Command
+{
+public:
+    CCC_QaWaterDryUnder(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr;
+        const CEnvironment& env = GamePersistent().Environment();
+        if (!actor || !env.water_field_valid())
+        {
+            Msg("! [qa] qa_water_dry_under: no actor or no water field");
+            return;
+        }
+        float radius = 150.f, pitch = 0.f;
+        int go = 0;
+        Fvector from = actor->Position();
+        if (args && xr_strlen(args))
+            sscanf(args, "%f %d %f %f %f", &radius, &go, &pitch, &from.x, &from.z);
+
+        CObjectSpace& space = g_pGameLevel->ObjectSpace;
+        const CDB::TRI* tris = space.GetStaticTris();
+        const Fvector* verts = space.GetStaticVerts();
+        const size_t mtl_count = GMLib.CountMaterial();
+        const auto solid = [&](const CDB::TRI& t) {
+            const SGameMtl* m = t.material < mtl_count ? GMLib.GetMaterialByIdx(u16(t.material)) : nullptr;
+            return !m || !(m->Flags.test(SGameMtl::flLiquid) || m->Flags.test(SGameMtl::flPassable));
+        };
+
+        struct spot
+        {
+            Fvector at;
+            float sheet, dist;
+        };
+        xr_vector<spot> found;
+        CDB::COLLIDER collider;
+        xr_vector<std::pair<float, u32>> hits;
+        const float step = env.water_field_texel;
+        static const Fvector down = {0.f, -1.f, 0.f};
+        for (float dz = -radius; dz <= radius; dz += step)
+            for (float dx = -radius; dx <= radius; dx += step)
+            {
+                if (dx * dx + dz * dz > radius * radius)
+                    continue;
+                const Fvector p = {from.x + dx, from.y, from.z + dz};
+                float sheet, bed;
+                if (!env.water_at(p, sheet, bed))
+                    continue;
+
+                // Every solid face under the sheet, top down. A floor is an upward-facing one
+                // with standing room above it and at least one solid face between it and the
+                // sheet: exactly where the field alone reads "under water" and nothing is wet.
+                const Fvector top = {p.x, sheet - 0.02f, p.z};
+                collider.ray_query(0, space.GetStaticModel(), top, down, 30.f);
+                hits.clear();
+                for (const CDB::RESULT& r : *collider.r_get())
+                    if (solid(tris[r.id]))
+                        hits.emplace_back(r.range, u32(r.id));
+                std::sort(hits.begin(), hits.end());
+                for (size_t i = 1; i < hits.size(); ++i)
+                {
+                    const CDB::TRI& t = tris[hits[i].second];
+                    Fvector n;
+                    n.mknormal(verts[t.verts[0]], verts[t.verts[1]], verts[t.verts[2]]);
+                    const float room = hits[i].first - hits[i - 1].first;
+                    if (_abs(n.y) < 0.7f || room < 2.0f)
+                        continue;
+                    const Fvector floor = {p.x, top.y - hits[i].first, p.z};
+                    found.push_back({floor, sheet, _sqrt(dx * dx + dz * dz)});
+                    break;
+                }
+            }
+
+        std::sort(found.begin(), found.end(), [](const spot& a, const spot& b) { return a.dist < b.dist; });
+        Msg("* [qa] dry-under: %u floor(s) below a water sheet within %.0f m", u32(found.size()), radius);
+        for (size_t i = 0; i < found.size() && i < 8; ++i)
+        {
+            const spot& s = found[i];
+            Fvector eye = s.at;
+            eye.y += 1.6f;
+            float su, bd;
+            Msg("* [qa]   (%.1f, %.1f, %.1f) %.0f m away, sheet %.2f m over the eye, column: %s", s.at.x, s.at.y,
+                s.at.z, s.dist, s.sheet - eye.y, env.water_column_at(eye, su, bd) ? "WET" : "dry");
+        }
+        if (go && !found.empty())
+        {
+            actor->MoveActor(found.front().at, Fvector{pitch, 0.f, 0.f});
+            Msg("* [qa] dry-under: actor put at (%.1f, %.1f, %.1f)", found.front().at.x, found.front().at.y,
+                found.front().at.z);
+        }
+    }
+};
+
 // qa_water_state: what the water model currently believes. The surface is driven entirely by
 // solved quantities - the bodies measured off the level's liquid collision, the sea state the
 // wind raises over them, the optical profile the level's LTX picked - and none of it is visible
@@ -2940,6 +3040,15 @@ public:
                 env.water_field_bounds.vMax.x - env.water_field_bounds.vMin.x,
                 env.water_field_bounds.vMax.z - env.water_field_bounds.vMin.z,
                 surf > -flt_max * 0.5f ? "yes" : "no", env.water_shore_dist(p));
+            // The field's sheet is 2.5D; whether the camera is actually in that water is the
+            // column test, and the two disagreeing is exactly the cellar case.
+            if (surf > -flt_max * 0.5f && p.y < surf)
+            {
+                float column, bed;
+                const bool in = env.water_column_at(p, column, bed);
+                Msg("* [qa] field sheet %.2f m above the camera; column: %s", surf - p.y,
+                    in ? "open water" : "blocked (dry)");
+            }
         }
         else
             Msg("* [qa] field: not baked on this level");
@@ -2948,6 +3057,12 @@ public:
             env.water_ripple_win.z, env.water_ripple_win.x, env.water_ripple_win.y, env.water_ripple_win.w,
             env.water_body.x, env.water_ripple_speed, env.water_ripple_win.z > 0.f ? "" : "  (field off - analytic rings only)");
         Msg("* [qa] under water: %.2f m below a surface at %.2f", env.eye_under_depth, env.eye_under_surface);
+        if (CActor* actor = g_pGameLevel ? smart_cast<CActor*>(Level().CurrentEntity()) : nullptr)
+        {
+            const CPHMovementControl* mc = actor->character_physics_support()->movement();
+            Msg("* [qa] actor wading: %.2f m of water over the feet at (%.1f, %.1f, %.1f)", mc->WaterDepth(),
+                actor->Position().x, actor->Position().y, actor->Position().z);
+        }
         Msg("* [qa] rain: %.1f mm/h, extinction %.2f 1/km", env.rain_rate_mmh, env.rain_ext_km);
         Msg("* [qa] sea: Hs %.3f m, peak %.2f m, mss %.4f, wind %.2f m/s (raw %.2f)", env.water_sea.x,
             env.water_sea.y, env.water_sea.z, env.water_sea.w, env.WindSpeedMs());
@@ -3122,6 +3237,25 @@ public:
     }
 };
 
+// visor_worn <0|1>: whether there is a visor in front of the eye at all - a mask with its HUD up -
+// from the mod's own driver, negative to hand it back. Only the script layer knows it: the mask
+// HUD is a script's overlay and its switch is a script option. With 0 the renderer neither steps
+// nor draws the water, whatever the rain or a dunk would put on the glass.
+class CCC_VisorWorn : public IConsole_Command
+{
+public:
+    CCC_VisorWorn(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGamePersistent)
+            return;
+        int v = -1;
+        if (args && xr_strlen(args))
+            sscanf(args, "%d", &v);
+        GamePersistent().Environment().visor.worn = (v < 0) ? -1 : (v ? 1 : 0);
+    }
+};
+
 // qa_visor_blob <radius mm>: hold a cap of water at the centre of the visor, 0 to let it go. The
 // optics of a drop cannot be judged on a bead nine pixels wide.
 class CCC_QaVisorBlob : public IConsole_Command
@@ -3219,6 +3353,7 @@ public:
             IKinematicsAnimated* rig = g_player_hud->hands_model();
             Msg("* [qa] hands: rig [%s], %u motion slot(s)", g_player_hud->section_name().c_str(),
                 rig ? u32(rig->LL_MotionsSlotCount()) : 0u);
+            Msg("* [qa] hands: scene #%u, active %d", g_player_hud->scene_id(), g_player_hud->scene_active() ? 1 : 0);
             for (u16 i = 0; i < 2; ++i)
             {
                 const attachable_hud_item* it = g_player_hud->attached_item(i);
@@ -3296,8 +3431,10 @@ public:
         if (!g_pGamePersistent)
             return;
         const CEnvironment& env = GamePersistent().Environment();
-        Msg("* [qa] visor: wipe phase %.2f, direction %d, sweep %.2f s", env.visor_wipe_phase(),
-            env.visor.wipe_dir, env.visor.wipe_len);
+        Msg("* [qa] visor: worn %d (negative = not driven yet), glass %s, wipe phase %.2f, direction %d, "
+            "sweep %.2f s",
+            env.visor.worn, env.visor_glass() ? "yes" : "no", env.visor_wipe_phase(), env.visor.wipe_dir,
+            env.visor.wipe_len);
         Msg("* [qa] visor: rain %.1f mm/h at the eye, visor_rate %.3f (negative = not driven yet), "
             "exposure %.3f = density %.3f x cover %.3f, lens %.1f mm",
             env.rain_rate_mmh, env.visor.rate, env.GetRainExposure(), env.CurrentEnv.rain_density,
@@ -3326,6 +3463,142 @@ public:
             Msg("* [qa] visor: cover rays lean %.0f deg toward heading %.0f deg (wind %.2f gust %.2f):%s",
                 rad2deg(rain->GetCoverLean()), rad2deg(rain->GetCoverHeading()), env.eff_wind_norm,
                 env.eff_wind_gust, rays);
+        }
+    }
+};
+
+// qa_rain_column [height] [half]: the column a drop over the eye falls down, from the cloud end. First
+// where the drop's own query stops, then every static face the column crosses, near to far, with
+// its material and the side the falling water meets - rain indoors is decided in this list.
+class CCC_QaRainColumn : public IConsole_Command
+{
+public:
+    CCC_QaRainColumn(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGameLevel)
+            return;
+        float height = da_rain::source_offset;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &height);
+
+        Fvector top = Device.vCameraPosition;
+        top.y += height;
+        const Fvector down{0.f, -1.f, 0.f};
+        const float reach = height + 5.f;
+
+        float range = reach;
+        Fvector normal;
+        s32 mtl = -1;
+        const auto name_of = [](s32 idx) -> pcstr
+        {
+            const SGameMtl* m = (idx >= 0 && idx < s32(GMLib.CountMaterial())) ? GMLib.GetMaterialByIdx(u16(idx)) : nullptr;
+            return m ? m->m_Name.c_str() : "?";
+        };
+        if (CEffect_Rain::RayPickThrough(top, down, range, collide::rqtStatic, normal, mtl, nullptr))
+            Msg("* [qa] rain column from %.1f m over the eye: the drop stops at %.2f m (%.2f m over the eye) on [%s]",
+                height, range, height - range, name_of(mtl));
+        else
+            Msg("* [qa] rain column from %.1f m over the eye: the drop falls through, open", height);
+
+        CDB::COLLIDER collider;
+        collider.ray_query(0, g_pGameLevel->ObjectSpace.GetStaticModel(), top, down, reach);
+        xr_vector<CDB::RESULT> hits(collider.r_begin(), collider.r_begin() + collider.r_count());
+        std::sort(hits.begin(), hits.end(), [](const CDB::RESULT& a, const CDB::RESULT& b) { return a.range < b.range; });
+        const CDB::TRI* tris = g_pGameLevel->ObjectSpace.GetStaticTris();
+        const Fvector* verts = g_pGameLevel->ObjectSpace.GetStaticVerts();
+        for (const CDB::RESULT& hit : hits)
+        {
+            const CDB::TRI& tri = tris[hit.id];
+            // The collider's own test for a face it culls: det of the ray against the edges.
+            Fvector e1, e2, p;
+            e1.sub(verts[tri.verts[1]], verts[tri.verts[0]]);
+            e2.sub(verts[tri.verts[2]], verts[tri.verts[0]]);
+            p.crossproduct(down, e2);
+            const bool front = e1.dotproduct(p) >= EPS;
+            const SGameMtl* m = GMLib.GetMaterialByIdx(u16(tri.material));
+            Msg("* [qa]   %6.2f m (%6.2f over the eye) %-5s [%s]%s", hit.range, height - hit.range, front ? "front" : "back",
+                name_of(s32(tri.material)), m && m->Flags.test(SGameMtl::flPassable) ? " passable" : "");
+        }
+
+        // Map of the columns round the eye, 0.25 m apart, north up: '#' where the rain stops over
+        // the eye, '.' where it falls through past it - a hole in the roof as the collision sees it.
+        float half = 0.f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%*f %f", &half);
+        const int n = std::clamp(iFloor(half / 0.25f), 0, 40);
+        for (int row = n; row >= -n && n; --row)
+        {
+            string128 line{};
+            for (int col = -n; col <= n; ++col)
+            {
+                Fvector from = top;
+                from.x += col * 0.25f;
+                from.z += row * 0.25f;
+                float r = reach;
+                const bool stop = CEffect_Rain::RayPickThrough(from, down, r, collide::rqtStatic, normal, mtl, nullptr);
+                line[col + n] = row == 0 && col == 0 ? 'X' : stop && r < height ? '#' : '.';
+            }
+            Msg("* [qa] %s", line);
+        }
+    }
+};
+
+// qa_npc_ground [radius]: every live NPC within radius of the eye (40 m), measured against the static
+// ground under it - its position, its AI node and its pelvis. "Sitting in the ground at the fire" is
+// a pelvis below that ground, and which of the three moved says whose doing it was.
+class CCC_QaNpcGround : public IConsole_Command
+{
+public:
+    CCC_QaNpcGround(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGameLevel)
+            return;
+        float radius = 40.f;
+        if (args && xr_strlen(args))
+            sscanf(args, "%f", &radius);
+
+        const Fvector down{0.f, -1.f, 0.f};
+        for (u32 i = 0, count = Level().Objects.o_count(); i < count; ++i)
+        {
+            auto* npc = smart_cast<CCustomMonster*>(Level().Objects.o_get_by_iterator(i));
+            if (!npc || !npc->g_Alive() || npc->Position().distance_to(Device.vCameraPosition) > radius)
+                continue;
+
+            const Fvector& p = npc->Position();
+            Fvector from = p;
+            from.y += 1.5f;
+            collide::rq_result hit;
+            if (!g_pGameLevel->ObjectSpace.RayPick(from, down, 4.f, collide::rqtStatic, hit, nullptr))
+                continue;
+            const float ground = from.y - hit.range;
+
+            float node = p.y;
+            const u32 lv = npc->ai_location().level_vertex_id();
+            if (ai().level_graph().valid_vertex_id(lv))
+                node = ai().level_graph().vertex_position(lv).y;
+
+            // The pelvis against the ground under the PELVIS: a seated body reaches half a metre
+            // behind its feet, and on a slope that ground is not the ground under the feet.
+            Fvector pelvis = p;
+            if (IKinematics* K = smart_cast<IKinematics*>(npc->Visual()))
+            {
+                const u16 bone = K->LL_BoneID("bip01_pelvis");
+                if (bone != BI_NONE)
+                {
+                    Fmatrix world;
+                    world.mul_43(npc->XFORM(), K->LL_GetTransform(bone));
+                    pelvis = world.c;
+                }
+            }
+            float ground_p = ground;
+            Fvector from_p = pelvis;
+            from_p.y = std::max(pelvis.y, p.y) + 1.5f;
+            if (g_pGameLevel->ObjectSpace.RayPick(from_p, down, 5.f, collide::rqtStatic, hit, nullptr))
+                ground_p = from_p.y - hit.range;
+            Msg("* [qa] npc %-28s (%7.1f %6.2f %7.1f): feet %+.2f, node %+.2f, pelvis %+.2f over the ground under it",
+                npc->cName().c_str(), p.x, p.y, p.z, p.y - ground, node - ground, pelvis.y - ground_p);
         }
     }
 };
@@ -3991,6 +4264,7 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "keypress_on_start", &g_keypress_on_start_legacy, 0, 1);
     CMD1(CCC_UI_Time_Factor, "ui_time_factor");
     CMD1(CCC_QaWaterGoto, "qa_water_goto");
+    CMD1(CCC_QaWaterDryUnder, "qa_water_dry_under");
     CMD1(CCC_QaWaterState, "qa_water_state");
     CMD1(CCC_QaWaterDive, "qa_water_dive");
     CMD1(CCC_QaWaterRing, "qa_water_ring");
@@ -3998,13 +4272,17 @@ void CCC_RegisterCommands()
     CMD1(CCC_VisorWipe, "visor_wipe");
     CMD1(CCC_QaHandsState, "qa_hands_state");
     CMD1(CCC_QaVisorState, "qa_visor_state");
+    CMD1(CCC_QaRainColumn, "qa_rain_column");
+    CMD1(CCC_QaNpcGround, "qa_npc_ground");
     CMD1(CCC_QaHandsRig, "qa_hands_rig");
     CMD1(CCC_QaHudMotion, "qa_hud_motion");
     CMD1(CCC_QaVisorWet, "qa_visor_wet");
     CMD1(CCC_VisorRate, "visor_rate");
+    CMD1(CCC_VisorWorn, "visor_worn");
     CMD1(CCC_QaVisorBlob, "qa_visor_blob");
     da_opt_bench_register();
     da_profiler_register();
+    da_ai_register_console();
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_inventory", UITimeDilator::Inventory);
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 

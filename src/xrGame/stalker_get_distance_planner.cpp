@@ -15,6 +15,7 @@
 #include "script_game_object.h"
 #include "script_game_object_impl.h"
 #include "ai/stalker/ai_stalker.h"
+#include "da_ai_tactics.h"
 
 using namespace StalkerSpace;
 using namespace StalkerDecisionSpace;
@@ -44,8 +45,7 @@ void CStalkerGetDistancePlanner::add_evaluators()
         xr_new<CStalkerPropertyEvaluatorMember>((CPropertyStorage*)0, //&CScriptActionPlanner::m_storage,
             eWorldPropertyInCover, true, true, "in cover"));
 
-    add_evaluator(
-        eWorldPropertyTooFarToKillEnemy, xr_new<CStalkerPropertyEvaluatorTooFarToKillEnemy>(m_object, "too far to kill"));
+    add_evaluator(eWorldPropertyTooFarToKillEnemy, DaAi::Tactics::make_too_far_evaluator(m_object, "too far to kill"));
 }
 
 void CStalkerGetDistancePlanner::add_actions()

@@ -475,6 +475,34 @@ On a new game the actor spawns there - one level load, no teleport - and the
 faction start the new-game screen asks for is dropped once. The first module
 that places a start wins; a second one is logged as a conflict and ignored.
 
+**The start kit** replaces what the new-game screen hands out - the faction's
+loadout, the extra kits and, when the author says so, the perks:
+
+```ini
+[start_kit]
+money        = 1          ; absent: the money the screen gives stays
+perks        = false      ; absent or true: the perks picked on the screen stay
+device_torch              ; a bare section is one of it
+wpn_knife
+bandage      = 2          ; section = N is N (ammo: boxes)
+```
+
+- **The section being there declares the kit**; an empty one starts the player
+  with nothing. The format is the game's own `plugins\faction_loadouts.ltx`.
+- **A NEW game only.** `new_game_faction` of `[character_creation]` is how the
+  game itself knows one (`ui_mm_faction_select` reads it and clears it), so no
+  loaded save is ever touched.
+- **The inventory becomes exactly the kit** on the first update, after the
+  screen's own `on_game_load` has given its loadout and before the first quest
+  runs - an item a quest gives at its start stays (`xms_world.script`). What the
+  player already holds of the kit stays where it is (the knife keeps its slot),
+  the rest is released and only the shortfall is created; nothing is announced.
+- **Never part of it:** the PDA (any `D_PDA`), the bolt, and Dead Air's scripted
+  props - the ones its Azazel mode never moves either. A section the game does
+  not have is left out with a log line instead of stopping the game.
+- **Several modules:** the first one in the load order that declares a kit wins;
+  a second one is logged and ignored. A kit needs no `[world]`.
+
 **Module patrol paths** - what an order, a behaviour step or a quest walks -
 ship in the spawn layer and are registered as the level's patrol paths when the
 level loads:
@@ -869,11 +897,23 @@ the files that carry them. `docs/dead-air/UPSTREAM.md` says what the engine desc
 
 ## The quality preset owns the quality settings
 
-There is one control for how the game looks at a given cost: the preset list on the basic video
-page. The advanced page next to it carries taste - grass height, sun shaft strength, sharpen,
-bloom, chromatic aberration, depth of field, technicolor, grain, lens dirt - and nothing that a
-preset also writes. A row for a value the preset owns is a second control for one value,
-and the player who moves it finds it moved back.
+There is one control for how the game looks at a given cost: the preset list at the top of the
+video tab. Everything else on the tab is the display (resolution, window, frame cap, vsync), the
+picture (gamma, contrast, brightness, the two fields of view, colour correction) or taste -
+grass height, sun shaft strength, sharpen, bloom, chromatic aberration, depth of field,
+technicolor, grain (`r2_vignette`, which draws the grain and no vignette) - and nothing that a
+preset also writes. A row for a value the preset owns is a second control for one value, and the
+player who moves it finds it moved back.
+
+The tab is one list, `video_page` in `ui_mm_opt.xml` and `ui_mm_opt_16.xml`, built by
+`ui_mm_opt_video.script`: the taste rows used to sit on an advanced page behind a button, and the
+two buttons between the pages are gone with it. Since 1.5.0 the list is grouped into subsections
+and scrolls on both layouts, like the game tab; Sound and Controls are built the same way now (see
+"Options -> Video, Sound, Controls" below). The hint of a row - `st_da_x64_video_hint_<name>` in
+`text\<lang>\dead_air_x64_video.xml` - sits on the row window and shows wherever the cursor is on the
+row; captions and controls carry none, or two hints would pop up at once. The eight taste rows keep their
+`mm_opt_video_adv` options group, so Cancel, preset changes and saving treat them exactly as
+before.
 
 What follows from that, for anyone shipping a preset file or a menu page of their own:
 
@@ -888,19 +928,200 @@ What follows from that, for anyone shipping a preset file or a menu page of thei
   those switches (shadow map size, AO technique, grass density and radius, visor droplets) used
   to be held back on renderer start because the menu also showed them; the menu does not any
   more, and they follow the preset like the rest.
-- Antialiasing is one ladder: FXAA on the two cheapest presets, SMAA 1x from Default up, camera
-  TAA on top of it on Extreme. `phase_combine` runs SMAA or FXAA and never both, so the FXAA
-  checkbox that used to sit on the advanced page did nothing on three presets out of five; it is
-  gone and `r2_fxaa` is a runtime command now, session-only like `r__smaa` beside it.
+- Anti-aliasing is not the preset's any more (1.5.0): `r__aa` (`st_aa_off`, `st_aa_fxaa`,
+  `st_aa_smaa`, `st_aa_taa`) is the player's own saved choice, and it drives the runtime-only
+  `r2_fxaa`, `r__smaa` and `r__taa`, which a preset file must not set. A saved profile without an
+  `r__aa` line takes the one its preset used to give, once. AMD FSR (`r__fsr`) and NVIDIA DLSS
+  (`r__dlss`) replace anti-aliasing while either runs and switch each other off; frame generation
+  is `r__framegen`. See `DX12_RENDERER.md` for the whole console contract.
 - `appdata\qa_autoexec.ltx`, the measurement hook, still executes last of all.
-- Every node of the advanced page is still in `ui_mm_opt.xml` and `ui_mm_opt_16.xml`, including
-  the ones the page no longer builds. An addon that ships its own `ui_mm_opt_video_adv.script`
-  gets exactly the page that script asks for.
-- `ui_mm_opt_main.script` belongs to the game, not to Refined, and it reaches into the advanced
-  page for three controls by name (`texture_lod_track`, `tab_ao_opt`, `combo_ssao`). The page
-  still builds those three - hidden children of the page rather than rows on the list - so the
-  stock script and every addon copy of it keep working. They read and write their console values
-  as before, which costs nothing: the options manager writes back only what the player changed.
+- Every node of the old basic and advanced pages is still in `ui_mm_opt.xml` and
+  `ui_mm_opt_16.xml` (`tab_video`, `video_adv`), next to the new `video_page`. An addon that ships
+  its own `ui_mm_opt_video.script` or `ui_mm_opt_video_adv.script` gets exactly the page that
+  script asks for.
+- `ui_mm_opt_main.script` belongs to the game, not to Refined, and it still builds the advanced
+  page and reaches into it by name: the scroll list it clears and refills from `m_preconditions`
+  on every refresh, and three controls (`texture_lod_track`, `tab_ao_opt`, `combo_ssao`).
+  `ui_mm_opt_video_adv.script` is that and nothing else now - an empty list and the three
+  controls as hidden children of a page nothing opens - so the stock script and every addon copy
+  of it keep working. The controls read and write their console values as before, which costs
+  nothing: the options manager writes back only what the player changed. The video tab keeps
+  its list under its own name (`self.list`), never `handler.scroll_v`, which the stock refresh
+  would empty.
+- The video tab is grouped like the game tab since 1.5.0: subsections, their order and their rows
+  come from `configs\dead_air_x64_video_options.ltx` (`[rows]`, `[groups]`, `[group_<id>]`,
+  `[captions]`, `[caps]`; lists, so a module's `.ltxp` can append with `+rows = ...`), the header
+  of a subsection is the string `ui_mm_grp_<id>`, and the control of every row is still a node
+  `<control>_<row>` of `video_page` in the xml, because only a node can bind a console command. A
+  row whose command the running renderer lacks is left out, and a `[caps]` row only shows where
+  `r__caps` reports its key (the DLSS row on NVIDIA RTX, for example).
+- The renderer is a choice again in 1.5.0: DirectX 11 (`renderer_r4`) or DirectX 12
+  (`renderer_r5`, offered only where the adapter passes the DX12 probe), applied at the next
+  start. What follows is how the choice was taken away before, and still holds for the lower
+  modes. Every entry of the old list (`Dx9 R2`, `Dx9 R2.5`,
+  `Dx10 R3`, `Dx11 R4`) was the same D3D11 module: the ones below R4 only created a
+  feature-level 10 device - no SM5, no compute, so the water ripple solver and the GTAO filter do
+  not compile there and ran as `stub_default` - and R2 dropped the advanced post-processing on top.
+  On a card with feature level 11 the engine now lists R4 alone and takes it whatever `user.ltx`
+  says (an old `renderer renderer_r2` line costs one "Invalid syntax" at start and is written back
+  as `renderer_r4` by the next save). `-r3`, `-r2.5` and `-r2` on the command line still bring the
+  lower modes back, for debugging. The video tab builds the renderer combo hidden, because
+  `ui_mm_opt_main.script` reads it on every refresh; in the old `tab_video` layout the rows below
+  it moved up into its place and its nodes sit in the freed slot at the bottom, so a page script
+  that still shows them covers nothing.
+- Two more rows left the advanced page: the screen-space sun shafts (`r2_sss_enable`) ride the
+  preset from Default up - five full-screen passes, +0.63 ms at 1080p, which a weak card pays
+  several times over - and the visor dirt (`r2_lensdirt`) is on everywhere but lights only behind
+  a mask HUD (see The visor). Both are runtime commands now: a session override, never saved.
+
+## DirectX 12 and mod shaders
+
+The DirectX 12 renderer (`xrRender_R5.dll`) runs the same `shaders\r3` files as DirectX 11, with
+one extra define, `SMAP_ARRAY`: the sun's shadow map is a `Texture2DArray` there, so a shader that
+samples `s_smap` goes through `SMAP_TC(uv)` from `shadow.h` instead of a bare `float2`.
+
+### The compiler: DXC and Shader Model 6.6
+
+On DirectX 12 every engine shader, a loose override of a mod included, is compiled by Microsoft's
+DXC into DXIL at Shader Model 6.6 (lower when the GPU tops out lower); `dxcompiler.dll` and
+`dxil.dll` ship next to `xrEngine.exe`. DirectX 11 keeps FXC. What that means for a mod shader:
+
+- The source goes through FXC's preprocessor with the engine's include rules and macros, then DXC
+  compiles it as HLSL 2018 with row-major matrices and `-flegacy-resource-reservation`, so explicit
+  `register()` bindings keep the slots FXC gives them. The warnings FXC never printed (implicit
+  truncation, `for`-scope redefinitions, `register(ps, ...)` effect syntax) stay silent.
+- Extra macros, never defined for FXC: `XFR_DXC=1`, `XFR_SM=66`, `XFR_WAVE_LANES=<n>` only where the
+  GPU has wave operations, `XFR_MIN16=1` only where it honours 16-bit minimum precision. Put Shader
+  Model 6 code behind them, and the same file still builds for DirectX 11.
+- DXC refuses what FXC let through:
+  - a second `SV_Position` input (a `float4 pos2d : SV_Position` parameter next to an input struct
+    that already has one): read the struct's;
+  - a texel offset that is not an immediate constant after DXC unrolls the loop
+    (`SampleCmpLevelZero(..., int2(col, row))` inside a loop): fold the offset into the coordinate,
+    `tc + float2(col, row) / size`;
+  - DX9 effect types such as `uniform texture2D`: write `Texture2D`;
+  - code that needed `D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY`.
+  16-bit types (`min16float`, `float16`) in a constant buffer fail on both compilers.
+- A shader DXC cannot build still renders: the log gets `! [dxc] <file>:<line>: <first error>`, FXC
+  compiles that shader, and the other stages of its pass are rebuilt with FXC too (`! [dxc] pass ...:
+  DXBC twins for vs (the ps fell back to FXC)`), because a D3D12 pipeline cannot mix DXIL and DXBC.
+  It costs a second compile and shows in `* [dxc] shaders: ... N on FXC, M twins, K refused by DXC`.
+  Fix the shader rather than lean on it: mesh and ray-tracing shaders have no FXC path.
+- Cache: `appdata\shaders_cache_xfr\r5_dxil\<tag>\` (DXIL) and `r5\` (the FXC fallback), both keyed
+  by the source's CRC, so an edited file recompiles.
+- Check without the game: `tools\qa\Test-Shaders.ps1 -Dxc -Shader <name>` compiles a shader the way
+  the DirectX 12 module does (`-Sm 6_0` for the oldest model the engine accepts);
+  `python tools\qa\Check-ShaderLinkage.py --compiler dxc --filter <name>` links it with DXIL
+  signatures against every pass that uses it.
+- To take DXC out: `r__dxc 0` (saved, applies at the next start) or `-dx12_no_sm6` on the command
+  line. Both also switch mesh-shader grass and ray tracing off, which need DXIL. `-dxc_plain` keeps
+  DXC without the wave, quad and 16-bit paths (a driver that mishandles them).
+
+### Rules D3D12 enforces
+
+Two rules D3D11 never enforced now matter:
+
+- **A pixel shader reads exactly what its vertex shader writes.** D3D12 checks the pair when it
+  builds the pipeline: every input of the pixel shader needs an output with the same semantic and
+  index, in the same register, with a component mask that covers it. D3D11 matched registers and
+  let a mismatch read garbage; D3D12 refuses the pipeline and the draw is skipped, with the file
+  names in the log (`[d3d12] graphics pipeline ... refused` followed by `vs '...', ps '...'`).
+  `python tools\qa\Check-ShaderLinkage.py --filter <name>` checks a shader against every pass
+  that uses it before the game ever loads it.
+- **Depth tests need a depth buffer** and stencil needs a stencil plane: a state that asks for
+  them without one is dropped from the pipeline, as D3D11 ignored it.
+
+A loose shader override that breaks one of them works on DirectX 11 and draws nothing on DirectX
+12, so test both.
+
+### Tree vertex shaders: the GPU-driven block
+
+On DirectX 12 trees are culled, animated by the wind and drawn by the GPU (`r__gpu_driven`: by
+default while the CPU is the frame's bottleneck). A tree takes that path when every pass of its HQ, LQ
+and shadow elements has a GPU-driven variant: the engine recompiles the pass's vertex shader as
+`<name>(DA_TREE_GD,)`, and the result has to take the per-instance input `uint gd_ref : GDREF`. The
+shipped `deffer_tree_flat.vs`,
+`deffer_tree_bump.vs` and `shadow_direct_tree.vs` carry that block under `#ifdef DA_TREE_GD`: the
+per-draw values (`xform`, `xform_v`, `c_scale`, `c_bias`, `c_sun`, `c_tree`, `c_tree_prev`) come from
+`da_gd_tree_rows(gd_ref)` of `da_gd_tree.h` instead of the constants; the bend code is shared and
+untouched. A mod's own tree vertex shader without the block compiles a variant without `GDREF`, and
+its trees stay on the CPU path (counted in `* [gd] trees: ... visuals kept on the CPU (shader ...)`),
+so they look as before; a crown and its trunk never split between the two. To keep them on the GPU,
+keep the `#ifdef DA_TREE_GD` block and change only the shared bend. Elements that are not priority
+0, or are strict back-to-front, emissive, wallmark or distortion, or use tessellation, stay on the
+CPU as well.
+
+### Grass vertex shaders: mesh-shader grass
+
+On DirectX 12 GPUs with mesh shaders (tier 1, Shader Model 6.5, `r__caps` `ms=1`) grass is drawn by
+an amplification and a mesh shader (`deffer_detail_cull.as`, `deffer_detail_mesh.ms`) with the same
+maths as the vertex shaders, shared through `da_detail_common.h`; the pixel shader
+`deffer_base_aref_flat.ps` is common to both paths.
+Mesh grass runs only while the level's `deffer_detail_w_flat.vs` and `deffer_detail_s_flat.vs`
+include `da_detail_common.h`: a mod that replaces them with a wind of its own keeps its look on the
+vertex path for the session (one `* [grass-mesh] off: ...` line). To change how grass bends or is
+tinted on both paths, change the functions in `da_detail_common.h`; every constant there is a
+parameter, so the includer's constant layout stays put.
+
+### Ray tracing sees materials through their shader flags
+
+The RTX category builds its scene from the level's static geometry and sorts materials by shader
+flags, never by names: a visual enters when element 0 is an opaque-priority pass
+(`iPriority / 2 == 0`), not strictly back-to-front (glass, water, decals) and not distortion-only;
+a pass whose pixel shader is an `*_aref` one is alpha-tested, resolved against the alpha of the
+texture bound to `s_base` in pass 0 (the first texture when there is none). Of the multiple-use models, `rigid` ones (stumps, logs)
+cast traced shadows; tree crowns and trunks appear only in reflections, and trunks near the root in
+the ambient occlusion. Vegetation never casts a traced shadow: its shadow maps keep the sway. New
+static geometry of a mod is traced without any change.
+
+### Video rows and `r__caps`
+
+DirectX 12 adds these rows to Options -> Video: async compute (screen group), DirectStorage texture
+loading (quality group) and the RTX group (ray-traced reflections, sun shadows, ambient occlusion,
+ray tracing quality), which no quality preset touches. Variable rate shading rides the quality
+presets (High and Extreme); GPU-driven trees and mesh grass have no row. A script reads what the
+session can run from `get_console():get_string("r__caps")` (`rt`, `rt_tier`, `vrs`, `ms`, `sm`,
+`acq`, `dxc`, `dstorage`, ...; the keys are listed in `DX12_RENDERER.md` section 8).
+
+## How far things are drawn
+
+Every distance the preset sets follows one rule: Minimum sits exactly where the distance was
+before it had a ladder - the value every preset used to share - and each preset above goes
+further, up to what current games ship (Unreal's default cascades reach 200 m, Unity HDRP's
+500 m, virtual shadow maps the horizon; open worlds draw grass 100-200 m out). A distance where
+current games stop short of ours is not cut. The ladders live in `xrRender_sync_preset_derived()`:
+
+| Preset | Sun shadows (box / fade end) | Grass shadows | Grass | Puddles | Wet ground / rain map | Water reflections |
+| --- | --- | --- | --- | --- | --- | --- |
+| Minimum | 160 / 140 m | 40 m | 49 m | 20 m | 20 m / 256 | cubemap |
+| Low | 200 / 175 m | 50 m | 70 m | 40 m | 30 m / 512 | 150 m |
+| Default | 240 / 210 m | 60 m | 100 m | 60 m | 45 m / 1024 | 250 m |
+| High | 300 / 262 m | 75 m | 130 m | 90 m | 65 m / 1024 | 350 m |
+| Extreme | 360 / 315 m | 95 m | 160 m | 120 m | 90 m / 2048 | 500 m |
+
+The sun is drawn through the cascaded path - the shaders shipped are cascade shaders and
+`must_enable_old_cascades()` reads that off `accum_sun_near.ps` - where the reach is the far
+cascade's box and the fade inside it (`accum_sun_far.ps`), and those were a fixed 160 m and 140 m.
+`r2_sun_far` sizes only the old single-map path (`r2_shadow_cascede_old`), so the 1.4.2 ladder on it
+(60-180 m) never reached a shadow; it rides along (100-350 m) for anyone on that path. The middle
+box is exactly as far as grass casts (40/50/60/75/95 m), and grass is drawn into the near and
+middle maps only: in the far map a texel is a third of a metre and a blade a few centimetres, the
+wind moves it by less than a texel, and its shadow there was a block switching on and off - a
+patch of ground at middle distance flickered in sun and wind from 1.4.2, when grass shadows first
+reached past a 40 m middle box. The fade ends at 7/8 of the far box, where the tuned 140/160 pair had it. The
+volumetric shafts are drawn over the far box, so they reach as far as the shadows now. Session
+overrides, never saved: `r__sun_cascade_mid`, `r__sun_cascade_far`, `r__sun_shadow_fade`. Water
+reflection ranges are the `REFL_RANGE` tiers of `ogse_reflections.h` (100/140/180/220 m before,
+the sample count along the ray raised with them).
+
+What it costs, at 1080p on Extreme on the QA rig, standing on the marsh at noon: 11.99 to
+13.66 ms a frame, and all of it is the grass radius - with grass back at 100 m the frame is
+11.67 ms. The longer cascades cost 0.1 ms in the sun pass; grass shadows at 95 m, puddles, wet
+ground and the reflections measured inside the noise. The middle box at 95 m instead of 64 m is
+another 0.07 ms in the sun pass (2.42 to 2.49 ms, noon on the marsh), and grass no longer goes
+into the far map at all. The shadow map keeps its old ladder
+(1024/1536/2048/2048/2048): 4096 on Extreme sharpens the mid-range edges for 2.9 ms more in the
+sun pass.
 
 ## Colour grade and foliage saturation
 
@@ -1287,7 +1508,8 @@ names `set_weather` accepts live in packed configs), `wind_dbg 1` logs the state
 `wind_seed N` pins the random stream so a scene replays identically, `wind_force 0..1` pins
 the base strength (`-1` releases it), `wind_freeze 1` stops the clock. `r__gpu_stats` dumps
 the GPU timers (frame, scene, shadows, sun, lights, clouds, combine) once, `r__gpu_log N`
-logs them every N frames, `r__screenshot_every N` photographs every N-th frame - the
+logs them every N frames (with the combine split into ambient occlusion, forward geometry, bloom,
+anti-aliasing and post), `r__screenshot_every N` photographs every N-th frame - the
 headless QA rig uses the last two to grade a run without a window.
 
 ### Wind motors and tall vegetation
@@ -1521,6 +1743,36 @@ described in [`ANIMATIONS.md`](ANIMATIONS.md). What a mod can plug into:
 Do not add spawnable sections for the sake of a scene: a section the original game does not
 know ends up in saves. Every scene here is a hud section and an existing item.
 
+### A scene has an owner
+
+The hands carry one scene at a time, and several modules put scenes on them: the backpack held for
+as long as the inventory is open, an item used from that inventory, a suit put on, the pickup, the
+climb. With nothing but `stop_hud_motion()` any of them ended whatever stood on the hands, so a
+bread eaten from the open inventory played the backpack being put away instead, a suit put on cut
+the bag off mid-motion, and a held scene left behind kept every item in the hands from animating -
+the 3D PDA could not even come up. So a scene has a ticket:
+
+- `game.hud_scene_id()` - the ticket of the scene on the hands, 0 when there is none. Read it right
+  after your `play_hud_motion`; if it did not change, the hands refused the cycle (their rig does
+  not carry it) and there is no scene of yours.
+- `game.stop_hud_scene(id)` / `game.hold_hud_scene(id)` - stop or hold that scene and no other; a
+  ticket that no longer matches does nothing.
+- A ticket that no longer matches on your next frame means someone else took the hands. Give back
+  what you took (`restore_weapon` for your `hide_weapon`) and leave the scene alone.
+- Before starting, wait out someone else's scene - `game.scene_active()` with a ticket that is not
+  yours - for a bounded time: that is how an item used from the open inventory waits for the bag to
+  be put away, and a suit's scene for the same.
+
+The hands model itself can change under a scene: an outfit put on swaps it, and so does the 3D
+PDA, whose rig carries its own motions only. The engine lays the scene's cycle on the new hands
+where it left off when they carry it, and ends the scene when they do not - left standing, the new
+hands stood in their bind pose with the scene item on their grip bone right in front of the camera.
+The PDA, for its part, comes up only once a scene on the hands is over (at most 1.5 s), so the
+backpack is put away before the device takes the hands; and the backpack, asked for with the PDA
+up, sends the PDA away first and waits for the hands. `qa_hands_state` prints the ticket;
+`tools\qa\water\scene_owners.lua`, `pda_backpack.lua` and `wear_backpack.lua` are the acceptance
+probes.
+
 
 ## Open water
 
@@ -1616,10 +1868,13 @@ the `da_water_map` constant. Gameplay reads the same numbers off the CPU copy th
 frame per actor. `qa_water_state` prints what got baked.
 
 The same sweep bakes the **puddle fill map** (`$user$puddle_fill`, R16F): a Planchon-Darboux fill
-over the same terrain heights, so a puddle lands where water would actually pool instead of where
-a noise function happened to cross a threshold. The noise still shapes the edge; the fill decides
-the place. `r__puddle_fill` is its ladder column, and with it off the placement is exactly what it
-was before.
+over the same terrain heights - how deep water would stand in each dip. It ADDS to the noise
+(`DA_PUDDLE_FILL_GAIN` 0.8 per full 25 cm, `da_puddle_fill_gain` on the CPU): the noise is the
+ground's small relief, the ruts and hollows a 1.4 m lattice cannot see, and the map raises the
+level in the dips on top of it, so they fill first and deepest. It used to REPLACE the noise, and
+flat ground - a village yard, a road, the ground round a campfire - held no water in any storm,
+because the bake sees a dip only where its lattice does. `r__puddle_fill` is its ladder column,
+and with it off the placement is the noise alone.
 
 ### The ripple field
 
@@ -1767,6 +2022,22 @@ means to the dozen scripts that read it.
 `r__rain_quality` is the ladder: oriented splashes from 2, streak lighting from 3, rain into the
 ripple field at 4.
 
+A drop is born by one ray down its column from the cloud end, and that ray is the whole of what
+the rain knows about roofs. The drop's line (`Item::D`) is solved at birth from the gusting wind at
+the eye (`WindAt`) and the drop's own share of the gust, the ray clears that line, and the drop
+falls along it and nothing else until it dies where the ray stopped (`Item::Phit`). A gust reaches
+the sheet through births - a drop lives a fraction of a second - so nothing is steered in flight
+and no drop is ever asked again. Two slips rained on the floor of the player's own new-game start
+in Cordon. The flight step reset every drop to straight down each frame (`normalize_safe(v)`
+REPLACES the vector with `v` normalised, it is not an in-place normalise), so a drop born on a
+slanted line over the house fell through its roof. And a drop born a hand's width over its landing
+took its first step before any check - a metre at 60 fps, metres after a hitch - and drew its head
+under the ceiling for that frame; the step now stops at `Phit`. `qa_rain_column [height] [half]`
+prints the column over the eye - where the drop's query stops, then every static face below the
+cloud end, near to far, with its material and the side the falling water meets - and with `half` a
+map of the columns round the eye, 0.25 m apart, `#` where the rain stops over the eye. That is
+where an indoor-rain report starts.
+
 ### The visor
 
 The water standing on the actor's mask is a field with a memory, exactly as the ripple field is:
@@ -1887,15 +2158,26 @@ while the player was still watching a rifle being holstered. The delay is what i
 animation before the hand actually reaches the glass. The sweep runs one way and only one way -
 it follows an animation, and that animation goes the same way every time; alternating it, which is
 the obvious thing to do so that two wipes do not smear alike, had the glass being wiped against
-the arm the player could see half the time. Over the better part of a second the hand crosses the
-glass: the water just ahead of the edge is shoved along and piles into a bead
-that rides in front of it and runs off the far side, what the edge has passed keeps six per cent
-of its water as a smeared film streaked along the way the hand went, and what it has not reached
-is untouched. It never clears to zero - a wiped visor is not clean glass, and the couple of per
-cent left is exactly what makes it read as wiped.
+the arm the player could see half the time. Over the better part of a second a gloved palm, 28 mm
+of it in contact and its edge drawn in a slight arc, crosses the glass. Where it slides it takes
+the water - all but 4 % where it pressed firmly, twice that where a slow noise says it pressed
+lightly - and leaves most of what it took as film, fibred along the stroke by the glove, and it
+drags the film it laid a moment ago along with it, thinning by e every 10 mm, so a drop leaves a
+streak ahead of where it stood. It never clears to zero - a wiped visor is not clean glass. The
+palm is placed per sim STEP: the frame's steps share the way from where it was at the last step to
+where it is now (`g_visor_wipe_last`), and what a texel loses is the share of the palm that slid
+over it during the step, so the result is the same at any frame rate. Two earlier versions left
+a grid of rectangles: one position for all of a frame's steps held the edge still and jumped it a
+hundred pixels a frame, and the edge was asked to push the water ahead as a bead while it crossed
+the glass three to four times faster than the flux can carry water. The film itself had two bugs
+of its own: the trail step capped the WHOLE film at a trail's worth (0.06 mm), pressing a smear
+down to nothing on the next step, and the optics returned a raw sample of the frame from before
+the tone curve wherever there was film, which painted every smear as a grey blot.
 
 **The look is set by four numbers and they trade against each other**, all in
-`da_visor_drops.ps`. `DA_VD_FLUX` is how much rain arrives. `DA_VD_PIN` is how readily a bead lets
+`da_visor_drops.ps`. `DA_VD_FLUX` is how much rain arrives - 12500 drops a square metre a second
+at full rate: down from 15000 after players found a storm covered the glass too fast, and back up
+from 10000, which read as too sparse. `DA_VD_PIN` is how readily a bead lets
 go - and it, not the rain, is what decides how WET the glass gets, because water leaves a visor by
 running off far faster than it leaves by drying, so the equilibrium is set by how easily it runs;
 it has to sit UNDER `DA_VD_BEAD_H`, or nothing short of a wide merged pancake ever runs and the
@@ -1988,6 +2270,17 @@ own ramp once a second, and in anything but heavy rain that ramp is zero, so sha
 the rain on and off at one hertz - which the player saw as the drops stopping for a while and
 starting again.
 
+**No mask HUD, no glass.** The water is a mask's: `dead_air_x64_visor.script` tells the engine
+whether a mask HUD is up (`visor_worn 1|0` - the mask HUD option on and a helmet or suit with a
+visor on), and without one the renderer neither steps nor draws the field, whatever the rain or a
+dunk would put there, and clears it once, so a mask taken off in the rain takes its drops with it
+and the next one goes on dry. The base driver rains on the screen when the mask HUD option is off,
+as though the eye were a camera lens; here that switch means no visor. The visor's dirt glowing
+round bright light (`USE_LENS_DIRT`, `textures\shaders\s_dirt`) is the same glass: always compiled,
+lit only while a mask is up, `r2_lensdirt 0` turning it off for the session. `qa_visor_wet` and
+`qa_visor_blob` count as glass, so the maskless stand keeps working; `visor_mask.lua` puts a
+respirator on and takes it off in a storm and reads back both halves.
+
 **What the screen spans is 12 cm of visor**, not the visor's width: the eye is a few centimetres
 behind the glass and the field of view cuts a window out of it, and the window is what the screen
 shows edge to edge. That is one constant, `visor_width_m` in `r4_rendertarget.h`, and it sets the
@@ -2042,11 +2335,14 @@ and what they reflect. The ladders live in `xrRender_sync_preset_derived()` (`xr
 
 | Preset | Puddles | Reflection (`r__puddles_refl`) | Puddle distance | Wet ground radius / rain map |
 | --- | --- | --- | --- | --- |
-| Minimum | mask in the G-buffer | none (0) | 15 m | 20 m / 256 |
-| Low | mask | none (0) | 20 m | 20 m / 256 |
-| Default | mask | sky only, no depth march (1) | 30 m | 25 m / 512 |
-| High | mask | world ray-march, sky on a miss (2) | 45 m | 35 m / 512 |
-| Extreme | mask | world ray-march, sky on a miss (2) | 60 m | 50 m / 1024 |
+| Minimum | mask in the G-buffer | none (0) | 20 m | 20 m / 256 |
+| Low | mask | none (0) | 40 m | 30 m / 512 |
+| Default | mask | sky only, no depth march (1) | 60 m | 45 m / 1024 |
+| High | mask | world ray-march, sky on a miss (2) | 90 m | 65 m / 1024 |
+| Extreme | mask | world ray-march, sky on a miss (2) | 120 m | 90 m / 2048 |
+
+Minimum is the 20 m / 20 m every preset shared before the ladders, and the rest follow the rule in
+[How far things are drawn](#how-far-things-are-drawn).
 
 The look constants are the same on every tier and are re-applied on every start, so a `user.ltx`
 from an earlier build cannot pin them: `r__puddles_size 0.6` (share of the ground under water
@@ -2085,6 +2381,20 @@ the unpacked G-buffer layout (`r3_gbuffer_opt off`) the sign of the material flo
 `gbuffer_data.ground` exposes it to any pass; `common_iostructs.h` is now shipped by the mod for
 that one field.
 
+A puddle is water at any distance. Two things let it exist only past a ring round the player, and
+the ring travelled with him. The wet-surface pass (`rain_patch_normal.ps`, strongest at the camera
+and fading out to `r3_dynamic_wet_surfaces_far`) salted the terrain's puddles with the ground's
+pops, run-off and rivulets like the mud round them, so near water read as more wet ground. And a
+reflected ray that met no geometry - every near puddle's, since it leaves steeply upward - reflected
+`L_hemi_color`, the ambient light, several times darker than a storm sky, while a far puddle's ray
+met the lit fog on screen. The wet pass now computes the terrain's own mask (`da_puddles`, the same
+call as the G-buffer and reflection passes; the fill map and ripple field are bound for it in
+`dx11RainBlender.cpp`) and inside it keeps only the rain rings on a levelled normal. A missed ray
+reflects the sky pixel its direction lands on if there is one on screen and the fog colour
+otherwise (the bare dome under the cloud deck is as dark as the ambient). While it rains the
+Fresnel is capped at 0.45: rings roughen the water everywhere, and the far puddles were perfect
+mirrors of the fog, the brightest things on the ground.
+
 Ground wetness starts over with a level load. The accumulator (the `rain_params` binder in
 `r2.cpp`, buildup and drying in minutes) carried a storm's puddles and dark ground into a save
 made in clear weather. `CRender::level_Load` now asks the binder to resolve itself on the first
@@ -2110,22 +2420,55 @@ so the surface brakes a slide by its normal load - barely on a wall, more on a s
 materials (bushes) keep the stock full-speed formula. Both are deliberate departures from the CoC
 and DA sources, requested for the mod.
 
+A landing in water ends on the ground under it, and the water only slows the body on the way.
+The first build of the water rework zeroed the damage outright once the feet stood
+`fall_safe_depth` (0.55 m) deep, so a jump from a tower into a knee-deep swamp was free. Now
+`CPHMovementControl::UpdateCollisionDamage` turns the column over the feet at the landing point -
+the whole depth from the baked water field through `CEnvironment::water_column_at`, deep water
+included, not the wade state's value that stops at `2 x wade_full` - into a lower contact speed,
+and the stock formula takes it from there:
+
+    v' = min(v, max(v * exp(-max(depth - fall_water_shallow, 0) / fall_water_stop_length),
+                    entry * fall_water_surface_impact))
+
+`v` is the contact speed with the bottom, `entry` the downward speed the surface was broken at
+(held while the feet stay under it). The first `fall_water_shallow` (0.9 m, hip height) do not
+cushion at all: the legs reach the bottom through them, so a puddle and knee-deep swamp are hard
+floors. Past that, drag takes the speed down by one e-fold per `fall_water_stop_length` (3.5 m,
+`2m / (rho Cd A)` for 90 kg feet first with `Cd A` about 0.05 m2). The surface hits back with
+`fall_water_surface_impact` (0.7) of the entry speed, so a very high fall into deep water still
+hurts. For Dead Air's 13/30 m/s (heights to the bottom in the physics world's doubled gravity,
+19.62 m/s2): landing at 20 m/s (a 10 m drop, 41 % of the crash range on dry ground) costs 41 % in
+0.8 m of water, 38 % in 1 m, 28 % in 1.3 m, 9 % in 2 m and nothing in 3 m; 25 m/s (16 m, 71 %)
+costs 31 % in 2 m, 16 % in 3 m, 9 % in 5 m; 30 m/s (23 m, lethal on land) 52 %, 39 % and 33 %;
+35 m/s (31 m) still 56 % in 5 m. The reduced speed is
+what everything downstream reads - the stock loss, the landing roll, the camera shake and the hit
+callback - so a roll into water pays the roll's price on the water-reduced speed. Keys in
+`[water_actor]` of `dead_air_x64_water.ltx`: `fall_water_shallow`, `fall_water_stop_length`,
+`fall_water_surface_impact`. Only the actor runs the per-frame water state; NPC and mutant
+movement (the path `Calculate`) is unchanged.
+
 
 ## Landing roll
 
 Landing with the jump key held turns a survivable fall into a forward roll that takes part of the
 impact - the Mirror's Edge landing, without animations. The engine decides at touchdown
-(`CActor::g_Physics`): the stock fall damage must be non-zero and, through the outfit and the
-immunities, less than the current health (`CActorCondition::PredictHealthLoss`); otherwise there
-is no roll and the stock damage or death stands.
+(`CActor::g_Physics`): the stock fall damage must be non-zero, and the ROLL's damage
+(`FallRollHealthLost`), through the outfit and the immunities, must be less than the current
+health (`CActorCondition::PredictHealthLoss`). The first build tested the stock damage instead, so
+at low health a fall the roll would have survived killed the player anyway. The roll's loss then
+replaces the stock one before the landing's single hit is sent, so there is no stock hit and no
+death frame ahead of the tumble. When even the roll would kill, there is no roll and the stock hit
+stands (death either way; the stiff landing is what the player did not survive).
 
 The damage with a roll has two knobs, one per effect. `fall_roll_threshold_raise` (0.375) is
 the share by which the no-damage landing speed grows: `ph_crash_speed_min x (1 + raise)`, Dead
 Air's 13 m/s becoming 17.9 m/s - a fall of some sixteen metres instead of nine. Above that the
 stock slope continues, cut by `fall_roll_damage_reduction` (0.43): the roll costs `(1 - r)` of
 what a stiff landing costs per extra metre per second, measured from the raised threshold. The
-lethal speed (`ph_crash_speed_max`, 30 m/s) is not moved, and a fall that would kill a stiff
-landing never starts a roll. The 0.43 is the force-plate result: the roll cut the peak vertical
+lethal speed (`ph_crash_speed_max`, 30 m/s) is not moved; a roll at 30 m/s costs 41 % of the
+crash range, so a fall that kills a stiff landing is rolled whenever the health covers that. The
+contact speed is the water-reduced one when the landing is in water (see Fall damage). The 0.43 is the force-plate result: the roll cut the peak vertical
 landing force by 43 % against a stiff two-foot landing from 0.75 m (Puddle and Maulder, J Sports
 Sci Med 2013; 90 % CI 34-51 %); trained landings cut it by 40-49 % at 0.44-0.88 m (Standing and
 Maulder, J Sports Sci Med 2015), and a kinematic study from 0.9-2.7 m found the roll's advantage
@@ -2159,6 +2502,44 @@ Keys in `[actor]`: `fall_roll_damage_reduction`, `fall_roll_threshold_raise`, `f
 cannot jump, with `time_factor 0.2` and `r__screenshot_every 1` to catch its phases. Nothing about
 the roll is saved.
 
+
+## A sleep that would kill
+
+The night passes in one jump of game time (`change_game_time` in the sleep dialog's
+`dream_callback`), and the actor's condition used to take the whole jump as one integration step:
+every rate acted for all of it at its bedtime value, the night's radiation landed inside one frame,
+and a booster - its clock runs in real seconds - expired before its effect was applied, so the
+medicine and the vodka did nothing. Three hours with 7 % radiation on the bar is death either way
+in DA (`radiation_health_v 0.0018`, no natural decay); what the player was missing is being told. `CActorCondition::UpdateCondition`
+now takes any stretch longer than two 5-second game steps in steps (`IntegrateTimeJump`): the
+radiation keeps burning and the boosters work for as long as they last, the wounds bleed and close
+as they do, hunger comes, and the belt, the helmet and the suit act inside every step
+(`CActor::ApplyWornEffects`) instead of landing the night's worth a frame later.
+
+The same integration runs ahead of time for a forecast:
+
+- `db.actor:sleep_forecast(game_seconds, satiety_add, psy_add, radiation_add)` runs it on the live
+  state, puts every value back and returns the lowest health on the way - 0 or below is death.
+  The three adds are what the script layer itself hands the sleeper at bedtime, which the first
+  step of the real jump takes as well: DA's `dream_callback` feeds `hours*0.05` of satiety and
+  `hours*0.1` of psy before it moves the clock, and `inventory_radiation.script` lands the whole
+  night's dose of the carried artefacts in its first update after the jump.
+- `db.actor:sleep_forecast_cause()` names the largest drain of the last forecast: 0 none,
+  1 radiation, 2 bleeding, 3 hunger, 4 fields. It can read radiation on a night that is survived.
+- The fields around count without being asked: radiation and psy hits, and anything an anomaly
+  deals, are kept as a rate over the last two real seconds (fading after that), and the forecast
+  has that rate go on all night. Twelve seconds out of a field, it no longer counts.
+
+`dead_air_x64_sleep.script` wraps `ui_sleep_dialog.sleep_dialog.OnButtonSleep`: a sleep the player
+asks for whose forecast ends in death is not slept - the dialog closes and the HUD says why
+(`st_da_x64_sleep_lethal_*` in `dead_air_x64_sleep.xml`: radiation burning from inside, bleeding
+that won't stop, hunger, a place crushing the mind, or a plain "If I fall asleep now, I might not
+wake up"). `sleep_forced()` - fainting, a story knockout - is not a choice and goes ahead. An addon
+that replaces the sleep dialog loses only the guard, with a log line saying so;
+`dead_air_x64_sleep.forecast(hours)` returns the health and the cause for its own use.
+
+Checked on the rig with 7 % radiation and radioactive artefacts carried: 1 h forecast 1.0, woke at
+1.0; 2 h forecast 0.619, woke at 0.605; 3 h forecast lethal, and a forced 3 h sleep killed.
 
 ## An artefact in a container answers for itself
 
@@ -2255,8 +2636,19 @@ It reached the player through OUR scene rather than instead of it. The module co
 mid-scene through the ordinary use, so that `actor_on_item_use` fires - which is exactly what the
 addon listens on. A second scene started inside the first, span while our block was up, and ran to
 its own end, and its end blocks. That is also the double animation the player saw. **One feature,
-one owner:** while the module has a scene for an item, the addon's copy stays out of it; when the
-module is off in Options, or has no scene for that item, the addon works as it always did.
+one owner:** while the module has a scene for the case, the addon's copy stays out of it; when the
+module has no scene for that item, the addon works as it always did. Which functions are such
+copies is knowledge about another mod, so it lives in data, not in the glue script:
+`configs\dead_air_x64_scene_copies.ltx`, `[duplicate_scenes]`, one `<script>.<function> = item|harvest`
+per line; a script or function that is not installed is skipped.
+
+The same addon starts its own mutant harvest too - from the loot window, once the items are taken,
+after ours has already played before the window opened. So with its "Animations: new" switch on
+skinning played twice and ended on the same unmatched `hide_weapon()`, and after that nothing could
+be drawn, the PDA included. That entry point is listed in the same file. With both copies silent the
+switch does nothing at all, so the Game tab no longer offers it; the handful of items only the addon
+animated (iodine, LSD, the metal flask, the tourniquet, a rat carcass) got substitutions of their own
+in `ea_addon_dar2_items.ltx` and `ea_addon_da_items.ltx`.
 
 Three more holes on the same path, each able to strand the hands on its own:
 
@@ -2335,3 +2727,306 @@ is the whole mechanism without a PDA, an outfit or a save; `qa_hud_motion <secti
 the pooled item for a cycle length on the rig loaded now. `tools\qa\water\hud_rig.lua` is the
 acceptance probe: a weapon drawn, the rig swapped to the PDA's and back three times over, with
 draws and holsters on the far side of each swap.
+
+
+## Options -> Game: subsections from data
+
+The Game tab is one scroll list of subsections - Saving, World, Survival, Crosshair, Interface,
+Animations, Sound, Controls, Other - each with its rows under a header, every row with a hover hint.
+The rows are whoever put themselves into the options dialog's `gameplay_options`: the engine's own
+switches, the base game, add-ons, XMS modules. **No option is known to the code by name**; the layout
+is data, `configs\dead_air_x64_gameplay_options.ltx`, and a key that nothing added is skipped, so the
+file may describe more than is installed.
+
+A row finds its subsection, first match wins:
+
+1. its own `group` field - `menu.gameplay_options["my_switch"] = { typ = "check", default = true, group = "world" }`;
+2. the `rows` list of a `[group_<id>]` section of the file;
+3. the prefix of its caption: "Prefix: Name" makes "Prefix" a subsection of its own, placed before
+   the last one, which is how an add-on that labels its rows the old way still lands somewhere sane;
+4. the last subsection of `[groups] order`.
+
+The caption is shown without such a prefix. A header is the string `ui_mm_grp_<id>`. A row's hint is
+the string `ui_mm_<option>_hint`, or its own `hint` field (a string id); a row without either simply
+has none. Captions that read wrong once their neighbours changed are renamed in `[captions]`
+(`<option> = <string id>`) instead of redefining somebody else's string.
+
+**Order is a list, not the order of lines.** The engine hands back the lines of a section sorted, so
+`[groups] order = saves, world, ...` and `[group_<id>] rows = a, b, c` are comma lists. A module's
+`.ltxp` appends to them like to any list: `+order = my_group`, `+rows = my_switch`.
+
+Two more sections: `[hidden]` takes rows out of the table altogether - not just off the screen,
+because the accept and refresh handlers walk the table and would index a control that was never
+built. What is hidden and why: DAR2's "NPCs rob stashes" (nothing reads the switch) and "Animations:
+new" (see the section on the hands above). `[language_lists]` names list options that pick the
+language of the texts: they offer only the translations actually installed - a `text\<lang>` folder
+with at least half as many files as the fullest one; a folder holding a handful of add-on strings is
+not a translation - and are left out when there is just one.
+
+The row template, headers and control column live in `ui_mm_opt.xml` / `ui_mm_opt_16.xml`,
+`tab_gameplay`: `templ_header`, `cap_header`, `templ_item`, `cap_check_axr`, `check_axr`, `list_axr`.
+Every checkbox of the tab, including the engine-bound ones with an `options_item`, sits in one column,
+so a caption never runs into its control. `CUIStatic:SetHint(id)` / `GetHint()` are script exports
+now: the same hover hint the xml `hint` attribute sets, a string id translated when shown.
+
+
+## Options -> Video, Sound, Controls, and the weather dialog: pages that are one list
+
+Video, Sound and Controls are built alike, by `dead_air_x64_option_list.script`: one scroll list,
+a subsection header per group (`ui_mm_grp_<id>`, the Game tab's look), a row per setting with the
+caption on the left and the control in one column on the right, a slider's number beside it, and a
+hover hint on every row. The dialog is the same from the main menu and from the pause menu. What a
+page shows is data, `configs\dead_air_x64_<page>_options.ltx` (`video`, `sound`, `controls`), with
+the rules at the top of the list script:
+
+- `[rows]` - `<row> = <control>, <command>[, <third>]`. `list`, `check` and `track` are the page's
+  node `<control>_<row>` in `ui_mm_opt.xml` / `ui_mm_opt_16.xml` (`video_page`, `sound_page`,
+  `controls_page`), whose `options_item` binds it to the console command and its options group -
+  so Accept, Cancel and the default buttons of `ui_mm_opt_main.script` treat it as before; a track
+  with a format as `<third>` shows its value. A row whose command the game lacks is left out.
+  `button` is the node `button_<row>`, registered with the dialog under `<command>`, the name its
+  click callback listens to (Controls' `keyb_default` -> `btn_keyb_default`). `script` is a control
+  another script builds on the page: the dialog's member `<command>`, its old caption the member
+  `<third>`, which is hidden.
+- `[groups] order` and `[group_<id>] rows` - comma lists, so a module's `.ltxp` appends
+  (`+rows = ...`); `[captions]` - `<row> = <string id>`, else `ui_mm_<row>`.
+- The hint of a row is `st_da_x64_<page>_hint_<row>`; the video page's greyed-out rows have their
+  own (`..._aa_upscaler`, `..._framegen_dx11`, ...). The shared templates (list, header, row,
+  caption, number) are the node `option_list`.
+
+Script rows are how the subtitles got onto the Sound page: `closecaption.script` builds its radio
+group and check on the page during `opt_menu_on_init`, from `tab_sound`, and right after that
+callback `ui_mm_opt_main.script` asks every page to adopt its script rows - each control moves into
+a row of the list (placed by the node `place_<row>`, the row as tall as the control needs) and its
+old caption hides. They join after the rows built beforehand, so their subsection is the last one.
+`closecaption.script` keeps reading and writing them through the same members.
+
+The Controls page ends with the key list, as rows of the same list: a subsection per group of
+`ui_keybinding.xml` with the column captions in its header, a row per action with the key and the
+alternative. The engine supplies both halves - `key_binding_actions()` (the groups and actions of the
+file, the PDA map added when the file lacks it, unknown actions left out) and `xml:InitKeyBind(node,
+parent, action, primary)` (one key cell, saving into the `key_binding` group like the stock list's;
+a cell now follows keyboard layout changes itself). A key row's id is its caption id, `[captions]`
+can rename it like any row (`kb_reload`, too long beside two cells), and its hint is the string
+`<caption id>_hint` (`kb_jump_hint`, `ui_mm_save_game_hint`), so a mod that adds an action to
+`ui_keybinding.xml` adds its hint the same way. Keys a keyboard layout does not name - mouse and
+gamepad buttons - are shown by the string `st_key_<key>` where the text files have one (`st_key_mouse1`
+is "ЛКМ" / "LMB"; the engine's `xfined-ray.xml` carries the mouse ones), by the engine's English name
+otherwise; the same names appear wherever the game prints a binding. The stock `CUIKeyBinding` list follows the same rule
+for addons that ship the stock page script; its rows offer their hints only while the cursor is over
+the visible part of the list, since a row scrolled out of sight still lies under the cursor somewhere
+on the tab and, never drawn, would hold the one static hint the page has.
+
+The main menu's weather dialog (`atmosfear_options.script`, "Опции погоды") is built the same way:
+its two pages are lists over the templates `option_list` of `ui_mm_atmosfear_options.xml` and
+`ui_mm_atmosfear_options_16.xml`, from `init`, `add_header`, `new_row` and `commit_row` of the list
+script, because its controls are not console-bound. The events page is a subsection per event
+(`EVENTS` of the script: blowout, psi storm, fallout) with its enable check and its frequency and
+shelter-task lists; the periods page is one subsection whose header carries the column captions, and
+a row per level AtmosFear runs - by name, a Latin name after the Cyrillic ones - with the weather of
+its good and its bad period side by side (one line on 4:3, two on 16:9, from the nodes of
+`weather_page`). Every control is still the dialog's `check_<name>` / `list_<name>`, so what it
+saves and when it applies it did not change. The hint of a row is `st_da_x64_weather_hint_<row>`,
+and one hint, `..._period`, serves every level. The stock nodes `event_dialog` and `weather_dialog`
+stay for addons that ship the stock script; the 4:3 file now has the `weather_dialog:cap_name` that
+script asks for, whose absence stopped the game on a 4:3 screen.
+
+The stock nodes `tab_video`, `video_adv`, `tab_sound` and `tab_controls` stay for addons that ship the
+stock page scripts. The strings of all of these pages - headers, renamed captions, every hint - and
+the English the game never had for them (the Game rows, the dialogs' tabs, buttons and questions,
+the quality presets, the weather dialog's lists and the levels it names) are in
+`text\<lang>\dead_air_x64_option_pages.xml`; the Russian and English hints use a plain hyphen, since
+the 4:3 hint font draws no em dash. `tools\qa\Check-OptionHints.py` walks every source of a hint in
+both dialogs (the three layouts, the key list, the Game options of every script, the weather
+dialog's rows, the `hint` attributes of the xml) and everything the pages show - captions, headers,
+node texts, the questions, the entries of the video lists as the combo box looks them up
+(`st_opt_<token>`, else the token) - and fails on one without Russian or English text;
+`tools\qa\water\options_tab.lua` asserts the same in the running game and shoots all four tabs and
+the weather dialog's pages.
+
+
+## An item icon from a texture of its own (`icons_texture`)
+
+An item section may name the texture its icon comes from: `icons_texture = ui\my_icons`. Its
+`inv_grid_x/y/width/height` are then read against that texture, in the same 50-pixel grid. Without
+the key nothing changes - the equipment atlas, as always. The key is honoured everywhere an item
+icon is drawn: inventory, trade and loot cells, weapon addons and icon layers, the item tooltip,
+the HUD weapon icon, the pickup icon, the quick slots, the artefact belt and encyclopedia articles.
+It is the key Anomaly-era mods use, so their data carries over, and it lets a module ship icons for
+its own items without touching the shared atlas.
+
+The first user is the bolt. Every STALKER game gives it cell 0,0 - a placeholder nobody ever drew,
+because the bolt was never an inventory item. Here it is two: DA 1.0's HUD icon code, imported into
+the engine, draws the bolt's icon when it is in the hands, and finite bolts (`g_infinite_bolts 0`)
+put bolts into the backpack, the trade window and the pickup list. Under DAR2's atlas cell 0,0 is a
+backpack frame. The bolt now has `ui\ui_da_x64_bolt` (built from the bolt model's own texture: the
+hex head, its end face and the thread) and a description, `st_bolt_descr`; the section is carried in
+the overlay as `configs\weapons\w_bolt.ltx`.
+
+
+## Legacy script calls and luabind overloads
+
+The engine runs luabind in compatibility mode, and the rules there decide whether an old script's
+call happens at all:
+
+* a function bound ONCE is called whatever the arguments - extra ones are ignored, missing ones are
+  converted from nil;
+* a function bound SEVERAL times is called only on an exact match: the same number of arguments,
+  each convertible (a Lua number does NOT pass for a C++ `bool`);
+* no match, or a tie between two overloads, and **nothing happens and nothing is logged**.
+
+So splitting a single binding into overloads silently kills every call written against the old
+single one. `set_actor_position` was split for the ledge climb into `(pos)`, `(pos, bool)` and
+`(pos, bool, bool)`, and 117 calls of the form `set_actor_position(pos, lvid, gvid)` in DAR2 - its
+teleport device, the trader doors, the quest scenes (the ATP bandits' "steal the case" knocks the
+player out and moves him into a locked room) - stopped moving anybody. The form is bound again,
+`(pos, u32, u32)`, ignoring the vertex ids as the original engine did. When a binding has to grow a
+second signature, bind the old form explicitly as well; `tools\qa\water\quest_teleport.lua` is the
+acceptance probe for the one above.
+
+
+## Loading screen tip, and the engine's own strings
+
+The loading screen draws a tip - header, "tip N:" caption, text - only when all three strings exist.
+A missing one used to be drawn as its raw id: DAR2 replaces the tips and leaves the number caption
+out, so every load read "ls_tip_number2:". The original never drew these lines at all.
+
+The engine's own strings (`configs\text\<lang>\xfined-ray.xml`: loading stages, engine menu rows)
+ship in the compatibility archive and fold into the string table **first**, as defaults: every file
+of the game comes after and overrides whatever both define, however the names sort. A language
+folder holding nothing but this file is still not offered as a language.
+
+## The actor menu's sort and filter row
+
+Every item grid of the inventory, the loot, the trade and the upgrade window starts lower by the height
+of a row of small buttons that sits flush left right under the window's header - it rises into the
+free space above the grid, never onto a window there, and the grid keeps whole rows of cells: sort,
+then the filters All, Weapons and ammo, Armour, Food and drink, Medicine, Artefacts and containers,
+Misc. The row is cut out of whichever `actor_menu` layout is
+installed (DA, DAR2, a UI mod), 4:3 and widescreen alike, so a layout needs nothing to get it and
+the row covers nothing. Its look is `configs\ui\actor_menu_tools.xml` (button texture, glyphs,
+colours, sizes, the hint ids); the glyphs are `ui\ui_da_x64_inv_tools`, built by
+`tools\graphics\make_inventory_tools_sheet.py`. A script window laid over the bottom of the bag (an
+older sort button, for one) covers the grid's last row.
+
+**Sorting** merges what is split, in the pane the button belongs to: partial ammo boxes into full
+ones (each box's own size), numbered-section stacks (`vodka` + `vodka` = `vodka_2`; the bases are
+the game's `[stackable]` list, named in `configs\dead_air_x64_inventory_tools.ltx`, the siblings
+found from the sections that exist), and multi-use items (`use_condition`, `remove_after_use`, no
+`next_use_item`) into the fewest items, then lays the grid out again from the top. Quest items are
+never touched; a box or a body the player may not take from is not sorted, and the upgrade window
+has the filters but no sort. A trader's goods get only the merges that keep every item its section:
+his trade lists decide what of his stock he shows at all. The ammo of a living NPC (a trader, a
+companion opened as loot) is never merged: with infinite ammo every emptied box that leaves him is
+replaced by a full one, so a merge would print rounds. Emptied items are released, new stacks
+spawned into the same inventory.
+
+**Filters** are visual. A filtered-out cell stays in its list - counted by `ItemsCount`, priced,
+weighed, taken by Take All, found and removed like any other - it only leaves the grid, and the rest
+is packed from the top; "All", or the active filter pressed again, puts back the layout the grid had
+before. Take All and Store All of the loot window (the button, the key, and the script call
+below) move only what the grid shows while a filter is on, everything under "All". Slots, the belt and the quick slots are never filtered. The filter resets when the window
+closes. Categories come from data, never from item names: artefacts and the empty containers of the
+container registry (`dead_air_x64_af_container.ltx`); weapons except binoculars, ammo, grenades and
+addons (addon classes, anything a weapon section names in `scopes`, `scope_name`, `silencer_name`,
+`grenade_launcher_name`, or a section with `scope_texture`); outfits, helmets and backpacks; eatables
+by their effects - healing, bleeding, protections, a real dose of radiation removal or suppressed
+hunger make medicine, nutrition or a plain drink makes food, any other effect a drug (medicine), none
+at all a tool (misc); everything else misc.
+
+Scripts: `ActorMenu.get_actor_menu()` has `sort_items(pane)` (0 player, 1 loot, 2 trader; false when
+that pane is not open), `set_item_filter(category)` and `get_item_filter()` (0 all, 1 weapons,
+2 armour, 3 food, 4 medicine, 5 artefacts, 6 misc) and `take_all()` (the loot window's Take All,
+false outside it) - the same code the buttons run.
+
+A multi-use item's condition is its share of uses left again: it used to be computed in integers,
+so a partly used one read as worn out (an empty bar, refused by traders).
+
+
+## NPC AI: what scripts and configs see now
+
+Human NPCs perceive, remember and talk on their own (`NPC_AI.md`); mutants are unchanged. Every public name and call
+form stays, but several existing calls now answer from the NPC's own knowledge instead of the truth. A script that
+relied on the old answers keeps running and gets honest ones.
+
+**Memory is per NPC.** For a stalker, `memory_time`, `memory_position`, `best_enemy`, the enemy selection and the
+list getters (`memory_visible_objects`, `memory_sound_objects`, `memory_hit_objects`, `not_yet_visible_objects`) return
+what that NPC knows: its own sightings, its own heard and hit estimates, and reports that reached it. `memory_position`
+of a creature out of sight is the NPC's belief, off by its error; a live creature it neither sees nor believes in has
+no memory time. `see` is the NPC's own sight only - a squad mate's sighting no longer counts - and for the enemy a
+fighting NPC has selected it turns false one update earlier after the target ducks out of sight. Nothing in the
+stock pool is read for a stalker's decision any more.
+
+**`make_object_visible_somewhen(obj)` on a stalker is a rumour**: the object's position at that moment plus a 25 m
+error (`[ai_errors] script`), source `script`, never a sighting. The NPC can search and look there; it cannot shoot or
+throw at it. To hand an NPC an honest report with an error you choose, use `npc:ai_inform(obj, pos, err, source)`
+(a `seen` or `none` source becomes `script`). Monsters keep the stock behaviour.
+
+**`visual_memory_manager.get_visible_value`** keeps its arguments, and our overlay copy keeps DA's formula without the
+direction-less torch and lighter bonus (the engine's light sense replaces it) and with a positive denominator in fog.
+For stalkers the value is an intensity integrated over time: detection takes a while and depends on distance, light,
+stance, foliage and rank. A value at or above the threshold still means "seen at once", so a script that forces
+visibility that way still works.
+
+**Hearing a new human action.** The engine's own step, reload and torch sound events of humans no longer reach the AI
+(the noise bus replaces them with gait, surface and load); `callback.sound` still receives them. A mod that wants NPCs
+to hear something new calls `level.ai_noise(pos, loudness, kind, who)` (`kind` = `step`, `landing`, `reload`,
+`grenade_draw`, `item`, `torch_click`, `impact`, `voice`, `shot`, `explosion`; loudness 1.0 = a sprint, heard within
+36 m for steps and 40 m otherwise). Ground surfaces are data: `[ai_noise_surface] <material name> = factor`.
+
+**Base DA scripts are wrapped, not forked.** `dead_air_x64_ai.script` wraps `xr_danger`, `xr_npc_extra`, the
+camper, fight-from-cover, friendly-fire, corpse, wounded-help, medkit and kill-wounded schemes and
+`ai_stalker.update_best_weapon` at run time and keeps each original; a mod that replaces one of those functions after
+us wins. Behaviour that changed:
+
+- The first-contact broadcast of `xr_npc_extra` (goodwill -1000 for the whole faction within 100 m of the actor) and
+  the hit broadcast are gone: hostility reaches the victim, members of its community that saw the attack, and those
+  told about it by a member of their own community.
+- `xr_danger` no longer detects the actor by carried weight or torch without line of sight, no longer turns a corpse
+  into the live actor position, and reacts to heard attacks only where the NPC's own senses placed the source.
+- `xr_combat_ignore.script` ships as an overlay copy of base DA's: the `is_enemy` range caps (150/100/75/60 m) measure
+  the NPC's memory position of the enemy instead of the true one, and an attack by the actor drops `combat_ignore`
+  only for squad mates that perceive him or are told. A loose `xr_combat_ignore.script` of a mod replaces the copy
+  and brings DA's true-distance caps back for that installation.
+- The weapon choice prefers the weapon whose range band holds the known enemy distance; the sidearm up close.
+- NPCs are issued grenades at spawn by profile (`grenade_issue`); `configs\ai_tweaks\xrs_kill_wounded.ltx` names Duty
+  `dolg`, as the game does.
+
+**Reports to scripts.** `dead_air_x64_ai.subscribe_report(fn)` / `unsubscribe_report(fn)` register
+`fn(receiver, target, kind, channel, sender)`, called for a delivered message (at most once per receiver and target
+per 2 s, from a once-per-frame dispatch at most a frame later; kind and channel indices in `NPC_AI.md`). It is not a `RegisterScriptCallback` name: DA's callback table is a
+closed local, and an unknown name there is dropped without a word.
+
+**New Lua API** (one binding per name, so loose arguments are safe): `npc:ai_awareness(obj)`,
+`ai_belief_source/error/age/position(obj)`, `ai_known_distance(obj)`, `ai_enemy_sees_me(enemy)`,
+`ai_inform(obj, pos, err, source)`, `ai_has_radio()`, `ai_is_leader()`, `ai_morale()` (0..4 panicked..heroic,
+5 surrendered), `ai_fear()`, `ai_role()`, `ai_suppression()`, `ai_searching()`, `ai_profile(key)`,
+`ai_weapon_class(item)`, `ai_danger_near(pos, radius, since)` (the type of the nearest danger the NPC holds there,
+-1 = none); globals `level.ai_noise`, `ai_stat(key)`, `ai_feature_enabled(name)`; planner ids
+`stalker_ids.da_property_*` and `stalker_ids.da_action_*` in the range `0x00DA0000`-`0x00DA01FF`, which no script
+uses. A mod that replaces the Panic or a danger evaluator from Lua still wins (the last replacement wins).
+
+**Tuning by data.** Every number of the AI is in `configs\dead_air_x64_ai.ltx`, merged into `system.ltx` before the
+XMS config stage, so a module's `.ltxp` or `configs\xms\*.ltx` patches single keys; do not ship a loose copy, which
+replaces the whole file. The usual cases:
+
+```ini
+[ai_community_alias]
+renegade      = bandit                    ; a mod's community fights like bandits
+
+[ai_profile_by_character]
+my_mod_sniper = ai_profile_army_sniper    ; a special character, by specific character id prefix
+
+[ai_weapon_class_overrides]
+wpn_my_gun    = dmr                       ; a weapon the generic class rules would misclass
+
+[ai_profile_bandit_r1]
+react_ms      = 1400, 2000                ; one key of one faction and rank band
+```
+
+Profiles resolve key by key through a chain (character, community and band, default), not through `[a]:b` parents,
+so patching one key of `ai_profile_army` reaches every soldier whose band section does not set it. A community
+without a profile gets `ai_profile_default`, scaled by rank band, and one log line.
+
+**Testing.** `ai_feature <name> 0/1` switches one part of the AI at run time (`all` for everything; stock behaviour
+when off), `ai_stats` prints the counters, `ai_log_period <ms>` prints them periodically. None of them is saved.

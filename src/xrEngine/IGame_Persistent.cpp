@@ -432,17 +432,20 @@ void IGame_Persistent::LoadTitle(pcstr ls_title, bool change_tip, shared_str map
         if (noTips)
             return;
 
-        xr_sprintf(buff, "%s%d:", StringTable().translate("ls_tip_number").c_str(), tip_num);
-        const shared_str tmp = buff;
+        string64 tip_id;
+        xr_sprintf(tip_id, is_single ? "ls_tip_%d" : "ls_mp_tip_%d", tip_num);
 
-        if (is_single)
-            xr_sprintf(buff, "ls_tip_%d", tip_num);
+        // The tip is shown whole or not at all. A string the game does not define comes back as its
+        // raw id, and a game can replace the tips while leaving the number caption out.
+        shared_str header, number, tip;
+        if (StringTable().translate("ls_header", header) && StringTable().translate("ls_tip_number", number) &&
+            StringTable().translate(tip_id, tip))
+        {
+            xr_sprintf(buff, "%s%d:", number.c_str(), tip_num);
+            m_pLoadingScreen->SetStageTip(header.c_str(), buff, tip.c_str());
+        }
         else
-            xr_sprintf(buff, "ls_mp_tip_%d", tip_num);
-
-        m_pLoadingScreen->SetStageTip(StringTable().translate("ls_header").c_str(),
-            tmp.c_str(),
-            StringTable().translate(buff).c_str());
+            m_pLoadingScreen->SetStageTip(nullptr, nullptr, nullptr);
     }
 
     LoadStage();

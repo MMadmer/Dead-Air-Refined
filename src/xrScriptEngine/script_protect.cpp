@@ -283,37 +283,50 @@ int lfs_dir(lua_State* L)
 
 // ---- marshal: no functions, so no bytecode ------------------------------------------------------
 
-// Whether encoding the value at `index` would write a function: a function value, or a table
-// or userdata whose __persist hands the encoder one.
-bool holds_function(lua_State* L, int index, int depth, xr_vector<const void*>& seen)
+// Whether encoding the value at the absolute `index` would write a function, asked the way the
+// encoder asks (lmarshal.c): a function value; a table with __persist, whose hook always hands
+// over a function; a userdata whose __persist returns a function rather than Lua source text.
+// The game's CTime returns source text, and a save without CTimes does not exist.
+// `seen` is the absolute index of a table of the tables already walked.
+bool holds_function(lua_State* L, int index, int seen, int depth)
 {
-    if (index < 0 && index > LUA_REGISTRYINDEX)
-        index = lua_gettop(L) + index + 1;
     const int type = lua_type(L, index);
     if (type == LUA_TFUNCTION)
         return true;
     if (type != LUA_TTABLE && type != LUA_TUSERDATA)
         return false;
-    if (depth > 256)
+    // too deep to walk, or no room left on the stack to walk it: refused rather than guessed
+    if (depth > 256 || !lua_checkstack(L, 4))
         return true;
-    if (lua_getmetatable(L, index))
+    if (luaL_getmetafield(L, index, "__persist"))
     {
-        lua_getfield(L, -1, "__persist");
-        const bool persist = !lua_isnil(L, -1);
-        lua_pop(L, 2);
-        if (persist)
+        if (type == LUA_TTABLE)
+        {
+            lua_pop(L, 1);
             return true;
+        }
+        // A hook that fails here fails again in the encoder, which reports it.
+        lua_pushvalue(L, index);
+        const bool function = lua_pcall(L, 1, 1, 0) == 0 && lua_isfunction(L, -1);
+        lua_pop(L, 1);
+        return function;
     }
     if (type != LUA_TTABLE)
         return false;
-    const void* table = lua_topointer(L, index);
-    if (std::ranges::find(seen, table) != seen.end())
+    lua_pushvalue(L, index);
+    lua_rawget(L, seen);
+    const bool walked = !lua_isnil(L, -1);
+    lua_pop(L, 1);
+    if (walked)
         return false;
-    seen.push_back(table);
+    lua_pushvalue(L, index);
+    lua_pushboolean(L, true);
+    lua_rawset(L, seen);
     lua_pushnil(L);
     while (lua_next(L, index))
     {
-        if (holds_function(L, -2, depth + 1, seen) || holds_function(L, -1, depth + 1, seen))
+        const int value = lua_gettop(L);
+        if (holds_function(L, value - 1, seen, depth + 1) || holds_function(L, value, seen, depth + 1))
         {
             lua_pop(L, 2);
             return true;
@@ -325,8 +338,11 @@ bool holds_function(lua_State* L, int index, int depth, xr_vector<const void*>& 
 
 PROTECT_HELPER bool stores_function(lua_State* L, pcstr what, Message& message)
 {
-    xr_vector<const void*> seen;
-    if (!holds_function(L, 1, 0, seen))
+    // The walked tables live in a Lua table: no object here for an error to unwind through.
+    lua_newtable(L);
+    const bool function = holds_function(L, 1, lua_gettop(L), 0);
+    lua_pop(L, 1);
+    if (!function)
         return false;
     log_refusal(L, what, nullptr, "functions cannot be stored in protected mode");
     xr_sprintf(message, "%s refused by protected mode: functions cannot be stored", what);

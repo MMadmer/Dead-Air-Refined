@@ -7,7 +7,7 @@ struct game_action;
 struct keyboard_key;
 class CUIColorAnimatorWrapper;
 
-class CUIEditKeyBind final : public CUIStatic, public CUIOptionsItem
+class CUIEditKeyBind final : public CUIStatic, public CUIOptionsItem, public pureKeyMapChanged
 {
     bool m_primary;
     bool m_isGamepadBinds;
@@ -30,6 +30,9 @@ public:
 
     void SetValue();
     virtual void OnMessage(LPCSTR message);
+
+    // Key names follow the keyboard layout: another layout renames the keys shown.
+    void OnKeyMapChanged() override { SetValue(); }
 
     // CUIWindow methods
     void InitKeyBind(Fvector2 pos, Fvector2 size);

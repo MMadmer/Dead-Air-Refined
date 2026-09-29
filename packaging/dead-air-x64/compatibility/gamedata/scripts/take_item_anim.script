@@ -196,9 +196,9 @@ function delete_fake()
 end
 
 function restore_knife()
-	-- [DA_PORT] Сцену закрываем явно. Без этого мешок оставался прицепленным к рукам и вылезал
-	-- в следующей анимации любого предмета: движок держит предмет сцены до остановки.
-	game.stop_hud_motion()
+	-- The bag scene is gone from this path (see above), so there is nothing of ours on the hands to
+	-- stop; a stop here ended whatever scene another module had put up - the backpack of an
+	-- inventory opened right after the loot window.
 	-- [DA_PORT] Возврат ножа после сцены. unblock_all_slots обязателен: убирание оружия
 	-- СЧИТАЕТСЯ, а не переключается, и без обнуления счётчика слоты остались бы запертыми.
 	-- [DA_PORT] Только снятие блокировки; сам слот вернёт return_slots ниже, явным вызовом.

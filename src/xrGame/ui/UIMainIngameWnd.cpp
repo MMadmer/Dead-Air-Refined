@@ -595,6 +595,7 @@ void CUIMainIngameWnd::UpdatePickUpItem()
     texture_rect.lt.set(m_iXPos * INV_GRID_WIDTH, m_iYPos * INV_GRID_HEIGHT);
     texture_rect.rb.set(m_iGridWidth * INV_GRID_WIDTH, m_iGridHeight * INV_GRID_HEIGHT);
     texture_rect.rb.add(texture_rect.lt);
+    UIPickUpItemIcon->SetShader(InventoryUtilities::GetItemIconsShader(sect_name));
     UIPickUpItemIcon->GetStaticItem()->SetTextureRect(texture_rect);
     UIPickUpItemIcon->SetStretchTexture(true);
 
@@ -853,7 +854,7 @@ void CUIMainIngameWnd::UpdateQuickSlots()
                 wnd->TextItemControl()->SetText(str);
                 wnd->Show(true);
 
-                slot->SetShader(InventoryUtilities::GetEquipmentIconsShader());
+                slot->SetShader(InventoryUtilities::GetItemIconsShader(item_name));
                 Frect texture_rect;
                 texture_rect.x1 = pSettings->r_float(item_name, "inv_grid_x") * INV_GRID_WIDTH;
                 texture_rect.y1 = pSettings->r_float(item_name, "inv_grid_y") * INV_GRID_HEIGHT;

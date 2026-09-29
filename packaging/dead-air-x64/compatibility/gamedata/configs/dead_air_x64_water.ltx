@@ -216,8 +216,15 @@ entry_radius_max        = 3.2
 ps_entry                = hit_fx\effects\hit_water_splash_01
 ps_entry_big            = hit_fx\effects\hit_water_splash_02
 
-; --- landing damage: water this deep takes the whole fall, from the ankle to it it tapers ---
-fall_safe_depth         = 0.55
+; --- landing damage through water: the ground under it still stops the body, the water only slows it ---
+; The column is the whole depth over the feet at the landing point, deep water included. The
+; contact speed the stock damage and the landing roll read becomes
+;   max(v * exp(-max(depth - fall_water_shallow, 0) / fall_water_stop_length),
+;       entry_speed * fall_water_surface_impact)
+; never more than v. Replaces fall_safe_depth, which made knee-deep water take any fall whole.
+fall_water_shallow        = 0.9   ; metres the legs reach the bottom through (hip height): no cushion
+fall_water_stop_length    = 3.5   ; metres per e-fold of speed past that: 2m/(rho*Cd*A), 90 kg feet first, Cd*A ~ 0.05 m2
+fall_water_surface_impact = 0.7   ; share of the entry speed the surface hits back with (a 23 m drop, lethal on land, into 5 m of lake: 33 %)
 
 ; --- the dose an injurious liquid delivers: a depth and a motion, not a binary tick ---
 rad_depth_ref           = 1.0   ; depth at which the material's own rate is reached

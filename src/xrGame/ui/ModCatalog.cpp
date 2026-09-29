@@ -6,6 +6,7 @@
 
 #ifdef XR_PLATFORM_WINDOWS
 #include "ModHttp.h"
+#include "ModUpdateService.h"
 
 #include "xrCore/XMS/xms_catalog.h"
 #include "xrCore/XMS/xms_core.h"
@@ -1005,6 +1006,8 @@ void run_refresh(ModHttp::Session& session)
     Msg("* [catalog] serial %llu from %s: %zu module(s)", static_cast<unsigned long long>(snapshot->serial), mirror.c_str(),
         snapshot->entries.size());
     publish(snapshot);
+    // a module installed by hand may turn out to be one of the catalog's releases (MOD_CATALOG 14.1)
+    ModUpdateService::CatalogRefreshed();
 }
 
 // ---- thumbnails ------------------------------------------------------------------------------------------
@@ -1697,7 +1700,8 @@ bool ModCatalog::PostReview(pcstr id, u32 stars, const xr_string& text, const xr
     const size_t length = TextLength(body);
     if (!snapshot->reviewsWritable)
         error = "reviews cannot be written in this catalog";
-    else if (!module || !snapshot->Find(id))
+    // the catalog's module, not another author's under the same id
+    else if (!module || !XMS::Catalog::IsCatalogModule(*module) || !snapshot->Find(id))
         error = "only an installed module of the catalog can be reviewed";
     else if (stars < 1 || stars > 5)
         error = "pick from one to five stars";

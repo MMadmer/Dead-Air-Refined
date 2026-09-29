@@ -20,11 +20,10 @@ IC ai_obstacle::ai_obstacle(CGameObject* object) : m_crc(0)
 
 IC void ai_obstacle::compute()
 {
-    if (m_actual)
+    if (m_actual.load(std::memory_order_acquire))
         return;
 
-    m_actual = true;
-    compute_impl();
+    compute_locked();
 }
 
 IC const ai_obstacle::AREA& ai_obstacle::area()

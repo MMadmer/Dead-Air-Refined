@@ -23,6 +23,7 @@
 #include "client_spawn_manager.h"
 #include "memory_manager.h"
 #include "xrEngine/IGame_Persistent.h"
+#include "da_ai_senses.h" // [ai:sense] hook
 
 #ifndef MASTER_GOLD
 #include "Actor.h"
@@ -144,6 +145,15 @@ void CHitMemoryManager::add(float amount, const Fvector& vLocalDir, const IGameO
                           ((*J).m_squad_mask.get() | m_stalker->agent_manager().member().mask(m_stalker))));
         (*J).m_amount = _max(amount, (*J).m_amount);
     }
+
+    // [ai:sense] begin hit_estimate
+    // A stalker's entry holds where it believes the hit came from (the estimate CAI_Stalker::Hit made just before).
+    if (m_stalker)
+    {
+        if (const auto entry = std::find(m_hits->begin(), m_hits->end(), object_id(who)); entry != m_hits->end())
+            DaAi::Sense::apply_hit_estimate(*m_stalker, *entry);
+    }
+    // [ai:sense] end hit_estimate
 }
 
 void CHitMemoryManager::add(const CHitObject& _hit_object)

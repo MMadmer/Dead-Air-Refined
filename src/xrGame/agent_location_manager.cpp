@@ -13,6 +13,7 @@
 #include "agent_enemy_manager.h"
 #include "ai/stalker/ai_stalker.h"
 #include "cover_point.h"
+#include "da_ai_tactics.h"
 
 const float MIN_SUITABLE_ENEMY_DISTANCE = 3.f; // 10.f;
 
@@ -103,8 +104,15 @@ bool CAgentLocationManager::suitable(CAI_Stalker* object, const CCoverPoint* loc
         CAgentEnemyManager::ENEMIES::const_iterator I = this->object().enemy().enemies().begin();
         CAgentEnemyManager::ENEMIES::const_iterator E = this->object().enemy().enemies().end();
         for (; I != E; ++I)
-            if ((*I).m_enemy_position.distance_to_sqr(location->position()) < _sqr(MIN_SUITABLE_ENEMY_DISTANCE))
+        {
+            // F2: a stalker keeps its cover away from the enemies it knows of, at their believed positions.
+            Fvector enemy_position = (*I).m_enemy_position;
+            if (bool known{}; DaAi::Tactics::cover_enemy_position(*object, (*I).m_object, known, enemy_position) &&
+                !known)
+                continue;
+            if (enemy_position.distance_to_sqr(location->position()) < _sqr(MIN_SUITABLE_ENEMY_DISTANCE))
                 return (false);
+        }
     }
 
     return (true);
@@ -159,6 +167,8 @@ void CAgentLocationManager::add(CDangerLocationPtr location)
     }
 
     danger->m_level_time = location->m_level_time;
+    // Members told of the danger later join its mask (H12).
+    danger->m_mask.assign(danger->m_mask.get() | location->m_mask.get());
 
     if (danger->m_interval < location->m_interval)
         danger->m_interval = location->m_interval;

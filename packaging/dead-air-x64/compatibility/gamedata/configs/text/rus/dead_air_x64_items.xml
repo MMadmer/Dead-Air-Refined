@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Texts of items the base game leaves without one. -->
+	<string id="st_bolt_descr">
+		<text>Обычный стальной болт. Если бросить его перед собой, аномалия на его пути выдаст себя.</text>
+	</string>
+</string_table>

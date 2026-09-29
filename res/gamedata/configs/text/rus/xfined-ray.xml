@@ -132,4 +132,28 @@
 	<string id="ukr">
 		<text>Украинский (Ukrainian)</text>
 	</string>
+	<string id="st_key_mouse1">
+		<text>ЛКМ</text>
+	</string>
+	<string id="st_key_mouse2">
+		<text>ПКМ</text>
+	</string>
+	<string id="st_key_mouse3">
+		<text>СКМ</text>
+	</string>
+	<string id="st_key_mouse4">
+		<text>Мышь 4</text>
+	</string>
+	<string id="st_key_mouse5">
+		<text>Мышь 5</text>
+	</string>
+	<string id="st_key_mouse6">
+		<text>Мышь 6</text>
+	</string>
+	<string id="st_key_mouse7">
+		<text>Мышь 7</text>
+	</string>
+	<string id="st_key_mouse8">
+		<text>Мышь 8</text>
+	</string>
 </string_table>

@@ -8,6 +8,7 @@
 #include "ActorHelmet.h"
 #include "Artefact.h"
 #include "Weapon.h"
+#include "da_ai.h"
 
 namespace SaveExtensionGameplay
 {
@@ -26,6 +27,8 @@ struct CaptureState
     SActorAdrenalineSaveCaptureState actor;
     SHelmetFilterSaveCaptureState helmet;
     SArtefactOverrideSaveCaptureState artefact;
+    DaAi::ChunkCapture aiKnowledge;
+    DaAi::ChunkCapture aiTraits;
     ChunkMutationList mutations;
     xr_vector<u8> payload;
     size_t encodeIndex{};

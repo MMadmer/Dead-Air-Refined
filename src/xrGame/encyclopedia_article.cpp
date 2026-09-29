@@ -70,7 +70,7 @@ void CEncyclopediaArticle::load_shared(LPCSTR)
 
     if (ltx)
     {
-        data()->image.SetShader(InventoryUtilities::GetEquipmentIconsShader());
+        data()->image.SetShader(InventoryUtilities::GetItemIconsShader(ltx));
         Frect tex_rect;
         tex_rect.x1 = float(pSettings->r_u32(ltx, "inv_grid_x") * INV_GRID_WIDTH);
         tex_rect.y1 = float(pSettings->r_u32(ltx, "inv_grid_y") * INV_GRID_HEIGHT);

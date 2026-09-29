@@ -14,6 +14,8 @@
 local ANIM_FALLBACK_MS = 1100
 local SECT = "da_pickup_hud"
 local busy, one_hand = false, false
+-- The ticket of our scene on the hands (game.hud_scene_id): only this one is ever stopped.
+local pickup_scene = 0
 
 function on_game_start()
 	RegisterScriptCallback("actor_on_first_update", reset)
@@ -24,12 +26,17 @@ end
 -- they close: drop them, the input gate is lifted by enhanced_animations on the same frame.
 function reset()
 	busy, one_hand = false, false
+	pickup_scene = 0
 	RemoveTimeEvent("da_pickup_anim", "start")
 	RemoveTimeEvent("da_pickup_anim", "stop")
 end
 
 function after_pickup(obj)
 	if busy or not obj or not db.actor then return end
+	-- The hands are in someone else's scene (an item being used, a thing being put on): the item is
+	-- already in the backpack, the gesture is only a flourish, and started over that scene it
+	-- would cut it short.
+	if game.scene_active() then return end
 
 	busy = true
 	-- A weapon in the hands: the left hand alone plays the scene and the weapon stays
@@ -47,13 +54,17 @@ function start_anim()
 	local anim_ms = game.get_motion_length(SECT, "anm_ea_show", 1.0)
 	if not anim_ms or anim_ms <= 0 then anim_ms = ANIM_FALLBACK_MS end
 
+	local before = game.hud_scene_id()
 	game.play_hud_motion(one_hand and 1 or 2, SECT, "anm_ea_show", false, 1.0, 0)
+	local id = game.hud_scene_id()
+	pickup_scene = (id ~= before) and id or 0
 	CreateTimeEvent("da_pickup_anim", "stop", anim_ms / 1000, stop_anim)
 	return true
 end
 
 function stop_anim()
-	game.stop_hud_motion()
+	game.stop_hud_scene(pickup_scene)
+	pickup_scene = 0
 	level.enable_input()
 	game.only_allow_movekeys(false)
 	if not one_hand then db.actor:restore_weapon() end

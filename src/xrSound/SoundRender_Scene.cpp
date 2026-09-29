@@ -220,7 +220,11 @@ void CSoundRender_Scene::play_at_pos(ref_sound& S, IGameObject* O, const Fvector
 CSoundRender_Emitter* CSoundRender_Scene::i_play(ref_sound& S, u32 flags, float delay)
 {
     VERIFY(!S->feedback);
-    CSoundRender_Emitter* E = s_emitters.emplace_back(xr_new<CSoundRender_Emitter>(this));
+    CSoundRender_Emitter* E = xr_new<CSoundRender_Emitter>(this);
+    {
+        std::lock_guard lock(s_emitters_lock);
+        s_emitters.emplace_back(E);
+    }
     S->feedback = E;
     E->start(S, flags, delay);
     return E;

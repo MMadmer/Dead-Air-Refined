@@ -58,6 +58,9 @@ public:
     u32 in_detour() const;
     bool can_detour() const;
     bool cover_detouring() const;
+    // The same questions asked by one member: its role and what it was told or saw decide (tactics roles).
+    bool can_detour(const CAI_Stalker& member) const;
+    bool cover_detouring(const CAI_Stalker& member) const;
     bool can_cry_noninfo_phrase() const;
     bool can_throw_grenade(const Fvector& location) const;
     void on_throw_completed();

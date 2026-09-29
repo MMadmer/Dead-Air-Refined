@@ -28,6 +28,8 @@
 #include "client_spawn_manager.h"
 #include "memory_manager.h"
 #include "ai/monsters/basemonster/base_monster.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_senses.h"
 
 #ifndef MASTER_GOLD
 #include "Actor.h"
@@ -183,6 +185,11 @@ const CVisionParameters& CVisualMemoryManager::current_state() const
 
 u32 CVisualMemoryManager::visible_object_time_last_seen(const IGameObject* object) const
 {
+    // [ai:know] begin visible_object_time_last_seen
+    if (u32 result{}; m_stalker && DaAi::Know::hook_time_last_seen(*m_stalker, object, result))
+        return result;
+    // [ai:know] end visible_object_time_last_seen
+
     VISIBLES::iterator I = std::find(m_objects->begin(), m_objects->end(), object_id(object));
     if (I != m_objects->end())
         return (I->m_level_time);
@@ -202,6 +209,12 @@ bool CVisualMemoryManager::visible_right_now(const CGameObject* game_object) con
     {
         return false;
     }
+
+    // [ai:know] begin visible_right_now
+    if (bool result{};
+        m_stalker && DaAi::Know::hook_visible_right_now(*m_stalker, game_object, m_last_update_time, result))
+        return result;
+    // [ai:know] end visible_right_now
 
     VISIBLES::const_iterator I = std::find(objects().begin(), objects().end(), object_id(game_object));
     if ((objects().end() == I))
@@ -228,6 +241,11 @@ bool CVisualMemoryManager::visible_now(const CGameObject* game_object) const
     {
         return false;
     }
+
+    // [ai:know] begin visible_now
+    if (bool result{}; m_stalker && DaAi::Know::hook_visible_now(*m_stalker, game_object, m_last_update_time, result))
+        return result;
+    // [ai:know] end visible_now
 
     VISIBLES::const_iterator I = std::find(objects().begin(), objects().end(), object_id(game_object));
     return ((objects().end() != I) && (*I).visible(mask()));
@@ -301,6 +319,10 @@ float CVisualMemoryManager::object_luminocity(const CGameObject* game_object) co
     if (!smart_cast<CEntityAlive const*>(game_object)) //Alundaio
         return (1.f);
     float luminocity = const_cast<CGameObject*>(game_object)->ROS()->get_luminocity();
+    // [ai:sense] begin daylight_floor
+    if (m_stalker && DaAi::Sense::metered(*m_stalker))
+        luminocity = DaAi::Sense::target_luminocity(*game_object, luminocity);
+    // [ai:sense] end daylight_floor
     float power = log(luminocity > .001f ? luminocity : .001f) * current_state().m_luminocity_factor;
     return (exp(power));
 }
@@ -387,6 +409,47 @@ bool CVisualMemoryManager::visible(const CGameObject* game_object, float time_de
     float object_distance, distance = object_visible_distance(game_object, object_distance);
 
     CNotYetVisibleObject* object = not_yet_visible_object(game_object);
+
+    // Stalkers integrate an awareness meter over time instead of passing or failing each tick (DA assigns the value,
+    // CoC accumulated it): the stock value is kept in the stock units for the HUD indicator and the scripts.
+    if (m_stalker && DaAi::Sense::metered(*m_stalker))
+    {
+        if (!object)
+        {
+            CNotYetVisibleObject new_object;
+            new_object.m_object = game_object;
+            new_object.m_prev_time = 0;
+            new_object.m_value = 0.f;
+            add_not_yet_visible_object(new_object);
+            object = &m_not_yet_visible_objects.back();
+        }
+
+        const CVisionParameters& state = current_state();
+        DaAi::Sense::Glimpse glimpse;
+        glimpse.danger = &state == &m_danger;
+        glimpse.object_distance = object_distance;
+        glimpse.in_range = distance >= object_distance;
+        // An identified target stays identified while in range: its meter needs no intensity (a Lua call per object).
+        if (glimpse.in_range && !DaAi::Sense::identified(*m_stalker, *game_object))
+        {
+            // One time quantum of the stock value (or of the script hook) is the dt-independent intensity.
+            if (!DaAi::Sense::cached_intensity(*m_stalker, *game_object, glimpse.danger, object_distance,
+                    glimpse.intensity))
+            {
+                glimpse.intensity = get_visible_value(game_object, distance, object_distance, state.m_time_quant,
+                    get_object_velocity(game_object, *object), object_luminocity(game_object));
+                DaAi::Sense::store_intensity(
+                    *m_stalker, *game_object, glimpse.danger, object_distance, glimpse.intensity);
+            }
+            glimpse.instant = glimpse.intensity >= state.m_visibility_threshold;
+        }
+
+        object->m_value =
+            DaAi::Sense::vision_seen(*m_stalker, *game_object, glimpse, state.m_visibility_threshold, time_delta);
+        object->m_update_time = Device.dwTimeGlobal;
+        object->m_prev_time = get_prev_time(game_object);
+        return object->m_value >= state.m_visibility_threshold;
+    }
 
     if (distance < object_distance)
     {
@@ -494,6 +557,11 @@ void CVisualMemoryManager::add_visible_object(const IGameObject* object, float t
     if (!game_object || (!fictitious && !visible(game_object, time_delta)))
         return;
     //	STOP_PROFILE
+
+    // [ai:know] begin add_visible_object
+    if (m_stalker)
+        DaAi::Know::on_add_visible(*m_stalker, *game_object, fictitious);
+    // [ai:know] end add_visible_object
 
     //	START_PROFILE("Memory Manager/visuals/update/add_visibles/find_object_by_id")
     self = m_object;
@@ -726,8 +794,14 @@ void CVisualMemoryManager::update(float time_delta)
         xr_vector<CVisibleObject>::iterator I = m_objects->begin();
         xr_vector<CVisibleObject>::iterator E = m_objects->end();
         for (; I != E; ++I)
+        {
+            // [ai:know] begin make_invisible
+            if (m_stalker && DaAi::Know::hook_make_invisible(*m_stalker, *I, mask))
+                continue;
+            // [ai:know] end make_invisible
             if ((*I).m_level_time + current_state().m_still_visible_time < Device.dwTimeGlobal)
                 (*I).visible(mask, false);
+        }
     }
     STOP_PROFILE
 
@@ -742,11 +816,19 @@ void CVisualMemoryManager::update(float time_delta)
 
     START_PROFILE("Memory Manager/visuals/update/make_not_yet_visible")
     {
+        // The awareness of a stalker fades while the rays do not reach the object; stock resets it at once.
+        const bool metered = m_stalker && DaAi::Sense::metered(*m_stalker);
+        const bool danger = &current_state() == &m_danger;
         xr_vector<CNotYetVisibleObject>::iterator I = m_not_yet_visible_objects.begin();
         xr_vector<CNotYetVisibleObject>::iterator E = m_not_yet_visible_objects.end();
         for (; I != E; ++I)
-            if ((*I).m_update_time < Device.dwTimeGlobal)
-                (*I).m_value = 0.f;
+        {
+            if ((*I).m_update_time >= Device.dwTimeGlobal)
+                continue;
+            (*I).m_value = metered && (*I).m_object ?
+                DaAi::Sense::vision_unseen(*m_stalker, *(*I).m_object, danger, visibility_threshold(), time_delta) :
+                0.f;
+        }
     }
     STOP_PROFILE
 

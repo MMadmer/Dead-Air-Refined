@@ -1361,7 +1361,7 @@ local function build_xms()
 end
 
 -- ---------------------------------------------------------------------------- script namespaces
-local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_behaviour = true }
+local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_behaviour = true, xms_world = true }
 local loading = {}
 
 local function load_script(name)

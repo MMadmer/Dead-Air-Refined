@@ -48,6 +48,8 @@ local function section_for(obj, slot_id)
 end
 
 local item, slot, busy, wait_ticks, settle_target, wear_snd = nil, nil, false, 0, 0, nil
+-- The ticket of our scene on the hands (game.hud_scene_id): only this one is ever stopped.
+local wear_scene = 0
 
 function on_game_start()
 	-- Слой совместимости кладёт в _G помощников, которых в Dead Air нет: hide_hud_inventory и
@@ -58,6 +60,7 @@ end
 
 function reset()
 	item, slot, busy, wait_ticks, settle_target = nil, nil, false, 0, 0
+	wear_scene = 0
 end
 
 -- Not optional.
@@ -138,6 +141,11 @@ function start_anim()
 	if hide_hud_inventory then hide_hud_inventory() end
 
 	if not weapon_away() then return false end
+	-- Someone else's scene still on the hands - the backpack going away as the inventory closes -
+	-- is waited out: started over it, one of the two scenes was cut short.
+	if game.scene_active() and game.hud_scene_id() ~= wear_scene and time_global() < settle_until + 2000 then
+		return false
+	end
 
 	local sect = section_for(item, slot)
 	local ms = game.get_motion_length(sect, "anm_ea_show", 1.0)
@@ -153,13 +161,17 @@ function start_anim()
 		wear_snd:play(db.actor, 0, sound_object.s2d)
 	end
 
+	local before = game.hud_scene_id()
 	game.play_hud_motion(2, sect, "anm_ea_show", false, 1.0, 0)
+	local id = game.hud_scene_id()
+	wear_scene = (id ~= before) and id or 0
 	CreateTimeEvent("da_wear", "finish", ms / 1000, finish)
 	return true
 end
 
 function finish()
-	game.stop_hud_motion()
+	game.stop_hud_scene(wear_scene)
+	wear_scene = 0
 	level.enable_input()
 	game.only_allow_movekeys(false)
 

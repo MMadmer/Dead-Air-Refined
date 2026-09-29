@@ -1,0 +1,95 @@
+-- A sleep that would kill is not slept.
+--
+-- The night passes in one jump of game time, and the engine takes it in short steps (see
+-- CActorCondition::IntegrateTimeJump): radiation keeps burning, wounds keep bleeding and close as
+-- they do, hunger comes, the medicine and the vodka work for as long as they last and the belt acts
+-- all night. db.actor:sleep_forecast() runs that same integration ahead of time on the live state
+-- and puts everything back. When the answer is death, the player is told so instead of being put
+-- to sleep.
+--
+-- What the forecast is handed from here is what this layer knows and the engine cannot:
+--   * ui_sleep_dialog.dream_callback feeds the sleeper before it jumps the clock - hours*0.05 of
+--     satiety and hours*0.1 of psy - and the first step of the real jump takes both;
+--   * inventory_radiation.script sees the whole night go by in its first update after it and lands
+--     every carried artefact's dose for all of it at once, before the engine's own update of that
+--     frame: from the jump's first step the body carries the night's full dose.
+-- The fields around (radiation, psy) the engine measures itself from the hits of the last seconds.
+--
+-- Only a sleep the player asks for is refused. sleep_forced() - fainting from thirst, a story knockout -
+-- is not a choice, and it goes ahead however it ends.
+
+local LETHAL = "st_da_x64_sleep_lethal"
+-- sleep_forecast_cause(): 1 radiation, 2 bleeding, 3 hunger, 4 fields
+local BY_CAUSE = {
+	[1] = "st_da_x64_sleep_lethal_radiation",
+	[2] = "st_da_x64_sleep_lethal_bleeding",
+	[3] = "st_da_x64_sleep_lethal_hunger",
+	[4] = "st_da_x64_sleep_lethal_zone",
+}
+
+-- inventory_radiation.script's catch-up for a stretch of game seconds: every artefact carried,
+-- its radiation clamped to [0, 1] a second, three tenths of it with the lead-lined backpack perk.
+local function carried_dose(seconds)
+	local rate = 0
+	db.actor:iterate_inventory(function(_, item)
+		local cls = item:clsid()
+		if cls == clsid.artefact or cls == clsid.artefact_s then
+			local r = item:get_artefact_radiation()
+			if r > 1 then r = 1 elseif r < 0 then r = 0 end
+			rate = rate + r
+		end
+	end, nil)
+	if has_alife_info("perk_lead_backpack") then
+		rate = rate * 0.3
+	end
+	return rate * seconds
+end
+
+-- The lowest health the night would leave and what took the most of it.
+function forecast(hours)
+	local seconds = hours * 3600
+	local dose = inventory_radiation and carried_dose(seconds) or 0
+	local health = db.actor:sleep_forecast(seconds, hours * 0.05, hours * 0.1, dose)
+	return health, db.actor:sleep_forecast_cause()
+end
+
+-- The class the wrapper went onto: on_game_start comes with every load, the class only with a
+-- fresh script engine, and a second wrapper would forecast the same night twice.
+local wrapped
+
+local function install()
+	local dialog = ui_sleep_dialog and ui_sleep_dialog.sleep_dialog
+	if not (dialog and dialog.OnButtonSleep) then
+		return false
+	end
+	if wrapped == dialog then
+		return true
+	end
+	wrapped = dialog
+	local base = dialog.OnButtonSleep
+	dialog.OnButtonSleep = function(self)
+		if not self.forced and db.actor and self.time_track then
+			local hours = self.time_track:GetIValue()
+			if hours and hours > 0 then
+				local health, cause = forecast(hours)
+				if health <= 0 then
+					if self:IsShown() then
+						self:HideDialog()
+					end
+					SetHudMsg(game.translate_string(BY_CAUSE[cause] or LETHAL), 6)
+					return
+				end
+			end
+		end
+		return base(self)
+	end
+	return true
+end
+
+function on_game_start()
+	-- A build with a replaced sleep dialog must not lose the rest of the script layer over this.
+	local ok, installed = pcall(install)
+	if not (ok and installed) then
+		printf("! dead_air_x64: the sleep forecast is not installed")
+	end
+end

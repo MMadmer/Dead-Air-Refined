@@ -7,113 +7,269 @@ function opt_video:__finalize()
 
 end
 
-local function set_static_argb(control, color)
-	local alpha = math.floor(color / 0x1000000) % 0x100
-	local red = math.floor(color / 0x10000) % 0x100
-	local green = math.floor(color / 0x100) % 0x100
-	local blue = color % 0x100
-	control:SetTextColor(alpha, red, green, blue)
+-- Options -> Video, one list like Sound, Controls and Game (dead_air_x64_option_list.script builds
+-- it): a subsection header per group, a row per setting, a hint on every row. Which rows there are
+-- and where they go is data, see the rules in the file below and in the list script; each control
+-- is still a node of its own in ui_mm_opt*.xml (<video_page>, <control>_<row>), because the node's
+-- options_item is what binds it to its console command. On top of the shared layout the file has
+-- [caps] (<row> = <key>: shown only where r__caps reports <key>=1); the hint of a row is the string
+-- st_da_x64_video_hint_<row>.
+local VIDEO_LAYOUT = "dead_air_x64_video_options.ltx"
+
+-- Token ids of the renderer's commands (docs\dead-air\DX12_RENDERER.md, section 2).
+local RENDERER_DX12 = 7
+local FRAMEGEN_FSR, FRAMEGEN_DLSS, FRAMEGEN_DLSS_X3, FRAMEGEN_DLSS_X4 = 1, 2, 3, 4
+
+-- The DirectX 12 rows (docs\dead-air\dx12-features\PLAN.md 2.6): always shown, greyed with the reason
+-- where the running renderer or the card cannot run them, like frame generation. The RTX rows are
+-- ray tracing, a category of its own that no quality preset touches.
+local RT_EFFECTS = { "rt_reflections", "rt_shadows", "rtao" }
+local DX12_ROWS = { "async_compute", "dstorage", "rt_reflections", "rt_shadows", "rtao", "rt_quality" }
+
+-- The stock ui_mm_opt_main.script fills the numbers beside these sliders by name, every frame.
+local LEGACY_READOUTS = {
+	fov      = { "fov_track", "fov_value" },
+	hud_fov  = { "hud_fov_track", "hud_fov_value" },
+	color_r  = { "color_r_track", "color_r_val" },
+	color_g  = { "color_g_track", "color_g_val" },
+	color_b  = { "color_b_track", "color_b_val" },
+	vibrance = { "vibrance_track", "vibrance_val" },
+}
+
+-- What the running renderer and the card can do: r__caps, "api=12;dx12=1;dlss=1;...". A key the
+-- string does not carry, or no such command at all (an older renderer), reads 0.
+local function read_caps()
+	local caps = setmetatable({}, { __index = function() return 0 end })
+	for key, value in string.gmatch(get_console():get_string("r__caps") or "", "([%w_]+)%s*=%s*([^;%s]+)") do
+		caps[key] = tonumber(value) or 0
+	end
+	return caps
 end
 
 function opt_video:InitControls(x, y, xml, handler)
-
 	self:SetWndPos(vector2():set(x,y))
 	self:SetWndSize(vector2():set(738,416))
 	self:SetAutoDelete(true)
 
---	self.bk = xml:InitFrame			("frame", self)
+	self.caps = read_caps()
+	local list = dead_air_x64_option_list
+	local ini = ini_file(VIDEO_LAYOUT)
+	local required = list.ini_map(ini, "caps")
+	list.build(self, xml, handler, ini, "video_page", "st_da_x64_video_hint_", function(id)
+		return (required[id] == nil) or (self.caps[required[id]] == 1)
+	end)
 
-	xml:InitStatic					("tab_video:cap_window_mode",		self)
-	xml:InitComboBox				("tab_video:list_window_mode",		self)
-	handler.level_texture_unload_caption = xml:InitStatic(
-		"tab_video:cap_level_texture_unload", self)
-	handler.level_texture_unload_check = xml:InitCheck(
-		"tab_video:check_level_texture_unload", self)
-	handler.level_texture_unload_caption_color =
-		handler.level_texture_unload_caption:GetTextColor()
-
-	xml:InitStatic					("tab_video:cap_brightness",		self)
-	xml:InitTrackBar				("tab_video:track_brightness",		self)
-
-	xml:InitStatic					("tab_video:cap_contrast",			self)
-	xml:InitTrackBar				("tab_video:track_contrast",		self)
-
-	xml:InitStatic("tab_video:cap_fov",self)
-	self.fov_value = xml:InitStatic("tab_video:cap_fov_value",self)
-	self.fov_track = xml:InitTrackBar("tab_video:track_fov",self)
-	
-	xml:InitStatic("tab_video:cap_hud_fov",self)
-	self.hud_fov_value = xml:InitStatic("tab_video:cap_hud_fov_value",self)
-	self.hud_fov_track = xml:InitTrackBar("tab_video:track_hud_fov",self)
-	
-	xml:InitStatic("tab_video:cap_color_correction",self)
-	
-	xml:InitStatic("tab_video:cap_color_r",self)
-	self.color_r_val = xml:InitStatic("tab_video:cap_color_r_val",self)
-	self.color_r_track = xml:InitTrackBar("tab_video:track_color_r",self)
-	
-	xml:InitStatic("tab_video:cap_color_g",self)
-	self.color_g_val = xml:InitStatic("tab_video:cap_color_g_val",self)
-	self.color_g_track = xml:InitTrackBar("tab_video:track_color_g",self)
-	
-	xml:InitStatic("tab_video:cap_color_b",self)
-	self.color_b_val = xml:InitStatic("tab_video:cap_color_b_val",self)
-	self.color_b_track = xml:InitTrackBar("tab_video:track_color_b",self)
-	
-	xml:InitStatic("tab_video:cap_vibrance", self)
-	self.vibrance_val = xml:InitStatic("tab_video:cap_vibrance_val",self)
-	self.vibrance_track = xml:InitTrackBar("tab_video:track_vibrance_val", self)
-	
-	xml:InitStatic					("tab_video:cap_gamma",				self)
-	xml:InitTrackBar				("tab_video:track_gamma",			self)
-
-	xml:InitStatic					("tab_video:cap_resolution",		self)
-	xml:InitComboBox				("tab_video:list_resolution",		self)
-
-	xml:InitStatic					("tab_video:cap_fps_limit",			self)
-	xml:InitComboBox				("tab_video:list_fps_limit",		self)
-
-	xml:InitStatic					("tab_video:cap_vsync",				self)
-	xml:InitCheck					("tab_video:check_vsync",			self)
-
-	xml:InitStatic					("tab_video:cap_preset",			self)
-	handler.combo_preset			= xml:InitComboBox("tab_video:list_presets",	self)
-	handler:Register				(handler.combo_preset,				"combo_preset")
-
-	xml:InitStatic					("tab_video:cap_renderer",			self)
-	handler.combo_renderer			= xml:InitComboBox("tab_video:list_renderer",		self)
-	handler:Register				(handler.combo_renderer, "combo_renderer")
-
-	btn		= xml:Init3tButton		("tab_video:btn_advanced",	self)
-	handler:Register				(btn, "btn_advanced_graphic")
-
-	function handler:UpdateLevelTextureUnloadState()
-		-- Renderer IDs 2-5 are D3D11 profiles; ID 6 is the OpenGL backend.
-		local level_unload_supported = self.combo_renderer:CurrentID() ~= 6
-			and level_texture_unload_supported ~= nil
-			and level_texture_unload_supported()
-
-		-- A pending renderer selection takes precedence over the active backend.
-		if self.combo_renderer:CurrentID() >= 2
-			and self.combo_renderer:CurrentID() <= 5 then
-			level_unload_supported = true
+	for id, row in pairs(self.rows) do
+		local legacy = LEGACY_READOUTS[id]
+		if (legacy and row.readout) then
+			self[legacy[1]], self[legacy[2]] = row.ctrl, row.readout
 		end
 
-		self.level_texture_unload_check:Enable(level_unload_supported)
-		if level_unload_supported then
-			set_static_argb(
-				self.level_texture_unload_caption,
-				self.level_texture_unload_caption_color)
-		else
-			self.level_texture_unload_caption:SetTextColor(255, 70, 70, 70)
+		-- The dialog's own names for the two combos it has callbacks for.
+		if (id == "renderer") then
+			handler.combo_renderer = row.ctrl
+			handler:Register(row.ctrl, "combo_renderer")
+		elseif (id == "preset") then
+			handler.combo_preset = row.ctrl
+			handler:Register(row.ctrl, "combo_preset")
+		elseif (id == "fsr" or id == "dlss") then
+			handler:Register(row.ctrl, "video_" .. id)
+			handler:AddCallback("video_" .. id, ui_events.LIST_ITEM_SELECT, function() self:OnUpscalerSelected(id) end)
 		end
 	end
 
-	local update_depend_controls = handler.UpdateDependControls
-	function handler:UpdateDependControls()
-		update_depend_controls(self)
-		self:UpdateLevelTextureUnloadState()
+	-- ui_mm_opt_main reads the renderer combo on every refresh, and the preset combo is all of the
+	-- options group it refreshes and saves (an empty group stops the game): a layout without their
+	-- rows still gets both, hidden.
+	if not (handler.combo_renderer) then
+		handler.combo_renderer = xml:InitComboBox("tab_video:list_renderer", self)
+		handler:Register(handler.combo_renderer, "combo_renderer")
+		handler.combo_renderer:Show(false)
+	end
+	if not (handler.combo_preset) then
+		handler.combo_preset = xml:InitComboBox("tab_video:list_presets", self)
+		handler:Register(handler.combo_preset, "combo_preset")
+		handler.combo_preset:Show(false)
 	end
 
-	handler:UpdateLevelTextureUnloadState()
+	self:InitStates()
+end
+
+-- What the card cannot do does not change while the dialog is open.
+function opt_video:InitStates()
+	local caps = self.caps
+	local has_string = dead_air_x64_option_list.has_string
+
+	if (caps.dx12 ~= 1) then
+		self:SetState("renderer", false, "st_da_x64_video_hint_renderer_no_dx12")
+	end
+
+	-- Frame generation: every entry the card lacks leaves the list (the first SetCurrentValues
+	-- applies it); the row stays, greyed with the reason, when nothing is left or DX12 is not on.
+	local framegen = self.rows.framegen
+	if (framegen) then
+		if (caps.fsrfg ~= 1) then
+			framegen.ctrl:disable_id(FRAMEGEN_FSR)
+		end
+		if (caps.dlssg ~= 1) then
+			framegen.ctrl:disable_id(FRAMEGEN_DLSS)
+		end
+		if (caps.dlssg ~= 1 or caps.dlssg_max < 2) then
+			framegen.ctrl:disable_id(FRAMEGEN_DLSS_X3)
+		end
+		if (caps.dlssg ~= 1 or caps.dlssg_max < 3) then
+			framegen.ctrl:disable_id(FRAMEGEN_DLSS_X4)
+		end
+		-- An RTX card without DLSS frame generation may only lack Windows' hardware-accelerated GPU
+		-- scheduling, which DLSS frame generation needs: the hint says so.
+		local hags = (caps.dlss == 1 and caps.dlssg ~= 1 and caps.hags ~= 1)
+		if (hags and has_string("st_da_x64_video_hint_framegen_hags")) then
+			framegen.hint = "st_da_x64_video_hint_framegen_hags"
+		end
+		if (caps.api ~= 12) then
+			framegen.off_hint = "st_da_x64_video_hint_framegen_dx11"
+		elseif (caps.fsrfg ~= 1 and caps.dlssg ~= 1) then
+			framegen.off_hint = hags and "st_da_x64_video_hint_framegen_hags" or "st_da_x64_video_hint_framegen_unsupported"
+		end
+	end
+
+	-- The DirectX 12 rows: what holds for the whole session is decided here (off_hint), the renderer
+	-- combo's current choice in Refresh (dx11_hint).
+	local function dx12_row(id, dx11_hint, available, unavailable_hint)
+		local row = self.rows[id]
+		if not (row) then
+			return
+		end
+		row.dx11_hint = dx11_hint
+		if (caps.api ~= 12) then
+			row.off_hint = dx11_hint
+		elseif not (available) then
+			row.off_hint = unavailable_hint
+		end
+	end
+	dx12_row("async_compute", "st_da_x64_video_hint_async_compute_dx11", caps.acq == 1,
+		"st_da_x64_video_hint_async_compute_unsupported")
+	dx12_row("dstorage", "st_da_x64_video_hint_dstorage_dx11", caps.dstorage == 1,
+		"st_da_x64_video_hint_dstorage_unavailable")
+	-- Without hardware ray tracing DirectX 12 alone would not help: that hint says so.
+	local rt_dx11 = (caps.rt_tier >= 11) and "st_da_x64_video_hint_rt_dx11" or "st_da_x64_video_hint_rt_dx11_nohw"
+	for _, id in ipairs(DX12_ROWS) do
+		if (id ~= "async_compute" and id ~= "dstorage") then
+			dx12_row(id, rt_dx11, caps.rt == 1, "st_da_x64_video_hint_rt_unsupported")
+		end
+	end
+
+	-- The combos the rules read hold no value until the dialog reads its groups; read these now,
+	-- so the first state is right with any ui_mm_opt_main (the stock one never calls Refresh).
+	for _, id in ipairs({ "renderer", "fsr", "dlss" }) do
+		if (self.rows[id]) then
+			self.rows[id].ctrl:SetCurrentOptValue()
+		end
+	end
+	-- The same for the ray traced effects, which rt_quality depends on.
+	local console = get_console()
+	for _, id in ipairs(RT_EFFECTS) do
+		local row = self.rows[id]
+		if (row) then
+			row.ctrl:SetCheck(console:get_bool(self.specs[id].command))
+		end
+	end
+	self:Refresh()
+end
+
+-- Any ray traced effect ticked (the current, not yet accepted values).
+function opt_video:AnyRtEffect()
+	for _, id in ipairs(RT_EFFECTS) do
+		local row = self.rows[id]
+		if (row and row.ctrl:GetCheck()) then
+			return true
+		end
+	end
+	return false
+end
+
+-- AMD FSR and NVIDIA DLSS take turns: picking one switches the other off.
+function opt_video:OnUpscalerSelected(id)
+	if (self:IsOn(id)) then
+		for _, other in ipairs({ "fsr", "dlss" }) do
+			if (other ~= id and self:IsOn(other)) then
+				-- "Off" is token 0, the first entry of the list.
+				self.rows[other].ctrl:SetCurrentID(0)
+			end
+		end
+	end
+	self:Refresh()
+end
+
+function opt_video:IsOn(id)
+	local row = self.rows[id]
+	return (row ~= nil) and (row.ctrl:CurrentID() ~= 0)
+end
+
+-- A row greyed out shows why in its hint; off_hint falls back to the row's own.
+function opt_video:SetState(id, enabled, off_hint)
+	dead_air_x64_option_list.set_state(self, id, enabled, off_hint)
+end
+
+-- Called by the dialog every frame: the numbers beside the sliders and the rows that depend on
+-- other rows' current (not yet accepted) values.
+function opt_video:Refresh()
+	-- A combo moved by the keyboard, the stick or a right click sends no selection event: the
+	-- turn-taking of FSR and DLSS is checked here too, against the values seen last time.
+	local changed
+	for _, id in ipairs({ "fsr", "dlss" }) do
+		local row = self.rows[id]
+		if (row) then
+			local current = row.ctrl:CurrentID()
+			if (row.seen_id ~= nil and current ~= row.seen_id and current ~= 0) then
+				changed = id
+			end
+		end
+	end
+	if (changed) then
+		local other = (changed == "fsr") and "dlss" or "fsr"
+		if (self:IsOn(other)) then
+			self.rows[other].ctrl:SetCurrentID(0)
+		end
+	end
+	for _, id in ipairs({ "fsr", "dlss" }) do
+		local row = self.rows[id]
+		if (row) then
+			row.seen_id = row.ctrl:CurrentID()
+		end
+	end
+
+	dead_air_x64_option_list.refresh(self)
+
+	-- While an upscaler is on it does the antialiasing, and the sharpening is its own.
+	local upscaling = self:IsOn("fsr") or self:IsOn("dlss")
+	self:SetState("aa", not upscaling, "st_da_x64_video_hint_aa_upscaler")
+	self:SetState("upscale_sharpness", upscaling, "st_da_x64_video_hint_upscale_sharpness_off")
+
+	local renderer = self.rows.renderer
+	local dx11_chosen = (renderer ~= nil) and (renderer.ctrl:CurrentID() ~= RENDERER_DX12)
+	local framegen = self.rows.framegen
+	if (framegen) then
+		local off_hint = framegen.off_hint
+		if not (off_hint) and dx11_chosen then
+			off_hint = "st_da_x64_video_hint_framegen_dx11"
+		end
+		self:SetState("framegen", off_hint == nil, off_hint)
+	end
+
+	-- The DirectX 12 rows: greyed while DirectX 11 is chosen too; the ray tracing quality only means
+	-- something while an effect is ticked.
+	for _, id in ipairs(DX12_ROWS) do
+		local row = self.rows[id]
+		if (row) then
+			local off_hint = row.off_hint
+			if not (off_hint) and dx11_chosen then
+				off_hint = row.dx11_hint
+			end
+			if not (off_hint) and (id == "rt_quality") and not self:AnyRtEffect() then
+				off_hint = "st_da_x64_video_hint_rt_quality_off"
+			end
+			self:SetState(id, off_hint == nil, off_hint)
+		end
+	end
 end

@@ -89,6 +89,8 @@ public:
     bool m_select_equipped{};
     bool m_cur_mark;
     bool m_has_upgrade;
+    // Hidden by the owner list's filter: still in the list, but out of the grid
+    bool m_filtered_out{};
     u8 m_select_mode{};
 };
 

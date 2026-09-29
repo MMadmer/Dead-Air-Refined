@@ -121,7 +121,8 @@ XRCORE_API u64 AcceptedSerial();
 // serial (rollback); an equal serial is accepted (the same publication from another mirror).
 XRCORE_API bool Accept(std::string_view verifiedText, const Index& index, xr_string& error);
 
-// Modules installed through the Mod Browser (MOD_CATALOG 13).
+// Modules installed through the Mod Browser (MOD_CATALOG 13), and the ones installed by hand that
+// were found to be a release of the catalog byte for byte (MOD_CATALOG 14.1): one record for both.
 XRCORE_API bool InstalledFromBrowser(pcstr id);
 XRCORE_API void MarkInstalled(pcstr id, bool installed);
 
@@ -129,6 +130,9 @@ XRCORE_API void MarkInstalled(pcstr id, bool installed);
 XRCORE_API bool Listed(const Module& m);
 // A module its author withdrew from the catalog, under the module's own repository.
 XRCORE_API bool Withdrawn(const Module& m);
+// The catalog's module and not merely one with the same id: installed through the browser, or
+// listed under the module's own repository.
+XRCORE_API bool IsCatalogModule(const Module& m);
 // The reason the catalog revokes this installed module, listed or withdrawn; empty when it does not.
 XRCORE_API xr_string RevocationReason(const Module& m);
 

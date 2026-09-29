@@ -84,6 +84,7 @@ public:
 
     typedef fastdelegate::FastDelegate1<CUICellItem*, bool> DRAG_CELL_EVENT;
     typedef fastdelegate::FastDelegate2<CUIDragItem*, bool, void> DRAG_ITEM_EVENT;
+    typedef fastdelegate::FastDelegate1<CUICellItem*, bool> CELL_FILTER;
 
     DRAG_CELL_EVENT m_f_item_drop;
     DRAG_CELL_EVENT m_f_item_start_drag;
@@ -194,6 +195,26 @@ public:
     CUICell& GetCellIdx(size_t idx);
     CUICell& GetCellAt(const Ivector2& pos);
     CUICellContainer* GetContainer() { return m_container; }; //Alundaio
+
+    // A visual filter. Rejected cells stay in the list - counted, priced, weighed and removable
+    // like any other - but leave the grid, and the accepted ones are packed from the top. An
+    // empty filter brings the layout the list had before filtering back as far as it still fits.
+    void SetCellFilter(const CELL_FILTER& filter);
+    bool HasCellFilter() const { return !m_cell_filter.empty(); }
+
+    // The root cells a bulk move takes: every one, or under a filter only those on screen.
+    xr_vector<CUICellItem*> GetShownItems();
+    // Takes these root cells out of the list and deletes them with their grouped children.
+    void DestroyItems(const xr_vector<CUICellItem*>& cells);
+
+private:
+    CELL_FILTER m_cell_filter;
+    xr_vector<std::pair<CUICellItem*, Ivector2>> m_unfiltered_layout;
+
+    bool PassesFilter(CUICellItem* itm) const { return m_cell_filter.empty() || m_cell_filter(itm); }
+    void ParkItem(CUICellItem* itm);
+    void Relayout(bool restore_layout);
+    void ForgetLayout(CUICellItem* itm);
 
 public:
     // UIWindow overriding

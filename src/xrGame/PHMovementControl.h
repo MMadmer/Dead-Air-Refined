@@ -4,6 +4,7 @@
 #include "xrPhysics/MathUtils.h"
 #include "xrPhysics/MovementBoxDynamicActivate.h"
 #include "xrCDB/xr_collide_defs.h"
+#include "xrEngine/Environment.h"
 
 namespace ALife
 {
@@ -146,6 +147,11 @@ private:
     float m_water_depth;
     float m_water_surface;
     float m_water_entry; // downward speed the frame the surface was broken; consumed once
+    CEnvironment::SWaterProbe m_water_probe;
+    // The landing damage's view of the same column: uncapped by the wade limit, and the
+    // downward speed the surface was broken at, held while the feet stay under it.
+    float m_fall_water_depth{};
+    float m_fall_water_entry{};
 
 public:
     Fvector vExternalImpulse;

@@ -493,6 +493,7 @@ void CUIHudStatesWnd::SetAmmoIcon(const shared_str& sect_name)
         return;
     }
     m_ui_weapon_icon->Show(true);
+    m_ui_weapon_icon->SetShader(InventoryUtilities::GetItemIconsShader(sect_name));
 
     Frect texture_rect;
     texture_rect.x1 = pSettings->r_float(sect_name, "inv_grid_x") * INV_GRID_WIDTH;

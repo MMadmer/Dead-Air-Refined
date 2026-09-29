@@ -402,23 +402,138 @@ void CUIDragDropListEx::ClearAll(bool bDestroy)
 {
     DestroyDragItem();
     m_container->ClearAll(bDestroy);
+    m_unfiltered_layout.clear();
     m_selected_item = NULL;
     m_container->SetWndPos(Fvector2().set(0, 0));
     ResetCellsCapacity();
 }
 
-void CUIDragDropListEx::Compact()
-{
-    CUIWindow::WINDOW_LIST wl = m_container->GetChildWndList();
-    ClearAll(false);
+// Used to go through ClearAll(false), which popped the grouped children off every cell and
+// dropped them, and reset a capacity the owner may have set at runtime (the belt).
+void CUIDragDropListEx::Compact() { Relayout(false); }
 
-    auto it = wl.begin();
-    auto it_e = wl.end();
-    for (; it != it_e; ++it)
+void CUIDragDropListEx::SetCellFilter(const CELL_FILTER& filter)
+{
+    if (!HasCellFilter())
     {
-        CUICellItem* itm = smart_cast<CUICellItem*>(*it);
-        SetItem(itm);
+        if (filter.empty())
+            return;
+
+        // The layout to come back to once the filter is gone.
+        m_unfiltered_layout.clear();
+        for (CUIWindow* w : m_container->GetChildWndList())
+        {
+            CUICellItem* itm = static_cast<CUICellItem*>(w);
+            if (!itm->m_filtered_out)
+                m_unfiltered_layout.emplace_back(itm, m_container->GetItemPos(itm));
+        }
     }
+
+    m_cell_filter = filter;
+    Relayout(!HasCellFilter());
+}
+
+xr_vector<CUICellItem*> CUIDragDropListEx::GetShownItems()
+{
+    xr_vector<CUICellItem*> cells;
+    for (CUIWindow* w : m_container->GetChildWndList())
+    {
+        CUICellItem* itm = static_cast<CUICellItem*>(w);
+        if (!itm->m_filtered_out)
+            cells.push_back(itm);
+    }
+    return cells;
+}
+
+void CUIDragDropListEx::DestroyItems(const xr_vector<CUICellItem*>& cells)
+{
+    DestroyDragItem();
+    for (CUICellItem* itm : cells)
+    {
+        if (itm == m_selected_item)
+            m_selected_item = nullptr;
+        CUICellItem* removed = RemoveItem(itm, true);
+        delete_data(removed);
+    }
+}
+
+void CUIDragDropListEx::ParkItem(CUICellItem* itm)
+{
+    itm->m_filtered_out = true;
+    itm->Show(false);
+    itm->Enable(false);
+    m_container->AttachChild(itm);
+
+    itm->SetWindowName("cell_item");
+    Register(itm);
+    itm->SetOwnerList(this);
+}
+
+void CUIDragDropListEx::ForgetLayout(CUICellItem* itm)
+{
+    std::erase_if(m_unfiltered_layout, [itm](const auto& entry) { return entry.first == itm; });
+}
+
+void CUIDragDropListEx::Relayout(bool restore_layout)
+{
+    // Roots only: a grouped child travels with its root and never had a place of its own.
+    xr_vector<CUICellItem*> roots;
+    roots.reserve(m_container->GetChildWndList().size());
+    for (CUIWindow* w : m_container->GetChildWndList())
+        roots.push_back(static_cast<CUICellItem*>(w));
+
+    for (CUICell& cell : m_container->m_cells)
+        cell.Clear();
+    for (CUICellItem* itm : roots)
+        m_container->DetachChild(itm);
+
+    if (IsAutoGrow())
+        SetCellsCapacity(m_orig_cell_capacity);
+
+    const auto place = [this](CUICellItem* itm, Ivector2 cell_pos)
+    {
+        m_container->PlaceItemAtPos(itm, cell_pos);
+        itm->SetWindowName("cell_item");
+        Register(itm);
+        itm->SetOwnerList(this);
+    };
+
+    xr_vector<CUICellItem*> rest;
+    rest.reserve(roots.size());
+    if (restore_layout)
+    {
+        for (const auto& [itm, pos] : m_unfiltered_layout)
+        {
+            if (std::find(roots.begin(), roots.end(), itm) == roots.end() || !PassesFilter(itm))
+                continue;
+
+            Ivector2 size = itm->GetGridSize();
+            if (GetVerticalPlacement())
+                std::swap(size.x, size.y);
+            while (IsAutoGrow() && pos.y + size.y > m_container->CellsCapacity().y)
+                m_container->Grow();
+
+            if (m_container->ValidCell(pos) && m_container->IsRoomFree(pos, itm->GetGridSize()))
+                place(itm, pos);
+        }
+        m_unfiltered_layout.clear();
+    }
+
+    for (CUICellItem* itm : roots)
+    {
+        if (itm->GetParent())
+            continue;
+        // A fixed-size list that cannot take the cell would compact itself from inside this
+        // very relayout; keeping the cell off the grid is the gentler failure.
+        if (PassesFilter(itm) && (IsAutoGrow() || m_container->HasFreeSpace(itm->GetGridSize())))
+            place(itm, m_container->FindFreeCell(itm->GetGridSize()));
+        else
+            rest.push_back(itm);
+    }
+    for (CUICellItem* itm : rest)
+        ParkItem(itm);
+
+    ReinitScroll();
 }
 
 void CUIDragDropListEx::Draw()
@@ -560,6 +675,11 @@ void CUIDragDropListEx::SetItem(CUICellItem* itm) // auto
     {
         return;
     }
+    if (!PassesFilter(itm))
+    {
+        ParkItem(itm);
+        return;
+    }
 
     Ivector2 dest_cell_pos = m_container->FindFreeCell(itm->GetGridSize());
 
@@ -570,6 +690,11 @@ void CUIDragDropListEx::SetItem(CUICellItem* itm, Fvector2 abs_pos) // start at 
 {
     if (m_container->AddSimilar(itm))
         return;
+    if (!PassesFilter(itm))
+    {
+        ParkItem(itm);
+        return;
+    }
 
     const Ivector2 dest_cell_pos = m_container->PickCell(abs_pos);
 
@@ -583,6 +708,11 @@ void CUIDragDropListEx::SetItem(CUICellItem* itm, Ivector2 cell_pos) // start at
 {
     if (m_container->AddSimilar(itm))
         return;
+    if (!PassesFilter(itm))
+    {
+        ParkItem(itm);
+        return;
+    }
     R_ASSERT(m_container->IsRoomFree(cell_pos, itm->GetGridSize()));
 
     m_container->PlaceItemAtPos(itm, cell_pos);
@@ -604,6 +734,7 @@ CUICellItem* CUIDragDropListEx::RemoveItem(CUICellItem* itm, bool force_root)
 {
     CUICellItem* i = m_container->RemoveItem(itm, force_root);
     i->SetOwnerList((CUIDragDropListEx*)NULL);
+    ForgetLayout(i);
     return i;
 }
 
@@ -728,6 +859,13 @@ CUICellItem* CUICellContainer::FindSimilar(CUICellItem* itm)
 
 void CUICellContainer::PlaceItemAtPos(CUICellItem* itm, Ivector2& cell_pos)
 {
+    if (itm->m_filtered_out)
+    {
+        itm->m_filtered_out = false;
+        itm->Show(true);
+        itm->Enable(true);
+    }
+
     Ivector2 cs = itm->GetGridSize();
     if (m_pParentDragDropList->GetVerticalPlacement())
         std::swap(cs.x, cs.y);
@@ -785,18 +923,28 @@ CUICellItem* CUICellContainer::RemoveItem(CUICellItem* itm, bool force_root)
         return iii;
     }
 
-    Ivector2 pos = GetItemPos(itm);
-    Ivector2 cs = itm->GetGridSize();
+    // A filtered-out cell holds no place in the grid.
+    if (itm->m_filtered_out)
+    {
+        itm->m_filtered_out = false;
+        itm->Show(true);
+        itm->Enable(true);
+    }
+    else
+    {
+        Ivector2 pos = GetItemPos(itm);
+        Ivector2 cs = itm->GetGridSize();
 
-    if (m_pParentDragDropList->GetVerticalPlacement())
-        std::swap(cs.x, cs.y);
+        if (m_pParentDragDropList->GetVerticalPlacement())
+            std::swap(cs.x, cs.y);
 
-    for (int x = 0; x < cs.x; ++x)
-        for (int y = 0; y < cs.y; ++y)
-        {
-            CUICell& C = GetCellAt(Ivector2().set(x, y).add(pos));
-            C.Clear();
-        }
+        for (int x = 0; x < cs.x; ++x)
+            for (int y = 0; y < cs.y; ++y)
+            {
+                CUICell& C = GetCellAt(Ivector2().set(x, y).add(pos));
+                C.Clear();
+            }
+    }
 
     itm->SetOwnerList(NULL);
     DetachChild(itm);

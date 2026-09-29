@@ -54,6 +54,16 @@ function New-DeadAirCompatibilityArchive {
         Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
     }
 
+    # The engine's own strings (loading stages, engine menu rows). The string table folds them in
+    # first, so the game's files override whatever both define, and a language folder holding
+    # nothing but this file is not offered as a language.
+    $engineTextRoot = Join-Path $RepositoryRoot "res\gamedata\configs\text"
+    foreach ($engineText in Get-ChildItem -LiteralPath $engineTextRoot -Recurse -File -Filter "xfined-ray.xml") {
+        $destinationPath = Join-Path $compatibilityStageGameRoot "configs\text\$($engineText.Directory.Name)\xfined-ray.xml"
+        New-Item -ItemType Directory -Path (Split-Path -Parent $destinationPath) -Force | Out-Null
+        Copy-Item -LiteralPath $engineText.FullName -Destination $destinationPath -Force
+    }
+
     $utf8 = [Text.UTF8Encoding]::new($false, $true)
     [Text.Encoding]::RegisterProvider([Text.CodePagesEncodingProvider]::Instance)
     $windows1251 = [Text.Encoding]::GetEncoding(

@@ -3513,6 +3513,60 @@ do
 end
 end)()
 
+-- A module's [start_kit] replaces what the new-game screen handed out. The screen's loadout is
+-- given in on_game_load (ui_mm_faction_select), so mock.after_game_load plays that part.
+section("(z20) start kit: the new-game screen's loadout becomes the module's kit")
+do
+	local options = {}
+	axr_main = { config = {
+		r_value = function(self, sec, key) return options[sec] and options[sec][key] end,
+		w_value = function(self, sec, key, v) options[sec] = options[sec] or {} options[sec][key] = v end,
+		save = function() end,
+	} }
+	local KIT = { { id = "mod_kit", root = FIXTURES .. "\\mod_kit" } }
+	local function screen_loadout()
+		for _, s in ipairs({ "device_pda", "bolt", "wpn_knife", "wpn_pm", "wpn_ak74", "ammo_9x18_fmj", "medkit", "bread" }) do
+			mock.add_item(s)
+		end
+		db.actor:give_info_portion("perk_craft")
+		db.actor:give_money(3000 - db.actor:money())
+	end
+
+	-- a new game: the screen left its faction for the game to read
+	options.character_creation = { new_game_faction = "stalker" }
+	setup({ modules = KIT })
+	xms_world.on_game_start()
+	mock.after_game_load = screen_loadout
+	mock.first_update()
+	check(mock.count_items("wpn_knife") == 1 and mock.count_items("medkit") == 1, "what the kit names stays - nothing is made twice")
+	check(mock.count_items("bread") == 2, "only the shortfall is made: one bread kept, one given (" .. mock.count_items("bread") .. ")")
+	check(mock.count_items("wpn_pm") == 0 and mock.count_items("wpn_ak74") == 0 and mock.count_items("ammo_9x18_fmj") == 0,
+		"everything else the screen gave is taken")
+	check(mock.count_items("device_pda") == 1 and mock.count_items("bolt") == 1, "the PDA and the bolt are never part of it")
+	check(mock.count_items("no_such_item") == 0, "a section the game does not have is left out, not created")
+	check(db.actor:money() == 1, "money is set exactly (" .. db.actor:money() .. ")")
+	check(not db.actor:has_info("perk_craft"), "perks = false takes the screen's perks away")
+
+	-- a loaded save: the faction is gone, the inventory is the player's
+	options.character_creation = {}
+	setup({ modules = KIT })
+	xms_world.on_game_start()
+	mock.after_game_load = screen_loadout
+	mock.first_update()
+	check(mock.count_items("wpn_pm") == 1 and db.actor:money() == 3000, "a loaded game keeps what it has")
+
+	-- a new game in a mode whose module declares no kit: the screen decides
+	options.character_creation = { new_game_faction = "stalker" }
+	setup({ modules = { { id = "mod_b", root = FIXTURES .. "\\mod_b" } } })
+	xms_world.on_game_start()
+	mock.after_game_load = screen_loadout
+	mock.first_update()
+	check(mock.count_items("wpn_pm") == 1 and db.actor:money() == 3000, "no [start_kit]: the new-game screen's loadout stands")
+
+	mock.after_game_load = nil
+	axr_main = nil
+end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

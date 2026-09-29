@@ -29,6 +29,9 @@
 #include "stalker_decision_space.h"
 #include "agent_manager.h"
 #include "agent_enemy_manager.h"
+#include "da_ai_knowledge.h"
+
+extern const float wounded_enemy_reached_distance;
 
 const u32 MIN_QUEUE = 0;
 const u32 MAX_QUEUE = 1;
@@ -316,6 +319,10 @@ void CStalkerActionKillWounded::execute()
         return;
 
     if (object().memory().visual().visible_now(enemy) && object().can_kill_enemy() && !object().can_kill_member())
+        return;
+
+    // The finishing hit below goes through anything: only for a victim within reach of what the NPC saw lately.
+    if (!DaAi::Know::may_finish_unseen(object(), *enemy, wounded_enemy_reached_distance))
         return;
 
     // this is fake

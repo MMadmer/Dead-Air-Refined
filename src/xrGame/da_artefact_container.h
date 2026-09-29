@@ -32,6 +32,9 @@ namespace da_af_container
 // Is the rule on at all? Data, so a setup that does not want it can say so.
 bool quest_visible();
 
+// Is this section an EMPTY container of the registry? Independent of quest_visible.
+bool is_container(pcstr section);
+
 // The artefact a filled container holds, or nullptr when this section is not a filled container.
 // The result points into a caller-owned buffer.
 pcstr held_artefact(pcstr section, string256& buffer);

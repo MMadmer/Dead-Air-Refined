@@ -42,13 +42,7 @@ void CEatableItem::Load(LPCSTR section)
     m_fWeightFull = m_weight;
     m_fWeightEmpty = READ_IF_EXISTS(pSettings, r_float, section, "empty_weight", 0.0f);
 
-    if (IsUsingCondition())
-    {
-        if (m_iMaxUses > 0)
-            SetCondition(static_cast<float>(m_iRemainingUses / m_iMaxUses));
-        else
-            SetCondition(0.f);
-    }
+    SyncUseCondition();
 }
 
 void CEatableItem::load(IReader& packet)
@@ -72,13 +66,7 @@ bool CEatableItem::net_Spawn(CSE_Abstract* DC)
     if (!inherited::net_Spawn(DC))
         return FALSE;
 
-    if (IsUsingCondition())
-    {
-        if (m_iMaxUses > 0)
-            SetCondition(static_cast<float>(m_iRemainingUses / m_iMaxUses));
-        else
-            SetCondition(0);
-    }
+    SyncUseCondition();
 
     return TRUE;
 };
@@ -156,15 +144,17 @@ bool CEatableItem::UseBy(CEntityAlive* entity_alive)
             m_iRemainingUses = 0;
     }
 
-    if (IsUsingCondition())
-    {
-        if (m_iMaxUses > 0)
-            SetCondition(static_cast<float>(m_iRemainingUses / m_iMaxUses));
-        else
-            SetCondition(0.f);
-    }
+    SyncUseCondition();
 
     return true;
+}
+
+// The division used to be done in integers, so a partly used item read as worn out: its bar
+// showed nothing and a trader refused it below buy_item_condition_factor.
+void CEatableItem::SyncUseCondition()
+{
+    if (IsUsingCondition())
+        SetCondition(m_iMaxUses > 0 ? float(m_iRemainingUses) / float(m_iMaxUses) : 0.0f);
 }
 
 float CEatableItem::Weight() const

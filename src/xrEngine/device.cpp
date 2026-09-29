@@ -51,6 +51,12 @@ void destroy_precache_light()
     precache_light->set_active(false);
     precache_light.destroy();
 }
+
+void frame_marker(IRender::FrameMarker marker)
+{
+    if (!GEnv.isDedicatedServer && GEnv.Render)
+        GEnv.Render->OnFrameMarker(marker);
+}
 }
 
 bool CRenderDevice::RenderBegin()
@@ -259,6 +265,7 @@ void CRenderDevice::DoRender()
     renderTotalReal.Begin();
     if (b_is_Active && RenderBegin())
     {
+        frame_marker(IRender::FrameMarker::RenderSubmitStart);
         {
             ZoneScopedN("Render process");
             seqRender.Process(); // all rendering is done here
@@ -272,6 +279,7 @@ void CRenderDevice::DoRender()
             m_imgui_render->Render(drawData);
         UpdateViewports();
 
+        frame_marker(IRender::FrameMarker::RenderSubmitEnd);
         RenderEnd(); // Present goes here
     }
     else
@@ -287,12 +295,17 @@ void CRenderDevice::ProcessFrame()
 {
     ZoneScoped;
 
+    // Reflex sleeps here, before input is read, so the frame starts as late as the GPU allows.
+    frame_marker(IRender::FrameMarker::FrameStart);
+
     if (!BeforeFrame())
         return;
 
+    frame_marker(IRender::FrameMarker::SimulationStart);
     FrameMove();
 
     OnCameraUpdated();
+    frame_marker(IRender::FrameMarker::SimulationEnd);
 
     {
         std::lock_guard lock(seqParallelMutex);
@@ -378,16 +391,26 @@ void CRenderDevice::ProcessFrame()
 
     const int configuredLimit = GEnv.isDedicatedServer ? g_svDedicateServerUpdateReate : ps_fps_limit;
 
+    // Under frame generation the driver paces the frames (the Reflex limiter): a CPU wait here
+    // would fight it, so the engine's limiter stands aside while the renderer owns the limit.
+    const bool rendererPaces = !GEnv.isDedicatedServer && GEnv.Render &&
+        GEnv.Render->OwnFrameLimit(u32(std::max(configuredLimit, 0)));
+
+    // With frame generation the limit still means frames on the screen: each rendered frame is
+    // shown dwFramesPerRender times, so the rendered ones are paced that much slower.
+    const u32 framesPerRender = GEnv.isDedicatedServer ? 1u : std::max(dwFramesPerRender, 1u);
+
     // Zero disables frame pacing entirely; the limiter used to clamp to 1 fps minimum, so an
     // "unlimited" setting still slept for its own frame budget every frame.
     static CTimerBase::Clock::time_point pacingDeadline{};
     static int pacedLimit = 0;
+    static u32 pacedFramesPerRender = 1;
 
-    if (configuredLimit > 0)
+    if (configuredLimit > 0 && !rendererPaces)
     {
         // Preserve sub-millisecond frame intervals instead of truncating 1000 / FPS.
         const auto frameDuration = std::chrono::duration_cast<CTimerBase::Clock::duration>(
-            std::chrono::duration<double>(1.0 / configuredLimit));
+            std::chrono::duration<double>(double(framesPerRender) / configuredLimit));
 
         // Pace against the previous deadline instead of this frame's start: a frame that ran over
         // budget is then followed by a shorter wait, so the rate holds the target instead of
@@ -395,9 +418,11 @@ void CRenderDevice::ProcessFrame()
         // changes or a whole frame has already been missed - after a level load or an alt-tab the
         // engine must not sprint to catch up on a backlog.
         const auto frameEnd = CTimerBase::Clock::now();
-        if (pacedLimit != configuredLimit || pacingDeadline + frameDuration < frameEnd)
+        if (pacedLimit != configuredLimit || pacedFramesPerRender != framesPerRender ||
+            pacingDeadline + frameDuration < frameEnd)
         {
             pacedLimit = configuredLimit;
+            pacedFramesPerRender = framesPerRender;
             pacingDeadline = frameEnd;
         }
 

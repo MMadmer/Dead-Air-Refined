@@ -13,6 +13,7 @@
 #include "xrAICore/Navigation/ai_object_location.h"
 #include "stalker_movement_manager_smart_cover.h"
 #include "Inventory.h"
+#include "da_ai_knowledge.h"
 
 //#define SIGHT_TEST
 
@@ -166,8 +167,10 @@ void CSightAction::execute_object()
 
     Fvector my_position = m_object->eye_matrix.c;
 
+    // A creature out of own sight is looked at where the NPC believes it is, not at the object (W1).
     const CEntityAlive* entity_alive = smart_cast<const CEntityAlive*>(m_object_to_look);
-    if (!entity_alive || entity_alive->g_Alive())
+    const bool believed = DaAi::Know::look_point(*m_object, *m_object_to_look, look_pos);
+    if (!believed && (!entity_alive || entity_alive->g_Alive()))
     {
         look_pos.x = m_object_to_look->Position().x;
         look_pos.z = m_object_to_look->Position().z;
@@ -284,7 +287,7 @@ float CSightAction::head_speed() const
 void CSightAction::initialize_fire_object()
 {
     m_holder_start_position = m_object->Position();
-    m_object_start_position = m_object_to_look->Position();
+    m_object_start_position = DaAi::Know::known_position(*m_object, *m_object_to_look);
     m_state_fire_object = 0;
 }
 
@@ -325,7 +328,10 @@ void CSightAction::on_frame()
 void CSightAction::predict_object_position(bool use_exact_position)
 {
     m_object->feel_vision_get(objects);
-    if (std::find(objects.begin(), objects.end(), m_object_to_look) == objects.end())
+    // Being in the vision list is not being seen: until its own vision confirms the target, the NPC aims at its
+    // belief.
+    if (std::find(objects.begin(), objects.end(), m_object_to_look) == objects.end() ||
+        (DaAi::Know::active(*m_object) && !DaAi::Know::sees_now(*m_object, m_object_to_look)))
     {
         m_vector3d = m_object->sight().object_position();
         return;
@@ -355,7 +361,7 @@ void CSightAction::predict_object_position(bool use_exact_position)
                 Fvector const velocity =
                     Fvector(offset).div(float(current_position.dwTime - previous_position.dwTime) / 1000.f);
                 extern float g_aim_predict_time;
-                float const predict_time = g_aim_predict_time; //*Device.fTimeDelta;
+                float const predict_time = g_aim_predict_time * DaAi::Know::lead_factor(*m_object, *m_object_to_look);
                 m_vector3d.mad(velocity, predict_time);
             }
         }
@@ -383,13 +389,13 @@ void CSightAction::execute_fire_object()
         if (m_object->can_kill_enemy() && !m_object->can_kill_member())
             break;
 
-        if (m_object_to_look->Position().distance_to_sqr(m_object->Position()) < _sqr(5.f))
+        if (DaAi::Know::known_position(*m_object, *m_object_to_look).distance_to_sqr(m_object->Position()) < _sqr(5.f))
             break;
 
         //			Msg							("%6d switch to mode 1", Device.dwTimeGlobal);
         m_state_fire_object = 1;
         m_state_fire_switch_time = Device.dwTimeGlobal;
-        m_object_start_position = m_object_to_look->Position();
+        m_object_start_position = DaAi::Know::known_position(*m_object, *m_object_to_look);
         m_holder_start_position = m_object->Position();
         //			m_vector3d					= m_object->sight().object_position();
         break;
@@ -398,7 +404,8 @@ void CSightAction::execute_fire_object()
     {
         if (Device.dwTimeGlobal >= m_state_fire_switch_time + 1500)
         {
-            if (m_object_to_look->Position().distance_to_sqr(m_object->Position()) > _sqr(5.f))
+            const Fvector object_position = DaAi::Know::known_position(*m_object, *m_object_to_look);
+            if (object_position.distance_to_sqr(m_object->Position()) > _sqr(5.f))
             {
                 if (!m_holder_start_position.similar(m_object->Position(), .05f))
                 {
@@ -411,7 +418,7 @@ void CSightAction::execute_fire_object()
                     break;
                 }
 
-                if (!m_object_start_position.similar(m_object_to_look->Position(), .05f))
+                if (!m_object_start_position.similar(object_position, .05f))
                 {
                     m_vector3d = m_object->sight().object_position();
                     //						Msg					("%6d switch to mode 0 (reson: object position

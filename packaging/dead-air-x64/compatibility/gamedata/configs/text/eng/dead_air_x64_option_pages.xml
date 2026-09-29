@@ -1,0 +1,812 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Options -> Sound and Controls: subsection headers (ui_mm_grp_<group>, dead_air_x64_sound_options.ltx and dead_air_x64_controls_options.ltx) and the captions those files rename rows to. -->
+	<string id="ui_mm_grp_volume">
+		<text>Volume</text>
+	</string>
+	<string id="ui_mm_grp_playback">
+		<text>Playback</text>
+	</string>
+	<string id="ui_mm_grp_subtitles">
+		<text>Subtitles</text>
+	</string>
+	<string id="ui_mm_grp_mouse">
+		<text>Mouse and aiming</text>
+	</string>
+	<string id="ui_mm_grp_keys">
+		<text>Keys</text>
+	</string>
+	<string id="ui_mm_da_volume_sounds">
+		<text>Sounds</text>
+	</string>
+	<string id="ui_mm_da_volume_music">
+		<text>Music</text>
+	</string>
+	<string id="ui_mm_da_eax">
+		<text>Environment effects (EAX)</text>
+	</string>
+	<string id="ui_mm_da_subtitles">
+		<text>Speech subtitles</text>
+	</string>
+	<string id="ui_mm_da_sound_captions">
+		<text>Sound captions</text>
+	</string>
+	<string id="ui_mm_da_keyb_default">
+		<text>Default keys</text>
+	</string>
+	<string id="ui_mm_da_kb_firemode_next">
+		<text>Fire mode</text>
+	</string>
+	<string id="ui_mm_da_kb_reload">
+		<text>Reload / wipe the mask</text>
+	</string>
+	<!-- Options -> Sound: the hint of every row (st_da_x64_sound_hint_<row>). -->
+	<string id="st_da_x64_sound_hint_master_volume">
+		<text>Volume of every game sound except the music.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_music_volume">
+		<text>Volume of the music in the menu and in the game.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_snd_device">
+		<text>The device the sound plays through. Takes effect after a game restart.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_eax">
+		<text>Echo and reverb by place: sound differs indoors, in tunnels and in the open.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_dynamic_music">
+		<text>Combat music plays while you fight people; the usual music fades out meanwhile.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_cc_captioning">
+		<text>Subtitles for speech: none, story lines only, or everything characters say.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_cc_icc">
+		<text>Captions for sounds, such as a creaking door. They work while speech subtitles are on.</text>
+	</string>
+	<!-- Options -> Controls: the hint of every row (st_da_x64_controls_hint_<row>). -->
+	<string id="st_da_x64_controls_hint_mouse_sense">
+		<text>How fast the mouse turns the camera.</text>
+	</string>
+	<string id="st_da_x64_controls_hint_invert_mouse">
+		<text>Moving the mouse forward looks down, moving it back looks up.</text>
+	</string>
+	<string id="st_da_x64_controls_hint_aim_toggle">
+		<text>A press toggles aiming instead of holding it while the key is down.</text>
+	</string>
+	<string id="st_da_x64_controls_hint_keyb_default">
+		<text>Gives every action its default keys and the quick slots their default items, at once.</text>
+	</string>
+	<!-- Options -> Controls, the key list: the hint of an action row is its caption id plus _hint. -->
+	<string id="kb_forward_hint">
+		<text>Move forward while held.</text>
+	</string>
+	<string id="kb_backward_hint">
+		<text>Move backward while held.</text>
+	</string>
+	<string id="kb_left_strafe_hint">
+		<text>Step left while held. Stops sprinting.</text>
+	</string>
+	<string id="kb_right_strafe_hint">
+		<text>Step right while held. Stops sprinting.</text>
+	</string>
+	<string id="kb_jump_hint">
+		<text>Jump. Hold it at a ledge to climb up, and on a hard landing to roll.</text>
+	</string>
+	<string id="kb_crouch_hint">
+		<text>Crouch; together with Walk, crouch lower. Hold or toggle is chosen on the Game tab.</text>
+	</string>
+	<string id="kb_always_run_hint">
+		<text>Walk slowly and quietly while held.</text>
+	</string>
+	<string id="kb_sprint_hint">
+		<text>Start or stop sprinting. Held while aiming, it holds your breath so the sight sways less.</text>
+	</string>
+	<string id="kb_left_lookout_hint">
+		<text>Lean out to the left while held.</text>
+	</string>
+	<string id="kb_right_lookout_hint">
+		<text>Lean out to the right while held.</text>
+	</string>
+	<string id="kb_weapon2_hint">
+		<text>Take out or put away the weapon in the primary slot.</text>
+	</string>
+	<string id="kb_weapon3_hint">
+		<text>Take out or put away the weapon in the secondary slot.</text>
+	</string>
+	<string id="kb_weapon5_hint">
+		<text>Take out or put away the pistol.</text>
+	</string>
+	<string id="kb_weapon1_hint">
+		<text>Take out or put away the knife.</text>
+	</string>
+	<string id="kb_weapon7_hint">
+		<text>Take out or put away the grenade or the binoculars, whichever is in their shared slot.</text>
+	</string>
+	<string id="kb_weapon6_hint">
+		<text>Take out or put away a bolt, for testing the way for anomalies.</text>
+	</string>
+	<string id="kb_weapon4_hint">
+		<text>A quick knife strike without putting the weapon away. Needs a knife in the knife slot.</text>
+	</string>
+	<string id="kb_wpn_next_hint">
+		<text>Reload with the next ammo type in the backpack; with a grenade in hand, switch the grenade type.</text>
+	</string>
+	<string id="kb_next_slot_hint">
+		<text>Take the weapon from the next slot. The mouse wheel does the same unless you are aiming.</text>
+	</string>
+	<string id="kb_prev_slot_hint">
+		<text>Take the weapon from the previous slot.</text>
+	</string>
+	<string id="kb_fire_hint">
+		<text>Shoot or strike, throw a grenade or a bolt. With empty hands, pick up an object and carry it.</text>
+	</string>
+	<string id="kb_zoom_hint">
+		<text>Aim while held. With a knife, a heavy stab; with a grenade, a wind-up for a long throw.</text>
+	</string>
+	<string id="kb_reload_hint">
+		<text>Reload or clear a jam. Hold for a second to wipe the glass of the mask.</text>
+	</string>
+	<string id="kb_func_hint">
+		<text>Switch to the underbarrel grenade launcher and back, if one is fitted.</text>
+	</string>
+	<string id="kb_firemode_next_hint">
+		<text>Cycle the fire modes the weapon has: single, burst, automatic.</text>
+	</string>
+	<string id="kb_inventory_hint">
+		<text>Open or close the backpack.</text>
+	</string>
+	<string id="kb_active_jobs_hint">
+		<text>Take out or put away the PDA.</text>
+	</string>
+	<string id="kb_torch_hint">
+		<text>Turn the headlamp on or off. It has to be used from the backpack once first.</text>
+	</string>
+	<string id="kb_detector_hint">
+		<text>Take out or put away what is in the detector slot: a detector, flashlight, glowstick or lighter.</text>
+	</string>
+	<string id="kb_night_vision_hint">
+		<text>Turn the night vision of the helmet or suit on or off, if it has one.</text>
+	</string>
+	<string id="kb_quick_use_1_hint">
+		<text>Use the item in quick slot 1. Food and medicine go into the slots in the backpack.</text>
+	</string>
+	<string id="kb_quick_use_2_hint">
+		<text>Use the item in quick slot 2. Food and medicine go into the slots in the backpack.</text>
+	</string>
+	<string id="kb_quick_use_3_hint">
+		<text>Use the item in quick slot 3. Food and medicine go into the slots in the backpack.</text>
+	</string>
+	<string id="kb_quick_use_4_hint">
+		<text>Use the item in quick slot 4. Food and medicine go into the slots in the backpack.</text>
+	</string>
+	<string id="kb_map_hint">
+		<text>Open the PDA straight on the map.</text>
+	</string>
+	<string id="kb_custom1_hint">
+		<text>Companions: cycle the aggressive, passive and defensive combat modes.</text>
+	</string>
+	<string id="kb_custom2_hint">
+		<text>Companions: wait where they are or follow you.</text>
+	</string>
+	<string id="kb_custom3_hint">
+		<text>Companions: hold, aim at a spot and release, and they take that position.</text>
+	</string>
+	<string id="kb_custom4_hint">
+		<text>Companions: turn stealthy movement on or off.</text>
+	</string>
+	<string id="kb_custom5_hint">
+		<text>Companions: let them pick up items and search bodies, or stop them.</text>
+	</string>
+	<string id="kb_scores_hint">
+		<text>Show your current tasks while held.</text>
+	</string>
+	<string id="kb_pause_hint">
+		<text>Pause or resume the game.</text>
+	</string>
+	<string id="kb_use_hint">
+		<text>Pick up, talk, search a body, open a door. Held, it keeps picking items up.</text>
+	</string>
+	<string id="kb_screenshot_hint">
+		<text>Save a screenshot.</text>
+	</string>
+	<string id="ui_mm_save_game_hint">
+		<text>Quicksave. With saving only at campfires on, it works only next to a burning one.</text>
+	</string>
+	<string id="ui_mm_load_game_hint">
+		<text>Load the latest quicksave.</text>
+	</string>
+	<string id="kb_quit_hint">
+		<text>Close the open window, or go to the main menu when none is open.</text>
+	</string>
+	<string id="kb_console_hint">
+		<text>Open the console.</text>
+	</string>
+	<!-- The game's own captions on the video page have no English text: English only. The engine's own strings (xfined-ray.xml) give the rest. -->
+	<string id="ui_mm_resolution">
+		<text>Resolution</text>
+	</string>
+	<string id="ui_mm_vsync">
+		<text>Vertical sync</text>
+	</string>
+	<string id="ui_mm_quality_presets">
+		<text>Quality preset</text>
+	</string>
+	<string id="ui_mm_gamma">
+		<text>Gamma</text>
+	</string>
+	<string id="ui_mm_contrast">
+		<text>Contrast</text>
+	</string>
+	<string id="ui_mm_brightness">
+		<text>Brightness</text>
+	</string>
+	<string id="ui_mm_detail_height">
+		<text>Grass height</text>
+	</string>
+	<string id="ui_mm_r2_shafts_value">
+		<text>Sun shafts</text>
+	</string>
+	<string id="ui_mm_sharp">
+		<text>Sharpening</text>
+	</string>
+	<string id="ui_mm_bloom">
+		<text>Bloom</text>
+	</string>
+	<string id="ui_mm_abberation">
+		<text>Chromatic aberration</text>
+	</string>
+	<string id="ui_mm_dof">
+		<text>Depth of field</text>
+	</string>
+	<string id="ui_mm_technicolor">
+		<text>Technicolor</text>
+	</string>
+	<string id="ui_mm_vignette">
+		<text>Film grain</text>
+	</string>
+	<string id="ui_mm_color_r">
+		<text>Red</text>
+	</string>
+	<string id="ui_mm_color_g">
+		<text>Green</text>
+	</string>
+	<string id="ui_mm_color_b">
+		<text>Blue</text>
+	</string>
+	<string id="ui_mm_vibrance">
+		<text>Saturation</text>
+	</string>
+	<!-- The game's own captions on the sound and controls pages have no English text: English only. -->
+	<string id="ui_mm_snd_device">
+		<text>Sound device</text>
+	</string>
+	<string id="ui_mm_dynamic_music">
+		<text>Dynamic music</text>
+	</string>
+	<string id="ui_mm_mouse_sense">
+		<text>Mouse sensitivity</text>
+	</string>
+	<string id="ui_mm_invert_mouse">
+		<text>Invert mouse</text>
+	</string>
+	<string id="ui_mm_aim_toggle">
+		<text>Toggle aiming</text>
+	</string>
+	<string id="ui_st_reset">
+		<text>Reset</text>
+	</string>
+	<string id="ui_mm_key">
+		<text>Key</text>
+	</string>
+	<string id="ui_mm_alternative">
+		<text>Alternative</text>
+	</string>
+	<string id="ui_mm_cc_none">
+		<text>No subtitles</text>
+	</string>
+	<string id="ui_mm_cc_storyonly">
+		<text>Story only</text>
+	</string>
+	<string id="ui_mm_cc_all">
+		<text>All subtitles</text>
+	</string>
+	<string id="kb_grp_movement">
+		<text>Movement</text>
+	</string>
+	<string id="kb_grp_weapons">
+		<text>Weapons</text>
+	</string>
+	<string id="kb_grp_inventory">
+		<text>Backpack</text>
+	</string>
+	<string id="kb_grp_squad">
+		<text>Squad</text>
+	</string>
+	<string id="kb_grp_common">
+		<text>General</text>
+	</string>
+	<string id="kb_forward">
+		<text>Forward</text>
+	</string>
+	<string id="kb_backward">
+		<text>Backward</text>
+	</string>
+	<string id="kb_left_strafe">
+		<text>Step left</text>
+	</string>
+	<string id="kb_right_strafe">
+		<text>Step right</text>
+	</string>
+	<string id="kb_jump">
+		<text>Jump</text>
+	</string>
+	<string id="kb_crouch">
+		<text>Crouch</text>
+	</string>
+	<string id="kb_always_run">
+		<text>Walk</text>
+	</string>
+	<string id="kb_sprint">
+		<text>Sprint / hold breath</text>
+	</string>
+	<string id="kb_left_lookout">
+		<text>Lean left</text>
+	</string>
+	<string id="kb_right_lookout">
+		<text>Lean right</text>
+	</string>
+	<string id="kb_weapon2">
+		<text>Primary</text>
+	</string>
+	<string id="kb_weapon3">
+		<text>Secondary</text>
+	</string>
+	<string id="kb_weapon5">
+		<text>Pistol</text>
+	</string>
+	<string id="kb_weapon1">
+		<text>Knife</text>
+	</string>
+	<string id="kb_weapon7">
+		<text>Grenade / binoculars</text>
+	</string>
+	<string id="kb_weapon6">
+		<text>Bolt</text>
+	</string>
+	<string id="kb_weapon4">
+		<text>Knife strike</text>
+	</string>
+	<string id="kb_wpn_next">
+		<text>Next ammo type</text>
+	</string>
+	<string id="kb_next_slot">
+		<text>Next slot</text>
+	</string>
+	<string id="kb_prev_slot">
+		<text>Previous slot</text>
+	</string>
+	<string id="kb_fire">
+		<text>Fire</text>
+	</string>
+	<string id="kb_zoom">
+		<text>Aim</text>
+	</string>
+	<string id="kb_reload">
+		<text>Reload / wipe the mask</text>
+	</string>
+	<string id="kb_func">
+		<text>Underbarrel launcher</text>
+	</string>
+	<string id="kb_firemode_next">
+		<text>Fire mode</text>
+	</string>
+	<string id="kb_inventory">
+		<text>Backpack</text>
+	</string>
+	<string id="kb_active_jobs">
+		<text>PDA</text>
+	</string>
+	<string id="kb_torch">
+		<text>Headlamp</text>
+	</string>
+	<string id="kb_detector">
+		<text>Detector</text>
+	</string>
+	<string id="kb_night_vision">
+		<text>Night vision</text>
+	</string>
+	<string id="kb_quick_use_1">
+		<text>Quick slot 1</text>
+	</string>
+	<string id="kb_quick_use_2">
+		<text>Quick slot 2</text>
+	</string>
+	<string id="kb_quick_use_3">
+		<text>Quick slot 3</text>
+	</string>
+	<string id="kb_quick_use_4">
+		<text>Quick slot 4</text>
+	</string>
+	<string id="kb_map">
+		<text>PDA map</text>
+	</string>
+	<string id="kb_custom1">
+		<text>Combat mode</text>
+	</string>
+	<string id="kb_custom2">
+		<text>Movement mode</text>
+	</string>
+	<string id="kb_custom3">
+		<text>Move to point</text>
+	</string>
+	<string id="kb_custom4">
+		<text>Stealth mode</text>
+	</string>
+	<string id="kb_custom5">
+		<text>Search bodies</text>
+	</string>
+	<string id="kb_scores">
+		<text>Current task</text>
+	</string>
+	<string id="kb_pause">
+		<text>Pause</text>
+	</string>
+	<string id="kb_use">
+		<text>Use</text>
+	</string>
+	<string id="kb_screenshot">
+		<text>Screenshot</text>
+	</string>
+	<string id="ui_mm_save_game">
+		<text>Save game</text>
+	</string>
+	<string id="ui_mm_load_game">
+		<text>Load game</text>
+	</string>
+	<string id="kb_quit">
+		<text>Exit</text>
+	</string>
+	<string id="kb_console">
+		<text>Console</text>
+	</string>
+	<!-- The weather dialog of the main menu (atmosfear_options.script): its headers and row captions, and the hint of every row (st_da_x64_weather_hint_<row>). -->
+	<string id="ui_mm_grp_af_periods">
+		<text>Weather by level</text>
+	</string>
+	<string id="ui_mm_af_period_good">
+		<text>Good period</text>
+	</string>
+	<string id="ui_mm_af_period_bad">
+		<text>Bad period</text>
+	</string>
+	<string id="ui_mm_af_enable">
+		<text>Enabled</text>
+	</string>
+	<string id="ui_mm_af_freq">
+		<text>Frequency</text>
+	</string>
+	<string id="ui_mm_af_task">
+		<text>Shelter task</text>
+	</string>
+	<string id="st_da_x64_weather_hint_enable_blowout">
+		<text>Blowouts: a wave that kills everyone in the open. Only shelter lets you live through it.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_blowout_freq">
+		<text>How often blowouts come; the exact time is random each time.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_blowout_task">
+		<text>Whether you get a task to find shelter when a blowout is coming.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_enable_psi_storm">
+		<text>Psi storms: psi blasts and discharges over open ground. Only shelter keeps you safe.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_psi_storm_freq">
+		<text>How often psi storms come; the exact time is random each time.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_psi_storm_task">
+		<text>Whether you get a task to find shelter when a psi storm is coming.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_enable_fallout">
+		<text>Fallout: radioactive or acid rain that hurts everyone outside shelter.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_fallout_freq">
+		<text>How often radioactive and acid rain falls.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_fallout_task">
+		<text>Whether you get a task to find shelter when the fallout starts.</text>
+	</string>
+	<string id="st_da_x64_weather_hint_period">
+		<text>Weather on the level: left in the good period, right in the bad one. The periods take turns.</text>
+	</string>
+	<!-- The weather dialog's own texts, its lists and the levels it lists have no English text: English only. -->
+	<string id="ui_mm_weather_options">
+		<text>Weather options</text>
+	</string>
+	<string id="st_cap_af_weather_options">
+		<text>Periods</text>
+	</string>
+	<string id="st_cap_af_event_options">
+		<text>Events</text>
+	</string>
+	<string id="st_cap_af_blowout">
+		<text>Blowouts</text>
+	</string>
+	<string id="st_cap_af_psi_storm">
+		<text>Psi storms</text>
+	</string>
+	<string id="st_cap_af_fallout">
+		<text>Fallout</text>
+	</string>
+	<string id="st_list_periods_clear">
+		<text>Clear</text>
+	</string>
+	<string id="st_list_periods_cloudy">
+		<text>Cloudy</text>
+	</string>
+	<string id="st_list_periods_foggy">
+		<text>Fog</text>
+	</string>
+	<string id="st_list_periods_rainy">
+		<text>Rain</text>
+	</string>
+	<string id="st_list_periods_stormy">
+		<text>Storm</text>
+	</string>
+	<string id="st_list_periods_veryfoggy">
+		<text>Heavy fog</text>
+	</string>
+	<string id="st_list_periods_wet">
+		<text>Drizzle</text>
+	</string>
+	<string id="st_list_freq_12">
+		<text>every 6 - 12 hours</text>
+	</string>
+	<string id="st_list_freq_24">
+		<text>every 12 - 24 hours</text>
+	</string>
+	<string id="st_list_freq_48">
+		<text>every 1 - 2 days</text>
+	</string>
+	<string id="st_list_freq_96">
+		<text>every 2 - 4 days</text>
+	</string>
+	<string id="st_list_task_give">
+		<text>Give the task</text>
+	</string>
+	<string id="st_list_task_none">
+		<text>No task</text>
+	</string>
+	<string id="jupiter">
+		<text>Jupiter</text>
+	</string>
+	<string id="k00_marsh">
+		<text>Swamps</text>
+	</string>
+	<string id="k01_darkscape">
+		<text>Darkscape</text>
+	</string>
+	<string id="k02_trucks_cemetery">
+		<text>Truck Cemetery</text>
+	</string>
+	<string id="l01_escape">
+		<text>Cordon</text>
+	</string>
+	<string id="l02_garbage">
+		<text>Garbage</text>
+	</string>
+	<string id="l03_agroprom">
+		<text>Agroprom Research Institute</text>
+	</string>
+	<string id="l04_darkvalley">
+		<text>Dark Valley</text>
+	</string>
+	<string id="l05_bar">
+		<text>Bar</text>
+	</string>
+	<string id="l06_rostok">
+		<text>Wild Territory</text>
+	</string>
+	<string id="l08_yantar">
+		<text>Yantar</text>
+	</string>
+	<string id="l09_deadcity">
+		<text>Dead City</text>
+	</string>
+	<string id="l10_limansk">
+		<text>Limansk</text>
+	</string>
+	<string id="l10_radar">
+		<text>Radar</text>
+	</string>
+	<string id="l10_red_forest">
+		<text>Red Forest</text>
+	</string>
+	<string id="l11_hospital">
+		<text>Abandoned Hospital</text>
+	</string>
+	<string id="l11_pripyat">
+		<text>Central Pripyat</text>
+	</string>
+	<string id="l12_stancia">
+		<text>Chernobyl NPP-1</text>
+	</string>
+	<string id="l12_stancia_2">
+		<text>Chernobyl NPP-2</text>
+	</string>
+	<string id="l13_generators">
+		<text>Generators</text>
+	</string>
+	<string id="pripyat">
+		<text>Eastern Pripyat</text>
+	</string>
+	<string id="zaton">
+		<text>Zaton</text>
+	</string>
+	<string id="fake_start">
+		<text>Fake Start</text>
+	</string>
+	<string id="new_military">
+		<text>Army Warehouses</text>
+	</string>
+	<!-- The options dialog's own texts - tabs, buttons, the questions it asks, the quality presets - have no English text: English only. -->
+	<string id="ui_mm_options_n">
+		<text>Options</text>
+	</string>
+	<string id="ui_mm_video">
+		<text>Video</text>
+	</string>
+	<string id="ui_mm_sound">
+		<text>Sound</text>
+	</string>
+	<string id="ui_mm_gameplay">
+		<text>Game</text>
+	</string>
+	<string id="ui_mm_controls">
+		<text>Controls</text>
+	</string>
+	<string id="ui_mm_apply">
+		<text>Apply</text>
+	</string>
+	<string id="ui_mm_cancel">
+		<text>Cancel</text>
+	</string>
+	<string id="ui_mm_confirm_changes">
+		<text>Keep the changes? They will be undone in</text>
+	</string>
+	<string id="mp_si_sec">
+		<text>sec.</text>
+	</string>
+	<string id="ui_mm_need_restart">
+		<text>The changes take effect after the game is restarted</text>
+	</string>
+	<string id="Btn_Yes">
+		<text>Yes</text>
+	</string>
+	<string id="Btn_No">
+		<text>No</text>
+	</string>
+	<string id="Btn_OK">
+		<text>OK</text>
+	</string>
+	<string id="st_opt_fps_unlimited">
+		<text>Unlimited</text>
+	</string>
+	<string id="st_opt_Minimum">
+		<text>Minimum</text>
+	</string>
+	<string id="st_opt_Low">
+		<text>Low</text>
+	</string>
+	<string id="st_opt_Default">
+		<text>Medium</text>
+	</string>
+	<string id="st_opt_High">
+		<text>High</text>
+	</string>
+	<string id="st_opt_Extreme">
+		<text>Maximum</text>
+	</string>
+	<!-- Options -> Game: the game's own row captions have no English text: English only. No prefix before a name - the rows' subsections come from dead_air_x64_gameplay_options.ltx; Debug keeps its own. -->
+	<string id="ui_mm_aim_animation">
+		<text>Aiming sound</text>
+	</string>
+	<string id="ui_mm_alife_mutant_pop">
+		<text>Population (mutants)</text>
+	</string>
+	<string id="ui_mm_alife_stalker_pop">
+		<text>Population (stalkers)</text>
+	</string>
+	<string id="ui_mm_crosshair_distance">
+		<text>Distance to target</text>
+	</string>
+	<string id="ui_mm_crouch_toggle">
+		<text>Crouch toggle</text>
+	</string>
+	<string id="ui_mm_debug_hud">
+		<text>Debug: HUD</text>
+	</string>
+	<string id="ui_mm_dyn_crosshair">
+		<text>Dynamic crosshair</text>
+	</string>
+	<string id="ui_mm_dynamic_news">
+		<text>News</text>
+	</string>
+	<string id="ui_mm_fast_travel">
+		<text>Fast travel</text>
+	</string>
+	<string id="ui_mm_ground_items">
+		<text>Picked-up items</text>
+	</string>
+	<string id="ui_mm_hand_animation">
+		<text>Object animations</text>
+	</string>
+	<string id="ui_mm_heli_engine_sound">
+		<text>Helicopter sound</text>
+	</string>
+	<string id="ui_mm_heli_spawn">
+		<text>Helicopters</text>
+	</string>
+	<string id="ui_mm_hud_draw_info">
+		<text>Player status</text>
+	</string>
+	<string id="ui_mm_hud_draw_map">
+		<text>Minimap</text>
+	</string>
+	<string id="ui_mm_important_save">
+		<text>Autosave</text>
+	</string>
+	<string id="ui_mm_letterbox">
+		<text>Letterbox</text>
+	</string>
+	<string id="ui_mm_lootmoney_option">
+		<text>Money on bodies</text>
+	</string>
+	<string id="ui_mm_mask_hud">
+		<text>Helmet/mask</text>
+	</string>
+	<string id="ui_mm_mechanic_feature">
+		<text>Repairs take time</text>
+	</string>
+	<string id="ui_mm_offline_battles">
+		<text>Offline battles</text>
+	</string>
+	<string id="ui_mm_only_campfire">
+		<text>Save at campfires only</text>
+	</string>
+	<string id="ui_mm_photomode">
+		<text>Photo mode</text>
+	</string>
+	<string id="ui_mm_quicksave_cnt">
+		<text>Quicksave slots</text>
+	</string>
+	<string id="ui_mm_radio_mod">
+		<text>Radio music</text>
+	</string>
+	<string id="ui_mm_release_dropped_items">
+		<text>Junk cleaner</text>
+	</string>
+	<string id="ui_mm_show_crosshair">
+		<text>Crosshair</text>
+	</string>
+	<string id="ui_mm_show_enemy_health">
+		<text>Enemy health</text>
+	</string>
+	<string id="ui_mm_show_tracers">
+		<text>Tracers</text>
+	</string>
+	<string id="ui_mm_show_weapon">
+		<text>Weapon</text>
+	</string>
+	<string id="ui_mm_sleep_deprived">
+		<text>Need for sleep</text>
+	</string>
+	<string id="ui_mm_tips">
+		<text>NPC recognition</text>
+	</string>
+	<string id="ui_mm_use_battery">
+		<text>Battery charge</text>
+	</string>
+	<!-- The hint of the stock video page's level_texture_unload row (tab_video in ui_mm_opt.xml); the Russian one is in dead_air_x64.xml. -->
+	<string id="ui_mm_level_texture_unload_hint">
+		<text>Frees video and system memory after leaving a level. May make the next load slightly longer.</text>
+	</string>
+</string_table>

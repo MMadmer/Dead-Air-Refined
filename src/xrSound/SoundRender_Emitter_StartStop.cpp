@@ -36,10 +36,7 @@ void CSoundRender_Emitter::start(const ref_sound& _owner, u32 flags, float delay
     }
     bStopping = FALSE;
     bRewind = FALSE;
-
-    // Calc storage
-    for (auto& buf : temp_buf)
-        buf.resize(source()->data_info().bytesPerBuffer);
+    // The prefill blocks are allocated when the emitter first renders (ensure_buffers).
 }
 
 void CSoundRender_Emitter::i_stop()

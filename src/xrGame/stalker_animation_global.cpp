@@ -18,6 +18,8 @@
 #include "Weapon.h"
 #include "Missile.h"
 #include "stalker_animation_manager_impl.h"
+#include "stalker_planner.h"
+#include "stalker_decision_space.h"
 
 using namespace StalkerSpace;
 
@@ -49,14 +51,16 @@ MotionID CStalkerAnimationManager::global_critical_hit()
     if (global().animation())
         return (global().animation());
 
+    // The wound began with a firearm in hand (critical_wound_external_conditions_suitable); a swap or a grenade since
+    // leaves no pose to play, so the wound ends here as OnItemDrop ends it.
     CWeapon* weapon = smart_cast<CWeapon*>(object().inventory().ActiveItem());
-    VERIFY2(weapon, make_string("current active item: %s", object().inventory().ActiveItem() ?
-                            object().inventory().ActiveItem()->object().cName().c_str() :
-                            "no active item"));
-
-    u32 animation_slot = weapon->animation_slot();
-    VERIFY(animation_slot >= 1);
-    VERIFY(animation_slot <= 3);
+    const u32 animation_slot = weapon ? weapon->animation_slot() : 0;
+    if (animation_slot < 1 || animation_slot > 3)
+    {
+        object().brain().CStalkerPlanner::m_storage.set_property(
+            StalkerDecisionSpace::eWorldPropertyCriticallyWounded, false);
+        return MotionID();
+    }
 
     return (global().select(m_data_storage->m_part_animations.A[eBodyStateStand]
                                 .m_global.A[object().critical_wound_type() + 6 * (animation_slot - 1)]

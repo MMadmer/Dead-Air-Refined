@@ -36,6 +36,7 @@
 #include "xrAICore/Navigation/level_graph.h"
 #include "stalker_animation_manager.h"
 #include "Weapon.h"
+#include "da_ai_knowledge.h"
 
 using namespace StalkerDecisionSpace;
 
@@ -349,7 +350,9 @@ _value_type CStalkerPropertyEvaluatorEnemyReached::evaluate()
     if (processor_id != object().ID())
         return (false);
 
-    return ((object().Position().distance_to_sqr(enemy->Position()) <= _sqr(wounded_enemy_reached_distance)));
+    // Reached by the known position (W3): exact while seen, else the belief; unknown = not reached.
+    const float distance = DaAi::Know::known_distance(object(), *enemy);
+    return distance >= 0.f && distance <= wounded_enemy_reached_distance;
 }
 
 //////////////////////////////////////////////////////////////////////////

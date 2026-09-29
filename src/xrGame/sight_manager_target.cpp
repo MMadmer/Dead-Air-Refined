@@ -14,6 +14,7 @@
 #include "ai_space.h"
 #include "ai/stalker/ai_stalker_space.h"
 #include "detail_path_manager.h"
+#include "da_ai_knowledge.h"
 
 void CSightManager::SetPointLookAngles(
     const Fvector& tPosition, float& yaw, float& pitch, Fvector const& look_position, const CGameObject* object)
@@ -43,6 +44,10 @@ bool CSightManager::aim_target(Fvector& my_position, Fvector& aim_target, const 
 {
     if (!object)
         return (false);
+
+    // An unseen target is aimed at the belief, a seen one at the bone of the NPC's aim roll (W1, W10).
+    if (DaAi::Know::aim_point(*m_object, *object, aim_target))
+        return (true);
 
     if (m_object->aim_bone_id().size())
     {

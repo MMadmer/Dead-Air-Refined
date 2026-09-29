@@ -3,29 +3,19 @@
 #include "particle_actions_collection.h"
 #include "particle_effect.h"
 
-#include "xrCore/Threading/ParallelFor.hpp"
-
 using namespace PAPI;
 
 namespace
 {
+// Serial on purpose: the actions run under the effect's, the group's and the particle object's
+// recursive locks, and a thread waiting on a parallel_for runs any queued task - the next sun
+// cascade or light reached the same object again through those locks and freed its children under
+// the running update. The render passes already update different objects in parallel.
 template <typename Function>
 void for_each_particle(Particle* particles, u32 count, Function&& function)
 {
-    const auto processRange = [particles, &function](const TaskRange<u32>& range)
-    {
-        for (u32 index = range.begin(); index != range.end(); ++index)
-            function(particles[index]);
-    };
-
-    constexpr u32 minimumParallelParticles = 512;
-    const size_t workerCount = TaskScheduler ? TaskScheduler->GetWorkersCount() : 1;
-    const u32 parallelThreshold =
-        std::max(minimumParallelParticles, static_cast<u32>(std::min<size_t>(workerCount * 32, u32(-1))));
-    if (workerCount > 1 && count >= parallelThreshold)
-        xr_parallel_for(TaskRange<u32>(0, count, 64), processRange);
-    else
-        processRange(TaskRange<u32>(0, count));
+    for (u32 index = 0; index != count; ++index)
+        function(particles[index]);
 }
 
 template <typename Function>

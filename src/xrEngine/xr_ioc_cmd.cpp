@@ -53,6 +53,25 @@ public:
     void Info(TInfo& I) override { xr_strcpy(I, "wind_seed [N] - show or pin the wind service seed"); }
 };
 
+// env_time_pin h:m[:s] holds the weather clock at that time of day (QA frame parity: the same sky,
+// sun and weather blend in every run); -1 or no argument releases it.
+class CCC_EnvTimePin : public IConsole_Command
+{
+public:
+    CCC_EnvTimePin(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        extern float g_env_time_pin;
+        int h = -1, m = 0, s = 0;
+        if (args && *args && sscanf(args, "%d:%d:%d", &h, &m, &s) >= 2 && h >= 0 && h < 24)
+            g_env_time_pin = float(h * 3600 + m * 60 + s);
+        else
+            g_env_time_pin = -1.f;
+        Msg("* [env] weather clock %s", g_env_time_pin >= 0.f ? "pinned" : "released");
+    }
+    void Info(TInfo& I) override { xr_strcpy(I, "env_time_pin [h:m[:s]|-1] - hold or release the weather clock"); }
+};
+
 // wind_force N pins the weather ceiling (0 = dead calm, 1 = full gale, 1.25 = the storm
 // maximum) regardless of the cycle; -1 or no argument releases it. For tuning and QA.
 class CCC_WindForce : public IConsole_Command
@@ -1071,6 +1090,7 @@ void CCC_Register()
         CMD1(CCC_WeatherList, "weather_list");
         CMD1(CCC_WindFreeze, "wind_freeze");
         CMD1(CCC_WindForce, "wind_force");
+        CMD1(CCC_EnvTimePin, "env_time_pin");
     }
     // CMD4(CCC_Integer, "rs_vb_size", &rsDVB_Size, 32, 4096);
     // CMD4(CCC_Integer, "rs_ib_size", &rsDIB_Size, 32, 4096);

@@ -715,6 +715,8 @@ luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_
         .def("set_actor_adrenaline_time", &CScriptGameObject::SetActorAdrenalineTime)
         .def("set_radiation_detector", &CScriptGameObject::SetRadiationDetector)
         .def("get_radiation_detector", &CScriptGameObject::GetRadiationDetector)
+        .def("sleep_forecast", &CScriptGameObject::SleepForecast)
+        .def("sleep_forecast_cause", &CScriptGameObject::SleepForecastCause)
         //-AVO
 
         ;

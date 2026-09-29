@@ -1165,6 +1165,37 @@ target_sources(xrGame PRIVATE
     da_profiler.h
     da_script_cam.cpp
     da_script_cam.h
+    # [ai:core] begin sources
+    da_ai.cpp
+    da_ai.h
+    da_ai_comms.cpp
+    da_ai_comms.h
+    da_ai_comms_voice.cpp
+    da_ai_cover.cpp
+    da_ai_hearing.cpp
+    da_ai_ids.h
+    da_ai_know_evaluators.cpp
+    da_ai_know_save.cpp
+    da_ai_knowledge.cpp
+    da_ai_knowledge.h
+    da_ai_light.cpp
+    da_ai_morale.cpp
+    da_ai_morale.h
+    da_ai_morale_planner.cpp
+    da_ai_npc.cpp
+    da_ai_npc.h
+    da_ai_profile.cpp
+    da_ai_profile.h
+    da_ai_script.cpp
+    da_ai_search.cpp
+    da_ai_search.h
+    da_ai_search_planner.cpp
+    da_ai_senses.cpp
+    da_ai_senses.h
+    da_ai_tactics.cpp
+    da_ai_tactics.h
+    da_ai_tactics_planner.cpp
+    # [ai:core] end sources
     PdaAnimatorItem.cpp
     PdaAnimatorItem.h
     ShootingObject.cpp
@@ -2166,6 +2197,8 @@ target_sources(xrGame PRIVATE
     ui/UIActorMenuInitialize.cpp
     ui/UIActorMenuInventory.cpp
     ui/UIActorMenu_script.cpp
+    ui/UIActorMenuTools.cpp
+    ui/UIActorMenuTools.h
     ui/UIActorMenuTrade.cpp
     ui/UIActorMenuUpgrade.cpp
     ui/UIActorStateInfo.cpp

@@ -243,8 +243,12 @@ void CPHMovementControl::Calculate(
 void CPHMovementControl::UpdateWaterState()
 {
     const float was = m_water_depth;
+    const float fall_was = m_fall_water_depth;
+    const float fall_entry_was = m_fall_water_entry;
     m_water_depth = 0.f;
     m_water_surface = 0.f;
+    m_fall_water_depth = 0.f;
+    m_fall_water_entry = 0.f;
 
     if (!g_pGamePersistent)
         return;
@@ -252,22 +256,28 @@ void CPHMovementControl::UpdateWaterState()
     if (!env.water_field_valid())
         return;
 
-    float surface, bed;
-    if (!env.water_at(vPosition, surface, bed))
-        return;
     // vPosition is the character's ground point, so the column standing on top of it is the
     // depth. The bed is deliberately unused: a bridge or a rock above the pond puts the feet
-    // over the surface and the difference goes negative, which is exactly "not in the water".
-    if (surface <= vPosition.y)
+    // over the surface, which is exactly "not in the water". The column test and not the bare
+    // field: a cellar or a lower floor under some other sheet of water is dry.
+    float surface, bed;
+    if (!env.water_column_at(vPosition, surface, bed, &m_water_probe))
         return;
 
     const float depth = surface - vPosition.y;
-    // The bake keeps the HIGHEST liquid triangle over a texel and cannot tell a pond from a
-    // raised tank, a pipe or a flooded upper floor. Several metres of "water" standing over the
-    // feet is one of those, not something we are wading in - and left unbounded it means
-    // permanent mcWade, no sprint, no jump, no fall damage and a permanent dose on dry ground.
-    // Genuinely deeper water is out of scope anyway: swimming is deliberately not built, so
-    // over-the-head water is level geometry the actor is not meant to be standing in.
+
+    // The landing damage reads the whole column, deep water included: a fall into a lake ends
+    // on its bed, and the metres it went through are what cushioned it. The entry speed is the
+    // one the surface was broken with (vVelocity is still last frame's here), kept while the
+    // feet stay under that surface.
+    m_fall_water_depth = depth;
+    m_fall_water_entry = fall_was > 0.f ? fall_entry_was : _max(-vVelocity.y, 0.f);
+
+    // Several metres over the feet is not wading. The column test already rejects the sheets that
+    // belong to a tank, a pipe or a floor above; what is left is genuinely deep water, and that is
+    // out of scope: swimming is deliberately not built, so over-the-head water is level geometry
+    // the actor is not meant to be standing in, and a wade state there would mean no sprint and
+    // no jump on the bed of a lake.
     if (depth > da_water_actor_cfg().wade_full * 2.f)
         return;
 
@@ -300,6 +310,24 @@ void CPHMovementControl::UpdateCollisionDamage()
             block_damage_step_end = u64(-1);
     }
 
+    // Landing through water. The ground under it still stops the body; the water only slows it
+    // on the way. The legs reach the bottom through the first fall_water_shallow metres, so a
+    // puddle or knee-deep swamp is a hard floor; past that, drag takes the speed down by
+    // exp(-d / fall_water_stop_length). The surface itself hits back with
+    // fall_water_surface_impact of the speed it was broken at, so a very high fall into deep
+    // water still hurts. The result replaces the contact speed, which is what the stock damage,
+    // the landing roll (CActor::FallRollHealthLost), the camera and the hit callback all read.
+    if (m_fall_water_depth > 0.f && fContactSpeed > 0.f)
+    {
+        const SDaWaterActorCfg& wcfg = da_water_actor_cfg();
+        const float cushion = m_fall_water_depth - wcfg.fall_water_shallow;
+        float v = fContactSpeed;
+        if (cushion > 0.f)
+            v *= std::exp(-cushion / wcfg.fall_water_stop_length);
+        const float entry = m_fall_water_entry > 0.f ? m_fall_water_entry : fContactSpeed;
+        fContactSpeed = _min(fContactSpeed, _max(v, entry * wcfg.fall_water_surface_impact));
+    }
+
     // calc new
     gcontact_Power = fContactSpeed / fMaxCrashSpeed;
     if (fContactSpeed > fMinCrashSpeed)
@@ -307,20 +335,6 @@ void CPHMovementControl::UpdateCollisionDamage()
         gcontact_HealthLost = ((fContactSpeed - fMinCrashSpeed)) / (fMaxCrashSpeed - fMinCrashSpeed);
         VERIFY(m_character);
         m_character->SetHitType(DefineCollisionHitType(m_character->LastMaterialIDX()));
-
-        // Landing in water: the column under the feet takes the fall. Knee-deep and past it it
-        // costs nothing at all; from the ankle to there it tapers, so a puddle stays a hard
-        // floor. gcontact_Power is left alone on purpose - the impact happened and the camera
-        // should still feel it, it just did not hurt. Zeroing the loss also keeps the landing
-        // roll out of it (CActor::g_Physics triggers on a non-zero loss), which is right: you
-        // do not tuck and roll into a pond.
-        const SDaWaterActorCfg& wcfg = da_water_actor_cfg();
-        if (m_water_depth > wcfg.ankle)
-        {
-            const float k =
-                clampr((m_water_depth - wcfg.ankle) / _max(wcfg.fall_safe_depth - wcfg.ankle, EPS_S), 0.f, 1.f);
-            gcontact_HealthLost *= 1.f - k;
-        }
     }
 
     // const ICollisionDamageInfo* di=m_character->CollisionDamageInfo();

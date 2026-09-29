@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- The sort and filter row of the actor menu (actor_menu_tools.xml). Hints only, and a -
+	     plain hyphen: the 4:3 hint font draws no em dash. A second click on the active filter
+	     shows everything again. -->
+	<string id="st_da_inv_sort_actor">
+		<text>Сортировать рюкзак: собрать неполные пачки патронов, бутылки и многоразовые предметы в полные и уплотнить сетку</text>
+	</string>
+	<string id="st_da_inv_sort_loot">
+		<text>Сортировать содержимое: собрать неполные пачки патронов, бутылки и многоразовые предметы в полные и уплотнить сетку</text>
+	</string>
+	<string id="st_da_inv_sort_trader">
+		<text>Сортировать товар торговца: собрать многоразовые предметы и уплотнить сетку</text>
+	</string>
+	<string id="st_da_inv_filter_all">
+		<text>Показать все предметы</text>
+	</string>
+	<string id="st_da_inv_filter_weapons">
+		<text>Оружие и боеприпасы: оружие, патроны, гранаты, обвесы</text>
+	</string>
+	<string id="st_da_inv_filter_armour">
+		<text>Броня: костюмы, шлемы, рюкзаки</text>
+	</string>
+	<string id="st_da_inv_filter_food">
+		<text>Еда и напитки</text>
+	</string>
+	<string id="st_da_inv_filter_medicine">
+		<text>Медицина: аптечки, бинты, препараты, антирады</text>
+	</string>
+	<string id="st_da_inv_filter_artefacts">
+		<text>Артефакты и контейнеры</text>
+	</string>
+	<string id="st_da_inv_filter_misc">
+		<text>Прочее: инструменты, приборы, квестовые предметы, ценности и всё остальное</text>
+	</string>
+</string_table>

@@ -10,6 +10,8 @@
 #include "Artefact.h"
 #include "Weapon.h"
 #include "xrEngine/IGame_Persistent.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_profile.h"
 
 #include <bit>
 #include <cmath>
@@ -389,6 +391,10 @@ void begin_capture(CaptureState& state)
     CActor::BeginAdrenalineSaveCapture(state.actor);
     CHelmet::BeginFilterSaveCapture(state.helmet);
     CArtefact::BeginOverrideSaveCapture(state.artefact);
+    // [ai:know] begin capture_begin
+    DaAi::Know::save_begin(state.aiKnowledge);
+    // [ai:know] end capture_begin
+    DaAi::Traits::save_begin(state.aiTraits);
     state.initialized = true;
 }
 
@@ -585,6 +591,44 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
             // XMS module manifest + per-module blobs ride the same capture
             XmsGame::CollectSaveMutations(state.mutations);
             state.phase = 10;
+            continue;
+        }
+
+        // [ai:know] begin capture_continue
+        if (state.phase == 10)
+        {
+            const float elapsed = budgetTimer.GetElapsed_sec() * 1000.f;
+            const float remaining = unlimitedBudget ? flt_max : budgetMilliseconds - elapsed;
+            if (!DaAi::Know::save_continue(state.aiKnowledge, remaining))
+                return false;
+            if (state.aiKnowledge.failed)
+            {
+                state.failed = true;
+                state.completed = true;
+                return true;
+            }
+            add_mutation(state.mutations, SaveExtensionChunkIds::AiKnowledge, std::move(state.aiKnowledge.payload),
+                state.aiKnowledge.present);
+            state.phase = 11;
+            continue;
+        }
+        // [ai:know] end capture_continue
+
+        if (state.phase == 11)
+        {
+            const float elapsed = budgetTimer.GetElapsed_sec() * 1000.f;
+            const float remaining = unlimitedBudget ? flt_max : budgetMilliseconds - elapsed;
+            if (!DaAi::Traits::save_continue(state.aiTraits, remaining))
+                return false;
+            if (state.aiTraits.failed)
+            {
+                state.failed = true;
+                state.completed = true;
+                return true;
+            }
+            add_mutation(state.mutations, SaveExtensionChunkIds::AiTraits, std::move(state.aiTraits.payload),
+                state.aiTraits.present);
+            state.phase = 12;
             state.completed = true;
         }
     }
@@ -681,6 +725,20 @@ void stage_chunks(const SaveExtensionContainer::ChunkList& chunks)
         else
             report_invalid_chunk("SEA1");
     }
+
+    // [ai:know] begin stage
+    if (const auto* chunk = supported_chunk(chunks, SaveExtensionChunkIds::AiKnowledge))
+    {
+        if (!DaAi::Know::stage(chunk->payload))
+            report_invalid_chunk("AIK1");
+    }
+    // [ai:know] end stage
+
+    if (const auto* chunk = supported_chunk(chunks, SaveExtensionChunkIds::AiTraits))
+    {
+        if (!DaAi::Traits::stage(chunk->payload))
+            report_invalid_chunk("AIT1");
+    }
 }
 
 void clear_state()
@@ -691,6 +749,10 @@ void clear_state()
     CWeapon::ClearExtendedSaveState();
     if (g_pGamePersistent)
         g_pGamePersistent->Environment().SetSeason(0.f);
+    // [ai:know] begin clear_state
+    DaAi::Know::clear_staged();
+    // [ai:know] end clear_state
+    DaAi::Traits::clear();
 }
 
 void forget_object(const CSE_Abstract& serverObject)
@@ -699,5 +761,9 @@ void forget_object(const CSE_Abstract& serverObject)
     CHelmet::ForgetFilterSaveState(serverObject);
     CArtefact::ForgetOverrideSaveState(serverObject);
     CWeapon::ForgetExtendedSaveState(serverObject);
+    // [ai:know] begin forget_object
+    DaAi::Know::forget_saved(serverObject.ID);
+    // [ai:know] end forget_object
+    DaAi::Traits::forget(serverObject.ID);
 }
 }

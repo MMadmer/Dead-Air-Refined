@@ -113,6 +113,9 @@ void CUIActorMenu::SetMenuMode(EMenuMode mode)
 
     if (mode != m_currMenuMode)
     {
+        // A filter and a pending sort belong to the window they were made in.
+        ResetInventoryTools();
+
         switch (m_currMenuMode)
         {
         case mmUndefined: break;
@@ -148,6 +151,7 @@ void CUIActorMenu::SetMenuMode(EMenuMode mode)
         UpdateActor();
     }
     UpdateButtonsLayout();
+    SyncInventoryTools();
 }
 
 void CUIActorMenu::PlaySnd(eActorMenuSndAction a)
@@ -213,6 +217,8 @@ void CUIActorMenu::Update()
     { // all mode
         m_last_time = Device.dwTimeGlobal;
         m_ActorStateInfo->UpdateActorInfo(m_pActorInvOwner);
+        UpdatePendingSort();
+        SyncInventoryTools();
     }
 
     switch (m_currMenuMode)

@@ -9,6 +9,8 @@
 
 #include "Include/xrRender/Kinematics.h"
 #include "xrCore/Animation/Bone.hpp"
+#include "xrCore/Threading/Lock.hpp"
+#include "xrCore/Threading/ScopeLock.hpp"
 
 #ifdef DEBUG
 IC float DET(const Fmatrix& a)
@@ -20,6 +22,17 @@ IC float DET(const Fmatrix& a)
 #endif
 
 using namespace collide;
+
+namespace
+{
+// One skeleton is ray-queried from several threads at once - the rain's birth rays on the main
+// thread, the visibility and object-handler tasks of the parallel frame sequence - and the first
+// to find the frame stale rebuilt the element list while the others walked it, or rebuilt it as
+// well: two threads growing one vector. Striped by form, so unrelated skeletons never wait for
+// each other; file-scope because the class is exported with its implicit copy operations.
+Lock g_cform_locks[64];
+Lock& cform_lock(const void* form) { return g_cform_locks[(reinterpret_cast<uintptr_t>(form) >> 6) & 63]; }
+} // namespace
 
 void CCF_Skeleton::SElement::center(Fvector& center) const
 {
@@ -36,11 +49,12 @@ void CCF_Skeleton::SElement::center(Fvector& center) const
 
 bool CCF_Skeleton::_ElementCenter(u16 elem_id, Fvector& e_center)
 {
+    ScopeLock lock{ &cform_lock(this) };
     const auto it = std::lower_bound(elements.begin(), elements.end(), elem_id, [](const SElement& E, u16 elem)
     {
         return E.elem_id < elem;
     });
-    if (it->elem_id == elem_id)
+    if (it != elements.end() && it->elem_id == elem_id)
     {
         it->center(e_center);
         return true;
@@ -248,12 +262,15 @@ bool CCF_Skeleton::_RayQuery(const collide::ray_defs& Q, collide::rq_results& R)
     if (!owner || owner->getDestroy())
         return false;
 
-    if (!PKinematics(owner->Visual()))
+    IKinematics* K = PKinematics(owner->Visual());
+    if (!K)
     {
         cform_report("ray query", owner);
         return false;
     }
 
+    Lock& lock = cform_lock(this);
+    lock.Enter();
     if (dwFrameTL != Device.dwFrame)
         BuildTopLevel();
 
@@ -267,19 +284,21 @@ bool CCF_Skeleton::_RayQuery(const collide::ray_defs& Q, collide::rq_results& R)
     int quant;
     Fsphere::ERP_Result res1 = w_bv_sphere.intersect(Q.start, Q.dir, tgt_dist, quant, aft);
     if ((Fsphere::rpNone == res1) || ((Fsphere::rpOriginOutside == res1) && (aft[0] > tgt_dist)))
-        return false;
-
-    if (dwFrame != Device.dwFrame)
-        BuildState();
-    else
     {
-        IKinematics* K = PKinematics(owner->Visual());
-        if (K->LL_GetBonesVisible() != vis_mask)
-        {
-            // Model changed between ray-picks
-            dwFrame = Device.dwFrame - 1;
+        lock.Leave();
+        return false;
+    }
+
+    // Stale, or the model changed between ray-picks. The bones are brought up to date outside the
+    // form's lock - they take the animation lock of their own - and BuildState then finds them
+    // published and never takes it under ours.
+    if (dwFrame != Device.dwFrame || K->LL_GetBonesVisible() != vis_mask)
+    {
+        lock.Leave();
+        K->CalculateBones();
+        lock.Enter();
+        if (dwFrame != Device.dwFrame || K->LL_GetBonesVisible() != vis_mask)
             BuildState();
-        }
     }
 
     bool bHIT = false;
@@ -310,6 +329,7 @@ bool CCF_Skeleton::_RayQuery(const collide::ray_defs& Q, collide::rq_results& R)
                 break;
         }
     }
+    lock.Leave();
     return bHIT;
 }
 

@@ -242,6 +242,7 @@ void CSoundRender_Emitter::fill_block(void* ptr, u32 size)
 std::pair<u8*, size_t> CSoundRender_Emitter::obtain_block()
 {
     wait_prefill();
+    ensure_buffers();
     const std::pair result = { temp_buf[current_block].data(), temp_buf[current_block].size() };
     ++current_block;
     if (current_block >= sdef_target_count_prefill)
@@ -250,8 +251,21 @@ std::pair<u8*, size_t> CSoundRender_Emitter::obtain_block()
     return std::move(result);
 }
 
+// The prefill blocks (a second of PCM, zeroed) are allocated on the main thread when the emitter first renders, not
+// when it starts: most started sounds only simulate, out of the listener's reach, and never need them.
+void CSoundRender_Emitter::ensure_buffers()
+{
+    const u32 size = source()->data_info().bytesPerBuffer;
+    for (auto& buf : temp_buf)
+    {
+        if (buf.size() != size)
+            buf.resize(size);
+    }
+}
+
 void CSoundRender_Emitter::fill_all_blocks()
 {
+    ensure_buffers();
     current_block = 0;
     for (size_t i = 0; i < sdef_target_count_prefill; ++i)
         fill_block(temp_buf[i].data(), temp_buf[i].size());
@@ -261,6 +275,7 @@ void CSoundRender_Emitter::fill_all_blocks()
 void CSoundRender_Emitter::dispatch_prefill()
 {
     wait_prefill();
+    ensure_buffers();
     if (filled_blocks >= sdef_target_count_prefill)
         return;
 

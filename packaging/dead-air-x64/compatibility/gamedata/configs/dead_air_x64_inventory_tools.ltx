@@ -1,0 +1,20 @@
+; The sort button of the actor menu (src\xrGame\ui\UIActorMenuTools.cpp, actor_menu_tools.xml).
+;
+; Sorting a pane merges what is split: partial ammo boxes into full ones (each box's own
+; box size), items of numbered-section stacks into the fewest stacks, and multi-use items
+; (use_condition with remove_after_use and no next_use_item) into the fewest items, then lays the
+; grid out again from the top. A trader's goods get the merges that keep every item its section,
+; and the ammo of a living NPC (a trader, a companion) is left alone: his infinite ammo replaces
+; every emptied box that leaves him with a full one.
+;
+; A numbered-section stack is a base section and its "<base>_2" .. "<base>_N" siblings, each
+; holding that many of the item: "vodka_3" is three vodkas. N is found from the sections that
+; exist. WHICH bases are stacks is the game's own list, named here because it belongs to the
+; game's scripts; nothing of it is written in code.
+
+[inventory_sort]
+stack_source_file    = plugins\itms_manager.ltx
+stack_source_section = stackable
+
+; Bases the list above does not cover, one section per line.
+[inventory_sort_stackable]

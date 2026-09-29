@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Options -> Game: subsection headers (ui_mm_grp_<group>), captions renamed by dead_air_x64_gameplay_options.ltx, a hint per option (ui_mm_<option>_hint), and the captions of our own options. -->
+	<string id="ui_mm_grp_saves">
+		<text>Saving</text>
+	</string>
+	<string id="ui_mm_grp_world">
+		<text>World</text>
+	</string>
+	<string id="ui_mm_grp_survival">
+		<text>Survival</text>
+	</string>
+	<string id="ui_mm_grp_crosshair">
+		<text>Crosshair</text>
+	</string>
+	<string id="ui_mm_grp_interface">
+		<text>Interface</text>
+	</string>
+	<string id="ui_mm_grp_animations">
+		<text>Animations</text>
+	</string>
+	<string id="ui_mm_grp_sound">
+		<text>Sound</text>
+	</string>
+	<string id="ui_mm_grp_controls">
+		<text>Controls</text>
+	</string>
+	<string id="ui_mm_grp_misc">
+		<text>Other</text>
+	</string>
+	<string id="ui_mm_da_extra_animations">
+		<text>Action effects</text>
+	</string>
+	<string id="ui_mm_auto_continue_on_load">
+		<text>Continue after loading</text>
+	</string>
+	<string id="ui_mm_auto_continue_on_load_hint">
+		<text>Starts the game as soon as loading finishes, without waiting for a key press.</text>
+	</string>
+	<string id="ui_mm_infinite_bolts">
+		<text>Infinite bolts</text>
+	</string>
+	<string id="ui_mm_infinite_bolts_hint">
+		<text>Bolts are never used up. If you have run out, a bolt appears when this is switched on.</text>
+	</string>
+	<string id="ui_mm_crosshair_dot">
+		<text>Dot crosshair</text>
+	</string>
+	<string id="ui_mm_crosshair_dot_hint">
+		<text>Replaces the static crosshair with a round dot in the centre of the screen.</text>
+	</string>
+	<string id="ui_mm_pause_in_background">
+		<text>Pause in background</text>
+	</string>
+	<string id="ui_mm_instant_inventory">
+		<text>Instant inventory</text>
+	</string>
+	<string id="ui_mm_major_update_notice">
+		<text>Notify about major versions</text>
+	</string>
+	<string id="ui_mm_cursor_sens">
+		<text>Cursor speed</text>
+	</string>
+	<string id="ui_mm_cursor_sens_hint">
+		<text>Cursor speed in menus and the inventory. 1.00 matches the system cursor.</text>
+	</string>
+	<string id="ui_mm_important_save_hint">
+		<text>The game saves itself at key moments of the story and of tasks.</text>
+	</string>
+	<string id="ui_mm_only_campfire_hint">
+		<text>You can save only next to a burning campfire - both quicksaves and saves from the menu.</text>
+	</string>
+	<string id="ui_mm_quicksave_cnt_hint">
+		<text>How many quicksaves are kept. When all are taken, a new one replaces the oldest.</text>
+	</string>
+	<string id="ui_mm_alife_stalker_pop_hint">
+		<text>Multiplier for the number of stalker squads in the Zone. Lower - emptier and calmer, higher - more encounters and fights.</text>
+	</string>
+	<string id="ui_mm_alife_mutant_pop_hint">
+		<text>Multiplier for the number of mutants in the Zone. Lower - fewer encounters, higher - more dangerous trips.</text>
+	</string>
+	<string id="ui_mm_offline_battles_hint">
+		<text>Squads that meet far from the player fight each other in a simplified simulation: life in the Zone goes on without you.</text>
+	</string>
+	<string id="ui_mm_heli_spawn_hint">
+		<text>Military helicopters appear in the Zone.</text>
+	</string>
+	<string id="ui_mm_fast_travel_hint">
+		<text>Fast travel to discovered points from the map spot menu of the PDA.</text>
+	</string>
+	<string id="ui_mm_dynamic_news_hint">
+		<text>Stalkers post about events in the Zone to the common PDA channel: fights, finds, deaths of comrades.</text>
+	</string>
+	<string id="ui_mm_lootmoney_option_hint">
+		<text>Dead stalkers can carry money.</text>
+	</string>
+	<string id="ui_mm_release_dropped_items_hint">
+		<text>Removes dropped items and weapons over time, so the world does not fill up with junk and lose performance.</text>
+	</string>
+	<string id="ui_mm_sleep_deprived_hint">
+		<text>Without sleep the character gets tired, and the longer he stays awake, the worse he feels. Regular sleep is needed.</text>
+	</string>
+	<string id="ui_mm_use_battery_hint">
+		<text>The flashlight, night vision, detectors and containers run on a common charge that batteries refill.</text>
+	</string>
+	<string id="ui_mm_mechanic_feature_hint">
+		<text>A technician does not repair and upgrade instantly: an item you hand over is ready only after a while.</text>
+	</string>
+	<string id="ui_mm_show_crosshair_hint">
+		<text>The crosshair in the centre of the screen.</text>
+	</string>
+	<string id="ui_mm_dyn_crosshair_hint">
+		<text>The crosshair spreads while moving and shooting, showing the current dispersion of the weapon.</text>
+	</string>
+	<string id="ui_mm_crosshair_distance_hint">
+		<text>Shows the distance to whatever the crosshair points at.</text>
+	</string>
+	<string id="ui_mm_tips_hint">
+		<text>The crosshair is coloured by your relation to the target (enemy, neutral, friend); below it are the name and faction of a character, and up close the name of an item.</text>
+	</string>
+	<string id="ui_mm_hud_draw_info_hint">
+		<text>On-screen indicators: health, stamina, weapon and ammo.</text>
+	</string>
+	<string id="ui_mm_hud_draw_map_hint">
+		<text>The minimap in the corner of the screen.</text>
+	</string>
+	<string id="ui_mm_mask_hud_hint">
+		<text>With a helmet or a gas mask on, its glass is seen over the screen: cracks, raindrops, fogging.</text>
+	</string>
+	<string id="ui_mm_show_enemy_health_hint">
+		<text>A health bar appears over an enemy after a hit.</text>
+	</string>
+	<string id="ui_mm_show_tracers_hint">
+		<text>Bullets leave a visible glowing trail.</text>
+	</string>
+	<string id="ui_mm_ground_items_hint">
+		<text>Picking an item up from the ground shows a message with its name.</text>
+	</string>
+	<string id="ui_mm_show_weapon_hint">
+		<text>The weapon and items in the hands. Switch it off for a clean screenshot.</text>
+	</string>
+	<string id="ui_mm_letterbox_hint">
+		<text>Black bars at the top and bottom of the screen, as in a film.</text>
+	</string>
+	<string id="ui_mm_photomode_hint">
+		<text>Keeps the far background blurred, like a camera lens. Works with Depth of field switched on in the graphics settings.</text>
+	</string>
+	<string id="ui_mm_extra_animations_hint">
+		<text>Dead Air scenes for actions that have no animation of their own - repairing gear, cleaning a weapon, lighting a campfire: fade, camera sway and sound.</text>
+	</string>
+	<string id="ui_mm_hand_animation_hint">
+		<text>A short hand movement when you open a door or press a button.</text>
+	</string>
+	<string id="ui_mm_instant_inventory_hint">
+		<text>The inventory opens the moment the key is pressed, without waiting for the backpack to come off. The backpack scene still plays behind the window.</text>
+	</string>
+	<string id="ui_mm_radio_mod_hint">
+		<text>Radios in camps play music.</text>
+	</string>
+	<string id="ui_mm_heli_engine_sound_hint">
+		<text>The engine noise of helicopters is heard.</text>
+	</string>
+	<string id="ui_mm_aim_animation_hint">
+		<text>A sound and a slight camera jolt when you raise the weapon to aim and lower it.</text>
+	</string>
+	<string id="ui_mm_crouch_toggle_hint">
+		<text>A press toggles crouching instead of holding it while the key is down.</text>
+	</string>
+	<string id="ui_mm_pause_in_background_hint">
+		<text>The game pauses when its window loses focus, for example on Alt+Tab.</text>
+	</string>
+	<string id="ui_mm_localization_hint">
+		<text>Language of the game texts; takes effect after a restart. Only installed translations are listed.</text>
+	</string>
+	<string id="ui_mm_major_update_notice_hint">
+		<text>Tell when a new major version of the mod is out. Updates within the current version are always checked.</text>
+	</string>
+	<string id="ui_mm_debug_hud_hint">
+		<text>Debug information on screen. Available only in developer mode.</text>
+	</string>
+</string_table>

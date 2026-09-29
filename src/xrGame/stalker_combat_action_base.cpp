@@ -23,6 +23,8 @@
 #include "agent_enemy_manager.h"
 #include "inventory_item.h"
 #include "smart_cover.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_tactics.h"
 
 using namespace StalkerSpace;
 
@@ -52,7 +54,33 @@ void CStalkerActionCombatBase::finalize()
 bool CStalkerActionCombatBase::fire_make_sense() const { return (object().fire_make_sense()); }
 void CStalkerActionCombatBase::fire()
 {
-    Fvector enemy_position = object().memory().enemy().selected()->Position();
+    // Fire gate (F5, F6, doctrine): aimed fire at what the NPC sees and identified, suppression at its own last-seen
+    // point, otherwise only aim; the angle test and the queue use the known position, never the target object.
+    const CEntityAlive* enemy = object().memory().enemy().selected();
+    if (!enemy)
+        return;
+    // An aimed command that waits for the reaction to run out or the head to turn: the gate checks it every frame, so
+    // it goes the frame it may, not at this action's next update.
+    const auto defer = [this, enemy]() {
+        u32 min_queue_size, max_queue_size, min_queue_interval, max_queue_interval;
+        select_queue_params(DaAi::Know::known_distance(object(), *enemy), min_queue_size, max_queue_size,
+            min_queue_interval, max_queue_interval);
+        const CInventoryItem* weapon = object().best_weapon();
+        DaAi::Tactics::defer_fire(object(), *enemy, weapon ? &weapon->object() : nullptr, min_queue_size,
+            max_queue_size, min_queue_interval, max_queue_interval, start_fire_angle_difference);
+    };
+    const DaAi::Tactics::FireMode mode = DaAi::Tactics::fire_mode(object(), enemy);
+    if (mode == DaAi::Tactics::FireMode::none)
+    {
+        aim_ready();
+        if (DaAi::Tactics::reaction_running(object(), *enemy))
+            defer();
+        return;
+    }
+
+    Fvector enemy_position = DaAi::Know::known_position(object(), *enemy);
+    if (mode == DaAi::Tactics::FireMode::suppress)
+        DaAi::Tactics::suppress_point(object(), enemy_position);
     Fvector object_position = object().Position();
     Fvector direction = Fvector().sub(enemy_position, object_position);
     float yaw, pitch;
@@ -61,8 +89,12 @@ void CStalkerActionCombatBase::fire()
     if (angle_difference(-yaw, current_angles.current.yaw) > start_fire_angle_difference)
     {
         aim_ready();
+        if (mode == DaAi::Tactics::FireMode::aimed)
+            defer();
         return;
     }
+    if (mode == DaAi::Tactics::FireMode::aimed)
+        DaAi::Tactics::on_fire_decision(object());
 
     u32 min_queue_size, max_queue_size, min_queue_interval, max_queue_interval;
     float distance = enemy_position.distance_to(object_position);
@@ -74,7 +106,7 @@ void CStalkerActionCombatBase::fire()
 void CStalkerActionCombatBase::aim_ready()
 {
     u32 min_queue_size, max_queue_size, min_queue_interval, max_queue_interval;
-    float distance = object().memory().enemy().selected()->Position().distance_to(object().Position());
+    float distance = DaAi::Know::known_distance(object(), *object().memory().enemy().selected());
     select_queue_params(distance, min_queue_size, max_queue_size, min_queue_interval, max_queue_interval);
     object().CObjectHandler::set_goal(eObjectActionAimReady1, object().best_weapon(), min_queue_size, max_queue_size,
         min_queue_interval, max_queue_interval);
@@ -83,7 +115,7 @@ void CStalkerActionCombatBase::aim_ready()
 void CStalkerActionCombatBase::aim_ready_force_full()
 {
     u32 min_queue_size, max_queue_size, min_queue_interval, max_queue_interval;
-    float distance = object().memory().enemy().selected()->Position().distance_to(object().Position());
+    float distance = DaAi::Know::known_distance(object(), *object().memory().enemy().selected());
     select_queue_params(distance, min_queue_size, max_queue_size, min_queue_interval, max_queue_interval);
     object().CObjectHandler::set_goal(eObjectActionAimForceFull1, object().best_weapon(), min_queue_size,
         max_queue_size, min_queue_interval, max_queue_interval);

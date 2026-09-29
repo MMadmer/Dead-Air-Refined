@@ -634,8 +634,18 @@ static void RemapKeys()
         keyboard_key& kb = keyboards[idx];
         if (pInput->GetKeyName(kb.dik, buff, sizeof(buff)))
             kb.key_local_name = buff;
-        else if (kb.key_local_name.empty())
-            kb.key_local_name = kb.key_name;
+        else
+        {
+            // What no keyboard layout names (mouse and gamepad buttons): the short name the text
+            // files give (st_key_mouse1 is "LMB" in English), the table's English one otherwise.
+            string64 id;
+            xr_sprintf(id, "st_key_%s", kb.key_name);
+            const shared_str local = StringTable().translate(id);
+            if (local.size() && xr_strcmp(local.c_str(), id) != 0)
+                kb.key_local_name = local.c_str();
+            else if (kb.key_local_name.empty())
+                kb.key_local_name = kb.key_name;
+        }
 
         // Msg("[%s]-[%s]", kb.key_name, kb.key_local_name.c_str());
     }

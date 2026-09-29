@@ -12,18 +12,6 @@
     <string id="st_opt_fullscreen">
         <text>Полноэкранный</text>
     </string>
-    <string id="st_opt_renderer_r2">
-        <text>Dx9 R2</text>
-    </string>
-    <string id="st_opt_renderer_r2.5">
-        <text>Dx9 R2.5</text>
-    </string>
-    <string id="st_opt_renderer_r3">
-        <text>Dx10 R3</text>
-    </string>
-    <string id="st_opt_renderer_r4">
-        <text>Dx11 R4</text>
-    </string>
     <string id="st_opt_renderer_rgl">
         <text>OpenGL</text>
     </string>
@@ -34,7 +22,7 @@
         <text>Освобождает видеопамять и оперативную память после выхода с локации. Может немного увеличить время следующей загрузки.</text>
     </string>
     <string id="ui_mm_auto_continue_on_load">
-        <text>Игра: Автостарт после загрузки</text>
+        <text>Автостарт после загрузки</text>
     </string>
     <string id="ui_mm_auto_continue_on_load_hint">
         <text>Автоматически продолжает игру после завершения загрузки, пропуская ожидание нажатия любой клавиши.</text>
@@ -143,7 +131,7 @@
         <text>Больше не уведомлять о новых крупных версиях</text>
     </string>
     <string id="ui_mm_instant_inventory">
-        <text>Игра: Мгновенный инвентарь</text>
+        <text>Мгновенный инвентарь</text>
     </string>
     <string id="ui_mm_major_update_notice">
         <text>Уведомлять о крупных версиях</text>
@@ -158,7 +146,7 @@
         <text>Скорость курсора</text>
     </string>
     <string id="ui_mm_cursor_sens_hint">
-        <text>Скорость курсора в меню и инвентаре. 1.00 — как у системного курсора.</text>
+        <text>Скорость курсора в меню и инвентаре. 1.00 - как у системного курсора.</text>
     </string>
     <string id="st_content_caption">
         <text>Контент мода неполный</text>

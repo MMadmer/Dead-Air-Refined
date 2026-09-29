@@ -26,6 +26,7 @@
 #include "script_game_object.h"
 #include "stalker_decision_space.h"
 #include "Weapon.h"
+#include "da_ai_tactics.h"
 
 extern const float MIN_SUITABLE_ENEMY_DISTANCE = 3.f;
 
@@ -76,6 +77,10 @@ void CAI_Stalker::compute_enemy_distances(float& minimum_enemy_distance, float& 
     maximum_enemy_distance = 170.f;
 
     if (!best_weapon())
+        return;
+
+    // Doctrine: the band of the weapon class ([ai_weapon_classes]) instead of the fixed metres by ef_weapon_type.
+    if (DaAi::Tactics::cover_distances(*this, minimum_enemy_distance, maximum_enemy_distance))
         return;
 
     const int weapon_type = best_weapon()->object().ef_weapon_type();
@@ -133,20 +138,27 @@ const CCoverPoint* CAI_Stalker::find_best_cover(const Fvector& position_to_cover
     const CCoverPoint* point =
         ai().cover_manager().best_cover(Position(), 10.f, *m_ce_best, CStalkerMovementRestrictor(this, true));
     if (point)
+    {
+        DaAi::Tactics::on_cover_search(*this, true);
         return (point);
+    }
 
 #ifdef _DEBUG
     ++g_far_cover_search_count;
 #endif
     m_ce_best->setup(position_to_cover_from, minimum_enemy_distance, maximum_enemy_distance, minimum_enemy_distance);
     point = ai().cover_manager().best_cover(Position(), 30.f, *m_ce_best, CStalkerMovementRestrictor(this, true));
+    DaAi::Tactics::on_cover_search(*this, !!point);
     return (point);
 }
 
 float CAI_Stalker::best_cover_value(const Fvector& position_to_cover_from)
 {
     m_ce_best->setup(position_to_cover_from, MIN_SUITABLE_ENEMY_DISTANCE, 170.f, MIN_SUITABLE_ENEMY_DISTANCE);
-    m_ce_best->initialize(Position(), true);
+    // Scored covers are judged from the cover itself: a walk away to look out or detour must not make the held cover
+    // look worse and send the combat planner back to a new one.
+    const bool from_cover = m_best_cover && DaAi::Tactics::held_cover_from_cover(*this);
+    m_ce_best->initialize(from_cover ? m_best_cover->position() : Position(), true);
     m_ce_best->evaluate(m_best_cover, CStalkerMovementRestrictor(this, true).weight(m_best_cover));
     return (m_ce_best->best_value());
 }

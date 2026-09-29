@@ -5,7 +5,7 @@
 -- configs/items/items/items_anm_da_backpack.ltx.
 --
 -- Рюкзак живёт в руках столько, сколько открыт инвентарь: доставание, дальше idle под открытым
--- окном (сцену держит game.hold_hud_motion - иначе движок закрыл бы её по концу цикла), на
+-- окном (сцену держит game.hold_hud_scene - иначе движок закрыл бы её по концу цикла), на
 -- закрытие - убирание. Три цикла берутся из того же раздела: anm_ea_show, anm_ea_idle, anm_ea_hide.
 --
 -- Прерывания. Нажатие посреди доставания разворачивает сцену в убирание, нажатие посреди убирания
@@ -28,6 +28,15 @@ local sect = nil
 -- Момент старта текущего цикла и его длина: из них считается, насколько он прошёл.
 local clip_at, clip_len = 0, 0
 local playing = false
+-- The ticket of our scene on the hands (game.hud_scene_id). Other modules play scenes on the same
+-- hands - an item used from the open inventory, a suit put on, the PDA taking its own rig - and a
+-- ticket that no longer matches means the backpack is not in them any more.
+local my_scene = 0
+-- When the window was asked for; one that never shows up counts as closed.
+local window_asked_at = 0
+-- How long the hands may stay busy (a weapon holstering, the PDA going away) before the scene is
+-- dropped and the window opens without it.
+local show_deadline = 0
 -- Пока идёт уборка оружия, сцена ещё не началась; здесь лежит смещение, с которого её начать.
 local pending_start = 0
 local instant = false
@@ -49,6 +58,8 @@ local SECT_BASE = "da_backpack_hud"
 local BACKPACK_SLOT = 15
 local ANIM_FALLBACK_MS = 1200
 local MENU_GRACE_MS = 400
+local WINDOW_WAIT_MS = 1500
+local HANDS_WAIT_MS = 4000
 
 function on_game_start()
 	RegisterScriptCallback("actor_on_first_update", reset)
@@ -57,8 +68,9 @@ end
 
 function reset()
 	-- Сцена держится до нашей команды, а загрузка сейва её не снимает: снимаем сами.
-	if state ~= ST_OFF or game.scene_active() then game.stop_hud_motion() end
+	if my_scene ~= 0 then game.stop_hud_scene(my_scene) end
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
+	my_scene, window_asked_at = 0, 0
 	for_trade = false
 	scene_snd = nil
 end
@@ -99,15 +111,21 @@ end
 -- from - доля цикла, которую надо пропустить. Длину берём из ответа движка: get_motion_length
 -- считает по тому же циклу, но при пустом разделе вернёт ноль, а сцена всё равно должна знать,
 -- когда ей заканчиваться.
+-- False when the hands refused the cycle (a rig without it): then there is no scene of ours.
 local function play_clip(anim, from)
 	local est = clip_ms(anim)
 	local start_ms = math.floor((from or 0) * est)
 	if start_ms >= est then start_ms = est - 1 end
 	if start_ms < 0 then start_ms = 0 end
+	local before = game.hud_scene_id()
 	local len = game.play_hud_motion(2, sect, anim, true, 1.0, 0, start_ms)
+	local id = game.hud_scene_id()
+	if id == 0 or id == before then return false end
+	my_scene = id
 	clip_len = (len and len > 0) and len or est
 	clip_at = time_global() - start_ms
 	playing = true
+	return true
 end
 
 -- The holster length of the item in the hands, ms, from the engine (a knife, a rifle and a
@@ -126,69 +144,109 @@ end
 -- The scene waits for the slot to empty (the holster cycle has ended) and for the holster
 -- length to pass; the holster length plus a margin is the cap should the slot never empty.
 local settle_until = 0
-local had_weapon = false
-local function weapon_away()
-	local now = time_global()
-	if had_weapon and db.actor:active_slot() ~= 0 and now < settle_until + 800 then return false end
-	return now >= settle_until
-end
 
 local function start_show(from)
 	sect = scene_section()
 	pending_start = from or 0
 	playing = false
-	had_weapon = db.actor:active_slot() ~= 0
+	my_scene = 0
 	settle_until = time_global() + hide_ms() + 80
+	show_deadline = time_global() + HANDS_WAIT_MS
+	-- The 3D PDA holds the hands on a rig of its own, which has no backpack motions, and it only
+	-- leaves once its window is gone: asked to go now, it is away by the time the scene starts.
+	local hud = get_hud()
+	if hud then hud:HidePdaMenu() end
 	-- Сцена ДВУРУКАЯ: обе руки заняты сумкой, поэтому оружие убираем.
 	db.actor:hide_weapon()
 	state = ST_SHOW
-end
-
-local function start_hide(from)
-	sect = sect or scene_section()
-	play_clip("anm_ea_hide", from)
-	state = ST_HIDE
 end
 
 local function open_window()
 	local hud = get_hud()
 	if hud then hud:ShowActorMenu() end
 	menu_grace = time_global() + MENU_GRACE_MS
+	window_asked_at = time_global()
 end
 
 local function finish()
-	game.stop_hud_motion()
+	if my_scene ~= 0 then game.stop_hud_scene(my_scene) end
 	-- Страховка: если ввод погасил кто-то другой, сцена его вернёт.
 	level.enable_input()
 	if db.actor then db.actor:restore_weapon() end
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
+	my_scene, window_asked_at = 0, 0
 	for_trade = false
 	scene_snd = nil
 end
 
--- Открыто ли окно, ради которого достали рюкзак.
-local function window_open()
-	if for_trade then
-		local am = ActorMenu.get_actor_menu()
-		return am ~= nil and am:IsShown()
+-- The hands were taken by someone else's scene: ours went with it. Only the weapon block this
+-- scene raised is given back - a stop or a hide now would land on the new owner's scene.
+local function yield()
+	if scene_snd then scene_snd:stop() end
+	if db.actor then db.actor:restore_weapon() end
+	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
+	my_scene, window_asked_at = 0, 0
+	for_trade = false
+	scene_snd = nil
+end
+
+-- The hands never got free for the scene, or cannot play it: the window opens without it, since
+-- the key was pressed for the inventory and not for an animation.
+local function give_up()
+	if window_asked_at == 0 and not for_trade then open_window() end
+	yield()
+end
+
+local function start_hide(from)
+	sect = sect or scene_section()
+	if play_clip("anm_ea_hide", from) then
+		state = ST_HIDE
+	else
+		finish()
 	end
-	return level.main_input_receiver() ~= nil
+end
+
+-- Открыто ли окно, ради которого достали рюкзак. The actor menu itself, for the inventory too:
+-- any window on the input stack (the PDA screen, a talk) kept the backpack held for as long as it
+-- stayed, with no inventory in front of the idle pose to hide it.
+local function window_open()
+	local am = ActorMenu.get_actor_menu()
+	return am ~= nil and am:IsShown()
+end
+
+-- Something is still in the hands: a weapon holstering, the PDA going away, or someone else's scene.
+local function hands_busy()
+	if db.actor:active_slot() ~= 0 then return true end
+	return game.scene_active() and game.hud_scene_id() ~= my_scene
 end
 
 function update()
 	if state == ST_OFF or not db.actor then return end
 
+	if playing and game.hud_scene_id() ~= my_scene then
+		yield()
+		return
+	end
+
+	local now = time_global()
 	local menu = window_open()
 	-- Окно увидено открытым - фора больше не нужна, дальше "закрыто" значит закрыто.
 	if menu then menu_was_open, menu_grace = true, 0 end
-	local closed = menu_was_open and (not menu) and time_global() > menu_grace
+	local closed = (menu_was_open and (not menu) and now > menu_grace)
+		or ((not menu_was_open) and window_asked_at > 0 and now > window_asked_at + WINDOW_WAIT_MS)
 
 	if state == ST_SHOW then
 		if not playing then
 			-- Закрылся, пока руки только убирают оружие: сумки в кадре не было, убирать нечего.
 			if closed then finish() return end
-			if not weapon_away() then return end
-			play_clip("anm_ea_show", pending_start)
+			if hands_busy() and now < show_deadline then return end
+			if now < settle_until then return end
+			-- Hands whose rig has no backpack motions (an outfit left out of the animation set) do
+			-- not get them by waiting.
+			if (game.get_motion_length(sect, "anm_ea_show", 1.0) or 0) <= 0 or not play_clip("anm_ea_show", pending_start) then
+				give_up()
+				return
+			end
 			-- Звук молнии. Ссылку держим в переменной МОДУЛЯ, а не в локальной: sound_object живёт
 			-- ровно столько, сколько на него ссылаются, и локальная умерла бы вместе с этой
 			-- функцией - звук оборвался бы на первом же кадре.
@@ -208,11 +266,14 @@ function update()
 			-- Окно торговли открывает движок, и к этому моменту оно уже открыто. Открывать
 			-- что-то своё тут нельзя: без этой оговорки по концу доставания поверх торговли
 			-- вылезал бы инвентарь.
-			if not menu and not for_trade then open_window() end
-			play_clip("anm_ea_idle", 0)
-			-- Иначе движок снял бы сцену по концу цикла и рюкзак пропал бы из рук.
-			game.hold_hud_motion()
-			state = ST_OPEN
+			if not menu and not for_trade and window_asked_at == 0 then open_window() end
+			if play_clip("anm_ea_idle", 0) then
+				-- Иначе движок снял бы сцену по концу цикла и рюкзак пропал бы из рук.
+				game.hold_hud_scene(my_scene)
+				state = ST_OPEN
+			else
+				yield()
+			end
 		end
 	elseif state == ST_OPEN then
 		if closed then start_hide(0) end
@@ -231,6 +292,9 @@ function before_open()
 
 	instant = get_console():get_bool("dar_instant_inventory")
 
+	-- A scene someone else has taken over is no longer ours to turn around.
+	if playing and game.hud_scene_id() ~= my_scene then yield() end
+
 	if state == ST_SHOW then
 		-- Второе нажатие, пока руки достают: убираем с той же точки, окно не показываем.
 		if playing then start_hide(1 - progress()) else finish() end
@@ -241,23 +305,28 @@ function before_open()
 		-- Передумал: достаём обратно с зеркальной точки.
 		local from = 1 - progress()
 		sect = sect or scene_section()
-		play_clip("anm_ea_show", from)
-		state = ST_SHOW
-		menu_was_open, menu_grace = false, 0
-		if instant then open_window() end
-		return false
+		if play_clip("anm_ea_show", from) then
+			state = ST_SHOW
+			menu_was_open, menu_grace, window_asked_at = false, 0, 0
+			if instant then open_window() end
+			return false
+		end
+		-- The hands cannot take it back: the window opens without the scene.
+		finish()
+		return true
 	end
 
 	if state == ST_OPEN then
 		-- Окно закрыл не игрок, а кто-то ещё, и мы этого кадра ещё не видели: рюкзак уже в руках,
 		-- открывать заново нечего - пусть движок просто покажет окно.
 		menu_was_open, menu_grace = false, time_global() + MENU_GRACE_MS
+		window_asked_at = time_global()
 		return true
 	end
 
 	for_trade = false
 	start_show(0)
-	menu_was_open, menu_grace = false, 0
+	menu_was_open, menu_grace, window_asked_at = false, 0, 0
 	if instant then open_window() end
 	return false
 end
@@ -268,11 +337,14 @@ end
 function before_trade()
 	if not enabled() or not db.actor then return end
 
+	if playing and game.hud_scene_id() ~= my_scene then yield() end
+
 	for_trade = true
 
 	if state == ST_OPEN or (state == ST_SHOW and playing) then
 		-- Рюкзак уже в руках или как раз достаётся: окно просто откроется поверх.
 		menu_was_open, menu_grace = false, time_global() + MENU_GRACE_MS
+		window_asked_at = time_global()
 		return
 	end
 
@@ -280,13 +352,18 @@ function before_trade()
 		-- Передумал на полпути к уборке: достаём обратно с зеркальной точки.
 		local from = 1 - progress()
 		sect = sect or scene_section()
-		play_clip("anm_ea_show", from)
-		state = ST_SHOW
+		if play_clip("anm_ea_show", from) then
+			state = ST_SHOW
+		else
+			finish()
+			return
+		end
 	elseif state ~= ST_SHOW then
 		start_show(0)
 	end
 
 	menu_was_open, menu_grace = false, time_global() + MENU_GRACE_MS
+	window_asked_at = time_global()
 end
 
 -- Точка входа для движка: имя обязано лежать в НАСТОЯЩЕЙ глобальной области, иначе functor его не

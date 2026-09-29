@@ -1,6 +1,7 @@
 """The mod catalog's in-game QA (docs/dead-air/MOD_CATALOG.md 15): fixture, mock and checks.
 
     python catalog_qa.py fixture --qa-root <root> --assets <dir> --port <port>
+    python catalog_qa.py adopt --modules <modules> --assets <dir> --port <port> [--real <dir>]
     python catalog_qa.py serve --assets <dir> --port <port> [--log <file>]
     python catalog_qa.py inbox --assets <dir>          verifies the reviews the game posted
 
@@ -11,7 +12,12 @@ reviews), VirusTotal API answers, and variants of the index for the rollback, ta
 and withdrawal phases (withdraw\\ holds the release a withdrawn module publishes afterwards).
 It writes env.json with what the engine needs to trust it (DAR_QA_CATALOG_KEY and friends).
 
-The mock serves /catalog/..., /<owner>/<repo>/releases/latest/download/<asset> with Range,
+The adopt fixture copies modules into a modules folder by hand - copies of releases, edited ones,
+another author's module under a listed id - and publishes the releases they are held against
+(MOD_CATALOG 14.1).
+
+The mock serves /catalog/..., /<owner>/<repo>/releases/latest/download/<asset> and
+/<owner>/<repo>/releases/download/<tag>/<asset> with Range,
 /vt/api/v3/files/<sha256> (the x-apikey of the fixture only) and a POST /inbox that keeps every
 review the game sends. Its log has one line a request: "<unix time> <method> <path>".
 """
@@ -240,12 +246,15 @@ def manifest(mod_id, name, version, github, thumbnail=False, tags=""):
 
 
 def publish_release(assets, mod_id, version, github, files, key=None, card=True, thumbnail=False, parts=1,
-                    descriptor_dir=None):
+                    descriptor_dir=None, tag=None):
     """Descriptor (+ [card], signed by `key`), index and `parts` packages (the files dealt out in turn),
     the way the contract says. The descriptor goes to `descriptor_dir` when one is named: a release
-    the repository publishes later, while another one is its latest."""
+    the repository publishes later, while another one is its latest. With `tag` the whole release
+    goes to that tag's folder instead: served under /releases/download/<tag>/, not as the latest."""
     owner, repo = github.split("/")
     folder = os.path.join(assets, "github", owner, repo)
+    if tag:
+        folder = os.path.join(folder, "tags", tag)
     os.makedirs(folder, exist_ok=True)
     names = sorted(files)
     packages = []
@@ -510,6 +519,125 @@ def make_fixture(qa_root, assets, port):
     print("fixture: %d listed module(s), %d withdrawal line(s), serial 5" % (len(listings), len(withdrawals)))
 
 
+# ---- modules installed by hand (MOD_CATALOG 14.1) ----------------------------------------------------------
+
+def make_adopt_fixture(modules, assets, port, real=None):
+    """Modules copied into `modules` by hand, and a catalog they are held against. Every release is
+    published under its tag (v<version>), the latest one also as the latest. `real`: a folder with
+    tags/<tag>/ of a real published module (darf-overnight-delivery, fetched from GitHub), whose
+    author key is listed as it is in the public catalog. Writes env.json and expect.json."""
+    if os.path.isdir(assets):
+        shutil.rmtree(assets)
+    os.makedirs(assets)
+    os.makedirs(modules, exist_ok=True)
+    for name in os.listdir(modules):
+        if name.startswith("qa.adopt.") or name in (".catalog", ".staged", "darf-overnight-delivery"):
+            shutil.rmtree(os.path.join(modules, name))
+    if os.path.isfile(os.path.join(modules, ".update_state")):
+        os.remove(os.path.join(modules, ".update_state"))
+
+    maintainer = xc.new_private()
+    author = xc.new_private()
+    stranger = xc.new_private()
+    author_key = xc.key_text(xc.public_of(author))
+    mods, withdrawn, revoked, cards = [], [], [], {}
+    expect = {}
+
+    def files_of(mod_id, version, github):
+        return {"mod.ltx": manifest(mod_id, "QA " + mod_id, version, github, tags="story"),
+                "gamedata/configs/%s.ltx" % mod_id.replace(".", "_"): b"[qa]\r\nversion = " + version.encode() + b"\r\n",
+                "scripts/%s.script" % mod_id.replace(".", "_"): b"-- " + mod_id.encode() + b" " + version.encode() + b"\n"}
+
+    def module(mod_id, versions, installed, key=author, min_version="1.0.0", listing="mods", edit=None):
+        """`versions`: published, the last one the latest; `installed`: the version copied by hand,
+        `edit` changes its files first."""
+        github = "QaOwner/" + mod_id.replace(".", "-")
+        line = "%s = %s, %s, %s, 2026-09-25" % (mod_id, github, author_key, min_version)
+        (withdrawn if listing == "withdrawn" else mods).append(line)
+        published = {}
+        for i, version in enumerate(versions):
+            files = files_of(mod_id, version, github)
+            out = publish_release(assets, mod_id, version, github, files, key, tag="v" + version)
+            if i == len(versions) - 1:
+                publish_release(assets, mod_id, version, github, files, key)
+                cards[mod_id] = out["descriptor"]
+            published[version] = files
+        files = dict(published.get(installed) or files_of(mod_id, installed, github))
+        if edit:
+            edit(files)
+        install_module(os.path.dirname(modules), mod_id, files)
+        return github
+
+    # an older release, copied exactly (Explorer's Thumbs.db beside it): adopted, then updated
+    module("qa.adopt.old", ["1.0.0", "1.1.0"], "1.0.0", edit=lambda f: f.update({"Thumbs.db": b"explorer"}))
+    expect["qa.adopt.old"] = "adopted (v1.0.0), update 1.1.0 offered"
+    module("qa.adopt.same", ["1.0.0"], "1.0.0")
+    expect["qa.adopt.same"] = "adopted (the latest release), up to date"
+    module("qa.adopt.edited", ["1.0.0"], "1.0.0",
+           edit=lambda f: f.update({"gamedata/configs/qa_adopt_edited.ltx": b"[qa]\r\nversion = mine\r\n"}))
+    expect["qa.adopt.edited"] = "not taken: its files are not those of release 1.0.0"
+    module("qa.adopt.extra", ["1.0.0"], "1.0.0", edit=lambda f: f.update({"gamedata/configs/mine.ltx": b"[mine]\r\n"}))
+    expect["qa.adopt.extra"] = "not taken: its files are not those of release 1.0.0; local, modified"
+    module("qa.adopt.git", ["1.0.0"], "1.0.0", edit=lambda f: f.update({".git/HEAD": b"ref: refs/heads/main\n"}))
+    expect["qa.adopt.git"] = "not taken: it holds .git"
+    module("qa.adopt.dev", ["1.0.0"], "1.2.0")
+    expect["qa.adopt.dev"] = "not taken: version 1.2.0 is not published"
+    module("qa.adopt.unsigned", ["1.0.0"], "1.0.0", key=stranger)
+    expect["qa.adopt.unsigned"] = "not taken: not signed by the author's key"
+    module("qa.adopt.floor", ["1.0.0", "1.1.0"], "1.0.0", min_version="1.1.0")
+    expect["qa.adopt.floor"] = "not taken: below the lowest the catalog lists"
+    module("qa.adopt.held", ["1.0.0", "1.0.1"], "1.0.0")
+    revoked.append("qa.adopt.held = 1.0.0, VirusTotal: QA hold")
+    expect["qa.adopt.held"] = "not taken: the catalog withdrew release 1.0.0"
+    module("qa.adopt.wd", ["1.0.0", "1.1.0"], "1.0.0", listing="withdrawn")
+    expect["qa.adopt.wd"] = "adopted (v1.0.0), no update: withdrawn by its author"
+    # the id is listed, the module on the disk is somebody else's: its own repository, never looked at
+    listed = module("qa.adopt.foreign", ["1.0.0"], "1.0.0")
+    install_module(os.path.dirname(modules), "qa.adopt.foreign", files_of("qa.adopt.foreign", "1.0.0", "Stranger/qa-adopt-foreign"))
+    expect["qa.adopt.foreign"] = "never looked at: %s is not its repository" % listed
+
+    if real:
+        # the public catalog's module and its real releases: 1.0.1 signed and listed, 1.0.0 from before the catalog
+        real_key = "p256:PAXBivgTvxOqRq24mq6Ua6gCw8e_yCMORFifFbv4PDimciFjr-_l88-sxwW94aIyqKeABpj_X9YlN_yMN425EA"
+        github = "MMadmer/DARF-Overnight-Delivery"
+        mods.append("darf-overnight-delivery = %s, %s, 1.0.1, 2026-09-25" % (github, real_key))
+        repo = os.path.join(assets, "github", "MMadmer", "DARF-Overnight-Delivery")
+        tags = sorted(os.listdir(os.path.join(real, "tags")))
+        for tag in tags:
+            shutil.copytree(os.path.join(real, "tags", tag), os.path.join(repo, "tags", tag))
+        latest = tags[-1]
+        for name in os.listdir(os.path.join(repo, "tags", latest)):
+            shutil.copy(os.path.join(repo, "tags", latest, name), os.path.join(repo, name))
+        with open(os.path.join(repo, "darf-overnight-delivery.update.ltx"), "rb") as f:
+            cards["darf-overnight-delivery"] = f.read()
+        with zipfile.ZipFile(os.path.join(repo, "darf-overnight-delivery-%s.zip" % latest[1:])) as archive:
+            archive.extractall(os.path.dirname(modules))
+        expect["darf-overnight-delivery"] = "adopted (the latest release): the real %s, extracted from its zip" % latest
+
+    catalog = os.path.join(assets, "catalog")
+    os.makedirs(catalog)
+    body = "\n".join([
+        "[catalog]", "format  = 1", "serial  = 3", "issued  = 2026-09-30", "mirrors = https://example.invalid/",
+        "", "[virustotal]", "trusted       = " + TRUSTED, "block_trusted = 1", "warn_trusted  = 1",
+        "block_others  = 5", "warn_others   = 2", "", "[mods]"] + mods + ["", "[withdrawn]"] + withdrawn +
+        ["", "[revoked]"] + revoked + [""])
+    with open(os.path.join(catalog, "index.ltx"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(xc.sign_text(body, maintainer))
+    data = b"xms-cards 1\n"
+    for mod_id in sorted(cards):
+        data += b"card %s %d\n" % (mod_id.encode(), len(cards[mod_id])) + cards[mod_id]
+    with open(os.path.join(catalog, "cards.txt"), "wb") as f:
+        f.write(data)
+    env = {"DAR_QA_CATALOG_KEY": xc.key_text(xc.public_of(maintainer)),
+           "DAR_QA_CATALOG_BASE": "http://127.0.0.1:%d/catalog/" % port,
+           "DAR_QA_VT_KEY": VT_KEY, "DAR_QA_VT_BASE": "http://127.0.0.1:%d/vt/" % port}
+    with open(os.path.join(assets, "env.json"), "w") as f:
+        json.dump(env, f, indent=1)
+    with open(os.path.join(assets, "expect.json"), "w") as f:
+        json.dump(expect, f, indent=1)
+    print("adopt fixture: %d module(s) installed by hand" % len(expect))
+
+
 # ---- the mock ----------------------------------------------------------------------------------------------
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -557,6 +685,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.serve_file(os.path.join(self.assets, "catalog", *parts[1:]))
         elif len(parts) == 6 and parts[2:5] == ["releases", "latest", "download"]:
             self.serve_file(os.path.join(self.assets, "github", parts[0], parts[1], parts[5]))
+        elif len(parts) == 6 and parts[2:4] == ["releases", "download"]:
+            self.serve_file(os.path.join(self.assets, "github", parts[0], parts[1], "tags", parts[4], parts[5]))
         elif parts[:4] == ["vt", "api", "v3", "files"] and len(parts) == 5:
             if self.headers.get("x-apikey") != VT_KEY:
                 self.send_body(401, b'{"error": {"code": "WrongCredentialsError"}}', "application/json")
@@ -639,14 +769,18 @@ def check_inbox(assets):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["fixture", "serve", "inbox"])
+    parser.add_argument("command", choices=["fixture", "adopt", "serve", "inbox"])
     parser.add_argument("--qa-root")
+    parser.add_argument("--modules", help="adopt: the modules folder the copies installed by hand go to")
+    parser.add_argument("--real", help="adopt: tags\\<tag>\\ of a real published module")
     parser.add_argument("--assets", required=True)
     parser.add_argument("--port", type=int, default=8793)
     parser.add_argument("--log")
     args = parser.parse_args()
     if args.command == "fixture":
         make_fixture(args.qa_root, args.assets, args.port)
+    elif args.command == "adopt":
+        make_adopt_fixture(args.modules, args.assets, args.port, args.real)
     elif args.command == "serve":
         serve(args.assets, args.port, args.log)
     else:

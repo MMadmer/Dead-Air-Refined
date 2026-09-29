@@ -14,64 +14,25 @@ end
 function opt_video_adv:__finalize()
 end
 
-function all_modes(render_id)
-	return true
-end
-
-function mode_1(render_id)
-	return render_id==0
-end
-
-function mode_ge_2a(render_id)
-	return render_id>=1
-end
-
-function mode_ge_2(render_id)
-	return render_id>=2
-end
-
-function mode_ge_25(render_id)
-	return render_id>=3
-end
-
-function mode_less_3(render_id)
-	return render_id<4
-end
-
-function mode_ge_3(render_id)
-	return render_id>=4
-end
-
-function mode_4(render_id)
-	return render_id==5
-end
-
--- A row that the quality preset also writes is a second control for one value, and the next
--- start of the renderer silently undoes whatever it was set to. So this page carries taste
--- only, and everything the preset decides - draw distance, geometry and texture detail,
--- anisotropy, MSAA, grass density and radius, sun and grass shadows, shadow map size and
--- quality, light and particle distance, ambient occlusion, detail bump, parallax, sun shafts,
--- soft water and particles, volumetric light and smoke, wet surfaces, visor drops,
--- tessellation, NPC torches, antialiasing - is the preset list on the basic page and nothing else.
+-- There is no advanced video page any more: its effect rows are on the video tab itself
+-- (ui_mm_opt_video.script), and nothing opens this one - the buttons between the two pages are
+-- gone. ui_mm_opt_main.script still builds it and reaches into it by name - ours, and the stock
+-- copies addons ship - so what it reaches for is here: the scroll list it clears and refills from
+-- m_preconditions (left empty) and three controls the preset owns.
 --
--- Their console commands are untouched, and so is every node in ui_mm_opt*.xml: an addon that
--- ships the stock copy of this script still finds all of them and gets the stock page.
+-- Every node the stock page scripts use is still in ui_mm_opt*.xml (tab_video, video_adv): an
+-- addon that ships the stock copy of this script finds all of them and gets the stock page.
 function opt_video_adv:InitControls(x, y, xml, handler)
-	local ctl
-    local _st
-
 	self:SetWndPos(vector2():set(x,y))
 	self:SetWndSize(vector2():set(738,416))
 	self:SetAutoDelete(true)
 
 	self.scroll_v = xml:InitScrollView("video_adv:scroll_v", self)
-    handler.scroll_v = self.scroll_v
+	handler.scroll_v = self.scroll_v
 
-	-- Three controls the preset owns, which ui_mm_opt_main.script - not ours, and shipped by
-	-- addons in their own copies - calls by name on every refresh of the page. They are built
-	-- as usual, so they still read and write their console values, and live as hidden children
-	-- of this page: off the scroll list, never drawn, and owned by something (a row with no
-	-- parent at all is what the stock page leaks for every precondition that never matches).
+	-- Built as usual, so they still read and write their console values, and kept as hidden
+	-- children of this page: never drawn, and owned by something (a row with no parent at all is
+	-- what the stock page leaks for every precondition that never matches).
 	local function preset_owned(cap, init)
 		local row = xml:InitStatic("video_adv:templ_item", self)
 		xml:InitStatic(cap, row)
@@ -92,58 +53,4 @@ function opt_video_adv:InitControls(x, y, xml, handler)
 	handler.combo_ssao = preset_owned("video_adv:cap_ssao", function(row)
 		return xml:InitComboBox("video_adv:combo_ssao", row)
 	end)
-
-	_st	= xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_detail_height", _st)
-	xml:InitTrackBar("video_adv:track_detail_height", _st)
-	table.insert(handler.m_preconditions, {func=all_modes, control=_st})
-
-	-- those shiny ajustable sunshafts were also made by LostAlphaRus
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_ss_shafts", _st)
-	ctl = xml:InitCheck("video_adv:check_r2_ss_shafts", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_r2_sun_shafts_value", _st)
-	xml:InitTrackBar("video_adv:track_r2_sun_shafts_value", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_sharp", _st)
-	xml:InitTrackBar("video_adv:track_sharp", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_bloom", _st)
-	xml:InitTrackBar("video_adv:track_bloom", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_aberration", _st)
-	xml:InitTrackBar("video_adv:track_aberration", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_dof", _st)
-	ctl = xml:InitCheck("video_adv:check_dof", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_25, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_technicolor", _st)
-	xml:InitCheck("video_adv:check_technicolor", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_vignette", _st)
-	xml:InitCheck("video_adv:check_vignette", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	_st = xml:InitStatic("video_adv:templ_item", nil)
-	xml:InitStatic("video_adv:cap_lensdirt", _st)
-	xml:InitCheck("video_adv:check_lensdirt", _st)
-	table.insert(handler.m_preconditions, {func=mode_ge_2a, control=_st})
-
-	btn = xml:Init3tButton("video_adv:btn_to_simply", self)
-	handler:Register(btn, "btn_simply_graphic")
 end

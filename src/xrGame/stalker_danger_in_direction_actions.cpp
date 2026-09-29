@@ -29,6 +29,7 @@
 #include "cover_manager.h"
 #include "stalker_movement_restriction.h"
 #include "Random.hpp"
+#include "da_ai_search.h"
 
 using namespace StalkerDecisionSpace;
 
@@ -66,6 +67,13 @@ void CStalkerActionDangerInDirectionTakeCover::execute()
 
     if (!object().memory().danger().selected())
         return;
+
+    // Investigation: an NPC advancing straight at the source, or already on its way there, takes no cover first.
+    if (DaAi::Search::investigate_skip_cover(object()))
+    {
+        m_storage->set_property(eWorldPropertyInCover, true);
+        return;
+    }
 
     Fvector position = object().memory().danger().selected()->position();
 
@@ -149,6 +157,12 @@ void CStalkerActionDangerInDirectionLookOut::execute()
     if (!object().memory().danger().selected())
         return;
     //Alundaio: END
+
+    if (DaAi::Search::investigate_skip_cover(object()))
+    {
+        m_storage->set_property(eWorldPropertyLookedOut, true);
+        return;
+    }
 
     //	CMemoryInfo							mem_object =
     // object().memory().memory(object().memory().danger().selected()->object());
@@ -248,7 +262,9 @@ void CStalkerActionDangerInDirectionHoldPosition::execute()
 
     object().sight().setup(CSightAction(SightManager::eSightTypePosition, position, true));
 
-    if (completed() && object().agent_manager().member().can_detour())
+    // Investigation by the profile (who goes, who covers, who waits); the stock detour quota with the feature off.
+    if (DaAi::Search::investigate_leave(
+            object(), completed(), completed() && object().agent_manager().member().can_detour()))
     {
         m_storage->set_property(eWorldPropertyPositionHolded, true);
         m_storage->set_property(eWorldPropertyInCover, false);
@@ -293,6 +309,15 @@ void CStalkerActionDangerInDirectionDetour::initialize()
 void CStalkerActionDangerInDirectionDetour::execute()
 {
     inherited::execute();
+
+    if (!object().memory().danger().selected())
+        return;
+
+    if (DaAi::Search::investigate_skip_detour(object()))
+    {
+        m_storage->set_property(eWorldPropertyEnemyDetoured, true);
+        return;
+    }
 
     if (!object().memory().danger().selected()->object())
         return;
@@ -365,6 +390,34 @@ void CStalkerActionDangerInDirectionSearch::initialize()
 void CStalkerActionDangerInDirectionSearch::execute()
 {
     inherited::execute();
+
+    if (!object().memory().danger().selected())
+        return;
+
+    // Investigation: walk to the spot itself and look into it; the NPC's own eyes end it.
+    if (const DaAi::Investigation* investigation = DaAi::Search::investigating(object()))
+    {
+        const Fvector spot = investigation->spot;
+        const u32 vertex = investigation->vertex;
+        if (DaAi::Search::investigate_check(object()))
+            return;
+
+        auto& movement = object().movement();
+        if (movement.accessible(vertex))
+        {
+            movement.set_level_dest_vertex(vertex);
+            movement.set_desired_position(nullptr);
+        }
+        else
+            movement.set_nearest_accessible_position(spot, vertex);
+        movement.set_movement_type(eMovementTypeWalk);
+        // A crouch needs a mind other than free (asserted), whatever changed it since initialize.
+        movement.set_mental_state(eMentalStateDanger);
+        movement.set_body_state(DaAi::Search::sneak(object(), spot) ? eBodyStateCrouch : eBodyStateStand);
+        object().sight().setup(
+            CSightAction(SightManager::eSightTypePosition, Fvector().set(spot.x, spot.y + 1.f, spot.z), true));
+        return;
+    }
 
     if (!object().memory().danger().selected()->object())
         return;

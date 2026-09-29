@@ -922,6 +922,8 @@ bool Withdrawn(const Module& m)
     return listing && !m.update_github.empty() && iequals(listing->github, m.update_github);
 }
 
+bool IsCatalogModule(const Module& m) { return InstalledFromBrowser(m.id.c_str()) || Listed(m); }
+
 xr_string RevocationReason(const Module& m)
 {
     const std::shared_ptr<const Index> index = Current();
@@ -1027,7 +1029,7 @@ void Evaluate(xr_vector<Module>& modules, pcstr game_root, pcstr app_data_root)
             m.disabled = true;
             m.disable_reason = "withdrawn from the mod catalog: " + revoked;
         }
-        if (!m.disabled && (InstalledFromBrowser(m.id.c_str()) || Listed(m)))
+        if (!m.disabled && IsCatalogModule(m))
         {
             if (!catalogEnabled)
                 firstCatalogModule = m.id;

@@ -106,6 +106,8 @@ public:
 public:
     IC void set_threshold(float threshold);
     IC void restore_threshold();
+    // The adaptive hearing threshold as it stands now: recent loud sounds mask quieter ones.
+    float masking_threshold() const;
 
 public:
     void save(NET_Packet& packet) const;

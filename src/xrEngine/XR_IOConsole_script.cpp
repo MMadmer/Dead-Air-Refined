@@ -65,7 +65,8 @@ void CConsole::script_register(lua_State* luaState)
 
         def("level_texture_unload_supported", +[]()
         {
-            return GEnv.Render && GEnv.Render->GetBackendAPI() == IRender::BackendAPI::D3D11;
+            return GEnv.Render && (GEnv.Render->GetBackendAPI() == IRender::BackendAPI::D3D11 ||
+                GEnv.Render->GetBackendAPI() == IRender::BackendAPI::D3D12);
         })
     ];
 }

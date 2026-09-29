@@ -1,0 +1,267 @@
+-- The options pages that are one list - Video, Sound, Controls, and the pages of the weather dialog
+-- (atmosfear_options.script) - built alike: a subsection header per group, a row per setting with the
+-- caption on the left and the control in one column on the right (a slider's number beside it), a
+-- hover hint on every row. Which rows there are, in which subsection and order, is data - a layout
+-- ltx per page:
+--
+--   [rows]             <row> = <control>, <command>[, <third>]
+--                        list, check, track - the page's node <control>_<row>, whose options_item
+--                          binds it to <command>; a track with a <third> (a format) shows its value
+--                          beside it. A row whose command the game lacks is left out: a combo bound
+--                          to a missing command stops the game.
+--                        button - the node button_<row>, registered with the dialog as <command>,
+--                          the name its click callback listens to.
+--                        script - a control another script builds on this page, the dialog's member
+--                          <command>; <third> names the member holding its own caption, which is
+--                          hidden. The node place_<row> places it in its row and gives the row's
+--                          height. It joins the list when the dialog calls adopt_script_rows, after
+--                          the rows built here: keep such rows in the last subsections.
+--   [groups] order     subsections in this order; the header is the string ui_mm_grp_<id>.
+--   [group_<id>] rows  rows of a subsection in this order. A row of [rows] that no subsection lists
+--                      goes to the end of the last one.
+--   [captions]         <row> = caption string id; a row without a line here uses ui_mm_<row>.
+--
+-- Lists rather than one key per line: the engine hands the lines of a section back sorted, and a
+-- module's .ltxp can append to a list (+order = ..., +rows = ...). The hint of a row is the string
+-- <page's hint prefix><row>. The headers, rows, captions and numbers are the templates of the node
+-- option_list of the dialog's xml (ui_mm_opt*.xml, ui_mm_atmosfear_options*.xml); the controls are
+-- nodes of the page's own node. A page whose controls are not bound to console commands builds its
+-- rows itself with init, groups, add_header, new_row and commit_row.
+--
+-- A page built here holds list (the scroll list), rows (<row> -> { id, wnd, caption, ctrl, kind,
+-- group, hint, shown_hint, enabled, readout }), order (row ids top to bottom), headers (group ids
+-- top to bottom), readouts, specs and captions (the layout's [rows] and [captions]).
+
+local TEMPLATES = "option_list"
+
+-- An ordered list: a comma-separated value, which is also what a module's .ltxp can append to.
+function ini_list(ini, section, key)
+	local list = {}
+	if (ini:section_exist(section) and ini:line_exist(section, key)) then
+		for item in string.gmatch(ini:r_string(section, key) or "", "[^,%s]+") do
+			list[#list + 1] = item
+		end
+	end
+	return list
+end
+
+-- Keys of a section, as key = value.
+function ini_map(ini, section)
+	local map = {}
+	if (ini:section_exist(section)) then
+		for i = 0, ini:line_count(section) - 1 do
+			local _, key, value = ini:r_line(section, i, "", "")
+			map[key] = value or ""
+		end
+	end
+	return map
+end
+
+-- translate_string answers a missing id with the id itself. Asked every frame for greyed rows.
+local known_strings = {}
+function has_string(id)
+	if (known_strings[id] == nil) then
+		local text = game.translate_string(id)
+		known_strings[id] = (text ~= id) and (text ~= "")
+	end
+	return known_strings[id]
+end
+
+-- A subsection header at the end of the list; the rows committed after it belong to it.
+function add_header(page, xml, group_id, title)
+	local header = xml:InitStatic(TEMPLATES .. ":templ_header", nil)
+	xml:InitStatic(TEMPLATES .. ":cap_header", header):TextControl():SetText(game.translate_string(title or ("ui_mm_grp_" .. group_id)))
+	page.list:AddWindow(header, true)
+	page.headers[#page.headers + 1] = group_id
+	page.current_group = group_id
+	return header
+end
+
+-- A row not yet in the list: its window, caption and hint. The control goes into row.wnd before
+-- commit_row, so a taller control can still make the row taller. caption_node and row_node replace
+-- the templates' caption and row, for a row laid out differently.
+function new_row(page, xml, id, group_id, caption, hint, caption_node, row_node)
+	local wnd = xml:InitStatic(row_node or (TEMPLATES .. ":templ_item"), nil)
+	local cap = xml:InitStatic(caption_node or (TEMPLATES .. ":cap_item"), wnd)
+	cap:TextControl():SetText(game.translate_string(caption))
+
+	local row = { id = id, wnd = wnd, caption = cap, group = group_id, enabled = true }
+	row.hint = has_string(hint) and hint or ""
+	row.shown_hint = row.hint
+	wnd:SetHint(row.hint)
+	return row
+end
+
+-- Puts a row at the end of the list, under its subsection's header.
+function commit_row(page, xml, row)
+	if (page.current_group ~= row.group) then
+		add_header(page, xml, row.group)
+	end
+	page.list:AddWindow(row.wnd, true)
+	page.rows[row.id] = row
+	page.order[#page.order + 1] = row.id
+end
+
+local function build_control(page, xml, handler, row, spec)
+	local node = page.node .. ":" .. spec.kind .. "_" .. row.id
+	local ctrl
+	if (spec.kind == "list") then
+		ctrl = xml:InitComboBox(node, row.wnd)
+	elseif (spec.kind == "check") then
+		ctrl = xml:InitCheck(node, row.wnd)
+	elseif (spec.kind == "track") then
+		ctrl = xml:InitTrackBar(node, row.wnd)
+		if (spec.third) then
+			row.readout = xml:InitStatic(TEMPLATES .. ":readout", row.wnd)
+			page.readouts[#page.readouts + 1] = { track = ctrl, wnd = row.readout, format = spec.third }
+		end
+	else
+		ctrl = xml:Init3tButton(node, row.wnd)
+		handler:Register(ctrl, spec.command)
+	end
+	row.ctrl, row.kind = ctrl, spec.kind
+end
+
+-- An empty list on the page. node: the xml node of the page's controls; hints: the prefix of its row
+-- hints.
+function init(page, xml, node, hints)
+	-- Not handler.scroll_v: the stock ui_mm_opt_main clears that one on every refresh.
+	page.list = xml:InitScrollView(TEMPLATES .. ":scroll_v", page)
+	page.rows, page.order, page.headers, page.readouts = {}, {}, {}, {}
+	page.node, page.hint_prefix = node, hints
+end
+
+-- The layout's subsections in order, { id = <group>, rows = { <row>, ... } } each; a row of [rows]
+-- that none of them lists joins the last one.
+function groups(ini)
+	local list, placed = {}, {}
+	for _, group_id in ipairs(ini_list(ini, "groups", "order")) do
+		local group = { id = group_id, rows = ini_list(ini, "group_" .. group_id, "rows") }
+		list[#list + 1] = group
+		for _, id in ipairs(group.rows) do
+			placed[id] = true
+		end
+	end
+	if (#list > 0) then
+		local rest = {}
+		for id in pairs(ini_map(ini, "rows")) do
+			if not (placed[id]) then
+				rest[#rest + 1] = id
+			end
+		end
+		table.sort(rest)
+		for _, id in ipairs(rest) do
+			table.insert(list[#list].rows, id)
+		end
+	end
+	return list
+end
+
+-- Builds the page's list from its layout (an ini_file). node: the xml node of the page's controls;
+-- hints: the prefix of its row hints; shown: optional, shown(id, spec) == false leaves a row out.
+function build(page, xml, handler, ini, node, hints, shown)
+	init(page, xml, node, hints)
+
+	local specs = {}
+	for id, value in pairs(ini_map(ini, "rows")) do
+		local fields = {}
+		for field in string.gmatch(value, "[^,%s]+") do
+			fields[#fields + 1] = field
+		end
+		specs[id] = { kind = fields[1], command = fields[2], third = fields[3] }
+	end
+	page.specs, page.captions = specs, ini_map(ini, "captions")
+	page.groups = groups(ini)
+
+	local console = get_console()
+	local function wanted(id)
+		local spec = specs[id]
+		if not (spec and spec.command) then
+			return false
+		end
+		if (spec.kind == "list" or spec.kind == "check" or spec.kind == "track") then
+			if (console:get_string(spec.command) == nil) then
+				return false
+			end
+		elseif (spec.kind ~= "button") then
+			return false
+		end
+		return (shown == nil) or shown(id, spec)
+	end
+
+	for _, group in ipairs(page.groups) do
+		for _, id in ipairs(group.rows) do
+			if (not page.rows[id]) and wanted(id) then
+				local row = new_row(page, xml, id, group.id, page.captions[id] or ("ui_mm_" .. id), hints .. id)
+				build_control(page, xml, handler, row, specs[id])
+				commit_row(page, xml, row)
+			end
+		end
+	end
+end
+
+-- The layout's script rows whose control the dialog now holds: each control moves off the page into
+-- a row of the list and its old caption hides. The node place_<row> of the page's node gives the
+-- control's place in the row and the row's height (a radio group needs more than one row); the
+-- control keeps its size.
+function adopt_script_rows(page, xml, handler)
+	for _, group in ipairs(page.groups or {}) do
+		for _, id in ipairs(group.rows) do
+			local spec = page.specs[id]
+			local ctrl = spec and spec.kind == "script" and spec.command and handler[spec.command]
+			if (ctrl and not page.rows[id]) then
+				local old_caption = spec.third and handler[spec.third]
+				if (old_caption) then
+					old_caption:Show(false)
+				end
+
+				local row = new_row(page, xml, id, group.id, page.captions[id] or ("ui_mm_" .. id), page.hint_prefix .. id)
+				-- Detached from the page without being deleted, then owned by the row.
+				ctrl:SetAutoDelete(false)
+				page:DetachChild(ctrl)
+				row.wnd:AttachChild(ctrl)
+				ctrl:SetAutoDelete(true)
+
+				local place = CUIWindow()
+				xml:InitWindow(page.node .. ":place_" .. id, 0, place)
+				ctrl:SetWndPos(place:GetWndPos())
+				if (place:GetHeight() > row.wnd:GetHeight()) then
+					row.wnd:SetHeight(place:GetHeight())
+				end
+				row.ctrl, row.kind = ctrl, "script"
+				commit_row(page, xml, row)
+			end
+		end
+	end
+end
+
+-- A row greyed out shows why in its hint; off_hint falls back to the row's own.
+function set_state(page, id, enabled, off_hint)
+	local row = page.rows[id]
+	if not (row) then
+		return
+	end
+	if (row.enabled ~= enabled) then
+		row.enabled = enabled
+		row.ctrl:Enable(enabled)
+	end
+	local hint = row.hint
+	if not (enabled) and off_hint and has_string(off_hint) then
+		hint = off_hint
+	end
+	if (row.shown_hint ~= hint) then
+		row.shown_hint = hint
+		row.wnd:SetHint(hint)
+	end
+end
+
+-- The numbers beside the sliders; the dialog calls a page's Refresh every frame.
+function refresh(page)
+	for _, readout in ipairs(page.readouts or {}) do
+		local text = string.format(readout.format, readout.track:GetFValue())
+		if (text ~= readout.text) then
+			readout.text = text
+			readout.wnd:TextControl():SetText(text)
+		end
+	end
+end

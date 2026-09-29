@@ -16,6 +16,7 @@
 #include "Common/object_broker.h"
 #include "Weapon.h"
 #include "Wound.h"
+#include "CustomZone.h"
 
 #include "PDA.h"
 #include "ai/monsters/basemonster/base_monster.h"
@@ -25,6 +26,16 @@
 
 #define MAX_SATIETY 1.0f
 #define START_SATIETY 0.5f
+
+namespace
+{
+// Game seconds per step of a long stretch of time. A frame is a fraction of one (the day runs at
+// ten times real time), so only time that passed at once - a sleep, a scripted skip - is longer
+// than two steps, and only that is integrated in steps. Half a real second of a booster's clock.
+constexpr float time_jump_step = 5.f;
+// Real seconds the zone exposure is averaged over.
+constexpr float exposure_window = 2.f;
+}
 
 BOOL GodMode()
 {
@@ -261,21 +272,15 @@ void CActorCondition::UpdateCondition()
         //-			SetHealth( 0.0f );
     };
 
-    UpdateSatiety();
-    UpdateBoosters();
-
-    const float item_effect_scale = GetItemEffectTimeScale() - 1.0f;
-    const float health_adjustment = GetActiveBoosterValue(eBoostHpRestore) * item_effect_scale;
-    const float bleeding_adjustment = GetActiveBoosterValue(eBoostBleedingRestore) * item_effect_scale;
-    const float radiation_adjustment = GetActiveBoosterValue(eBoostRadiationRestore) * item_effect_scale;
-
-    m_change_v.m_fV_HealthRestore += health_adjustment;
-    m_change_v.m_fV_WoundIncarnation += bleeding_adjustment;
-    m_change_v.m_fV_Radiation += radiation_adjustment;
-    inherited::UpdateCondition();
-    m_change_v.m_fV_HealthRestore -= health_adjustment;
-    m_change_v.m_fV_WoundIncarnation -= bleeding_adjustment;
-    m_change_v.m_fV_Radiation -= radiation_adjustment;
+    if (m_fDeltaTime > time_jump_step * 2.f)
+    {
+        IntegrateTimeJump(m_fDeltaTime);
+        // Consumed: nothing later this frame - the belt's own accumulator, a hit recomputing the
+        // condition - may integrate it a second time.
+        m_fDeltaTime = 0.f;
+    }
+    else
+        IntegrateStep(m_fDeltaTime, false);
 
     if (IsGameTypeSingle())
         UpdateTutorialThresholds();
@@ -296,7 +301,7 @@ void CActorCondition::UpdateCondition()
     AffectDamage_InjuriousMaterialAndMonstersInfluence();
 }
 
-void CActorCondition::UpdateBoosters()
+void CActorCondition::UpdateBoosters(bool indicators)
 {
     const float game_time_factor = IsGameTypeSingle() ? Level().GetGameTimeFactor() : 1.0f;
     const float booster_delta = !fis_zero(game_time_factor) ? m_fDeltaTime / game_time_factor : 0.0f;
@@ -315,8 +320,184 @@ void CActorCondition::UpdateBoosters()
         }
     }
 
+    if (indicators && m_object == Level().CurrentViewEntity())
+        CurrentGameUI()->UIMainIngameWnd->UpdateBoosterIndicators(m_booster_influences);
+}
+
+void CActorCondition::IntegrateStep(float dt, bool worn)
+{
+    m_fDeltaTime = dt;
+    if (worn)
+        object().ApplyWornEffects(dt);
+
+    UpdateSatiety();
+    UpdateBoosters(!worn);
+
+    const float item_effect_scale = GetItemEffectTimeScale() - 1.0f;
+    const float health_adjustment = GetActiveBoosterValue(eBoostHpRestore) * item_effect_scale;
+    const float bleeding_adjustment = GetActiveBoosterValue(eBoostBleedingRestore) * item_effect_scale;
+    const float radiation_adjustment = GetActiveBoosterValue(eBoostRadiationRestore) * item_effect_scale;
+
+    m_change_v.m_fV_HealthRestore += health_adjustment;
+    m_change_v.m_fV_WoundIncarnation += bleeding_adjustment;
+    m_change_v.m_fV_Radiation += radiation_adjustment;
+    inherited::UpdateCondition();
+    m_change_v.m_fV_HealthRestore -= health_adjustment;
+    m_change_v.m_fV_WoundIncarnation -= bleeding_adjustment;
+    m_change_v.m_fV_Radiation -= radiation_adjustment;
+}
+
+// Time that passed at once - a sleep, a scripted skip - taken in short steps. In one step every
+// rate acted for all of it: a booster's clock ran out before its effect was applied, so the
+// medicine and the vodka did nothing, while the radiation, the bleeding and the hunger each took
+// the whole stretch at their bedtime value; and the belt, on its own accumulator, landed the
+// stretch's worth of its effects a frame later in one lump. Stepped, the medicine works for as long
+// as it lasts, the wounds close as they bleed, and the belt acts all night.
+void CActorCondition::IntegrateTimeJump(float game_seconds)
+{
+    for (float left = game_seconds; left > 0.f && GetHealth() > 0.f;)
+    {
+        const float dt = std::min(left, time_jump_step);
+        left -= dt;
+        IntegrateStep(dt, true);
+    }
     if (m_object == Level().CurrentViewEntity())
         CurrentGameUI()->UIMainIngameWnd->UpdateBoosterIndicators(m_booster_influences);
+}
+
+void CActorCondition::DecayExposure()
+{
+    const float now = Device.fTimeGlobal;
+    const float k = expf(-std::max(now - m_exposure.at, 0.f) / exposure_window);
+    m_exposure.radiation *= k;
+    m_exposure.psy *= k;
+    m_exposure.health *= k;
+    m_exposure.at = now;
+}
+
+CActorCondition::SSleepForecast CActorCondition::ForecastTimeJump(
+    float game_seconds, float satiety_add, float psy_add, float radiation_add)
+{
+    SSleepForecast result;
+    if (!object().g_Alive())
+    {
+        result.min_health = 0.f;
+        result.death_at = 0.f;
+        m_last_forecast = result;
+        return result;
+    }
+
+    // Everything a step can touch, so the forecast leaves no trace.
+    const float saved_health = GetHealth();
+    const float saved_power = m_fPower;
+    const float saved_radiation = m_fRadiation;
+    const float saved_psy = m_fPsyHealth;
+    const float saved_morale = m_fEntityMorale;
+    const float saved_satiety = m_fSatiety;
+    const float saved_deltas[] = {m_fDeltaHealth, m_fDeltaPower, m_fDeltaRadiation, m_fDeltaPsyHealth,
+        m_fDeltaCircumspection, m_fDeltaEntityMorale};
+    const SConditionChangeV saved_change_v = m_change_v;
+    const float saved_satiety_power = m_fV_SatietyPower;
+    const float saved_boosts[] = {m_fBoostBurnImmunity, m_fBoostShockImmunity, m_fBoostRadiationImmunity,
+        m_fBoostTelepaticImmunity, m_fBoostChemicalBurnImmunity, m_fBoostExplImmunity, m_fBoostStrikeImmunity,
+        m_fBoostFireWoundImmunity, m_fBoostWoundImmunity, m_fBoostRadiationProtection, m_fBoostTelepaticProtection,
+        m_fBoostChemicalBurnProtection};
+    const BOOSTER_MAP saved_boosters = m_booster_influences;
+    const float saved_max_weight = object().inventory().GetMaxWeight();
+    const float saved_walk_weight = m_MaxWalkWeight;
+    xr_vector<CWound> saved_wounds;
+    saved_wounds.reserve(m_WoundVector.size());
+    for (const CWound* wound : m_WoundVector)
+        saved_wounds.push_back(*wound);
+    const float saved_health_lost = m_fHealthLost;
+    const bool saved_bleeding = m_bIsBleeding;
+    const float saved_invulnerable = m_fInvulnerableTime;
+    const float saved_dt = m_fDeltaTime;
+
+    // What the script layer hands over at bedtime, the way the first step of the real jump takes it.
+    ChangeSatiety(satiety_add);
+    ChangePsyHealth(psy_add);
+    ChangeRadiation(radiation_add);
+
+    // The fields around keep working for as long as the actor would lie there; they hit per real
+    // second, and a game second is a tenth of one.
+    DecayExposure();
+    const float time_factor = IsGameTypeSingle() ? std::max(Level().GetGameTimeFactor(), 1e-3f) : 1.f;
+    const float zone_radiation = m_exposure.radiation / exposure_window / time_factor;
+    const float zone_psy = m_exposure.psy / exposure_window / time_factor;
+    const float zone_health = m_exposure.health / exposure_window / time_factor;
+
+    float lost[5] = {};
+    float min_health = GetHealth();
+    for (float t = 0.f; t < game_seconds;)
+    {
+        const float dt = std::min(game_seconds - t, time_jump_step);
+        ChangeRadiation(zone_radiation * dt);
+        ChangePsyHealth(-zone_psy * dt);
+        ChangeHealth(-zone_health * dt);
+
+        // Who took what, for the message only; the step below is the authority on the result.
+        lost[eSleepThreatRadiation] += m_change_v.m_fV_RadiationHealth * m_fRadiation * dt;
+        lost[eSleepThreatBleeding] += BleedingSpeed() * m_change_v.m_fV_Bleeding * dt;
+        const float effective_satiety = std::min(m_fSatiety * 2.0f, 1.0f);
+        if (m_fSatietyCritical > 0.f && effective_satiety < m_fSatietyCritical)
+            lost[eSleepThreatHunger] += m_fV_SatietyHealth * (m_fSatietyCritical - effective_satiety) / m_fSatietyCritical * dt;
+        lost[eSleepThreatZone] += zone_health * dt;
+
+        IntegrateStep(dt, true);
+        t += dt;
+        min_health = std::min(min_health, GetHealth());
+        if (GetHealth() <= 0.f)
+        {
+            result.death_at = t;
+            break;
+        }
+    }
+    result.min_health = min_health;
+    for (u8 i = eSleepThreatRadiation; i <= eSleepThreatZone; ++i)
+    {
+        if (lost[i] > 0.f && (result.cause == eSleepThreatNone || lost[i] > lost[result.cause]))
+            result.cause = ESleepThreat(i);
+    }
+
+    SetHealth(saved_health);
+    m_fPower = saved_power;
+    m_fRadiation = saved_radiation;
+    m_fPsyHealth = saved_psy;
+    m_fEntityMorale = saved_morale;
+    m_fSatiety = saved_satiety;
+    m_fDeltaHealth = saved_deltas[0];
+    m_fDeltaPower = saved_deltas[1];
+    m_fDeltaRadiation = saved_deltas[2];
+    m_fDeltaPsyHealth = saved_deltas[3];
+    m_fDeltaCircumspection = saved_deltas[4];
+    m_fDeltaEntityMorale = saved_deltas[5];
+    m_change_v = saved_change_v;
+    m_fV_SatietyPower = saved_satiety_power;
+    m_fBoostBurnImmunity = saved_boosts[0];
+    m_fBoostShockImmunity = saved_boosts[1];
+    m_fBoostRadiationImmunity = saved_boosts[2];
+    m_fBoostTelepaticImmunity = saved_boosts[3];
+    m_fBoostChemicalBurnImmunity = saved_boosts[4];
+    m_fBoostExplImmunity = saved_boosts[5];
+    m_fBoostStrikeImmunity = saved_boosts[6];
+    m_fBoostFireWoundImmunity = saved_boosts[7];
+    m_fBoostWoundImmunity = saved_boosts[8];
+    m_fBoostRadiationProtection = saved_boosts[9];
+    m_fBoostTelepaticProtection = saved_boosts[10];
+    m_fBoostChemicalBurnProtection = saved_boosts[11];
+    m_booster_influences = saved_boosters;
+    object().inventory().SetMaxWeight(saved_max_weight);
+    m_MaxWalkWeight = saved_walk_weight;
+    for (size_t i = 0; i < saved_wounds.size(); ++i)
+        *m_WoundVector[i] = saved_wounds[i];
+    m_fHealthLost = saved_health_lost;
+    m_bIsBleeding = saved_bleeding;
+    m_fInvulnerableTime = saved_invulnerable;
+    m_fDeltaTime = saved_dt;
+
+    m_last_forecast = result;
+    return result;
 }
 
 void CActorCondition::AffectDamage_InjuriousMaterialAndMonstersInfluence()
@@ -512,7 +693,23 @@ CWound* CActorCondition::ConditionHit(SHit* pHDS)
 {
     if (GodMode())
         return NULL;
-    return inherited::ConditionHit(pHDS);
+    const float radiation_before = m_fDeltaRadiation;
+    const float psy_before = m_fDeltaPsyHealth;
+    const float health_before = m_fDeltaHealth;
+    CWound* wound = inherited::ConditionHit(pHDS);
+
+    // What the surroundings are doing to the actor: a field keeps doing it for as long as he stays,
+    // and lying down there for the night is what the sleep forecast has to answer for. Radiation and
+    // psy are fields whoever deals them; anything else only when an anomaly deals it.
+    if (pHDS->hit_type == ALife::eHitTypeRadiation || pHDS->hit_type == ALife::eHitTypeTelepatic ||
+        smart_cast<CCustomZone*>(pHDS->who))
+    {
+        DecayExposure();
+        m_exposure.radiation += std::max(m_fDeltaRadiation - radiation_before, 0.f);
+        m_exposure.psy += std::max(psy_before - m_fDeltaPsyHealth, 0.f);
+        m_exposure.health += std::max(health_before - m_fDeltaHealth, 0.f);
+    }
+    return wound;
 }
 
 float CActorCondition::PredictHealthLoss(float hit_power, ALife::EHitType hit_type, s16 element)

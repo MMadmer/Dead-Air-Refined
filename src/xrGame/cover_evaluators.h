@@ -87,12 +87,16 @@ protected:
     float m_current_distance;
     float m_deviation;
     float m_best_distance;
+    Fvector m_avoid_position{};
+    float m_avoid_radius{};
 
 public:
     IC CCoverEvaluatorCloseToEnemy(CRestrictedObject* object);
     IC void initialize(const Fvector& start_position, bool fake_call = false);
     IC void setup(
         const Fvector& enemy_position, float min_enemy_distance, float max_enemy_distance, float deviation = 0.f);
+    // Covers within radius of the position are skipped until the next call (radius 0 clears it).
+    void avoid(const Fvector& position, float radius);
     virtual void evaluate_cover(const CCoverPoint* cover_point, float weight);
     virtual void evaluate_smart_cover(smart_cover::cover const* smart_cover, float const& weight);
 };

@@ -2306,6 +2306,26 @@ float CScriptGameObject::GetRadiationDetector() const
     return hud_states ? hud_states->get_radiation_detector() : 0.0f;
 }
 
+float CScriptGameObject::SleepForecast(float game_seconds, float satiety_add, float psy_add, float radiation_add)
+{
+    CActor* actor = smart_cast<CActor*>(&object());
+    if (!actor || !std::isfinite(game_seconds) || game_seconds <= 0.f)
+    {
+        GEnv.ScriptEngine->script_log(LuaMessageType::Error, "sleep_forecast: the actor and a positive duration");
+        return 1.f;
+    }
+    const auto sane = [](float v) { return std::isfinite(v) ? v : 0.f; };
+    return actor->conditions()
+        .ForecastTimeJump(game_seconds, sane(satiety_add), sane(psy_add), sane(radiation_add))
+        .min_health;
+}
+
+u32 CScriptGameObject::SleepForecastCause() const
+{
+    const CActor* actor = smart_cast<const CActor*>(&object());
+    return actor ? u32(actor->conditions().LastForecast().cause) : 0u;
+}
+
 // получить и задать максимальный вес при котором можно ходить
 float CScriptGameObject::GetActorMaxWalkWeight() const
 {

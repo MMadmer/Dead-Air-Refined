@@ -24,6 +24,10 @@ namespace render_gl
 {
 class dxRainRender;
 }
+namespace render_r5
+{
+class dxRainRender;
+}
 } // namespace xray::render
 
 // The constants both halves of the system need. The simulation lives in Rain.cpp and the
@@ -50,10 +54,6 @@ constexpr float speed_mean = 0.5f * (speed_min + speed_max);
 constexpr float max_slant = deg2rad(45.f);
 // Per-drop scatter around the fall axis.
 constexpr float spread = deg2rad(3.0f);
-// How fast a drop already in the air answers a change in the wind. A raindrop's real
-// relaxation time is a fraction of a second, and this is what turns a gust front into a
-// visible ripple travelling through the sheet instead of a slow population turnover.
-constexpr float wind_tau = 0.30f;
 
 // Splash pool. Was 1000 with every second hit refused; now every drop splashes and a dense
 // rain runs out of a thousand - new splashes were simply never born.
@@ -101,12 +101,16 @@ class ENGINE_API CEffect_Rain
 {
     friend class xray::render::render_r4::dxRainRender;
     friend class xray::render::render_gl::dxRainRender;
+    friend class xray::render::render_r5::dxRainRender;
 
 private:
     struct Item
     {
         Fvector P;
         Fvector Phit;
+        // The one line the drop falls along, solved at birth and cleared by the birth ray (Born).
+        // Where the drop dies is known along this line and nowhere else, so nothing turns it in
+        // flight.
         Fvector D;
         // What the birth ray found under the drop. The query carried the surface all along and
         // the old code kept only the range, which is why every crown stood world-up on a
@@ -194,7 +198,8 @@ private:
     void p_free(Particle* P);
 
     // Some methods
-    void Born(Item& dest, float radius);
+    // wind_v: the wind at the eye this frame (CEnvironment::WindAt), the drop's line is solved on it.
+    void Born(Item& dest, float radius, const Fvector& wind_v);
     void Hit(Fvector& pos);
     bool RayPick(const Fvector& s, const Fvector& d, float& range, collide::rq_target tgt);
     void RenewItem(Item& dest, float height, bool bHit);
@@ -204,8 +209,7 @@ private:
         s32& material);
     // What a landed drop does, given what it landed on: a crown, a ring on water, or nothing.
     void Splash(const Fvector& pos, const Fvector& n, s32 mtl);
-    // A drop's own landing - splashes where the drop actually IS, so the in-flight wind and the
-    // crown agree.
+    // A drop's own landing: the crown where its birth ray found the surface.
     void HitItem(Item& src);
     bool SurfaceIsWater(const Fvector& pos, s32 mtl) const;
     void CoverTick(float dt);

@@ -113,6 +113,8 @@ ID can be reused; ordinary online/offline transitions keep the record alive.
 | `0x584DFF01` | 1 | NQ quest-graph runtime state: opaque marshal blob owned by `xms_nq` (`xms.save_data("xms.nq", ...)`); no record count. Core pseudo-namespace `0xFF01` on the XMS per-module data channel `0x584D0000\|ns`; the range `0xFF00`–`0xFFFF` is reserved for engine-owned blobs and is never allocated to a module. |
 | `0x584DFF02` | 1 | The world a new game was composed with (`XmsWorld`, MODDING.md "World rules"): `u8 version`, the rule sets of the modules, the run-time overrides, the area, the locks, the Player Start. Absent when no module declared a world. |
 | `0x584DFF03` | 1 | Run-time vars of a module PDA layout (`XmsPda`, MODDING.md "PDA layouts"): `u8 version`, `u32 count`, `count` pairs of zero-terminated name and value (cp1251). Absent when no script set a var. |
+| `AIK1` | 1 | NPC beliefs (`NPC_AI.md` "Knowledge"), 32-byte records: `u16 npcId`, `u16 targetId`, `u32 npcSectionCRC`, `f32 x, y, z`, `f32 err`, `u32 ageMs`, `u8 source`, `u8 confidence` (0..255), `u16 flags` (bit 0 enemy, bit 1 own sighting). Absent when no online stalker holds a belief. |
+| `AIT1` | 1 | NPC radio traits (`NPC_AI.md` "Communication"): `u16 npcId`, `u32 npcSectionCRC`, `u8 flags` (bit 0 rolled, bit 1 carries a radio), sorted by id. |
 
 The XMS module set manifest (`XMS1`) and the per-module data (`0x584D0000|ns`)
 and spawn-ledger (`0x584C0000|ns`) chunk families are described in
@@ -140,6 +142,26 @@ every counter at zero, and a weapon that already carries dirty faults is treated
 cleaning cycle in. Records are bound to the ALife id and the section CRC like WEX1, and a
 weapon that goes offline keeps its counters in the same id-keyed store the chunk is loaded
 into, so an id that is unregistered for good is forgotten with the object.
+
+AIK1 holds what each online human stalker believes about other creatures: at most 16 records
+per NPC, only beliefs younger than their forget time, the age measured at capture. On load the
+records are staged before the ALife load and applied when the NPC spawns with the same id and
+section CRC, as source `restored` (a remembered, reported-only kind that can steer movement and
+search but never a shot) with the saved error grown by its age; records nobody claims within
+`[ai_errors] restore_grace_s` (10 s) of play are dropped, and a target resolves by id at first
+use. A record naming no source or one beyond `restored` (19), an unknown flag bit, a
+non-finite or out-of-range position or error, or a duplicated NPC and target pair (every copy)
+is ignored, with one log line for the chunk. A save without the chunk loads with empty beliefs: the stock memory
+pool of `.scop` gives no stalker a belief.
+
+AIT1 keeps each NPC's radio trait (rolled once per NPC lifetime) stable across loads and offline
+periods, so a successor never inherits a dead leader's radio: the table holds every NPC rolled this session or restored, online or offline.
+Capture drops a record whose ALife object is gone or whose section CRC changed; staging validates
+size, flags and ids and drops every copy of a duplicated id; the table is cleared on a new game and
+on load before the chunk is staged. A save without the chunk makes every NPC roll once at its next
+online spawn and keep the result. The original 0.98b ignores both chunks, an older Refined build
+keeps them byte-for-byte, and `.scop` / `.scoc` are unchanged: the memory managers keep their
+layout and simply hold estimates for stalkers.
 
 A bad container header, directory, binding, or payload CRC is never interpreted
 speculatively. A bad payload CRC drops only that chunk. Within a structurally

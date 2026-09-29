@@ -43,6 +43,10 @@
                 update, the one also revoked is switched off; the window says which is which
       Remove    a removal is applied by the next start; protection stays on
 
+    -Scenario Adopt holds modules copied in by hand against the catalog (MOD_CATALOG.md 14.1):
+    catalog_qa.py adopt makes copies of releases, edited ones and another author's module under a
+    listed id; one start takes the exact copies for browser installations and nothing else.
+
 .EXAMPLE
     pwsh -NoProfile -File tools\qa\mods\Run-ModsQa.ps1 -ResultLabel run1
 
@@ -65,8 +69,11 @@ param(
     # 1280x720 exercises ui_mods_16.xml, 1024x768 ui_mods.xml.
     [string]$VidMode = '1280x720',
 
-    [ValidateSet('Updates', 'Catalog')]
+    [ValidateSet('Updates', 'Catalog', 'Adopt')]
     [string]$Scenario = 'Updates',
+
+    # -Scenario Adopt: tags\<tag>\ with the assets of a real published module's releases
+    [string]$RealRelease,
 
     [switch]$KeepRoot
 )
@@ -864,10 +871,84 @@ function Invoke-CatalogScenario {
     }
 }
 
+function Invoke-AdoptScenario {
+    # MOD_CATALOG.md 14.1: modules copied in by hand, held against the catalog once one is accepted.
+    # One start: no catalog cached, the first check takes nothing, the browser view loads it.
+    Assert-NoTargetEngine
+    New-QaRoot
+    if (Test-Path -LiteralPath $qaModules) { Remove-Item -LiteralPath $qaModules -Recurse -Force }
+    New-Item -ItemType Directory -Path $qaModules -Force | Out-Null
+    $catalogAssets = Join-Path $qaRoot 'catalog-assets'
+    $catalogTool = Join-Path $PSScriptRoot 'catalog_qa.py'
+    Write-Host '== generating the adoption fixture'
+    $fixtureArgs = @($catalogTool, 'adopt', '--modules', $qaModules, '--assets', $catalogAssets, '--port', $Port)
+    if ($RealRelease) { $fixtureArgs += @('--real', $RealRelease) }
+    & python @fixtureArgs
+    if ($LASTEXITCODE) { throw 'the adoption fixture could not be made' }
+    $script:catalogEnv = Get-Content -LiteralPath (Join-Path $catalogAssets 'env.json') -Raw | ConvertFrom-Json
+    $script:mockLog = Join-Path $resultRoot 'mock.log'
+    $mockProcess = Start-Process python -ArgumentList @("`"$catalogTool`"", 'serve', '--assets', "`"$catalogAssets`"", '--port', $Port,
+        '--log', "`"$($script:mockLog)`"") -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 2
+    $state = Join-Path $qaModules '.catalog\state.ltx'
+
+    try {
+        # a card is drawn on the frame after it is selected: each "state" waits for one
+        $commands = @('xms_mods', 'xms_mods wait 3000', 'xms_mods view browser', 'xms_mods wait 5000', 'xms_mods state',
+            'xms_mods view installed')
+        foreach ($id in 'qa.adopt.old', 'qa.adopt.same', 'qa.adopt.wd', 'qa.adopt.extra', 'qa.adopt.foreign') {
+            $commands += "xms_mods select $id", 'xms_mods wait 300', 'xms_mods state'
+        }
+        $log = Invoke-Engine -Phase 'adopt' -Catalog -Commands ($commands + 'xms_mods mark done') -WaitFor @('\[mods-ui\] mark done')
+        $first = $log.IndexOf('modules installed by hand are held against it')
+        Assert-That 'without a catalog the first check takes nothing' ($first -gt 0 -and
+            $log.Substring(0, $first) -notmatch 'installed by hand')
+        foreach ($taken in @(@('qa.adopt.old', 'v1\.0\.0'), @('qa.adopt.same', 'the latest release'), @('qa.adopt.wd', 'v1\.0\.0'))) {
+            Assert-That "$($taken[0]) is taken for a browser installation" ($log -match
+                ('\[mods\] {0}: installed by hand, release 1\.0\.0 of the Mod Browser byte for byte \({1}\)' -f [regex]::Escape($taken[0]), $taken[1]))
+        }
+        foreach ($refused in @(@('qa.adopt.edited', 'its files are not those of release 1\.0\.0'),
+                @('qa.adopt.extra', 'its files are not those of release 1\.0\.0'), @('qa.adopt.git', 'it holds \.git'),
+                @('qa.adopt.dev', 'version 1\.2\.0 is not published'), @('qa.adopt.unsigned', 'release 1\.0\.0 is not signed by the author'),
+                @('qa.adopt.floor', 'version 1\.0\.0 is below the lowest the catalog lists'))) {
+            Assert-That "$($refused[0]) is no release" ($log -match
+                ('\[mods\] {0}: installed by hand, not a release of the Mod Browser - {1}' -f [regex]::Escape($refused[0]), $refused[1]))
+        }
+        Assert-That 'a held release is not taken' ($log -match
+            '\[mods\] qa\.adopt\.held: installed by hand, a release the Mod Browser does not take - the catalog withdrew release 1\.0\.0')
+        Assert-That 'another author''s module under a listed id is never looked at' ($log -notmatch 'qa\.adopt\.foreign: installed by hand')
+        Assert-That 'the adopted older release is offered its update' ($log -match '\[mods\] qa\.adopt\.old: about \d+ of \d+ byte\(s\) to download' -and
+            $log -notmatch 'qa\.adopt\.old: update 1\.1\.0 refused')
+        Assert-That 'the adopted withdrawn module takes no update' ($log -match 'qa\.adopt\.wd: update 1\.1\.0 refused - its author withdrew it')
+        Assert-That 'an edited copy is not offered its own version as a fix' (
+            $log.Substring([Math]::Max($first, 0)) -notmatch 'qa\.adopt\.edited: 1\.0\.0 was published again')
+        Assert-That 'the browser does not call another author''s module installed' ($log -match '\[mods-ui\] row qa\.adopt\.foreign "[^"]*" badge=- ')
+        $stateText = if (Test-Path -LiteralPath $state) { Get-Content -LiteralPath $state -Raw } else { '' }
+        Assert-That 'state.ltx records exactly the adoptions' (($stateText -match '(?m)^qa\.adopt\.old = ') -and
+            ($stateText -match '(?m)^qa\.adopt\.same = ') -and ($stateText -match '(?m)^qa\.adopt\.wd = ') -and
+            ($stateText -notmatch '(?m)^qa\.adopt\.(edited|extra|git|dev|unsigned|floor|held|foreign) = '))
+        if ($RealRelease) {
+            Assert-That 'the real published release is taken on its real signature' ($log -match
+                '\[mods\] darf-overnight-delivery: installed by hand, release [0-9.]+ of the Mod Browser byte for byte')
+        }
+        Assert-That 'no file of a module was changed' (-not (Test-Path -LiteralPath $qaStaged) -and
+            (Test-Path -LiteralPath (Join-Path $qaModules 'qa.adopt.git\.git\HEAD')) -and
+            (Test-Path -LiteralPath (Join-Path $qaModules 'qa.adopt.extra\gamedata\configs\mine.ltx')))
+    }
+    finally {
+        if ($mockProcess -and -not $mockProcess.HasExited) { Stop-Process -Id $mockProcess.Id -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 
 # ---------------------------------------------------------------------------- run
 if ($Scenario -eq 'Catalog') {
     try { Invoke-CatalogScenario }
+    finally { Clear-QaEnvironment }
+    Complete-QaRun
+}
+if ($Scenario -eq 'Adopt') {
+    try { Invoke-AdoptScenario }
     finally { Clear-QaEnvironment }
     Complete-QaRun
 }

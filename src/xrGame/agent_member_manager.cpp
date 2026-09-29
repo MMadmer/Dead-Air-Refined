@@ -16,6 +16,8 @@
 #include "sound_player.h"
 #include "cover_point.h"
 #include "Grenade.h"
+#include "da_ai_comms.h" // [ai:comms] hook
+#include "da_ai_tactics.h"
 
 class CMemberPredicate2
 {
@@ -200,8 +202,26 @@ bool CAgentMemberManager::cover_detouring() const
     return (false);
 }
 
+bool CAgentMemberManager::can_detour(const CAI_Stalker& member) const
+{
+    bool result;
+    return DaAi::Tactics::can_detour(member, result) ? result : can_detour();
+}
+
+bool CAgentMemberManager::cover_detouring(const CAI_Stalker& member) const
+{
+    bool result;
+    return DaAi::Tactics::cover_detouring(member, result) ? result : cover_detouring();
+}
+
 bool CAgentMemberManager::can_cry_noninfo_phrase() const
 {
+    // [ai:comms] begin voice_arbitration
+    // Information callouts of any member go before idle chatter.
+    if (DaAi::Comms::hold_noninfo_phrase(*this))
+        return (false);
+    // [ai:comms] end voice_arbitration
+
     MEMBER_STORAGE::const_iterator I = members().begin();
     MEMBER_STORAGE::const_iterator E = members().end();
     for (; I != E; ++I)

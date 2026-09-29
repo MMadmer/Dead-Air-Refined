@@ -41,6 +41,9 @@ struct ModuleStatus
     xr_string requiresGame;
     // log-grade reason behind CheckFailed and Failed
     xr_string message;
+    // installed by hand, and its files are not a release the Mod Browser stands behind
+    // (MOD_CATALOG 14.1): a local, modified copy
+    bool handModified{};
     // Available: what the update is expected to download. Preparing: bytes of installed files
     // hashed. Downloading: packed bytes fetched.
     u64 downloadedBytes{};
@@ -61,6 +64,9 @@ struct Snapshot
 // Once per process from the main menu, and again from the Mods window: a pass only touches
 // modules that were never checked or whose last check failed.
 void StartCheck();
+// A catalog was accepted: modules installed by hand are held against it again (MOD_CATALOG 14.1).
+// Any thread.
+void CatalogRefreshed();
 
 bool StartUpdate(pcstr moduleId);
 // Number of modules queued.

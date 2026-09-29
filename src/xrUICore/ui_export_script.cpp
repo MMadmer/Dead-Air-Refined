@@ -544,8 +544,6 @@ void CUIListWnd::script_register(lua_State* luaState)
             .def("GetItem", &CUIListWnd::GetItem)
             .def("GetItemPos", &CUIListWnd::GetItemPos)
             .def("GetSize", &CUIListWnd::GetItemsCount)
-            .def("ScrollToBegin", &CUIListWnd::ScrollToBegin)
-            .def("ScrollToEnd", &CUIListWnd::ScrollToEnd)
             .def("ScrollToPos", +[](CUIListWnd* self, int position)
             {
                 self->ScrollToPos(position, 0.0f);
@@ -701,6 +699,10 @@ void CUIStatic::script_register(lua_State* luaState)
 
             .def("SetHeading", &CUIStatic::SetHeading)
             .def("GetHeading", &CUIStatic::GetHeading)
+
+            // The hover hint, as the xml "hint" attribute sets it: a string id, translated when shown.
+            .def("SetHint", +[](CUIStatic* self, pcstr hint) { self->m_stat_hint_text = hint; })
+            .def("GetHint", +[](CUIStatic* self) { return self->m_stat_hint_text.c_str(); })
 
             //.def("ClipperOn", &CUIStatic::ClipperOn)
             //.def("ClipperOff", (void(CUIStatic::*)(void))&CUIStatic::ClipperOff)

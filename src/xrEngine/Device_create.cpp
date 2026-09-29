@@ -50,6 +50,10 @@ void CRenderDevice::Create()
     GEnv.Render->OnDeviceCreate(fname);
     StartupProfileCheckpoint("Renderer resources created");
     m_imgui_render = GEnv.RenderFactory->CreateImGuiRender();
+    // ImGui windows dragged out of the game window need D3D11 swap chains of their own, which the
+    // D3D12 device cannot back: on DirectX 12 they stay inside the main window.
+    if (GEnv.Render->GetBackendAPI() == IRender::BackendAPI::D3D12)
+        ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
     m_imgui_render->OnDeviceCreate(GetImGuiContext());
     Statistic->OnDeviceCreate();
     dwFrame = 0;

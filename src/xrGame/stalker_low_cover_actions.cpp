@@ -24,6 +24,8 @@
 #include "script_game_object_impl.h"
 #include "stalker_combat_planner.h"
 #include "stalker_planner.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_tactics.h"
 
 using namespace StalkerDecisionSpace;
 
@@ -47,6 +49,8 @@ void CStalkerActionGetReadyToKillLowCover::execute()
 {
     inherited::execute();
 
+    // A crouch needs a mind other than free (asserted); a surrendered NPC (morale) keeps a free one.
+    object().movement().set_mental_state(eMentalStateDanger);
     object().movement().set_body_state(eBodyStateCrouch);
     object().sight().setup(CSightAction(SightManager::eSightTypeCurrentDirection));
     aim_ready_force_full();
@@ -142,8 +146,8 @@ void CStalkerActionHoldPositionLowCover::execute()
 
     if (completed())
     {
-        if (object().agent_manager().member().can_detour() || !object().agent_manager().member().cover_detouring() ||
-            !fire_make_sense())
+        if (object().agent_manager().member().can_detour(object()) ||
+            !object().agent_manager().member().cover_detouring(object()) || !fire_make_sense())
         {
             CStalkerCombatPlanner& planner = smart_cast<CStalkerCombatPlanner&>(object().brain().current_action());
             planner.CScriptActionPlanner::m_storage.set_property(eWorldPropertyLookedOut, true);
@@ -152,9 +156,15 @@ void CStalkerActionHoldPositionLowCover::execute()
         }
     }
 
-    if (object().agent_manager().member().cover_detouring() && fire_make_sense())
+    if (object().agent_manager().member().cover_detouring(object()) && fire_make_sense())
     {
-        object().sound().play(StalkerSpace::eStalkerSoundNeedBackup, 3000, 3000, 10000, 10000);
+        // The mate who needs cover asks for it; a holder covering him keeps quiet.
+        if (!DaAi::Tactics::quiet_cover_fire(object()))
+            object().sound().play(StalkerSpace::eStalkerSoundNeedBackup, 3000, 3000, 10000, 10000);
+        // Suppression aims at the own last-seen point, never at a refreshed belief (F5).
+        if (Fvector point; !DaAi::Know::sees_now(object(), mem_object.m_object) &&
+            DaAi::Tactics::suppress_point(object(), point))
+            object().sight().setup(CSightAction(SightManager::eSightTypePosition, point, true));
         fire();
     }
     else

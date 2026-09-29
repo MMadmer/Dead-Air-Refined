@@ -1,6 +1,6 @@
--- Options menu probe for a QA clone: builds the real options dialog - the stock
--- ui_mm_opt_main.script out of the game archives on top of whichever video pages the
--- installation has - and walks every path that touches the advanced video page.
+-- Options menu probe for a QA clone: builds the real options dialog - ui_mm_opt_main.script and
+-- the video pages the installation has - and walks every path that touches the video tab and the
+-- shell that is left of the advanced page.
 --
 -- Copy it into the clone's gamedata\scripts for the run and remove it afterwards. The dialog is
 -- kept in a global on purpose: a collected CUIScriptWnd takes its controls with it while the
@@ -9,7 +9,8 @@
 -- Phase two writes the video groups back the way Accept does and brackets that with two
 -- cfg_save files. Everything the options page touches is in them, so the runner can diff the
 -- pair instead of naming the commands one by one: a row that was dropped from the page must not
--- change, and a row that is only hidden must round-trip its value untouched.
+-- change, and a row that is only hidden must round-trip its value untouched. The probe's own
+-- moves of the upscaler rows are read back from the console before that.
 
 local started = false
 
@@ -19,54 +20,123 @@ local function say(text)
 	get_console():execute("flush")
 end
 
+-- Nodes the stock DA page scripts initialise (with the fatal flag). Built here into the dead
+-- advanced page before the values are read, so they cannot count as changed.
+local STOCK_NODES = {
+	{ "InitStatic", "tab_video:cap_fullscreen" },
+	{ "InitCheck", "tab_video:check_fullscreen" },
+	{ "InitStatic", "video_adv:cap_r__actor_body" },
+	{ "InitCheck", "video_adv:check_r__actor_body" },
+	{ "InitStatic", "video_adv:cap_vsync" },
+	{ "InitCheck", "video_adv:check_vsync" },
+	{ "InitStatic", "video_adv:cap_60hz" },
+	{ "InitCheck", "video_adv:check_60hz" },
+}
+
 local function probe()
 	_G.qa_options_dialog = ui_mm_opt_main.options_dialog()
 	local dlg = _G.qa_options_dialog
+	local page = dlg.dlg_video
+
+	local holder = dlg.xml:InitStatic("video_adv:templ_item", dlg.dlg_video_adv)
+	holder:Show(false)
+	for _, node in ipairs(STOCK_NODES) do
+		dlg.xml[node[1]](dlg.xml, node[2], holder)
+	end
+	say("stock nodes=" .. #STOCK_NODES .. " built")
 
 	-- What the main menu does before it shows the dialog: every group is read from the console,
-	-- then UpdateDependControls() fills the scroll list for the current renderer.
+	-- then UpdateDependControls() refreshes the dead advanced list for the current renderer.
 	dlg:SetCurrentValues()
+	page:Refresh()
 
-	local renderer = dlg.combo_renderer:CurrentID()
-	local shown = 0
-	for _, row in pairs(dlg.m_preconditions) do
-		if row.func(renderer) then
-			shown = shown + 1
+	-- The advanced page is an empty shell: no rows for the stock refresh to fill its list with.
+	say("renderer_id=" .. tostring(dlg.combo_renderer:CurrentID()) .. " adv_rows=" .. tostring(#dlg.m_preconditions))
+
+	-- The video tab: subsections and rows as the layout file and the renderer's capabilities make
+	-- them; the renderer combo is a row of its own now.
+	local console = get_console()
+	say("caps=" .. tostring(console:get_string("r__caps")) ..
+		" renderer=" .. tostring(console:get_token("renderer")) ..
+		" renderer_shown=" .. tostring(dlg.combo_renderer:IsShown()) ..
+		" renderer_row=" .. tostring(page.rows.renderer ~= nil))
+	say("groups (" .. #page.headers .. "): " .. table.concat(page.headers, " "))
+	say("rows (" .. #page.order .. "): " .. table.concat(page.order, " "))
+	say("scroll=" .. tostring(page.list:GetMinScrollPos()) .. ".." .. tostring(page.list:GetMaxScrollPos()))
+
+	-- A hint on every row and a number beside every slider (the HUD FOV one used to stay empty).
+	local no_hint, no_number = {}, {}
+	for _, id in ipairs(page.order) do
+		if (page.rows[id].hint == "") then
+			no_hint[#no_hint + 1] = id
 		end
 	end
-	say("renderer_id=" .. tostring(renderer) .. " rows=" .. tostring(#dlg.m_preconditions) ..
-		" shown=" .. tostring(shown))
+	for _, readout in ipairs(page.readouts) do
+		if (readout.wnd:TextControl():GetText() == "") then
+			no_number[#no_number + 1] = readout.format
+		end
+	end
+	say("rows_without_hint=" .. #no_hint .. " " .. table.concat(no_hint, " ") ..
+		" readouts=" .. #page.readouts .. " empty=" .. #no_number ..
+		" hud_fov=" .. tostring(page.hud_fov_value and page.hud_fov_value:TextControl():GetText()))
 
 	-- The three controls the stock main script calls by name on every refresh. A page that
 	-- dropped them would die here, which is the whole reason they still exist.
 	say("texture_lod=" .. type(dlg.texture_lod_track) .. " ao_tab=" .. type(dlg.tab_ao_opt) ..
 		" ssao=" .. type(dlg.combo_ssao) .. " ao_id=" .. tostring(dlg.tab_ao_opt:GetActiveId()))
 
-	-- A preset change refreshes the page, a renderer change rebuilds the list, and the AO
-	-- callback runs on both.
+	-- A preset change, a renderer change and the AO callback, as the dialog runs them.
 	dlg:OnPresetChanged()
 	dlg:UpdateDependControls()
 	dlg:OnAOOptionChange()
 
-	-- Both buttons of the video tab, so the pages are shown and hidden for real.
-	dlg:OnBtnAdvGraphic()
-	dlg:OnSimplyGraphic()
-	say("refresh and page switch passed")
+	dlg.tab:SetActiveTab("video")
+	dlg:OnTabChange()
+	say("refresh passed, video shown=" .. tostring(page:IsShown()) ..
+		" adv shown=" .. tostring(dlg.dlg_video_adv:IsShown()))
 
-	-- The antialiasing ladder. All three are runtime commands, so they are in no config file and
-	-- the only way to read them back is to ask the console.
-	local console = get_console()
+	-- The live rules of the anti-aliasing subsection, before Accept: an upscaler greys out the
+	-- AA row and lights the sharpness row, and AMD FSR and NVIDIA DLSS switch each other off.
+	local function state()
+		local function id(row) return page.rows[row] and tostring(page.rows[row].ctrl:CurrentID()) or "-" end
+		local function on(row) return page.rows[row] and tostring(page.rows[row].ctrl:IsEnabled()) or "-" end
+		return "fsr=" .. id("fsr") .. " dlss=" .. id("dlss") .. " aa_enabled=" .. on("aa") ..
+			" sharpness_enabled=" .. on("upscale_sharpness") .. " framegen_enabled=" .. on("framegen") ..
+			" aa_hint=" .. tostring(page.rows.aa and page.rows.aa.shown_hint)
+	end
+	say("upscalers as saved: " .. state())
+	if (page.rows.fsr) then
+		page.rows.fsr.ctrl:SetCurrentID(1)
+		page:OnUpscalerSelected("fsr")
+		say("fsr picked: " .. state())
+	end
+	if (page.rows.dlss) then
+		page.rows.dlss.ctrl:SetCurrentID(1)
+		page:OnUpscalerSelected("dlss")
+		say("dlss picked: " .. state())
+	end
+	local opt = COptionsManager()
+	opt:SetCurrentValues("mm_opt_video")
+	page:Refresh()
+	say("values read back: " .. state())
+
+	-- Antialiasing is the player's own setting now; the preset no longer writes the runtime
+	-- switches behind it, so read them next to it.
 	say("preset=" .. tostring(console:get_string("_preset")) ..
+		" aa=" .. tostring(console:get_string("r__aa")) ..
+		" fsr=" .. tostring(console:get_string("r__fsr")) ..
+		" dlss=" .. tostring(console:get_string("r__dlss")) ..
+		" framegen=" .. tostring(console:get_string("r__framegen")) ..
 		" fxaa=" .. tostring(console:get_integer("r2_fxaa")) ..
 		" smaa=" .. tostring(console:get_integer("r__smaa")) ..
 		" taa=" .. tostring(console:get_integer("r__taa")))
 
 	-- The write half of Accept, without the vid restart and the message box that follow it.
-	local opt = COptionsManager()
-	get_console():execute("cfg_save qa_options_before")
+	console:execute("cfg_save qa_options_before")
+	opt:SaveValues("mm_opt_video_preset")
 	opt:SaveValues("mm_opt_video")
 	opt:SaveValues("mm_opt_video_adv")
-	get_console():execute("cfg_save qa_options_after")
+	console:execute("cfg_save qa_options_after")
 	say("values written")
 end
 

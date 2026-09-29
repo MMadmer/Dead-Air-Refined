@@ -13,6 +13,7 @@
 #include "ai_stalker_space.h"
 #include "script_game_object.h"
 #include "stalker_planner.h"
+#include "da_ai_ids.h"
 
 void CAI_Stalker::script_register(lua_State* luaState)
 {
@@ -62,7 +63,17 @@ void CAI_Stalker::script_register(lua_State* luaState)
                 value("property_anomaly", StalkerDecisionSpace::eWorldPropertyAnomaly),
                 value("property_inside_anomaly", StalkerDecisionSpace::eWorldPropertyInsideAnomaly),
                 value("property_pure_enemy", StalkerDecisionSpace::eWorldPropertyPureEnemy),
-                value("property_script", StalkerDecisionSpace::eWorldPropertyScript)
+                value("property_script", StalkerDecisionSpace::eWorldPropertyScript),
+
+                // human NPC AI
+                value("da_property_out_of_band", DaAi::Ids::prop_out_of_band),
+                value("da_property_suppress_role", DaAi::Ids::prop_suppress_role),
+                value("da_property_should_fall_back", DaAi::Ids::prop_should_fall_back),
+                value("da_property_return_fire", DaAi::Ids::prop_return_fire),
+                value("da_property_contact_lost", DaAi::Ids::prop_contact_lost),
+                value("da_property_flank_role", DaAi::Ids::prop_flank_role),
+                value("da_property_search_spot", DaAi::Ids::prop_search_spot),
+                value("da_property_search_cover", DaAi::Ids::prop_search_cover)
             ]
 
             .enum_("action")
@@ -129,7 +140,17 @@ void CAI_Stalker::script_register(lua_State* luaState)
                 value("action_anomaly_planner", StalkerDecisionSpace::eWorldOperatorAnomalyPlanner),
                 value("action_danger_planner", StalkerDecisionSpace::eWorldOperatorDangerPlanner),
                 value("action_post_combat_wait", StalkerDecisionSpace::eWorldOperatorPostCombatWait),
-                value("action_script", StalkerDecisionSpace::eWorldOperatorScript)
+                value("action_script", StalkerDecisionSpace::eWorldOperatorScript),
+
+                // human NPC AI
+                value("da_action_suppress_fire", DaAi::Ids::op_suppress_fire),
+                value("da_action_fall_back", DaAi::Ids::op_fall_back),
+                value("da_action_hold_ambush", DaAi::Ids::op_hold_ambush),
+                value("da_action_return_fire", DaAi::Ids::op_return_fire),
+                value("da_action_search_handover", DaAi::Ids::op_search_handover),
+                value("da_action_flank", DaAi::Ids::op_flank),
+                value("da_action_search_sweep", DaAi::Ids::op_search_sweep),
+                value("da_action_search_overwatch", DaAi::Ids::op_search_overwatch)
             ]
 
             .enum_("sounds")

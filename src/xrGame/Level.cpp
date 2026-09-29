@@ -1,5 +1,6 @@
 #include "pch_script.h"
 #include "xrEngine/FDemoRecord.h"
+#include "da_ai.h"
 #include "xrEngine/FDemoPlay.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/IGame_Persistent.h"
@@ -117,6 +118,7 @@ CLevel::~CLevel()
 {
     ZoneScoped;
 
+    da_ai_level_unload();
     xr_delete(g_player_hud);
     xr_delete(pHUD);
     delete_data(hud_zones_list);

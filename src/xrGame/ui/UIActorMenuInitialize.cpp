@@ -161,7 +161,10 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
 
     m_pUpgradeWnd = xr_new<CUIInventoryUpgradeWnd>();
     if (!m_pUpgradeWnd->Init())
+    {
+        Msg("! inventory_upgrade.xml did not load (missing or malformed): the mechanic has no upgrade panel");
         xr_delete(m_pUpgradeWnd);
+    }
     else
     {
         AttachChild(m_pUpgradeWnd);
@@ -295,6 +298,8 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
         AttachChild(m_upgrade_info);
         m_upgrade_info->init_from_xml(ACTOR_MENU_ITEM_XML);
     }
+
+    InitInventoryTools();
 }
 
 void CUIActorMenu::InitializeInventoryMode(CUIXml& uiXml)

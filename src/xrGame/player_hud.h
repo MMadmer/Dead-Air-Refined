@@ -185,6 +185,11 @@ public:
     void scene_stop();
     void scene_hold();
     bool scene_active() const;
+    // The ticket of the scene on the hands, 0 when there is none. Several modules play scenes on
+    // the same hands; each keeps the ticket of its own and stops or holds only that one.
+    u32 scene_id() const { return m_scene_on ? m_scene_id : 0; }
+    bool scene_stop(u32 id);
+    bool scene_hold(u32 id);
     void scene_item_tune(Fvector& pos, Fvector& rot, float& scale) const
     {
         pos = m_scene_item_pos;
@@ -207,6 +212,9 @@ private:
     void scene_item_calc_transform();
     // Everything the frame update does for a scene, done once at the moment it starts.
     void scene_first_frame();
+    // A hands model change: the scene's cycle is laid on the new hands where it left off, or the
+    // scene ends when they do not carry it.
+    void scene_rebind();
     player_hud_motion_container& scene_motions(const shared_str& sect);
 
 private:
@@ -225,6 +233,16 @@ private:
     xr_map<shared_str, player_hud_motion_container> m_scene_motions;
     u32 m_scene_end{};
     bool m_scene_on{};
+    u32 m_scene_id{};
+    u32 m_scene_serial{};
+    // What the scene plays, kept to lay it again on other hands: section, cycle, the variant the
+    // cycle picked, the partition, the speed and the moment its frame zero would have been.
+    shared_str m_scene_sect;
+    shared_str m_scene_anim;
+    shared_str m_scene_motion;
+    u16 m_scene_part{};
+    float m_scene_speed{ 1.f };
+    u32 m_scene_started{};
     Fvector m_scene_hands_pos{};
     Fvector m_scene_hands_rot{}; // degrees
     bool m_scene_one_hand{};

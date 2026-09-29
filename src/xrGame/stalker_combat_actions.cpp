@@ -8,6 +8,11 @@
 
 #include "pch_script.h"
 #include "stalker_combat_actions.h"
+#include "da_ai_morale.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_senses.h"
+#include "da_ai_tactics.h"
+#include "da_ai_search.h"
 #include "ai/stalker/ai_stalker.h"
 #include "script_game_object.h"
 #include "script_game_object_impl.h"
@@ -141,7 +146,8 @@ void CStalkerActionMakeItemKilling::initialize()
         xr_new<CSightControlAction>(1.f, 3000, CSightAction(SightManager::eSightTypePathDirection)));
     object().sight().add_action(eSightActionTypeWatchEnemy,
         xr_new<CSightControlAction>(1.f, 3000,
-            CSightAction(SightManager::eSightTypePosition, object().memory().enemy().selected()->Position(), false)));
+            CSightAction(SightManager::eSightTypePosition,
+                DaAi::Know::known_position(object(), *object().memory().enemy().selected()), false)));
 
     object().movement().set_mental_state(eMentalStateDanger);
 }
@@ -177,10 +183,12 @@ void CStalkerActionMakeItemKilling::execute()
     object().movement().set_detail_path_type(DetailPathManager::eDetailPathTypeSmooth);
     object().movement().set_body_state(eBodyStateStand);
     object().movement().set_movement_type(eMovementTypeWalk);
-    object().sight().action(eSightActionTypeWatchEnemy).set_vector3d(object().memory().enemy().selected()->Position());
+    object().sight().action(eSightActionTypeWatchEnemy).set_vector3d(
+        DaAi::Know::known_position(object(), *object().memory().enemy().selected()));
     object().set_goal(eObjectActionIdle);
 }
 
+// [ai:morale] begin retreat_from_enemy
 //////////////////////////////////////////////////////////////////////////
 // CStalkerActionRetreatFromEnemy
 //////////////////////////////////////////////////////////////////////////
@@ -190,7 +198,12 @@ CStalkerActionRetreatFromEnemy::CStalkerActionRetreatFromEnemy(CAI_Stalker* obje
 {
 }
 
-void CStalkerActionRetreatFromEnemy::initialize() { inherited::initialize(); }
+void CStalkerActionRetreatFromEnemy::initialize()
+{
+    inherited::initialize();
+    DaAi::Morale::retreat_begin(object());
+}
+
 void CStalkerActionRetreatFromEnemy::finalize()
 {
     inherited::finalize();
@@ -198,6 +211,7 @@ void CStalkerActionRetreatFromEnemy::finalize()
     if (!object().g_Alive())
         return;
 
+    DaAi::Morale::retreat_end(object());
     object().sound().set_sound_mask(0);
 }
 
@@ -207,6 +221,22 @@ void CStalkerActionRetreatFromEnemy::execute()
 
     if (!object().memory().enemy().selected())
         return;
+
+    // A broken NPC leaves by its profile's style; the stock retreat runs otherwise.
+    if (const DaAi::Morale::RetreatStep step = DaAi::Morale::retreat_execute(*this); step.handled)
+    {
+        if (step.fire)
+            fire();
+        else if (step.aim)
+            aim_ready();
+        else
+            object().CObjectHandler::set_goal(eObjectActionIdle);
+#ifndef SILENT_COMBAT
+        if (step.panic_sound)
+            play_panic_sound(0, 0, 10000);
+#endif
+        return;
+    }
 
     object().movement().set_movement_type(eMovementTypeRun);
     object().movement().set_path_type(MovementManager::ePathTypeLevelPath);
@@ -272,6 +302,7 @@ _edge_value_type CStalkerActionRetreatFromEnemy::weight(
 {
     return (_edge_value_type(100));
 }
+// [ai:morale] end retreat_from_enemy
 
 //////////////////////////////////////////////////////////////////////////
 // CStalkerActionGetReadyToKill
@@ -333,6 +364,18 @@ void CStalkerActionGetReadyToKill::execute()
 
     if (!object().memory().enemy().selected())
         return;
+
+    // Caught in the open at close range and seen: a trained NPC readies its weapon where it stands to shoot back
+    // (DaReturnFire) instead of turning its back to run for cover.
+    if (m_affect_properties && DaAi::Tactics::return_fire(object()))
+    {
+        object().movement().set_movement_type(eMovementTypeStand);
+        object().movement().set_nearest_accessible_position();
+        object().sight().setup(CSightAction(object().memory().enemy().selected(), true, true));
+        object().brain().affect_cover(false);
+        aim_ready();
+        return;
+    }
 
     if (object().movement().detail().distance_to_target() < 2.f)
     {
@@ -475,7 +518,8 @@ void CStalkerActionTakeCover::initialize()
 
     m_body_state = object().movement().body_state();
     //	m_movement_type								= Random.randI(2) ? eMovementTypeRun : eMovementTypeWalk;
-    m_movement_type = eMovementTypeWalk;
+    // Nobody strolls to cover while standing in the open under the enemy's eyes.
+    m_movement_type = DaAi::Tactics::take_cover_run(object()) ? eMovementTypeRun : eMovementTypeWalk;
 
     object().movement().set_desired_direction(0);
     object().movement().set_path_type(MovementManager::ePathTypeLevelPath);
@@ -491,7 +535,7 @@ void CStalkerActionTakeCover::initialize()
     if (object().memory().enemy().selected() && object().memory().enemy().selected()->human_being())
     {
         if (object().agent_manager().member().can_cry_noninfo_phrase())
-            if (object().Position().distance_to_sqr(object().memory().enemy().selected()->Position()) < _sqr(10.f))
+            if (DaAi::Know::known_distance(object(), *object().memory().enemy().selected()) < 10.f)
                 if (object().memory().visual().visible_now(object().memory().enemy().selected()) &&
                     object().agent_manager().member().group_behaviour())
                     object().sound().play(eStalkerSoundBackup, 0, 0, 6000, 4000);
@@ -585,7 +629,10 @@ void CStalkerActionLookOut::initialize()
 {
     inherited::initialize();
 
-    if (Device.dwTimeGlobal >= m_last_change_time + CROUCH_LOOK_OUT_DELTA)
+    // Peek discipline: a trained NPC does not show himself twice in the same stance.
+    if (bool crouch{}; DaAi::Tactics::peek_stance(object(), crouch))
+        m_storage->set_property(eWorldPropertyUseCrouchToLookOut, crouch);
+    else if (Device.dwTimeGlobal >= m_last_change_time + CROUCH_LOOK_OUT_DELTA)
     {
         m_storage->set_property(eWorldPropertyUseCrouchToLookOut, !!m_crouch_look_out_random.random(2));
         m_last_change_time = Device.dwTimeGlobal;
@@ -618,8 +665,10 @@ float current_cover(CAI_Stalker* object)
     Fvector position, direction;
     position = object->eye_matrix.c;
     direction = object->eye_matrix.k;
+
+    // Unculled while full_los is on (W5): a wall seen from behind still blocks the look-out.
     collide::rq_result ray_query_result;
-    BOOL result = Level().ObjectSpace.RayPick(position, direction, 10.f, collide::rqtStatic, ray_query_result, NULL);
+    BOOL result = DaAi::Sense::ray_pick(position, direction, 10.f, collide::rqtStatic, ray_query_result, nullptr);
 
     if (!result)
         return (100.f);
@@ -666,8 +715,15 @@ void CStalkerActionLookOut::execute()
     {
         object().movement().set_nearest_accessible_position();
         m_storage->set_property(eWorldPropertyLookedOut, true);
+        DaAi::Tactics::on_peek(object());
         return;
     }
+
+    // Peek discipline: a trained NPC does not look out twice from the same spot.
+    Fvector avoid_position{};
+    float avoid_radius = 0.f;
+    if (DaAi::Tactics::peek_avoid(object(), avoid_position, avoid_radius))
+        object().m_ce_close->avoid(avoid_position, avoid_radius);
 
     Fvector position = mem_object.m_object_params.m_position;
     object().m_ce_close->setup(position, 0.f, 170.f, 10.f);
@@ -679,6 +735,7 @@ void CStalkerActionLookOut::execute()
         point = ai().cover_manager().best_cover(
             object().Position(), 30.f, *object().m_ce_close); //,CStalkerMovementRestrictor(m_object,true,false));
     }
+    object().m_ce_close->avoid(avoid_position, 0.f);
 
     if (point)
     {
@@ -717,7 +774,7 @@ void CStalkerActionHoldPosition::initialize()
 
     aim_ready();
 
-    set_inertia_time(1000 + ::Random32.random(2000));
+    set_inertia_time(DaAi::Tactics::hold_time_ms(object(), 1000 + ::Random32.random(2000)));
     object().brain().affect_cover(true);
 }
 
@@ -760,10 +817,11 @@ void CStalkerActionHoldPosition::execute()
                                             true));
     //-Alundaio
 
-    if (completed())
+    // A heard reload of the enemy cuts the hold short.
+    if (completed() || DaAi::Tactics::reload_push(object()))
     {
-        if (object().agent_manager().member().can_detour() ||
-            !object().agent_manager().member().cover_detouring() ||
+        if (object().agent_manager().member().can_detour(object()) ||
+            !object().agent_manager().member().cover_detouring(object()) ||
             !fire_make_sense()
         )
         {
@@ -772,10 +830,15 @@ void CStalkerActionHoldPosition::execute()
         }
     }
 
-    if (object().agent_manager().member().cover_detouring() && fire_make_sense())
+    if (object().agent_manager().member().cover_detouring(object()) && fire_make_sense())
     {
         //		object().sound().play		(eStalkerSoundDetour,3000,3000,10000,10000);
-        object().sound().play(eStalkerSoundNeedBackup, 3000, 3000, 10000, 10000);
+        // The mate who needs cover asks for it; a holder covering him keeps quiet.
+        if (!DaAi::Tactics::quiet_cover_fire(object()))
+            object().sound().play(eStalkerSoundNeedBackup, 3000, 3000, 10000, 10000);
+        // Suppression aims at the own last-seen point, never at a refreshed belief (F5).
+        if (Fvector point; !DaAi::Know::sees_now(object(), enemy) && DaAi::Tactics::suppress_point(object(), point))
+            object().sight().setup(CSightAction(SightManager::eSightTypePosition, point, true));
         fire();
     }
     else
@@ -801,7 +864,8 @@ void CStalkerActionDetourEnemy::initialize()
     object().movement().set_detail_path_type(DetailPathManager::eDetailPathTypeSmooth);
     object().movement().set_mental_state(eMentalStateDanger);
     object().movement().set_body_state(eBodyStateStand);
-    object().movement().set_movement_type(eMovementTypeRun);
+    object().movement().set_movement_type(
+        DaAi::Tactics::may_run(object(), true) ? eMovementTypeRun : eMovementTypeWalk);
 
     aim_ready();
 
@@ -815,8 +879,11 @@ void CStalkerActionDetourEnemy::initialize()
     object().agent_manager().member().member(m_object).cover(0);
 
 //#ifndef SILENT_COMBAT
+    // An ordered flanker announces its side through comms; otherwise the stock line.
+    const bool announced = DaAi::Tactics::on_detour_begin(object());
     //Alundaio: Added sanity to make sure enemy exists
-    if (object().memory().enemy().selected() && object().memory().enemy().selected()->human_being() && object().agent_manager().member().group_behaviour())
+    if (const CEntityAlive* detour_enemy = object().memory().enemy().selected(); !announced && detour_enemy &&
+        detour_enemy->human_being() && object().agent_manager().member().group_behaviour())
         //object().sound().play(eStalkerSoundNeedBackup);
         object().sound().play(eStalkerSoundDetour);
 //#endif
@@ -827,7 +894,10 @@ void CStalkerActionDetourEnemy::finalize()
     inherited::finalize();
 
     if (object().g_Alive())
+    {
         object().agent_manager().member().member(&object()).detour(false);
+        DaAi::Tactics::on_detour_end(object());
+    }
 }
 
 void CStalkerActionDetourEnemy::execute()
@@ -851,15 +921,22 @@ void CStalkerActionDetourEnemy::execute()
     {
         Fvector position = mem_object.m_object_params.m_position;
 
-        object().m_ce_angle->setup(position, 10.f, object().ffGetRange(), mem_object.m_object_params.m_level_vertex_id);
-        const CCoverPoint* point = ai().cover_manager().best_cover(
-            object().Position(), 10.f, *object().m_ce_angle, CStalkerMovementRestrictor(m_object, true));
-        if (!point)
+        // An ordered flanker goes around the ordered side to the end of its covered route (kept until reached);
+        // without a covered route it stays where it is.
+        const CCoverPoint* point = nullptr;
+        if (!DaAi::Tactics::flank_cover(object(), position, point))
         {
             object().m_ce_angle->setup(
                 position, 10.f, object().ffGetRange(), mem_object.m_object_params.m_level_vertex_id);
             point = ai().cover_manager().best_cover(
-                object().Position(), 30.f, *object().m_ce_angle, CStalkerMovementRestrictor(m_object, true));
+                object().Position(), 10.f, *object().m_ce_angle, CStalkerMovementRestrictor(m_object, true));
+            if (!point)
+            {
+                object().m_ce_angle->setup(
+                    position, 10.f, object().ffGetRange(), mem_object.m_object_params.m_level_vertex_id);
+                point = ai().cover_manager().best_cover(
+                    object().Position(), 30.f, *object().m_ce_angle, CStalkerMovementRestrictor(m_object, true));
+            }
         }
 
         if (point)
@@ -1084,6 +1161,14 @@ void CStalkerActionSuddenAttack::execute()
         return;
     }
 
+    // The ambush lost its target (search_delay_s without news): the search handover needs the sneak over, else a
+    // sneaker stands at the last known position until the enemy is forgotten.
+    if (DaAi::Search::contact_lost(object()))
+    {
+        m_storage->set_property(eWorldPropertyUseSuddenness, false);
+        return;
+    }
+
     const bool visible_now = object().memory().visual().visible_now(enemy);
     if (visible_now)
         object().sight().setup(CSightAction(enemy, true));
@@ -1106,6 +1191,25 @@ void CStalkerActionSuddenAttack::execute()
             object().sight().setup(CSightAction(SightManager::eSightTypePosition,
                                                 mem_object.m_object_params.m_position, true));
         //-Alundaio
+    }
+
+    // Fire on order: an undetected ambusher waits crouched and watching until the order; once it is given the squad
+    // fights openly instead of sneaking up one by one.
+    if (const DaAi::Tactics::Order order = DaAi::Tactics::order(object()); order != DaAi::Tactics::Order::none)
+    {
+        if (order == DaAi::Tactics::Order::released)
+        {
+            m_storage->set_property(eWorldPropertyUseSuddenness, false);
+            // The order is the moment to open up: a man who has his target in sight does not wait for the next plan.
+            if (visible_now)
+                fire();
+            return;
+        }
+        object().movement().set_movement_type(eMovementTypeStand);
+        object().movement().set_mental_state(eMentalStateDanger);
+        object().movement().set_body_state(eBodyStateCrouch);
+        aim_ready();
+        return;
     }
 
     if (object().movement().accessible(mem_object.m_object_params.m_level_vertex_id))
@@ -1131,7 +1235,8 @@ void CStalkerActionSuddenAttack::execute()
     if (distance >= 15.f)
     {
         object().movement().set_body_state(eBodyStateStand);
-        object().movement().set_movement_type(eMovementTypeRun);
+        object().movement().set_movement_type(
+            DaAi::Tactics::may_run(object()) ? eMovementTypeRun : eMovementTypeWalk);
     }
     else
     {
@@ -1165,9 +1270,8 @@ void CStalkerActionSuddenAttack::execute()
         }
     }
 
-    CVisualMemoryManager* visual_memory_manager = enemy->visual_memory();
-    VERIFY(visual_memory_manager);
-    if (enemy->g_Alive() && !visual_memory_manager->visible_now(&object()))
+    // W4: the NPC's own estimate of whether the enemy sees it, not the enemy's vision.
+    if (enemy->g_Alive() && !DaAi::Know::enemy_sees_me(object(), *enemy))
         return;
 
     m_storage->set_property(eWorldPropertyUseSuddenness, false);
@@ -1258,7 +1362,7 @@ void CStalkerActionCriticalHit::initialize()
         if (object().memory().enemy().selected())
         {
             u32 min_queue_size, max_queue_size, min_queue_interval, max_queue_interval;
-            float distance = object().memory().enemy().selected()->Position().distance_to(object().Position());
+            float distance = DaAi::Know::known_distance(object(), *object().memory().enemy().selected());
             select_queue_params(distance, min_queue_size, max_queue_size, min_queue_interval, max_queue_interval);
             object().set_goal(eObjectActionIdle, object().best_weapon(), min_queue_size, max_queue_size,
                               min_queue_interval, max_queue_interval);
@@ -1305,6 +1409,7 @@ void CStalkerCombatActionThrowGrenade::initialize()
     object().movement().set_body_state(eBodyStateStand);
     object().sound().play(eStalkerSoundThrowGrenade);
     m_storage->set_property(eWorldPropertyStartedToThrowGrenade, true);
+    DaAi::Tactics::on_grenade_throw(object());
 }
 
 void CStalkerCombatActionThrowGrenade::finalize()
@@ -1366,7 +1471,7 @@ void CStalkerCombatActionThrowGrenade::execute()
     object().throw_target(enemy_position, enemy_vertex_id, const_cast<CEntityAlive*>(enemy));
 
     u32 min_queue_size, max_queue_size, min_queue_interval, max_queue_interval;
-    float distance = enemy->Position().distance_to(object().Position());
+    float distance = enemy_position.distance_to(object().Position());
     select_queue_params(distance, min_queue_size, max_queue_size, min_queue_interval, max_queue_interval);
     object().CObjectHandler::set_goal(
         eObjectActionFire1, &grenade->object(), min_queue_size, max_queue_size, min_queue_interval, max_queue_interval);
@@ -1431,8 +1536,8 @@ void CStalkerCombatActionSmartCover::execute()
     if (level_time + s_wait_enemy_in_smart_cover_time >= Device.dwTimeGlobal)
         return;
 
-    if (object().agent_manager().member().can_detour() || !object().agent_manager().member().cover_detouring() ||
-        !fire_make_sense())
+    if (object().agent_manager().member().can_detour(object()) ||
+        !object().agent_manager().member().cover_detouring(object()) || !fire_make_sense())
         return;
 
     m_storage->set_property(eWorldPropertyPositionHolded, true);

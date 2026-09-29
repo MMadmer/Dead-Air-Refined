@@ -8,6 +8,7 @@
 
 #include "StdAfx.h"
 #include "material_manager.h"
+#include "da_ai.h"
 #include "alife_space.h"
 #include "PHMovementControl.h"
 #include "entity_alive.h"
@@ -110,6 +111,7 @@ void CMaterialManager::update(float time_delta, float volume, float step_time, b
 
                 m_step_sound[m_step_id] = snd_array[m_step_id];
                 m_step_sound[m_step_id].play_at_pos(m_object, position);
+                da_ai_sense_on_step(*m_object, volume, mtl_pair);
             }
         }
         m_time_to_step -= time_delta;

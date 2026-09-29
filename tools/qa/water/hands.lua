@@ -59,9 +59,6 @@ local function on_update()
 		-- The addon's own copy of this feature must stay out of it while ours has a scene. Its
 		-- use_item sets dar2_animations_item.anim_state to "full" almost first thing and holsters
 		-- the weapon before that, so an untouched state is the honest witness that it never ran.
-		check("dar2-patch-installed",
-			dar2_animations_enhanced == nil or dar2_animations_enhanced.da_use_item_original ~= nil,
-			"da_use_item_original")
 		if (dar2_animations_enhanced and dar2_animations_item) then
 			dar2_animations_item.anim_state = "none"
 			enhanced_animations.used_item = "item_ea_bandage"

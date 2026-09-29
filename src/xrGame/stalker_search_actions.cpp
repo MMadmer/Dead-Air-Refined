@@ -24,6 +24,9 @@
 #include "stalker_movement_restriction.h"
 #include "cover_point.h"
 #include "detail_path_manager_space.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_search.h"
+#include "da_ai_tactics.h"
 
 using namespace StalkerSpace;
 using namespace StalkerDecisionSpace;
@@ -52,11 +55,7 @@ void CStalkerActionReachEnemyLocation::initialize()
 
     object().agent_manager().member().member(m_object).cover(0);
 
-    const MemorySpace::CHitObject* hit = object().memory().hit().hit(object().memory().enemy().selected());
-    if (!hit)
-        m_last_hit_time = 0;
-    else
-        m_last_hit_time = hit->m_level_time;
+    m_last_hit_time = DaAi::Know::hit_time(object(), object().memory().enemy().selected());
 
     //	object().sniper_update_rate			(true);
 }
@@ -81,14 +80,53 @@ void CStalkerActionReachEnemyLocation::execute()
     if (!mem_object.m_object)
         return;
 
-    const MemorySpace::CHitObject* hit = object().memory().hit().hit(object().memory().enemy().selected());
-    if (hit && hit->m_level_time > m_last_hit_time)
+    if (DaAi::Know::hit_time(object(), object().memory().enemy().selected()) > m_last_hit_time)
     {
         m_combat_storage->set_property(eWorldPropertyLookedOut, false);
         m_combat_storage->set_property(eWorldPropertyPositionHolded, false);
         m_combat_storage->set_property(eWorldPropertyEnemyDetoured, false);
         return;
     }
+
+    // The NPC's own sweep already looked into the enemy's last position.
+    if (DaAi::Search::lkp_checked(object()))
+    {
+        m_storage->set_property(eWorldPropertyEnemyLocationReached, true);
+        return;
+    }
+
+    // A crouch needs a mind other than free (asserted), whatever changed it since initialize.
+    object().movement().set_mental_state(eMentalStateDanger);
+    object().movement().set_body_state(
+        DaAi::Search::sneak(object(), mem_object.m_object_params.m_position) ? eBodyStateCrouch : eBodyStateStand);
+
+    // A short gun never walks straight at the enemy's last position over open ground: it bounds from cover to cover,
+    // or holds where it is and watches it; held long enough, the position counts as watched.
+    Fvector step_position;
+    u32 step_vertex;
+    const DaAi::Tactics::Step step =
+        DaAi::Tactics::covered_step(object(), mem_object.m_object_params.m_position, step_position, step_vertex);
+    if (step != DaAi::Tactics::Step::direct)
+    {
+        if (step == DaAi::Tactics::Step::bound)
+        {
+            object().movement().set_movement_type(eMovementTypeWalk);
+            object().movement().set_level_dest_vertex(step_vertex);
+            object().movement().set_desired_position(&step_position);
+        }
+        else
+        {
+            object().movement().set_nearest_accessible_position();
+            object().movement().set_movement_type(eMovementTypeStand);
+            object().movement().set_body_state(eBodyStateCrouch);
+            if (step == DaAi::Tactics::Step::given_up)
+                m_storage->set_property(eWorldPropertyEnemyLocationReached, true);
+        }
+        object().sight().setup(CSightAction(SightManager::eSightTypePosition,
+            Fvector(mem_object.m_object_params.m_position).add(Fvector().set(0.f, .5f, 0.f)), true));
+        return;
+    }
+    object().movement().set_movement_type(eMovementTypeWalk);
 
     if (object().movement().path_completed())
     {
@@ -129,7 +167,9 @@ void CStalkerActionReachEnemyLocation::execute()
             m_storage->set_property(eWorldPropertyEnemyLocationReached, true);
 
 #ifndef SILENT_COMBAT
-            play_start_search_sound(0, 0, 10000, 10000);
+            // A quiet search makes no search barks.
+            if (!DaAi::Search::quiet(object()))
+                play_start_search_sound(0, 0, 10000, 10000);
 #endif // SILENT_COMBAT
         }
     }
@@ -156,11 +196,7 @@ void CStalkerActionReachAmbushLocation::initialize()
 {
     inherited::initialize();
 
-    const MemorySpace::CHitObject* hit = object().memory().hit().hit(object().memory().enemy().selected());
-    if (!hit)
-        m_last_hit_time = 0;
-    else
-        m_last_hit_time = hit->m_level_time;
+    m_last_hit_time = DaAi::Know::hit_time(object(), object().memory().enemy().selected());
 }
 
 void CStalkerActionReachAmbushLocation::finalize() { inherited::finalize(); }
@@ -173,8 +209,7 @@ void CStalkerActionReachAmbushLocation::execute()
     if (!mem_object.m_object)
         return;
 
-    const MemorySpace::CHitObject* hit = object().memory().hit().hit(object().memory().enemy().selected());
-    if (hit && hit->m_level_time > m_last_hit_time)
+    if (DaAi::Know::hit_time(object(), object().memory().enemy().selected()) > m_last_hit_time)
     {
         m_combat_storage->set_property(eWorldPropertyLookedOut, false);
         m_combat_storage->set_property(eWorldPropertyPositionHolded, false);
@@ -192,6 +227,27 @@ void CStalkerActionReachAmbushLocation::execute()
             CStalkerMovementRestrictor(m_object, true));
     }
 
+    // A short gun reaches the ambush cover by covered bounds, or holds and watches from where it is.
+    Fvector step_position;
+    u32 step_vertex;
+    const DaAi::Tactics::Step step = point ?
+        DaAi::Tactics::covered_step(object(), point->position(), step_position, step_vertex) :
+        DaAi::Tactics::Step::direct;
+    if (step == DaAi::Tactics::Step::hold || step == DaAi::Tactics::Step::given_up)
+    {
+        object().movement().set_nearest_accessible_position();
+        object().movement().set_movement_type(eMovementTypeStand);
+        if (step == DaAi::Tactics::Step::given_up)
+            m_storage->set_property(eWorldPropertyAmbushLocationReached, true);
+        return;
+    }
+    object().movement().set_movement_type(eMovementTypeWalk);
+    if (step == DaAi::Tactics::Step::bound)
+    {
+        object().movement().set_level_dest_vertex(step_vertex);
+        object().movement().set_desired_position(&step_position);
+        return;
+    }
     if (point)
     {
         object().movement().set_level_dest_vertex(point->level_vertex_id());
@@ -203,7 +259,8 @@ void CStalkerActionReachAmbushLocation::execute()
     if (!object().movement().path_completed())
     {
 #ifndef SILENT_COMBAT
-        play_enemy_lost_sound(0, 0, 10000, 10000);
+        if (!DaAi::Search::quiet(object()))
+            play_enemy_lost_sound(0, 0, 10000, 10000);
 #endif // SILENT_COMBAT
         return;
     }
@@ -225,12 +282,11 @@ void CStalkerActionHoldAmbushLocation::initialize()
 {
     inherited::initialize();
 
-    const MemorySpace::CHitObject* hit = object().memory().hit().hit(object().memory().enemy().selected());
-    if (!hit)
-        m_last_hit_time = 0;
-    else
-        m_last_hit_time = hit->m_level_time;
+    m_last_hit_time = DaAi::Know::hit_time(object(), object().memory().enemy().selected());
 
+    // Stock relied on the combat mind of the action before; one that surrendered (morale) comes here with a free mind,
+    // and a crouch with a free mind is asserted.
+    object().movement().set_mental_state(eMentalStateDanger);
     object().movement().set_body_state(eBodyStateCrouch);
     object().sight().setup(CSightAction(SightManager::eSightTypeCoverLookOver, true));
 }
@@ -245,8 +301,7 @@ void CStalkerActionHoldAmbushLocation::execute()
     if (!mem_object.m_object)
         return;
 
-    const MemorySpace::CHitObject* hit = object().memory().hit().hit(object().memory().enemy().selected());
-    if (hit && hit->m_level_time > m_last_hit_time)
+    if (DaAi::Know::hit_time(object(), object().memory().enemy().selected()) > m_last_hit_time)
     {
         m_combat_storage->set_property(eWorldPropertyLookedOut, false);
         m_combat_storage->set_property(eWorldPropertyPositionHolded, false);
@@ -255,6 +310,10 @@ void CStalkerActionHoldAmbushLocation::execute()
     }
 
     if (!completed())
+        return;
+
+    // The search gives up by its own profile timer, staggered per NPC, instead of right after the hold.
+    if (DaAi::Search::on_hold_complete(object()))
         return;
 
     if (mem_object.m_last_level_time + 60000 < Device.dwTimeGlobal)

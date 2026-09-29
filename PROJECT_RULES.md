@@ -570,6 +570,8 @@ drive. Do not install both. Existing saves are preserved.
 - `docs/dead-air/MODDING.md` — compatibility contract for addons.
 - `docs/dead-air/MOD_UPDATES.md` — module metadata, the Mods menu and the frozen
   module release contract.
+- `docs/dead-air/NPC_AI.md` — the human NPC AI: fairness rules, senses, knowledge,
+  communication, tactics, morale, the `dead_air_x64_ai.ltx` data, Lua API, save chunks.
 - `docs/dead-air/NQ_RUNTIME.md` — the `.nqasset` format and NQ runtime contract.
 - `docs/dead-air/SAVE_COMPATIBILITY.md` — the binary save-group contract.
 - `docs/dead-air/TEMPORAL_UPSCALER_RFC.md` — an open proposal, not implemented.

@@ -279,8 +279,9 @@ function af_options_dialog:RegisterCombo(xml, dialog, name, ini_section, dialogO
 	self:Register (self["list_"..name], "list_"..name)
 end
 
-function af_options_dialog:RegisterPeriodCombo(xml, dialog, name, ini_section, dialogObj)
-	self["list_"..name] = xml:InitComboBox	(dialog..":list_period", dialogObj)
+-- node: the combo's node under dialog, list_period by default.
+function af_options_dialog:RegisterPeriodCombo(xml, dialog, name, ini_section, dialogObj, node)
+	self["list_"..name] = xml:InitComboBox	(dialog..":"..(node or "list_period"), dialogObj)
 	self["list_"..name]:ClearList()
 	self["list_"..name]:SetAutoDelete(true)
 	if ini_section == nil then
@@ -573,8 +574,28 @@ function af_options_dialog:Update()
 end
 
 --######################################################################################################################
---#													af_opt_event													#
+--#											af_opt_event, af_opt_weather											#
 --######################################################################################################################
+
+-- Both pages are lists like the options dialog's (dead_air_x64_option_list.script): a subsection
+-- header per group, a row per setting with its caption on the left and its control on the right, a
+-- hover hint on every row. Only the look is new: every control is still the dialog's check_<name> or
+-- list_<name>, which SetCurrentValues and OnBtnAccept read and write as before. The nodes are
+-- event_page and weather_page of ui_mm_atmosfear_options*.xml; event_dialog and weather_dialog are
+-- the stock pages'.
+local HINTS = "st_da_x64_weather_hint_"
+
+-- The events page: a subsection per event, each with its three settings - the check
+-- enable_<event>, the lists <event>_freq and <event>_task.
+local EVENTS = {
+	{ id = "blowout",   title = "st_cap_af_blowout" },
+	{ id = "psi_storm", title = "st_cap_af_psi_storm" },
+	{ id = "fallout",   title = "st_cap_af_fallout" },
+}
+local EVENT_LISTS = {
+	{ suffix = "freq", caption = "ui_mm_af_freq" },
+	{ suffix = "task", caption = "ui_mm_af_task" },
+}
 
 class "af_opt_event" (CUIWindow)
 
@@ -589,36 +610,28 @@ function af_opt_event:InitControls(x, y, xml, handler)
 	self:SetWndSize(vector2():set(624,411))
 	self:SetAutoDelete(true)
 
-	xml:InitStatic				("event_dialog:cap_af_blowout", self)
-	xml:InitStatic				("event_dialog:cap_af_fallout", self)
-	xml:InitStatic				("event_dialog:cap_af_psi_storm", self)
-	xml:InitStatic				("event_dialog:cap_check_enable_blowout", self)
-	xml:InitStatic				("event_dialog:cap_check_enable_fallout", self)
-	xml:InitStatic				("event_dialog:cap_check_enable_psi_storm", self)
-	xml:InitStatic				("event_dialog:cap_blowout_freq", self)
-	xml:InitStatic				("event_dialog:cap_blowout_task", self)
-	xml:InitStatic				("event_dialog:cap_fallout_freq", self)
-	xml:InitStatic				("event_dialog:cap_fallout_task", self)
-	xml:InitStatic				("event_dialog:cap_psi_storm_freq", self)
-	xml:InitStatic				("event_dialog:cap_psi_storm_task", self)
+	local list = dead_air_x64_option_list
+	list.init(self, xml, "event_page", HINTS)
+	for _, event in ipairs(EVENTS) do
+		list.add_header(self, xml, event.id, event.title)
 
-	handler:RegisterCheck(xml, "event_dialog", "enable_blowout", self)
-	handler:RegisterCheck(xml, "event_dialog", "enable_fallout", self)
-	handler:RegisterCheck(xml, "event_dialog", "enable_psi_storm", self)
+		local enable = list.new_row(self, xml, "enable_" .. event.id, event.id, "ui_mm_af_enable", HINTS .. "enable_" .. event.id)
+		handler:RegisterCheck(xml, "event_page", "enable_" .. event.id, enable.wnd)
+		enable.ctrl, enable.kind = handler["check_enable_" .. event.id], "check"
+		list.commit_row(self, xml, enable)
 
-	handler:RegisterCombo(xml, "event_dialog", "blowout_freq", nil, self)
-	handler:RegisterCombo(xml, "event_dialog", "fallout_freq", nil, self)
-	handler:RegisterCombo(xml, "event_dialog", "psi_storm_freq", nil, self)
-
-	handler:RegisterCombo(xml, "event_dialog", "blowout_task", nil, self)
-	handler:RegisterCombo(xml, "event_dialog", "psi_storm_task", nil, self)
-	handler:RegisterCombo(xml, "event_dialog", "fallout_task", nil, self)
+		for _, setting in ipairs(EVENT_LISTS) do
+			local id = event.id .. "_" .. setting.suffix
+			local row = list.new_row(self, xml, id, event.id, setting.caption, HINTS .. id)
+			handler:RegisterCombo(xml, "event_page", id, nil, row.wnd)
+			row.ctrl, row.kind = handler["list_" .. id], "list"
+			list.commit_row(self, xml, row)
+		end
+	end
 end
 
---######################################################################################################################
---#													af_opt_weather													#
---######################################################################################################################
-
+-- The periods page: a row per level whose weather AtmosFear runs, by name, with the weather of its
+-- good and of its bad period side by side under the column captions of the subsection's header.
 class "af_opt_weather" (CUIWindow)
 
 function af_opt_weather:__init() super()
@@ -627,35 +640,47 @@ end
 function af_opt_weather:__finalize()
 end
 
-
 function af_opt_weather:InitControls(x, y, xml, handler)
-
-	local step=77
-	local _st
-	local _el
 	self:SetWndPos(vector2():set(x,y))
 	self:SetWndSize(vector2():set(624,411))
 	self:SetAutoDelete(true)
 
-	self.scroll_v = xml:InitScrollView("weather_dialog:scroll_v", self)
+	local list = dead_air_x64_option_list
+	list.init(self, xml, "weather_page", HINTS)
 
-	local k = 0
-	for level_name,v in pairs(level_weathers.valid_levels) do
-		k = k + 1
-		_st = xml:InitStatic("weather_dialog:templ_item", nil)
-		_el=xml:InitStatic("weather_dialog:cap_name", _st)
-		_el:SetWndPos(vector2():set(0,0))
-		_el:TextControl():SetTextST(level_name)
-		_el:TextControl():SetTextColor(GetARGB(255, 95, 92, 79))
-		_el:TextControl():SetFont(GetFontLetterica16Russian())
-
-
-		handler:RegisterPeriodCombo(xml, "weather_dialog", level_name.."_period_good", "periods", _st)
-		handler["list_"..level_name.."_period_good"]:SetWndPos(vector2():set(10,21))
-		handler:RegisterPeriodCombo(xml, "weather_dialog", level_name.."_period_bad", "periods", _st)
-		handler["list_"..level_name.."_period_bad"]:SetWndPos(vector2():set(140,21))
-
-		self.scroll_v:AddWindow(_st, true)
+	local header = list.add_header(self, xml, "periods", "ui_mm_grp_af_periods")
+	for _, node in ipairs({ "cap_period_good", "cap_period_bad" }) do
+		local cap = xml:InitStatic("weather_page:" .. node, header)
+		local bottom = cap:GetWndPos().y + cap:GetHeight()
+		if (bottom > header:GetHeight()) then
+			header:SetHeight(bottom)
+		end
 	end
 
+	-- By name: pairs() walks the level set in the order of its hash table. A name in Latin letters
+	-- among Cyrillic ones (a technical level) goes last rather than first.
+	local levels = {}
+	for level_name in pairs(level_weathers.valid_levels) do
+		local name = game.translate_string(level_name)
+		levels[#levels + 1] = { id = level_name, name = name, latin = string.byte(name, 1) < 128 }
+	end
+	local cyrillic = false
+	for _, level_info in ipairs(levels) do
+		cyrillic = cyrillic or not level_info.latin
+	end
+	table.sort(levels, function(a, b)
+		if (cyrillic and a.latin ~= b.latin) then
+			return b.latin
+		end
+		return a.name < b.name
+	end)
+
+	for _, level_info in ipairs(levels) do
+		local id = level_info.id
+		local row = list.new_row(self, xml, id, "periods", id, HINTS .. "period", "weather_page:cap_level", "weather_page:templ_level")
+		handler:RegisterPeriodCombo(xml, "weather_page", id .. "_period_good", "periods", row.wnd, "list_period_good")
+		handler:RegisterPeriodCombo(xml, "weather_page", id .. "_period_bad", "periods", row.wnd, "list_period_bad")
+		row.ctrl, row.kind = handler["list_" .. id .. "_period_good"], "list"
+		list.commit_row(self, xml, row)
+	end
 end

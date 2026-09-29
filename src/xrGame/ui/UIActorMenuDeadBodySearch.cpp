@@ -208,6 +208,15 @@ void CUIActorMenu::UpdateDeadBodyBag()
     m_PartnerWeightBar->UpdateData(total);
 }
 
+// A bulk move takes what the grid shows: everything, or under a filter only the matching items.
+static void finish_bulk_move(CUIDragDropListEx* list, const xr_vector<CUICellItem*>& moved)
+{
+    if (list->HasCellFilter())
+        list->DestroyItems(moved);
+    else
+        list->ClearAll(true);
+}
+
 void CUIActorMenu::TakeAllFromPartner(CUIWindow* w, void* d)
 {
     VERIFY(m_pActorInvOwner);
@@ -220,10 +229,10 @@ void CUIActorMenu::TakeAllFromPartner(CUIWindow* w, void* d)
         return;
     }
 
-    u32 const cnt = m_pLists[eSearchLootBagList]->ItemsCount();
-    for (u32 i = 0; i < cnt; ++i)
+    CUIDragDropListEx* list = m_pLists[eSearchLootBagList];
+    const xr_vector<CUICellItem*> cells = list->GetShownItems();
+    for (CUICellItem* ci : cells)
     {
-        CUICellItem* ci = m_pLists[eSearchLootBagList]->GetItemIdx(i);
         for (u32 j = 0; j < ci->ChildsCount(); ++j)
         {
             PIItem j_item = (PIItem)(ci->Child(j)->m_pData);
@@ -232,7 +241,8 @@ void CUIActorMenu::TakeAllFromPartner(CUIWindow* w, void* d)
         PIItem item = (PIItem)(ci->m_pData);
         move_item_check(item, m_pPartnerInvOwner, m_pActorInvOwner, false);
     } // for i
-    m_pLists[eSearchLootBagList]->ClearAll(true); // false
+    SetCurrentItem(nullptr);
+    finish_bulk_move(list, cells);
 }
 
 void CUIActorMenu::StoreAllToPartner(CUIWindow* w, void* d)
@@ -247,10 +257,10 @@ void CUIActorMenu::StoreAllToPartner(CUIWindow* w, void* d)
         return;
     }
 
-    u32 const cnt = m_pLists[eInventoryBagList]->ItemsCount();
-    for (u32 i = 0; i < cnt; ++i)
+    CUIDragDropListEx* list = m_pLists[eInventoryBagList];
+    const xr_vector<CUICellItem*> cells = list->GetShownItems();
+    for (CUICellItem* ci : cells)
     {
-        CUICellItem* ci = m_pLists[eInventoryBagList]->GetItemIdx(i);
         for (u32 j = 0; j < ci->ChildsCount(); ++j)
         {
             PIItem j_item = (PIItem)(ci->Child(j)->m_pData);
@@ -259,17 +269,18 @@ void CUIActorMenu::StoreAllToPartner(CUIWindow* w, void* d)
         PIItem item = (PIItem)(ci->m_pData);
         move_item_check(item, m_pActorInvOwner, m_pPartnerInvOwner, false);
     } // for i
-    m_pLists[eInventoryBagList]->ClearAll(true); // false
+    SetCurrentItem(nullptr);
+    finish_bulk_move(list, cells);
 }
 
 void CUIActorMenu::TakeAllFromInventoryBox()
 {
     u16 actor_id = m_pActorInvOwner->object_id();
 
-    u32 const cnt = m_pLists[eSearchLootBagList]->ItemsCount();
-    for (u32 i = 0; i < cnt; ++i)
+    CUIDragDropListEx* list = m_pLists[eSearchLootBagList];
+    const xr_vector<CUICellItem*> cells = list->GetShownItems();
+    for (CUICellItem* ci : cells)
     {
-        CUICellItem* ci = m_pLists[eSearchLootBagList]->GetItemIdx(i);
         for (u32 j = 0; j < ci->ChildsCount(); ++j)
         {
             PIItem j_item = (PIItem)(ci->Child(j)->m_pData);
@@ -279,17 +290,18 @@ void CUIActorMenu::TakeAllFromInventoryBox()
         PIItem item = (PIItem)(ci->m_pData);
         move_item_from_to(m_pInvBox->ID(), actor_id, item->object_id());
     } // for i
-    m_pLists[eSearchLootBagList]->ClearAll(true); // false
+    SetCurrentItem(nullptr);
+    finish_bulk_move(list, cells);
 }
 
 void CUIActorMenu::StoreAllToInventoryBox()
 {
     u16 actor_id = m_pActorInvOwner->object_id();
 
-    u32 const cnt = m_pLists[eInventoryBagList]->ItemsCount();
-    for (u32 i = 0; i < cnt; ++i)
+    CUIDragDropListEx* list = m_pLists[eInventoryBagList];
+    const xr_vector<CUICellItem*> cells = list->GetShownItems();
+    for (CUICellItem* ci : cells)
     {
-        CUICellItem* ci = m_pLists[eInventoryBagList]->GetItemIdx(i);
         for (u32 j = 0; j < ci->ChildsCount(); ++j)
         {
             PIItem j_item = (PIItem)(ci->Child(j)->m_pData);
@@ -298,5 +310,6 @@ void CUIActorMenu::StoreAllToInventoryBox()
         PIItem item = (PIItem)(ci->m_pData);
         move_item_from_to(actor_id, m_pInvBox->ID(), item->object_id());
     }
-    m_pLists[eInventoryBagList]->ClearAll(true); // false
+    SetCurrentItem(nullptr);
+    finish_bulk_move(list, cells);
 }

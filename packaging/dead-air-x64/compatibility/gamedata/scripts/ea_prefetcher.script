@@ -16,9 +16,12 @@ function actor_on_first_update()
 	local lines = ini_eff_anims:line_count("ea_anims_list")
 	for current_line = 0, lines - 1 do
 		result, variable, value = ini_eff_anims:r_line("ea_anims_list", current_line, "", "")
+		local before = game.hud_scene_id()
 		game.play_hud_motion(2, value, "anm_ea_show", false, 1)
 		printf(value.." anim cached")
-		game.stop_hud_motion()
+		-- Only the scene just played: a section that failed to play leaves the hands as they were.
+		local id = game.hud_scene_id()
+		if id ~= before then game.stop_hud_scene(id) end
 	end
 	result, variable, value, ini_eff_anims, lines, current_line, ini_eff_sounds = nil
 end

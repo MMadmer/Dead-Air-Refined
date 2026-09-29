@@ -192,7 +192,26 @@ void CUIActorMenu::script_register(lua_State* luaState)
             .def("GetInvBox", &GetActorMenuInventoryBox)
             .def("SetPartner", &SetActorMenuPartner)
             .def("SetInvBox", &SetActorMenuInventoryBox)
-            .def("SetActor", &SetActorMenuActor),
+            .def("SetActor", &SetActorMenuActor)
+            // The sort and filter row: pane 0 player, 1 loot, 2 trader; category 0 all .. 6 misc.
+            .def("sort_items", +[](CUIActorMenu* self, int pane)
+            {
+                return pane >= 0 && pane <= int(EInventoryPane::Trader) && self->SortInventoryPane(EInventoryPane(pane));
+            })
+            .def("set_item_filter", +[](CUIActorMenu* self, int category)
+            {
+                self->SetItemFilter(category >= 0 && category < int(EItemCategory::Count) ?
+                    EItemCategory(category) : EItemCategory::All);
+            })
+            .def("get_item_filter", +[](CUIActorMenu* self) { return int(self->GetItemFilter()); })
+            // The loot window's Take All: under a filter only what the grid shows.
+            .def("take_all", +[](CUIActorMenu* self)
+            {
+                if (self->GetMenuMode() != mmDeadBodySearch)
+                    return false;
+                self->TakeAllFromPartner(nullptr, nullptr);
+                return true;
+            }),
 
         class_<CUIPdaWnd, CUIDialogWnd>("CUIPdaWnd")
             .def(constructor<>())

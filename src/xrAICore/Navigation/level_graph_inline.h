@@ -292,9 +292,23 @@ IC void CLevelGraph::begin(const u32 vertex_id, const_iterator& _begin, const_it
 IC u32 CLevelGraph::value(const CLevelVertex& vertex, const_iterator i) const { return (vertex.link(i)); }
 IC u32 CLevelGraph::value(const CLevelVertex* vertex, const_iterator i) const { return (value(*vertex, i)); }
 IC u32 CLevelGraph::value(const u32 vertex_id, const_iterator i) const { return (value(vertex(vertex_id), i)); }
+IC xr_vector<bool>& CLevelGraph::access_mask() const
+{
+    // Threads outside the task pool share the main thread's mask, as they share its graph engine.
+    const size_t worker = TaskScheduler ? TaskScheduler->GetCurrentWorkerID() : 0;
+    if (worker >= m_access_masks.size())
+        return m_access_masks.front();
+
+    // Each slot is touched only by its own worker, so the lazy fill needs no lock.
+    xr_vector<bool>& mask = m_access_masks[worker];
+    if (mask.empty())
+        mask.assign(header().vertex_count(), true);
+    return mask;
+}
+
 IC bool CLevelGraph::is_accessible(const u32 vertex_id) const
 {
-    return (valid_vertex_id(vertex_id) && m_access_mask[vertex_id]);
+    return (valid_vertex_id(vertex_id) && access_mask()[vertex_id]);
 }
 
 IC void CLevelGraph::set_invalid_vertex(u32& vertex_id, CLevelVertex** vertex) const
@@ -562,18 +576,18 @@ IC void CLevelGraph::clear_mask_no_check(const xr_vector<u32>& mask)
 
 IC void CLevelGraph::set_mask(u32 vertex_id)
 {
-    VERIFY(m_access_mask[vertex_id]);
+    VERIFY(access_mask()[vertex_id]);
     set_mask_no_check(vertex_id);
 }
 
-IC void CLevelGraph::set_mask_no_check(u32 vertex_id) { m_access_mask[vertex_id] = false; }
+IC void CLevelGraph::set_mask_no_check(u32 vertex_id) { access_mask()[vertex_id] = false; }
 IC void CLevelGraph::clear_mask(u32 vertex_id)
 {
-    VERIFY(!m_access_mask[vertex_id]);
+    VERIFY(!access_mask()[vertex_id]);
     clear_mask_no_check(vertex_id);
 }
 
-IC void CLevelGraph::clear_mask_no_check(u32 vertex_id) { m_access_mask[vertex_id] = true; }
+IC void CLevelGraph::clear_mask_no_check(u32 vertex_id) { access_mask()[vertex_id] = true; }
 template <typename P>
 IC void CLevelGraph::iterate_vertices(
     const Fvector& min_position, const Fvector& max_position, const P& predicate) const

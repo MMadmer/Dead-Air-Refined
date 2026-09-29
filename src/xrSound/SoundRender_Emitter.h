@@ -92,6 +92,7 @@ private:
 
     void fill_all_blocks();
     void dispatch_prefill();
+    void ensure_buffers();
 
     void wait_prefill() const;
 

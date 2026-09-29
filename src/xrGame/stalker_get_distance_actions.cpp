@@ -22,6 +22,9 @@
 #include "script_game_object.h"
 #include "script_game_object_impl.h"
 #include "visual_memory_manager.h"
+#include "agent_manager.h"
+#include "agent_location_manager.h"
+#include "da_ai_tactics.h"
 
 //////////////////////////////////////////////////////////////////////////
 // CStalkerActionRunToCover
@@ -37,11 +40,25 @@ void CStalkerActionRunToCover::initialize()
     inherited::initialize();
 
     object().movement().set_mental_state(eMentalStateDanger);
-    object().movement().set_movement_type(eMovementTypeRun);
+    object().movement().set_movement_type(DaAi::Tactics::may_run(object()) ? eMovementTypeRun : eMovementTypeWalk);
     object().movement().set_body_state(eBodyStateStand);
 
     object().set_goal(eObjectActionIdle, object().best_weapon());
     object().sight().setup(CSightAction(SightManager::eSightTypePathDirection));
+
+    // Doctrine: bound to the cover of the covered approach; without one the NPC stays and never runs at the enemy.
+    if (const CCoverPoint* cover{}; DaAi::Tactics::approach_begin(object(), cover))
+    {
+        if (!cover)
+        {
+            object().movement().set_movement_type(eMovementTypeStand);
+            object().movement().set_nearest_accessible_position();
+            return;
+        }
+        object().agent_manager().location().make_suitable(&object(), cover);
+        setup_cover(*cover);
+        return;
+    }
 
     MemorySpace::CMemoryInfo mem_object = object().memory().memory(object().memory().enemy().selected());
     Fvector position = mem_object.m_object_params.m_position;
@@ -88,13 +105,17 @@ void CStalkerActionRunToCover::execute()
         fire();
     }
 
-    if (!object().movement().path_completed())
+    if (!object().movement().path_completed() && DaAi::Tactics::approach_running(object()))
         return;
 
     m_storage->set_property(StalkerDecisionSpace::eWorldPropertyInCover, true);
 }
 
-void CStalkerActionRunToCover::finalize() { inherited::finalize(); }
+void CStalkerActionRunToCover::finalize()
+{
+    inherited::finalize();
+    DaAi::Tactics::approach_end(object());
+}
 //////////////////////////////////////////////////////////////////////////
 // CStalkerActionWaitInCover
 //////////////////////////////////////////////////////////////////////////

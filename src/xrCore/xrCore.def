@@ -1517,3 +1517,4 @@ EXPORTS
     ?Skipped@ContentPin@@YAAEBV?$vector@Vshared_str@@V?$xalloc@Vshared_str@@@@@std@@XZ @1516
     ?MetaDirectory@ContentPin@@YAPEBDXZ @1517
     ?SkipReasons@ContentPin@@YAAEBV?$vector@Vshared_str@@V?$xalloc@Vshared_str@@@@@std@@XZ @1518
+    ?rtc_decompress_prefix@@YA_KPEAX_KPEBX1@Z @1519

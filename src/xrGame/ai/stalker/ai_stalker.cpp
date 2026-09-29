@@ -61,6 +61,8 @@
 #include "smart_cover_animation_selector.h"
 #include "smart_cover_animation_planner.h"
 #include "smart_cover_planner_target_selector.h"
+#include "da_ai.h"
+#include "da_ai_comms.h" // [ai:comms] hook
 
 #ifdef DEBUG
 #include "alife_simulator.h"
@@ -288,6 +290,10 @@ void CAI_Stalker::LoadSounds(LPCSTR section)
         sound().add(pSettings->r_string(section, "sound_grenade_alarm"), 100, SOUND_TYPE_MONSTER_TALKING, 5,
             u32(eStalkerSoundMaskKillWounded), eStalkerSoundThrowGrenade, head_bone_name, xr_new<CStalkerSoundData>(this));
     }
+
+    // [ai:comms] begin load_sounds
+    DaAi::Comms::load_sounds(*this, section);
+    // [ai:comms] end load_sounds
 }
 
 void CAI_Stalker::reload(LPCSTR section)
@@ -449,10 +455,12 @@ void CAI_Stalker::reload(LPCSTR section)
     }
 
     m_power_fx_factor = pSettings->r_float(section, "power_fx_factor");
+    da_ai_reload(*this, section);
 }
 
 void CAI_Stalker::Die(IGameObject* who)
 {
+    da_ai_on_death(*this, who);
     movement().on_death();
 
     notify_on_wounded_or_killed(who);
@@ -621,11 +629,13 @@ bool CAI_Stalker::net_Spawn(CSE_Abstract* DC)
 
     m_pPhysics_support->in_NetSpawn(e);
 
+    da_ai_spawn(*this);
     return (true);
 }
 
 void CAI_Stalker::net_Destroy()
 {
+    da_ai_destroy(*this);
     inherited::net_Destroy();
     CInventoryOwner::net_Destroy();
     m_pPhysics_support->in_NetDestroy();
@@ -826,6 +836,7 @@ void CAI_Stalker::UpdateCL()
 
     if (g_Alive())
     {
+        da_ai_update_cl(*this);
         if (g_mt_config.test(mtObjectHandler) && CObjectHandler::planner().initialized())
         {
             // XXX: task scheduler
@@ -959,9 +970,13 @@ void CAI_Stalker::shedule_Update(u32 DT)
         process_enemies();
         STOP_PROFILE
 
+        da_ai_pre_memory(*this, dt);
+
         START_PROFILE("stalker/schedule_update/memory/update")
         memory().update(dt);
         STOP_PROFILE
+
+        da_ai_post_memory(*this, dt);
 
         STOP_PROFILE
     }

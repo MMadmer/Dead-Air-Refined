@@ -37,6 +37,22 @@ private:
     void UpdateRadiation() override;
     float GetActiveBoosterValue(EBoostParams type) const;
 
+    // One short stretch of what time does to the body; worn: the belt, the helmet and the suit
+    // act inside it too (a frame leaves them to the actor's own accumulator).
+    void IntegrateStep(float dt, bool worn);
+    void IntegrateTimeJump(float game_seconds);
+    // Environmental hits (fields, zones) per real second, decayed over a couple of seconds: what
+    // would keep coming for as long as the actor lay there.
+    struct SExposure
+    {
+        float radiation{};
+        float psy{};
+        float health{};
+        float at{};
+    };
+    SExposure m_exposure;
+    void DecayExposure();
+
 public:
     CActorCondition(CActor* object);
     virtual ~CActorCondition();
@@ -49,7 +65,29 @@ public:
     // dealing it. The landing roll asks before it commits: a roll into a lethal drop is no roll.
     float PredictHealthLoss(float hit_power, ALife::EHitType hit_type, s16 element);
     virtual void UpdateCondition();
-    void UpdateBoosters();
+    // indicators: false inside a long integration, which refreshes the HUD once at its end.
+    void UpdateBoosters(bool indicators = true);
+
+    // What a long stretch of game time would do to the actor lying still - a sleep. Runs the very
+    // integration the real jump runs (IntegrateStep), on the live state, and puts the state back.
+    enum ESleepThreat : u8
+    {
+        eSleepThreatNone = 0,
+        eSleepThreatRadiation,
+        eSleepThreatBleeding,
+        eSleepThreatHunger,
+        eSleepThreatZone,
+    };
+    struct SSleepForecast
+    {
+        float min_health{1.f}; // the lowest health on the way; 0 or below is death
+        float death_at{-1.f}; // game seconds into the stretch, negative when it is survived
+        ESleepThreat cause{eSleepThreatNone}; // what took the most health
+    };
+    // satiety_add, psy_add, radiation_add: what the script layer itself hands the actor at
+    // bedtime, which the first step of the real jump takes as well.
+    SSleepForecast ForecastTimeJump(float game_seconds, float satiety_add, float psy_add, float radiation_add);
+    const SSleepForecast& LastForecast() const { return m_last_forecast; }
 
     virtual void ChangeAlcohol(const float value);
     virtual void ChangeSatiety(const float value);
@@ -126,6 +164,7 @@ public:
     float GetMaxWoundProtection() const { return m_max_wound_protection; };
     float GetMaxFireWoundProtection() const { return m_max_fire_wound_protection; };
 protected:
+    SSleepForecast m_last_forecast;
     SMedicineInfluenceValues m_curr_medicine_influence;
     float m_fAlcohol;
     float m_fV_Alcohol;

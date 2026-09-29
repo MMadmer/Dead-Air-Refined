@@ -4,6 +4,7 @@
 #include "xrUICore/Callbacks/UIWndCallback.h"
 #include "xrServerEntities/inventory_space.h"
 #include "xrUICore/Hint/UIHint.h"
+#include "UIActorMenuTools.h"
 
 class CUICharacterInfo;
 class CUIDragDropListEx;
@@ -27,6 +28,7 @@ class CTrade;
 class CUIProgressBar;
 class CUITradeBar;
 class CUIWeightBar;
+class CUIInventoryToolbar;
 
 namespace inventory
 {
@@ -192,6 +194,20 @@ protected:
     CUIStatic* m_clock_value{};
     UIHint* m_hint_wnd{};
 
+    // Sort and filter rows under the item grids
+    xr_vector<CUIInventoryToolbar*> m_inventory_tools;
+    EItemCategory m_item_filter{ EItemCategory::All };
+
+    // A sorted pane waits for the items the merge released before it is laid out again.
+    struct SPendingSort
+    {
+        xr_vector<u16> released;
+        u32 started{};
+        u32 settled_frames{};
+        EInventoryPane pane{};
+        bool active{};
+    } m_pending_sort;
+
 protected:
     u32 m_last_time;
     bool m_repair_mode;
@@ -241,6 +257,15 @@ protected:
     void InitSounds(CUIXml& uiXml);
     void InitAllowedDrops();
     void InitCallbacks();
+    void InitInventoryTools();
+
+    void SyncInventoryTools();
+    void ResetInventoryTools();
+    void OnInventoryToolClicked(CUIWindow* w, void* d);
+    bool CellPassesItemFilter(CUICellItem* itm);
+    void UpdatePendingSort();
+    void RefillInventoryPane(EInventoryPane pane, const xr_vector<u16>& skip);
+    CUIDragDropListEx* GetInventoryPaneList(EInventoryPane pane);
 
     void InitCellForSlot(u16 slot_idx);
     void InitInventoryContents(CUIDragDropListEx* pBagList, bool onlyBagList = false);
@@ -400,6 +425,11 @@ public:
     void StoreAllToInventoryBox();
 
     IC UIHint* get_hint_wnd() { return m_hint_wnd; }
+
+    // The sort and filter row: what its buttons do, open to scripts as well.
+    bool SortInventoryPane(EInventoryPane pane);
+    void SetItemFilter(EItemCategory category);
+    EItemCategory GetItemFilter() const { return m_item_filter; }
 
 	//AxelDominator && Alundaio consumable use condition
 	void RefreshCurrentItemCell();

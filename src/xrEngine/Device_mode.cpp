@@ -249,6 +249,14 @@ void CRenderDevice::SelectResolution(const bool windowed)
         psDeviceMode.RefreshRate = closest.refresh_rate;
     }
 
+    // The render size belongs to the renderer (an upscaler shrinks it at every reset); only a new
+    // display size brings it back to the display until the renderer picks again. Reset() calls
+    // this once more after the renderer reset, which used to undo the upscaler's size.
+    if (dwWidth != u32(psDeviceMode.Width) || dwHeight != u32(psDeviceMode.Height) || !dwRenderWidth || !dwRenderHeight)
+    {
+        dwRenderWidth = psDeviceMode.Width;
+        dwRenderHeight = psDeviceMode.Height;
+    }
     dwWidth = psDeviceMode.Width;
     dwHeight = psDeviceMode.Height;
 }

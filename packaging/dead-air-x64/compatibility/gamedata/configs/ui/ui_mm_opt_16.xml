@@ -101,10 +101,13 @@
 	
 	
     <tab_video>
-		<cap_renderer x="240" y="45" width="90" height="21" complex_mode="1" >
+		<!-- The stock basic page, for addons that ship the stock page scripts. The video tab has
+		     its own renderer combo (video_page:list_renderer); these two sit in the slot below the
+		     last row, so a stock page that shows them covers nothing. -->
+		<cap_renderer x="240" y="560" width="90" height="21" complex_mode="1" >
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_renderer</text>			
 		</cap_renderer>
-		<list_renderer x="320" y="39" width="100" height="21" list_length="5">
+		<list_renderer x="320" y="554" width="100" height="21" list_length="5">
 			<options_item entry="renderer" group="mm_opt_video" depend="restart"/>
 			<text_color>
 				<e r="220" g="220" b="220"/>
@@ -114,10 +117,10 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_renderer>
 
-		<cap_preset x="240" y="75" width="90" height="21" complex_mode="1" >
+		<cap_preset x="240" y="45" width="90" height="21" complex_mode="1" >
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_quality_presets</text>
 		</cap_preset>
-		<list_presets x="320" y="71" width="100" height="21" list_length="5">
+		<list_presets x="320" y="41" width="100" height="21" list_length="5">
 			<options_item entry="_preset" group="mm_opt_video_preset" depend="restart"/>
 			<text_color>
 				<e r="220" g="220" b="220"/>
@@ -127,10 +130,10 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_presets>
 
-		<cap_resolution x="240" y="105" width="90" height="21" complex_mode="1">
+		<cap_resolution x="240" y="75" width="90" height="21" complex_mode="1">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_resolution</text>
 		</cap_resolution>
-		<list_resolution x="320" y="101" width="100" height="21" always_show_scroll="1">
+		<list_resolution x="320" y="71" width="100" height="21" always_show_scroll="1">
             <options_item entry="vid_mode" group="mm_opt_video" depend="vid"/>
 			<text_color>
 				<e r="220" g="220" b="220"/>
@@ -140,10 +143,10 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_resolution>
 
-		<cap_window_mode x="240" y="135" width="90" height="21">
+		<cap_window_mode x="240" y="105" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_window_mode</text>
 		</cap_window_mode>
-		<list_window_mode x="320" y="134" width="165" height="21">
+		<list_window_mode x="320" y="104" width="165" height="21">
             <options_item entry="vid_window_mode" group="mm_opt_video" depend="vid"/>
             <list_font align="l" font="letterica16" r="95" g="92" b="79"/>
             <text_color>
@@ -152,10 +155,10 @@
             </text_color>
 		</list_window_mode>
 
-		<cap_fps_limit x="240" y="165" width="90" height="21" complex_mode="1">
+		<cap_fps_limit x="240" y="135" width="90" height="21" complex_mode="1">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fps_limit</text>
 		</cap_fps_limit>
-		<list_fps_limit x="320" y="161" width="100" height="21" list_length="9" always_show_scroll="1">
+		<list_fps_limit x="320" y="131" width="100" height="21" list_length="9" always_show_scroll="1">
             <options_item entry="vid_fps_limit" group="mm_opt_video" depend="runtime"/>
 			<text_color>
 				<e r="220" g="220" b="220"/>
@@ -165,110 +168,118 @@
 			<list_font	 r="191" g="191" b="191" font="letterica25"/>
 		</list_fps_limit>
 
-		<cap_vsync x="240" y="195" width="90" height="21">
+		<cap_vsync x="240" y="165" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_vsync</text>
 		</cap_vsync>
-		<check_vsync x="320" y="192" width="30" height="21">
+		<check_vsync x="320" y="162" width="30" height="21">
 			<options_item entry="rs_v_sync" group="mm_opt_video" depend="runtime"/>
 		</check_vsync>
 
-		<cap_gamma x="240" y="225" width="90" height="21">
+		<cap_gamma x="240" y="195" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_gamma</text>
 		</cap_gamma>
-		<track_gamma x="320" y="223" width="165" height="21">
+		<track_gamma x="320" y="193" width="165" height="21">
             <options_item entry="rs_c_gamma" group="mm_opt_video" depend="runtime"/>
 		</track_gamma>
 
-		<cap_contrast x="240" y="255" width="90" height="21">
+		<cap_contrast x="240" y="225" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_contrast</text>
 		</cap_contrast>
-		<track_contrast x="320" y="253" width="165" height="21">
+		<track_contrast x="320" y="223" width="165" height="21">
             <options_item entry="rs_c_contrast" group="mm_opt_video" depend="runtime"/>
 		</track_contrast>
 
-		<cap_brightness x="240" y="285" width="90" height="21">
+		<cap_brightness x="240" y="255" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_brightness</text>
 		</cap_brightness>
-		<track_brightness x="320" y="283" width="165" height="21">
+		<track_brightness x="320" y="253" width="165" height="21">
             <options_item entry="rs_c_brightness" group="mm_opt_video" depend="runtime"/>
 		</track_brightness>
 
 
-		<cap_fov x="240" y="315" width="90" height="21">
+		<cap_fov x="240" y="285" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fov</text>
         </cap_fov>
-		<track_fov x="320" y="313" width="165" height="21" step="1">
+		<track_fov x="320" y="283" width="165" height="21" step="1">
             <options_item entry="fov" group="mm_opt_video" depend="runtime"/>
         </track_fov>
-		<cap_fov_value x="490" y="315">
+		<cap_fov_value x="490" y="285">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_fov_value>
 
-		<cap_hud_fov x="240" y="345" width="90" height="21">
+		<cap_hud_fov x="240" y="315" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_hud_fov</text>
         </cap_hud_fov>
-		<track_hud_fov x="320" y="343" width="165" height="21" step="0.05">
+		<track_hud_fov x="320" y="313" width="165" height="21" step="0.05">
             <options_item entry="hud_fov" group="mm_opt_video" depend="runtime"/>
         </track_hud_fov>
-		<cap_hud_fov_value x="490" y="345">
+		<cap_hud_fov_value x="490" y="315">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_hud_fov_value>
 
-		<cap_level_texture_unload x="240" y="375" width="90" height="21"
+		<cap_level_texture_unload x="240" y="345" width="90" height="21"
 			hint="ui_mm_level_texture_unload_hint">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_level_texture_unload</text>
 		</cap_level_texture_unload>
-		<check_level_texture_unload x="320" y="372" width="30" height="21"
+		<check_level_texture_unload x="320" y="342" width="30" height="21"
 			hint="ui_mm_level_texture_unload_hint">
 			<options_item entry="r__unload_level_textures" group="mm_opt_video"/>
 		</check_level_texture_unload>
+
+		<!-- Stock node, still initialised by the stock page script. -->
+		<cap_fullscreen x="240" y="375" width="90" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fullscreen</text>
+		</cap_fullscreen>
+		<check_fullscreen x="320" y="372" width="30" height="21">
+			<options_item entry="rs_fullscreen" group="mm_opt_video" depend="vid"/>
+		</check_fullscreen>
 		
 		
-		<cap_color_correction x="240" y="440" width="90" height="21">
+		<cap_color_correction x="240" y="410" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_color_correction</text>
         </cap_color_correction>
 		
-		<cap_color_r x="240" y="470" width="90" height="21">
+		<cap_color_r x="240" y="440" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_color_r</text>
         </cap_color_r>
-		<track_color_r x="320" y="468" width="165" height="21" step="0.01">
+		<track_color_r x="320" y="438" width="165" height="21" step="0.01">
             <options_item entry="r__color_base_r" group="mm_opt_video" depend="runtime"/>
         </track_color_r>
-		<cap_color_r_val x="490" y="470">
+		<cap_color_r_val x="490" y="440">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_color_r_val>
 		
-		<cap_color_g x="240" y="500" width="90" height="21">
+		<cap_color_g x="240" y="470" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_color_g</text>
         </cap_color_g>
-		<track_color_g x="320" y="498" width="165" height="21" step="0.01">
+		<track_color_g x="320" y="468" width="165" height="21" step="0.01">
             <options_item entry="r__color_base_g" group="mm_opt_video" depend="runtime"/>
         </track_color_g>
-		<cap_color_g_val x="490" y="500">
+		<cap_color_g_val x="490" y="470">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_color_g_val>
 		
-		<cap_color_b x="240" y="530" width="90" height="21">
+		<cap_color_b x="240" y="500" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_color_b</text>
         </cap_color_b>
-		<track_color_b x="320" y="528" width="165" height="21" step="0.01">
+		<track_color_b x="320" y="498" width="165" height="21" step="0.01">
             <options_item entry="r__color_base_b" group="mm_opt_video" depend="runtime"/>
         </track_color_b>
-		<cap_color_b_val x="490" y="530">
+		<cap_color_b_val x="490" y="500">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_color_b_val>
 		
-		<cap_vibrance x="240" y="560" width="90" height="21">
+		<cap_vibrance x="240" y="530" width="90" height="21">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_vibrance</text>
         </cap_vibrance>
-        <track_vibrance_val x="320" y="558" width="165" height="21" step="0.1">
+        <track_vibrance_val x="320" y="528" width="165" height="21" step="0.1">
             <options_item entry="r2_vibrance_val" group="mm_opt_video" depend="runtime"/>
         </track_vibrance_val>
-		<cap_vibrance_val x="490" y="560">
+		<cap_vibrance_val x="490" y="530">
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_vibrance_val>
 
-		<btn_advanced x="245" y="616" width="96" height="24">
+		<btn_advanced x="245" y="586" width="96" height="24">
 			<text align="c" y="0" font="letterica25" r="191" g="191" b="191">ui_mm_advanced</text>
 			<text_color>
 				<e r="191" g="191" b="191"/>				
@@ -279,6 +290,314 @@
 			<texture>ui_button_ordinary</texture>			
 		</btn_advanced>
     </tab_video>
+
+	<option_list>
+		<!-- What the pages that are one list share (dead_air_x64_option_list.script: Video, Sound,
+		     Controls): the scroll list, a subsection header, a row with its caption, a slider's
+		     number. The Game tab keeps copies of the same sizes in tab_gameplay. -->
+		<scroll_v x="230" y="30" width="300" height="586" right_ident="0" left_ident="0" top_indent="0" bottom_indent="0" vert_interval="0" always_show_scroll="0"/>
+
+		<templ_header width="295" height="30"/>
+		<cap_header x="10" y="8" width="275" height="20" complex_mode="1">
+			<text align="l" font="graffiti19" r="175" g="175" b="170"></text>
+		</cap_header>
+		<templ_item width="295" height="24"/>
+		<cap_item x="10" y="3" width="240" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79"></text>
+		</cap_item>
+		<readout x="250" y="3" width="35" height="21">
+			<text align="r" font="letterica16" r="95" g="92" b="79"></text>
+		</readout>
+	</option_list>
+
+	<video_page>
+		<!-- Options -> Video, built by ui_mm_opt_video.script from configs\dead_air_x64_video_options.ltx:
+		     a subsection header per group and a row per setting, in the Game tab's columns - caption on
+		     the left, one control column on the right, a slider's number beside it. A control is the
+		     node <control>_<row>: its options_item binds it to the console command, which only a node
+		     can do. Headers, rows, captions and numbers are the templates of option_list. The
+		     tab_video and video_adv nodes are for addons that ship the stock page scripts. -->
+		<list_renderer x="125" y="1" width="160" height="21" list_length="2" always_show_scroll="0">
+			<options_item entry="renderer" group="mm_opt_video" depend="restart"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_renderer>
+
+		<list_resolution x="125" y="1" width="160" height="21" list_length="7" always_show_scroll="1">
+			<options_item entry="vid_mode" group="mm_opt_video" depend="vid"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_resolution>
+
+		<list_window_mode x="125" y="1" width="160" height="21" list_length="3" always_show_scroll="0">
+			<options_item entry="vid_window_mode" group="mm_opt_video" depend="vid"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_window_mode>
+
+		<list_fps_limit x="125" y="1" width="160" height="21" list_length="9" always_show_scroll="0">
+			<options_item entry="vid_fps_limit" group="mm_opt_video" depend="runtime"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_fps_limit>
+
+		<check_vsync x="255" y="1" width="30" height="21">
+			<options_item entry="rs_v_sync" group="mm_opt_video" depend="runtime"/>
+		</check_vsync>
+
+		<list_preset x="125" y="1" width="160" height="21" list_length="5" always_show_scroll="0">
+			<options_item entry="_preset" group="mm_opt_video_preset" depend="restart"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_preset>
+
+		<check_level_texture_unload x="255" y="1" width="30" height="21">
+			<options_item entry="r__unload_level_textures" group="mm_opt_video"/>
+		</check_level_texture_unload>
+
+		<list_aa x="125" y="1" width="160" height="21" list_length="4" always_show_scroll="0">
+			<options_item entry="r__aa" group="mm_opt_video" depend="vid"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_aa>
+
+		<list_fsr x="125" y="1" width="160" height="21" list_length="6" always_show_scroll="0">
+			<options_item entry="r__fsr" group="mm_opt_video" depend="vid"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_fsr>
+
+		<list_dlss x="125" y="1" width="160" height="21" list_length="6" always_show_scroll="0">
+			<options_item entry="r__dlss" group="mm_opt_video" depend="vid"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_dlss>
+
+		<list_framegen x="125" y="1" width="160" height="21" list_length="5" always_show_scroll="0">
+			<options_item entry="r__framegen" group="mm_opt_video" depend="vid"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_framegen>
+
+		<track_upscale_sharpness x="150" y="1" width="100" height="21" step="0.05">
+			<options_item entry="r__upscale_sharpness" group="mm_opt_video" depend="vid"/>
+		</track_upscale_sharpness>
+
+		<!-- DirectX 12 features: async compute applies on the next frame, DirectStorage on the next
+		     texture load; the RTX rows (ray tracing, never part of a preset) with the renderer restart. -->
+		<list_async_compute x="125" y="1" width="160" height="21" list_length="3" always_show_scroll="0">
+			<options_item entry="r__async_compute" group="mm_opt_video" depend="runtime"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_async_compute>
+
+		<check_dstorage x="255" y="1" width="30" height="21">
+			<options_item entry="r__dstorage" group="mm_opt_video"/>
+		</check_dstorage>
+
+		<check_rt_reflections x="255" y="1" width="30" height="21">
+			<options_item entry="r__rt_reflections" group="mm_opt_video" depend="vid"/>
+		</check_rt_reflections>
+
+		<check_rt_shadows x="255" y="1" width="30" height="21">
+			<options_item entry="r__rt_shadows" group="mm_opt_video" depend="vid"/>
+		</check_rt_shadows>
+
+		<check_rtao x="255" y="1" width="30" height="21">
+			<options_item entry="r__rtao" group="mm_opt_video" depend="vid"/>
+		</check_rtao>
+
+		<list_rt_quality x="125" y="1" width="160" height="21" list_length="3" always_show_scroll="0">
+			<options_item entry="r__rt_quality" group="mm_opt_video" depend="vid"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_rt_quality>
+
+		<track_gamma x="150" y="1" width="100" height="21">
+			<options_item entry="rs_c_gamma" group="mm_opt_video" depend="runtime"/>
+		</track_gamma>
+
+		<track_contrast x="150" y="1" width="100" height="21">
+			<options_item entry="rs_c_contrast" group="mm_opt_video" depend="runtime"/>
+		</track_contrast>
+
+		<track_brightness x="150" y="1" width="100" height="21">
+			<options_item entry="rs_c_brightness" group="mm_opt_video" depend="runtime"/>
+		</track_brightness>
+
+		<track_fov x="150" y="1" width="100" height="21" step="1">
+			<options_item entry="fov" group="mm_opt_video" depend="runtime"/>
+		</track_fov>
+
+		<track_hud_fov x="150" y="1" width="100" height="21" step="0.01">
+			<options_item entry="hud_fov" group="mm_opt_video" depend="runtime"/>
+		</track_hud_fov>
+
+		<track_detail_height x="150" y="1" width="100" height="21" step="0.1">
+			<options_item entry="r__detail_height" group="mm_opt_video_adv"/>
+		</track_detail_height>
+
+		<track_sun_shafts x="150" y="1" width="100" height="21" step="0.1">
+			<options_item entry="r2_sss_intensity" group="mm_opt_video_adv"/>
+		</track_sun_shafts>
+
+		<track_sharp x="150" y="1" width="100" height="21" step="0.1">
+			<options_item entry="r2_lumasharpen" group="mm_opt_video_adv"/>
+		</track_sharp>
+
+		<track_bloom x="150" y="1" width="100" height="21" step="0.1">
+			<options_item entry="r2_ls_bloom_kernel_scale" group="mm_opt_video_adv"/>
+		</track_bloom>
+
+		<track_aberration x="150" y="1" width="100" height="21" step="0.1">
+			<options_item entry="r2_aberration_val" group="mm_opt_video_adv"/>
+		</track_aberration>
+
+		<check_dof x="255" y="1" width="30" height="21">
+			<options_item entry="r2_dof_enable" group="mm_opt_video_adv" depend="vid"/>
+		</check_dof>
+
+		<check_technicolor x="255" y="1" width="30" height="21">
+			<options_item entry="r2_technicolor" group="mm_opt_video_adv" depend="vid"/>
+		</check_technicolor>
+
+		<check_vignette x="255" y="1" width="30" height="21">
+			<options_item entry="r2_vignette" group="mm_opt_video_adv" depend="vid"/>
+		</check_vignette>
+
+		<track_color_r x="150" y="1" width="100" height="21" step="0.01">
+			<options_item entry="r__color_base_r" group="mm_opt_video" depend="runtime"/>
+		</track_color_r>
+
+		<track_color_g x="150" y="1" width="100" height="21" step="0.01">
+			<options_item entry="r__color_base_g" group="mm_opt_video" depend="runtime"/>
+		</track_color_g>
+
+		<track_color_b x="150" y="1" width="100" height="21" step="0.01">
+			<options_item entry="r__color_base_b" group="mm_opt_video" depend="runtime"/>
+		</track_color_b>
+
+		<track_vibrance x="150" y="1" width="100" height="21" step="0.1">
+			<options_item entry="r2_vibrance_val" group="mm_opt_video" depend="runtime"/>
+		</track_vibrance>
+	</video_page>
+
+	<sound_page>
+		<!-- Options -> Sound, built by ui_mm_opt_sound.script from configs\dead_air_x64_sound_options.ltx
+		     like the video page: the control of row <row> is the node <control>_<row>. The subtitle
+		     rows are the controls closecaption.script builds from tab_sound, moved into their rows
+		     and placed there by place_<row>. The other tab_sound nodes are for addons that ship the
+		     stock page script. -->
+		<track_master_volume x="150" y="1" width="100" height="21">
+			<options_item entry="snd_volume_eff" group="mm_opt_sound"/>
+		</track_master_volume>
+
+		<track_music_volume x="150" y="1" width="100" height="21">
+			<options_item entry="snd_volume_music" group="mm_opt_sound"/>
+		</track_music_volume>
+
+		<list_snd_device x="125" y="1" width="160" height="21" list_length="4" always_show_scroll="1">
+			<options_item entry="snd_device" group="mm_opt_sound" depend="restart"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_snd_device>
+
+		<check_eax x="255" y="1" width="30" height="21">
+			<options_item entry="snd_efx" group="mm_opt_sound" depend="snd"/>
+		</check_eax>
+
+		<check_dynamic_music x="255" y="1" width="30" height="21">
+			<options_item entry="g_dynamic_music" group="mm_opt_sound" depend="snd"/>
+		</check_dynamic_music>
+
+		<!-- Where the adopted controls sit in their rows, and how tall the rows are: the radio
+		     buttons of tab_sound:tab_captioning are 26 apart. -->
+		<place_cc_captioning x="125" y="1" width="160" height="76"/>
+		<place_cc_icc x="255" y="1" width="30" height="24"/>
+	</sound_page>
+
+	<controls_page>
+		<!-- Options -> Controls, built by ui_mm_opt_controls.script from
+		     configs\dead_air_x64_controls_options.ltx like the video page, then the key list: a
+		     subsection per group of ui_keybinding.xml with the column captions in its header
+		     (cap_key_primary, cap_key_secondary), and a row per action - its caption cap_key and the
+		     key cells key_primary and key_secondary. The tab_controls nodes are for addons that ship
+		     the stock page script. -->
+		<track_mouse_sense x="150" y="1" width="100" height="21" step="0.01">
+			<options_item entry="mouse_sens" group="mm_opt_controls"/>
+		</track_mouse_sense>
+
+		<check_invert_mouse x="255" y="1" width="30" height="21">
+			<options_item entry="mouse_invert" group="mm_opt_controls"/>
+		</check_invert_mouse>
+
+		<check_aim_toggle x="255" y="1" width="30" height="21">
+			<options_item entry="wpn_aim_toggle" group="mm_opt_controls"/>
+		</check_aim_toggle>
+
+		<button_keyb_default x="189" y="0" width="96" height="24">
+			<text align="c" font="letterica16" r="191" g="191" b="191">ui_st_reset</text>
+			<text_color>
+				<e r="191" g="191" b="191"/>
+				<t r="117" g="114" b="97"/>
+				<h r="0" g="0" b="0"/>
+			</text_color>
+			<texture>ui_button_ordinary</texture>
+		</button_keyb_default>
+
+		<cap_key_primary x="158" y="10" width="62" height="20">
+			<text align="l" font="letterica16" r="120" g="120" b="120" x="2">ui_mm_key</text>
+		</cap_key_primary>
+		<cap_key_secondary x="223" y="10" width="62" height="20">
+			<text align="l" font="letterica16" r="120" g="120" b="120" x="2">ui_mm_alternative</text>
+		</cap_key_secondary>
+
+		<cap_key x="10" y="3" width="145" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79"></text>
+		</cap_key>
+		<key_primary x="158" y="2" width="62" height="20">
+			<text align="l" font="letterica16" r="170" g="170" b="170" x="2"></text>
+		</key_primary>
+		<key_secondary x="223" y="2" width="62" height="20">
+			<text align="l" font="letterica16" r="170" g="170" b="170" x="2"></text>
+		</key_secondary>
+	</controls_page>
 
     <video_adv>
 		<scroll_v	x="215" y="41" width="305" height="515" 
@@ -392,6 +711,27 @@
         <check_r2_sun_details x="115" y="0" width="30" height="21">
             <options_item entry="r2_sun_details" group="mm_opt_video"/>
         </check_r2_sun_details>
+
+        <!-- Stock rows, still initialised by the stock page script. The engine has no player-body
+             or 60 Hz command, so those two boxes are bound to nothing. -->
+        <cap_r__actor_body x="25" y="2" width="90" height="21" complex_mode="1" >
+            <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_r__actor_body</text>
+        </cap_r__actor_body>
+        <check_r__actor_body x="115" y="0" width="30" height="21">
+        </check_r__actor_body>
+
+        <cap_vsync x="25" y="2" width="90" height="21" complex_mode="1" >
+            <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_vsync</text>
+        </cap_vsync>
+        <check_vsync x="115" y="0" width="30" height="21">
+            <options_item entry="rs_v_sync" group="mm_opt_video_adv" depend="vid"/>
+        </check_vsync>
+
+        <cap_60hz x="25" y="2" width="90" height="21" complex_mode="1" >
+            <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_60_hz</text>
+        </cap_60hz>
+        <check_60hz x="115" y="0" width="30" height="21">
+        </check_60hz>
 		
         <cap_r1_detail_textures x="25" y="2" width="90" height="21" complex_mode="1" >
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_r1_detail_textures</text>
@@ -740,12 +1080,8 @@
         <cap_check_closed_captions x="240" y="315" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_cc_icc</text>
         </cap_check_closed_captions>
+        <!-- No text of its own: on the sound page it sits in a row whose caption says what it is. -->
         <check_closed_captions x="340" y="313" width="30" height="21">
-		<text x="-5" font="letterica16" vert_align="c">ui_mm_cc_icc_chktext</text>
-	            <text_color>
-	                <e r="170" g="170" b="170"/>
-	                <d r="120" g="120" b="120"/>
-	            </text_color>
         </check_closed_captions>
     </tab_sound>
 	
@@ -755,63 +1091,63 @@
         <cap_check_crosshair x="25" y="0" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_show_crosshair</text>
         </cap_check_crosshair>
-        <check_crosshair x="162" y="0" width="30" height="21">
+        <check_crosshair x="255" y="1" width="30" height="21">
             <options_item entry="hud_crosshair" group="mm_opt_gameplay"/>
         </check_crosshair>
 
         <cap_check_dyn_crosshair x="25" y="0" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_dyn_crosshair</text>
         </cap_check_dyn_crosshair>
-        <check_dyn_crosshair x="162" y="0" width="30" height="21">
+        <check_dyn_crosshair x="255" y="1" width="30" height="21">
             <options_item entry="cl_dynamiccrosshair" group="mm_opt_gameplay"/>
         </check_dyn_crosshair>
 
         <cap_check_show_weapon x="25" y="0" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_show_weapon</text>
         </cap_check_show_weapon>
-        <check_show_weapon x="162" y="0" width="30" height="21">
+        <check_show_weapon x="255" y="1" width="30" height="21">
             <options_item entry="hud_weapon" group="mm_opt_gameplay"/>
         </check_show_weapon>
 
         <cap_check_dist x="25" y="0" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_crosshair_distance</text>
         </cap_check_dist>
-        <check_dist x="162" y="0" width="30" height="21">
+        <check_dist x="255" y="1" width="30" height="21">
             <options_item entry="hud_crosshair_dist" group="mm_opt_gameplay"/>
         </check_dist>
 
         <cap_check_tips x="25" y="0" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_tips</text>
         </cap_check_tips>
-        <check_tips x="162" y="0" width="30" height="21">
+        <check_tips x="255" y="1" width="30" height="21">
             <options_item entry="hud_info" group="mm_opt_gameplay"/>
         </check_tips>
 
         <cap_check_crouch_toggle x="25" y="0" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_crouch_toggle</text>
         </cap_check_crouch_toggle>
-        <check_crouch_toggle x="162" y="0" width="30" height="21">
+        <check_crouch_toggle x="255" y="1" width="30" height="21">
             <options_item entry="g_crouch_toggle" group="mm_opt_gameplay"/>
         </check_crouch_toggle>
 
         <cap_check_important_save x="25" y="0" width="108" height="24">
             <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_important_save</text>
         </cap_check_important_save>
-        <check_important_save x="162" y="0" width="30" height="21">
+        <check_important_save x="255" y="1" width="30" height="21">
             <options_item entry="g_important_save" group="mm_opt_gameplay"/>
         </check_important_save>
 
       <cap_check_hud_draw x="25" y="0" width="108" height="24">
         <text align="l" font="letterica16" r="95" g="92" b="79">ui_st_disable_info</text>
       </cap_check_hud_draw>
-      <check_hud_draw x="162" y="0" width="30" height="21">
+      <check_hud_draw x="255" y="1" width="30" height="21">
         <options_item entry="hud_draw_info" group="mm_opt_gameplay"/>
       </check_hud_draw>
 	  
 	  <cap_check_map_draw x="25" y="0" width="108" height="24">
         <text align="l" font="letterica16" r="95" g="92" b="79">ui_st_disable_map</text>
       </cap_check_map_draw>
-      <check_map_draw x="162" y="0" width="30" height="21">
+      <check_map_draw x="255" y="1" width="30" height="21">
         <options_item entry="hud_draw_map" group="mm_opt_gameplay"/>
       </check_map_draw>
 
@@ -819,36 +1155,38 @@
         hint="ui_mm_auto_continue_on_load_hint">
         <text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_auto_continue_on_load</text>
       </cap_auto_continue_on_load>
-      <check_auto_continue_on_load x="162" y="0" width="30" height="21"
-        hint="ui_mm_auto_continue_on_load_hint">
+      <check_auto_continue_on_load x="255" y="1" width="30" height="21">
         <options_item entry="auto_continue_on_load" group="mm_opt_gameplay"/>
       </check_auto_continue_on_load>
 
-		<check_show_tracers x="162" y="0" width="30" height="21">
+		<check_show_tracers x="255" y="1" width="30" height="21">
 			<options_item entry="g_use_tracers" group="mm_opt_gameplay"/>
 		</check_show_tracers>
-
-		
-        <cap_check_axr x="25" y="3" width="108" height="24">
-            <text align="l" font="letterica16" r="95" g="92" b="79"></text>
-        </cap_check_axr>
-        <check_axr x="162" y="0" width="30" height="21">
+        <check_axr x="255" y="1" width="30" height="21">
         </check_axr>
-        <list_axr x="171" y="3" width="100" height="9020">
-            <list_font r="170" g="170" b="170" font="letterica16"/>
-		    <text_color>
-	            <e r="170" g="170" b="170"/>
-	            <d r="70" g="70" b="70"/>
-		    </text_color>
-        </list_axr>
-		
-		<templ_item width="305" height="38"/>
-		<scroll_v	x="215" y="42" width="305" height="515" 
-					right_ident="0" left_ident="0" top_indent="0" bottom_indent="0" 
-					vert_interval="0" always_show_scroll="0"/>    
-	
-	
-	</tab_gameplay>
+
+		<!-- Options -> Game, built by ui_mm_opt_main.script: a subsection header per group, a row per
+		     option. Rows and headers are the size of the video tab's rows, and every checkbox of the
+		     tab sits in the same column, so a caption never runs into its control. -->
+		<templ_header width="295" height="30"/>
+		<cap_header x="10" y="8" width="275" height="20" complex_mode="1">
+			<text align="l" font="graffiti19" r="175" g="175" b="170"></text>
+		</cap_header>
+		<templ_item width="295" height="24"/>
+		<cap_check_axr x="10" y="3" width="240" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79"></text>
+		</cap_check_axr>
+		<list_axr x="195" y="1" width="90" height="21" list_length="5">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_axr>
+		<scroll_v x="230" y="30" width="300" height="586"
+					right_ident="0" left_ident="0" top_indent="0" bottom_indent="0"
+					vert_interval="0" always_show_scroll="0"/>
+    </tab_gameplay>
 	
     <tab_controls>
         

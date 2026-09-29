@@ -70,13 +70,19 @@ void CEngineAPI::SelectRenderer()
     // or we don't comply with it's requirements (e.g. shaders missing)
     if (!selectedRenderer)
     {
-        // Select any suitable
-        for (const auto& [mode, renderer] : renderModes)
+        // Select any suitable, in the order of the mode list (R4 first): the map is keyed by
+        // pointer, so its own order is whatever addresses the modules' strings got.
+        for (const xr_token& token : VidQualityToken)
         {
-            if (renderer->CheckGameRequirements())
+            if (!token.name)
+                continue;
+            const auto found = renderModes.find(token.name);
+            if (found == renderModes.end())
+                continue;
+            if (found->second->CheckGameRequirements())
             {
-                selectedRenderer = renderer;
-                selected_mode = mode;
+                selectedRenderer = found->second;
+                selected_mode = found->first;
                 string64 buf;
                 xr_sprintf(buf, "renderer %s", selected_mode);
                 Console->Execute(buf);
@@ -123,7 +129,7 @@ void CEngineAPI::Destroy()
     XRC.r_clear_compact();
 }
 
-void CEngineAPI::CreateRendererList(const std::array<RendererModule*, 1>& modules)
+void CEngineAPI::CreateRendererList(const std::array<RendererModule*, 2>& modules)
 {
     if (!VidQualityToken.empty())
         return;

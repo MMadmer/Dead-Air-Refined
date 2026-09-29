@@ -11,6 +11,8 @@
 #include "xrEngine/profiler.h"
 #include "xrCore/XMS/xms_core.h"
 
+#include <thread>
+
 CLevelGraph::CLevelGraph(const char* fileName)
     : m_level_id(GameGraph::_LEVEL_ID(-1))
 {
@@ -62,7 +64,9 @@ void CLevelGraph::Initialize(const char* filePath)
     const auto& box = header().box();
     m_row_length = iFloor((box.vMax.z - box.vMin.z) / header().cell_size() + EPS_L + 1.5f);
     m_column_length = iFloor((box.vMax.x - box.vMin.x) / header().cell_size() + EPS_L + 1.5f);
-    m_access_mask.assign(header().vertex_count(), true);
+    // Worker ids stay below hardware_concurrency (TaskManager asserts it); slot 0 is the main thread.
+    m_access_masks.resize(std::max<size_t>(std::thread::hardware_concurrency(), 1));
+    m_access_masks.front().assign(header().vertex_count(), true);
     unpack_xz(vertex_position(box.vMax), m_max_x, m_max_z);
     build_vertex_column_index();
     if (!overlay_nodes.empty() && m_vertex_column_offsets.empty())

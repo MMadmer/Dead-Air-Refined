@@ -126,4 +126,28 @@
 	<string id="ukr">
 		<text>Ukrainian</text>
 	</string>
+	<string id="st_key_mouse1">
+		<text>LMB</text>
+	</string>
+	<string id="st_key_mouse2">
+		<text>RMB</text>
+	</string>
+	<string id="st_key_mouse3">
+		<text>MMB</text>
+	</string>
+	<string id="st_key_mouse4">
+		<text>Mouse 4</text>
+	</string>
+	<string id="st_key_mouse5">
+		<text>Mouse 5</text>
+	</string>
+	<string id="st_key_mouse6">
+		<text>Mouse 6</text>
+	</string>
+	<string id="st_key_mouse7">
+		<text>Mouse 7</text>
+	</string>
+	<string id="st_key_mouse8">
+		<text>Mouse 8</text>
+	</string>
 </string_table>

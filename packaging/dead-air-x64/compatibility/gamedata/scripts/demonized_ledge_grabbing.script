@@ -76,6 +76,8 @@ local savedCamY
 local savedSpeed = vector():set(0, 0, 0)
 local savedSpeedPos = vector():set(0, 0, 0)
 local climbActive = false
+-- The ticket of the climb's hand scene (game.hud_scene_id): the climb stops only its own scene.
+local climbScene = 0
 
 -- Jump key state, tracked from the key callbacks: held = pressed and not yet released.
 local jumpHeld = false
@@ -788,7 +790,8 @@ function tryToClimb(fromStanding)
 				db.actor:set_actor_direction(-camDirHPB.x)
 				db.actor:set_actor_position(pp)
 				level.remove_cam_custom_position_direction()
-				game.stop_hud_motion()
+				game.stop_hud_scene(climbScene)
+				climbScene = 0
 
 				local unstuckFunc
 				unstuckFunc = function()
@@ -937,7 +940,10 @@ function tryToClimb(fromStanding)
 			if not hudMotionStarted then
 				hudMotionStarted = true
 				nextTick(function()
+					local before = game.hud_scene_id()
 					game.play_hud_motion(2, "item_anm_ledge_grabbing", "anm_climb", true, animationSpeed * hudMotionSpeed)
+					local id = game.hud_scene_id()
+					climbScene = (id ~= before) and id or 0
 					return true
 				end)
 			end

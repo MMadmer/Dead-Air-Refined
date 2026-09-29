@@ -24,12 +24,13 @@ void CUIArtefactPanel::InitFromXML(CUIXml& xml, pcstr path, int index)
 
 void CUIArtefactPanel::InitIcons(const xr_vector<const CArtefact*>& artefacts)
 {
-    m_StaticItem.SetShader(InventoryUtilities::GetEquipmentIconsShader());
     m_vRects.clear();
+    m_vShaders.clear();
 
     for (const CArtefact* artefact : artefacts)
     {
         const shared_str& sectionName = artefact->cNameSect();
+        m_vShaders.push_back(InventoryUtilities::GetItemIconsShader(sectionName));
         Frect texture_rect;
         texture_rect.x1 = pSettings->read<float>(sectionName, "inv_grid_x") * INV_GRID_WIDTH;
         texture_rect.y1 = pSettings->read<float>(sectionName, "inv_grid_y") * INV_GRID_HEIGHT;
@@ -52,12 +53,14 @@ void CUIArtefactPanel::Draw()
 
     float _s = m_cell_size.x/m_cell_size.y;
 
-    for (const Frect& r : m_vRects)
+    for (size_t i = 0; i < m_vRects.size(); ++i)
     {
+        const Frect& r = m_vRects[i];
         Fvector2 size;
         size.x = m_fScale*(r.bottom - r.top);
         size.y = _s*m_fScale*(r.right - r.left);
 
+        m_StaticItem.SetShader(m_vShaders[i]);
         m_StaticItem.SetTextureRect(r);
         m_StaticItem.SetSize(size);
         m_StaticItem.SetPos(x, y);

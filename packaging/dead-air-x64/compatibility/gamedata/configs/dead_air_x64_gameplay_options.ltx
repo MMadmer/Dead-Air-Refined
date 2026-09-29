@@ -1,0 +1,64 @@
+; Options -> Game: how the list is laid out (ui_mm_opt_main.script, BuildGameplayList).
+;
+; The rows come from whoever adds them to the options dialog: the engine's switches, the base game,
+; add-ons, XMS modules. The code knows none of them by name; this file only says where they go. A
+; key that nothing added is skipped silently, so the file may describe more than is installed.
+;
+; A row finds its subsection, first match wins:
+;   1. the option's own `group` field - an add-on can set it when it adds the option;
+;   2. the rows lists of the [group_<id>] sections below;
+;   3. the prefix of its caption, "Prefix: Name" - that prefix becomes a subsection of its own;
+;   4. the last subsection of [groups].
+; The caption is shown without such a prefix. The header of a subsection is the string
+; ui_mm_grp_<id>; the hint of a row is the string ui_mm_<option>_hint, or the option's `hint` field.
+
+; Subsections, in this order. Lists rather than one key per line: the engine hands the lines of a
+; section back sorted, and a module's .ltxp can append to a list (+order = ...).
+[groups]
+order = saves, world, survival, crosshair, interface, animations, sound, controls, misc
+
+; Rows of each subsection, in this order. Rows not listed come after them, alphabetically.
+[group_saves]
+rows = important_save, only_campfire, quicksave_cnt, auto_continue_on_load
+
+[group_world]
+rows = alife_stalker_pop, alife_mutant_pop, offline_battles, heli_spawn, fast_travel, dynamic_news, lootmoney_option, release_dropped_items
+
+[group_survival]
+rows = sleep_deprived, use_battery, mechanic_feature, infinite_bolts
+
+[group_crosshair]
+rows = show_crosshair, dyn_crosshair, crosshair_dot, crosshair_distance, tips
+
+[group_interface]
+rows = hud_draw_info, hud_draw_map, mask_hud, show_enemy_health, show_tracers, ground_items, show_weapon, letterbox, photomode
+
+[group_animations]
+rows = extra_animations, hand_animation, instant_inventory
+
+[group_sound]
+rows = radio_mod, heli_engine_sound, aim_animation
+
+[group_controls]
+rows = crouch_toggle, cursor_sens, pause_in_background
+
+[group_misc]
+rows = localization, major_update_notice
+
+; Rows that do nothing in this game; they are taken out of the options.
+[hidden]
+; Revolution II (DAR2): "NPCs rob stashes" - nothing reads the switch, the stash thieves run anyway.
+npc_steal_box
+; Revolution II (DAR2): its own copy of the item-use and harvest scenes. The animation module owns
+; both (see dead_air_x64_scene_copies.ltx), so the switch only ever started a second, broken scene.
+consumable_animation
+
+; List options that pick the language of the texts. They offer only the translations actually
+; installed, and are left out when there is one.
+[language_lists]
+localization
+
+; Captions that read wrong once the rows around them change. <option> = string id of the caption.
+[captions]
+; Its pair, "Animations: new", is gone (see [hidden]); what is left is the stock scenes of actions.
+extra_animations = ui_mm_da_extra_animations

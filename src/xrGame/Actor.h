@@ -236,6 +236,8 @@ public:
 public:
     //свойства артефактов
     virtual void UpdateArtefactsOnBeltAndOutfit();
+    // What the belt, the helmet and the suit add or take over game_dt game seconds.
+    void ApplyWornEffects(float game_dt);
     float HitArtefactsOnBelt(float hit_power, ALife::EHitType hit_type);
     float GetProtection_ArtefactsOnBelt(ALife::EHitType hit_type) const;
 

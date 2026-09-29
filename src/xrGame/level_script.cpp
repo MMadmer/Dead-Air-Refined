@@ -871,6 +871,24 @@ static bool scene_hud_active()
 {
     return g_player_hud && g_player_hud->scene_active();
 }
+// The ticket of the scene on the hands, 0 when there is none. A script reads it right after its
+// play, keeps it, and hands it back to stop or hold ONLY its own scene: several modules play
+// scenes on the same hands, and a stop from one used to end whatever another had put up. A
+// ticket that no longer matches also says the hands were taken by someone else.
+static u32 scene_hud_id()
+{
+    return g_player_hud ? g_player_hud->scene_id() : 0;
+}
+static void scene_stop_hud_scene(u32 id)
+{
+    if (g_player_hud)
+        g_player_hud->scene_stop(id);
+}
+static void scene_hold_hud_scene(u32 id)
+{
+    if (g_player_hud)
+        g_player_hud->scene_hold(id);
+}
 
 // XXX nitrocaster: one can export enum like class, without defining dummy type
 template<typename T>
@@ -1225,6 +1243,9 @@ void CLevel::script_register(lua_State* luaState)
         def("get_motion_length", &scene_get_motion_length),
         def("stop_hud_motion", &scene_stop_hud_motion),
         def("hold_hud_motion", &scene_hold_hud_motion),
-        def("scene_active", &scene_hud_active)
+        def("scene_active", &scene_hud_active),
+        def("hud_scene_id", &scene_hud_id),
+        def("stop_hud_scene", &scene_stop_hud_scene),
+        def("hold_hud_scene", &scene_hold_hud_scene)
     ];
 }

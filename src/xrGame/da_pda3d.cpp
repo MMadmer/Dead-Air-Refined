@@ -176,6 +176,8 @@ namespace
 bool unzoom_request{};
 float activate_at{};
 float deactivate_at{};
+// Until when the raise waits for a scene on the hands to end; -1 when not waiting.
+float scene_wait_until{ -1.f };
 bool hands_swapped{};
 shared_str prev_hands;
 
@@ -486,6 +488,7 @@ void reset()
     boot_until = -1.f;
     activate_at = 0.f;
     deactivate_at = 0.f;
+    scene_wait_until = -1.f;
     joystick_reset();
 }
 
@@ -508,9 +511,19 @@ void update()
         PIItem in_slot = presenter_item(actor);
         if (actor)
         {
+            // The hands in a scene - the backpack going away as the inventory closes, an item
+            // being used - bring the device up once it is over: raised at once, its rig swap cut
+            // the scene short. Bounded, so a scene that does not end cannot keep the PDA down.
+            const bool scene = g_player_hud && g_player_hud->scene_active();
+            if (!win || presenter || !scene)
+                scene_wait_until = -1.f;
+            else if (scene_wait_until < 0.f)
+                scene_wait_until = now + 1.5f;
+            const bool wait_hands = scene && scene_wait_until > 0.f && now < scene_wait_until;
+
             // window up, device not raised (missing, spawned-but-idle, or mid-holster) ->
             // ask the script to raise; window down but anything still up -> put it away.
-            if (win && !presenter)
+            if (win && !presenter && !wait_hands)
             {
                 if (!request_activate())
                 {

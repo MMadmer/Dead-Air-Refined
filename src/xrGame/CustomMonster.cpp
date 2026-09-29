@@ -53,6 +53,8 @@
 #include "xrCore/_vector3d_ext.h"
 #include "debug_text_tree.h"
 #include "xrPhysics/IPHWorld.h"
+#include "ai/stalker/ai_stalker.h"
+#include "da_ai_senses.h"
 
 #ifdef DEBUG
 #include "debug_renderer.h"
@@ -655,6 +657,17 @@ void CCustomMonster::update_range_fov(float& new_range, float& new_fov, float st
     // 300=standart, 50=super-fog
 
     new_fov = start_fov;
+    // [ai:sense] begin fog_sight
+    // An AI stalker sees as far as the weather's fog lets anyone see (the renderer's fog distances), not by the fog
+    // density alone: DA's weathers keep fog_density at 1 in clear air, which with fog_density_factor 12 cut every view
+    // to a thirteenth. The player's view-distance setting (far_plane) no longer changes what an NPC sees.
+    if (CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(this); stalker && DaAi::Sense::metered(*stalker))
+    {
+        new_range = start_range *
+            DaAi::Sense::fog_sight_factor(eye_range * memory().visual().current_state().m_max_view_distance);
+        return;
+    }
+    // [ai:sense] end fog_sight
     new_range = start_range * (std::min(m_far_plane_factor * current_far_plane, standard_far_plane) / standard_far_plane) *
         (1.f / (1.f + m_fog_density_factor * current_fog_density));
 }
@@ -690,7 +703,15 @@ void CCustomMonster::eye_pp_s2()
     u32 dwTime = Level().timeServer();
     u32 dwDT = dwTime - eye_pp_timestamp;
     eye_pp_timestamp = dwTime;
-    feel_vision_update(this, eye_matrix.c, float(dwDT) / 1000.f, memory().visual().transparency_threshold());
+    float vis_threshold = memory().visual().transparency_threshold();
+    u32 ray_flags = CDB::OPT_CULL;
+    // Stalkers trace unculled, like bullets, and let partial concealment slow recognition instead of blocking it.
+    if (CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(this))
+    {
+        vis_threshold = DaAi::Sense::vision_threshold(*stalker, vis_threshold);
+        ray_flags = DaAi::Sense::ray_flags();
+    }
+    feel_vision_update(this, eye_matrix.c, float(dwDT) / 1000.f, vis_threshold, ray_flags);
     Level().AIStats.VisRayTests.End();
 }
 
@@ -706,6 +727,10 @@ void CCustomMonster::Exec_Visibility()
     case 0:
         eye_pp_s0();
         eye_pp_s1();
+        // Rays run every second update; a stalker in combat re-traces its enemy in between, so a lost line of sight
+        // is not taken for a visible target for another whole update (C18).
+        if (CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(this))
+            DaAi::Sense::retrace(*stalker, float(Level().timeServer() - eye_pp_timestamp) / 1000.f);
         break;
     case 1: eye_pp_s2(); break;
     }

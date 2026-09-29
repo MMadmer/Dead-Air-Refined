@@ -78,7 +78,10 @@ void CUIActorMenu::SetupUpgradeItem()
         can_upgrade = CanUpgradeItem(item);
     }
 
-    m_pUpgradeWnd->InitInventory(CurrentItem(), can_upgrade);
+    // No window when its layout would not load: DAR2's 4:3 inventory_upgrade.xml misses an end
+    // tag, and the mechanic's menu used to crash on opening there.
+    if (m_pUpgradeWnd)
+        m_pUpgradeWnd->InitInventory(CurrentItem(), can_upgrade);
     if (m_upgrade_info)
     {
         m_upgrade_info->Show(false);
@@ -94,7 +97,7 @@ void CUIActorMenu::UpdateUpgradeItem()
 
 void CUIActorMenu::TrySetCurUpgrade()
 {
-    if (!m_upgrade_info)
+    if (!m_upgrade_info || !m_pUpgradeWnd)
         return;
     Upgrade_type const* upgr = m_upgrade_info->get_upgrade();
     if (!upgr)

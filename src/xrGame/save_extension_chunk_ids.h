@@ -22,9 +22,13 @@ inline constexpr u32 EnvironmentSeason = 0x31414553;
 // 0xFF00-0xFFFF is reserved for such engine-owned blobs and is never handed to
 // a module by the ns registry.
 inline constexpr u32 XmsNqState = 0x584DFF01;
+// AIK1: per-NPC beliefs of the human NPC AI (target, estimated position and error, age, source).
+inline constexpr u32 AiKnowledge = 0x314B4941;
+// AIT1: per-NPC traits rolled once per lifetime (the radio), bound by object id and section CRC.
+inline constexpr u32 AiTraits = 0x31544941;
 
-inline constexpr std::array registered{
-    ActorAdrenaline, HelmetFilters, ArtefactOverrides, WeaponExtended, WeaponFouling, EnvironmentSeason, XmsNqState};
+inline constexpr std::array registered{ActorAdrenaline, HelmetFilters, ArtefactOverrides, WeaponExtended,
+    WeaponFouling, EnvironmentSeason, XmsNqState, AiKnowledge, AiTraits};
 
 consteval bool registered_ids_are_unique()
 {

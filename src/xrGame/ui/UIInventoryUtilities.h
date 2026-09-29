@@ -34,6 +34,9 @@ bool FreeRoom_inBelt(TIItemContainer& item_list, PIItem item, int width, int hei
 const ui_shader& GetBuyMenuShader();
 //получить shader на иконки инвенторя
 const ui_shader& GetEquipmentIconsShader();
+// The icon texture of an item section: the one its icons_texture key names, the equipment icons
+// otherwise. inv_grid_* of the section are read against that texture.
+const ui_shader& GetItemIconsShader(const shared_str& section);
 // shader на иконки персонажей в мультиплеере
 const ui_shader& GetMPCharIconsShader();
 // get shader for outfit icons in upgrade menu

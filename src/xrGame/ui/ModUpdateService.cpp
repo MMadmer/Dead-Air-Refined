@@ -43,6 +43,8 @@ constexpr unsigned ModDownloadAttempts = 5;
 // Two wanted files this close inside a package travel in one request: on a slow line the bytes
 // skipped between them cost about what another round trip through the redirects would.
 constexpr u64 ModRangeGap = 256 * 1024;
+// a module whose files were never held against a catalog in this process
+constexpr u64 ModNotHeld = ~0ull;
 
 // what the check learned about a release, kept for the update that usually follows
 struct ModKnownIndex
@@ -61,6 +63,27 @@ struct ModVerdict
     xr_string stamp;
     bool same{};
     u64 bytes{}; // !same: what the update is expected to download
+};
+
+// A file of a module installed by hand, hashed while its size and write time stay put.
+struct ModLocalFile
+{
+    xr_string id;
+    xr_string path; // relative to the module folder, '/' separators, UTF-8
+    u64 size{};
+    u64 time{}; // FILETIME of the last write
+    xr_string sha256;
+};
+
+// Why a module installed by hand was not taken for a catalog installation, while its files and the
+// catalog stay what they were: the probe is not repeated for nothing.
+struct ModAdoptVerdict
+{
+    xr_string id;
+    xr_string digest; // mod_content_digest of the files
+    xr_string basis;  // "<catalog serial>:<index SHA-256 of the latest release>"
+    bool modified{};  // the files are no release; otherwise a release the catalog does not take
+    xr_string reason;
 };
 
 struct ModService
@@ -90,6 +113,14 @@ struct ModService
     xr_vector<ModKnownIndex> indexes;
     xr_vector<ModVerdict> verdicts;
     bool verdictsLoaded{};
+    // modules installed by hand (MOD_CATALOG 14.1): hashes, verdicts, adoptions - modules\.catalog\local.txt
+    xr_vector<ModLocalFile> localFiles;
+    xr_vector<ModAdoptVerdict> adoptVerdicts;
+    xr_vector<xr_string> adoptions; // the file's "a" lines, verbatim
+    bool localLoaded{};
+
+    // per module, under the mutex: the catalog serial its files were last held against
+    xr_vector<u64> adoptSerials;
 
     bool initialized{};
     std::atomic_bool stop{};
@@ -490,10 +521,7 @@ bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRele
 // ---- the mod catalog (docs/dead-air/MOD_CATALOG.md) -----------------------------------------
 
 // A module the catalog lists under its own repository, or one the Mod Browser installed.
-bool mod_is_catalog(const XMS::Module& module)
-{
-    return XMS::Catalog::InstalledFromBrowser(module.id.c_str()) || XMS::Catalog::Listed(module);
-}
+bool mod_is_catalog(const XMS::Module& module) { return XMS::Catalog::IsCatalogModule(module); }
 
 // The catalog's word on a release of a catalog module: listed under this repository, not revoked,
 // not below the lowest listed version, signed by the author key the catalog names. Empty = taken.
@@ -1003,6 +1031,509 @@ void mod_run_install(ModHttpSession& session, const xr_string& id)
     mod_set_state(ModInstallSlot, refused ? State::Refused : State::Failed, std::move(error));
 }
 
+// ---- modules installed by hand (docs/dead-air/MOD_CATALOG.md 14.1) --------------------------------
+//
+// A module copied into modules\ by hand that is a release of the catalog byte for byte is recorded
+// the way the browser records its own installations; from then on it is one of them. Byte for byte
+// means every file the game sees against the release's index - path, size, SHA-256 - and nothing
+// besides; the index is the one the author's signed descriptor names. Anything else stays a module
+// installed by hand and nothing of it is touched.
+
+constexpr size_t ModLocalMaximumFiles = 200000;
+
+// modules\.catalog\local.txt, tab-separated:
+//   f <id> <size> <time> <sha256> <path>      a file's hash while its size and time hold
+//   v <id> <digest> <basis> <d|r> <reason>    a probe that took nothing: the files differ, or refused
+//   a <id> <version> <index sha256> <date>    an adoption, for whoever wonders where a record came from
+std::filesystem::path mod_local_file()
+{
+    return std::filesystem::path(XMS::Catalog::CacheRoot().c_str()) / L"local.txt";
+}
+
+// splits a line into exactly `count` tab-separated fields, the last one taking the rest
+bool mod_split_tabs(std::string_view line, size_t count, xr_vector<std::string_view>& out)
+{
+    out.clear();
+    while (out.size() + 1 < count)
+    {
+        const size_t tab = line.find('\t');
+        if (tab == std::string_view::npos)
+            return false;
+        out.push_back(line.substr(0, tab));
+        line.remove_prefix(tab + 1);
+    }
+    out.push_back(line);
+    return true;
+}
+
+void mod_load_local(ModService& service)
+{
+    if (service.localLoaded)
+        return;
+    service.localLoaded = true;
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, mod_local_file().c_str(), L"rb") || !file)
+        return;
+    std::array<char, 4096> buffer{};
+    xr_vector<std::string_view> fields;
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), file) && service.localFiles.size() < ModLocalMaximumFiles * 4)
+    {
+        std::string_view line(buffer.data());
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+            line.remove_suffix(1);
+        if (line.starts_with("f\t") && mod_split_tabs(line.substr(2), 5, fields))
+        {
+            ModLocalFile entry;
+            entry.id = fields[0];
+            entry.path = fields[4];
+            entry.sha256 = fields[3];
+            if (sscanf_s(xr_string(fields[1]).c_str(), "%llu", &entry.size) == 1 &&
+                sscanf_s(xr_string(fields[2]).c_str(), "%llu", &entry.time) == 1 && entry.sha256.size() == 64)
+                service.localFiles.push_back(std::move(entry));
+        }
+        else if (line.starts_with("v\t") && mod_split_tabs(line.substr(2), 5, fields))
+            service.adoptVerdicts.push_back(
+                {xr_string(fields[0]), xr_string(fields[1]), xr_string(fields[2]), fields[3] == "d", xr_string(fields[4])});
+        else if (line.starts_with("a\t"))
+            service.adoptions.emplace_back(line);
+    }
+    fclose(file);
+}
+
+void mod_save_local(const ModService& service)
+{
+    const std::filesystem::path path = mod_local_file();
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    // a lost file costs hashing the modules once more, nothing else
+    FILE* file = nullptr;
+    if (_wfopen_s(&file, path.c_str(), L"wb") || !file)
+        return;
+    fputs("xms-local 1\n", file);
+    for (const xr_string& line : service.adoptions)
+        fprintf(file, "%s\n", line.c_str());
+    // what is kept of a module that is gone would only ever be read for another module of its id
+    for (const ModAdoptVerdict& verdict : service.adoptVerdicts)
+        if (XMS::FindModule(verdict.id.c_str()))
+            fprintf(file, "v\t%s\t%s\t%s\t%s\t%s\n", verdict.id.c_str(), verdict.digest.c_str(), verdict.basis.c_str(),
+                verdict.modified ? "d" : "r", verdict.reason.c_str());
+    for (const ModLocalFile& entry : service.localFiles)
+        if (XMS::FindModule(entry.id.c_str()))
+            fprintf(file, "f\t%s\t%llu\t%llu\t%s\t%s\n", entry.id.c_str(), static_cast<unsigned long long>(entry.size),
+                static_cast<unsigned long long>(entry.time), entry.sha256.c_str(), entry.path.c_str());
+    fclose(file);
+}
+
+xr_string mod_utf8(std::wstring_view wide)
+{
+    const int length = WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
+    xr_string out(static_cast<size_t>(std::max(length, 0)), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), out.data(), length, nullptr, nullptr);
+    return out;
+}
+
+// What the game sees in a module folder, and the first entry that keeps it from being a release
+// copy: a dot-name (.git), a hidden or system file, a link - what XMS walks past is still the
+// player's, and a catalog update replaces the folder whole. Thumbs.db and desktop.ini are
+// Explorer's own and count for nothing.
+struct ModLocalSnapshot
+{
+    xr_vector<ModLocalFile> files;
+    xr_string extra;
+};
+
+void mod_walk_local(const std::wstring& root, const std::wstring& relative, ModLocalSnapshot& out, u32 depth)
+{
+    WIN32_FIND_DATAW data{};
+    const HANDLE find = FindFirstFileExW((root + relative + L"*").c_str(), FindExInfoBasic, &data, FindExSearchNameMatch,
+        nullptr, FIND_FIRST_EX_LARGE_FETCH);
+    if (find == INVALID_HANDLE_VALUE)
+        return;
+    do
+    {
+        const std::wstring_view name(data.cFileName);
+        if (name == L"." || name == L"..")
+            continue;
+        const bool folder = data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+        if (!folder && (0 == _wcsicmp(data.cFileName, L"Thumbs.db") || 0 == _wcsicmp(data.cFileName, L"desktop.ini")))
+            continue;
+        const std::wstring path = relative + data.cFileName;
+        const bool tooling = name.front() == L'.' ||
+            (data.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_REPARSE_POINT));
+        if (tooling || depth > 64 || out.files.size() >= ModLocalMaximumFiles)
+        {
+            if (out.extra.empty())
+                out.extra = mod_utf8(path);
+            continue;
+        }
+        if (folder)
+        {
+            mod_walk_local(root, path + L"\\", out, depth + 1);
+            continue;
+        }
+        ModLocalFile& file = out.files.emplace_back();
+        file.path = mod_utf8(path);
+        std::ranges::replace(file.path, '\\', '/');
+        file.size = (static_cast<u64>(data.nFileSizeHigh) << 32) | data.nFileSizeLow;
+        file.time = (static_cast<u64>(data.ftLastWriteTime.dwHighDateTime) << 32) | data.ftLastWriteTime.dwLowDateTime;
+    } while (FindNextFileW(find, &data));
+    FindClose(find);
+}
+
+// The module's files with their hashes: from the cache where size and time still hold, hashed
+// otherwise. False when cancelled.
+bool mod_local_snapshot(size_t moduleIndex, const XMS::Module& module, ModLocalSnapshot& out)
+{
+    ModService& service = mod_service();
+    mod_load_local(service);
+    const std::wstring root = std::filesystem::path(module.root.c_str()).wstring();
+    mod_walk_local(root.ends_with(L'\\') ? root : root + L"\\", L"", out, 0);
+
+    std::unordered_map<std::string, const ModLocalFile*> cached;
+    for (const ModLocalFile& entry : service.localFiles)
+        if (entry.id == module.id)
+            cached.emplace(entry.path.c_str(), &entry);
+    u64 total = 0;
+    for (ModLocalFile& file : out.files)
+    {
+        file.id = module.id;
+        const auto known = cached.find(file.path.c_str());
+        if (known != cached.end() && known->second->size == file.size && known->second->time == file.time)
+            file.sha256 = known->second->sha256;
+        else
+            total += file.size;
+    }
+
+    if (total)
+    {
+        mod_set_state(moduleIndex, State::Preparing);
+        service.progressDone.store(0, std::memory_order_release);
+        service.progressTotal.store(total, std::memory_order_release);
+    }
+    for (ModLocalFile& file : out.files)
+    {
+        if (!file.sha256.empty())
+            continue;
+        file.sha256 = ContentHash::File((std::filesystem::path(root) / mod_utf8_path(file.path)).wstring(), service.stop).c_str();
+        if (mod_stopped())
+            return false;
+        // a file that cannot be read cannot be shown to be the release's
+        if (file.sha256.empty() && out.extra.empty())
+            out.extra = file.path;
+        service.progressDone.fetch_add(file.size, std::memory_order_acq_rel);
+    }
+
+    const auto stale = std::ranges::remove_if(service.localFiles, [&](const ModLocalFile& entry) { return entry.id == module.id; });
+    service.localFiles.erase(stale.begin(), stale.end());
+    for (const ModLocalFile& file : out.files)
+        if (!file.sha256.empty())
+            service.localFiles.push_back(file);
+    return true;
+}
+
+// SHA-256 over "<path>\t<size>\t<sha256>\n" of every file, the path in ASCII lower case, the lines
+// in byte order: one text for a folder on the disk and for a release's index alike, so two equal
+// digests are two equal sets of files.
+xr_string mod_content_digest(xr_vector<xr_string> lines)
+{
+    std::ranges::sort(lines);
+    xr_string text;
+    for (const xr_string& line : lines)
+        text += line;
+    return ContentHash::Buffer(text.data(), text.size()).c_str();
+}
+
+xr_string mod_digest_line(std::string_view path, u64 size, std::string_view sha256)
+{
+    xr_string line(path);
+    for (char& c : line)
+        c = c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+    line += "\t" + xr_string(std::to_string(size).c_str()) + "\t" + xr_string(sha256) + "\n";
+    return line;
+}
+
+xr_string mod_local_digest(const ModLocalSnapshot& local)
+{
+    xr_vector<xr_string> lines;
+    for (const ModLocalFile& file : local.files)
+        lines.push_back(mod_digest_line(file.path, file.size, file.sha256));
+    return mod_content_digest(std::move(lines));
+}
+
+xr_string mod_index_digest(const ModRelease::FileIndex& index)
+{
+    xr_vector<xr_string> lines;
+    for (const ModRelease::FileEntry& entry : index.files)
+        lines.push_back(mod_digest_line(entry.path, entry.size, entry.sha256));
+    return mod_content_digest(std::move(lines));
+}
+
+// An asset of the release tagged `tag`, where the "latest" address cannot reach an older release.
+std::wstring mod_tagged_asset_url(const xr_string& repository, const xr_string& tag, const xr_string& asset)
+{
+    std::wstring url = mod_qa_base();
+    if (url.empty())
+        url = ModReleaseHost;
+    return url.append(L"/").append(mod_widen(repository)).append(L"/releases/download/").append(mod_widen(tag))
+        .append(L"/").append(mod_widen(asset));
+}
+
+// A release that may be the one on the disk: its descriptor, verbatim for the signature, and the
+// tag it was reached under - empty for the latest release.
+struct ModCandidate
+{
+    ModRelease::Descriptor descriptor;
+    xr_string text;
+    xr_string tag;
+};
+
+// The release of one version. XFined Editor tags a version v<version>, or v<version>-r<N> when it
+// went out again after a deletion, and never has two releases of one version out (MOD_UPDATES 2.5);
+// the game reads no release list, so it asks for those names until one answers. False when the
+// network failed - nothing is concluded from that.
+bool mod_tagged_candidates(ModHttpSession& session, const XMS::Module& module, xr_vector<ModCandidate>& out)
+{
+    // the tag is spelt from the manifest: only what a tag and a URL both take
+    if (module.version.empty() || module.version.size() > 32 ||
+        module.version.find_first_not_of("0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-") != xr_string::npos)
+        return true;
+    for (u32 attempt = 1; attempt <= 5 && !mod_stopped(); ++attempt)
+    {
+        xr_string tag = "v" + module.version;
+        if (attempt > 1)
+            tag += "-r" + xr_string(std::to_string(attempt).c_str());
+        ModCandidate candidate;
+        xr_string error;
+        switch (mod_fetch_text(session, mod_tagged_asset_url(module.update_github, tag, module.id + ".update.ltx"),
+            ModRelease::MaximumDescriptorBytes, candidate.text, error))
+        {
+        case ModFetch::NotFound: continue;
+        case ModFetch::Failed:
+            Msg("~ [mods] %s: release %s could not be read - %s", module.id.c_str(), tag.c_str(), error.c_str());
+            return false;
+        case ModFetch::Ok: break;
+        }
+        if (!ModRelease::ParseDescriptor(candidate.text, candidate.descriptor, error) || candidate.descriptor.id != module.id ||
+            ModRelease::ParseVersion(candidate.descriptor.version) != ModRelease::ParseVersion(module.version))
+            continue;
+        candidate.tag = std::move(tag);
+        out.push_back(std::move(candidate));
+        break;
+    }
+    return !mod_stopped();
+}
+
+// The index a candidate names, checked against the descriptor's size and SHA-256.
+std::shared_ptr<const ModRelease::FileIndex> mod_candidate_index(ModHttpSession& session, size_t moduleIndex,
+    const XMS::Module& module, const ModCandidate& candidate, xr_string& error)
+{
+    if (candidate.tag.empty())
+        return mod_fetch_index(session, moduleIndex, module, candidate.descriptor, error);
+    const ModRelease::Descriptor& descriptor = candidate.descriptor;
+    xr_string body;
+    if (mod_fetch_text(session, mod_tagged_asset_url(module.update_github, candidate.tag, descriptor.index.name),
+            static_cast<size_t>(descriptor.index.size), body, error) != ModFetch::Ok)
+    {
+        if (error.empty())
+            error = "release has no file index";
+        return nullptr;
+    }
+    if (body.size() != descriptor.index.size || ContentHash::Buffer(body.data(), body.size()) != descriptor.index.sha256.c_str())
+    {
+        error = "file index does not match the descriptor";
+        return nullptr;
+    }
+    auto index = std::make_shared<ModRelease::FileIndex>();
+    if (!ModRelease::ParseFileIndex(body, descriptor, *index, error))
+        return nullptr;
+    return index;
+}
+
+// Whether the module is one to hold against the catalog: installed by hand, listed - or withdrawn
+// by its author - under the repository its own manifest names. The id alone never makes a
+// module the catalog's: another author's module may carry it.
+bool mod_adoption_candidate(const XMS::Module& module)
+{
+    return ModRelease::ValidModuleId(module.id) && !module.update_github.empty() &&
+        !XMS::Catalog::InstalledFromBrowser(module.id.c_str()) &&
+        (XMS::Catalog::Listed(module) || XMS::Catalog::Withdrawn(module)) && XMS::StagedAction(module.id.c_str()).empty();
+}
+
+enum class ModAdopt
+{
+    Adopted,
+    Declined, // the files are no release of the catalog: modified, the author's build, another version
+    Refused,  // they are a release, one the catalog does not stand behind (withdrawn, flagged, forbidden content)
+    Unknown   // the network or a cancel left it open: asked again next time
+};
+
+// The catalog's word on a release that holds exactly the module's files. Empty = taken.
+xr_string mod_adoption_refusal(const XMS::Catalog::Index& catalog, const XMS::Catalog::Listing& listing,
+    const XMS::Module& module, const ModRelease::Descriptor& descriptor, const ModRelease::FileIndex& index)
+{
+    // a withdrawn version stays what it is on the disk: disabled at the start with the reason
+    if (const XMS::Catalog::Revocation* revoked = catalog.Revoked(module.id, descriptor.version, listing.key.id))
+        return "the catalog withdrew release " + descriptor.version + ": " +
+            (revoked->reason.empty() ? xr_string("no reason given") : revoked->reason);
+    if (const auto snapshot = ModCatalog::Current(); const ModCatalog::Entry* entry = snapshot->Find(module.id))
+        if (entry->hasCard && entry->release.index.sha256 == descriptor.index.sha256 && entry->vt.verdict == ModCatalog::Verdict::Block)
+            return "VirusTotal: flagged by " + (entry->vt.flaggedBy.empty() ? xr_string("antivirus engines") : entry->vt.flaggedBy);
+    xr_string why = mod_catalog_index_refusal(descriptor, index);
+    if (!why.empty())
+        return why;
+    const std::filesystem::path root(module.root.c_str());
+    for (const ModRelease::FileEntry& entry : index.files)
+        if (!ModRelease::CatalogFileAllowed(root / mod_utf8_path(entry.path), why))
+            return entry.path + ": " + why;
+    return {};
+}
+
+ModAdopt mod_probe_adoption(ModHttpSession& session, size_t moduleIndex, const XMS::Module& module,
+    const XMS::Catalog::Index& catalog, const XMS::Catalog::Listing& listing, const ModLocalSnapshot& local,
+    const xr_string& digest, const ModRelease::Descriptor& latest, const xr_string& latestText, xr_string& reason,
+    ModCandidate& taken)
+{
+    if (!local.extra.empty())
+    {
+        reason = "it holds " + local.extra + ", which no release carries";
+        return ModAdopt::Declined;
+    }
+    const ModRelease::Version installed = ModRelease::ParseVersion(module.version);
+    const ModRelease::Version released = ModRelease::ParseVersion(latest.version);
+    if (!installed.valid || installed > released)
+    {
+        reason = "version " + module.version + " is not published";
+        return ModAdopt::Declined;
+    }
+    if (installed < ModRelease::ParseVersion(listing.minVersion))
+    {
+        reason = "version " + module.version + " is below the lowest the catalog lists (" + listing.minVersion + ")";
+        return ModAdopt::Declined;
+    }
+
+    xr_vector<ModCandidate> candidates;
+    if (installed == released)
+        candidates.push_back({latest, latestText, {}});
+    else if (!mod_tagged_candidates(session, module, candidates))
+        return ModAdopt::Unknown;
+    if (candidates.empty())
+    {
+        reason = "no release of version " + module.version + " is published";
+        return ModAdopt::Declined;
+    }
+
+    reason = "its files are not those of release " + module.version;
+    for (ModCandidate& candidate : candidates)
+    {
+        xr_string error;
+        if (candidate.descriptor.schema > ModRelease::SupportedSchema)
+            continue;
+        // the author's signature is what ties the index, and every file with it, to the catalog
+        if (!XMS::Catalog::VerifySigned(candidate.text, listing.key, error))
+        {
+            reason = "release " + candidate.descriptor.version + " is not signed by the author's key the catalog names";
+            continue;
+        }
+        const auto index = mod_candidate_index(session, moduleIndex, module, candidate, error);
+        if (!index)
+        {
+            Msg("~ [mods] %s: the index of release %s could not be read - %s", module.id.c_str(),
+                candidate.descriptor.version.c_str(), error.c_str());
+            return ModAdopt::Unknown;
+        }
+        if (mod_index_digest(*index) != digest)
+            continue;
+        reason = mod_adoption_refusal(catalog, listing, module, candidate.descriptor, *index);
+        if (!reason.empty())
+            return ModAdopt::Refused;
+        taken = std::move(candidate);
+        return ModAdopt::Adopted;
+    }
+    return ModAdopt::Declined;
+}
+
+void mod_set_hand_modified(size_t moduleIndex, bool modified)
+{
+    mod_set_status(moduleIndex, [modified](ModuleStatus& status) { status.handModified = modified; });
+}
+
+// One module installed by hand against the catalog, with the latest release the check has just
+// fetched. Adopted, it is a catalog installation from here on: the rest of the check already
+// holds its updates to the catalog's rules.
+void mod_consider_adoption(ModHttpSession& session, size_t moduleIndex, const XMS::Module& module,
+    const ModRelease::Descriptor& latest, const xr_string& latestText)
+{
+    ModService& service = mod_service();
+    const std::shared_ptr<const XMS::Catalog::Index> catalog = XMS::Catalog::Current();
+    if (!catalog || !mod_adoption_candidate(module))
+        return;
+    const XMS::Catalog::Listing* listing = catalog->Find(module.id);
+    if (!listing)
+        listing = catalog->FindWithdrawn(module.id);
+    if (!listing)
+        return;
+
+    ModLocalSnapshot local;
+    if (!mod_local_snapshot(moduleIndex, module, local))
+        return;
+    const xr_string digest = mod_local_digest(local);
+    const xr_string basis = xr_string(std::to_string(catalog->serial).c_str()) + ":" + latest.index.sha256;
+    const auto remember_serial = [&]
+    {
+        std::lock_guard lock(service.mutex);
+        service.adoptSerials[moduleIndex] = catalog->serial;
+    };
+
+    for (const ModAdoptVerdict& verdict : service.adoptVerdicts)
+    {
+        if (verdict.id != module.id || verdict.digest != digest || verdict.basis != basis)
+            continue;
+        mod_save_local(service);
+        mod_set_hand_modified(moduleIndex, verdict.modified);
+        remember_serial();
+        return;
+    }
+
+    xr_string reason;
+    ModCandidate taken;
+    const ModAdopt result = mod_probe_adoption(session, moduleIndex, module, *catalog, *listing, local, digest, latest,
+        latestText, reason, taken);
+    const auto stale = std::ranges::remove_if(service.adoptVerdicts, [&](const ModAdoptVerdict& verdict) { return verdict.id == module.id; });
+    service.adoptVerdicts.erase(stale.begin(), stale.end());
+    switch (result)
+    {
+    case ModAdopt::Unknown:
+        break;
+    case ModAdopt::Declined:
+    case ModAdopt::Refused:
+    {
+        const bool modified = result == ModAdopt::Declined;
+        Msg("* [mods] %s: installed by hand, %s - %s", module.id.c_str(),
+            modified ? "not a release of the Mod Browser" : "a release the Mod Browser does not take", reason.c_str());
+        service.adoptVerdicts.push_back({module.id, digest, basis, modified, reason});
+        mod_set_hand_modified(moduleIndex, modified);
+        remember_serial();
+        break;
+    }
+    case ModAdopt::Adopted:
+    {
+        XMS::Catalog::MarkInstalled(module.id.c_str(), true);
+        SYSTEMTIME now{};
+        GetSystemTime(&now);
+        string32 date{};
+        xr_sprintf(date, "%04u-%02u-%02u", now.wYear, now.wMonth, now.wDay);
+        service.adoptions.push_back("a\t" + module.id + "\t" + taken.descriptor.version + "\t" +
+            taken.descriptor.index.sha256 + "\t" + date);
+        Msg("* [mods] %s: installed by hand, release %s of the Mod Browser byte for byte (%s) - taken as installed through it",
+            module.id.c_str(), taken.descriptor.version.c_str(), taken.tag.empty() ? "the latest release" : taken.tag.c_str());
+        mod_set_hand_modified(moduleIndex, false);
+        remember_serial();
+        break;
+    }
+    }
+    mod_save_local(service);
+}
+
 void mod_run_check(ModHttpSession& session)
 {
     ModService& service = mod_service();
@@ -1029,10 +1560,24 @@ void mod_run_check(ModHttpSession& session)
         {
             Msg("* [mods] %s: installed %s, released %s", module.id.c_str(), module.version.c_str(),
                 descriptor.version.c_str());
+            // first whose installation it is: an adopted module is checked as the catalog's below
+            mod_consider_adoption(session, index, module, descriptor, text);
+            if (mod_stopped())
+            {
+                mod_set_state(index, State::Unchecked);
+                break;
+            }
             // The same number is not yet "nothing new": the author may have taken that release
-            // down and published it again. Worth a comparison only for a release this game can take.
+            // down and published it again. Worth a comparison only for a release this game can take -
+            // and not for a copy installed by hand that is no release: what differs there is the
+            // player's, and the release would overwrite it in the name of a fix.
+            bool handModified = false;
+            {
+                std::lock_guard lock(service.mutex);
+                handModified = service.modules[index].handModified;
+            }
             if (ModRelease::ParseVersion(descriptor.version) == ModRelease::ParseVersion(module.version) &&
-                !mod_release_blocked(descriptor))
+                !mod_release_blocked(descriptor) && !handModified)
             {
                 u64 download = 0;
                 const bool reissue = mod_reissued(session, index, module, descriptor, download);
@@ -1228,7 +1773,40 @@ void mod_initialize(ModService& service)
         service.modules.emplace_back(std::move(status));
     }
     service.indexes.resize(service.modules.size());
+    service.adoptSerials.assign(service.modules.size(), ModNotHeld);
 }
+}
+
+void ModUpdateService::CatalogRefreshed()
+{
+    ModService& service = mod_service();
+    std::lock_guard lock(service.mutex);
+    // before the first check there is nothing to redo: that check holds every module against it
+    if (mod_stopped() || !service.initialized)
+        return;
+    const std::shared_ptr<const XMS::Catalog::Index> catalog = XMS::Catalog::Current();
+    if (!catalog)
+        return;
+    bool again = false;
+    const xr_vector<XMS::Module>& modules = XMS::Modules();
+    for (size_t index = 0; index != service.modules.size() && index != modules.size(); ++index)
+    {
+        ModuleStatus& status = service.modules[index];
+        if (service.adoptSerials[index] == catalog->serial || !mod_adoption_candidate(modules[index]))
+            continue;
+        // what is on its way stays so; an answer is asked again, now with the catalog to hold it against
+        if (status.state == State::Current || status.state == State::NoRelease || status.state == State::Available ||
+            status.state == State::Blocked || status.state == State::Refused || status.state == State::CheckFailed)
+        {
+            status.state = State::Unchecked;
+            again = true;
+        }
+    }
+    if (!again)
+        return;
+    Msg("* [mods] the catalog changed: modules installed by hand are held against it");
+    service.checkRequested = true;
+    mod_wake_worker(service);
 }
 
 void ModUpdateService::StartCheck()
@@ -1310,10 +1888,11 @@ void ModUpdateService::LogStatus()
     for (size_t index = 0; index != snapshot.modules.size() && index != modules.size(); ++index)
     {
         const ModuleStatus& status = snapshot.modules[index];
-        Msg("*   %s %s: %s%s%s%s%s%s", status.id.c_str(), modules[index].version.c_str(), mod_state_name(status.state),
+        Msg("*   %s %s: %s%s%s%s%s%s%s%s", status.id.c_str(), modules[index].version.c_str(), mod_state_name(status.state),
             status.version.empty() ? "" : " - ", status.version.c_str(),
             status.reissue ? " (the installed version, published again)" : "", status.message.empty() ? "" : " - ",
-            status.message.c_str());
+            status.message.c_str(), status.handModified ? ", installed by hand and modified" : "",
+            XMS::Catalog::InstalledFromBrowser(status.id.c_str()) ? ", a Mod Browser installation" : "");
     }
 }
 
@@ -1362,9 +1941,10 @@ bool ModUpdateService::StartInstall(pcstr moduleId, xr_string& error)
                                                                           "the mod catalog does not list this module";
         return false;
     }
-    if (XMS::FindModule(moduleId))
+    if (const XMS::Module* installed = XMS::FindModule(moduleId))
     {
-        error = "the module is installed already";
+        error = XMS::Catalog::IsCatalogModule(*installed) ? "the module is installed already" :
+                                                            "another module with this id is installed";
         return false;
     }
     // VirusTotal's block is final for an installation (MOD_CATALOG 11)
@@ -1459,6 +2039,7 @@ void ModUpdateService::Shutdown()
 }
 #else
 void ModUpdateService::StartCheck() {}
+void ModUpdateService::CatalogRefreshed() {}
 bool ModUpdateService::StartUpdate(pcstr) { return false; }
 u32 ModUpdateService::StartUpdateAll() { return 0; }
 void ModUpdateService::RequestUpdate(pcstr) {}

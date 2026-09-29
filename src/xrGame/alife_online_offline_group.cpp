@@ -294,7 +294,11 @@ void CSE_ALifeOnlineOfflineGroup::switch_offline()
 
     if (MEMBER* member = live_member())
     {
-        member->synchronize_location();
+        // Only an online commander's server location is stale. An offline one already holds its own
+        // (possibly another level's) location; syncing it against this level's graph moved it onto
+        // this level and into the level registry while the squad still owned it.
+        if (member->m_bOnline)
+            member->synchronize_location();
 
         o_Position = member->o_Position;
         m_tNodeID = member->m_tNodeID;

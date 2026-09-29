@@ -43,6 +43,7 @@ void Vision::o_new(IGameObject* O)
     feel_visible_Item& I = feel_visible.back();
     I.O = O;
     I.Cache_vis = 1.f;
+    I.trace_vis = 0.f;
     I.Cache.verts[0].set(0, 0, 0);
     I.Cache.verts[1].set(0, 0, 0);
     I.Cache.verts[2].set(0, 0, 0);
@@ -117,7 +118,7 @@ void Vision::feel_vision_query(Fmatrix& mFull, Fvector& P)
     }
 }
 
-void Vision::feel_vision_update(IGameObject* parent, Fvector& P, float dt, float vis_threshold)
+void Vision::feel_vision_update(IGameObject* parent, Fvector& P, float dt, float vis_threshold, u32 ray_flags)
 {
     // B-A = objects, that become visible
     if (!seen.empty())
@@ -148,137 +149,158 @@ void Vision::feel_vision_update(IGameObject* parent, Fvector& P, float dt, float
 
     // Copy results and perform traces
     query = seen;
-    o_trace(P, dt, vis_threshold);
+    o_trace(P, dt, vis_threshold, ray_flags);
 }
-void Vision::o_trace(Fvector& P, float dt, float vis_threshold)
+
+bool Vision::feel_vision_retrace(const IGameObject* object, Fvector& P, float dt, float vis_threshold, u32 ray_flags)
+{
+    for (feel_visible_Item& item : feel_visible)
+    {
+        if (item.O != object)
+            continue;
+        RQR.r_clear();
+        o_trace_item(item, P, dt, vis_threshold, ray_flags);
+        return true;
+    }
+    return false;
+}
+
+void Vision::o_trace(Fvector& P, float dt, float vis_threshold, u32 ray_flags)
 {
     RQR.r_clear();
-    xr_vector<feel_visible_Item>::iterator I = feel_visible.begin(), E = feel_visible.end();
-    for (; I != E; ++I)
+    for (feel_visible_Item& item : feel_visible)
+        o_trace_item(item, P, dt, vis_threshold, ray_flags);
+}
+
+void Vision::o_trace_item(feel_visible_Item& item, Fvector& P, float dt, float vis_threshold, u32 ray_flags)
+{
+    feel_visible_Item* I = &item;
+    if (0 == I->O->GetCForm())
     {
-        if (0 == I->O->GetCForm())
+        I->fuzzy = -1;
+        I->trace_vis = 0.f;
+        return;
+    }
+
+    // verify relation
+    // if (positive(I->fuzzy) && I->O->Position().similar(I->cp_LR_dst,lr_granularity) &&
+    // P.similar(I->cp_LR_src,lr_granularity))
+    // continue;
+
+    I->cp_LR_dst = I->O->Position();
+    I->cp_LR_src = P;
+    I->cp_LAST = I->O->get_last_local_point_on_mesh(I->cp_LP, I->bone_id);
+
+    //
+    Fvector D, OP = I->cp_LAST;
+    D.sub(OP, P);
+    // One square root, not two: this runs for every object an NPC can currently see,
+    // for every NPC, on every vision update.
+    const float d_mag = D.magnitude();
+    if (fis_zero(d_mag))
+    {
+        I->fuzzy = 1.f;
+        I->trace_vis = 1.f;
+        return;
+    }
+
+    float f = d_mag + .2f;
+    if (f > fuzzy_guaranteed)
+    {
+        D.div(f);
+        // setup ray defs & feel params
+        collide::ray_defs RD(
+            P, D, f, ray_flags, collide::rq_target(collide::rqtStatic | collide::rqtObject | collide::rqtObstacle));
+        SFeelParam feel_params(this, I, vis_threshold);
+        // check cache
+        if (I->Cache.result && I->Cache.similar(P, D, f))
         {
-            I->fuzzy = -1;
-            continue;
-        }
-
-        // verify relation
-        // if (positive(I->fuzzy) && I->O->Position().similar(I->cp_LR_dst,lr_granularity) &&
-        // P.similar(I->cp_LR_src,lr_granularity))
-        // continue;
-
-        I->cp_LR_dst = I->O->Position();
-        I->cp_LR_src = P;
-        I->cp_LAST = I->O->get_last_local_point_on_mesh(I->cp_LP, I->bone_id);
-
-        //
-        Fvector D, OP = I->cp_LAST;
-        D.sub(OP, P);
-        // One square root, not two: this runs for every object an NPC can currently see,
-        // for every NPC, on every vision update.
-        const float d_mag = D.magnitude();
-        if (fis_zero(d_mag))
-        {
-            I->fuzzy = 1.f;
-            continue;
-        }
-
-        float f = d_mag + .2f;
-        if (f > fuzzy_guaranteed)
-        {
-            D.div(f);
-            // setup ray defs & feel params
-            collide::ray_defs RD(P, D, f, CDB::OPT_CULL,
-                collide::rq_target(collide::rqtStatic | collide::rqtObject | collide::rqtObstacle));
-            SFeelParam feel_params(this, &*I, vis_threshold);
-            // check cache
-            if (I->Cache.result && I->Cache.similar(P, D, f))
-            {
-                // similar with previous query
-                feel_params.vis = I->Cache_vis;
-                // Log("cache 0");
-            }
-            else
-            {
-                float _u, _v, _range;
-                if (CDB::TestRayTri(P, D, I->Cache.verts, _u, _v, _range, false) && (_range > 0 && _range < f))
-                {
-                    feel_params.vis = 0.f;
-                    // Log("cache 1");
-                }
-                else
-                {
-                    // cache outdated. real query.
-                    VERIFY(!fis_zero(RD.dir.magnitude()));
-
-                    // Skip the observer's own collision model: without this every vision trace
-                    // raytested the owner's cform and folded its own material into fp->vis
-                    // (feel_vision_callback does not filter self). The ignore_object parameter is
-                    // already honoured by CObjectSpace::_RayQuery2.
-                    if (g_pGameLevel->ObjectSpace.RayQuery(
-                            RQR, RD, feel_vision_callback, &feel_params, NULL, const_cast<IGameObject*>(m_owner)))
-                    {
-                        I->Cache_vis = feel_params.vis;
-                        I->Cache.set(P, D, f, true);
-                    }
-                    else
-                    {
-                        // feel_params.vis = 0.f;
-                        // I->Cache_vis = feel_params.vis ;
-                        I->Cache.set(P, D, f, false);
-                    }
-                    // Log("query");
-                }
-            }
-            // Log("Vis",feel_params.vis);
-            r_spatial.clear();
-            g_pGamePersistent->SpatialSpace.q_ray(r_spatial, 0, STYPE_VISIBLEFORAI, P, D, f);
-
-            RD.flags = CDB::OPT_ONLYFIRST;
-
-            bool collision_found = false;
-            xr_vector<ISpatial*>::const_iterator i = r_spatial.begin();
-            xr_vector<ISpatial*>::const_iterator e = r_spatial.end();
-            for (; i != e; ++i)
-            {
-                if (*i == m_owner)
-                    continue;
-
-                if (*i == I->O)
-                    continue;
-
-                IGameObject const* object = (*i)->dcast_GameObject();
-                RQR.r_clear();
-                if (object && object->GetCForm() && !object->GetCForm()->_RayQuery(RD, RQR))
-                    continue;
-
-                collision_found = true;
-                break;
-            }
-
-            if (collision_found)
-                feel_params.vis = 0.f;
-
-            if (feel_params.vis < feel_params.vis_threshold)
-            {
-                // INVISIBLE, choose next point
-                I->fuzzy -= fuzzy_update_novis * dt;
-                clamp(I->fuzzy, -.5f, 1.f);
-                I->cp_LP = I->O->get_new_local_point_on_mesh(I->bone_id);
-            }
-            else
-            {
-                // VISIBLE
-                I->fuzzy += fuzzy_update_vis * dt;
-                clamp(I->fuzzy, -.5f, 1.f);
-            }
+            // similar with previous query
+            feel_params.vis = I->Cache_vis;
+            // Log("cache 0");
         }
         else
         {
-            // VISIBLE, 'cause near
+            float _u, _v, _range;
+            if (CDB::TestRayTri(P, D, I->Cache.verts, _u, _v, _range, false) && (_range > 0 && _range < f))
+            {
+                feel_params.vis = 0.f;
+                // Log("cache 1");
+            }
+            else
+            {
+                // cache outdated. real query.
+                VERIFY(!fis_zero(RD.dir.magnitude()));
+
+                // Skip the observer's own collision model: without this every vision trace
+                // raytested the owner's cform and folded its own material into fp->vis
+                // (feel_vision_callback does not filter self). The ignore_object parameter is
+                // already honoured by CObjectSpace::_RayQuery2.
+                if (g_pGameLevel->ObjectSpace.RayQuery(
+                        RQR, RD, feel_vision_callback, &feel_params, NULL, const_cast<IGameObject*>(m_owner)))
+                {
+                    I->Cache_vis = feel_params.vis;
+                    I->Cache.set(P, D, f, true);
+                }
+                else
+                {
+                    // feel_params.vis = 0.f;
+                    // I->Cache_vis = feel_params.vis ;
+                    I->Cache.set(P, D, f, false);
+                }
+                // Log("query");
+            }
+        }
+        // Log("Vis",feel_params.vis);
+        r_spatial.clear();
+        g_pGamePersistent->SpatialSpace.q_ray(r_spatial, 0, STYPE_VISIBLEFORAI, P, D, f);
+
+        RD.flags = CDB::OPT_ONLYFIRST;
+
+        bool collision_found = false;
+        xr_vector<ISpatial*>::const_iterator i = r_spatial.begin();
+        xr_vector<ISpatial*>::const_iterator e = r_spatial.end();
+        for (; i != e; ++i)
+        {
+            if (*i == m_owner)
+                continue;
+
+            if (*i == I->O)
+                continue;
+
+            IGameObject const* object = (*i)->dcast_GameObject();
+            RQR.r_clear();
+            if (object && object->GetCForm() && !object->GetCForm()->_RayQuery(RD, RQR))
+                continue;
+
+            collision_found = true;
+            break;
+        }
+
+        if (collision_found)
+            feel_params.vis = 0.f;
+
+        I->trace_vis = feel_params.vis;
+        if (feel_params.vis < feel_params.vis_threshold)
+        {
+            // INVISIBLE, choose next point
+            I->fuzzy -= fuzzy_update_novis * dt;
+            clamp(I->fuzzy, -.5f, 1.f);
+            I->cp_LP = I->O->get_new_local_point_on_mesh(I->bone_id);
+        }
+        else
+        {
+            // VISIBLE
             I->fuzzy += fuzzy_update_vis * dt;
             clamp(I->fuzzy, -.5f, 1.f);
         }
+    }
+    else
+    {
+        // VISIBLE, 'cause near
+        I->fuzzy += fuzzy_update_vis * dt;
+        clamp(I->fuzzy, -.5f, 1.f);
+        I->trace_vis = 1.f;
     }
 }
 };

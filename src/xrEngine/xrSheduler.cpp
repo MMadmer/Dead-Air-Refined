@@ -3,6 +3,8 @@
 #include "xr_object.h"
 #include "GameFont.h"
 #include "PerformanceAlert.hpp"
+#include "xrCore/Threading/Lock.hpp"
+#include "xrCore/Threading/ScopeLock.hpp"
 
 //#define DEBUG_SCHEDULER
 //#define DEBUG_SCHEDULERMT
@@ -11,6 +13,11 @@ float psShedulerCurrent = 10.f;
 float psShedulerTarget = 10.f;
 const float psShedulerReaction = 0.1f;
 bool isSheduleInProgress = false;
+
+// Guards the registration queue: objects are created on task workers too (see CPS_Instance), and
+// two registering at once grew one vector together. File-scope rather than a member: the class is
+// exported with its implicit copy operations.
+static Lock registration_lock;
 
 //-------------------------------------------------------------------------------------
 void CSheduler::Initialize()
@@ -60,6 +67,7 @@ void CSheduler::DumpStatistics(IGameFont& font, IPerformanceAlert* alert)
 
 void CSheduler::internal_Registration()
 {
+    ScopeLock lock{ &registration_lock };
     for (u32 it = 0; it < Registration.size(); it++)
     {
         ItemReg& R = Registration[it];
@@ -264,6 +272,7 @@ void CSheduler::Register(ISheduled* A, bool RT)
     Msg("SCHEDULER: register [%s][%x]", A->shedule_Name().c_str(), A);
 #endif
 
+    ScopeLock lock{ &registration_lock };
     Registration.push_back(R);
 }
 
@@ -288,6 +297,7 @@ void CSheduler::Unregister(ISheduled* A)
     R.RT = A->GetSchedulerData().b_RT;
     R.Object = A;
 
+    ScopeLock lock{ &registration_lock };
     Registration.push_back(R);
 }
 

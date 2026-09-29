@@ -1,0 +1,108 @@
+; Options -> Video: how the list is laid out (ui_mm_opt_video.script).
+;
+; Every row is one setting, bound to a console command by a node of its own in the xml
+; (configs\ui\ui_mm_opt.xml and ui_mm_opt_16.xml, <video_page>): the control of row <row> is the
+; node <control>_<row>, and its options_item names the command, the options group and what a change
+; needs (vid restart, game restart, applied at once). Only a node can bind a control, and only a
+; bound combo lists a command's values, so that part cannot live here. This file says which rows
+; there are, in which subsection and in what order:
+;
+;   [rows]             <row> = <control>, <console command>[, <readout format>]
+;                      control is list, check or track. The command is the one the node binds: a
+;                      row whose command the running renderer does not register is left out (a combo
+;                      bound to a missing command stops the game). A track with a format shows its
+;                      value beside it, string.format(format, value).
+;   [groups] order     subsections in this order; the header is the string ui_mm_grp_<id>.
+;   [group_<id>] rows  rows of a subsection in this order. A row of [rows] that no subsection lists
+;                      goes to the end of the last one.
+;   [captions]         <row> = caption string id; a row without a line here uses ui_mm_<row>.
+;   [caps]             <row> = <key>: the row is shown only when the renderer reports <key>=1 in its
+;                      capabilities (console command r__caps, "key=value;key=value").
+;
+; The hint of a row is the string st_da_x64_video_hint_<row>.
+;
+; Lists rather than one key per line: the engine hands the lines of a section back sorted, and a
+; module's .ltxp can append to a list (+order = ..., +rows = ...).
+
+[rows]
+renderer             = list,  renderer
+resolution           = list,  vid_mode
+window_mode          = list,  vid_window_mode
+fps_limit            = list,  vid_fps_limit
+vsync                = check, rs_v_sync
+preset               = list,  _preset
+level_texture_unload = check, r__unload_level_textures
+aa                   = list,  r__aa
+fsr                  = list,  r__fsr
+dlss                 = list,  r__dlss
+framegen             = list,  r__framegen
+upscale_sharpness    = track, r__upscale_sharpness, %.2f
+async_compute        = list,  r__async_compute
+dstorage             = check, r__dstorage
+rt_reflections       = check, r__rt_reflections
+rt_shadows           = check, r__rt_shadows
+rtao                 = check, r__rtao
+rt_quality           = list,  r__rt_quality
+gamma                = track, rs_c_gamma, %.2f
+contrast             = track, rs_c_contrast, %.2f
+brightness           = track, rs_c_brightness, %.2f
+fov                  = track, fov, %.0f
+hud_fov              = track, hud_fov, %.2f
+detail_height        = track, r__detail_height, %.1f
+sun_shafts           = track, r2_sss_intensity, %.1f
+sharp                = track, r2_lumasharpen, %.1f
+bloom                = track, r2_ls_bloom_kernel_scale, %.1f
+aberration           = track, r2_aberration_val, %.1f
+dof                  = check, r2_dof_enable
+technicolor          = check, r2_technicolor
+vignette             = check, r2_vignette
+color_r              = track, r__color_base_r, %.2f
+color_g              = track, r__color_base_g, %.2f
+color_b              = track, r__color_base_b, %.2f
+vibrance             = track, r2_vibrance_val, %.2f
+
+[groups]
+order = screen, quality, aa, rtx, image, effects, color
+
+[group_screen]
+rows = renderer, async_compute, resolution, window_mode, fps_limit, vsync
+
+[group_quality]
+rows = preset, level_texture_unload, dstorage
+
+[group_aa]
+rows = aa, fsr, dlss, framegen, upscale_sharpness
+
+; Ray tracing: its own category, never part of a quality preset (DirectX 12, greyed elsewhere).
+[group_rtx]
+rows = rt_reflections, rt_shadows, rtao, rt_quality
+
+[group_image]
+rows = gamma, contrast, brightness, fov, hud_fov
+
+[group_effects]
+rows = detail_height, sun_shafts, sharp, bloom, aberration, dof, technicolor, vignette
+
+[group_color]
+rows = color_r, color_g, color_b, vibrance
+
+[captions]
+renderer          = ui_mm_da_renderer
+preset            = ui_mm_quality_presets
+aa                = ui_mm_da_aa
+fsr               = ui_mm_da_fsr
+dlss              = ui_mm_da_dlss
+framegen          = ui_mm_da_framegen
+upscale_sharpness = ui_mm_da_upscale_sharpness
+async_compute     = ui_mm_da_async_compute
+dstorage          = ui_mm_da_dstorage
+rt_reflections    = ui_mm_da_rt_reflections
+rt_shadows        = ui_mm_da_rt_shadows
+rtao              = ui_mm_da_rtao
+rt_quality        = ui_mm_da_rt_quality
+sun_shafts        = ui_mm_r2_shafts_value
+aberration        = ui_mm_abberation
+
+[caps]
+fsr  = fsr
+dlss = dlss

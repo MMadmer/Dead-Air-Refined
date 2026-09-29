@@ -15,6 +15,8 @@
 #include "enemy_manager.h"
 #include "Actor.h"
 #include "Common/object_broker.h"
+#include "ai/stalker/ai_stalker.h"
+#include "da_ai_knowledge.h"
 
 struct CDangerPredicate
 {
@@ -118,6 +120,9 @@ void CDangerManager::remove_links(const IGameObject* object)
         m_selected = 0;
 
     m_objects.erase(std::remove_if(m_objects.begin(), m_objects.end(), CDangerPredicate(object)), m_objects.end());
+    // The erase shifts the entries: a selection left past the end would read a destroyed entry until the next update.
+    if (m_selected && m_selected >= m_objects.data() + m_objects.size())
+        m_selected = 0;
 
     {
         OBJECTS::iterator I = m_objects.begin();
@@ -293,7 +298,12 @@ void CDangerManager::add(const CHitObject& object)
     // A non-CEntityAlive hitter (physics debris) fails the cast, and obj is dereferenced right away.
     if (!obj)
         return;
-    add(CDangerObject(obj, obj->Position(), object.m_level_time, CDangerObject::eDangerTypeAttacked,
+    // A stalker's attacked danger stays where the hit placed it (the entry holds its estimate); the stock read
+    // followed the attacker's live position on every memory update.
+    const CAI_Stalker* stalker = smart_cast<const CAI_Stalker*>(m_object);
+    const Fvector& position =
+        stalker && DaAi::Know::active(*stalker) ? object.m_object_params.m_position : obj->Position();
+    add(CDangerObject(obj, position, object.m_level_time, CDangerObject::eDangerTypeAttacked,
         CDangerObject::eDangerPerceiveTypeHit));
 }
 
@@ -312,7 +322,12 @@ void CDangerManager::add(const CDangerObject& object)
         return;
     }
 
+    // A stalker's own estimates add dangers between two updates (after the selection was made): the push may move the
+    // storage, so the selection is re-pointed at the same entry instead of dangling until the next update.
+    const std::ptrdiff_t selected = m_selected ? m_selected - m_objects.data() : -1;
     m_objects.push_back(object);
+    if (selected >= 0)
+        m_selected = &m_objects[selected];
 }
 
 void CDangerManager::ignore(const CGameObject* object)

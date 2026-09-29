@@ -8,6 +8,10 @@
 #include "XR_IOConsole.h"
 #include "xr_ioc_cmd.h"
 
+#include "xrCore/xr_token.h"
+
+extern xr_vector<xr_token> VidQualityToken;
+
 struct SoundProcessor final : public pureFrame
 {
     void OnFrame() override
@@ -29,6 +33,51 @@ CEngine Engine;
 CEngine::CEngine() {}
 CEngine::~CEngine() {}
 
+namespace
+{
+bool IsRenderModeAvailable(pcstr mode)
+{
+    return std::any_of(VidQualityToken.begin(), VidQualityToken.end(),
+        [mode](const xr_token& token) { return token.name && !xr_stricmp(token.name, mode); });
+}
+
+// DirectX 11 is the default and the fallback: DirectX 12 runs only when it was chosen.
+pcstr DefaultRenderMode()
+{
+    if (IsRenderModeAvailable("renderer_r4"))
+        return "renderer_r4";
+    // Hardware below feature level 11 gets the best of what the list offers.
+    const auto best = std::find_if(VidQualityToken.rbegin(), VidQualityToken.rend(),
+        [](const xr_token& token) -> bool { return token.name; });
+    return best != VidQualityToken.rend() ? best->name : nullptr;
+}
+
+void ExecuteRenderMode(pcstr mode)
+{
+    if (!mode)
+        return;
+    string64 cmd;
+    xr_sprintf(cmd, "renderer %s", mode);
+    Console->Execute(cmd);
+}
+
+// Reads the mode named by the "renderer" line of the config without executing anything.
+class CCC_ReadSavedRenderer final : public CCC_LoadCFG_custom
+{
+public:
+    string64 mode{};
+
+    CCC_ReadSavedRenderer() : CCC_LoadCFG_custom("renderer ") {}
+
+    bool allow(pcstr cmd) override
+    {
+        if (CCC_LoadCFG_custom::allow(cmd))
+            sscanf(cmd + xr_strlen("renderer "), "%63s", mode);
+        return false;
+    }
+};
+} // namespace
+
 void CheckAndSetupRenderer()
 {
     if (GEnv.isDedicatedServer)
@@ -38,8 +87,18 @@ void CheckAndSetupRenderer()
     }
 
     // The -rgl key is gone together with the OpenGL renderer: the mode list is built from
-    // the renderer modules, and only R4 remains.
-    if (strstr(Core.Params, "-r4"))
+    // the renderer modules, R4 (DirectX 11) and R5 (DirectX 12).
+    if (strstr(Core.Params, "-r5"))
+    {
+        if (IsRenderModeAvailable("renderer_r5"))
+            Console->Execute("renderer renderer_r5");
+        else
+        {
+            Msg("! -r5: DirectX 12 is not available on this system, starting DirectX 11");
+            ExecuteRenderMode(DefaultRenderMode());
+        }
+    }
+    else if (strstr(Core.Params, "-r4"))
         Console->Execute("renderer renderer_r4");
     else if (strstr(Core.Params, "-r3"))
         Console->Execute("renderer renderer_r3");
@@ -53,15 +112,29 @@ void CheckAndSetupRenderer()
         Console->Execute("renderer renderer_r1");
     else
     {
-        CCC_LoadCFG_custom cmd("renderer ");
-        cmd.Execute(Console->ConfigFile);
+        // The player's API choice (the Video tab) lives in user.ltx, which runs only after the
+        // renderer is selected: read that one line now. A mode the list does not offer here -
+        // DirectX 12 on hardware that fails the probe, an old "renderer_r2" - falls back to the
+        // default, and the next save writes that over it.
         renderer_allow_override = true;
+        CCC_ReadSavedRenderer saved;
+        saved.Execute(Console->ConfigFile);
+        pcstr mode = DefaultRenderMode();
+        if (saved.mode[0])
+        {
+            if (IsRenderModeAvailable(saved.mode))
+                mode = saved.mode;
+            else
+                Msg("! Renderer [%s] is not available on this system, using [%s]", saved.mode,
+                    mode ? mode : "none");
+        }
+        ExecuteRenderMode(mode);
     }
 }
 
 extern void msCreate(pcstr name);
 
-void CEngine::Initialize(GameModule* game, const std::array<RendererModule*, 1>& modules)
+void CEngine::Initialize(GameModule* game, const std::array<RendererModule*, 2>& modules)
 {
     ZoneScoped;
 #ifdef DEBUG

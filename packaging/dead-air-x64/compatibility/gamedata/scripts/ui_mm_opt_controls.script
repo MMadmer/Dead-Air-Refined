@@ -1,0 +1,52 @@
+class "opt_controls" (CUIWindow)
+
+function opt_controls:__init() super()
+end
+
+function opt_controls:__finalize()
+
+end
+
+-- Options -> Controls, one list like Video (dead_air_x64_option_list.script builds it): the rows of
+-- configs\dead_air_x64_controls_options.ltx (hint: st_da_x64_controls_hint_<row>), then the key
+-- list - a subsection per group of ui_keybinding.xml, the column captions in its header, a row per
+-- action with its key and its alternative. Those come from the engine (key_binding_actions()), as
+-- the stock list's do; a key row's id is the action's caption id, its hint the string
+-- <caption id>_hint, and [captions] of the file may rename it too. The key cells save into the
+-- key_binding options group, like the stock list's. The stock nodes of this page (tab_controls in
+-- ui_mm_opt*.xml) stay for addons that ship the stock page script.
+local CONTROLS_LAYOUT = "dead_air_x64_controls_options.ltx"
+
+function opt_controls:InitControls(x, y, xml, handler)
+	self:SetWndPos(vector2():set(x,y))
+	self:SetWndSize(vector2():set(738,416))
+	self:SetAutoDelete(true)
+
+	local list = dead_air_x64_option_list
+	list.build(self, xml, handler, ini_file(CONTROLS_LAYOUT), "controls_page", "st_da_x64_controls_hint_")
+
+	-- rawget: an engine without the function leaves the list without keys instead of stopping.
+	local key_groups = rawget(_G, "key_binding_actions")
+	for _, group in ipairs(key_groups and key_groups() or {}) do
+		local header = list.add_header(self, xml, group.name, group.name)
+		xml:InitStatic("controls_page:cap_key_primary", header)
+		xml:InitStatic("controls_page:cap_key_secondary", header)
+		for _, entry in ipairs(group.actions) do
+			local id = entry.caption
+			local row = list.new_row(self, xml, id, group.name, self.captions[id] or id, id .. "_hint", "controls_page:cap_key")
+			-- A caption longer than its column ends in an ellipsis; the hint says the rest.
+			row.caption:SetEllipsis(true)
+			row.keys = {
+				xml:InitKeyBind("controls_page:key_primary", row.wnd, entry.action, true),
+				xml:InitKeyBind("controls_page:key_secondary", row.wnd, entry.action, false),
+			}
+			row.ctrl, row.kind, row.action = row.keys[1], "key", entry.action
+			list.commit_row(self, xml, row)
+		end
+	end
+end
+
+-- Called by the dialog every frame: the numbers beside the sliders.
+function opt_controls:Refresh()
+	dead_air_x64_option_list.refresh(self)
+end

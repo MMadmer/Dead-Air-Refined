@@ -1,0 +1,612 @@
+class "options_dialog" (CUIScriptWnd)
+
+function options_dialog:__init() super()
+	self.m_preconditions = {}
+	self.gameplay_options = {}
+	
+    self:InitControls()
+    self:InitCallBacks()
+	self.tab:SetActiveTab("video")
+	SendScriptCallback("opt_menu_on_init",self)
+
+	-- Controls the callback above has put on a page - closecaption.script's subtitle rows on the
+	-- sound page - become rows of that page's list.
+	for _, page in ipairs({ self.dlg_video, self.dlg_sound, self.dlg_controls }) do
+		if (page.AdoptScriptRows) then
+			page:AdoptScriptRows(self)
+		end
+	end
+
+	self:BuildGameplayList()
+end
+
+function options_dialog:__finalize()
+
+end
+
+-- Options -> Game. Its rows are whatever the engine, the game, add-ons and XMS modules put into
+-- self.gameplay_options; how they are laid out - subsections, order, rows left out - is data, see
+-- the rules in the file below. No option is known here by name.
+local GAMEPLAY_LAYOUT = "dead_air_x64_gameplay_options.ltx"
+
+-- "Prefix: Name" -> "Prefix", "Name". Captions carry such a prefix to say where they belong; under
+-- a header of their own it is noise. Only a short head counts as one.
+local function split_caption(text)
+	local prefix, name = string.match(text, "^([^:]+):%s+(.+)$")
+	if (prefix and string.len(prefix) <= 24) then
+		return prefix, name
+	end
+	return nil, text
+end
+
+-- Keys of a section. Their order is not the file's: the engine hands the lines back sorted.
+local function ini_lines(ini, section)
+	local lines = {}
+	if (ini:section_exist(section)) then
+		for i = 0, ini:line_count(section) - 1 do
+			local _, key, value = ini:r_line(section, i, "", "")
+			lines[#lines + 1] = { key = key, value = value }
+		end
+	end
+	return lines
+end
+
+-- An ordered list: a comma-separated value, which is also what a module's .ltxp can append to.
+local function ini_list(ini, section, key)
+	local list = {}
+	if (ini:section_exist(section) and ini:line_exist(section, key)) then
+		for item in string.gmatch(ini:r_string(section, key) or "", "[^,%s]+") do
+			list[#list + 1] = item
+		end
+	end
+	return list
+end
+
+-- translate_string answers a missing id with the id itself.
+local function has_string(id)
+	local text = game.translate_string(id)
+	return (text ~= id) and (text ~= "")
+end
+
+-- Languages that are actually installed. A text folder counts when it holds at least half as many
+-- files as the fullest one: a handful of add-on strings is not a translation, and switching to it
+-- leaves nearly every text in the game as a raw id.
+local function installed_languages()
+	local fs = getFS()
+	local counts, fullest = {}, 0
+	local folders = fs:file_list_open("$game_config$", "text\\", bit_or(FS.FS_ListFolders, FS.FS_RootOnly))
+	for i = 0, folders:Size() - 1 do
+		local language = string.gsub(folders:GetAt(i), "[\\/]+$", "")
+		local files = fs:file_list_open("$game_config$", "text\\" .. language .. "\\", bit_or(FS.FS_ListFiles, FS.FS_RootOnly))
+		counts[language] = files:Size()
+		fullest = math.max(fullest, counts[language])
+		files:Free()
+	end
+	folders:Free()
+
+	local languages = {}
+	for language, count in pairs(counts) do
+		if (count * 2 >= fullest) then
+			languages[#languages + 1] = language
+		end
+	end
+	table.sort(languages)
+	return languages
+end
+
+function options_dialog:BuildGameplayList()
+	local ini = ini_file(GAMEPLAY_LAYOUT)
+	local options = self.gameplay_options
+	local xml = self.xml
+
+	-- Rows that do nothing in this game. Taken out of the table, not just off the screen: the
+	-- accept and refresh handlers walk the table and would index a control that was never built.
+	for _, line in ipairs(ini_lines(ini, "hidden")) do
+		options[line.key] = nil
+	end
+
+	-- A language switch lists the installed translations; with one installed it switches nothing.
+	for _, line in ipairs(ini_lines(ini, "language_lists")) do
+		local option = options[line.key]
+		if (option and option.typ == "list") then
+			local languages = installed_languages()
+			if (#languages < 2) then
+				options[line.key] = nil
+			else
+				option.list = languages
+			end
+		end
+	end
+
+	-- Subsections in the order the file lists them, each with its rows in order. The last one also
+	-- takes every row that has no place of its own.
+	local groups, by_id, place, captions = {}, {}, {}, {}
+	for _, id in ipairs(ini_list(ini, "groups", "order")) do
+		local group = { id = id, title = game.translate_string("ui_mm_grp_" .. id), rows = {} }
+		groups[#groups + 1] = group
+		by_id[id] = group
+		for order, key in ipairs(ini_list(ini, "group_" .. id, "rows")) do
+			place[key] = { group = id, order = order }
+		end
+	end
+	if (#groups == 0) then
+		groups[1] = { id = "misc", title = game.translate_string("ui_mm_grp_misc"), rows = {} }
+		by_id.misc = groups[1]
+	end
+	local fallback = groups[#groups]
+	for _, line in ipairs(ini_lines(ini, "captions")) do
+		captions[line.key] = line.value
+	end
+
+	-- A subsection the file does not describe - named by an option itself or by a caption prefix -
+	-- goes in front of the last one.
+	local function group_named(id, title)
+		local group = by_id[id]
+		if not (group) then
+			group = { id = id, title = title, rows = {} }
+			table.insert(groups, #groups, group)
+			by_id[id] = group
+		end
+		return group
+	end
+
+	self.scroll_v:Clear()
+
+	for key, option in pairs(options) do
+		if not (option.disabled) then
+			local row = xml:InitStatic("tab_gameplay:templ_item", nil)
+
+			-- ctrl needs scoped here because we pass it to wrapper or else ref will get replaced
+			local ctrl = xml:InitStatic("tab_gameplay:cap_check_axr", row)
+			local prefix, name = split_caption(game.translate_string(option.caption or captions[key] or ("ui_mm_" .. key)))
+			ctrl:TextControl():SetText(name)
+
+			local hint = option.hint or ("ui_mm_" .. key .. "_hint")
+			if (has_string(hint)) then
+				row:SetHint(hint)
+			end
+
+			local shown = true
+			if (option.typ == "check") then
+				ctrl = xml:InitCheck(option.tag or "tab_gameplay:check_axr", row)
+				if (option.default ~= nil) then -- obviously dynamic axr option
+					self:Register(ctrl, "ck_" .. key)
+				end
+			elseif (option.typ == "list") then
+				ctrl = xml:InitComboBox(option.tag or "tab_gameplay:list_axr", row)
+				if (option.list) then
+					for i, v in ipairs(option.list) do
+						ctrl:AddItem(v, i - 1)
+					end
+				end
+				if (option.default ~= nil) then -- obviously dynamic axr option
+					self:Register(ctrl, "lst_" .. key)
+					if (option.on_list_item_select) then
+						local list = ctrl
+						local _wrapper = function(handler) -- we need wrapper in order to pass ctrl to method
+							option.on_list_item_select(handler, list)
+						end
+						self:AddCallback("lst_" .. key, ui_events.LIST_ITEM_SELECT, _wrapper, self)
+					end
+				end
+			else
+				shown = false
+			end
+			option.ctrl = ctrl
+
+			if (shown) then
+				-- An option naming its own subsection wins; then the file; then the caption prefix.
+				local where, group = place[key]
+				if (option.group) then
+					group = group_named(option.group, game.translate_string("ui_mm_grp_" .. option.group))
+				elseif (where) then
+					group = by_id[where.group]
+				elseif (prefix) then
+					group = group_named("prefix:" .. prefix, prefix)
+				else
+					group = fallback
+				end
+				local order = (where and where.group == group.id) and where.order or math.huge
+				table.insert(group.rows, { wnd = row, order = order, name = name })
+			end
+		end
+	end
+
+	-- Rows the file orders come first in its order, the rest alphabetically; empty subsections
+	-- are not drawn.
+	local function by_order(a, b)
+		if (a.order ~= b.order) then
+			return a.order < b.order
+		end
+		return a.name < b.name
+	end
+	for _, group in ipairs(groups) do
+		if (#group.rows > 0) then
+			table.sort(group.rows, by_order)
+			local header = xml:InitStatic("tab_gameplay:templ_header", nil)
+			xml:InitStatic("tab_gameplay:cap_header", header):TextControl():SetText(group.title)
+			self.gameplay_scroll_v:AddWindow(header, true)
+			header:SetAutoDelete(false)
+			for _, entry in ipairs(group.rows) do
+				self.gameplay_scroll_v:AddWindow(entry.wnd, true)
+				entry.wnd:SetAutoDelete(false)
+			end
+		end
+	end
+end
+
+function options_dialog:InitControls()
+	self:SetWndRect				(Frect():set(0,0,1024,768))
+	self:Enable					(true)
+
+	self.xml = CScriptXmlInit()
+	local xml = self.xml
+	xml:ParseFile				("ui_mm_opt.xml")
+
+	xml:InitStatic				("background", self)
+	self.dialog					= xml:InitStatic("main_dialog:dialog", self)
+
+--	xml:InitStatic				("main_dialog:cap_options", self.dialog)
+
+	self.dlg_video				= ui_mm_opt_video.opt_video()
+	self.dlg_video:InitControls	(0,0, xml, self)
+	self.dlg_video:Show			(false)
+	self.dialog:AttachChild		(self.dlg_video)
+	xml:InitWindow				("tab_size", 0, self.dlg_video)
+
+	self.dlg_sound				= ui_mm_opt_sound.opt_sound()
+	self.dlg_sound:InitControls	(0,0, xml, self)
+	self.dlg_sound:Show			(false)
+	self.dialog:AttachChild		(self.dlg_sound)
+	xml:InitWindow				("tab_size", 0, self.dlg_sound)
+
+	self.dlg_gameplay			= ui_mm_opt_gameplay.opt_gameplay()
+	self.dlg_gameplay:InitControls(0,0, xml, self)
+	self.dlg_gameplay:Show		(false)
+	self.dialog:AttachChild		(self.dlg_gameplay)
+	xml:InitWindow				("tab_size", 0, self.dlg_gameplay)
+
+	self.dlg_controls			= ui_mm_opt_controls.opt_controls()
+	self.dlg_controls:InitControls(0,0, xml, self)
+	self.dlg_controls:Show		(false)
+	self.dialog:AttachChild		(self.dlg_controls)
+	xml:InitWindow				("tab_size", 0, self.dlg_controls)
+
+	self.dlg_video_adv			= ui_mm_opt_video_adv.opt_video_adv()
+	self.dlg_video_adv:InitControls(0,0, xml, self)
+	self.dlg_video_adv:Show		(false)
+	self.dialog:AttachChild		(self.dlg_video_adv)
+	xml:InitWindow				("tab_size", 0, self.dlg_video_adv)
+
+	local btn
+	btn = xml:Init3tButton		("main_dialog:btn_accept", self.dialog)
+	self:Register				(btn, "btn_accept")
+	btn = xml:Init3tButton		("main_dialog:btn_cancel", self.dialog)
+	self:Register				(btn, "btn_cancel")
+
+	self.tab					= xml:InitTab("main_dialog:tab", self.dialog)
+	self:Register				(self.tab, "tab")
+
+
+	self.message_box			= CUIMessageBoxEx()
+	self:Register				(self.message_box, "mb")
+
+	self.b_restart_system_shown	= false
+	self.timer					= nil
+end
+
+function options_dialog:SetCurrentValues()
+	local opt = COptionsManager()
+
+	opt:SetCurrentValues("mm_opt_video_preset")
+	opt:SaveBackupValues("mm_opt_video_preset")
+
+	opt:SetCurrentValues("mm_opt_video")
+	opt:SaveBackupValues("mm_opt_video")
+
+	opt:SetCurrentValues("mm_opt_video_adv")
+	opt:SaveBackupValues("mm_opt_video_adv")
+
+	opt:SetCurrentValues("mm_opt_gameplay")
+	opt:SaveBackupValues("mm_opt_gameplay")
+
+	opt:SetCurrentValues("mm_opt_sound")
+	opt:SaveBackupValues("mm_opt_sound")
+
+	opt:SetCurrentValues("mm_opt_controls")
+	opt:SaveBackupValues("mm_opt_controls")
+
+	opt:SetCurrentValues("key_binding")
+	opt:SaveBackupValues("key_binding")
+
+	SendScriptCallback("opt_menu_on_set_values",self,opt)
+
+	self:UpdateDependControls()
+end
+
+function options_dialog:UpdateDependControls()
+	self.scroll_v:Clear()
+	local _current_id = self.combo_renderer:CurrentID()
+
+	for i,j in pairs(self.m_preconditions) do
+		if(j.func(_current_id)) then
+			self.scroll_v:AddWindow(j.control, true)
+			j.control:SetAutoDelete(false)
+		end
+	end
+
+	local max_texture_lod = 4
+	local min_texture_lod = 0
+
+	if _current_id ~= 0 then
+		if not is_enough_address_space_available()	then
+			min_texture_lod = 1
+		end
+	end
+
+	self.texture_lod_track:SetOptIBounds(min_texture_lod, max_texture_lod)
+	self:OnAOOptionChange()
+end
+
+function options_dialog:InitCallBacks()
+	self:AddCallback("tab",					ui_events.TAB_CHANGED,		self.OnTabChange,			self)
+	self:AddCallback("btn_advanced_graphic",ui_events.BUTTON_CLICKED,	self.OnBtnAdvGraphic,		self)
+	self:AddCallback("btn_accept",			ui_events.BUTTON_CLICKED,	self.OnBtnAccept,			self)
+	self:AddCallback("btn_cancel",			ui_events.BUTTON_CLICKED,	self.OnBtnCancel,			self)
+	self:AddCallback("btn_default_graphic",	ui_events.BUTTON_CLICKED,	self.OnBtnDefGraph,			self)
+	self:AddCallback("btn_default_sound",	ui_events.BUTTON_CLICKED,	self.OnBtnDefSound,			self)
+	self:AddCallback("combo_preset",		ui_events.LIST_ITEM_SELECT,	self.OnPresetChanged,		self)
+	self:AddCallback("btn_simply_graphic",	ui_events.BUTTON_CLICKED,	self.OnSimplyGraphic,		self)
+	self:AddCallback("btn_keyb_default",	ui_events.BUTTON_CLICKED,	self.OnBtnKeybDefault,		self)
+	--self:AddCallback("btn_check_updates",	ui_events.BUTTON_CLICKED,	self.OnBtnCheckUpdates,		self)
+	self:AddCallback("combo_renderer",		ui_events.LIST_ITEM_SELECT,	self.UpdateDependControls,	self)
+	self:AddCallback("tab_ao_opt",			ui_events.TAB_CHANGED,		self.OnAOOptionChange,		self)
+
+	self:AddCallback("mb",					ui_events.MESSAGE_BOX_YES_CLICKED, self.OnApplyChanges, self)
+	self:AddCallback("mb",					ui_events.MESSAGE_BOX_NO_CLICKED, self.OnDiscardChanges,self)
+--	self:AddCallback("trb_ssample",			ui_events.BUTTON_CLICKED,	self.UpdateDependControls,	self)
+--	self:AddCallback("cb_ssample",			ui_events.LIST_ITEM_SELECT,	self.UpdateDependControls,	self)
+end
+
+function options_dialog:OnBtnCheckUpdates()
+	local console			= get_console()
+	console:execute			("check_for_updates 1")
+end
+
+function options_dialog:OnBtnKeybDefault()
+	local console			= get_console()
+	console:execute			("default_controls")
+
+	local opt				= COptionsManager()
+	opt:SetCurrentValues	("mm_opt_controls")
+	opt:SetCurrentValues	("key_binding")
+end
+
+-- The stock handler re-read the advanced group here, for the rows a preset used to fill. Those rows
+-- are gone (the preset applies at Accept), and the group now holds the effect sliders, whose
+-- unsaved moves a re-read would throw away.
+function options_dialog:OnPresetChanged()
+end
+
+
+function options_dialog:OnBtnDefGraph()
+	local opt = COptionsManager()
+	opt:SendMessage2Group("mm_opt_video","set_default_value")
+end
+
+function options_dialog:OnBtnDefSound()
+	local opt = COptionsManager()
+	opt:SendMessage2Group("mm_opt_sound","set_default_value")
+end
+
+function options_dialog:OnBtnAccept()
+
+	local opt		= COptionsManager()
+	local console	= get_console()
+
+   	console:execute("cfg_save tmp")
+
+	opt:SaveValues("mm_opt_video_preset")
+	opt:SaveValues("key_binding")
+	opt:SaveValues("mm_opt_video")
+	opt:SaveValues("mm_opt_video_adv")
+	opt:SaveValues("mm_opt_gameplay")
+	opt:SaveValues("mm_opt_sound")
+	opt:SaveValues("mm_opt_controls")
+
+	SendScriptCallback("opt_menu_on_accept",self,opt,console)
+
+	if opt:NeedVidRestart() then
+		-- OptionsPostAccept below restarts the device; keeping the changes must not do it twice. A
+		-- global, like the flag beside it: the restart can rebuild the menu and this dialog with it.
+		_G.b_options_vid_restarted = true
+		_G.b_discard_settings_shown = true
+		self.message_box:InitMessageBox("message_box_yes_no")
+		self.message_box:SetText(string.format("%s %d% s", game.translate_string("ui_mm_confirm_changes"), 15, game.translate_string("mp_si_sec")))
+		self.message_box:ShowDialog(true)
+	else
+		self:OnApplyChanges()
+	end
+
+	opt:OptionsPostAccept()
+	
+	console:execute("cfg_save")
+end
+
+function options_dialog:OnBtnCancel()
+	local opt				= COptionsManager()
+	opt:UndoGroup			("mm_opt_video_preset")
+	opt:UndoGroup			("mm_opt_video")
+	opt:UndoGroup			("mm_opt_video_adv")
+	opt:UndoGroup			("mm_opt_sound")
+	opt:OptionsPostAccept	()
+
+	self.owner:ShowDialog(true)
+	self:HideDialog()
+	self.owner:Show(true)
+end
+
+function options_dialog:OnTabChange()
+	self.dlg_video:Show		(false)
+	self.dlg_sound:Show		(false)
+	self.dlg_gameplay:Show	(false)
+	self.dlg_controls:Show	(false)
+	self.dlg_video_adv:Show	(false)
+
+	local ids = self.tab:GetActiveId()
+	if ids == "video" then
+		self.dlg_video:Show(true)
+	elseif ids == "sound" then
+		self.dlg_sound:Show(true)
+	elseif ids == "gameplay" then
+		self.dlg_gameplay:Show(true)
+	elseif ids == "controls" then
+		self.dlg_controls:Show(true)
+	end
+
+end
+
+function options_dialog:OnAOOptionChange()
+	local ao_opt_id = self.tab_ao_opt:GetActiveId()
+	local render_id = self.combo_renderer:CurrentID()
+	if(render_id>=4) and (ao_opt_id=="hdao") then
+		self.combo_ssao:enable_id(4)
+	else
+		self.combo_ssao:disable_id(4)
+	end
+	self.combo_ssao:SetCurrentOptValue()
+end
+
+function options_dialog:OnBtnAdvGraphic()
+	self.dlg_video:Show		(false)
+	self.dlg_video_adv:Show	(true)
+end
+
+function options_dialog:OnSimplyGraphic()
+	self.dlg_video:Show		(true)
+	self.dlg_video_adv:Show	(false)
+end
+
+function options_dialog:OnKeyboard(dik, keyboard_action)
+	local res = CUIScriptWnd.OnKeyboard(self,dik,keyboard_action)
+
+	if res==false then
+
+		local bind = dik_to_bind(dik)
+
+		if keyboard_action == ui_events.WINDOW_KEY_PRESSED then
+			if dik == DIK_keys.DIK_ESCAPE then
+				if self.dlg_video_adv:IsShown() then
+					self.dlg_video_adv:Show	(false)
+					self.dlg_video:Show		(true)
+				else
+					self.owner:ShowDialog(true)
+					self:HideDialog()
+					self.owner:Show(true)
+				end
+			end
+
+		end
+	end
+
+	return res
+end
+
+local STOCK_VIDEO_READOUTS = {
+	{ "fov_track", "fov_value", "%.0f" },
+	{ "hud_fov_track", "hud_fov_value", "%.2f" },
+	{ "color_r_track", "color_r_val", "%.2f" },
+	{ "color_g_track", "color_g_val", "%.2f" },
+	{ "color_b_track", "color_b_val", "%.2f" },
+	{ "vibrance_track", "vibrance_val", "%.2f" },
+}
+
+function options_dialog:Update()
+	CUIScriptWnd.Update(self)
+
+	local mm = main_menu.get_main_menu()
+
+	if(_G.b_discard_settings_shown) then
+		local tg = math.floor(time_global_async()/1000)
+		if(self.timer==nil) then
+			self.timer = tg
+		end
+		self.message_box:SetText(string.format("%s %d %s", game.translate_string("ui_mm_confirm_changes"), 15-(tg-self.timer), game.translate_string("mp_si_sec")))
+		if(tg-self.timer>=15) then
+			if (self.message_box:IsShown()) then
+				self.message_box:HideDialog()
+			end
+			self:OnDiscardChanges()
+		end
+	end
+	
+	-- The video page fills the number beside every slider and greys out the rows that depend on
+	-- other rows. A stock page only has named slider/number pairs.
+	local page = self.dlg_video
+	if (page and page.Refresh) then
+		page:Refresh()
+	elseif (page) then
+		for _, pair in ipairs(STOCK_VIDEO_READOUTS) do
+			local track, text = page[pair[1]], page[pair[2]]
+			if (track and text) then
+				text:TextControl():SetText(string.format(pair[3], track:GetFValue()))
+			end
+		end
+	end
+
+	-- The sound and controls pages fill the numbers beside their sliders.
+	for _, other in ipairs({ self.dlg_sound, self.dlg_controls }) do
+		if (other and other.Refresh) then
+			other:Refresh()
+		end
+	end
+end
+
+function options_dialog:OnApplyChanges()
+    self.timer = nil
+    _G.b_discard_settings_shown = false
+
+	self.owner:ShowDialog(true)
+	if (self:IsShown()) then
+		self:HideDialog()
+	end
+	self.owner:Show(true)
+	-- Also what applies a changed grass height, which asks for no restart of its own.
+	if (_G.b_options_vid_restarted) then
+		_G.b_options_vid_restarted = false
+	else
+		get_console():execute("vid_restart")
+	end
+
+	if not (self.b_restart_system_shown and self.message_box:IsShown()) then
+		local opt = COptionsManager()
+		if (opt:NeedSystemRestart() or self.b__require_restart == true) then
+ 			self.b__require_restart = false
+			self.b_restart_system_shown = true
+ 			self.message_box:InitMessageBox("message_box_restart_game")
+ 			self.message_box:ShowDialog(true)
+ 		end
+	end
+end
+
+function options_dialog:OnDiscardChanges()
+    self.timer = nil
+    _G.b_options_vid_restarted = false
+    _G.b_discard_settings_shown = false
+
+	local c = get_console()
+   	c:execute("cfg_load tmp")
+
+	self:SetCurrentValues()
+
+	c:execute("vid_restart")
+   	c:execute("cfg_save")
+end
+
+function options_dialog:OnMenuReloaded()
+	if(_G.b_discard_settings_shown) then
+	    self.message_box:InitMessageBox("message_box_yes_no")
+	    self.message_box:SetText(string.format("%s %d% s", game.translate_string("ui_mm_confirm_changes"), 15, game.translate_string("mp_si_sec")))
+	    self.message_box:ShowDialog(true)
+	end
+end

@@ -15,6 +15,7 @@
 
 #ifndef _EDITOR
 #include "IGame_Level.h"
+#include "xrMaterialSystem/GameMtlLib.h"
 #endif
 
 #include "xrCore/xrCore.h"
@@ -291,8 +292,14 @@ void CEnvironment::ChangeGameTime(float game_time)
     fGameTime = NormalizeTime(fGameTime + game_time);
 }
 
+// env_time_pin: the weather clock held at one second of the day whatever the level's clock says
+// (frame parity on the QA stand). -1 = follow the level.
+float g_env_time_pin = -1.f;
+
 void CEnvironment::SetGameTime(float game_time, float time_factor)
 {
+    if (g_env_time_pin >= 0.f)
+        game_time = g_env_time_pin;
     if (bWFX)
         wfx_time -= TimeDiff(fGameTime, game_time);
     fGameTime = game_time;
@@ -1118,10 +1125,9 @@ static float da_cpu_vnoise(float px, float py)
 // CPU half of the mask and has to branch on exactly what the pixel shader branched on.
 extern ENGINE_API int ps_r__puddle_fill;
 
-// How far the value noise is allowed to move the fill map's level - the width of the edge it
-// shapes, in the noise's own 0..1 domain. DA_PUDDLE_FILL_EDGE in da_puddles.h is the same
-// number; the two masks are one mask.
-static constexpr float da_puddle_fill_edge = .30f;
+// How far a full dip raises the noise's level, in the noise's own 0..1 domain.
+// DA_PUDDLE_FILL_GAIN in da_puddles.h is the same number; the two masks are one mask.
+static constexpr float da_puddle_fill_gain = .8f;
 
 float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
 {
@@ -1138,17 +1144,16 @@ float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
     float n = da_cpu_vnoise(pos.x * 0.33f, pos.z * 0.33f) * 0.62f +
         da_cpu_vnoise(pos.x * 1.10f, pos.z * 1.10f) * 0.38f;
 
-    // The baked fill map decides WHERE, the noise only shapes the edge - the same two lines the
-    // shader runs, on the same data, behind the same rung of the ladder. Off the map (or on a
-    // level with no bake) the noise stays the placement, which is also what the shader does, so
-    // the footprint test is spelled out here rather than hidden behind a zero the map could
-    // legitimately hold.
+    // The baked fill map raises the noise's level in the dips - the same line the shader runs, on
+    // the same data, behind the same rung of the ladder. Off the map (or on a level with no bake)
+    // the noise stands alone, which is also what the shader does, so the footprint test is spelled
+    // out here rather than hidden behind a zero the map could legitimately hold.
     if (ps_r__puddle_fill > 0 && !puddle_fill.empty())
     {
         const float u = (pos.x - water_field_bounds.vMin.x) * water_field_inv_extent.x;
         const float v = (pos.z - water_field_bounds.vMin.z) * water_field_inv_extent.y;
         if (u >= 0.f && u <= 1.f && v >= 0.f && v <= 1.f)
-            n = clampr(puddle_fill_at(pos) + (n - .5f) * da_puddle_fill_edge, 0.f, 1.f);
+            n = clampr(n + puddle_fill_at(pos) * da_puddle_fill_gain, 0.f, 1.f);
     }
 
     const float thr =
@@ -1309,6 +1314,7 @@ void CEnvironment::reset_water_field()
     water_field_texel = 1.f;
     eye_under_depth = 0.f;
     eye_under_surface = 0.f;
+    eye_probe = {};
 }
 
 // Texel of the baked field a world point falls in, or -1 when there is no field or the point
@@ -1363,6 +1369,90 @@ bool CEnvironment::water_at(const Fvector& p, float& surface, float& bed) const
     surface = water_field[at].surface;
     bed = water_field[at].bed;
     return true;
+}
+
+namespace
+{
+// How far the column ray starts above the point. Callers pass ground points (a character's feet),
+// and a ray born on the floor it stands on would report that floor as a roof. Capped at half the
+// depth so a point just under the surface still starts below it.
+constexpr float water_column_lift = 0.10f;
+// How far past the field's sheet the ray may find the water. The sheet is the highest liquid
+// triangle over the whole texel, and a sloped stream stands higher at the point than at the
+// texel centre by up to its gradient times a texel.
+constexpr float water_column_reach = 0.25f;
+// Travel a memoised answer stays good for. Static geometry makes the answer a function of
+// position, and across a few centimetres it only changes at a solid face.
+constexpr float water_probe_slack = 0.05f;
+// A solid face this close under the water it lies beneath is the bank or a patch of ground modelled
+// flush with the surface, not a roof over the point: one such face in the marsh blocked the column.
+constexpr float water_column_coplanar = 0.02f;
+}
+
+bool CEnvironment::water_column_at(const Fvector& p, float& surface, float& bed, SWaterProbe* memo) const
+{
+    float sheet;
+    if (!water_at(p, sheet, bed) || p.y >= sheet)
+        return false;
+    surface = sheet;
+
+    if (memo && memo->valid && _abs(p.x - memo->at.x) < water_probe_slack &&
+        _abs(p.z - memo->at.z) < water_probe_slack && _abs(p.y - memo->at.y) < water_probe_slack)
+    {
+        if (!memo->open)
+            return false;
+        surface = memo->surface;
+        return p.y < surface;
+    }
+
+#ifndef _EDITOR
+    if (!g_pGameLevel)
+        return false;
+    CObjectSpace& space = g_pGameLevel->ObjectSpace;
+    const CDB::TRI* tris = space.GetStaticTris();
+
+    const float depth = sheet - p.y;
+    const float lift = _min(water_column_lift, 0.5f * depth);
+    Fvector start = p;
+    start.y += lift;
+    const float range = depth - lift + water_column_reach;
+
+    // Every face on the segment, both windings: a cellar ceiling faces down at the ray, the ground
+    // or a floor above it faces away, and the water sheet itself is seen from underneath.
+    static thread_local CDB::COLLIDER collider;
+    static const Fvector up = {0.f, 1.f, 0.f};
+    collider.ray_query(0, space.GetStaticModel(), start, up, range);
+
+    float liquid = flt_max, solid = flt_max;
+    const size_t mtl_count = GMLib.CountMaterial();
+    for (const CDB::RESULT& r : *collider.r_get())
+    {
+        const u16 idx = u16(tris[r.id].material);
+        const SGameMtl* m = idx < mtl_count ? GMLib.GetMaterialByIdx(idx) : nullptr;
+        if (m && m->Flags.test(SGameMtl::flLiquid))
+            liquid = _min(liquid, r.range);
+        // Passable faces (foliage cards, fake volumes) never keep water off anything.
+        else if (!m || !m->Flags.test(SGameMtl::flPassable))
+            solid = _min(solid, r.range);
+    }
+
+    // In the water only when the water is the first thing above: no sheet at all over this exact
+    // spot means the texel was only partly wet, and a solid face first means a roof, a floor or
+    // the ground between the point and a sheet that belongs to somewhere else.
+    const bool open = liquid < flt_max && liquid <= solid + water_column_coplanar;
+    if (open)
+        surface = start.y + liquid;
+    if (memo)
+    {
+        memo->at = p;
+        memo->surface = surface;
+        memo->open = open;
+        memo->valid = true;
+    }
+    return open && p.y < surface;
+#else
+    return true;
+#endif
 }
 
 // The fill map, read the way the shader reads it: bilinear over the same footprint, clamped at
@@ -1677,10 +1767,12 @@ void CEnvironment::water_tick(float delta)
 
     // ---- Camera against the baked field. ----------------------------------------------------
     // Nothing else knows whether the eye is under water: the surface is a forward pass and the
-    // combine has no other way to ask. Levels with no field simply never go under.
+    // combine has no other way to ask. Levels with no field simply never go under. The column
+    // test and not the bare field: the field alone put the camera under water in cellars and on
+    // lower floors beneath a sheet that belongs to the pond outside or the storey above.
     const Fvector& eye = Device.vCameraPosition;
-    const float surf = water_surface_at(eye);
-    if (surf > -flt_max && eye.y < surf)
+    float surf, bed;
+    if (water_column_at(eye, surf, bed, &eye_probe))
     {
         eye_under_depth = surf - eye.y;
         eye_under_surface = surf;
@@ -1722,6 +1814,21 @@ void CEnvironment::wind_reseed(float seed)
     g_wind_rng.state = 0x9E3779B9u ^ u32(eff_wind_seed * 977.f);
     if (g_wind_rng.state == 0)
         g_wind_rng.state = 1;
+    // Every accumulator restarts too, so the service state after a reseed is a pure function of
+    // the seed and the weather: a reseed followed by wind_freeze gives the same trees, grass,
+    // cloud deck and water in every run (frame parity across stand runs).
+    eff_wind_field_ofs.set(0.f, 0.f);
+    eff_tree_phase = 0.f;
+    eff_cloud_run = 0.f;
+    eff_water_run_rain = 0.f;
+    eff_water_run_wind = 0.f;
+    wind_profile_smooth = -1.f;
+    water_wind_lp = -1.f;
+    // The legacy gust input is Perlin noise of a per-session seed on the device clock; the
+    // restarted state takes its mean instead, until the next frame samples it again.
+    wind_strength_factor = 0.5f;
+    wind_tick(0.f);
+    eff_wind_gust_smooth = eff_wind_gust;
     Msg("* [wind] reseeded: %.1f", eff_wind_seed);
 }
 

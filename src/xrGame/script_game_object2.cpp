@@ -9,6 +9,7 @@
 #include "pch_script.h"
 #include "script_game_object.h"
 #include "script_game_object_impl.h"
+#include "da_ai_knowledge.h"
 #include "ai_space.h"
 #include "xrScriptEngine/script_engine.hpp"
 #include "Explosive.h"
@@ -268,6 +269,10 @@ const xr_vector<CNotYetVisibleObject>& CScriptGameObject::not_yet_visible_object
             LuaMessageType::Error, "CGameObject : cannot access class member not_yet_visible_objects!");
         NODEFAULT;
     }
+    // [ai:know] begin not_yet_visible_objects
+    if (const auto* known = DaAi::Know::script_not_yet_visible_objects(*monster))
+        return *known;
+    // [ai:know] end not_yet_visible_objects
     return (monster->memory().visual().not_yet_visible_objects());
 }
 

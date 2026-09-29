@@ -46,6 +46,8 @@ ui_shader* g_EquipmentIconsShader = NULL;
 ui_shader* g_MPCharIconsShader = NULL;
 ui_shader* g_OutfitUpgradeIconsShader = NULL;
 ui_shader* g_WeaponUpgradeIconsShader = NULL;
+// Icon textures that item sections name themselves (icons_texture), one shader per texture.
+xr_map<shared_str, ui_shader*> g_ItemIconsShaders;
 //static CUIStatic* GetUIStatic();
 
 typedef std::pair<CHARACTER_RANK_VALUE, shared_str> CharInfoStringID;
@@ -67,6 +69,9 @@ void InventoryUtilities::DestroyShaders()
     xr_delete(g_MPCharIconsShader);
     xr_delete(g_OutfitUpgradeIconsShader);
     xr_delete(g_WeaponUpgradeIconsShader);
+    for (auto& [texture, shader] : g_ItemIconsShaders)
+        xr_delete(shader);
+    g_ItemIconsShaders.clear();
 }
 
 bool InventoryUtilities::GreaterRoomInRuck(PIItem item1, PIItem item2)
@@ -189,6 +194,21 @@ const ui_shader& InventoryUtilities::GetEquipmentIconsShader()
     }
 
     return *g_EquipmentIconsShader;
+}
+
+const ui_shader& InventoryUtilities::GetItemIconsShader(const shared_str& section)
+{
+    const pcstr texture = section.size() ? pSettings->read_if_exists<pcstr>(section, "icons_texture", nullptr) : nullptr;
+    if (!texture || !texture[0])
+        return GetEquipmentIconsShader();
+
+    ui_shader*& shader = g_ItemIconsShaders[texture];
+    if (!shader)
+    {
+        shader = xr_new<ui_shader>();
+        (*shader)->create("hud" DELIMITER "default", texture);
+    }
+    return *shader;
 }
 
 const ui_shader& InventoryUtilities::GetMPCharIconsShader()

@@ -44,9 +44,10 @@ struct SDaWaterActorCfg
     shared_str ps_entry{"hit_fx\\effects\\hit_water_splash_01"};
     shared_str ps_entry_big{"hit_fx\\effects\\hit_water_splash_02"};
 
-    // ---- Landing damage. Water this deep takes the whole landing; from the ankle to it the
-    // damage tapers, so a puddle is still a hard floor. ----
-    float fall_safe_depth{0.55f};
+    // ---- Landing damage through water (CPHMovementControl::UpdateCollisionDamage). ----
+    float fall_water_shallow{0.9f}; // metres the legs reach the bottom through: no cushion
+    float fall_water_stop_length{3.5f}; // metres of water past that per e-fold of landing speed
+    float fall_water_surface_impact{0.7f}; // share of the entry speed the surface hits back with
 
     // ---- The dose from an injurious liquid: the binary tick becomes a depth and a motion. ----
     float rad_depth_ref{1.0f}; // depth at which the material's own rate is reached
@@ -95,7 +96,9 @@ inline const SDaWaterActorCfg& da_water_actor_cfg()
                 cfg.entry_radius_max = rf("entry_radius_max", cfg.entry_radius_max);
                 cfg.ps_entry = rs("ps_entry", cfg.ps_entry);
                 cfg.ps_entry_big = rs("ps_entry_big", cfg.ps_entry_big);
-                cfg.fall_safe_depth = rf("fall_safe_depth", cfg.fall_safe_depth);
+                cfg.fall_water_shallow = rf("fall_water_shallow", cfg.fall_water_shallow);
+                cfg.fall_water_stop_length = rf("fall_water_stop_length", cfg.fall_water_stop_length);
+                cfg.fall_water_surface_impact = rf("fall_water_surface_impact", cfg.fall_water_surface_impact);
                 cfg.rad_depth_ref = rf("rad_depth_ref", cfg.rad_depth_ref);
                 cfg.rad_depth_floor = rf("rad_depth_floor", cfg.rad_depth_floor);
                 cfg.rad_move_bonus = rf("rad_move_bonus", cfg.rad_move_bonus);
@@ -106,9 +109,12 @@ inline const SDaWaterActorCfg& da_water_actor_cfg()
             }
         }
         // The defaults above are shipping values, not placeholders: wading, water footsteps
-        // and the fall-damage exemption cost nothing and are unconditional (DESIGN2 section 7),
+        // and the water-cushioned landing cost nothing and are unconditional (DESIGN2 section 7),
         // so a missing section must not disable them.
         clamp(cfg.wade_speed_min, 0.05f, 1.f);
+        cfg.fall_water_shallow = _max(cfg.fall_water_shallow, 0.f);
+        cfg.fall_water_stop_length = _max(cfg.fall_water_stop_length, 0.1f);
+        clamp(cfg.fall_water_surface_impact, 0.f, 1.f);
         clamp(cfg.rad_depth_floor, 0.f, 1.f);
         cfg.wade_full = _max(cfg.wade_full, cfg.ankle + 0.05f);
         cfg.entry_speed_max = _max(cfg.entry_speed_max, cfg.entry_speed_min + 0.1f);

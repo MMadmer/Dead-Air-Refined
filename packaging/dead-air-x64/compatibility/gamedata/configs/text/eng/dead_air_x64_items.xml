@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Texts of items the base game leaves without one. -->
+	<string id="st_bolt_descr">
+		<text>An ordinary steel bolt. Throw it ahead of you, and an anomaly in its path gives itself away.</text>
+	</string>
+</string_table>

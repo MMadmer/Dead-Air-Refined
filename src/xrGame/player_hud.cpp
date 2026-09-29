@@ -747,6 +747,10 @@ void player_hud::load(const shared_str& player_hud_sect)
         m_model_2->dcast_PKinematics()->CalculateBones_Invalidate();
         m_model_2->dcast_PKinematics()->CalculateBones(TRUE);
     }
+
+    // The scene's cycle was playing on the models just deleted.
+    if (m_scene_on)
+        scene_rebind();
 }
 
 Fvector player_hud::attach_pos(u8 part) const
@@ -1352,6 +1356,17 @@ u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, floa
     m_scene_end = left ? (Device.dwTimeGlobal + left) : 0;
     m_scene_on = true;
 
+    // Zero is "no scene", so the counter steps over it on wrap.
+    if (++m_scene_serial == 0)
+        m_scene_serial = 1;
+    m_scene_id = m_scene_serial;
+    m_scene_sect = sect;
+    m_scene_anim = anim;
+    m_scene_motion = M.name;
+    m_scene_part = part;
+    m_scene_speed = eff_speed;
+    m_scene_started = Device.dwTimeGlobal - start_ms;
+
     scene_first_frame();
 
     return length;
@@ -1387,6 +1402,15 @@ void player_hud::scene_stop()
     m_scene_hand = u8(-1);
     m_scene_on = false;
     m_scene_end = 0;
+    m_scene_id = 0;
+}
+
+bool player_hud::scene_stop(u32 id)
+{
+    if (!id || id != scene_id())
+        return false;
+    scene_stop();
+    return true;
 }
 
 // Keep the scene standing once its cycle is over. A looping cycle goes on looping by itself;
@@ -1396,6 +1420,43 @@ void player_hud::scene_hold()
 {
     if (m_scene_on)
         m_scene_end = 0;
+}
+
+bool player_hud::scene_hold(u32 id)
+{
+    if (!id || id != scene_id())
+        return false;
+    scene_hold();
+    return true;
+}
+
+void player_hud::scene_rebind()
+{
+    const player_hud_motion* motion = m_model ? scene_motions(m_scene_sect).find_motion(m_scene_anim) : nullptr;
+    if (!motion || motion->m_animations.empty())
+    {
+        // Hands of another rig (the 3D PDA's) know nothing of the cycle. Left standing, the scene
+        // had no cycle on the new hands at all: they stood in their bind pose, and the scene item
+        // hung on their grip bone right in front of the camera.
+        Msg("~ [hud-scene] [%s] %s is not on the new hands [%s], the scene ends", m_scene_sect.c_str(),
+            m_scene_anim.c_str(), m_sect_name.c_str());
+        scene_stop();
+        return;
+    }
+
+    const motion_descr* M = &motion->m_animations[0];
+    for (const motion_descr& d : motion->m_animations)
+    {
+        if (d.name == m_scene_motion)
+        {
+            M = &d;
+            break;
+        }
+    }
+    // Laid where it left off: an outfit changed under a scene (the backpack held while a suit is
+    // put on in the inventory) goes on without a jump.
+    play_blend(m_scene_part, M->mid, FALSE, m_scene_speed, true, float(Device.dwTimeGlobal - m_scene_started) * 0.001f);
+    scene_first_frame();
 }
 
 bool player_hud::scene_active() const

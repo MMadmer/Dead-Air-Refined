@@ -97,27 +97,38 @@ void CEffect_Rain::InvalidateState()
 }
 
 // Born
-void CEffect_Rain::Born(Item& dest, float radius)
+void CEffect_Rain::Born(Item& dest, float radius, const Fvector& wind_v)
 {
     ZoneScoped;
 
-    Fvector axis;
-    axis.set(0, -1, 0);
-    // Slant follows the effective-wind service, so the rain leans exactly where the grass bends
-    // and the puddle ripples drift - and it breathes with the same lulls and gusts. The angle
-    // is the physical one: a falling drop drifts sideways at the wind speed, so the streak
-    // tilts by atan(wind / fall). eff_wind_norm maps to ~11 m/s at full storm - the same
-    // scale the bullet wind-drift uses.
-    const auto& env = g_pGamePersistent->Environment();
-    const float wind_ms = env.eff_wind_norm * 11.f * (0.55f + 0.45f * env.eff_wind_gust);
-    float slant = atanf(wind_ms / da_rain::fall_ms);
-    clamp(slant, 0.f, da_rain::max_slant);
+    // The drop's whole flight is one line, solved here from the wind the sheet falls in this frame
+    // (WindAt at the eye, the gusting field the grass bends in) with the drop's own share of the
+    // gust, so the sheet shimmers instead of sliding as one slab. The slant is the physical one -
+    // a falling drop drifts sideways at the wind speed, so it tilts by atan(wind / fall) - scaled to
+    // the speed the streak is DRAWN at, and capped where a squall would lay the sheet flat. A gust
+    // reaches the sheet through births: a drop lives a fraction of a second.
+    //
+    // Nothing turns it afterwards, because the birth ray below clears this line and no other. The
+    // flight step used to steer drops toward the wind, and a slip in it (normalize_safe of a
+    // constant, which REPLACES the vector, instead of the velocity) sent every drop straight down
+    // from its first frame: born on a slanted line over a house, it fell through the roof and out
+    // of the ceiling of the room below, until the time its landing in the yard was due.
+    dest.fSpeed = ::Random.randF(da_rain::speed_min, da_rain::speed_max);
+    const float k = dest.fSpeed * ::Random.randF(0.75f, 1.25f) / da_rain::fall_ms;
+    float tx = wind_v.x * k, tz = wind_v.z * k;
+    const float hmax = dest.fSpeed * _sin(da_rain::max_slant);
+    const float h = _sqrt(tx * tx + tz * tz);
+    if (h > hmax)
+    {
+        tx *= hmax / h;
+        tz *= hmax / h;
+    }
     // Downwind is (sin dir, 0, cos dir) - the convention the service (WindAt), the grass, the
-    // trees, the puddles and the clouds share. setHP's heading runs the other way round on x,
-    // so the rain fell MIRRORED: dead on at north and south, ninety degrees off on the
-    // diagonals, against the wind at east and west.
-    const float sl = _sin(slant), cl = _cos(slant);
-    axis.set(_sin(env.eff_wind_dir) * sl, -cl, _cos(env.eff_wind_dir) * sl);
+    // trees, the puddles and the clouds share.
+    Fvector axis;
+    axis.set(tx, -_sqrt(std::max(dest.fSpeed * dest.fSpeed - tx * tx - tz * tz, 0.f)), tz);
+    axis.div(dest.fSpeed);
+    dest.D.random_dir(axis, da_rain::spread);
 
     // Landing-disc spawn (the NVIDIA rain-SDK camera-volume idea): pick where the streak's
     // LINE crosses eye level inside the radius, then walk back up the fall axis. That keeps
@@ -127,13 +138,11 @@ void CEffect_Rain::Born(Item& dest, float radius)
     Fvector& view = Device.vCameraPosition;
     const float angle = ::Random.randF(0, PI_MUL_2);
     const float dist = _sqrt(::Random.randF()) * radius;
-    dest.D.random_dir(axis, da_rain::spread);
     Fvector land;
     land.set(view.x + dist * _cos(angle), view.y, view.z + dist * _sin(angle));
 
     const float inv_fall = 1.f / std::max(-dest.D.y, 0.4f);
     const float up_range = da_rain::source_offset * inv_fall;
-    dest.fSpeed = ::Random.randF(da_rain::speed_min, da_rain::speed_max);
 
     // THE cover test. Probe the whole column, and probe it from the CLOUD END down: the first
     // thing the ray meets is the roof over this spot, and everything below that is indoors.
@@ -275,17 +284,18 @@ bool CEffect_Rain::RayPickThrough(const Fvector& s, const Fvector& d, float& ran
 void CEffect_Rain::RenewItem(Item& dest, float height, bool bHit)
 {
     dest.uv_set = Random.randI(2);
+    // Where the flight ends either way - the landing, or the bottom of an open column - and the
+    // point the flight step may not carry the drop past (dxRainRender).
+    dest.Phit.mad(dest.P, dest.D, height);
     if (bHit)
     {
         dest.dwTime_Life = Device.dwTimeGlobal + iFloor(1000.f * height / dest.fSpeed) - Device.dwTimeDelta;
         dest.dwTime_Hit = Device.dwTimeGlobal + iFloor(1000.f * height / dest.fSpeed) - Device.dwTimeDelta;
-        dest.Phit.mad(dest.P, dest.D, height);
     }
     else
     {
         dest.dwTime_Life = Device.dwTimeGlobal + iFloor(1000.f * height / dest.fSpeed) - Device.dwTimeDelta;
         dest.dwTime_Hit = Device.dwTimeGlobal + iFloor(2 * 1000.f * height / dest.fSpeed) - Device.dwTimeDelta;
-        dest.Phit.set(dest.P);
     }
 }
 
@@ -493,19 +503,9 @@ void CEffect_Rain::Hit(Fvector& pos)
 
 void CEffect_Rain::HitItem(Item& src)
 {
-    // Where the drop's CURRENT line crosses the surface the birth ray found. Two corrections in
-    // one: the frame the timer fires in has already carried the drop up to a metre past the
-    // ground, and the wind steers it in flight now, so its path is no longer the straight line
-    // the landing point was solved on. A grazing angle falls back to that landing point.
-    Fvector pos = src.Phit;
-    const float denom = src.D.dotproduct(src.Nhit);
-    if (denom < -0.1f)
-    {
-        Fvector to_hit;
-        to_hit.sub(src.Phit, src.P);
-        pos.mad(src.P, src.D, to_hit.dotproduct(src.Nhit) / denom);
-    }
-    Splash(pos, src.Nhit, src.mtl_hit);
+    // The drop keeps to the line its birth ray solved, so it lands exactly where that ray found
+    // the surface - whatever the frame the timer fires in has carried it past.
+    Splash(src.Phit, src.Nhit, src.mtl_hit);
 }
 
 // startup _new_ particle system
@@ -553,8 +553,10 @@ void CEffect_Rain::Splash(const Fvector& pos, const Fvector& n, s32 mtl)
     if (tier >= 2)
     {
         // Stand the crown ON the surface it hit, with a random yaw about that surface's normal.
+        // normalize_safe() in place: the overload taking a vector REPLACES this one with it, and
+        // handed world-up it stood every crown upright whatever the surface was.
         Fvector up = n;
-        up.normalize_safe(Fvector().set(0.f, 1.f, 0.f));
+        up.normalize_safe();
         Fvector a, b;
         Fvector::generate_orthonormal_basis(up, a, b);
         const float yaw = ::Random.randF(PI_MUL_2);

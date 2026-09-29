@@ -30,6 +30,8 @@
 #include "danger_manager.h"
 #include "visual_memory_manager.h"
 #include "agent_enemy_manager.h"
+#include "da_ai_comms.h"
+#include "da_ai_tactics.h"
 
 const u32 TOLLS_INTERVAL = 2000;
 const u32 GRENADE_INTERVAL = 0 * 1000;
@@ -41,9 +43,12 @@ bool CAI_Stalker::useful(const CItemManager* manager, const CGameObject* object)
 {
     const CExplosive* explosive = smart_cast<const CExplosive*>(object);
 
+    // Only the member who sees the explosive keeps its covers away from it (H12).
     if (explosive && smart_cast<const CInventoryItem*>(object))
-        agent_manager().location().add(xr_new<CDangerObjectLocation>(
-            object, Device.dwTimeGlobal, DANGER_INFINITE_INTERVAL, DANGER_EXPLOSIVE_DISTANCE));
+        agent_manager().location().add(xr_new<CDangerObjectLocation>(object, Device.dwTimeGlobal,
+            DANGER_INFINITE_INTERVAL, DANGER_EXPLOSIVE_DISTANCE,
+            DaAi::Tactics::grenade_danger_own_only() ? agent_manager().member().mask(this) :
+                                                       MemorySpace::squad_mask_type(-1)));
 
     if (explosive && (explosive->CurrentParentID() != 0xffff))
     {
@@ -135,14 +140,23 @@ void CAI_Stalker::react_on_grenades()
         */
         if (initiator)
         {
+            // With comms the warning is a message: it reaches mates by the physical channels, with latency.
+            using namespace DaAi::Comms;
+            const u16 grenade = reaction.m_game_object ? reaction.m_game_object->ID() : u16(-1);
             if (is_relation_enemy(initiator))
-                sound().play(StalkerSpace::eStalkerSoundGrenadeAlarm);
+            {
+                if (!request(*this, Kind::grenade, grenade, 0, urgent, StalkerSpace::eStalkerSoundGrenadeAlarm))
+                    sound().play(StalkerSpace::eStalkerSoundGrenadeAlarm);
+            }
             else if (missile->Position().distance_to(Position()) < FRIENDLY_GRENADE_ALARM_DIST)
             {
-                u32 const time = missile->destroy_time() >= Device.dwTimeGlobal ?
-                    u32(missile->destroy_time() - Device.dwTimeGlobal) :
-                    0;
-                sound().play(StalkerSpace::eStalkerSoundFriendlyGrenadeAlarm, time + 1500, time + 1000);
+                if (!request(*this, Kind::grenade, grenade, 1, urgent, StalkerSpace::eStalkerSoundFriendlyGrenadeAlarm))
+                {
+                    u32 const time = missile->destroy_time() >= Device.dwTimeGlobal ?
+                        u32(missile->destroy_time() - Device.dwTimeGlobal) :
+                        0;
+                    sound().play(StalkerSpace::eStalkerSoundFriendlyGrenadeAlarm, time + 1500, time + 1000);
+                }
             }
         }
     }
@@ -161,9 +175,14 @@ void CAI_Stalker::react_on_member_death()
 
     if (agent_manager().member().group_behaviour())
     {
+        using namespace DaAi::Comms;
+        const u16 member = reaction.m_member->ID();
         if (!reaction.m_member->g_Alive())
-            sound().play(StalkerSpace::eStalkerSoundTolls, 3000, 2000);
-        else
+        {
+            if (!request(*this, Kind::man_down, member))
+                sound().play(StalkerSpace::eStalkerSoundTolls, 3000, 2000);
+        }
+        else if (!request(*this, Kind::man_down, member, 1, 0, StalkerSpace::eStalkerSoundWounded))
             sound().play(StalkerSpace::eStalkerSoundWounded, 3000, 2000);
     }
 
@@ -194,6 +213,10 @@ void CAI_Stalker::process_enemies()
             continue;
 
         if (!member->g_Alive())
+            continue;
+
+        // With comms a busy friend in own sight is a witness cue: where he looks, never his enemy or his danger (C28).
+        if (DaAi::Comms::witness(*this, *member))
             continue;
 
         if (!member->memory().enemy().selected())

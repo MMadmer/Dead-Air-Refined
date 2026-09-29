@@ -54,6 +54,11 @@
 #include "script_game_object_impl.h"
 #include "Inventory.h"
 #include "trajectories.h"
+#include "da_ai.h"
+#include "da_ai_ids.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_tactics.h"
+#include "da_ai_senses.h" // [ai:sense] hook
 
 using namespace StalkerSpace;
 
@@ -73,6 +78,10 @@ float CAI_Stalker::GetWeaponAccuracy() const
 
     //влияние ранга на меткость
     base *= m_fRankDisperison;
+
+    // [ai:tactics] begin accuracy
+    base *= DaAi::Tactics::accuracy_mult(*this);
+    // [ai:tactics] end accuracy
 
     if (!movement().path_completed())
     {
@@ -309,16 +318,25 @@ void CAI_Stalker::Hit(SHit* pHDS)
     {
         bool already_critically_wounded = critically_wounded();
 
+        // [ai:tactics] begin hit_danger_cover
         if (!already_critically_wounded)
         {
             const CCoverPoint* cover = agent_manager().member().member(this).cover();
             if (!invulnerable() && cover && HDS.initiator() && (HDS.initiator()->ID() != ID()) &&
                 !fis_zero(HDS.damage()) && brain().affect_cover())
             {
+                // H12: only the hit member knows the cover is dangerous; mates learn it from a taking_fire message.
+                const auto mask = DaAi::Tactics::danger_cover_own_only(*this) ?
+                    agent_manager().member().mask(this) :
+                    CDangerLocation::squad_mask_type(-1);
                 agent_manager().location().add(
-                    xr_new<CDangerCoverLocation>(cover, Device.dwTimeGlobal, DANGER_INTERVAL, DANGER_DISTANCE));
+                    xr_new<CDangerCoverLocation>(cover, Device.dwTimeGlobal, DANGER_INTERVAL, DANGER_DISTANCE, mask));
             }
         }
+        // [ai:tactics] end hit_danger_cover
+
+        // [ai:morale] begin hit
+        // [ai:morale] end hit
 
         const CEntityAlive* entity_alive = smart_cast<const CEntityAlive*>(HDS.initiator());
         if (entity_alive && !wounded())
@@ -399,7 +417,11 @@ void CAI_Stalker::Hit(SHit* pHDS)
         HDS.hit_type = static_cast<ALife::EHitType>(lua_hit.m_tHitType);
 
         const float damageFactor = invulnerable() ? 0.f : 100.f;
+        // [ai:sense] begin hit
+        DaAi::Sense::on_hit(*this, HDS);
+        // [ai:sense] end hit
         memory().hit().add(damageFactor * HDS.damage(), HDS.direction(), HDS.who, HDS.boneID);
+        da_ai_on_hit(*this, HDS);
     }
 
     // conditions().health()			= 1.f;
@@ -720,7 +742,10 @@ void CAI_Stalker::can_kill_entity(
 
     VERIFY(!fis_zero(direction.square_magnitude()));
 
-    collide::ray_defs ray_defs(position, direction, distance, CDB::OPT_CULL, collide::rqtBoth);
+    // [ai:sense] begin can_kill_entity
+    // Unculled like the bullet itself (W5): a back face the bullet will hit is not a free line of fire.
+    collide::ray_defs ray_defs(position, direction, distance, DaAi::Sense::ray_flags(), collide::rqtBoth);
+    // [ai:sense] end can_kill_entity
     VERIFY(!fis_zero(ray_defs.dir.square_magnitude()));
 
     ray_query_param params(this, memory().visual().transparency_threshold(), distance);
@@ -771,7 +796,8 @@ IC float CAI_Stalker::start_pick_distance() const
     if (!memory().enemy().selected())
         return (result);
 
-    return (_max(result, memory().enemy().selected()->Position().distance_to(Position()) + 1.f));
+    // The ray reaches past the enemy as the NPC knows him (W3): exact while seen, the belief otherwise.
+    return (_max(result, DaAi::Know::known_distance(*this, *memory().enemy().selected()) + 1.f));
 }
 
 float CAI_Stalker::pick_distance()
@@ -859,6 +885,11 @@ void CAI_Stalker::update_range_fov(float& new_range, float& new_fov, float start
 
 bool CAI_Stalker::fire_make_sense()
 {
+    // [ai:tactics] begin fire_make_sense
+    if (bool result{}; DaAi::Tactics::hook_fire_make_sense(*this, result))
+        return result;
+    // [ai:tactics] end fire_make_sense
+
     // if we do not have an enemy
     const CEntityAlive* enemy = memory().enemy().selected();
     if (!enemy)
@@ -1239,6 +1270,16 @@ bool CAI_Stalker::can_cry_enemy_is_wounded() const
     case StalkerDecisionSpace::eWorldOperatorKillEnemyIfPlayerOnThePath:
     case StalkerDecisionSpace::eWorldOperatorKillWoundedEnemy:
     case StalkerDecisionSpace::eWorldOperatorCriticallyWounded: return (false);
+    // [ai:core] begin da_operators
+    case DaAi::Ids::op_suppress_fire:
+    case DaAi::Ids::op_fall_back:
+    case DaAi::Ids::op_hold_ambush:
+    case DaAi::Ids::op_return_fire:
+    case DaAi::Ids::op_search_handover:
+    case DaAi::Ids::op_flank:
+    case DaAi::Ids::op_search_sweep:
+    case DaAi::Ids::op_search_overwatch: return (false);
+    // [ai:core] end da_operators
     default: NODEFAULT;
     }
 #ifdef DEBUG
@@ -1286,6 +1327,11 @@ bool CAI_Stalker::can_kill_enemy()
 
 bool CAI_Stalker::too_far_to_kill_enemy(const Fvector& position)
 {
+    // [ai:tactics] begin too_far_to_kill_enemy
+    if (bool result{}; DaAi::Tactics::hook_too_far(*this, position, result))
+        return result;
+    // [ai:tactics] end too_far_to_kill_enemy
+
 #if 1
     return (false);
 #else

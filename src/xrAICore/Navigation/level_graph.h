@@ -13,6 +13,7 @@
 #include "xrAICore/Navigation/game_graph_space.h"
 #include "xrAICore/Navigation/level_graph_manager.h"
 #include "xrCore/_plane.h"
+#include "xrCore/Threading/TaskManager.hpp"
 
 namespace LevelGraph
 {
@@ -53,7 +54,11 @@ private:
     CHeader m_xms_header_copy{}; // owned header when ai-map overlays bump the count
     CLevelGraphManager* m_nodes; // contains nodes array
     void xms_collect_aimap_overlays(pcstr level_ai_path, xr_vector<u8>& out);
-    xr_vector<bool> m_access_mask;
+    // One mask per task worker, filled on first use. Path builds of different objects run at once,
+    // and each masks its own borders around its own search: a shared mask let them clear each
+    // other's bits and see each other's borders.
+    mutable xr_vector<xr_vector<bool>> m_access_masks;
+    IC xr_vector<bool>& access_mask() const;
     GameGraph::_LEVEL_ID m_level_id; // unique level identifier
     u32 m_row_length;
     u32 m_column_length;

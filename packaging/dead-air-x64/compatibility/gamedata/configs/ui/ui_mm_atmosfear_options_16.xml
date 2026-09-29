@@ -1,0 +1,292 @@
+<w>
+	<background x="0" y="0" width="1024" height="768" stretch="1">
+		<texture x="0" y="0" width="1920" height="1080">ui\ui_static_mm_back_00</texture>
+	</background>
+
+  <main_dialog>
+
+		<dialog x="0" y="0" width="1024" height="768" stretch="1">
+			<texture x="0" y="0" width="1920" height="1024">ui\ui_static_mm_back_03</texture>
+		</dialog>
+  		
+		<btn_weather_options x="108" y="346" width="157" height="39">
+			<texture>butt_mm_new</texture>
+			<text y="0" font="graffiti22">st_cap_af_weather_options</text>
+			<text_color>
+				<e r="220" g="220" b="220"/>				
+				<t r="117" g="114" b="97"/>				
+				<d r="178" g="178" b="125"/>
+				<h r="220" g="220" b="220"/>
+			</text_color>
+		</btn_weather_options>
+		
+		<btn_event_options x="108" y="396" width="157" height="39">
+			<texture>butt_mm_new</texture>
+			<text y="0" font="graffiti22">st_cap_af_event_options</text>
+			<text_color>
+				<e r="220" g="220" b="220"/>				
+				<t r="117" g="114" b="97"/>				
+				<d r="178" g="178" b="125"/>
+				<h r="220" g="220" b="220"/>
+			</text_color>
+		</btn_event_options>
+		
+		<btn_cancel x="108" y="446" width="157" height="39">
+			<texture>butt_mm_new</texture>
+			<text y="0" font="graffiti22">ui_mm_cancel</text>
+			<text_color>
+				<e r="220" g="220" b="220"/>				
+				<t r="117" g="114" b="97"/>				
+				<d r="178" g="178" b="125"/>
+				<h r="220" g="220" b="220"/>
+			</text_color>
+		</btn_cancel>
+		
+		
+		<btn_accept x="453" y="650" width="96" height="24">
+			<text align="c" y="0" font="letterica18" r="191" g="191" b="191">ui_mm_apply</text>
+			<texture>ui_button_ordinary</texture>
+				<text_color>
+					<e r="191" g="191" b="191"/>				
+					<t r="117" g="114" b="97"/>				
+					<d r="178" g="178" b="125"/>
+					<h r="0" g="0" b="0"/>
+				</text_color>
+		</btn_accept>
+		
+	</main_dialog>
+
+	<tab_size x="0" y="0" width="1024" height="768"/>
+
+	<event_dialog>
+
+        <cap_af_blowout x="332" y="80" width="240" height="31" stretch="1">
+            <text r="170" g="170" b="170" font="graffiti19" align="l" vert_align="t">st_cap_af_blowout</text>
+        </cap_af_blowout>
+
+        <cap_check_enable_blowout x="332" y="110" width="108" height="20" stretch="1">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_check_event_enable</text>
+        </cap_check_enable_blowout>
+        <check_enable_blowout x="402" y="110" width="30" height="21" stretch="1">
+            <options_item entry="opt_enable_blowout" group="mm_opt_atmosfear"/>
+        </check_enable_blowout>
+
+        <cap_blowout_freq x="332" y="140" width="130" height="20">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_freq</text>
+        </cap_blowout_freq>
+        <list_blowout_freq x="412" y="140" width="156" height="20">
+            <options_item entry="opt_blowout_freq" group="mm_opt_atmosfear"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+	            <e r="170" g="170" b="170"/>
+	            <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_blowout_freq>
+
+        <cap_blowout_task x="332" y="170" width="128" height="20" stretch="1">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_task</text>
+        </cap_blowout_task>
+        <list_blowout_task x="412" y="170" width="156" height="20" stretch="1">
+            <options_item entry="opt_blowout_task" group="mm_opt_atmosfear"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+	            <e r="170" g="170" b="170"/>
+	            <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_blowout_task>
+		
+		
+        <cap_af_psi_storm x="332" y="250" width="240" height="31" stretch="1">
+            <text r="170" g="170" b="170" font="graffiti19" align="l" vert_align="t">st_cap_af_psi_storm</text>
+        </cap_af_psi_storm>
+
+        <cap_check_enable_psi_storm x="332" y="280" width="108" height="20" stretch="1">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_check_event_enable</text>
+        </cap_check_enable_psi_storm>
+        <check_enable_psi_storm x="402" y="280" width="30" height="21" stretch="1">
+            <options_item entry="opt_enable_psi_storm" group="mm_opt_atmosfear"/>
+        </check_enable_psi_storm>
+
+		<cap_psi_storm_freq x="332" y="310" width="80" height="20">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_freq</text>
+        </cap_psi_storm_freq>
+        <list_psi_storm_freq x="412" y="310" width="156" height="20">
+            <options_item entry="opt_psi_storm_freq" group="mm_opt_atmosfear"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+	            <e r="170" g="170" b="170"/>
+	            <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_psi_storm_freq>
+
+        <cap_psi_storm_task x="332" y="340" width="128" height="20" stretch="1">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_task</text>
+        </cap_psi_storm_task>
+        <list_psi_storm_task x="412" y="340" width="156" height="20" stretch="1">
+            <options_item entry="opt_psi_storm_task" group="mm_opt_atmosfear"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+	            <e r="170" g="170" b="170"/>
+	            <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_psi_storm_task>
+		
+		
+		
+        <cap_af_fallout x="332" y="420" width="240" height="31" stretch="1">
+            <text r="170" g="170" b="170" font="graffiti19" align="l" vert_align="t">st_cap_af_fallout</text>
+        </cap_af_fallout>
+
+        <cap_check_enable_fallout x="332" y="450" width="108" height="20" stretch="1">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_check_event_enable</text>
+        </cap_check_enable_fallout>
+        <check_enable_fallout x="402" y="450" width="30" height="21" stretch="1">
+            <options_item entry="opt_enable_fallout" group="mm_opt_atmosfear"/>
+        </check_enable_fallout>
+		
+		<cap_fallout_freq x="332" y="480" width="80" height="20">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_freq</text>
+        </cap_fallout_freq>
+        <list_fallout_freq x="412" y="480" width="156" height="20">
+            <options_item entry="opt_fallout_freq" group="mm_opt_atmosfear"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+	            <e r="170" g="170" b="170"/>
+	            <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_fallout_freq>
+
+        <cap_fallout_task x="332" y="510" width="128" height="20" stretch="1">
+            <text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c">st_cap_task</text>
+        </cap_fallout_task>
+        <list_fallout_task x="412" y="510" width="156" height="20" stretch="1">
+            <options_item entry="opt_fallout_task" group="mm_opt_atmosfear"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+	            <e r="170" g="170" b="170"/>
+	            <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_fallout_task>
+
+	</event_dialog>
+	
+	<weather_dialog>
+        <scroll_v x="295" y="80" width="280" height="540" right_ident="0" left_ident="0" top_indent="0" bottom_indent="0" vert_interval="0" always_show_scroll="1"/>
+
+		<templ_item x="0" y="0" width="417" height="48"/>
+
+        <cap_name x="0" y="110" width="417" height="16" stretch="1">
+        </cap_name>
+
+        <list_period x="0" y="131" width="120" height="20" stretch="1">
+            <options_item entry="opt_period" group="mm_opt_atmosfear"/>
+            <list_font r="170" g="170" b="170" font="letterica16"/>
+            <text_color>
+	            <e r="170" g="170" b="170"/>
+	            <d r="70" g="70" b="70"/>
+            </text_color>
+        </list_period>	
+
+	</weather_dialog>
+
+	<option_list>
+		<!-- The weather dialog's two pages are lists like the options dialog's (atmosfear_options.script
+		     builds them with dead_air_x64_option_list.script): these are their templates - the scroll
+		     list, a subsection header, a row with its caption. -->
+		<scroll_v x="285" y="64" width="300" height="586" right_ident="0" left_ident="0" top_indent="0" bottom_indent="0" vert_interval="0" always_show_scroll="0"/>
+		<templ_header width="295" height="30"/>
+		<cap_header x="10" y="8" width="275" height="20" complex_mode="1">
+			<text align="l" font="graffiti19" r="175" g="175" b="170"></text>
+		</cap_header>
+		<templ_item width="295" height="24"/>
+		<cap_item x="10" y="3" width="240" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79"></text>
+		</cap_item>
+	</option_list>
+
+	<event_page>
+		<!-- The events page: a subsection per event, a row per setting - check_enable_<event>,
+		     list_<event>_freq, list_<event>_task, each placed in its row. The event_dialog nodes are
+		     the stock page's. -->
+		<check_enable_blowout x="255" y="1" width="30" height="21">
+		</check_enable_blowout>
+		<list_blowout_freq x="125" y="1" width="160" height="21" list_length="4" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_blowout_freq>
+		<list_blowout_task x="125" y="1" width="160" height="21" list_length="2" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_blowout_task>
+		<check_enable_psi_storm x="255" y="1" width="30" height="21">
+		</check_enable_psi_storm>
+		<list_psi_storm_freq x="125" y="1" width="160" height="21" list_length="4" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_psi_storm_freq>
+		<list_psi_storm_task x="125" y="1" width="160" height="21" list_length="2" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_psi_storm_task>
+		<check_enable_fallout x="255" y="1" width="30" height="21">
+		</check_enable_fallout>
+		<list_fallout_freq x="125" y="1" width="160" height="21" list_length="4" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_fallout_freq>
+		<list_fallout_task x="125" y="1" width="160" height="21" list_length="2" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_fallout_task>
+	</event_page>
+
+	<weather_page>
+		<!-- The periods page: a row per level (templ_level, its caption cap_level) with the weather of
+		     its good and its bad period (list_period_good, list_period_bad); the column captions
+		     cap_period_good and cap_period_bad sit in the subsection's header, which grows to hold
+		     them. The weather_dialog nodes are the stock page's. -->
+		<templ_level width="295" height="48"/>
+		<cap_level x="10" y="3" width="275" height="21">
+			<text align="l" font="letterica16" r="95" g="92" b="79"></text>
+		</cap_level>
+		<cap_period_good x="10" y="32" width="135" height="20">
+			<text align="l" font="letterica16" r="120" g="120" b="120" x="2">ui_mm_af_period_good</text>
+		</cap_period_good>
+		<cap_period_bad x="150" y="32" width="135" height="20">
+			<text align="l" font="letterica16" r="120" g="120" b="120" x="2">ui_mm_af_period_bad</text>
+		</cap_period_bad>
+		<list_period_good x="10" y="25" width="135" height="21" list_length="6" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_period_good>
+		<list_period_bad x="150" y="25" width="135" height="21" list_length="6" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_period_bad>
+	</weather_page>
+
+</w>

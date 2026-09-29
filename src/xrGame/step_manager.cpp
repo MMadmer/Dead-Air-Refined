@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "step_manager.h"
+#include "da_ai.h"
 #include "entity_alive.h"
 #include "Include/xrRender/Kinematics.h"
 #include "Level.h"
@@ -221,6 +222,10 @@ void CStepManager::update(bool b_hud_view)
             if (!mtl_pair)
                 break;
 
+            // The AI hears steps at any distance from the camera; the sound below plays only within 20 m of it.
+            if (is_on_ground())
+                da_ai_sense_on_step(*m_object, m_step_info.params.step[i].power, mtl_pair);
+
             // Играть звук
             if (b_play && is_on_ground())
                 m_step_sound.play_next(mtl_pair, m_object, m_step_info.params.step[i].power, b_hud_view);
@@ -355,6 +360,13 @@ void CStepManager::UpdateWaterWake(float dist_sqr)
 
         float surface, bed;
         if (!env.water_at(foot, surface, bed))
+            continue;
+        // Confirmed against the column, so a walk through a cellar under the pond outside does
+        // not stir that pond. Probed just under the sheet rather than at the sole: in ankle-deep
+        // water the sole sits on the bed, and a ray born on the bed only finds the bed.
+        Fvector probe = foot;
+        probe.y = _min(foot.y, surface - 0.02f);
+        if (!env.water_column_at(probe, surface, bed))
             continue;
         const float immersion = surface - (foot.y - wake_sole_below_bone);
         if (immersion <= 0.02f)

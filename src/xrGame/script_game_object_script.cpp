@@ -16,6 +16,7 @@
 extern luabind::class_<CScriptGameObject>& script_register_game_object1(luabind::class_<CScriptGameObject>&);
 extern luabind::class_<CScriptGameObject>& script_register_game_object2(luabind::class_<CScriptGameObject>&);
 extern luabind::class_<CScriptGameObject>& script_register_game_object_trader(luabind::class_<CScriptGameObject>&);
+extern luabind::class_<CScriptGameObject>& script_register_game_object_da_ai(luabind::class_<CScriptGameObject>&);
 
 void CScriptGameObject::script_register(lua_State* luaState)
 {
@@ -51,7 +52,8 @@ void CScriptGameObject::script_register(lua_State* luaState)
             .def_readonly("m_vector", &CSightParams::m_vector)
             .def_readonly("m_sight_type", &CSightParams::m_sight_type),
 
-        script_register_game_object2(script_register_game_object1(script_register_game_object_trader(instance))),
+        script_register_game_object_da_ai(
+            script_register_game_object2(script_register_game_object1(script_register_game_object_trader(instance)))),
 
         class_<EnumCallbackType>("callback")
             .enum_("callback_types")

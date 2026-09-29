@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "WeaponShotgun.h"
+#include "da_ai.h"
 #include "Entity.h"
 #include "ParticlesObject.h"
 #include "xrEngine/xr_level_controller.h"
@@ -174,6 +175,7 @@ void CWeaponShotgun::OnStateSwitch(u32 S, u32 oldState)
 void CWeaponShotgun::switch2_StartReload()
 {
     PlaySound("sndOpen", get_LastFP());
+    da_ai_sense_on_reload(*this);
     PlayAnimOpenWeapon();
     SetPending(TRUE);
 }

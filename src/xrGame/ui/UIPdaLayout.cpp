@@ -368,8 +368,8 @@ void CUIPdaItem::Update()
 {
     inherited::Update();
 
-    if (m_item.hint.empty() || !CursorOverWindow() || g_btnHint->Owner() ||
-        Device.dwTimeGlobal <= FocusReceiveTime() + 700 * Device.time_factor())
+    if (m_item.hint.empty() || !CursorOverWindow() || !g_btnHint->Vacant() ||
+        Device.dwTimeContinual <= FocusReceiveTime() + 700)
         return;
 
     // the stock button's placement: above the cursor, flipped to stay on screen

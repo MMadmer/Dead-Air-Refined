@@ -12,6 +12,8 @@
 #include "moving_objects.h"
 #include "magic_box3.h"
 
+#include <atomic>
+
 class CGameObject;
 
 class ai_obstacle
@@ -36,7 +38,8 @@ private:
 
 private:
     CGameObject* m_object;
-    bool m_actual;
+    // Raised only after m_area and m_crc are built: lock-free readers trust them once it is up.
+    std::atomic<bool> m_actual;
     AREA m_area;
     AREA m_danger_area;
     u32 m_crc;
@@ -49,6 +52,7 @@ private:
     void prepare_inside(Fvector& start, Fvector& dest);
     void correct_position(Fvector& position);
     void compute_impl();
+    void compute_locked();
     void compute();
     void compute_matrix(Fmatrix& result, const Fvector& additional);
 

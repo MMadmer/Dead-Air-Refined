@@ -39,5 +39,7 @@ public:
     virtual u8 GetMaxUses() const { return m_iMaxUses; }
     virtual u8 GetRemainingUses() const { return m_iRemainingUses; }
     void SetRemainingUses(u8 value) { if (value <= m_iMaxUses) m_iRemainingUses = value; };
+    // The condition of a use_condition item is the share of uses left.
+    void SyncUseCondition();
     float Weight() const override;
 };

@@ -1,4 +1,6 @@
--- The visor on a player's own save, watched for seventy-five seconds without touching anything.
+-- The visor on a player's own save, watched for seventy-five seconds. The one thing touched is the
+-- mask: the drops are the mask's, and a save without one correctly shows dry glass, so a respirator
+-- goes on with the mask HUD switched on.
 --
 -- A report says the drops dry up and come back in a storm where the player stands still. This
 -- loads that save on the stand, leaves the weather the save restores unless the runner names one
@@ -6,6 +8,7 @@
 -- name, the rain density, the exposure the script reads, the cover under it, and the field's own
 -- statistics. If the density holds while the exposure drops, the sky-cover probe is what let go.
 local stage, t0, frames, ticks = 0, 0, 0, 0
+local helm, opt_before = "helm_respirator", true
 local function cmd(s) get_console():execute(s) end
 
 local function report()
@@ -33,10 +36,20 @@ local function on_update()
 			level.set_weather(qa_water_weather, true)
 		end
 		if axr_main and axr_main.config then
-			axr_main.config:w_value("mm_options", "enable_mask_hud", false)
+			opt_before = axr_main.config:r_value("mm_options", "enable_mask_hud", 1, false)
+			axr_main.config:w_value("mm_options", "enable_mask_hud", true)
 		end
-		t0 = now ticks = now stage = 1
+		alife():create(helm, db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id(),
+			db.actor:id())
+		stage = 1
 	elseif stage == 1 then
+		-- The respirator exists a few frames after it is created; the clock starts once it is on.
+		local obj = db.actor:object(helm)
+		if obj then
+			db.actor:move_to_slot(obj, 12)
+			t0 = now ticks = now stage = 2
+		end
+	elseif stage == 2 then
 		if now - ticks > 1000 then
 			report() ticks = now
 			-- A picture of the spot every half minute, for the geometry the rays report.
@@ -46,11 +59,11 @@ local function on_update()
 		-- within forty-five, so a run that shows nothing by here is a run that shows nothing.
 		if now - t0 > 75000 then
 			if axr_main and axr_main.config then
-				axr_main.config:w_value("mm_options", "enable_mask_hud", true)
+				axr_main.config:w_value("mm_options", "enable_mask_hud", opt_before)
 			end
 			printf("DA_WATER_PROBE_DONE")
 			cmd("flush")
-			stage = 2
+			stage = 3
 		end
 	end
 end

@@ -56,44 +56,69 @@ local function install_actor_effects_patch()
 	end
 end
 
--- ---- the addon's own copy of this feature --------------------------------------------------------
--- DAR2 carries its own item-use animations (dar2_animations_enhanced), and this project ported a
--- second, better set. Both hang on the same event, so both used to run - the player saw the new
--- animation and then the old one right after it.
+-- ---- other scripts' copies of the module's scenes ------------------------------------------------
+-- An add-on may carry its own animations for the moments this module animates and hang them on the
+-- same events, so both run - one scene inside the other. That is how the hands used to be lost. One
+-- such copy has its two halves the wrong way round: its scene ENDS with hide_weapon (a comment next
+-- to it reads "the ability to change weapon", the author took hide for restore), and its
+-- restore_weapon sits at the START, where the counter is already zero and the call is swallowed.
+-- A blocked slot is a refcount: one unmatched hide is permanent, only a fresh actor clears it, and
+-- the player is left with empty hands and no way to draw anything, the PDA included.
 --
--- That double run is also where the hands were lost, and the reason is worth writing down. In
--- dar2_animations_enhanced the two halves are the wrong way round: its scene ENDS with
---     db.actor:hide_weapon()   --Возможность менять оружие
--- (the comment says "the ability to change weapon", so the author read hide as restore), and the
--- restore_weapon it does own sits at the START, where the counter is already zero and the call is
--- silently swallowed. A blocked slot is a refcount: one unmatched hide is permanent, and only a
--- fresh actor clears it. One frame later that scene asks for its slot back, the engine refuses
--- because the slot it just blocked is blocked, and the player is left standing with empty hands
--- and no way to draw anything at all.
+-- The copy reached the player through OUR scene, not instead of it: the module consumes the item
+-- mid-scene through the ordinary use, which fires the use event the copy listens on; the harvest
+-- copy is started by the loot window once the items are taken, after our harvest has played.
 --
--- It reached the player through OUR scene, not instead of it: the module consumes the item
--- mid-scene through the ordinary use, which fires actor_on_item_use, which is what DAR2 listens
--- on. So the second scene started inside the first, spun while our block was up, and ran to its
--- own end - and its end blocks.
---
--- One feature, one owner: while the module has a scene for an item, the addon's copy stays out of
--- it. When the module is switched off in Options, or has no scene for that item, the addon works
--- exactly as it always did.
-local function install_dar2_animation_patch()
-	if not (dar2_animations_enhanced and dar2_animations_enhanced.use_item) then return end
-	if (dar2_animations_enhanced.da_use_item_original) then return end
-
-	local original = dar2_animations_enhanced.use_item
-	dar2_animations_enhanced.da_use_item_original = original
-
-	dar2_animations_enhanced.use_item = function(obj, item, ...)
-		if (enhanced_animations and enhanced_animations.enable_item_anims) then
-			-- Ours is already running one: never a second scene inside it.
-			if (enhanced_animations.used_item or enhanced_animations.used_monster) then return end
-			local section = obj and obj.section and obj:section() or item
-			if (section and enhanced_animations.da_has_anim(section)) then return end
+-- One feature, one owner: while the module has a scene for the case, the copy is skipped; when it
+-- has none, the copy runs as it always did. Which functions are such copies is knowledge about
+-- other mods, so it is data: dead_air_x64_scene_copies.ltx, [duplicate_scenes].
+local covers = {
+	-- A use of an item, which comes among the arguments as a game object or a section name.
+	item = function(...)
+		if not (enhanced_animations and enhanced_animations.enable_item_anims) then return false end
+		-- Ours is already running one: never a second scene inside it.
+		if (enhanced_animations.used_item or enhanced_animations.used_monster) then return true end
+		for i = 1, select("#", ...) do
+			local arg = select(i, ...)
+			local section = (type(arg) == "string") and arg or nil
+			if (type(arg) == "userdata") then
+				local ok, name = pcall(function() return arg:section() end)
+				section = ok and name or nil
+			end
+			if (section and enhanced_animations.da_has_anim(section)) then return true end
 		end
-		return original(obj, item, ...)
+		return false
+	end,
+	-- The mutant harvest: the module plays it before the loot window opens, whenever it is on.
+	harvest = function()
+		return (enhanced_animations and enhanced_animations.enable_animations and enhanced_animations.mutant_loot_mod) == true
+	end,
+}
+
+-- What was wrapped, by "script.function". A function that no longer is our wrapper was replaced by
+-- its script (reloaded, or reassigned on activation) and is wrapped again.
+local duplicate_wrappers = {}
+
+local function install_duplicate_scene_patches()
+	local ini = ini_file("dead_air_x64_scene_copies.ltx")
+	if not (ini and ini:section_exist("duplicate_scenes")) then return end
+
+	for i = 0, ini:line_count("duplicate_scenes") - 1 do
+		local _, name, kind = ini:r_line("duplicate_scenes", i, "", "")
+		local script, func = string.match(name or "", "^([%w_]+)%.([%w_]+)$")
+		local covered = covers[kind]
+		local owner = script and _G[script]
+		if (not covered) then
+			printf("![da_anims] duplicate_scenes: %s has an unknown kind '%s'", tostring(name), tostring(kind))
+		elseif (type(owner) == "table" and type(owner[func]) == "function" and owner[func] ~= duplicate_wrappers[name]) then
+			local original = owner[func]
+			local wrapper = function(...)
+				if covered(...) then return end
+				return original(...)
+			end
+			duplicate_wrappers[name] = wrapper
+			owner[func] = wrapper
+		end
 	end
 end
 
@@ -116,13 +141,13 @@ end
 function on_game_start()
 	install_actor_effects_patch()
 	install_knife_manager_patch()
-	install_dar2_animation_patch()
-	-- The addon registers its own handlers from actor_on_first_update, and the order two scripts
-	-- get that callback in is the order a hash table lists them. So the patch is put on again
+	install_duplicate_scene_patches()
+	-- Add-ons register their own handlers from actor_on_first_update, and the order two scripts
+	-- get that callback in is the order a hash table lists them. So the patches are put on again
 	-- once the game is running, when everything is certainly loaded.
-	RegisterScriptCallback("actor_on_first_update", install_dar2_animation_patch)
+	RegisterScriptCallback("actor_on_first_update", install_duplicate_scene_patches)
 end
 
 install_actor_effects_patch()
 install_knife_manager_patch()
-install_dar2_animation_patch()
+install_duplicate_scene_patches()

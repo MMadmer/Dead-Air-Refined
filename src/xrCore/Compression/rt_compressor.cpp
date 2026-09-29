@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#include "rt_compressor_prefix.h"
+
 #include "lzo/lzo1x.h"
 #include "lzo1x_decompress_safe_fast.inl"
 
@@ -35,4 +37,10 @@ size_t rtc_decompress(void* dst, size_t dst_len, const void* src, size_t src_len
     const int result =
         xr_lzo::decompress_safe((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size, rtc_wrkmem);
     return result == LZO_E_OK && out_size == dst_len ? out_size : 0;
+}
+size_t rtc_decompress_prefix(void* dst, size_t dst_len, const void* src, size_t src_len)
+{
+    lzo_uint out_size = dst_len;
+    const int result = xr_lzo::decompress_prefix((const lzo_byte*)src, (lzo_uint)src_len, (lzo_byte*)dst, &out_size);
+    return result == LZO_E_OK ? out_size : 0;
 }

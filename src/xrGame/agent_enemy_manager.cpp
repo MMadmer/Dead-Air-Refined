@@ -23,8 +23,29 @@
 #include "hit_memory_manager.h"
 #include "enemy_manager.h"
 #include "memory_space_impl.h"
+#include "da_ai_knowledge.h"
 
 extern const float wounded_enemy_reached_distance;
+
+namespace
+{
+// A member measures to what it knows of an enemy (W3); an unknown enemy counts as far away.
+float member_distance(const CAI_Stalker& member, const CEntityAlive& enemy)
+{
+    if (!DaAi::Know::active(member))
+        return member.Position().distance_to(enemy.Position());
+    const float distance = DaAi::Know::known_distance(member, enemy);
+    return distance < 0.f ? flt_max : distance;
+}
+
+float member_distance_sqr(const CAI_Stalker& member, const CEntityAlive& enemy)
+{
+    if (!DaAi::Know::active(member))
+        return member.Position().distance_to_sqr(enemy.Position());
+    const float distance = DaAi::Know::known_distance(member, enemy);
+    return distance < 0.f ? flt_max : _sqr(distance);
+}
+} // namespace
 
 const u32 __c0 = 0x55555555;
 const u32 __c1 = 0x33333333;
@@ -76,10 +97,25 @@ void CAgentEnemyManager::fill_enemies()
     {
         CAgentMemberManager::iterator I = object().member().combat_members().begin();
         CAgentMemberManager::iterator E = object().member().combat_members().end();
+        xr_vector<const CEntityAlive*> known;
         for (; I != E; ++I)
         {
             (*I)->probability(1.f);
-            (*I)->object().memory().fill_enemies(CEnemyFiller(&m_enemies, object().member().mask(&(*I)->object())));
+            CAI_Stalker& member = (*I)->object();
+            const CEnemyFiller filler(&m_enemies, object().member().mask(&member));
+            if (!DaAi::Know::active(member))
+            {
+                member.memory().fill_enemies(filler);
+                continue;
+            }
+
+            // A member offers only the enemies it believes in, not every entry of the shared pool.
+            DaAi::Know::known_objects(member, known);
+            for (const CEntityAlive* enemy : known)
+            {
+                if (member.memory().enemy().useful(enemy))
+                    filler(enemy);
+            }
         }
     }
 
@@ -146,6 +182,15 @@ void CAgentEnemyManager::fill_enemies()
 
 float CAgentEnemyManager::evaluate(const CEntityAlive* object0, const CEntityAlive* object1) const
 {
+    // The odds read the enemy's weapon and health: a member judges only an enemy in its own sight, others are even.
+    const bool first_is_member = !!object().member().get_member(object0->ID());
+    const auto* member = smart_cast<const CAI_Stalker*>(first_is_member ? object0 : object1);
+    if (member && DaAi::Know::active(*member) && !DaAi::Know::sees_now(*member, first_is_member ? object1 : object0))
+    {
+        CPatternFunction& odds = *ai().ef_storage().m_pfVictoryProbability;
+        return (odds.ffGetMinResultValue() + odds.ffGetMaxResultValue()) / 200.f;
+    }
+
     ai().ef_storage().non_alife().member_item() = 0;
     ai().ef_storage().non_alife().enemy_item() = 0;
     ai().ef_storage().non_alife().member() = object0;
@@ -286,7 +331,7 @@ void CAgentEnemyManager::permutate_enemies()
             if ((*I)->processed())
                 continue;
 
-            float best = (*I)->object().Position().distance_to(m_enemies[(*I)->selected_enemy()].m_object->Position());
+            float best = member_distance((*I)->object(), *m_enemies[(*I)->selected_enemy()].m_object);
             bool found = false;
             xr_vector<u32>::const_iterator i = (*I)->enemies().begin();
             xr_vector<u32>::const_iterator e = (*I)->enemies().end();
@@ -294,7 +339,7 @@ void CAgentEnemyManager::permutate_enemies()
             {
                 if ((*I)->selected_enemy() == *i)
                     continue;
-                float my_distance = (*I)->object().Position().distance_to(m_enemies[*i].m_object->Position());
+                float my_distance = member_distance((*I)->object(), *m_enemies[*i].m_object);
                 if (my_distance < best)
                 {
                     // check if we can exchange enemies
@@ -311,9 +356,8 @@ void CAgentEnemyManager::permutate_enemies()
                             continue;
 
                         // check if I'm closer to the enemy
-                        float member_distance =
-                            (*j)->object().Position().distance_to(m_enemies[*i].m_object->Position());
-                        if (member_distance <= my_distance)
+                        float his_distance = member_distance((*j)->object(), *m_enemies[*i].m_object);
+                        if (his_distance <= my_distance)
                             continue;
 
                         // check if our effectiveness is near the same
@@ -393,6 +437,11 @@ IC void CAgentEnemyManager::setup_mask(CMemberEnemy& enemy, const squad_mask_typ
 
 void CAgentEnemyManager::assign_enemy_masks()
 {
+    // With knowledge a distribution only orders what each member already knows: nobody is handed an enemy's
+    // exact position (H3), and nobody's squad bit is spread onto another member's entries.
+    if (DaAi::feature(DaAi::Feature::knowledge))
+        return;
+
     {
         ENEMIES::iterator I = m_enemies.begin();
         ENEMIES::iterator E = m_enemies.end();
@@ -464,8 +513,7 @@ void CAgentEnemyManager::assign_wounded()
                 continue;
 
             CAgentMemberManager::iterator i = object().member().member(mask);
-            if ((*I).first->Position().distance_to_sqr((*i)->object().Position()) >
-                _sqr(wounded_enemy_reached_distance))
+            if (member_distance_sqr((*i)->object(), *(*I).first) > _sqr(wounded_enemy_reached_distance))
                 continue;
 
             if (wounded_processor((*J).m_object) != ALife::_OBJECT_ID(-1))
@@ -503,7 +551,7 @@ void CAgentEnemyManager::assign_wounded()
                 {
                     squad_mask_type K = (J & (J - 1)) ^ J;
                     CAgentMemberManager::iterator i = object().member().member(K);
-                    float distance_sqr = (*i)->object().Position().distance_to_sqr((*I).m_object->Position());
+                    float distance_sqr = member_distance_sqr((*i)->object(), *(*I).m_object);
                     if (distance_sqr < best_distance_sqr)
                     {
                         best_distance_sqr = distance_sqr;
@@ -618,6 +666,12 @@ void CAgentEnemyManager::remove_links(IGameObject* object)
     {
         return wounded_enemy.first == object || wounded_enemy.second.first == object->ID();
     }), m_wounded.end());
+    // The list outlives a distribution until the next one, and the members' cover checks read its objects (F2): a
+    // released enemy leaves it (r4a7 crashed in Know::knows on one). Member indices into it are rebuilt per distribution.
+    m_enemies.erase(std::remove_if(m_enemies.begin(), m_enemies.end(), [object](const CMemberEnemy& enemy)
+    {
+        return enemy.m_object == object;
+    }), m_enemies.end());
 }
 
 void CAgentEnemyManager::update() {}

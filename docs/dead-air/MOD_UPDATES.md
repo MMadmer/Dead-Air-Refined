@@ -205,7 +205,11 @@ Nothing here binds the game; it says what a publisher has to get right, and what
 XFined Editor's **Publish Release** does about it.
 
 - Only the descriptor's name is fixed. The tag, the title and the notes of the
-  GitHub release are the author's: the game reads none of them. Which release is
+  GitHub release are the author's: the game reads none of them - with one exception, where
+  nothing depends on it: to find the release of an older installed version when it holds a
+  module installed by hand against the mod catalog ([MOD_CATALOG.md](MOD_CATALOG.md) 14.1), it
+  asks for the tags the editor writes, `v<version>` and `v<version>-r<N>`. A release under
+  another tag is simply not found there. Which release is
   newer is decided by the descriptor's `version` against the installed
   `mod.ltx`, never by a tag or a date. The editor's **Releases** window edits
   the title and the notes of a release that is out and leaves the rest alone -
@@ -270,6 +274,14 @@ anything differs the release is offered like any update - same staging, same
 delta - and the Mods menu words it as a fix by the author rather than as
 "version X is available" over an installed X.
 
+A module installed by hand that the mod catalog lists under its own repository is first held
+against the catalog ([MOD_CATALOG.md](MOD_CATALOG.md) 14.1): byte for byte a release, it is
+taken for a browser installation before the rest of the check, which then holds its update to
+the catalog's rules. Found to be no release - edited, with files of the player's - it is never
+offered a release of its own version: what differs is the player's, not the author's fix, and
+the release would overwrite it. It is "up to date" with a note that it differs, and a higher
+version is offered as usual.
+
 The comparison reads the whole module, so its verdict is kept in
 `modules\.update_state`, one line per module: the SHA-256 of the index it was
 made against and the size and time of the installed `mod.ltx`. While both still
@@ -330,7 +342,7 @@ applies anything. `No` leaves the update for the next start.
 | Command | Effect |
 |---|---|
 | `xms_update <id>` / `xms_update all` | Checks, then stages whatever is available. Needs no finished check to act on. |
-| `xms_update_status` | One log line per module: installed version, state, available version, failure reason. |
+| `xms_update_status` | One log line per module: installed version, state, available version, failure reason; whether the Mod Browser installed it (or took it for its own, MOD_CATALOG 14.1) and whether it is a copy installed by hand that differs from every release. |
 | `xms_mods` | Opens the Mods window once the main menu has the input. |
 
 ### 3.5 QA override

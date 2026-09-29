@@ -17,7 +17,9 @@ param(
     # A single string on purpose: an array argument here unrolls into the positional
     # parameters behind it and quietly rewrites $Rig.
     [string]$Callers = "",
-    [switch]$SkipDeploy
+    [switch]$SkipDeploy,
+    # More engine switches, e.g. "-r5" to profile the DirectX 12 renderer.
+    [string]$ExtraArgs = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,11 +65,13 @@ Set-Content -LiteralPath (Join-Path $scriptDir "qa_profile.script") `
 try {
     & (Join-Path $repo "tools\qa\Run-ContentProbe.ps1") -Rig $Rig -Label "profile-$Label" `
         -RunSeconds ($Seconds + 90) -TimeoutSeconds ($Seconds + 200) -WaitFor "PROFILE: DONE" `
-        -ExtraArgs "-always_active" `
+        -ExtraArgs ("-always_active " + $ExtraArgs).Trim() `
         -Commands @("start server($Save/single/alife/load) client(localhost)") | Out-Null
 }
 finally {
     foreach ($pair in $parked) { Move-Item -LiteralPath $pair[0] -Destination $pair[1] -Force }
+    # Left behind, it would start the profiler in every later run on the rig.
+    Remove-Item -LiteralPath (Join-Path $scriptDir "qa_profile.script") -Force -ErrorAction SilentlyContinue
 }
 
 $log = Join-Path $Rig "appdata\logs\xfined-ray_admin.log"

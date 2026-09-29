@@ -27,13 +27,7 @@ private:
     xr_vector<ISpatial*> r_spatial;
     IGameObject const* m_owner;
 
-    void o_new(IGameObject* E);
-    void o_delete(IGameObject* E);
-    void o_trace(Fvector& P, float dt, float vis_threshold);
-
 public:
-    Vision(IGameObject const* owner);
-    virtual ~Vision();
     struct feel_visible_Item
     {
         collide::ray_cache Cache;
@@ -44,14 +38,37 @@ public:
         IGameObject* O;
         float fuzzy; // note range: (-1[no]..1[yes])
         float Cache_vis;
+        float trace_vis; // transparency product along the last trace, 0 = blocked
         u16 bone_id;
     };
+
+private:
+    void o_new(IGameObject* E);
+    void o_delete(IGameObject* E);
+    void o_trace(Fvector& P, float dt, float vis_threshold, u32 ray_flags);
+    void o_trace_item(feel_visible_Item& item, Fvector& P, float dt, float vis_threshold, u32 ray_flags);
+
+public:
+    Vision(IGameObject const* owner);
+    virtual ~Vision();
     xr_vector<feel_visible_Item> feel_visible;
 
 public:
     void feel_vision_clear();
     void feel_vision_query(Fmatrix& mFull, Fvector& P);
-    void feel_vision_update(IGameObject* parent, Fvector& P, float dt, float vis_threshold);
+    // ray_flags: CDB::OPT_CULL (stock) or CDB::OPT_FULL_TEST, which also sees the back faces bullets hit.
+    void feel_vision_update(
+        IGameObject* parent, Fvector& P, float dt, float vis_threshold, u32 ray_flags = CDB::OPT_CULL);
+    // One extra trace of a single object of the potentially visible set; false when it is not in the set.
+    bool feel_vision_retrace(const IGameObject* object, Fvector& P, float dt, float vis_threshold, u32 ray_flags);
+    // Transparency product along the last trace to the object, 0 when blocked or not in the set.
+    float feel_vision_transparency(const IGameObject* object) const
+    {
+        for (const feel_visible_Item& item : feel_visible)
+            if (item.O == object)
+                return item.trace_vis;
+        return 0.f;
+    }
     void feel_vision_relcase(IGameObject* object);
     void feel_vision_get(xr_vector<IGameObject*>& R)
     {

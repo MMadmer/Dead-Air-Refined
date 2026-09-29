@@ -48,6 +48,10 @@ namespace render_gl
 {
 class dxEnvironmentRender;
 }
+namespace render_r5
+{
+class dxEnvironmentRender;
+}
 } // namespace xray::render
 
 #define DAY_LENGTH 86400.f
@@ -250,6 +254,7 @@ class ENGINE_API CEnvironment : public xray::editor::ide_tool
 {
     friend class xray::render::render_r4::dxEnvironmentRender;
     friend class xray::render::render_gl::dxEnvironmentRender;
+    friend class xray::render::render_r5::dxEnvironmentRender;
 
     struct str_pred
     {
@@ -605,6 +610,29 @@ public:
     float water_bed_at(const Fvector& p) const;
     float water_shore_dist(const Fvector& p) const;
     bool water_at(const Fvector& p, float& surface, float& bed) const;
+
+    // Is the POINT itself in the water, not merely somewhere below a sheet of it. The field is
+    // 2.5D and keeps the highest liquid triangle over a texel, so on its own it also answers "yes"
+    // in a cellar under a pond whose plane runs on under the bank, on the ground floor under a
+    // flooded upper one, or beneath a tank - the camera went "under water" there and the actor
+    // waded. This confirms the column with one short static ray straight up: the first thing
+    // above the point has to be the water surface itself, with no solid face on the way.
+    //
+    // surface is where that ray met the water (exact, not the texel's highest sheet), bed the
+    // field's. Every gameplay and render consumer asking "is this in the water" goes through here.
+    //
+    // A memo makes a caller that asks every frame from about the same spot pay for one ray per
+    // few centimetres of travel rather than one per call: the geometry is static, so the answer
+    // is a function of position alone.
+    struct SWaterProbe
+    {
+        Fvector at{};
+        float surface{};
+        // Liquid found above at, with nothing solid in between.
+        bool open{};
+        bool valid{};
+    };
+    bool water_column_at(const Fvector& p, float& surface, float& bed, SWaterProbe* memo = nullptr) const;
     // How deep rain would stand here, 0..1 of puddle_fill_depth. Bilinear and clamped, the same
     // read the shader's linear sampler does, so gameplay and the picture place puddles alike.
     float puddle_fill_at(const Fvector& p) const;
@@ -683,6 +711,11 @@ public:
         // The wetting rate this mod's own driver pushes (visor_rate), negative until it has. The
         // console float the older drivers write is a fallback, not a partner: they keep writing.
         float rate{-1.f};
+        // Whether there is glass in front of the eye at all - a mask with its HUD up - as this
+        // mod's own driver says (visor_worn): 1 or 0, negative until it has spoken. The rate
+        // alone cannot say it: a rate of zero is a mask in dry weather, whose water stays on and
+        // runs off, while no mask is no water, from the rain or from a dunk.
+        int worn{-1};
         // A rig lens: the radius in mm of a cap held at the centre of the glass, 0 for none.
         float qa_blob{};
         float wipe_start{-1.f}; // fTimeGlobal the sweep begins at, negative when none is running
@@ -700,6 +733,9 @@ public:
     void visor_wipe(float delay, float len);
     // Where the hand is now, 0 before the sweep and 1 once it is over, and which way it travels.
     float visor_wipe_phase() const;
+    // Whether the visor's water exists at all, to be stepped and drawn. The QA overrides count as
+    // glass: the stand wears no mask, and a pinned rate or a held lens is a rig asking for water.
+    bool visor_glass() const { return visor.worn != 0 || visor.qa_wet >= 0.f || visor.qa_blob > 0.f; }
 
     // ---- Rain and the camera in water --------------------------------------------------------
     // The rain rate the whole rain system is parameterised on, mm/h. Solved where the sea state
@@ -712,6 +748,7 @@ public:
     // Camera below a water surface: metres below, and the surface Y it is below.
     float eye_under_depth{};
     float eye_under_surface{};
+    SWaterProbe eye_probe;
 
     // "Is this spot sheltered from the wind" - static geometry overhead means indoors/under a
     // roof, where the physical wind push on bodies and projectiles must die. One static-only

@@ -145,7 +145,8 @@ public:
         D3D9,
         D3D10,
         D3D11,
-        OpenGL
+        OpenGL,
+        D3D12, // xrRender_R5: the D3D11 render code on xrD3D12
     };
 
     enum ScreenshotMode : u32
@@ -400,4 +401,22 @@ public:
 
     virtual RenderContext GetCurrentContext() const = 0;
     virtual void MakeContextCurrent(RenderContext context) = 0;
+
+    // Latency markers of the frame loop (NVIDIA Reflex and PC latency stats through Streamline),
+    // sent in this order every frame; a renderer without a use for them ignores the calls.
+    enum class FrameMarker : u32
+    {
+        FrameStart, // before input and simulation: Reflex paces the frame here
+        SimulationStart,
+        SimulationEnd,
+        RenderSubmitStart,
+        RenderSubmitEnd,
+        PresentStart, // the renderer sends these two around its Present
+        PresentEnd,
+    };
+    virtual void OnFrameMarker(FrameMarker /*marker*/) {}
+
+    // The engine's frame limit (0 = none), once per frame. true: the renderer paces the frame rate
+    // itself (the driver's limiter while frame generation runs) and the engine's limiter stands aside.
+    virtual bool OwnFrameLimit(u32 /*fpsLimit*/) { return false; }
 };

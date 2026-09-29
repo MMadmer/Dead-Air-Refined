@@ -16,7 +16,8 @@ constexpr u32 STRING_TABLE_CACHE_MAGIC = 0x31435453;
 // Version 3: the header carries a content CRC and the table is rebuilt serially.
 // The bump itself matters - it drops every cache built by the racy parallel path,
 // which is how a one-time parse glitch became permanent mojibake for a player.
-constexpr u32 STRING_TABLE_CACHE_VERSION = 3;
+// Version 4: the engine's own file folds in first, as defaults.
+constexpr u32 STRING_TABLE_CACHE_VERSION = 4;
 constexpr u32 MAX_CACHED_STRINGS = 1'000'000;
 constexpr size_t MAX_CACHED_STRING_LENGTH = 1024 * 1024;
 constexpr size_t STRING_TABLE_CACHE_HEADER_SIZE = sizeof(u32) * 5;
@@ -128,6 +129,13 @@ void CStringTable::Init()
             xr_strcat(name, extension);
             files.push_back({ name, {} });
         }
+
+        // The engine's own strings are defaults: every file of the game folds in after them and
+        // overrides what it defines, however the names sort.
+        std::stable_partition(files.begin(), files.end(), [](const LocalizationFile& f)
+        {
+            return !xr_stricmp(f.name.c_str(), ENGINE_XML) || !xr_stricmp(f.name.c_str(), ENGINE_XML_LEGACY);
+        });
 
         // fold order: base layer first, then modules by load order; overrides
         // land by layer priority instead of bare filename alphabetics

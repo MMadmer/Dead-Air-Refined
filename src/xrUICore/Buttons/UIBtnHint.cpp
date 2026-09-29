@@ -30,6 +30,14 @@ CUIButtonHint::CUIButtonHint() : CUIFrameWindow(CUIButtonHint::GetDebugType())
     CUIXmlInitBase::InitStatic(uiXml, "button_hint:description", 0, m_text);
 }
 
+bool CUIButtonHint::Vacant() const { return !m_ownerWnd || Device.dwFrame > m_ownerDrawFrame + 1; }
+
+void CUIButtonHint::Draw_()
+{
+    m_enabledOnFrame = true;
+    m_ownerDrawFrame = Device.dwFrame;
+}
+
 void CUIButtonHint::OnRender()
 {
     if (m_enabledOnFrame)
@@ -51,6 +59,7 @@ void CUIButtonHint::OnRender()
 void CUIButtonHint::SetHintText(CUIWindow* w, LPCSTR text)
 {
     m_ownerWnd = w;
+    m_ownerDrawFrame = Device.dwFrame;
     m_text->SetTextST(text);
 
     if (m_border)

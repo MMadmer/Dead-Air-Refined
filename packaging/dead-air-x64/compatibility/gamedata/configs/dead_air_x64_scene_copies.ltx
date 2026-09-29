@@ -1,0 +1,18 @@
+; Other scripts' copies of the scenes the animation module plays (dead_air_x64_animations.script).
+;
+; An add-on can carry its own animations for the same moments - using an item, skinning a mutant -
+; and hang them on the same events, so both would run, one scene inside the other. A function listed
+; here is skipped while the module has its own scene for the case; when the module has none, it runs
+; as it always did. This is data about other mods, not engine knowledge: replace the add-on, replace
+; the lines. A script or function that is not installed is skipped silently.
+;
+; <script>.<function> = <what the module has to cover for the copy to be skipped>
+;   item    - the call uses an item (passed as a game object or a section name); skipped when the
+;             module has a scene for that item, or is playing one right now
+;   harvest - the call starts a mutant harvest scene; skipped while the module's harvest is on (it
+;             plays before the loot window opens)
+[duplicate_scenes]
+; Revolution II (DAR2): its item-use scenes, hung on actor_on_item_use.
+dar2_animations_enhanced.use_item = item
+; Revolution II (DAR2): its harvest scene, started by the loot window after the items are taken.
+dar2_animations_enhanced.monster_on_actor_use_2 = harvest

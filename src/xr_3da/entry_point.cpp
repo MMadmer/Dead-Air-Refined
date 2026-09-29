@@ -22,11 +22,12 @@ XR_EXPORT u32 NvOptimusEnablement = 0x00000001; // NVIDIA Optimus
 XR_EXPORT u32 AmdPowerXpressRequestHighPerformance = 0x00000001; // PowerXpress or Hybrid Graphics
 }
 
-// Exactly one renderer module remains: R4. The OpenGL module is removed from the build;
-// keep the array size in sync with this list.
-std::array<RendererModule*, 1> s_render_modules =
+// DirectX 11 (R4) and DirectX 12 (R5). The order is the mode list's order: R4 comes first and
+// stays the fallback. Keep the array size in sync with this list and with xrEngine.def.
+std::array<RendererModule*, 2> s_render_modules =
 {
     xray::render::render_r4::GetRendererModule(),
+    xray::render::render_r5::GetRendererModule(),
 };
 
 struct tracy_raii

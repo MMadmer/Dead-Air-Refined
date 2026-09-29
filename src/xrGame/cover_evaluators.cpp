@@ -18,6 +18,7 @@
 #include "ai_debug.h"
 #include "ai/stalker/ai_stalker.h"
 #include "stalker_movement_manager_smart_cover.h"
+#include "da_ai_tactics.h"
 
 float g_smart_cover_factor = 1.f;
 
@@ -91,8 +92,17 @@ void CCoverEvaluatorBase::evaluate(CCoverPoint const* cover_point, float weight)
 // CCoverEvaluatorCloseToEnemy
 //////////////////////////////////////////////////////////////////////////
 
+void CCoverEvaluatorCloseToEnemy::avoid(const Fvector& position, float radius)
+{
+    m_avoid_position = position;
+    m_avoid_radius = radius;
+}
+
 void CCoverEvaluatorCloseToEnemy::evaluate_cover(const CCoverPoint* cover_point, float weight)
 {
+    if (m_avoid_radius > 0.f && cover_point->position().distance_to_sqr(m_avoid_position) < _sqr(m_avoid_radius))
+        return;
+
     float enemy_distance = m_enemy_position.distance_to(cover_point->position());
     // float					my_distance		= m_start_position.distance_to(cover_point->position());
 
@@ -115,6 +125,9 @@ void CCoverEvaluatorCloseToEnemy::evaluate_cover(const CCoverPoint* cover_point,
     //	return;
 
     if (enemy_distance >= m_best_value)
+        return;
+
+    if (m_stalker && DaAi::Tactics::open_ground_refused(*m_stalker, cover_point->position(), m_enemy_position))
         return;
 
     m_selected = cover_point;
@@ -213,6 +226,11 @@ void CCoverEvaluatorBest::evaluate_cover(const CCoverPoint* cover_point, float w
     if (ai().level_graph().neighbour_in_direction(direction, cover_point->level_vertex_id()))
         value += 10.f;
 
+    // Weapon band, line of fire, aggression, travel and path exposure toward the belief (tactics T3).
+    if (m_stalker && !DaAi::Tactics::cover_terms(*m_stalker, *cover_point, m_enemy_position, m_start_position,
+            enemy_distance, m_current_distance, m_best_value * weight, value))
+        return;
+
     value /= weight;
 
     if (value > m_best_value)
@@ -293,6 +311,9 @@ void CCoverEvaluatorAngle::evaluate_cover(const CCoverPoint* cover_point, float 
     direction.normalize_safe();
     float cos_a = direction.dotproduct(m_best_direction);
     if (cos_a < m_best_alpha)
+        return;
+
+    if (m_stalker && DaAi::Tactics::open_ground_refused(*m_stalker, cover_point->position(), m_enemy_position))
         return;
 
     m_selected = cover_point;

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<!-- Options -> Game: subsection headers (ui_mm_grp_<group>), captions renamed by dead_air_x64_gameplay_options.ltx, and a hint per option (ui_mm_<option>_hint). -->
+	<string id="ui_mm_grp_saves">
+		<text>Сохранения</text>
+	</string>
+	<string id="ui_mm_grp_world">
+		<text>Мир</text>
+	</string>
+	<string id="ui_mm_grp_survival">
+		<text>Выживание</text>
+	</string>
+	<string id="ui_mm_grp_crosshair">
+		<text>Прицел</text>
+	</string>
+	<string id="ui_mm_grp_interface">
+		<text>Интерфейс</text>
+	</string>
+	<string id="ui_mm_grp_animations">
+		<text>Анимации</text>
+	</string>
+	<string id="ui_mm_grp_sound">
+		<text>Звук</text>
+	</string>
+	<string id="ui_mm_grp_controls">
+		<text>Управление</text>
+	</string>
+	<string id="ui_mm_grp_misc">
+		<text>Прочее</text>
+	</string>
+	<string id="ui_mm_da_extra_animations">
+		<text>Эффекты действий</text>
+	</string>
+	<string id="ui_mm_important_save_hint">
+		<text>Игра сама сохраняется в ключевые моменты сюжета и заданий.</text>
+	</string>
+	<string id="ui_mm_only_campfire_hint">
+		<text>Сохраняться можно только рядом с горящим костром - и быстрым сохранением, и из меню.</text>
+	</string>
+	<string id="ui_mm_quicksave_cnt_hint">
+		<text>Сколько быстрых сохранений хранится. Когда все заняты, новое заменяет самое старое.</text>
+	</string>
+	<string id="ui_mm_alife_stalker_pop_hint">
+		<text>Множитель численности сталкерских отрядов в Зоне. Меньше - безлюднее и спокойнее, больше - чаще встречи и стычки.</text>
+	</string>
+	<string id="ui_mm_alife_mutant_pop_hint">
+		<text>Множитель численности мутантов в Зоне. Меньше - реже встречи с ними, больше - опаснее переходы.</text>
+	</string>
+	<string id="ui_mm_offline_battles_hint">
+		<text>Отряды, встретившиеся вдали от игрока, дерутся между собой по упрощённому расчёту: жизнь в Зоне идёт и без вас.</text>
+	</string>
+	<string id="ui_mm_heli_spawn_hint">
+		<text>В Зоне появляются военные вертолёты.</text>
+	</string>
+	<string id="ui_mm_fast_travel_hint">
+		<text>Быстрое перемещение к открытым точкам через меню метки на карте ПДА.</text>
+	</string>
+	<string id="ui_mm_dynamic_news_hint">
+		<text>Сталкеры пишут в общий канал ПДА о событиях в Зоне: стычках, находках, гибели товарищей.</text>
+	</string>
+	<string id="ui_mm_lootmoney_option_hint">
+		<text>У убитых сталкеров можно найти деньги.</text>
+	</string>
+	<string id="ui_mm_release_dropped_items_hint">
+		<text>Со временем убирает брошенные предметы и оружие, чтобы мир не зарастал мусором и не терял в производительности.</text>
+	</string>
+	<string id="ui_mm_sleep_deprived_hint">
+		<text>Без сна персонаж устаёт, и чем дольше он не спит, тем ему хуже. Спать приходится регулярно.</text>
+	</string>
+	<string id="ui_mm_use_battery_hint">
+		<text>Фонарик, ПНВ, детекторы и контейнеры питаются от общего заряда, который пополняют батарейками.</text>
+	</string>
+	<string id="ui_mm_mechanic_feature_hint">
+		<text>Техник чинит и улучшает вещи не мгновенно: отданную вещь можно забрать только через некоторое время.</text>
+	</string>
+	<string id="ui_mm_show_crosshair_hint">
+		<text>Прицел в центре экрана.</text>
+	</string>
+	<string id="ui_mm_dyn_crosshair_hint">
+		<text>Прицел расходится при движении и стрельбе, показывая текущий разброс оружия.</text>
+	</string>
+	<string id="ui_mm_crosshair_distance_hint">
+		<text>Под прицелом показывается расстояние до того, на что он наведён.</text>
+	</string>
+	<string id="ui_mm_tips_hint">
+		<text>Прицел окрашивается по отношению к цели (враг, нейтрал, друг), под ним видны имя и группировка персонажа, а вблизи - название предмета.</text>
+	</string>
+	<string id="ui_mm_hud_draw_info_hint">
+		<text>Индикаторы на экране: здоровье, выносливость, оружие и патроны.</text>
+	</string>
+	<string id="ui_mm_hud_draw_map_hint">
+		<text>Миникарта в углу экрана.</text>
+	</string>
+	<string id="ui_mm_mask_hud_hint">
+		<text>Когда надеты шлем или противогаз, поверх экрана видно их стекло: трещины, капли дождя, запотевание.</text>
+	</string>
+	<string id="ui_mm_show_enemy_health_hint">
+		<text>Над противником после попадания показывается полоска его здоровья.</text>
+	</string>
+	<string id="ui_mm_show_tracers_hint">
+		<text>Пули оставляют видимый светящийся след.</text>
+	</string>
+	<string id="ui_mm_ground_items_hint">
+		<text>При подборе предмета с земли появляется сообщение с его названием.</text>
+	</string>
+	<string id="ui_mm_show_weapon_hint">
+		<text>Оружие и предметы в руках. Выключив, можно сделать чистый скриншот.</text>
+	</string>
+	<string id="ui_mm_letterbox_hint">
+		<text>Чёрные полосы сверху и снизу экрана, как в кино.</text>
+	</string>
+	<string id="ui_mm_photomode_hint">
+		<text>Постоянно размывает дальний план, как объектив фотоаппарата. Работает при включённой «Глубине резкости» в настройках графики.</text>
+	</string>
+	<string id="ui_mm_extra_animations_hint">
+		<text>Сценки Dead Air для действий, у которых нет своей анимации - ремонт снаряжения, чистка оружия, розжиг костра: затемнение, покачивание камеры и звук.</text>
+	</string>
+	<string id="ui_mm_hand_animation_hint">
+		<text>Короткое движение руки, когда вы открываете дверь или нажимаете кнопку.</text>
+	</string>
+	<string id="ui_mm_instant_inventory_hint">
+		<text>Инвентарь открывается сразу по нажатию клавиши, не дожидаясь, пока персонаж снимет рюкзак. Сцена с рюкзаком при этом доигрывает за окном.</text>
+	</string>
+	<string id="ui_mm_radio_mod_hint">
+		<text>Радиоприёмники в лагерях играют музыку.</text>
+	</string>
+	<string id="ui_mm_heli_engine_sound_hint">
+		<text>Слышен шум двигателя вертолётов.</text>
+	</string>
+	<string id="ui_mm_aim_animation_hint">
+		<text>Звук и лёгкий толчок камеры, когда вы вскидываете оружие к прицелу и опускаете его.</text>
+	</string>
+	<string id="ui_mm_crouch_toggle_hint">
+		<text>Приседание переключается нажатием, а не держится, пока зажата клавиша.</text>
+	</string>
+	<string id="ui_mm_pause_in_background_hint">
+		<text>Игра встаёт на паузу, когда её окно теряет фокус, например при Alt+Tab.</text>
+	</string>
+	<string id="ui_mm_localization_hint">
+		<text>Язык текстов игры; смена вступает в силу после перезапуска. В списке только установленные переводы.</text>
+	</string>
+	<string id="ui_mm_major_update_notice_hint">
+		<text>Сообщать о выходе новой крупной версии мода. Обновления внутри текущей версии проверяются всегда.</text>
+	</string>
+	<string id="ui_mm_debug_hud_hint">
+		<text>Отладочные сведения на экране. Есть только в режиме разработчика.</text>
+	</string>
+</string_table>

@@ -208,6 +208,19 @@ void InitSettings()
     }
     InitConfig(pGameIni, "game.ltx");
 
+    // Human NPC AI data goes in before the module stage, so that XMS module configs and .ltxp patches land on top
+    // of it. The overlay path keeps "[a]:b" parents: they are copied at parse time from sections read earlier.
+    if (FS.exist("$game_config$", "dead_air_x64_ai.ltx"))
+    {
+        if (IReader* R = FS.r_open("$game_config$", "dead_air_x64_ai.ltx"))
+        {
+            string_path dir;
+            FS.update_path(dir, "$game_config$", "");
+            const_cast<CInifile*>(pSettings)->xms_load_overlay(R, "dead_air_x64_ai.ltx", dir);
+            FS.r_close(R);
+        }
+    }
+
     // module config overlays + .ltxp directive patches on top of system.ltx
     XMS::ApplyConfigStage(const_cast<CInifile*>(pSettings));
 
@@ -321,7 +334,7 @@ constexpr pcstr FRAME_MARK_APPLICATION_STARTUP = "Application startup";
 constexpr pcstr FRAME_MARK_APPLICATION_SHUTDOWN = "Application shutdown";
 constexpr pcstr FRAME_MARK_APPLICATION_RUN = "Application run";
 
-CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array<RendererModule*, 1>& modules)
+CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array<RendererModule*, 2>& modules)
 {
     TracySetProgramName("XFined-Ray");
     Threading::SetCurrentThreadName("Primary thread");

@@ -2,6 +2,8 @@
 
 #include "SoundRender_Environment.h"
 
+#include <mutex>
+
 class CSoundRender_Emitter;
 
 class CSoundRender_Scene final : public ISoundScene
@@ -46,6 +48,9 @@ public:
 
 private:
     xr_vector<CSoundRender_Emitter*> s_emitters;
+    // The NPC sound players run as parallel frame tasks and start emitters at the same time.
+    // Everything else touching s_emitters runs on the main thread outside those tasks.
+    std::mutex s_emitters_lock;
 
     using event = std::pair<ref_sound, float>;
     xr_vector<event> s_events;

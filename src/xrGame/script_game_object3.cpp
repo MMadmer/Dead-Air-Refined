@@ -9,6 +9,7 @@
 #include "pch_script.h"
 #include "script_game_object.h"
 #include "script_game_object_impl.h"
+#include "da_ai_knowledge.h"
 #include "ai_space.h"
 #include "xrScriptEngine/script_engine.hpp"
 #include "cover_evaluators.h"
@@ -126,6 +127,10 @@ const xr_vector<MemorySpace::CVisibleObject>& CScriptGameObject::memory_visible_
             LuaMessageType::Error, "CGameObject : cannot access class member memory_visible_objects!");
         NODEFAULT;
     }
+    // [ai:know] begin memory_visible_objects
+    if (const auto* known = DaAi::Know::script_visible_objects(*monster))
+        return *known;
+    // [ai:know] end memory_visible_objects
     return (monster->memory().visual().objects());
 }
 
@@ -138,6 +143,10 @@ const xr_vector<MemorySpace::CSoundObject>& CScriptGameObject::memory_sound_obje
             LuaMessageType::Error, "CGameObject : cannot access class member memory_sound_objects!");
         NODEFAULT;
     }
+    // [ai:know] begin memory_sound_objects
+    if (const auto* known = DaAi::Know::script_sound_objects(*monster))
+        return *known;
+    // [ai:know] end memory_sound_objects
     return (monster->memory().sound().objects());
 }
 
@@ -150,6 +159,10 @@ const xr_vector<MemorySpace::CHitObject>& CScriptGameObject::memory_hit_objects(
             LuaMessageType::Error, "CGameObject : cannot access class member memory_hit_objects!");
         NODEFAULT;
     }
+    // [ai:know] begin memory_hit_objects
+    if (const auto* known = DaAi::Know::script_hit_objects(*monster))
+        return *known;
+    // [ai:know] end memory_hit_objects
     return (monster->memory().hit().objects());
 }
 

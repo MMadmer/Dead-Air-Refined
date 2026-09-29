@@ -34,6 +34,32 @@
 #include "Weapon.h"
 #include "animation_movement_controller.h"
 #include "visual_memory_manager.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_tactics.h"
+
+namespace
+{
+// A scripted fire object is the script's own instruction: the NPC turns to what it knows of it, else to where the
+// script put it.
+Fvector fire_object_position(CAI_Stalker const& stalker, CGameObject const& fire_object)
+{
+    return DaAi::Know::knows(stalker, &fire_object) ? DaAi::Know::known_position(stalker, fire_object) :
+                                                      fire_object.Position();
+}
+
+// The selected enemy out of own sight: honest suppression bursts go at the own last-seen point (F5), never at a
+// belief a report or a sound refreshed; otherwise the NPC only looks at the belief and the fire gate holds the trigger.
+Fvector unseen_enemy_point(CAI_Stalker const& stalker, CEntityAlive const& enemy)
+{
+    Fvector point;
+    if (DaAi::Tactics::fire_mode(stalker, &enemy) == DaAi::Tactics::FireMode::suppress &&
+        DaAi::Tactics::suppress_point(stalker, point))
+    {
+        return point;
+    }
+    return stalker.memory().memory_position(&enemy);
+}
+} // namespace
 
 
 namespace smart_cover
@@ -98,9 +124,15 @@ void loophole_action_base::process_fire_object(bool const& change_sight)
     VERIFY(object().movement().current_params().cover_fire_object());
 
     CGameObject const* fire_object = object().movement().current_params().cover_fire_object();
-    if (object().movement().in_current_loophole_fov(fire_object->Position()))
+    const Fvector fire_position = fire_object_position(object(), *fire_object);
+    if (object().movement().in_current_loophole_fov(fire_position))
     {
-        object().sight().setup(CSightAction(fire_object, true, true));
+        CEntityAlive const* enemy = object().memory().enemy().selected();
+        if (enemy && enemy == fire_object && !object().memory().visual().visible_now(enemy))
+            object().sight().setup(
+                CSightAction(SightManager::eSightTypePosition, unseen_enemy_point(object(), *enemy), true));
+        else
+            object().sight().setup(CSightAction(fire_object, true, true));
         object().sight().update();
 
         if (!change_sight)
@@ -111,7 +143,7 @@ void loophole_action_base::process_fire_object(bool const& change_sight)
     }
 
     object().sight().setup(
-        CSightAction(SightManager::eSightTypeDirection, nearest_loophole_direction(fire_object->Position()), true));
+        CSightAction(SightManager::eSightTypeDirection, nearest_loophole_direction(fire_position), true));
 
     object().sight().update();
 
@@ -155,7 +187,7 @@ bool loophole_action_base::enemy_in_fov() const
     if (!enemy)
         return (false);
 
-    if (!object().movement().in_current_loophole_fov(enemy->Position()))
+    if (!object().movement().in_current_loophole_fov(DaAi::Know::known_position(object(), *enemy)))
         return (false);
 
     return (true);
@@ -172,7 +204,7 @@ bool loophole_action_base::process_enemy(bool const& change_sight)
             object().sight().setup(CSightAction(enemy, true, true));
         else
             object().sight().setup(
-                CSightAction(SightManager::eSightTypePosition, object().memory().memory_position(enemy), true));
+                CSightAction(SightManager::eSightTypePosition, unseen_enemy_point(object(), *enemy), true));
 
         object().sight().update();
         if (!change_sight)
@@ -183,7 +215,8 @@ bool loophole_action_base::process_enemy(bool const& change_sight)
     }
 
     object().sight().setup(
-        CSightAction(SightManager::eSightTypeDirection, nearest_loophole_direction(enemy->Position()), true));
+        CSightAction(SightManager::eSightTypeDirection,
+            nearest_loophole_direction(DaAi::Know::known_position(object(), *enemy)), true));
     object().sight().update();
 
     if (!change_sight)

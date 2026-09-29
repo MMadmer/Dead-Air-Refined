@@ -29,6 +29,63 @@
 #include <al.h>
 #include <alc.h>
 
+namespace
+{
+// OpenAL names devices in UTF-8, the menu draws Windows-1251 (every text of the game is in it). The
+// menu name keeps what that code page can show - a device named in a script it lacks, such as
+// "扬声器 (Realtek(R) Audio)", keeps its Latin part - without the "OpenAL Soft on " every name starts
+// with. Opening a device still uses the full UTF-8 name.
+xr_string MenuName(pcstr utf8)
+{
+    constexpr char prefix[] = "OpenAL Soft on ";
+    if (!strncmp(utf8, prefix, sizeof(prefix) - 1))
+        utf8 += sizeof(prefix) - 1;
+
+    xr_string name;
+#if defined(XR_PLATFORM_WINDOWS)
+    wchar_t wide[512];
+    const int count = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide, int(std::size(wide)));
+    for (int i = 0; i + 1 < count; ++i)
+    {
+        char narrow[4];
+        BOOL lossy = FALSE;
+        if (WideCharToMultiByte(1251, WC_NO_BEST_FIT_CHARS, &wide[i], 1, narrow, sizeof(narrow), nullptr, &lossy) == 1 &&
+            !lossy)
+            name += narrow[0];
+    }
+#else
+    name = utf8;
+#endif
+
+    // What a dropped script leaves behind: runs of spaces, and brackets around the rest.
+    xr_string tidy;
+    for (const char c : name)
+    {
+        if (c != ' ' || (!tidy.empty() && tidy.back() != ' '))
+            tidy += c;
+    }
+    while (!tidy.empty() && tidy.back() == ' ')
+        tidy.pop_back();
+    if (tidy.size() > 2 && tidy.front() == '(' && tidy.back() == ')')
+    {
+        int depth = 0;
+        size_t closes = 0;
+        for (size_t i = 0; i < tidy.size(); ++i)
+        {
+            depth += tidy[i] == '(' ? 1 : tidy[i] == ')' ? -1 : 0;
+            if (!depth)
+            {
+                closes = i;
+                break;
+            }
+        }
+        if (closes + 1 == tidy.size())
+            tidy = tidy.substr(1, tidy.size() - 2);
+    }
+    return tidy;
+}
+} // namespace
+
 ALDeviceList::ALDeviceList()
 {
     snd_device_id = (u32)-1;
@@ -105,7 +162,14 @@ void ALDeviceList::Enumerate()
 
     for (u32 i = 0; i < _cnt; ++i)
     {
-        devices.emplace_back(xr_strdup(m_devices[i].name), i);
+        // The token is what the menu shows and user.ltx keeps, so it has to be unique too.
+        xr_string name = MenuName(m_devices[i].name);
+        if (name.empty())
+            name = "Audio device";
+        const xr_string base = name;
+        for (u32 n = 2; std::any_of(devices.begin(), devices.end(), [&](const xr_token& t) { return t.name && name == t.name; }); ++n)
+            name = base + " (" + std::to_string(n).c_str() + ")";
+        devices.emplace_back(xr_strdup(name.c_str()), i);
     }
     devices.emplace_back(nullptr, -1);
     //--

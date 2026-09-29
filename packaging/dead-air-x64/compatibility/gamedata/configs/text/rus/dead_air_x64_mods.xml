@@ -252,6 +252,9 @@
     <string id="st_mods_status_withdrawn">
         <text>Отозван из браузера модов: %s</text>
     </string>
+    <string id="st_mods_status_local_modified">
+        <text>Установлен вручную, файлы отличаются от всех версий в браузере модов</text>
+    </string>
     <string id="st_mods_status_author_withdrawn">
         <text>Убран автором из браузера модов: обновлений больше не будет</text>
     </string>

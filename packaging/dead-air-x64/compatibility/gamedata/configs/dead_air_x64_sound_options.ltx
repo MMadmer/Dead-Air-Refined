@@ -1,0 +1,38 @@
+; Options -> Sound: how the list is laid out (ui_mm_opt_sound.script). The rules of the file are the
+; ones of every page that is one list, see dead_air_x64_option_list.script: [rows], [groups],
+; [group_<id>], [captions]. The control of row <row> is the node <control>_<row> of <sound_page> in
+; configs\ui\ui_mm_opt.xml and ui_mm_opt_16.xml; the hint of a row is the string
+; st_da_x64_sound_hint_<row>.
+;
+; The subtitle rows are closecaption.script's own controls, which it puts on this page while the
+; dialog opens: script rows, <row> = script, <dialog member>, <dialog member of its old caption>,
+; placed in their row by the node place_<row>. They join the list after the rest, so their
+; subsection is the last one.
+
+[rows]
+master_volume = track, snd_volume_eff, %.2f
+music_volume  = track, snd_volume_music, %.2f
+snd_device    = list, snd_device
+eax           = check, snd_efx
+dynamic_music = check, g_dynamic_music
+cc_captioning = script, tab_captioning, cap_captioning
+cc_icc        = script, check_closedcaptions, cap_closedcaptions
+
+[groups]
+order = volume, playback, subtitles
+
+[group_volume]
+rows = master_volume, music_volume
+
+[group_playback]
+rows = snd_device, eax, dynamic_music
+
+[group_subtitles]
+rows = cc_captioning, cc_icc
+
+[captions]
+master_volume = ui_mm_da_volume_sounds
+music_volume  = ui_mm_da_volume_music
+eax           = ui_mm_da_eax
+cc_captioning = ui_mm_da_subtitles
+cc_icc        = ui_mm_da_sound_captions

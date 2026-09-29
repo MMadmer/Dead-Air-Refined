@@ -25,6 +25,8 @@ used_item = nil
 fake_monster = nil
 ea_flag = nil
 local tmr = nil
+-- The ticket of the scene this module put on the hands (game.hud_scene_id): it stops only that one.
+local ea_scene = 0
 -- What the scene took from the player and has to give back. Kept as a record rather than read
 -- back from the engine, because these are not the scene's alone: the ladder, a car, the death
 -- effector and a bloodsucker's grab all block the same slots, and the input gate is a plain
@@ -132,7 +134,10 @@ function start_anim(anim_section_hud)
 	-- The sixth argument stretches the cycle to the scene length, or the hands freeze on the
 	-- last frame for the remainder (bread: 5970 ms cycle against a 7000 ms scene).
 	local scene_ms = used_item and ini_eff:r_float_ex(used_item, "tm") or 0
+	local before = game.hud_scene_id()
 	game.play_hud_motion(2, anim_section_hud, "anm_ea_show", false, speed, scene_ms and math.floor(scene_ms) or 0)
+	local id = game.hud_scene_id()
+	ea_scene = (id ~= before) and id or 0
 end
 
 function anim_manager_item(anim_section_hud)
@@ -169,7 +174,10 @@ end
 local failure_timer = 0
 function actor_on_update()
 	failure_timer = failure_timer + (device().time_delta / 17)
-	if (db.actor:active_slot() ~= 0 or db.actor:active_detector()) and (failure_timer < 100) then
+	-- Someone else's scene still on the hands - the backpack being put away after the item was used
+	-- from the open inventory - is waited out too: started over it, one scene cut the other short.
+	local foreign = game.scene_active() and game.hud_scene_id() ~= ea_scene
+	if (db.actor:active_slot() ~= 0 or db.actor:active_detector() or foreign) and (failure_timer < 100) then
 		return
 	elseif (failure_timer >= 100) then
 		-- The scene starts with the weapon still up; said out loud, it is an inventory problem.
@@ -371,7 +379,8 @@ end
 function stop_my_item_anim()
 	-- Closed explicitly: the engine closes a scene by time too, but a zero-length cycle would
 	-- leave the scene item in the hands otherwise.
-	game.stop_hud_motion()
+	game.stop_hud_scene(ea_scene)
+	ea_scene = 0
 	ea_callbacks.EA_SendScriptCallback("ea_on_item_anim_stop", used_item)
 	ea_restore_actor()
 	mask_hud_switcher()
@@ -381,7 +390,8 @@ function stop_my_item_anim()
 end
 
 function stop_my_monster_anim()
-	game.stop_hud_motion()
+	game.stop_hud_scene(ea_scene)
+	ea_scene = 0
 	ea_restore_actor()
 	-- No carcass (a load in the middle of the scene brought the persisted event back with
 	-- nothing behind it) or a dead actor: the scene is over, the window does not open.
@@ -429,7 +439,8 @@ function cancel_scene()
 	if not (used_item or used_monster) then return end
 	remove_scene_events()
 	UnregisterScriptCallback("actor_on_update", actor_on_update)
-	game.stop_hud_motion()
+	game.stop_hud_scene(ea_scene)
+	ea_scene = 0
 	if monster_usage_snd then monster_usage_snd:stop() end
 	if item_usage_snd then item_usage_snd:stop() end
 	ea_restore_actor()
@@ -508,6 +519,7 @@ function actor_on_first_update()
 	game.only_allow_movekeys(false)
 	game.set_actor_allow_ladder(true)
 	game.stop_hud_motion()
+	ea_scene = 0
 	level.remove_cam_custom_position_direction()
 	exec_console_cmd("hud_weapon 1")
 

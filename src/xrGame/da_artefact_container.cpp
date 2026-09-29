@@ -49,9 +49,8 @@ void load()
     if (!ini.section_exist(cfg_section))
         return;
 
+    // The list is read either way: the inventory filter needs it even where quests do not.
     g_visible = ini.line_exist(cfg_section, "quest_visible") && ini.r_bool(cfg_section, "quest_visible");
-    if (!g_visible)
-        return;
 
     // Where the installed container mod keeps its own list. The file's name and the section's
     // name are data on purpose: this is somebody else's mod, and nothing of it is written here.
@@ -84,6 +83,18 @@ bool da_af_container::quest_visible()
     if (!g_loaded)
         load();
     return g_visible && !g_containers.empty();
+}
+
+bool da_af_container::is_container(pcstr section)
+{
+    if (!section || !section[0])
+        return false;
+    for (const shared_str& container : containers())
+    {
+        if (0 == xr_strcmp(container.c_str(), section))
+            return true;
+    }
+    return false;
 }
 
 pcstr da_af_container::held_artefact(pcstr section, string256& buffer)

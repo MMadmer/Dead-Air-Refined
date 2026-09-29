@@ -5,6 +5,7 @@
 
 #include "StdAfx.h"
 #include "Level_Bullet_Manager.h"
+#include "da_ai.h"
 #include "Entity.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 #include "Level.h"
@@ -150,6 +151,7 @@ bool CBulletManager::test_callback(const collide::ray_defs& rd, IGameObject* obj
                         Fvector pt;
                         pt.mad(bullet->bullet_pos, bullet->dir, dist);
                         Level().BulletManager().PlayWhineSound(bullet, initiator, pt);
+                        da_ai_sense_queue_near_miss(bullet->parent_id, entity->ID(), pt, bullet->dir);
                     }
                 }
                 else

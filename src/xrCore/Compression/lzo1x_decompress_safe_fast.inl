@@ -96,18 +96,22 @@ inline void copy_match(unsigned char*& output, const unsigned char* match, lzo_u
         *output++ = *match++;
 }
 
-inline int decompress_safe(const lzo_bytep source, lzo_uint sourceLength,
-    lzo_bytep destination, lzo_uintp destinationLength, lzo_voidp workMemory)
+// Prefix = false: the safe decoder. Prefix = true: the output is a window over the start of the
+// stream; the run that does not fit is clipped at the window's end instead of being refused, so the
+// window fills completely whenever the stream holds that many bytes. Only the output-overrun paths
+// differ, so the safe decoder's loop is untouched.
+template <bool Prefix>
+inline int decompress(const lzo_bytep source, lzo_uint sourceLength,
+    lzo_bytep destination, lzo_uintp destinationLength)
 {
     auto* output = destination;
     const auto* input = source;
     const auto* const inputEnd = source + sourceLength;
     auto* const outputEnd = destination + *destinationLength;
-    const unsigned char* match;
-    lzo_uint matchOffset;
+    const unsigned char* match = nullptr;
+    lzo_uint matchOffset = 0;
     lzo_uint token;
 
-    (void)workMemory;
     *destinationLength = 0;
 
 #define XR_LZO_NEED_INPUT(count) \
@@ -117,11 +121,18 @@ inline int decompress_safe(const lzo_bytep source, lzo_uint sourceLength,
             goto input_overrun; \
     } while (false)
 
-#define XR_LZO_NEED_OUTPUT(count) \
+#define XR_LZO_NEED_LITERAL_OUTPUT(count) \
     do \
     { \
         if (static_cast<lzo_uint>(outputEnd - output) < static_cast<lzo_uint>(count)) \
-            goto output_overrun; \
+            goto literal_overrun; \
+    } while (false)
+
+#define XR_LZO_NEED_MATCH_OUTPUT(count) \
+    do \
+    { \
+        if (static_cast<lzo_uint>(outputEnd - output) < static_cast<lzo_uint>(count)) \
+            goto match_overrun; \
     } while (false)
 
 #define XR_LZO_TEST_INPUT_LENGTH(value) \
@@ -152,7 +163,7 @@ inline int decompress_safe(const lzo_bytep source, lzo_uint sourceLength,
         token = *input++ - 17;
         if (token < 4)
             goto match_next;
-        XR_LZO_NEED_OUTPUT(token);
+        XR_LZO_NEED_LITERAL_OUTPUT(token);
         XR_LZO_NEED_INPUT(token + 3);
         copy_literal_run(output, input, token);
         goto first_literal_run;
@@ -177,7 +188,7 @@ inline int decompress_safe(const lzo_bytep source, lzo_uint sourceLength,
             token += 15 + *input++;
         }
 
-        XR_LZO_NEED_OUTPUT(token + 3);
+        XR_LZO_NEED_LITERAL_OUTPUT(token + 3);
         XR_LZO_NEED_INPUT(token + 6);
         copy_literal_run(output, input, token + 3);
 
@@ -188,7 +199,7 @@ first_literal_run:
 
         matchOffset = 1 + 0x0800 + (token >> 2) + (*input++ << 2);
         XR_LZO_SET_MATCH();
-        XR_LZO_NEED_OUTPUT(3);
+        XR_LZO_NEED_MATCH_OUTPUT(3);
         *output++ = *match++;
         *output++ = *match++;
         *output++ = *match;
@@ -202,7 +213,7 @@ match_token:
                 matchOffset = 1 + ((token >> 2) & 7) + (*input++ << 3);
                 token = (token >> 5) - 1;
                 XR_LZO_SET_MATCH();
-                XR_LZO_NEED_OUTPUT(token + 2);
+                XR_LZO_NEED_MATCH_OUTPUT(token + 2);
                 goto copy_match;
             }
 
@@ -250,14 +261,14 @@ match_token:
             {
                 matchOffset = 1 + (token >> 2) + (*input++ << 2);
                 XR_LZO_SET_MATCH();
-                XR_LZO_NEED_OUTPUT(2);
+                XR_LZO_NEED_MATCH_OUTPUT(2);
                 *output++ = *match++;
                 *output++ = *match;
                 goto match_done;
             }
 
             XR_LZO_SET_MATCH();
-            XR_LZO_NEED_OUTPUT(token + 2);
+            XR_LZO_NEED_MATCH_OUTPUT(token + 2);
 
 copy_match:
             copy_match(output, match, token + 2, matchOffset);
@@ -268,7 +279,7 @@ match_done:
                 break;
 
 match_next:
-            XR_LZO_NEED_OUTPUT(token);
+            XR_LZO_NEED_LITERAL_OUTPUT(token);
             XR_LZO_NEED_INPUT(token + 3);
             *output++ = *input++;
             if (token > 1)
@@ -287,6 +298,29 @@ eof_found:
         return LZO_E_OK;
     return input < inputEnd ? LZO_E_INPUT_NOT_CONSUMED : LZO_E_INPUT_OVERRUN;
 
+literal_overrun:
+    if constexpr (Prefix)
+    {
+        const auto fit = static_cast<lzo_uint>(outputEnd - output);
+        XR_LZO_NEED_INPUT(fit);
+        copy_literal_run(output, input, fit);
+        *destinationLength = static_cast<lzo_uint>(output - destination);
+        return LZO_E_OK;
+    }
+    else
+        goto output_overrun;
+
+match_overrun:
+    if constexpr (Prefix)
+    {
+        // A shorter copy of the same match: its first bytes do not depend on the length.
+        copy_match(output, match, static_cast<lzo_uint>(outputEnd - output), matchOffset);
+        *destinationLength = static_cast<lzo_uint>(output - destination);
+        return LZO_E_OK;
+    }
+    else
+        goto output_overrun;
+
 input_overrun:
     *destinationLength = static_cast<lzo_uint>(output - destination);
     return LZO_E_INPUT_OVERRUN;
@@ -302,7 +336,23 @@ lookbehind_overrun:
 #undef XR_LZO_SET_MATCH
 #undef XR_LZO_TEST_OUTPUT_LENGTH
 #undef XR_LZO_TEST_INPUT_LENGTH
-#undef XR_LZO_NEED_OUTPUT
+#undef XR_LZO_NEED_MATCH_OUTPUT
+#undef XR_LZO_NEED_LITERAL_OUTPUT
 #undef XR_LZO_NEED_INPUT
+}
+
+inline int decompress_safe(const lzo_bytep source, lzo_uint sourceLength,
+    lzo_bytep destination, lzo_uintp destinationLength, lzo_voidp workMemory)
+{
+    (void)workMemory;
+    return decompress<false>(source, sourceLength, destination, destinationLength);
+}
+
+// The first *destinationLength bytes of the stream (fewer only when the stream is shorter); LZO_E_OK
+// for a full window or a complete stream.
+inline int decompress_prefix(const lzo_bytep source, lzo_uint sourceLength,
+    lzo_bytep destination, lzo_uintp destinationLength)
+{
+    return decompress<true>(source, sourceLength, destination, destinationLength);
 }
 }

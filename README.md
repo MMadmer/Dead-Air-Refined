@@ -5,7 +5,7 @@ project provides a native 64-bit Windows runtime, improves stability and
 performance, modernizes the engine dependency stack, and adds integrated
 installation, diagnostics, bug reporting, and automatic updates.
 
-Current release: **1.4.0**
+Current release: **1.5.0**
 
 Required game: **Dead Air 0.98b or Dead Air Revolution II**
 
@@ -50,6 +50,27 @@ upstream, and where the untouched code that actually runs is.
   particle, sound, and renderer work.
 - Updated third-party libraries and a warning-clean x64 `Release` build.
 - Improved windowed, borderless, and exclusive-fullscreen display modes.
+- A DirectX 12 renderer next to DirectX 11, selectable in the video options:
+  every effect of the DirectX 11 renderer, with the grass of the scene
+  recorded in parallel and a persistent pipeline cache.
+- DirectX 12-only features on GPUs that support them: shaders compiled for
+  Shader Model 6.6, trees culled and drawn by the GPU, mesh-shader grass,
+  texture and level loading through DirectStorage, variable rate shading on
+  the High and Extreme presets, and async compute where the GPU gains from it
+  (off/auto/on).
+- Hardware ray tracing in its own "RTX" section of the video options:
+  reflections on water and puddles, sun shadows and ambient occlusion, with
+  three quality levels. No quality preset turns it on; it needs DirectX 12 and
+  a GPU with DXR 1.1 (GeForce RTX, Radeon RX 6000 and newer, Intel Arc).
+- AMD FSR (DirectX 11 and 12) and NVIDIA DLSS / DLAA (DirectX 11 and 12, on
+  supported GPUs) upscaling, anti-aliasing as its own setting (off, FXAA, SMAA,
+  TAA), and frame generation through AMD FSR or NVIDIA DLSS on DirectX 12.
+- Human NPCs that perceive and communicate like people, without cheating:
+  each stalker knows only what it saw, heard or was told, needs time to spot
+  you, and passes news by voice, radio and hand signals with a delay and a
+  rough position. Factions and ranks fight by their lore and their weapons,
+  fall back, scatter or surrender when losing, and search for you when they
+  lose contact. Mutants are unchanged.
 - Engine-native anonymous diagnostic reports and a bug-report form available in
   both the main menu and the in-game menu.
 - Automatic update checks against GitHub releases, verified update archives,
@@ -67,10 +88,10 @@ in [`docs/dead-air`](docs/dead-air).
 ## Installation
 
 Download only one release asset. Most users need
-`Dead-Air-Refined-1.4.0-Setup.exe`; it supports both first-time installation
+`Dead-Air-Refined-1.5.0-Setup.exe`; it supports both first-time installation
 and manual upgrades from an earlier Refined version, and it is the only asset
 that installs content on a machine that has none. Use
-`Dead-Air-Refined-1.4.0-Update.zip` when you prefer to upgrade an
+`Dead-Air-Refined-1.5.0-Update.zip` when you prefer to upgrade an
 existing Refined installation by hand: extract it into the game root and
 replace the existing files. It carries the runtime and the content manifest but
 not the content itself, so it can upgrade an installation that already has its
@@ -82,7 +103,7 @@ more than one file.
 
 1. Install Dead Air 0.98b or Dead Air Revolution II.
 2. Close the game and any tools that may keep its files open.
-3. Download `Dead-Air-Refined-1.4.0-Setup.exe` from the latest release.
+3. Download `Dead-Air-Refined-1.5.0-Setup.exe` from the latest release.
 4. Select the root game directory containing `xrEngine.exe`, `fsgame.ltx`, and
    the `database` directory.
 5. Let the content download finish. It runs before anything on disk is
@@ -220,8 +241,8 @@ be built without a content manifest:
 ```powershell
 tools\package\dead_air_x64_content_bundles.ps1 -SourceRoot <authored gamedata> `
     -BundleCache <bundle cache> -OutputManifest <manifest> `
-    -PortVersion 1.4.0 -ReleaseTag <content tag>
-tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.4.0 `
+    -PortVersion 1.5.0 -ReleaseTag <content tag>
+tools\package\build_dead_air_x64_installer.ps1 -PortVersion 1.5.0 `
     -ContentManifest <manifest>
 ```
 
@@ -257,6 +278,8 @@ versions and compatibility pins are recorded in
 - [`MODDING.md`](docs/dead-air/MODDING.md) — the compatibility contract for
   addons: XMS modules, content bundles and load order, loose particle
   overrides.
+- [`NPC_AI.md`](docs/dead-air/NPC_AI.md) — the human NPC AI: senses,
+  knowledge, communication, tactics, morale, its data file and Lua API.
 - [`UPSTREAM.md`](docs/dead-air/UPSTREAM.md) — source lineage and attribution.
 - [`ENGINE_SURFACE.md`](docs/dead-air/ENGINE_SURFACE.md) — how much of the
   engine is this project’s own, and the map of what is still stock.
@@ -306,6 +329,18 @@ To **DanesCrail**, author of
 
 To **Jorge Jimenez** and the authors of
 **[SMAA](https://github.com/iryoku/smaa)**, for the anti-aliasing library.
+
+To **AMD** and the **[FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)**,
+for FSR upscaling and frame generation; to the
+**[OptiScaler](https://github.com/optiscaler)** project, for the FidelityFX
+SDK port that brings FSR 3.1 to DirectX 11; and to **NVIDIA** and
+**[Streamline](https://github.com/NVIDIA-RTX/Streamline)**, for DLSS, DLAA,
+DLSS Frame Generation and Reflex.
+
+To **Microsoft**, for the
+**[DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler)**
+and **[DirectStorage](https://github.com/microsoft/DirectStorage)**, which the
+DirectX 12 renderer ships.
 
 To **Manuel (ascii1457)** and **Screen Space Shaders for Anomaly**, for a
 rendering technique reimplemented here.

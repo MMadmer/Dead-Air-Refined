@@ -1016,6 +1016,11 @@ public:
     void SetActorAdrenalineTime(float time);
     void SetRadiationDetector(bool enabled);
     float GetRadiationDetector() const;
+    // The actor lying still for game_seconds: the lowest health on the way, 0 or below is death.
+    // The three adds are what the calling script itself hands over at bedtime.
+    float SleepForecast(float game_seconds, float satiety_add, float psy_add, float radiation_add);
+    // The main threat the last forecast found: 0 none, 1 radiation, 2 bleeding, 3 hunger, 4 fields.
+    u32 SleepForecastCause() const;
 
     void SetCharacterIcon(pcstr iconName);
     //-Alundaio

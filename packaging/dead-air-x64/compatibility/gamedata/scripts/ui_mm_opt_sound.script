@@ -1,0 +1,32 @@
+class "opt_sound" (CUIWindow)
+
+function opt_sound:__init() super()
+end
+
+function opt_sound:__finalize()
+
+end
+
+-- Options -> Sound, one list like Video (dead_air_x64_option_list.script builds it) from
+-- configs\dead_air_x64_sound_options.ltx; the hint of a row is the string st_da_x64_sound_hint_<row>.
+-- The subtitle controls closecaption.script puts on this page are rows too: the dialog hands them
+-- over once its opt_menu_on_init callback has run (AdoptScriptRows). The stock nodes of this page
+-- (tab_sound in ui_mm_opt*.xml) stay for addons that ship the stock page script.
+local SOUND_LAYOUT = "dead_air_x64_sound_options.ltx"
+
+function opt_sound:InitControls(x, y, xml, handler)
+	self:SetWndPos(vector2():set(x,y))
+	self:SetWndSize(vector2():set(738,416))
+	self:SetAutoDelete(true)
+
+	dead_air_x64_option_list.build(self, xml, handler, ini_file(SOUND_LAYOUT), "sound_page", "st_da_x64_sound_hint_")
+end
+
+function opt_sound:AdoptScriptRows(handler)
+	dead_air_x64_option_list.adopt_script_rows(self, handler.xml, handler)
+end
+
+-- Called by the dialog every frame: the numbers beside the sliders.
+function opt_sound:Refresh()
+	dead_air_x64_option_list.refresh(self)
+end

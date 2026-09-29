@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The sort and filter row of the actor menu (CUIInventoryToolbar). The engine takes whole rows of
+     cells off the top of every item grid of the inventory, the loot, the trade and the upgrade window
+     and puts one of these rows in their place, flush left, right under the window's header, so the row belongs to whichever actor_menu layout is installed
+     and covers nothing. One file serves 4:3 and widescreen: sizes are in 4:3 units and the engine
+     squeezes the widths for a wider screen, so the buttons stay square.
+
+     size, spacing, gap  - button side, space between the filters, space after the sort button
+     lift, margin        - how far the row may rise above the grid's top edge into the free space
+                           under the header, and the least space it keeps below any window there
+     gap_below           - space between the row and the grid, which then keeps whole rows of cells
+     glyph_inset         - share of the button the glyph keeps clear on every side
+     button_texture      - a 3t button texture: <name>_e, _h, _t, _d
+     glyph_color*        - the glyph tint: normal, under the cursor, pressed or the active filter
+     glyph               - a white mask from ui_da_x64_inv_tools.xml
+     hint*               - string ids; the sort button has one per pane -->
+<w>
+	<inventory_tools size="26" spacing="3" gap="12" lift="8" margin="2" gap_below="4" glyph_inset="0.14">
+		<button_texture>ui_inGame2_inventory_button</button_texture>
+		<glyph_color r="240" g="217" b="182"/>
+		<glyph_color_hover r="0" g="0" b="0"/>
+		<glyph_color_active r="238" g="155" b="23"/>
+
+		<sort glyph="ui_da_x64_inv_sort" hint_actor="st_da_inv_sort_actor" hint_loot="st_da_inv_sort_loot"
+			hint_trader="st_da_inv_sort_trader"/>
+
+		<filter_all glyph="ui_da_x64_inv_all" hint="st_da_inv_filter_all"/>
+		<filter_weapons glyph="ui_da_x64_inv_weapons" hint="st_da_inv_filter_weapons"/>
+		<filter_armour glyph="ui_da_x64_inv_armour" hint="st_da_inv_filter_armour"/>
+		<filter_food glyph="ui_da_x64_inv_food" hint="st_da_inv_filter_food"/>
+		<filter_medicine glyph="ui_da_x64_inv_medicine" hint="st_da_inv_filter_medicine"/>
+		<filter_artefacts glyph="ui_da_x64_inv_artefacts" hint="st_da_inv_filter_artefacts"/>
+		<filter_misc glyph="ui_da_x64_inv_misc" hint="st_da_inv_filter_misc"/>
+	</inventory_tools>
+</w>

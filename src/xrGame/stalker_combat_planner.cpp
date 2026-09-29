@@ -40,6 +40,12 @@
 #include "smart_cover_evaluators.h"
 #include "Inventory.h"
 #include "WeaponMagazined.h"
+#include "da_ai_ids.h"
+#include "da_ai_knowledge.h"
+#include "da_ai_comms.h"
+#include "da_ai_tactics.h"
+#include "da_ai_morale.h"
+#include "da_ai_search.h"
 
 using namespace StalkerSpace;
 using namespace StalkerDecisionSpace;
@@ -142,10 +148,11 @@ void CStalkerCombatPlanner::initialize()
 
     if (!m_loaded && object().memory().enemy().selected())
     {
-        CVisualMemoryManager* visual_memory_manager = object().memory().enemy().selected()->visual_memory();
-        VERIFY(visual_memory_manager);
+        // [ai:know] begin use_suddenness
+        const CEntityAlive* enemy = object().memory().enemy().selected();
         CScriptActionPlanner::m_storage.set_property(
-            eWorldPropertyUseSuddenness, !visual_memory_manager->visible_now(&object()));
+            eWorldPropertyUseSuddenness, !DaAi::Know::enemy_sees_me(object(), *enemy));
+        // [ai:know] end use_suddenness
     }
 
     m_loaded = false;
@@ -156,14 +163,24 @@ void CStalkerCombatPlanner::initialize()
     //  this is possible when i enter combat when it is wait after combat stage
     //	VERIFY					(object().memory().enemy().selected());
 
-    if (m_object->memory().visual().visible_now(m_object->memory().enemy().selected()))
+    // [ai:comms] begin alarm
+    // Contact goes out by the NPC's channels; a sneak attack keeps it quiet.
+    const CEntityAlive* alarm_enemy = m_object->memory().enemy().selected();
+    const u32 alarm_flags =
+        CScriptActionPlanner::m_storage.property(eWorldPropertyUseSuddenness) ? DaAi::Comms::quiet : 0;
+    if (!alarm_enemy ||
+        !DaAi::Comms::request(object(), DaAi::Comms::Kind::contact, alarm_enemy->ID(), 0, alarm_flags))
     {
-        if (m_object->memory().enemy().selected()->human_being())
-            if (object().agent_manager().member().can_cry_noninfo_phrase())
-                if (object().agent_manager().member().members().size() > 1)
-                    if (!CScriptActionPlanner::m_storage.property(eWorldPropertyUseSuddenness))
-                        object().sound().play(eStalkerSoundAlarm);
+        if (m_object->memory().visual().visible_now(alarm_enemy))
+        {
+            if (alarm_enemy->human_being())
+                if (object().agent_manager().member().can_cry_noninfo_phrase())
+                    if (object().agent_manager().member().members().size() > 1)
+                        if (!CScriptActionPlanner::m_storage.property(eWorldPropertyUseSuddenness))
+                            object().sound().play(eStalkerSoundAlarm);
+        }
     }
+    // [ai:comms] end alarm
 
     object().agent_manager().member().register_in_combat(m_object);
 }
@@ -198,7 +215,7 @@ void CStalkerCombatPlanner::add_evaluators()
     add_evaluator(eWorldPropertyEnemy, xr_new<CStalkerPropertyEvaluatorEnemies>(m_object, "is_there_enemies_delayed",
                                            POST_COMBAT_WAIT_INTERVAL, &m_last_wounded));
     add_evaluator(eWorldPropertySeeEnemy, xr_new<CStalkerPropertyEvaluatorSeeEnemy>(m_object, "see enemy"));
-    add_evaluator(eWorldPropertyEnemySeeMe, xr_new<CStalkerPropertyEvaluatorEnemySeeMe>(m_object, "enemy see me"));
+    add_evaluator(eWorldPropertyEnemySeeMe, DaAi::Know::make_enemy_see_me_evaluator(m_object, "enemy see me"));
     add_evaluator(eWorldPropertyItemToKill, xr_new<CStalkerPropertyEvaluatorItemToKill>(m_object, "item to kill"));
     add_evaluator(eWorldPropertyItemCanKill, xr_new<CStalkerPropertyEvaluatorItemCanKill>(m_object, "item can kill"));
     add_evaluator(
@@ -206,7 +223,7 @@ void CStalkerCombatPlanner::add_evaluators()
     add_evaluator(eWorldPropertyFoundAmmo, xr_new<CStalkerPropertyEvaluatorFoundAmmo>(m_object, "found ammo"));
     add_evaluator(eWorldPropertyReadyToKill, xr_new<CStalkerPropertyEvaluatorReadyToKill>(m_object, "ready to kill"));
     add_evaluator(eWorldPropertyReadyToDetour, xr_new<CStalkerPropertyEvaluatorReadyToDetour>(m_object, "ready to detour"));
-    add_evaluator(eWorldPropertyPanic, xr_new<CStalkerPropertyEvaluatorPanic>(m_object, "panic"));
+    add_evaluator(eWorldPropertyPanic, DaAi::Morale::make_panic_evaluator(m_object, "panic"));
     add_evaluator(eWorldPropertyDangerGrenade,
         xr_new<CStalkerPropertyEvaluatorGrenadeToExplode>(m_object, "is there grenade to explode"));
     add_evaluator(eWorldPropertyEnemyWounded, xr_new<CStalkerPropertyEvaluatorEnemyWounded>(m_object, "is enemy wounded"));
@@ -214,8 +231,7 @@ void CStalkerCombatPlanner::add_evaluators()
         eWorldPropertyPlayerOnThePath, xr_new<CStalkerPropertyEvaluatorPlayerOnThePath>(m_object, "player on the path"));
     add_evaluator(eWorldPropertyEnemyCriticallyWounded,
         xr_new<CStalkerPropertyEvaluatorEnemyCriticallyWounded>(m_object, "enemy_critically_wounded"));
-    add_evaluator(
-        eWorldPropertyTooFarToKillEnemy, xr_new<CStalkerPropertyEvaluatorTooFarToKillEnemy>(m_object, "too far to kill"));
+    add_evaluator(eWorldPropertyTooFarToKillEnemy, DaAi::Tactics::make_too_far_evaluator(m_object, "too far to kill"));
 
     add_evaluator(eWorldPropertyInCover,
         xr_new<CStalkerPropertyEvaluatorMember>((CPropertyStorage*)0, eWorldPropertyInCover, true, true, "in cover"));
@@ -235,11 +251,21 @@ void CStalkerCombatPlanner::add_evaluators()
                                          eWorldPropertyKilledWounded, true, true, "killed critically wounded"));
 
     add_evaluator(eWorldPropertyShouldThrowGrenade,
-        xr_new<CStalkerPropertyEvaluatorShouldThrowGrenade>(m_object, "should throw grenade"));
+        DaAi::Tactics::make_should_throw_grenade_evaluator(m_object, "should throw grenade"));
     add_evaluator(eWorldPropertyLowCover, xr_new<CStalkerPropertyEvaluatorLowCover>(m_object, "using low cover"));
 
     add_evaluator(
         eWorldPropertyInSmartCover, xr_new<smart_cover::evaluators::in_cover_evaluator>(m_object, "in smart cover"));
+
+    // Human NPC AI properties: plain evaluators (nothing in m_storage), false while their feature is off.
+    add_evaluator(DaAi::Ids::prop_out_of_band, DaAi::Tactics::make_out_of_band_evaluator(m_object, "da out of band"));
+    add_evaluator(
+        DaAi::Ids::prop_suppress_role, DaAi::Tactics::make_suppress_role_evaluator(m_object, "da suppress role"));
+    add_evaluator(DaAi::Ids::prop_should_fall_back,
+        DaAi::Tactics::make_should_fall_back_evaluator(m_object, "da should fall back"));
+    add_evaluator(DaAi::Ids::prop_return_fire, DaAi::Tactics::make_return_fire_evaluator(m_object, "da return fire"));
+    add_evaluator(DaAi::Ids::prop_contact_lost, DaAi::Search::make_contact_lost_evaluator(m_object, "da contact lost"));
+    add_evaluator(DaAi::Ids::prop_flank_role, DaAi::Tactics::make_flank_role_evaluator(m_object, "da flank role"));
 }
 
 void CStalkerCombatPlanner::add_actions()
@@ -312,6 +338,8 @@ void CStalkerCombatPlanner::add_actions()
     add_condition(action, eWorldPropertyLowCover, false);
     //	add_condition			(action,eWorldPropertyShouldThrowGrenade,false);
     add_condition(action, eWorldPropertyTooFarToKillEnemy, false);
+    add_condition(action, DaAi::Ids::prop_should_fall_back, false);
+    add_condition(action, DaAi::Ids::prop_out_of_band, false);
     add_effect(action, eWorldPropertyPureEnemy, false);
     add_effect(action, eWorldPropertyLookedOut, false);
     add_effect(action, eWorldPropertyPositionHolded, false);
@@ -330,6 +358,7 @@ void CStalkerCombatPlanner::add_actions()
     add_condition(action, eWorldPropertyEnemyWounded, false);
     add_condition(action, eWorldPropertyPlayerOnThePath, false);
     //	add_condition			(action,eWorldPropertyTooFarToKillEnemy,false);
+    add_condition(action, DaAi::Ids::prop_should_fall_back, false);
     add_effect(action, eWorldPropertyInCover, true);
     add_effect(action, eWorldPropertyLookedOut, false);
     add_effect(action, eWorldPropertyPositionHolded, false);
@@ -350,6 +379,9 @@ void CStalkerCombatPlanner::add_actions()
     add_condition(action, eWorldPropertyShouldThrowGrenade, false);
     add_condition(action, eWorldPropertyTooFarToKillEnemy, false);
     add_condition(action, eWorldPropertyLowCover, false);
+    add_condition(action, DaAi::Ids::prop_should_fall_back, false);
+    add_condition(action, DaAi::Ids::prop_out_of_band, false);
+    add_condition(action, DaAi::Ids::prop_contact_lost, false);
     add_effect(action, eWorldPropertyLookedOut, true);
     add_operator(eWorldOperatorLookOut, action);
 
@@ -368,6 +400,9 @@ void CStalkerCombatPlanner::add_actions()
     add_condition(action, eWorldPropertyShouldThrowGrenade, false);
     add_condition(action, eWorldPropertyTooFarToKillEnemy, false);
     add_condition(action, eWorldPropertyLowCover, false);
+    add_condition(action, DaAi::Ids::prop_should_fall_back, false);
+    add_condition(action, DaAi::Ids::prop_out_of_band, false);
+    add_condition(action, DaAi::Ids::prop_contact_lost, false);
     add_effect(action, eWorldPropertyInCover, false);
     add_effect(action, eWorldPropertyPositionHolded, true);
     add_operator(eWorldOperatorHoldPosition, action);
@@ -389,6 +424,10 @@ void CStalkerCombatPlanner::add_actions()
     add_condition(action, eWorldPropertyPlayerOnThePath, false);
     add_condition(action, eWorldPropertyShouldThrowGrenade, false);
     add_condition(action, eWorldPropertyTooFarToKillEnemy, false);
+    add_condition(action, DaAi::Ids::prop_should_fall_back, false);
+    add_condition(action, DaAi::Ids::prop_out_of_band, false);
+    add_condition(action, DaAi::Ids::prop_contact_lost, false);
+    add_condition(action, DaAi::Ids::prop_suppress_role, false);
     add_effect(action, eWorldPropertyEnemyDetoured, true);
     add_operator(eWorldOperatorDetourEnemy, action);
 
@@ -408,6 +447,10 @@ void CStalkerCombatPlanner::add_actions()
         add_condition(action, eWorldPropertyPlayerOnThePath, false);
         add_condition(action, eWorldPropertyShouldThrowGrenade, false);
         add_condition(action, eWorldPropertyTooFarToKillEnemy, false);
+        add_condition(action, DaAi::Ids::prop_should_fall_back, false);
+        add_condition(action, DaAi::Ids::prop_out_of_band, false);
+        add_condition(action, DaAi::Ids::prop_suppress_role, false);
+        add_condition(action, DaAi::Ids::prop_flank_role, false);
         add_effect(action, eWorldPropertyPureEnemy, false);
         add_operator(eWorldOperatorSearchEnemy, action);
     }
@@ -423,6 +466,8 @@ void CStalkerCombatPlanner::add_actions()
     add_condition(action, eWorldPropertyPanic, false);
     add_condition(action, eWorldPropertyEnemyWounded, false);
     add_condition(action, eWorldPropertyTooFarToKillEnemy, false);
+    add_condition(action, DaAi::Ids::prop_out_of_band, false);
+    add_condition(action, DaAi::Ids::prop_flank_role, false);
     add_effect(action, eWorldPropertyPureEnemy, false);
     add_operator(eWorldOperatorKillEnemyIfNotVisible, action);
 
@@ -527,6 +572,7 @@ void CStalkerCombatPlanner::add_actions()
         add_condition(planner, eWorldPropertyShouldThrowGrenade, false);
         add_condition(planner, eWorldPropertyLowCover, false);
         add_condition(planner, eWorldPropertyTooFarToKillEnemy, true);
+        add_condition(planner, DaAi::Ids::prop_should_fall_back, false);
         add_effect(planner, eWorldPropertyTooFarToKillEnemy, false);
         add_operator(eWorldOperatorGetDistance, planner);
     }
@@ -542,6 +588,7 @@ void CStalkerCombatPlanner::add_actions()
         add_condition(planner, eWorldPropertyPlayerOnThePath, false);
         add_condition(planner, eWorldPropertyInCover, true);
         add_condition(planner, eWorldPropertyLowCover, true);
+        add_condition(planner, DaAi::Ids::prop_flank_role, false);
         add_effect(planner, eWorldPropertyLowCover, false);
         add_operator(eWorldOperatorLowCover, planner);
     }
@@ -558,6 +605,117 @@ void CStalkerCombatPlanner::add_actions()
     add_condition(action, eWorldPropertyInSmartCover, true);
     add_effect(action, eWorldPropertyInSmartCover, false);
     add_operator(eWorldOperatorInSmartCover, action);
+
+    // Human NPC AI operators (plain actions, no storage), unreachable while their properties are false. The
+    // ShouldThrowGrenade and PlayerOnThePath conditions keep the grenade flush and the path-clearing shot ahead of
+    // their cheap routes to PureEnemy. The ordered suppressor takes its cover itself (no InCover condition), and
+    // detour and search wait for its window (DaSuppressRole = false on them), so the stock chain cannot outbid it.
+    // The ordered flanker with a covered route goes at once: one step to PureEnemy (kill_enemy weighs 4), and the other
+    // one-step fights (return fire, ambush, kill if not visible) and the search wait for the order (DaFlankRole
+    // = false on them).
+    {
+        CActionBase<CScriptGameObject>* operation =
+            DaAi::Tactics::make_suppress_fire_action(m_object, "da suppress fire");
+        add_condition(operation, eWorldPropertyCriticallyWounded, false);
+        add_condition(operation, eWorldPropertyDangerGrenade, false);
+        add_condition(operation, eWorldPropertyInSmartCover, false);
+        add_condition(operation, eWorldPropertyUseSuddenness, false);
+        add_condition(operation, eWorldPropertyReadyToKill, true);
+        add_condition(operation, eWorldPropertySeeEnemy, false);
+        add_condition(operation, eWorldPropertyPanic, false);
+        add_condition(operation, eWorldPropertyEnemyWounded, false);
+        add_condition(operation, eWorldPropertyPlayerOnThePath, false);
+        add_condition(operation, eWorldPropertyShouldThrowGrenade, false);
+        add_condition(operation, DaAi::Ids::prop_suppress_role, true);
+        add_condition(operation, DaAi::Ids::prop_should_fall_back, false);
+        add_effect(operation, eWorldPropertyPureEnemy, false);
+        add_operator(DaAi::Ids::op_suppress_fire, operation);
+
+        operation = DaAi::Tactics::make_fall_back_action(m_object, "da fall back");
+        add_condition(operation, eWorldPropertyCriticallyWounded, false);
+        add_condition(operation, eWorldPropertyDangerGrenade, false);
+        add_condition(operation, eWorldPropertyInSmartCover, false);
+        add_condition(operation, eWorldPropertyItemToKill, true);
+        add_condition(operation, eWorldPropertyItemCanKill, true);
+        add_condition(operation, DaAi::Ids::prop_should_fall_back, true);
+        add_effect(operation, DaAi::Ids::prop_should_fall_back, false);
+        add_effect(operation, eWorldPropertyInCover, true);
+        add_effect(operation, eWorldPropertyLookedOut, false);
+        add_effect(operation, eWorldPropertyPositionHolded, false);
+        add_operator(DaAi::Ids::op_fall_back, operation);
+
+        operation = DaAi::Tactics::make_hold_ambush_action(m_object, "da hold ambush");
+        add_condition(operation, eWorldPropertyCriticallyWounded, false);
+        add_condition(operation, eWorldPropertyDangerGrenade, false);
+        add_condition(operation, eWorldPropertyInSmartCover, false);
+        add_condition(operation, eWorldPropertyUseSuddenness, false);
+        add_condition(operation, eWorldPropertyReadyToKill, true);
+        add_condition(operation, eWorldPropertyInCover, true);
+        add_condition(operation, eWorldPropertyPanic, false);
+        add_condition(operation, eWorldPropertyEnemyWounded, false);
+        add_condition(operation, eWorldPropertyPlayerOnThePath, false);
+        add_condition(operation, eWorldPropertyShouldThrowGrenade, false);
+        add_condition(operation, DaAi::Ids::prop_out_of_band, true);
+        add_condition(operation, DaAi::Ids::prop_should_fall_back, false);
+        add_condition(operation, DaAi::Ids::prop_flank_role, false);
+        add_effect(operation, eWorldPropertyPureEnemy, false);
+        add_operator(DaAi::Ids::op_hold_ambush, operation);
+
+        // One step to PureEnemy from the open, so it beats take_cover -> kill_enemy while the exchange lasts.
+        operation = DaAi::Tactics::make_return_fire_action(m_object, "da return fire");
+        add_condition(operation, eWorldPropertyCriticallyWounded, false);
+        add_condition(operation, eWorldPropertyDangerGrenade, false);
+        add_condition(operation, eWorldPropertyInSmartCover, false);
+        add_condition(operation, eWorldPropertyUseSuddenness, false);
+        add_condition(operation, eWorldPropertyReadyToKill, true);
+        add_condition(operation, eWorldPropertySeeEnemy, true);
+        add_condition(operation, eWorldPropertyPanic, false);
+        add_condition(operation, eWorldPropertyEnemyWounded, false);
+        add_condition(operation, eWorldPropertyPlayerOnThePath, false);
+        add_condition(operation, eWorldPropertyTooFarToKillEnemy, false);
+        add_condition(operation, DaAi::Ids::prop_return_fire, true);
+        add_condition(operation, DaAi::Ids::prop_out_of_band, false);
+        add_condition(operation, DaAi::Ids::prop_should_fall_back, false);
+        add_condition(operation, DaAi::Ids::prop_flank_role, false);
+        add_effect(operation, eWorldPropertyPureEnemy, false);
+        add_operator(DaAi::Ids::op_return_fire, operation);
+
+        // The ordered flank by its covered route (the grenade flush, a wounded enemy and the fall back come first).
+        operation = DaAi::Tactics::make_flank_action(m_object, "da flank");
+        add_condition(operation, eWorldPropertyCriticallyWounded, false);
+        add_condition(operation, eWorldPropertyDangerGrenade, false);
+        add_condition(operation, eWorldPropertyInSmartCover, false);
+        add_condition(operation, eWorldPropertyUseSuddenness, false);
+        add_condition(operation, eWorldPropertyReadyToKill, true);
+        add_condition(operation, eWorldPropertyPanic, false);
+        add_condition(operation, eWorldPropertyEnemyWounded, false);
+        add_condition(operation, eWorldPropertyEnemyCriticallyWounded, false);
+        add_condition(operation, eWorldPropertyPlayerOnThePath, false);
+        add_condition(operation, eWorldPropertyShouldThrowGrenade, false);
+        add_condition(operation, DaAi::Ids::prop_flank_role, true);
+        add_condition(operation, DaAi::Ids::prop_should_fall_back, false);
+        add_effect(operation, eWorldPropertyPureEnemy, false);
+        add_operator(DaAi::Ids::op_flank, operation);
+
+        // Contact lost for the profile's search_delay_s: look out, hold and detour give way (DaContactLost = false on
+        // them), and one step sets what the search sub-planner requires. A suppressor finishes its window first.
+        operation = DaAi::Search::make_search_handover_action(m_object, "da search handover");
+        add_condition(operation, eWorldPropertyCriticallyWounded, false);
+        add_condition(operation, eWorldPropertyDangerGrenade, false);
+        add_condition(operation, eWorldPropertyInSmartCover, false);
+        add_condition(operation, eWorldPropertyUseSuddenness, false);
+        add_condition(operation, eWorldPropertySeeEnemy, false);
+        add_condition(operation, eWorldPropertyPanic, false);
+        add_condition(operation, DaAi::Ids::prop_contact_lost, true);
+        add_condition(operation, DaAi::Ids::prop_suppress_role, false);
+        add_condition(operation, DaAi::Ids::prop_flank_role, false);
+        add_condition(operation, DaAi::Ids::prop_should_fall_back, false);
+        add_effect(operation, eWorldPropertyInCover, false);
+        add_effect(operation, eWorldPropertyLookedOut, true);
+        add_effect(operation, eWorldPropertyPositionHolded, true);
+        add_effect(operation, eWorldPropertyEnemyDetoured, true);
+        add_operator(DaAi::Ids::op_search_handover, operation);
+    }
 }
 
 void CStalkerCombatPlanner::save(NET_Packet& packet) { inherited::save(packet); }

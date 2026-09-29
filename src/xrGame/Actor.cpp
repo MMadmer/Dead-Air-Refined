@@ -1150,18 +1150,22 @@ void CActor::g_Physics(Fvector& _accel, float jump, float dt)
 
     if (Local() && g_Alive())
     {
-        // Landing roll: jump held on touchdown, damage real and survivable - the roll takes
-        // the hit (FallRollHealthLost) and the tumble begins. No damage or a lethal one: no roll.
+        // Landing roll: jump held on touchdown and a real landing hit. Survival is judged on what
+        // the ROLL costs (FallRollHealthLost through the same armour and immunity path), not on
+        // the stiff landing: a fall only the tumble survives is rolled, and the roll's loss
+        // replaces the stock one before the hit below is sent - one hit per landing. When even
+        // the roll would kill, there is no roll and the stock hit stands.
         {
             CPHMovementControl* mc = character_physics_support()->movement();
             if (!m_fall_roll.active && !fis_zero(mc->gcontact_HealthLost) && (mstate_wishful & mcJump) &&
                 !m_holder && Level().CurrentControlEntity() == this)
             {
+                const float roll_loss = FallRollHealthLost(mc->GetContactSpeed());
                 const float predicted =
-                    conditions().PredictHealthLoss(mc->gcontact_HealthLost, mc->CollisionDamageInfo()->HitType(), mc->ContactBone());
+                    conditions().PredictHealthLoss(roll_loss, mc->CollisionDamageInfo()->HitType(), mc->ContactBone());
                 if (predicted < conditions().GetHealth())
                 {
-                    mc->gcontact_HealthLost = FallRollHealthLost(mc->GetContactSpeed());
+                    mc->gcontact_HealthLost = roll_loss;
                     mc->gcontact_Power *= 1.f - m_fall_roll.damage_reduction;
                     StartFallRoll();
                 }
@@ -2061,8 +2065,8 @@ float CActor::FallRollHealthLost(float contact_speed) const
     const CPHMovementControl* mc = character_physics_support()->movement();
     // The no-damage speed moves up by the raise; above it the stock slope continues, cut by the
     // reduction - (1 - r) of what a stiff landing costs per extra metre per second. The lethal
-    // speed itself is not moved: a fall that kills a stiff landing never starts a roll (g_Physics
-    // checks the stock loss against the health first).
+    // speed itself is not moved. contact_speed is the movement control's, already reduced by
+    // any water the fall ended in, so a roll into a pond is judged on the same landing.
     const float lo = mc->GetMinCrashSpeed();
     const float hi = mc->GetMaxCrashSpeed();
     const float lo_roll = lo * (1.f + m_fall_roll.threshold_raise);
@@ -2527,19 +2531,22 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
 {
     static float update_time = 0;
 
-    float f_update_time = 0;
-
     if (update_time < ARTEFACTS_UPDATE_TIME)
     {
         update_time += conditions().fdelta_time();
         return;
     }
-    else
-    {
-        // Keep item rates calibrated to Dead Air's normal game-time factor when the day speed changes.
-        f_update_time = update_time * 2.0f * conditions().GetItemEffectTimeScale();
-        update_time = 0.0f;
-    }
+    ApplyWornEffects(update_time);
+    update_time = 0.0f;
+
+    if (!GetOutfit() && !smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT)) && GetNightVisionStatus())
+        SwitchNightVision(false);
+}
+
+void CActor::ApplyWornEffects(float game_dt)
+{
+    // Keep item rates calibrated to Dead Air's normal game-time factor when the day speed changes.
+    const float f_update_time = game_dt * 2.0f * conditions().GetItemEffectTimeScale();
 
     for (auto& it : inventory().m_belt)
     {
@@ -2582,15 +2589,6 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
             conditions().ChangePower(outfit->m_fPowerRestoreSpeed * f_update_time);
         conditions().ChangeSatiety(outfit->m_fSatietyRestoreSpeed * f_update_time);
         conditions().ChangeRadiation(outfit->m_fRadiationRestoreSpeed * f_update_time);
-    }
-    else
-    {
-        CHelmet* pHelmet = smart_cast<CHelmet*>(inventory().ItemFromSlot(HELMET_SLOT));
-        if (!pHelmet)
-        {
-            if (GetNightVisionStatus())
-                SwitchNightVision(false);
-        }
     }
 }
 

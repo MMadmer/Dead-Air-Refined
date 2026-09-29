@@ -43,7 +43,9 @@ bool xrServer::Process_event_reject(
     xr_vector<u16>::iterator c = std::find(C.begin(), C.end(), id_entity);
     if (c == C.end())
     {
-        Msg("! WARNING: SV: can't find children [%d] of parent [%d]", id_entity, e_parent);
+        // The stock line printed the parent's pointer through %d, which read as a corrupt id.
+        Msg("! WARNING: SV: can't find children [%d][%s] of parent [%d][%s]", id_entity, e_entity->name_replace(),
+            id_parent, e_parent->name_replace());
         return false;
     }
 
