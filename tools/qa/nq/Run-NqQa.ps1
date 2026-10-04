@@ -40,6 +40,12 @@
     new game stays on the fake_start level, whose map is a placeholder. -PdaStart '' keeps it.
     The probe then checks describe()'s map spots: the player and the order both in the slot.
 
+    Scenario Commands starts a NEW game with two modules that declare console commands
+    (tools\qa\nq\module-commands, mod.ltx [commands]): the probe runs them through the console and
+    checks what their Lua functions were given, and this script wants the engine's refusals (a
+    stock name, a malformed name or function, a name an earlier module has) and the printed
+    results in the log.
+
 .EXAMPLE
     pwsh -NoProfile -File tools\qa\nq\Run-NqQa.ps1 -SaveName "admin - autosave" -ResultLabel run1
 #>
@@ -56,7 +62,8 @@ param(
     [string]$ResultLabel = (Get-Date -Format 'yyyyMMdd-HHmmss'),
 
     [ValidateSet('All', 'Scout', 'Main', 'Reload', 'Dialog', 'LevelChange', 'ModuleRemoved',
-        'ChangedGraph', 'EmptyModule', 'Control', 'World', 'WorldControl', 'Pda', 'PdaControl', 'PdaModule')]
+        'ChangedGraph', 'EmptyModule', 'Control', 'World', 'WorldControl', 'Pda', 'PdaControl', 'PdaModule',
+        'SaveModule', 'Commands')]
     [string]$Scenario = 'All',
 
     [int]$TimeoutSeconds = 900,
@@ -341,11 +348,17 @@ function Copy-SaveGroup {
 }
 
 function Set-QaModule {
-    param([ValidateSet('Full', 'Changed', 'Empty', 'None', 'World', 'WorldControl', 'Pda', 'PdaControl')][string]$Variant)
+    param([ValidateSet('Full', 'Changed', 'Empty', 'None', 'World', 'WorldControl', 'Pda', 'PdaControl', 'Commands')]
+        [string]$Variant)
     if (Test-Path -LiteralPath $qaModules) { Remove-Item -LiteralPath $qaModules -Recurse -Force }
     New-Item -ItemType Directory -Path $qaModules -Force | Out-Null
     switch ($Variant) {
         'None' { return }
+        'Commands' {
+            # two modules: cmd_qa, and cmd_qa_b loading after it and asking for one of its names
+            Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module-commands') -Destination $qaModules
+            return
+        }
         'World' {
             Copy-TreeContents -Source (Join-Path $PSScriptRoot 'module-world') -Destination $qaWorldModule
             return
@@ -1017,6 +1030,52 @@ function Invoke-PdaModule {
     }
 }
 
+# A save the player made with a module the editor built (-SaveName, -PdaModuleDir): it has to
+# load and run on - the bug report is "the game crashes loading my save".
+function Invoke-SaveModule {
+    if (-not $PdaModuleDir -or -not (Test-Path -LiteralPath (Join-Path $PdaModuleDir 'mod.ltx'))) {
+        throw '-PdaModuleDir must name a built module folder (the one with mod.ltx).'
+    }
+    if (Test-Path -LiteralPath $qaModules) { Remove-Item -LiteralPath $qaModules -Recurse -Force }
+    New-Item -ItemType Directory -Path $qaModules -Force | Out-Null
+    Copy-TreeContents -Source $PdaModuleDir -Destination (Join-Path $qaModules (Split-Path -Leaf $PdaModuleDir))
+    Copy-SaveGroup
+    try { [void](Invoke-NqPhase -Name 'SaveModule' -Phase 'psm' -LoadSave $SaveName) }
+    finally { Set-QaModule -Variant Full }
+}
+
+# Console commands of modules ([commands] of mod.ltx): a NEW game with cmd_qa and cmd_qa_b, the probe
+# runs the commands, and the log has to say what the engine refused at the start and printed since.
+function Invoke-Commands {
+    Set-QaModule -Variant Commands
+    try {
+        if (-not (Invoke-NqPhase -Name 'Commands' -Phase 'pc' -LoadSave 'all' -NewGame)) { return }
+        $log = Get-Content -LiteralPath (Join-Path $resultRoot 'Commands\engine.log') -Raw -Encoding 1251
+        $expected = [ordered]@{
+            'registered'          = '\* XMS: module \[cmd_qa\] adds console command\(s\): cmdqa_echo, cmdqa_fail, cmdqa_cheat, cmdqa_loop, cmdqa_missing'
+            'the second module'   = '\* XMS: module \[cmd_qa_b\] adds console command\(s\): cmdqa_b_ok'
+            'a stock name'        = '! XMS: module \[cmd_qa\] console command \[xms_list\] refused - the game has a console command of that name'
+            'a bad name'          = '! XMS: module \[cmd_qa\] console command \[Bad-Name\] refused'
+            'a bad function'      = '! XMS: module \[cmd_qa\] console command \[cmdqa_badfn\] refused'
+            'no [commands] line'  = '! XMS: module \[cmd_qa\] console command \[cmdqa_ghost\] refused'
+            'first module wins'   = '! XMS: module \[cmd_qa_b\] console command \[cmdqa_echo\] refused - a module earlier in the load order has it: cmd_qa'
+            'the result printed'  = 'CMDQA-ECHO: \[hello "big world"\] cmd_qa cmdqa_echo'
+            'the error printed'   = 'CMDQA intentional failure'
+            'a missing function'  = 'cmdqa\.no_such_function is not a function'
+            'the cheat refused'   = '! cmdqa_cheat: a cheat of module \[cmd_qa\]'
+            'the nesting stopped' = '! cmdqa_loop: module commands nest too deep'
+            'its help line'       = 'cmdqa_echo\s+\(\s*\) --- Echo for the QA probe; returns what it got; cmdqa_echo <words> \(module cmd_qa\)'
+            'a cheat in help'     = 'cmdqa_cheat\s+\(\s*\) --- Cheat for the QA probe \(module cmd_qa, cheat: -dbg only\)'
+        }
+        foreach ($key in $expected.Keys) {
+            $found = $log -match $expected[$key]
+            Write-Host "   [log] $($key): $(if ($found) { 'found' } else { 'MISSING' })"
+            if (-not $found) { $script:failures.Add("[Commands] the log has no line for $($key): $($expected[$key])") }
+        }
+    }
+    finally { Set-QaModule -Variant Full }
+}
+
 # ---------------------------------------------------------------------------- main
 New-Item -ItemType Directory -Path $resultRoot -Force | Out-Null
 Assert-NoTargetEngine
@@ -1064,6 +1123,8 @@ try {
         'Pda' { Invoke-Scenario 'Pda' { Invoke-Pda } }
         'PdaControl' { Invoke-Scenario 'PdaControl' { Invoke-PdaControl } }
         'PdaModule' { Invoke-Scenario 'PdaModule' { Invoke-PdaModule } }
+        'SaveModule' { Invoke-Scenario 'SaveModule' { Invoke-SaveModule } }
+        'Commands' { Invoke-Scenario 'Commands' { Invoke-Commands } }
         default {
             Invoke-Scenario 'Main' { Invoke-Main }
             Invoke-Scenario 'Reload' { Invoke-Reload }
@@ -1077,6 +1138,7 @@ try {
             Invoke-Scenario 'WorldControl' { Invoke-WorldControl }
             Invoke-Scenario 'Pda' { Invoke-Pda }
             Invoke-Scenario 'PdaControl' { Invoke-PdaControl }
+            Invoke-Scenario 'Commands' { Invoke-Commands }
         }
     }
 }

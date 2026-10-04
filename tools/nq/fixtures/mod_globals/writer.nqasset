@@ -1,0 +1,21 @@
+-- Writes the module's global variables when the test signals it.
+return {
+  nq = 1,
+  id = "writer",
+  title = "Writer",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "wait" } },
+    { id = "wait", kind = "wait.when",
+      cond = { { kind = "event.signal", params = { name = "g_go" } } },
+      out = { done = "write" } },
+    { id = "write", kind = "flow.step",
+      on_enter = {
+        { kind = "global.set", params = { name = "night", value = 3 } },
+        { kind = "global.add", params = { name = "night", delta = 1 } },
+        { kind = "global.set", params = { name = "who", value = "Сыч" } },
+        { kind = "global.set", params = { name = "seen", value = true } },
+      },
+      out = { next = "finish" } },
+    { id = "finish", kind = "flow.end" },
+  },
+}

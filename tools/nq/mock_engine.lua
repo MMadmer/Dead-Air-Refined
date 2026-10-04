@@ -762,6 +762,11 @@ xr_logic = {
 		local s = ini and ini.sections and ini.sections[section]
 		return s and s.active or section
 	end,
+	-- a save's "*<name>" is the generated file in db.dynamic_ltx, like the real one
+	get_customdata_or_ini_file = function(npc, filename)
+		if (type(filename) == "string" and string.sub(filename, 1, 1) == "*") then return db.dynamic_ltx[string.sub(filename, 2)] end
+		return nil
+	end,
 	activate_by_section = function(go, ini, sect, gulag, loading)
 		local id = go and go:id()
 		local rec = mock.applied[id]
@@ -930,8 +935,11 @@ safe_release_manager = {
 
 function alife_object(id) return mock.se[id] end
 
+mock.ctimes = {}
 utils = {
 	is_ammo = function(section) return system_ini():r_string_ex(section, "class") == "AMMO" end,
+	save_ctime = function(obj, name, t) mock.ctimes[name] = t end,
+	load_ctime = function(obj, name) return mock.ctimes[name] end,
 	CTime_to_table = function(ct) local Y, M, D, h, m, s, ms = ct:get() return { Y = Y, M = M, D = D, h = h, m = m, s = s, ms = ms } end,
 	CTime_from_table = function(t) return ctime(0) end,
 }
@@ -1183,6 +1191,12 @@ class = SPC_RS_S
 [simulation_boar]
 class = ON_OFF_S
 ; a real army squad, the kind an author picks for "spawn soldiers to kill"
+; a character the editor built as a trader, and one that is not
+[mod_b_trader]
+class = AI_STL_S
+xms_trade = misc\trade\mod_b\trader.ltx
+[mod_b_plain]
+class = AI_STL_S
 [army_sim_squad_novice]
 class = ON_OFF_S
 faction = army
@@ -1302,12 +1316,17 @@ local function build_xms()
 			mock.patrol_point_calls = (mock.patrol_point_calls or 0) + 1
 			return true
 		end,
+		-- like resolve_blob_ns: the core blob or an enabled module's own id, nothing else
 		save_data = function(id, s)
+			if (id ~= "xms.nq" and not module_by_id(id)) then return false end
 			mock.save_calls = mock.save_calls + 1
 			mock.blobs[id] = s
 			return true
 		end,
-		load_data = function(id) return mock.blobs[id] end,
+		load_data = function(id)
+			if (id ~= "xms.nq" and not module_by_id(id)) then return nil end
+			return mock.blobs[id]
+		end,
 		list_files = function(id, subdir, mask, recursive)
 			local m = module_by_id(id)
 			if not (m) then return nil end
@@ -1361,7 +1380,7 @@ local function build_xms()
 end
 
 -- ---------------------------------------------------------------------------- script namespaces
-local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_behaviour = true, xms_world = true }
+local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_behaviour = true, xms_world = true, xms_characters = true }
 local loading = {}
 
 local function load_script(name)
@@ -1657,8 +1676,12 @@ end
 
 -- New Lua state (load game / level change): script tables, registries and callbacks are gone; the
 -- mock world, the actor's task registry and the engine-side dialog data stay.
+local logic_lookup = xr_logic.get_customdata_or_ini_file
+
 function mock.rebuild()
 	for name in pairs(SCRIPT_NAMES) do rawset(_G, name, nil) end
+	-- xr_logic is a game script too: whatever wrapped it went with the old Lua state
+	xr_logic.get_customdata_or_ini_file = logic_lookup
 	mock.callbacks = {}
 	-- a new Lua state and a reloaded level: generated logic files and runtime
 	-- patrol paths are gone until somebody puts them back
@@ -1679,7 +1702,7 @@ function mock.first_update()
 	local nq = xms_nq
 	if (nq and nq.on_game_start) then nq.on_game_start() end
 	-- axr_main runs every script's on_game_start; the actor's net_spawn then sends
-	-- on_game_load - BEFORE any NPC spawns and long before the first update
+	-- on_game_load long before the first update - but an NPC may spawn before the actor
 	local beh = xms_nq_behaviour
 	if (beh and beh.on_game_start) then beh.on_game_start() end
 	SendScriptCallback("on_game_load", { })

@@ -136,8 +136,8 @@ The catalog declares a type per parameter. These are the types the loader knows
 | `count_or_all` | integer ≥ 1 or `"all"` | `item.take` |
 | `duration` | `{ seconds = N }` real time, `{ game_minutes = N }`, `{ game_hours = N }`, `{ game_seconds = N }` game time, or a plain number (real seconds) | |
 | `npc_ref` | `{ story = "esc_2_12_stalker_wolf" }` \| `{ ref = "guard" }` \| `{ profile = "…" }` \| `{ community = "stalker", level = "l01_escape" }` | §7 |
-| `target_ref` | any `npc_ref`, or `{ ref = "boars" }` (squad/object), or `{ smart = "…" }` | |
-| `kill_target` | `{ story = … }` \| `{ ref = … }` \| `{ spawn = <spawn_spec> }` | only `objective.kill` |
+| `target_ref` | any `npc_ref`, or `{ ref = "boars" }` (squad/object), or `{ smart = "…" }`, or a place: `{ restrictor = "…" }`, `{ level = "…", pos = { x, y, z } }` | a restrictor is taken by name (`map.spot` and the task markers point at it); a point is anchored with a `space_restrictor` of the task (`task.set_target`, `task.set_objective_target`) |
+| `kill_target` | `{ story = … }` \| `{ ref = … }` \| `{ character = … }` \| `{ spawn = <spawn_spec> }` | only `objective.kill`; a character is resolved when the node starts - the living one, or the body when only that is left |
 | `object_ref` | `{ story = … }` \| `{ ref = … }` | one concrete object the runtime can pin down to a single id; `profile`/`community`/`smart` name a group and are not accepted |
 | `place` | `{ level = "l01_escape", pos = {x,y,z}, radius = 5 }` \| `{ restrictor = "zone_name" }` \| `{ smart = "…" }` \| `{ ref = "anchor" }` \| `{ actor = true, distance = 2 }` | `radius` defaults to 5; `ref` is where an object this quest created stands; `actor` is that many metres in front of the player, resolved when the action runs and snapped to the navmesh — a spawn point, not a destination |
 | `item_list` | `{ { section = "bread", count = 2 }, { item = { ref = "prize" } }, … }` | rows of two kinds: any items of a section (with a count), or one concrete object; a section may appear once |
@@ -507,7 +507,7 @@ and the rest of the list is checked right then.
 | `dialog.topic` | **`npc: npc_ref`**, **`text: text`**, `initiator: enum(actor\|npc) = actor` | `next`, `done` | ✔ | `true` | A conversation topic on an NPC. While the token sits here and the node's `cond` holds, the topic is in the talk list. `next` leads to the phrases; `done` fires when a leaf phrase has been said. |
 | `dialog.npc_phrase` | **`text: text`** | `next` | | `false` | A line the NPC says. The node's `cond` is its display condition; the first declared line whose condition holds is the one spoken. |
 | `dialog.actor_phrase` | **`text: text`** | `next` | | `false` | A reply the player can pick. The node's `cond` is its display condition. |
-| `objective.kill` | **`target: kill_target`**, `by_actor: bool = false`, `spot_task: task_id`, `spot_objective: objective_id`, `spot_done: bool = true` | `done` | ✔ | `false` | Waits for the target to die: an NPC by story id, an object remembered under a `ref`, or a squad from `spawn` (created on entry and remembered under its `ref`). `by_actor` additionally demands that the player landed the kill. With `spot_task` the node re-points the bound task's own PDA marker (or the marker of the step named by `spot_objective`) at the target - the task's colour, no separate additive spot. Nothing is removed when the node ends: completing the task/step takes the marker off the map, exactly like after a manual `task.set_target`. For a squad the quest just spawned this is the only way the player can find it. With `spot_done` (default **on**) the node also **closes what it borrowed** when it completes: the step named by `spot_objective`, or the whole task when no step is named. Turn it off (`spot_done = false`) when several nodes feed one step and only the last one should end it. It fires before the node's own `on_exit`, only on the `done` pin and never on a cancel, and it never closes a step somebody already closed. |
+| `objective.kill` | **`target: kill_target`**, `by_actor: bool = false`, `spot_task: task_id`, `spot_objective: objective_id`, `spot_done: bool = true` | `done` | ✔ | `false` | Waits for the target to die: an NPC by story id, an object remembered under a `ref`, a character of the module, or a squad from `spawn` (created on entry and remembered under its `ref`). `by_actor` additionally demands that the player landed the kill. With `spot_task` the node re-points the bound task's own PDA marker (or the marker of the step named by `spot_objective`) at the target - the task's colour, no separate additive spot. Nothing is removed when the node ends: completing the task/step takes the marker off the map, exactly like after a manual `task.set_target`. For a squad the quest just spawned this is the only way the player can find it. With `spot_done` (default **on**) the node also **closes what it borrowed** when it completes: the step named by `spot_objective`, or the whole task when no step is named. Turn it off (`spot_done = false`) when several nodes feed one step and only the last one should end it. It fires before the node's own `on_exit`, only on the `done` pin and never on a cancel, and it never closes a step somebody already closed. |
 | `objective.kill_count` | `count: int = 1`, `by_actor: bool = true`, `community: community`, `squad: object_ref`, `section: string` | `done` | ✔ | `false` | Counts kills until there are `count` of them. Counting starts when the node is entered, and the counter lives in the token, so it survives a save. `by_actor` (on by default) only counts what the player killed. At most one filter is allowed (`E022`): `community` is the victim's faction, `squad` a squad the quest spawned (the deaths of its members), `section` the victim's spawn section. With no filter every NPC death counts. A death nobody witnessed is only noticed for the `squad` filter and only with `by_actor = false`. |
 | `objective.fetch` | `section: item_section`, `count: int = 1`, `items: item_list`, `from: object_ref`, `spawn: loot_spawn`, `spot_task: task_id`, `spot_objective: objective_id`, `spot_done: bool = true` | `done` | ✔ | `false` | Waits for items to reach the player. What to bring is the `items` list; **a row is either a section with a count, or one concrete object** (`{ item = { ref/story } }`) — the two mix freely, so “bring THE flash drive and three medkits” is one node. `section`+`count` is the one-line spelling of a one-row list. With `from` only items that came **out of that container** count (section rows; an identical item picked up elsewhere never moves the counter). With `spawn` the node **creates the loot itself on entry** and credits exactly those instances — a destroyed instance is recreated (in its host, or at the player's feet when the host is gone) so the quest cannot dead-end; concrete-object rows cannot be combined with `spawn`. `spot_task` re-points the bound task's/step's marker at the **nearest pending** source — the host container/corpse/NPC, a loose spawned item, or whatever carries a concrete-object row right now; collected targets drop out and the marker walks on by itself. `count` is whole items — for ammo that means boxes. With `spot_done` (default **on**) the node also **closes what it borrowed** when it completes: the step named by `spot_objective`, or the whole task when no step is named. Turn it off (`spot_done = false`) when several nodes feed one step and only the last one should end it. It fires before the node's own `on_exit`, only on the `done` pin and never on a cancel, and it never closes a step somebody already closed. |
 | `objective.reach` | **`place: place`**, `spot_task: task_id`, `spot_objective: objective_id`, `spot_done: bool = true` | `done` | ✔ | `false` | Waits until the player is inside the place. With `spot_task` the bound task's/step's marker is pointed at it (at an anchor restrictor for a bare position); when the node releases its own anchor, that one marker is cleared rather than left on a dead id. With `spot_done` (default **on**) the node also **closes what it borrowed** when it completes: the step named by `spot_objective`, or the whole task when no step is named. Turn it off (`spot_done = false`) when several nodes feed one step and only the last one should end it. It fires before the node's own `on_exit`, only on the `done` pin and never on a cancel, and it never closes a step somebody already closed. |
@@ -782,12 +782,23 @@ and `xms.dialogs_for`; all of them demultiplex on the dialog id and are
   The runtime additionally registers the story id
   `nq.<module>.<quest>.<ref>` for every ref (re-registered after every load), so
   custom Lua and vanilla condlists can address the object by name.
+- **`character`** — a character of the module by the `id` of its `.npcasset`
+  (`"<module>.<id>"` names one another module ships). XFined Editor generates its
+  spawn section and its profile as `<module>_<id>`, so the NPC `spawn.npc` created
+  (the section) and a stalker placed in a level with that profile both answer.
+  Resolved online first, otherwise from one walk of the server registry that indexes
+  every character at once and is kept for ten seconds (`spawn.npc` drops it, so a
+  character it has just made is found at once); the living one is preferred to a
+  body. `order.follow` registers the character's key as a story id when the stock
+  companion scheme needs one. Allowed wherever an `npc_ref`, `target_ref`,
+  `object_ref`, `kill_target`, `destination`, `role_or_actor`, `attack_target` or a
+  role binding is.
 - **`profile`** — any NPC with that `character_profile`.
 - **`community`** (optionally plus `level`) — any NPC of that faction.
 
-Resolution order for an `npc_ref` is `ref` → `story` → the first online NPC
-matching `profile` / `community`. For dialogs the question is asked from the
-other side — "does this partner match the ref?" — which is what lets a
+Resolution order for an `npc_ref` is `ref` → `story` → `character` → the first
+online NPC matching `profile` / `community`. For dialogs the question is asked from
+the other side — "does this partner match the ref?" — which is what lets a
 `community` reference put a topic on any stalker.
 
 A `place` is one of:
@@ -861,6 +872,8 @@ The environment gains one extra global, `nq`, rebuilt for every call:
 | `nq.vars` | proxy over the quest variables — reading and assigning both work |
 | `nq.var(name)` | read one variable |
 | `nq.set_var(name, value)` | write one variable (bool/number/string) |
+| `nq.global(name)` | read a global variable of the module (`"<module>.<name>"` for another module's) |
+| `nq.set_global(name, value)` | write one |
 | `nq.ref(name)` | server object behind a ref, or `nil` |
 | `nq.ref_go(name)` | game object behind a ref, or `nil` |
 | `nq.signal(name)` | emit a signal for `event.signal` |
@@ -891,8 +904,9 @@ cp1251 bytes into a `.nqasset`.
 - Converted strings go into the engine raw — `AddPhrase`, `set_title`,
   `send_tip`. `translate()` returns an unknown key unchanged, so no string table
   is generated for a module and nothing has to be registered.
-- Placeholders are `{var:name}` (a quest variable, empty when unset) and
-  `{actor}` (the player's character name). They are substituted at display time
+- Placeholders are `{var:name}` (a quest variable, empty when unset),
+  `{global:name}` (a global variable of the module, `{global:<module>.<name>}` another
+  module's) and `{actor}` (the player's character name). They are substituted at display time
   for phrases, task text and news; topic captions substitute them once at graph
   build time (§6.2).
 - **Byte values are built with `string.char`, never written as decimal escapes.**

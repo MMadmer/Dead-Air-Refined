@@ -409,6 +409,58 @@ function get_var(uid, name)
 	return qs and qs.vars[name]
 end
 
+-- ---------------------------------------------------------------------------- global variables
+-- One set per module, declared in its manifest ([vars]) and shared by every graph of it;
+-- "<module>.<name>" reaches another module's. Kept in the state beside the quests, so a
+-- value outlives any one quest and rides the save.
+local function global_slot(ctx_or_module, name)
+	local own = type(ctx_or_module) == "table" and (ctx_or_module.def and ctx_or_module.def.module) or ctx_or_module
+	local mod, n = loader.global_key(own, name)
+	if not (state and mod and n) then return nil, nil, nil end
+	state.globals = state.globals or {}
+	state.globals[mod] = state.globals[mod] or {}
+	return state.globals[mod], mod, n
+end
+
+function get_global(ctx_or_module, name)
+	local vars, _, n = global_slot(ctx_or_module, name)
+	return vars and vars[n]
+end
+
+function set_global(ctx_or_module, name, value)
+	local vars, mod, n = global_slot(ctx_or_module, name)
+	if not (vars) then return false end
+	local tv = type(value)
+	if (tv ~= "boolean" and tv ~= "number" and tv ~= "string" and value ~= nil) then
+		util.err("global '%s.%s' rejects a %s value", tostring(mod), tostring(n), tv)
+		return false
+	end
+	if (vars[n] ~= value) then
+		vars[n] = value
+		dirty = true
+		log_debug("global %s.%s = %s", tostring(mod), tostring(n), tostring(value))
+	end
+	return true
+end
+
+-- every declared variable that has no value yet takes its default; values already there stay
+local function settle_globals(all)
+	if not (state) then return end
+	state.globals = state.globals or {}
+	for mod, decl in pairs(all.globals or {}) do
+		local vars = state.globals[mod] or {}
+		state.globals[mod] = vars
+		for _, name in ipairs(decl.order or {}) do
+			if (vars[name] == nil) then
+				vars[name] = decl.defaults[name]
+				dirty = true
+			end
+		end
+	end
+end
+
+function globals() return state and state.globals or {} end
+
 -- ---------------------------------------------------------------------------- context
 function make_ctx(uid, node_id, npc)
 	local q, qs = Q[uid], quest_state(uid)
@@ -456,6 +508,8 @@ function nq_api(ctx)
 		done = function(node) return (ctx.qs and ctx.qs.done[node] ~= nil) and true or false end,
 		var = function(name) return ctx.qs and ctx.qs.vars[name] end,
 		set_var = function(name, v) return set_var(uid, name, v) end,
+		global = function(name) return get_global(ctx, name) end,
+		set_global = function(name, v) return set_global(ctx, name, v) end,
 	}
 	return api
 end
@@ -1288,6 +1342,7 @@ end
 
 local function apply_scan(all, first_time)
 	SCAN = all
+	settle_globals(all)
 	Q, Q_ORDER, INVALID = all.quests, all.order, all.invalid
 	SCEN, SCEN_ORDER = all.behaviours or {}, all.behaviour_order or {}
 	for _, uid in ipairs(Q_ORDER) do
@@ -1456,6 +1511,7 @@ local function npc_record(go, id)
 	if (go) then
 		rec.story = util.story_id_of(id)
 		rec.profile = util.go_profile(go)
+		rec.section = util.go_section(go)
 		rec.community = util.go_community(go)
 	end
 	return rec

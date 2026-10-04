@@ -130,7 +130,7 @@ function pick_text(v)
 	return nil
 end
 
--- Substitutes {var:name} and {actor} at use time. The text itself is already
+-- Substitutes {var:name}, {global:name} and {actor} at use time. The text itself is already
 -- cp1251 (canon_text converted it at load), but a variable is NOT: its value
 -- comes out of the asset as raw UTF-8 and is kept that way so that comparisons
 -- in nq.var stay byte-equal on both sides. So the value - and only the value -
@@ -142,6 +142,13 @@ function format_text(ctx, text)
 	local s = string.gsub(text, "{var:([%w_]+)}", function(name)
 		local vars = ctx and (ctx.qs and ctx.qs.vars or ctx.vars)
 		local v = vars and vars[name]
+		if (v == nil) then return "" end
+		if (type(v) == "string") then return (to_cp1251(v)) end
+		return tostring(v)
+	end)
+	-- a global variable of the graph's module, or "<module>.<name>" of another
+	s = string.gsub(s, "{global:([%w_%.%-]+)}", function(name)
+		local v = xms_nq and xms_nq.get_global and xms_nq.get_global(ctx, name)
 		if (v == nil) then return "" end
 		if (type(v) == "string") then return (to_cp1251(v)) end
 		return tostring(v)
@@ -303,10 +310,21 @@ local function go_field(go, method)
 	return nil
 end
 
-function go_community(go) return go_field(go, "character_community") end
-function go_profile(go) return go_field(go, "profile_name") end
+-- The engine logs an error with a stack for the character methods of anything that is not
+-- an inventory owner (a monster, an anomaly, a box) - pcall does not silence that.
+local function go_owner_field(go, method)
+	local own = go and go.is_inventory_owner
+	if (own) then
+		local ok, yes = pcall(own, go)
+		if (ok and not yes) then return nil end
+	end
+	return go_field(go, method)
+end
+
+function go_community(go) return go_owner_field(go, "character_community") end
+function go_profile(go) return go_owner_field(go, "profile_name") end
 function go_section(go) return go_field(go, "section") end
-function go_name(go) return go_field(go, "character_name") or go_field(go, "name") end
+function go_name(go) return go_owner_field(go, "character_name") or go_field(go, "name") end
 
 local function se_field(se, method)
 	local f = se and se[method]
@@ -327,9 +345,99 @@ function se_alive(se)
 	return false
 end
 
+-- ============================================================================ characters
+-- { character = "id" } names a character of the graph's own module by its asset,
+-- { character = "module.id" } one another module ships. XFined Editor generates both the
+-- spawn section and the profile of a character as "<module>_<id>": a stalker spawn.npc
+-- created carries that section, one placed in a level that profile - either identifies it.
+function character_key(ctx, name)
+	if (type(name) ~= "string" or name == "") then return nil end
+	local mod, id = string.match(name, "^(.+)%.([%w_]+)$")
+	if not (mod) then
+		mod = ctx and ((ctx.def and ctx.def.module) or string.match(tostring(ctx.uid), "^(.-)%.")) or nil
+		id = name
+	end
+	if not (mod) then return nil end
+	return tostring(mod) .. "_" .. tostring(id)
+end
+
+local function se_section(se)
+	local ok, name = pcall(se.section_name, se)
+	return ok and name or nil
+end
+
+local function se_is_character(se, key)
+	return se_section(se) == key or se_profile(se) == key
+end
+
+local function go_is_character(go, key)
+	return go_section(go) == key or go_profile(go) == key
+end
+
+-- Every character in the registry, one walk for all of them, kept for a few seconds: a
+-- condition polled every 250 ms on a character that is not in the world yet must not walk
+-- 65k slots each time. spawn.npc drops it, so a character it just made is found at once.
+local character_index = nil
+local CHARACTER_INDEX_MS = 10000
+
+function character_forget()
+	character_index = nil
+end
+
+local function character_index_build()
+	local ids = {}
+	local function add(key, se)
+		if not (key) then return end
+		local rec = ids[key] or {}
+		ids[key] = rec
+		if (se_alive(se)) then rec.alive = rec.alive or se.id else rec.dead = rec.dead or se.id end
+	end
+	for _, se in ipairs(alife_scan(function(s) return se_profile(s) ~= nil end)) do
+		local sect, prof = se_section(se), se_profile(se)
+		add(sect, se)
+		if (prof ~= sect) then add(prof, se) end
+	end
+	character_index = { at = real_ms(), ids = ids }
+end
+
+-- The object id of a character: the living one first, the body when the story left only that.
+function character_id(ctx, name)
+	local key = character_key(ctx, name)
+	if not (key) then return nil end
+	-- online first: no registry walk while the NPC stands near the player
+	if (db and db.storage) then
+		local body
+		for _, st in pairs(db.storage) do
+			local go = st and st.object
+			if (go and go_is_character(go, key)) then
+				local alive = go.alive and go:alive()
+				if (alive) then return go:id() end
+				body = body or go:id()
+			end
+		end
+		if (body) then return body end
+	end
+	local function lookup()
+		local rec = character_index and character_index.ids[key]
+		if not (rec) then return nil end
+		for _, id in ipairs({ rec.alive or false, rec.dead or false }) do
+			local se = id and se_by_id(id)
+			if (se and se_is_character(se, key)) then return id end
+		end
+		return nil
+	end
+	local id = lookup()
+	if (id) then return id end
+	if (not character_index or real_ms() - character_index.at > CHARACTER_INDEX_MS) then
+		character_index_build()
+		id = lookup()
+	end
+	return id
+end
+
 -- ============================================================================ npc refs (§8)
--- npc_ref = {story=} | {ref=} | {profile=} | {community=, level=?}
--- Resolution order: ref -> story -> first online NPC by profile/community.
+-- npc_ref = {story=} | {ref=} | {character=} | {profile=} | {community=, level=?}
+-- Resolution order: ref -> story -> character -> first online NPC by profile/community.
 
 -- A ref by name. A behaviour instance sees what its caller made: its own refs
 -- first, then the caller's, up the chain - so a graph can walk to "the case the
@@ -360,6 +468,7 @@ function ref_object_id(ctx, ref)
 		return r and r.id or nil
 	end
 	if (ref.story) then return id_by_story(ref.story) end
+	if (ref.character) then return character_id(ctx, ref.character) end
 	if (ref.id) then return ref.id end
 	return nil
 end
@@ -369,7 +478,8 @@ local function first_online_npc(fn)
 	if not (db and db.storage) then return nil end
 	for id, st in pairs(db.storage) do
 		local go = st and st.object
-		if (go and go.alive and go:alive() and IsStalker and IsStalker(go)) then
+		-- alive() logs an engine error on anything that is not an entity: the class goes first
+		if (go and IsStalker and IsStalker(go) and go.alive and go:alive()) then
 			if (fn(go)) then return go end
 		end
 	end
@@ -417,6 +527,12 @@ function npc_matches(ctx, ref, go)
 		-- Fallback: the story registry may lag behind; compare ids.
 		return id_by_story(ref.story) == id
 	end
+	if (ref.character) then
+		local key = character_key(ctx, ref.character)
+		if not (key) then return false end
+		if (is_rec) then return go.section == key or go.profile == key end
+		return go_is_character(go, key)
+	end
 	if (ref.profile) then
 		local p = is_rec and go.profile or go_profile(go)
 		return p == ref.profile
@@ -437,6 +553,10 @@ function resolve_target_id(ctx, ref)
 	if (ref.smart) then
 		local smart = smart_by_name(ref.smart)
 		return smart and smart.id or nil
+	end
+	if (ref.restrictor) then
+		local se = restrictor_se(ctx, ref.restrictor)
+		return se and se.id or nil
 	end
 	local id = ref_object_id(ctx, ref)
 	if (id) then return id end
@@ -500,6 +620,17 @@ function restrictor_se(ctx, name)
 	end
 	if (se) then cache[name] = se.id end
 	return se
+end
+
+-- The name a smart cover of the level is registered under (se_smart_cover): as written,
+-- or the module's own "<module>.<name>" the spawn composer gave it. nil when there is none.
+function smart_cover_name(ctx, name)
+	local reg = se_smart_cover and se_smart_cover.registered_smartcovers
+	if not (reg and type(name) == "string" and name ~= "") then return nil end
+	if (reg[name]) then return name end
+	local mod = module_of(ctx)
+	if (mod and reg[mod .. "." .. name]) then return mod .. "." .. name end
+	return nil
 end
 
 -- The online object, when there is one: only it can answer :inside().

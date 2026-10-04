@@ -11,6 +11,8 @@ engine refuses writes into module folders by code. The only thing the game
 writes because of modules is its own bookkeeping under `_appdata_`
 (`xms_registry.ltx`, `xms_report.json`, caches).
 
+Spawn ids: every module holds a range of ids for the objects its spawn layers add, `[budget] spawns` long (256 by default). The range is taken once and kept in `xms_registry.ltx`, so the ids of objects already in saves never move. A module that raises its budget later grows in place when no other module's range follows it; otherwise the log says it cannot grow, and only the ids it really holds are used (the rest of its objects are not created).
+
 ```
 <game root>/modules/<mod.id>/
   mod.ltx            ; manifest: [module] id/name/version, [requires], [order]
@@ -28,6 +30,13 @@ writes because of modules is its own bookkeeping under `_appdata_`
   spawn/*.xspawn     ; additive spawn ops:
                      ;   [obj:my_guard]  op=add section=... level=... position=x,y,z
                      ;   [obj:base:<level>/<name>]  op=modify|remove ...
+                     ;   an add op carries what the section cannot: visual,
+                     ;   fixed_bones, shapes, smart_cover (an animpoint's
+                     ;   description), a hanging lamp's light (lamp_flags,
+                     ;   lamp_color, lamp_light = brightness,range,cone,size,
+                     ;   lamp_bones = main,ambient, lamp_ambient, lamp_glow,
+                     ;   lamp_volumetric, lamp_animator, lamp_texture,
+                     ;   lamp_health), custom_data, story_id
                      ; add-ops reach EXISTING playthroughs too: a loaded save
                      ; composes the registry the same way, and objects this
                      ; playthrough never saw are instantiated once, recorded
@@ -306,6 +315,13 @@ once.
   root recursively for `*.nqasset`. Quests are gated by `mode=` like the rest of
   a module's content, and a quest reaches an EXISTING save as soon as the module
   is installed.
+- **Global variables**: `mod.ltx` `[vars]` (`name = default`: `true`/`false`, a number, or a
+  string, quoted when it has to be) declares values every quest and behaviour graph of the
+  module shares - `global.set`, `global.add`, the `global` condition, `{global:name}` in a text,
+  `nq.global()` in Lua. The runtime reads the section when it scans the module
+  (`xms_nq_load.parse_globals`), keeps the values in its blob and gives a name its default once,
+  so a save keeps what the quests made of them and a variable a module update adds starts from
+  its default. `nq globals [module]` prints them; an undeclared name is `E030`.
 - New node kinds come from `gamedata/configs/nq/kinds/<mod>.ltx` plus
   implementations registered in `scripts/register.script` through
   `xms.registry.get("nq.kinds")`.
@@ -472,8 +488,13 @@ direction = 0,1.57,0      ; the actor's heading, like any op's direction
 ```
 
 On a new game the actor spawns there - one level load, no teleport - and the
-faction start the new-game screen asks for is dropped once. The first module
-that places a start wins; a second one is logged as a conflict and ignored.
+faction start the new-game screen asks for never happens. The game's faction
+script (`ui_mm_faction_select`) asks for that jump on every update until the
+level changes; `xms_world.script` holds it while a module's start stands (the
+engine drops one that still gets through, until the start settles), and without
+a start it lets the first request go and holds the repeats of a refused one. On
+`fake_start` nothing is held - there the jump is the way into the game. The first
+module that places a start wins; a second one is logged as a conflict and ignored.
 
 **The start kit** replaces what the new-game screen hands out - the faction's
 loadout, the extra kits and, when the author says so, the perks:
@@ -547,6 +568,38 @@ kinds (NQ_RUNTIME.md section 16). Lua: `xms.world` (`keep`, `set_rule`,
 `close|open <level>`, `area_add|area_remove <level>`,
 `rule <key> keep|remove|clear` change it.
 
+### Traders of a module's characters
+
+A character XFined Editor builds may keep a shop: what it sells and buys, its stock and its
+prices, written in the character's `.npcasset` as `trade = { ... }`. The build turns it into the
+game's own trade format and names it in the character's spawn section:
+
+```ini
+[my_mod_barkeep]:stalker
+character_profile = my_mod_barkeep
+xms_trade         = misc\trade\my_mod\barkeep.ltx
+```
+
+- The config is the stock one `trade_manager.script` reads - `[trader]` with the buy and sell
+  conditions, `buy_supplies` and `discounts` - under `configs\misc\trade\<module>\<id>.ltx`, a
+  folder of the module's own. What the trader does not sell or buy is switched off item by item
+  (a bare key), category by category of `trade_presets.ltx`; its stock is always for sale; the
+  prices go through `discounts`, the scale the game's own traders use over the single-item
+  factors of the presets.
+- **Any logic, one shop.** The stock logic takes a trader's config from the logic the NPC runs
+  (`[logic] trade = ...`) and falls back to `trade_generic.ltx`, and the logic a module hands an
+  NPC - a standing order, a behaviour step, a smart terrain's job - never carries that line.
+  `xms_characters.script` therefore wraps `trade_manager.trade_init`: an NPC whose section, or
+  whose profile (a stalker placed in a level with the character's profile), has `xms_trade`
+  trades from that config whatever logic started the trade. Everybody else is untouched, so a
+  game without such characters behaves exactly as before.
+- The talk window's Trade button stays the stock one (`xr_meet`'s `trade_enable`).
+- **Restock on an event.** The stock restocks by time only: the trade manager keeps a resupply
+  clock per NPC id in the actor's storage (`<id>_resupply_time`) and rolls the stock anew at the
+  first trade after `resupply_timeout`. The NQ action `trade.restock` (`xms_characters.restock`)
+  clears that clock, so the next trade restocks at once - a quest ties a shop's refresh to a
+  night that begins or a caravan that came, and the restock hours stay a fallback.
+
 ### PDA layouts - a module's own PDA interface
 
 A module can give the PDA its own screens: pages, buttons, lists, menus, and a slot for
@@ -600,6 +653,48 @@ layout = pda\app.pdaasset     ; a .pdaasset inside the module
   (its own textures_descr, or a file under `textures\`).
 - Dead Air's fonts: `letterica25` is the 16 px texture, the big ones are `graffiti19/22/
   32/50`; `—` and `–` draw blank, `→`, `★`, `×` are not in cp1251.
+
+### Console commands
+
+A module can add console commands of its own: a status line for the player, a switch for its
+author, a cheat for its testers. Each one is a line of `[commands]`; the function it calls lives
+in the module's own scripts (`gamedata\scripts\<script>.script`), details go into an optional
+`[command.<name>]` section:
+
+```ini
+[commands]
+od_status   = od_cmd.status         ; <name> = <script>.<function>
+od_league   = od_cmd.league
+
+[command.od_league]
+help  = "Achievements of the league; open ones only with open"  ; the console's help line
+args  = [open]                       ; what it takes: shown by help and as the hint while typing
+cheat = false                        ; true: runs only in debug mode (-dbg)
+```
+
+- The engine registers them as real console commands while the game starts, after every stock
+  command, in module load order: `help` lists them, Tab completes them, a key can be bound to
+  one. A name is `a-z`, `0-9` and `_`. A name the game already has, or that a module earlier in
+  the load order took, is refused with one log line (`! XMS: module [<id>] console command
+  [<name>] refused - ...`) and the game's or the first module's command stays; so is a function
+  that is not `<script>.<function>` and a `[command.<name>]` without a `[commands]` line. A
+  disabled module adds none. Nothing of them is written to `user.ltx`.
+- `od_league open` calls `od_cmd.league("open", "<module id>", "od_league")`: the text after the
+  name as typed (`""` when there is none), the module id and the command name. The script loads
+  on first use; only a function of the script itself counts, not a global it falls back to. A
+  string or number the function returns is printed into the console line by line; text may be
+  UTF-8 or cp1251. `xms.command_args(text)` splits the text into words, `"..."` keeping a phrase
+  together (feature-test `xms.commands_api`).
+- A Lua error never reaches the game: the console prints it with the Lua stack under it and the
+  game runs on. The function runs as the module's script, not as the player: a console command
+  it runs itself is checked like any script's in protected mode (MOD_CATALOG 9.2). A command
+  that runs itself through the console again is stopped eight levels deep.
+- `cheat = true` runs only in Dead Air's debug mode - `DEV_DEBUG`, set by `-dbg` on the command
+  line and switched by the debug menu; otherwise the console says so and nothing runs.
+- `help` may be a string table id as well as text.
+- The commands belong to the session, not to a save: they exist while the module is installed
+  and enabled - in every game and in the main menu - so a function checks itself whether its
+  world is there (`db.actor`, `xms.mode_active`) and says so when it is not.
 
 ## Content bundles
 

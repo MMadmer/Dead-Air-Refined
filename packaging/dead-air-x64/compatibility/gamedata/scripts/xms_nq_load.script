@@ -414,15 +414,24 @@ local function valid_npc_ref(v)
 	if (type(v) ~= "table") then return false end
 	if (type(v.story) == "string") then return true end
 	if (type(v.ref) == "string") then return true end
+	if (type(v.character) == "string" and v.character ~= "") then return true end
 	if (type(v.profile) == "string") then return true end
 	if (type(v.community) == "string") then return true end
 	return false
 end
 
+-- A target may also be a place: a restrictor by name, or a point the task anchors a
+-- space_restrictor on (xms_nq_task target_object_id) - the same forms the editor offers.
 local function valid_target_ref(v)
 	if (type(v) ~= "table") then return false end
 	if (valid_npc_ref(v)) then return true end
 	if (type(v.smart) == "string") then return true end
+	if (type(v.restrictor) == "string") then return true end
+	if (type(v.pos) == "table") then
+		local p = v.pos
+		local x, y, z = tonumber(p[1] or p.x), tonumber(p[2] or p.y), tonumber(p[3] or p.z)
+		return x ~= nil and y ~= nil and z ~= nil and (v.level == nil or type(v.level) == "string")
+	end
 	return false
 end
 
@@ -433,10 +442,11 @@ local function valid_squad_ref(v)
 	return type(v.story) == "string" or type(v.ref) == "string"
 end
 
--- One concrete world object (item, container, squad): the same two alternatives as squad_ref,
--- kept as its own type because the editor pickers and the docs describe it as "this object",
--- not "this squad".
+-- One concrete world object (item, container, squad, a character): the alternatives of
+-- squad_ref plus a character - one person, so one object - kept as its own type because the
+-- editor pickers and the docs describe it as "this object", not "this squad".
 local function valid_object_ref(v)
+	if (type(v) == "table" and type(v.character) == "string" and v.character ~= "") then return true end
 	return valid_squad_ref(v)
 end
 
@@ -492,6 +502,7 @@ local function valid_destination(v)
 	if (type(v) ~= "table") then return false end
 	if (type(v.path) == "string" and v.path ~= "") then return true end
 	if (type(v.story) == "string" and v.story ~= "") then return true end
+	if (type(v.character) == "string" and v.character ~= "") then return true end
 	if (type(v.role) == "string" and v.role ~= "") then return true end
 	return valid_place(v)
 end
@@ -631,7 +642,7 @@ local function canon_param(st, node, slot, p, v, kind)
 		if not (valid_duration(v)) then return nil, false, "must be {seconds=N} | {game_minutes=N} | {game_hours=N}" end
 		return util.copy(v), true
 	elseif (t == "npc_ref") then
-		if not (valid_npc_ref(v)) then return nil, false, "must be {story=} | {ref=} | {profile=} | {community=[, level=]}" end
+		if not (valid_npc_ref(v)) then return nil, false, "must be {story=} | {ref=} | {character=} | {profile=} | {community=[, level=]}" end
 		return util.copy(v), true
 	elseif (t == "target_ref") then
 		if not (valid_target_ref(v)) then return nil, false, "must be an npc_ref, {ref=} or {smart=}" end
@@ -644,7 +655,7 @@ local function canon_param(st, node, slot, p, v, kind)
 		if not (ok) then return nil, false, why end
 		return util.copy(v), true
 	elseif (t == "destination") then
-		if not (valid_destination(v)) then return nil, false, "must be {path=} | {ref=} | {story=} | {role=} | {smart=} | {restrictor=} | {level=, pos={x,y,z}} | {actor=true, distance=}" end
+		if not (valid_destination(v)) then return nil, false, "must be {path=} | {ref=} | {story=} | {character=} | {role=} | {smart=} | {restrictor=} | {level=, pos={x,y,z}} | {actor=true, distance=}" end
 		return util.copy(v), true
 	elseif (t == "spawn_spec") then
 		if not (valid_spawn_spec(v)) then return nil, false, "must be {section=, smart=, ref=, hold=, place=, restrictor=, spread=0..1}" end
@@ -653,7 +664,7 @@ local function canon_param(st, node, slot, p, v, kind)
 		if not (valid_squad_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
 		return util.copy(v), true
 	elseif (t == "object_ref") then
-		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
+		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=} | {character=}" end
 		return util.copy(v), true
 	elseif (t == "item_list") then
 		local state_ok = (kind == "item.spawn")
@@ -681,9 +692,9 @@ local function canon_param(st, node, slot, p, v, kind)
 		if (type(v) ~= "string" or not is_ident(v)) then return nil, false, "must be an objective id of the task" end
 		return v, true
 	elseif (t == "kill_target") then
-		if (type(v) ~= "table") then return nil, false, "must be {story=} | {ref=} | {spawn={section=, smart=, ref=}}" end
+		if (type(v) ~= "table") then return nil, false, "must be {story=} | {ref=} | {character=} | {spawn={section=, smart=, ref=}}" end
 		if (v.spawn ~= nil and not valid_spawn_spec(v.spawn)) then return nil, false, "spawn must be {section=, smart=, ref=, hold=}" end
-		if (v.spawn == nil and not valid_squad_ref(v)) then return nil, false, "must be {story=} | {ref=} | {spawn=...}" end
+		if (v.spawn == nil and not valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=} | {character=} | {spawn=...}" end
 		return util.copy(v), true
 	elseif (t == "value") then
 		local tv = type(v)
@@ -747,7 +758,7 @@ local function canon_param(st, node, slot, p, v, kind)
 		end
 		return out, true
 	elseif (t == "role_or_actor" or t == "attack_target") then
-		if (type(v) ~= "table") then return nil, false, "must be { actor = true }, { role = ... } or an object ({ ref = } | { story = })" end
+		if (type(v) ~= "table") then return nil, false, "must be { actor = true }, { role = ... } or an object ({ ref = } | { story = } | { character = })" end
 		local forms = 0
 		if (v.actor ~= nil) then forms = forms + 1 end
 		if (v.role ~= nil) then
@@ -756,8 +767,8 @@ local function canon_param(st, node, slot, p, v, kind)
 		end
 		if (t == "attack_target") then
 			if (v.community ~= nil) then forms = forms + 1 end
-			if (v.story ~= nil or v.ref ~= nil or v.profile ~= nil) then forms = forms + 1 end
-		elseif (v.story ~= nil or v.ref ~= nil) then
+			if (v.story ~= nil or v.ref ~= nil or v.character ~= nil or v.profile ~= nil) then forms = forms + 1 end
+		elseif (v.story ~= nil or v.ref ~= nil or v.character ~= nil) then
 			-- something to walk after: a ref the caller spawned, or an object of the level
 			forms = forms + 1
 		end
@@ -1043,6 +1054,9 @@ local function scan_refs(st, node, spec, params, tasks_hint)
 				st.ref_users[#st.ref_users + 1] = { name = v.ref, node = node, slot = "param:" .. p.name }
 			elseif (p.type == "var_name" and type(v) == "string") then
 				st.var_users[#st.var_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
+			elseif (p.type == "global_name" and type(v) == "string") then
+				-- checked once every module's declarations are read (check_quest_refs)
+				st.global_users[#st.global_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
 			elseif (p.type == "task_id" and type(v) == "string") then
 				st.task_users[#st.task_users + 1] = { name = v, node = node, slot = "param:" .. p.name }
 			elseif (p.type == "objective_id" and type(v) == "string") then
@@ -1367,8 +1381,9 @@ function build(raw, module, relpath, src, kind)
 	local st = {
 		cat = catalog(), problems = {}, used_kinds = {}, ref_creators = {}, ref_users = {},
 		var_users = {}, task_users = {}, objective_users = {}, node_users = {}, quest_users = {},
+		global_users = {},
 	}
-	local q = { module = module, file = relpath, nodes = {}, node_by_id = {}, vars = {}, var_names = {}, tasks = {}, task_names = {}, problems = st.problems, quest_users = st.quest_users, used_kinds = st.used_kinds }
+	local q = { module = module, file = relpath, nodes = {}, node_by_id = {}, vars = {}, var_names = {}, tasks = {}, task_names = {}, problems = st.problems, quest_users = st.quest_users, global_users = st.global_users, used_kinds = st.used_kinds }
 	q.hash = util.fnv1a(src or "")
 	-- E001 / E002 header. Only the future is refused: every released version stays loadable, and
 	-- whatever is not readable as-is has been lifted to NQ_VERSION by migrate() before we get here.
@@ -1632,8 +1647,64 @@ function build(raw, module, relpath, src, kind)
 	return q
 end
 
+-- ============================================================================ global variables
+-- [vars] of a module's manifest: `name = default`, one variable every graph of the module
+-- reads and writes. true / false is a bool, a number a number, anything else a string
+-- (quotes, when written, only delimit it). An empty value is an empty string.
+function parse_globals(text)
+	local defaults, order = {}, {}
+	if (type(text) ~= "string") then return defaults, order end
+	local in_vars = false
+	for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+		line = string.gsub(line, "\r", "")
+		-- a comment starts at ; outside quotes
+		local quoted, cut = false, nil
+		for i = 1, #line do
+			local c = string.sub(line, i, i)
+			if (c == '"') then quoted = not quoted
+			elseif (c == ";" and not quoted) then cut = i break end
+		end
+		if (cut) then line = string.sub(line, 1, cut - 1) end
+		line = string.match(line, "^%s*(.-)%s*$")
+		local section = string.match(line, "^%[([^%]]*)%]")
+		if (section) then
+			in_vars = (string.lower(section) == "vars")
+		elseif (in_vars and line ~= "") then
+			local k, v = string.match(line, "^([%w_]+)%s*=%s*(.-)$")
+			if not (k) then k, v = string.match(line, "^([%w_]+)$"), "" end
+			if (k) then
+				local value
+				if (v == "true") then value = true
+				elseif (v == "false") then value = false
+				elseif (tonumber(v) ~= nil) then value = tonumber(v)
+				else value = string.match(v, '^"(.*)"$') or v end
+				if (defaults[k] == nil) then order[#order + 1] = k end
+				defaults[k] = value
+			end
+		end
+	end
+	return defaults, order
+end
+
+-- "<module>.<name>" or "<name>" (the graph's own module)
+function global_key(module, name)
+	local mod, n = string.match(tostring(name), "^(.+)%.([%w_]+)$")
+	if (mod) then return mod, n end
+	return module, tostring(name)
+end
+
 -- Cross-quest checks once everything is loaded (quest_id references, E030 within own module).
 local function check_quest_refs(all)
+	local function check_globals(q)
+		for _, u in ipairs(q.global_users or {}) do
+			local mod, name = global_key(q.module, u.name)
+			local decl = all.globals and all.globals[mod]
+			-- another module's variable is that module's business: it may not apply to this game
+			if (mod == q.module and not (decl and decl.defaults[name] ~= nil)) then
+				problem(q.problems, "E030", u.node, u.slot, "global variable '%s' is not declared in mod.ltx [vars]", u.name)
+			end
+		end
+	end
 	for uid, q in pairs(all.quests) do
 		for _, u in ipairs(q.quest_users or {}) do
 			local target = u.name
@@ -1643,6 +1714,12 @@ local function check_quest_refs(all)
 				problem(q.problems, "E030", u.node, u.slot, "quest '%s' is not declared in this module", u.name)
 			end
 		end
+		check_globals(q)
+		q.errors, q.warnings = count_problems(q.problems)
+		q.valid = (q.errors == 0)
+	end
+	for uid, q in pairs(all.behaviours or {}) do
+		check_globals(q)
 		q.errors, q.warnings = count_problems(q.problems)
 		q.valid = (q.errors == 0)
 	end
@@ -1721,6 +1798,11 @@ function scan()
 			if (ok2 and r == false) then applies = false end
 		end
 		if (applies) then
+			-- the module's global variables, before any graph that names them is checked
+			local okm, manifest = pcall(xms.read_file, m.id, "mod.ltx")
+			local defaults, names = parse_globals(okm and manifest or nil)
+			all.globals = all.globals or {}
+			all.globals[m.id] = { defaults = defaults, order = names }
 			local counted, seen_ids = false, {}
 			for _, sk in ipairs(SCAN_KINDS) do
 				local ok3, files = pcall(xms.list_files, m.id, "", sk.mask, true)
@@ -1761,6 +1843,19 @@ function scan()
 		end
 	end
 	check_quest_refs(all)
+	-- a behaviour graph that failed it leaves the registry the same way
+	local border = {}
+	for _, uid in ipairs(all.behaviour_order) do
+		local q = all.behaviours[uid]
+		if (q.valid) then
+			border[#border + 1] = uid
+		else
+			all.behaviours[uid] = nil
+			all.invalid[#all.invalid + 1] = q
+			all.invalid_by_uid[uid] = q
+		end
+	end
+	all.behaviour_order = border
 	-- a quest that failed the cross check moves to the invalid list
 	local order = {}
 	for _, uid in ipairs(all.order) do
@@ -1782,7 +1877,7 @@ end
 -- ============================================================================ outline
 local function brief_param_value(v)
 	if (type(v) == "table") then
-		for _, key in ipairs({ "story", "ref", "profile", "community", "smart", "restrictor", "spawn" }) do
+		for _, key in ipairs({ "story", "ref", "character", "profile", "community", "smart", "restrictor", "spawn" }) do
 			if (v[key] ~= nil) then
 				if (key == "spawn") then
 					local s = v.spawn

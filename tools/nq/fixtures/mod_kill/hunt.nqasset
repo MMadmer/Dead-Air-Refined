@@ -1,0 +1,12 @@
+-- objective.kill on a character of the module
+return {
+  nq = 1,
+  id = "hunt",
+  title = "Hunt",
+  activation = "auto",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "kill" } },
+    { id = "kill", kind = "objective.kill", params = { target = { character = "boss" } }, out = { done = "finish" } },
+    { id = "finish", kind = "flow.end" },
+  },
+}

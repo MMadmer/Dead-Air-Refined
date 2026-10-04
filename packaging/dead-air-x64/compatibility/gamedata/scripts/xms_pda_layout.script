@@ -62,7 +62,10 @@ KIND_KEYS = {
 
 local TOP_KEYS = { pda = true, id = true, title = true, canvas = true, start = true,
 	keys = true, device = true, colors = true, styles = true, chrome = true, overlay = true,
-	pages = true, vars = true, preview = true }
+	pages = true, vars = true, preview = true, map_spots = true }
+
+local SPOT_KEYS = { icon = true, rect = true, color = true, size = true, heading = true, level = true, arrows = true, inner = true }
+local INNER_KEYS = { icon = true, color = true, size = true, x = true, y = true }
 
 local PAGE_KEYS = { id = true, title = true, widgets = true, stock = true }
 
@@ -871,6 +874,60 @@ function normalize(asset, opts)
 	end
 	if (st.map_actions and not st.map_path) then
 		add_problem(st, "E308", "", "map: actions need a map widget in the layout")
+	end
+
+	-- The look of the game's map spots while the module is on: a stock spot node of
+	-- ui\map_spots.xml by name -> an icon, its colour and size, an icon drawn inside it.
+	-- The game never reads this table: the editor's build writes it as an xml patch.
+	out.map_spots = {}
+	if (asset.map_spots ~= nil and type(asset.map_spots) ~= "table") then
+		add_problem(st, "E323", "map_spots", "map_spots is { <spot node> = { icon, color, size, ... } }")
+	end
+	local spot_names = {}
+	for k in pairs(type(asset.map_spots) == "table" and asset.map_spots or {}) do spot_names[#spot_names + 1] = k end
+	table.sort(spot_names, function(a, b) return tostring(a) < tostring(b) end)
+	for _, name in ipairs(spot_names) do
+		local d, path = asset.map_spots[name], "map_spots." .. tostring(name)
+		if not (is_ident(name)) or type(d) ~= "table" or type(d.icon) ~= "string" or d.icon == "" then
+			add_problem(st, "E323", path, "a spot is a stock spot node name = { icon = texture, ... }")
+		else
+			for k in pairs(d) do
+				if not (SPOT_KEYS[k]) then add_problem(st, "W324", path, "'%s' means nothing to a map spot", tostring(k)) end
+			end
+			local size = tonumber(d.size) or 24
+			if (size < 4 or size > 128) then
+				add_problem(st, "E323", path .. ".size", "size is 4..128")
+				size = 24
+			end
+			local rec = { name = name, icon = d.icon, color = color_of(st, path, d.color, "color", 0xFFFFFFFF), size = size,
+				heading = d.heading == true, level = math.floor(tonumber(d.level) or 5),
+				arrows = type(d.arrows) == "string" and d.arrows or nil }
+			-- a piece of a texture file: { x, y, w, h } in its pixels
+			if (d.rect ~= nil) then
+				local r = d.rect
+				local rx, ry, rw, rh = type(r) == "table" and tonumber(r[1] or r.x), type(r) == "table" and tonumber(r[2] or r.y),
+					type(r) == "table" and tonumber(r[3] or r.w), type(r) == "table" and tonumber(r[4] or r.h)
+				if (rx and ry and rw and rh and rw > 0 and rh > 0) then
+					rec.rect = { x = rx, y = ry, w = rw, h = rh }
+				else
+					add_problem(st, "E323", path .. ".rect", "rect is { x, y, w, h } of the texture, w and h above 0")
+				end
+			end
+			if (d.inner ~= nil) then
+				local i = d.inner
+				if (type(i) ~= "table" or type(i.icon) ~= "string" or i.icon == "") then
+					add_problem(st, "E323", path .. ".inner", "inner is { icon = texture, color, size, x, y }")
+				else
+					for k in pairs(i) do
+						if not (INNER_KEYS[k]) then add_problem(st, "W324", path .. ".inner", "'%s' means nothing to a map spot", tostring(k)) end
+					end
+					local isz = math.min(tonumber(i.size) or math.floor(size * 0.5), size)
+					rec.inner = { icon = i.icon, color = color_of(st, path .. ".inner", i.color, "color", 0xFFFFFFFF), size = isz,
+						x = tonumber(i.x) or (size - isz) / 2, y = tonumber(i.y) or (size - isz) / 2 }
+				end
+			end
+			out.map_spots[#out.map_spots + 1] = rec
+		end
 	end
 
 	out.lists = st.lists

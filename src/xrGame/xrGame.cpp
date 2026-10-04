@@ -11,6 +11,7 @@
 
 #include "GamePersistent.h"
 #include "object_factory.h"
+#include "xms_game.h"
 
 #include "xrEngine/xr_level_controller.h"
 #include "xrEngine/profiler.h"
@@ -56,6 +57,8 @@ void xrGameModule::initialize(Factory_Create*& pCreate, Factory_Destroy*& pDestr
     StringTable().Init();
     // keyboard binding
     CCC_RegisterInput(); // XXX: Move to xrEngine
+    // last: every stock command exists now, so a module's command can only take a free name
+    XmsGame::RegisterModuleCommands();
 #ifdef DEBUG
     g_profiler = xr_new<CProfiler>();
 #endif
@@ -75,6 +78,7 @@ void xrGameModule::initialize(Factory_Create*& pCreate, Factory_Destroy*& pDestr
 
 void xrGameModule::finalize()
 {
+    XmsGame::UnregisterModuleCommands();
     xr_delete(UIStyles);
     StringTable().Destroy();
     CCC_DeregisterInput(); // XXX: Remove if possible

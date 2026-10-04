@@ -1145,6 +1145,18 @@ K["var.add"] = {
 	end,
 }
 
+-- the module's global variables: one value every graph of the module sees
+K["global.set"] = {
+	run = function(ctx, p) core.set_global(ctx, p.name, p.value) end,
+}
+
+K["global.add"] = {
+	run = function(ctx, p)
+		local cur = tonumber(core.get_global(ctx, p.name)) or 0
+		core.set_global(ctx, p.name, cur + (tonumber(p.delta) or 0))
+	end,
+}
+
 K["signal.send"] = {
 	run = function(ctx, p)
 		core.emit({ name = "signal", signal = p.name, module = ctx.def and ctx.def.module, quest = ctx.uid })
@@ -1245,6 +1257,10 @@ end
 
 K["var"] = {
 	test = function(ctx, p) return compare(p.op or "eq", core.get_var(ctx.uid, p.name), p.value) end,
+}
+
+K["global"] = {
+	test = function(ctx, p) return compare(p.op or "eq", core.get_global(ctx, p.name), p.value) end,
 }
 
 K["node_done"] = {
@@ -1380,7 +1396,7 @@ K["event.npc_killed"] = {
 	test = function(ctx, p, evt)
 		if (p.by_actor and not evt.by_actor) then return false end
 		if (p.who == nil) then return true end
-		return util.npc_matches(ctx, p.who, { id = evt.id, story = evt.story, profile = evt.profile, community = evt.community })
+		return util.npc_matches(ctx, p.who, { id = evt.id, story = evt.story, profile = evt.profile, section = evt.section, community = evt.community })
 	end,
 }
 

@@ -1,0 +1,32 @@
+[module]
+id      = cmd_qa
+name    = Console commands acceptance test module
+version = 1.0.0
+api     = 1
+
+; -Scenario Commands (MODDING.md, "Console commands"). The engine registers these at the
+; start; the probe runs them, the runner wants the refusals below in the log.
+[commands]
+cmdqa_echo    = cmdqa.echo
+cmdqa_fail    = cmdqa.fail
+cmdqa_cheat   = cmdqa.cheat
+cmdqa_loop    = cmdqa.loop
+cmdqa_missing = cmdqa.no_such_function
+; refused: the game has a command of that name
+xms_list      = cmdqa.echo
+; refused: not a console command name
+Bad-Name      = cmdqa.echo
+; refused: not <script>.<function>
+cmdqa_badfn   = cmdqa
+
+[command.cmdqa_echo]
+help    = "Echo for the QA probe; returns what it got"
+args    = <words>
+
+[command.cmdqa_cheat]
+help    = Cheat for the QA probe
+cheat   = true
+
+; refused: no line in [commands]
+[command.cmdqa_ghost]
+help    = nobody declares it
