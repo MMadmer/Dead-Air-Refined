@@ -48,6 +48,9 @@ extern u32 dm_current_cache_size;// = dm_current_cache_line*dm_current_cache_lin
 extern float dm_current_fade;// = float(2*dm_current_size)-.5f;
 extern float ps_current_detail_density;
 extern float ps_current_detail_height;
+// Shares of the details the current season leaves: grass density, grass height, shrub density,
+// shrub height (DetailManager.cpp).
+Fvector4 detail_season_grass();
 
 class ECORE_API CDetailManager
 {
@@ -313,6 +316,10 @@ public:
     struct MeshPath;
     MeshPath* m_mesh{};
     bool m_mesh_frame{};
+    // The season's shares this manager was built with (detail_season_grass): another season rebuilds it.
+    Fvector4 m_season_grass{ 1.f, 1.f, 1.f, 1.f };
+    // Woody details of the level by object index, which keep the shrub shares.
+    xr_vector<bool> m_shrub;
     void ms_Load();
     void ms_Unload();
     bool ms_Latch();

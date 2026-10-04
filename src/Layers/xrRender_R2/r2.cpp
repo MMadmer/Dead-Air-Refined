@@ -1137,6 +1137,18 @@ void CRender::OnFrame()
 
     // r__season moved: what it changes reloads before this frame binds anything.
     Resources->SyncTextureSeason();
+    // The grass follows the season too: another density or height share rebuilds the details, the
+    // way a changed density does on vid_restart.
+    const Fvector4 season_grass = detail_season_grass();
+    const Fvector4& built_grass = Details ? Details->m_season_grass : season_grass;
+    if (b_loaded && Details && (!fsimilar(built_grass.x, season_grass.x) || !fsimilar(built_grass.y, season_grass.y) ||
+        !fsimilar(built_grass.z, season_grass.z) || !fsimilar(built_grass.w, season_grass.w)))
+    {
+        Details->Unload();
+        xr_delete(Details);
+        Details = xr_new<CDetailManager>();
+        Details->Load();
+    }
 
 #if defined(USE_DX11)
     ProcessGamesaveScreenshots();

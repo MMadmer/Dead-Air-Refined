@@ -120,6 +120,8 @@ void CDetailManager::cache_Decompress(Slot* S)
     // The wave group of each blade, per slot like the rest, so a slot looks the same in every
     // session and after every re-decompression.
     CRandom r_wave(0x7A3C95E1 ^ p_rnd);
+    // The season's thinning, per slot like the rest.
+    CRandom r_season(0x5EA50A11 ^ p_rnd);
 
     // Prepare to actual-bounds-calculations
     Fbox Bounds;
@@ -178,7 +180,15 @@ void CDetailManager::cache_Decompress(Slot* S)
             u32 index = selected[0];
 #endif
 
-            CDetail* Dobj = objects[DS.r_id(index)];
+            const u32 object_id = DS.r_id(index);
+            CDetail* Dobj = objects[object_id];
+            // The season keeps a share of the grass and of the shrubs: none of the grass under winter
+            // snow, the shrubs standing. Drawn for every item, so a slot thins the same way each time.
+            const bool shrub = object_id < m_shrub.size() && m_shrub[object_id];
+            const float keep = shrub ? m_season_grass.z : m_season_grass.x;
+            const float season_height = shrub ? m_season_grass.w : m_season_grass.y;
+            if (r_season.randF() >= keep)
+                continue;
             SlotItem* ItemP = poolSI.create();
             SlotItem& Item = *ItemP;
 
@@ -239,7 +249,7 @@ void CDetailManager::cache_Decompress(Slot* S)
 
 // Angles and scale
 #ifndef DBG_SWITCHOFF_RANDOMIZE
-            Item.scale = r_scale.randF(Dobj->m_fMinScale * 0.5f, Dobj->m_fMaxScale * 0.9f) * ps_current_detail_height;
+            Item.scale = r_scale.randF(Dobj->m_fMinScale * 0.5f, Dobj->m_fMaxScale * 0.9f) * ps_current_detail_height * season_height;
 #else
             Item.scale = (Dobj->m_fMinScale * 0.5f + Dobj->m_fMaxScale * 0.9f) / 2;
 // Item.scale	= 0.1f;

@@ -7,6 +7,7 @@
 
 #include "DetailManager.h"
 #include "xrCDB/Intersect.hpp"
+#include "xrEngine/da_season.h"
 
 #include <thread>
 
@@ -98,6 +99,37 @@ void CDetailManager::SSwingValue::lerp(const SSwingValue& A, const SSwingValue& 
 }
 //---------------------------------------------------
 
+// What the current season leaves of the details, as shares of the preset's density and the
+// player's height: dead_air_x64_details.ltx [season_grass] <season folder> = <grass density>,
+// <grass height>, <shrub density>, <shrub height>. Shrubs are the woody details a level lists in
+// [season_shrubs]; they stand through the winter that lays the grass flat. Full details when the
+// file or the line is missing. Asked every frame, read once per season (the folder names are one
+// static table, so the pointer tells the season).
+Fvector4 detail_season_grass()
+{
+    static pcstr cached_season = nullptr;
+    static Fvector4 cached{ 1.f, 1.f, 1.f, 1.f };
+    pcstr season = da_season_folder();
+    if (season == cached_season)
+        return cached;
+    cached_season = season;
+    cached.set(1.f, 1.f, 1.f, 1.f);
+    if (!season || !FS.exist("$game_config$", "dead_air_x64_details.ltx"))
+        return cached;
+    string_path fn;
+    FS.update_path(fn, "$game_config$", "dead_air_x64_details.ltx");
+    CInifile ini(fn, TRUE);
+    if (ini.line_exist("season_grass", season))
+    {
+        cached = ini.r_fvector4("season_grass", season);
+        clamp(cached.x, 0.f, 1.f);
+        clamp(cached.y, 0.1f, 1.f);
+        clamp(cached.z, 0.f, 1.f);
+        clamp(cached.w, 0.1f, 1.f);
+    }
+    return cached;
+}
+
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
@@ -126,6 +158,8 @@ CDetailManager::CDetailManager() : xrc("detail manager")
     dm_fade = dm_current_fade;
     ps_r__Detail_density = ps_current_detail_density;
     ps_current_detail_height = ps_r__Detail_height;
+    // The season thins and shortens the slots' items on top of these (cache_Decompress).
+    m_season_grass = detail_season_grass();
     cache_task.reserve(dm_cache_size);
     cache_level1 = (CacheSlot1**)xr_malloc(dm_cache1_line * sizeof(CacheSlot1*));
     for (u32 i = 0; i < dm_cache1_line; ++i)
@@ -219,6 +253,38 @@ void CDetailManager::Load()
         S->close();
     }
     m_fs->close();
+
+    // The level's woody details by object index (dead_air_x64_details.ltx [season_shrubs] <level> =
+    // i, j, ...): they keep the season's shrub shares.
+    m_shrub.assign(objects.size(), false);
+    if (FS.exist("$game_config$", "dead_air_x64_details.ltx"))
+    {
+        FS_Path* level_path = nullptr;
+        string_path level{};
+        if (FS.get_path("$level$", &level_path) && level_path->m_Add)
+        {
+            xr_strcpy(level, level_path->m_Add);
+            size_t length = xr_strlen(level);
+            while (length && (level[length - 1] == '\\' || level[length - 1] == '/'))
+                level[--length] = 0;
+            if (pcstr last = strrchr(level, '\\'))
+                memmove(level, last + 1, xr_strlen(last + 1) + 1);
+        }
+        string_path ltx;
+        FS.update_path(ltx, "$game_config$", "dead_air_x64_details.ltx");
+        CInifile ini(ltx, TRUE);
+        if (level[0] && ini.line_exist("season_shrubs", level))
+        {
+            pcstr list = ini.r_string("season_shrubs", level);
+            string16 item;
+            for (u32 i = 0, n = _GetItemCount(list); i < n; ++i)
+            {
+                const int id = atoi(_GetItem(list, i, item));
+                if (id >= 0 && u32(id) < m_shrub.size())
+                    m_shrub[id] = true;
+            }
+        }
+    }
 
     // The trample-rustle grass test classifies details by height (see k_veg_min_height).
     // Dump what this level actually ships so the threshold can be checked against real
