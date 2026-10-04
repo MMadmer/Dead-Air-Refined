@@ -267,6 +267,10 @@ bool texture_resolve_name(pcstr fRName, string_path& fn, bool quiet)
     xr_strcpy(fname, fRName);
     fix_texture_name(fname);
 
+    // The season's own copy goes first, bump maps included (r__season).
+    if (texture_season_overlay(fname, texture_season(), fn))
+        return true;
+
     const bool isBump = strstr(fname, "_bump");
     if (isBump)
     {

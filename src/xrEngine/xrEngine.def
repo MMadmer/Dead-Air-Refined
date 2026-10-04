@@ -1513,3 +1513,4 @@ EXPORTS
     ?feel_vision_retrace@Vision@Feel@@QEAA_NPEBVIGameObject@@AEAU?$_vector3@M@@MMI@Z @1511
     ?feel_vision_transparency@Vision@Feel@@QEBAMPEBVIGameObject@@@Z @1512
     ?o_trace_item@Vision@Feel@@AEAAXAEAUfeel_visible_Item@12@AEAU?$_vector3@M@@MMI@Z @1513
+    ?da_season_folder@@YAPEBDXZ @1514

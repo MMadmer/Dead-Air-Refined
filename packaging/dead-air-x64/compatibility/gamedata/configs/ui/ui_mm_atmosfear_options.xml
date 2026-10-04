@@ -39,6 +39,13 @@
                 <e r="170" g="170" b="170"/>
             </text_color>
 		</btn_event_options>
+		<btn_season_options x="322" y="38" width="135" height="26">
+			<text font="letterica18" align="c">st_cap_af_season_options</text>
+			<texture>ui_inGame2_Mp_bigbuttone</texture>
+            <text_color>
+                <e r="170" g="170" b="170"/>
+            </text_color>
+		</btn_season_options>
 		<btn_moon_options x="322" y="38" width="135" height="26">
 			<text font="letterica18" align="c">st_cap_af_moon_options</text>
 			<texture>ui_inGame2_Mp_bigbuttone</texture>
@@ -594,6 +601,17 @@
 			</text_color>
 		</list_fallout_task>
 	</event_page>
+
+	<season_page>
+		<!-- The seasons page: one row, the season (atmosfear_options.script, af_opt_season). -->
+		<list_season x="330" y="2" width="185" height="20" list_length="6" always_show_scroll="0">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_season>
+	</season_page>
 
 	<weather_page>
 		<!-- The periods page: a row per level (templ_level, its caption cap_level) with the weather of

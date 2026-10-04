@@ -12,8 +12,9 @@ the sets are used unchanged.
 
 | Set | Author | Terms | Used for |
 | --- | --- | --- | --- |
-| **Stalker Two-K** | **Akinaro**, <https://www.moddb.com/mods/stalker-two-k> | Free, S.T.A.L.K.E.R. games only, author notified, credited, no money including donations; not to be modified without notifying the author and telling players about the edits; the author may withdraw the permission | Environment textures: `textures/briks, crete, detail, door, floor, glas, glass, grnd, mtl, prop, roof, ston, tile, veh, wall, water, wind, wood` (2737 files; 2736 unchanged, one recoloured by the Refined project on 05.09.2026: `grnd/grnd_rocks_02.dds` - the moss patches desaturated to an autumn olive and darkened, the rock untouched - see the texture audit row in TEST_MATRIX.md) |
-| **Absolute Nature 4** | **Cromm Cruac** (Marcin Zemczak), <http://absolute.crommcruac.com> | Same four conditions, and modification is allowed | Tree and foliage textures in `textures/trees` (112 files; 55 of them upscaled 1024 -> 2048 by the DeadAir-x64 project; two recoloured by the Refined project on 05.09.2026: `trees_atp_spruce_branch_dry.dds` and `trees_atp_pine_branch_dry.dds` - the dead-branch cards moved from yellow-brown to the dark grey-green of the stock Dead Air textures (Lab mean/spread transfer, HD detail and alpha cutout kept), because Dead Air's spruces mix live and dry cards on one tree and read half yellow - see the texture audit rows in TEST_MATRIX.md) |
+| Environment textures (replace Stalker Two-K since 1.6.0) | Dead Air: Refined | Part of the mod | `textures/briks, crete, detail, door, floor, glas, glass, grnd, mtl, prop, roof, ston, tile, veh, wall, water, wind, wood`: Dead Air's own textures (or GSC's uncompressed CoP SDK sources of the same picture) upscaled 2-4x with Real-ESRGAN x4plus (BSD-3-Clause, a tool; the output is the project's), colour pinned to Dead Air's file at its own texel scale; bump pairs re-encoded the way the SDK does. Where Two-K was not sharper than Dead Air, or had no Dead Air counterpart, Dead Air's own file is used. Not a single Two-K pixel is used |
+| Tree and foliage cards (replace Absolute Nature 4 since 1.6.0) | Dead Air: Refined | Part of the mod | `textures/trees` and the season sets: branches grown procedurally inside the layout of Dead Air's card; leaves from ambientCG LeafSet004/006/007/008/009/012/013/014/016/024 (CC0), needle sprays from Poly Haven `fir_tree_01` and `pine_tree_01` (CC0), bark from ambientCG Bark001/006 (CC0); reeds, sedge, sprouts, forest walls and the bush from GSC's own CoP SDK pictures; colour statistics from Dead Air's cards (and, for summer, from the summer pack shipped with Dead Air - numbers only, no pixels). Absolute Nature is not used, and neither are Dead Air's `trees_atp_*` pictures, which are an older Absolute Nature release |
+| Season sets (1.6.0) | Dead Air: Refined | Part of the mod | `textures/seasons/<winter, spring_early, spring_mid, spring_late, summer>`: the tree cards above in each look, Dead Air's own terrain, grass, LOD atlases and PDA maps recoloured (snow for winter), winter versions of the ground materials. Winter's art direction followed screenshots of "Yet Another Winter Mod" (look only; the mod itself was not used) |
 | Bark upscale | DeadAir-x64 project (from the game's own textures) | Part of the port | Eight bark textures in `textures/trees` |
 | Landing roll sound | Dead Air: Refined (the project's own recording, 05.09.2026) | Part of the mod | `sounds/actor/fall_roll.ogg` - converted to mono 44.1 kHz and given the X-Ray ogg comment by the project |
 | **FDDA 0.9b** (food, drink, drugs, harvest) | **Feel_Fried** | Public Domain | `enhanced_animations.script`, `take_item_anim.script`, `ciga_effects.script`, the `item_ea_*` hud sections, `meshes/dynamics/weapons/wpn_eat`, `meshes/anomaly_weapons/hud_hands_animation/zzzz_ea_*`, `textures/usable_items`, `sounds/interface/item_usage`, `anims/itemuse_anm_effects` |
@@ -26,13 +27,10 @@ the sets are used unchanged.
 
 ## Who has to be notified
 
-The two texture authors make notification a condition of use. Write before the release that
-ships their work:
-
-| Author | Contact | What to say |
-| --- | --- | --- |
-| Akinaro (Stalker Two-K) | **akinaro@onet.eu** (or any other channel) | That Dead Air: Refined includes Stalker Two-K free, for S.T.A.L.K.E.R. only, with credit in the readme and the release notes, and - the condition of the set - that one texture (`grnd_rocks_02`, the moss on the boulders) was recoloured for the mod's autumn palette; the release notes tell players the same |
-| Cromm Cruac (Absolute Nature 4) | **info@crommcruac.com** | That Dead Air: Refined includes the Absolute Nature 4 tree and foliage textures (55 upscaled by the DeadAir-x64 project), free, no donations, for S.T.A.L.K.E.R. only, with credit; and, as a courtesy (the set allows modification), that two textures (`trees_atp_spruce_branch_dry`, `trees_atp_pine_branch_dry`) were recoloured from yellow-brown to Dead Air's grey-green |
+Since 1.6.0 no set in the content bundles asks for a notification: Stalker Two-K and Absolute
+Nature 4 are gone (see the rows above). Up to 1.5.x the bundles still carried them, and their
+authors were written to: Akinaro (Stalker Two-K, akinaro@onet.eu) and Cromm Cruac (Absolute
+Nature 4, info@crommcruac.com).
 
 The animation authors did not ask for a notification; the terms are attribution (MIT and
 Creative Commons require the notice to travel with the work, which this page and the readme
@@ -41,7 +39,11 @@ question come up: lizzardman <https://www.moddb.com/members/lizzardman>, ZeburG
 <https://www.moddb.com/members/zeburg>.
 
 No e-mail address exists for Feel_Fried, themrdemonized, Mirrowel, lizzardman or ZeburG in any
-of the source repositories; the two addresses above are the complete list.
+of the source repositories.
+
+The pipeline that makes the 1.6.0 textures (upscale, palette lock, bump re-encode, tree card
+generator, season looks) lives outside the repository, in `D:\Games\Dead-Air-AssetCompare\pipeline`;
+the CC0 sources it reads are in `D:\Games\Dead-Air-AssetCompare\sources`.
 
 ## What is deliberately not included
 

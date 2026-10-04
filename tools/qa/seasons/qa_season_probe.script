@@ -1,0 +1,53 @@
+-- QA probe: walks the six season looks on a loaded save and takes one scene shot per look.
+-- Put into <rig>\gamedata\scripts, remove after the run.
+
+local looks = { "autumn", "winter", "spring_early", "spring", "spring_late", "summer" }
+local step, t_next, shooting = 0, 0, false
+
+local function con(cmd)
+	get_console():execute(cmd)
+end
+
+local function on_update()
+	device():pause(false)
+	local now = time_global()
+	if now < t_next then
+		return
+	end
+	if shooting then
+		con("r__screenshot_every 0")
+		printf(string.format("[qa] SHOT season_%s", looks[step]))
+		shooting = false
+		t_next = now + 500
+		return
+	end
+	step = step + 1
+	if step > #looks then
+		printf("[qa] qa_season_done")
+		con("flush")
+		con("quit")
+		t_next = now + 100000
+		return
+	end
+	con("r__season " .. looks[step])
+	printf(string.format("[qa] season %s", looks[step]))
+	-- Give the reload and the texture upload a few seconds, then shoot for one second
+	shooting = true
+	CreateTimeEvent("qa_season", "shot", 4, function()
+		con("r__screenshot_every 1")
+		return true
+	end)
+	t_next = now + 5200
+end
+
+local function on_first_update()
+	con("g_pause_in_background 0")
+	con("main_menu off")
+	device():pause(false)
+	t_next = time_global() + 6000
+	RegisterScriptCallback("actor_on_update", on_update)
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+end

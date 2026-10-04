@@ -40,6 +40,7 @@ target_sources_grouped(
     TARGET xrEngine
     NAME "Engine\\Console\\commands"
     FILES
+    da_season.h
     xr_ioc_cmd.cpp
     xr_ioc_cmd.h
 )

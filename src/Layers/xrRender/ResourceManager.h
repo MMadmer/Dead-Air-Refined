@@ -19,6 +19,14 @@ class dx11ConstantBuffer;
 // (DXBC twins, dxc.md 3.6). The shader maps key such a shader with a "|fxc" suffix.
 constexpr u32 RSC_FXC = 1u << 31;
 
+// Texture seasons (r__season, xrEngine/da_season.h). The overlay folder textures resolve against now,
+// null until the first sync; it moves only in CResourceManager::SyncTextureSeason.
+pcstr texture_season();
+// The overlay file of texture `name` (no extension) in `season`: for a texture of the level folder the
+// level's own copy (seasons\<season>\levels\<level>\<name>.dds) first, then the common one
+// (seasons\<season>\<name>.dds). False without a season or an overlay; `fn` is scratch then.
+bool texture_season_overlay(pcstr name, pcstr season, string_path& fn);
+
 // defs
 class ECORE_API CResourceManager
 {
@@ -278,6 +286,9 @@ public:
     void DeferredUnload();
     void BeginLevelTextureTracking();
     void UnloadLevelTextures();
+    // r__season moved since the textures were resolved: switches the resolver over and reloads every
+    // loaded texture with an overlay in either season. Main thread, between frames.
+    void SyncTextureSeason();
     static void ShutdownTextureUploadPool();
     void Evict();
     void StoreNecessaryTextures();

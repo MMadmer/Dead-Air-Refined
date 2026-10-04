@@ -181,9 +181,10 @@ foreach ($entry in $hashed) {
     # in the same bundle for free. A directory that is already assigned at a deeper granularity
     # keeps it: the table is append-only, so the more specific line wins wherever one exists.
     $key = "$root/$($parts[1])".ToLowerInvariant()
-    if ($parts.Count -gt 2) {
-        $deeper = "$root/$($parts[1])/$($parts[2])".ToLowerInvariant()
-        if ($layout.Assign.Contains($deeper)) { $key = $deeper }
+    # The longest assigned prefix wins, at any depth (season sets live several levels down)
+    for ($depth = $parts.Count - 1; $depth -ge 3; $depth--) {
+        $deeper = ($parts[0..($depth - 1)] -join '/').ToLowerInvariant()
+        if ($layout.Assign.Contains($deeper)) { $key = $deeper; break }
     }
 
     if (-not $directories.Contains($key)) {

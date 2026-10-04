@@ -73,7 +73,9 @@ GLuint CRender::texture_load(LPCSTR fRName, u32& ret_msize, GLenum& ret_desc)
 
         // Call to FS.exist WRITES to fn !
 
-        if (!FS.exist(fn, "$game_textures$", fname, ".dds") && strstr(fname, "_bump"))
+        // The season's own copy goes first, bump maps included (r__season, ResourceManager.cpp).
+        const bool seasonal = texture_season_overlay(fname, texture_season(), fn);
+        if (!seasonal && !FS.exist(fn, "$game_textures$", fname, ".dds") && strstr(fname, "_bump"))
         {
             Msg("* Fallback to default bump map: %s", fname);
             if (strstr(fname, "_bump#"))
@@ -81,7 +83,7 @@ GLuint CRender::texture_load(LPCSTR fRName, u32& ret_msize, GLenum& ret_desc)
             else
                 R_ASSERT1_CURE(FS.exist(fn, "$game_textures$", "ed\\ed_dummy_bump", ".dds"), return 0);
         }
-        else
+        else if (!seasonal)
         {
             bool exist = false;
 

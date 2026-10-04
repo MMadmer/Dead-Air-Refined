@@ -14,7 +14,10 @@
 
 #if defined(USE_DX11)
 #include "Layers/xrRenderPC_R4/da_dstorage.h"
+#include "da_temporal.h"
 #endif
+
+#include "xrEngine/da_season.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -239,6 +242,48 @@ xr_vector<CTexture*> collect_unloaded_textures(const CResourceManager::map_Textu
     return textures;
 }
 #endif
+
+// The season the resolver serves; null until the first sync, when only base textures resolve. Moved by
+// SyncTextureSeason with the upload pool idle; read by every texture load, the upload workers' included.
+std::atomic<pcstr> textureSeason{};
+
+// The current level's folder name, "" before one is set: the last component of the $level$ alias.
+void season_level_name(string_path& level)
+{
+    level[0] = 0;
+    FS_Path* path = nullptr;
+    if (!FS.get_path("$level$", &path) || !path->m_Add)
+        return;
+    xr_strcpy(level, path->m_Add);
+    size_t length = xr_strlen(level);
+    while (length && (level[length - 1] == _DELIMITER || level[length - 1] == '/'))
+        level[--length] = 0;
+    if (pcstr last = strrchr(level, _DELIMITER))
+        memmove(level, last + 1, xr_strlen(last + 1) + 1);
+}
+}
+
+pcstr texture_season() { return textureSeason.load(std::memory_order_acquire); }
+
+bool texture_season_overlay(pcstr name, pcstr season, string_path& fn)
+{
+    if (!season || !name || !name[0])
+        return false;
+    string_path level;
+    season_level_name(level);
+    // The folders in front of the name and the textures root must still fit a path.
+    if (xr_strlen(name) + xr_strlen(level) > sizeof(string_path) / 2)
+        return false;
+    string_path overlay;
+    // Lightmaps, LOD atlases and the other level folder textures repeat their names from level to level.
+    if (level[0] && FS.exist(fn, "$level$", name, ".dds"))
+    {
+        strconcat(overlay, "seasons" DELIMITER, season, DELIMITER "levels" DELIMITER, level, DELIMITER, name);
+        if (FS.exist(fn, "$game_textures$", overlay, ".dds"))
+            return true;
+    }
+    strconcat(overlay, "seasons" DELIMITER, season, DELIMITER, name);
+    return FS.exist(fn, "$game_textures$", overlay, ".dds");
 }
 
 //	Already defined in Texture.cpp
@@ -713,6 +758,91 @@ void CResourceManager::UnloadLevelTextures()
     m_level_persistent_textures.clear();
     Msg("* Level texture unload: %u textures, %llu MiB released", unloaded_count, unloaded_memory / 1048576);
 #endif
+}
+
+void CResourceManager::SyncTextureSeason()
+{
+    pcstr const target = da_season_folder();
+    pcstr const current = texture_season();
+    // Both point into the one folder table of xrEngine.
+    if (target == current || !Device.b_is_Ready)
+        return;
+
+    ZoneScoped;
+    CTimer timer;
+    timer.Start();
+
+#if defined(USE_DX11)
+    auto*& uploadPool = texture_upload_pool();
+    // Its batch resolves against the old season and completes before the switch.
+    if (uploadPool)
+        uploadPool->Wait();
+#endif
+
+    // A loaded texture changes file when either season has an overlay of it. $user$ and the other
+    // engine-made names have no file: their owners set their surfaces.
+    xr_vector<CTexture*> textures;
+    string_path scratch;
+    for (const auto& [name, texture] : m_textures)
+    {
+        if (texture->flags.bLoaded && name[0] != '$' &&
+            (texture_season_overlay(name, current, scratch) || texture_season_overlay(name, target, scratch)))
+        {
+            textures.push_back(texture);
+        }
+    }
+    // Every load from here on resolves against the new season, the later ones of cold wrappers included.
+    textureSeason.store(target, std::memory_order_release);
+
+#if defined(USE_DX11)
+    // In chunks, each keeping the views it drops alive until its new ones exist: a new view never takes the
+    // address of the one it replaces, which is how the ray tracing tables tell a reloaded texture
+    // (da_rt_refresh_textures). The chunk also bounds the memory both copies take at once.
+    constexpr size_t chunkSize = 128;
+    if (!textures.empty() && !uploadPool)
+        uploadPool = xr_new<TextureUploadPool>();
+    xr_vector<ID3DShaderResourceView*> held;
+    held.reserve(chunkSize);
+    for (size_t first = 0; first < textures.size(); first += chunkSize)
+    {
+        xr_vector<CTexture*> chunk;
+        chunk.reserve(chunkSize);
+        for (size_t index = first; index < textures.size() && index < first + chunkSize; ++index)
+        {
+            CTexture* texture = textures[index];
+            if (ID3DShaderResourceView* view = texture->get_SRView())
+            {
+                view->AddRef();
+                held.push_back(view);
+            }
+            texture->Unload();
+            chunk.push_back(texture);
+        }
+        const size_t workerCount = texture_upload_worker_count(chunk.size());
+        uploadPool->Run(std::move(chunk), workerCount, "season");
+        for (ID3DShaderResourceView* view : held)
+            view->Release();
+        held.clear();
+    }
+    // TAA and the upscalers would blend the old season into the first frames of the new one.
+    if (!textures.empty())
+        da_history_request_reset("texture season");
+#elif defined(USE_OGL)
+    for (CTexture* texture : textures)
+    {
+        texture->Unload();
+        texture->Load();
+    }
+#else
+#   error No graphics API selected or enabled!
+#endif
+
+    // The first sync of a session only names the season; a reload is worth a line either way.
+    if (current || !textures.empty())
+    {
+        Msg("* Texture season %s -> %s: %zu textures reloaded in %u ms", current ? current : "(none)", target,
+            textures.size(), u32(timer.GetElapsed_ms()));
+    }
 }
 
 #ifdef _EDITOR

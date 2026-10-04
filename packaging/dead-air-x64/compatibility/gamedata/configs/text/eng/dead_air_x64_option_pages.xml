@@ -517,6 +517,37 @@
 	<string id="st_da_x64_weather_hint_period">
 		<text>Weather on the level: left in the good period, right in the bad one. The periods take turns.</text>
 	</string>
+	<!-- The seasons page of the weather dialog: the world's texture set (r__season). -->
+	<string id="st_cap_af_season_options">
+		<text>Seasons</text>
+	</string>
+	<string id="ui_mm_grp_af_season">
+		<text>Time of year</text>
+	</string>
+	<string id="ui_mm_af_season">
+		<text>Season</text>
+	</string>
+	<string id="ui_mm_season_autumn">
+		<text>Autumn</text>
+	</string>
+	<string id="ui_mm_season_winter">
+		<text>Winter</text>
+	</string>
+	<string id="ui_mm_season_spring_early">
+		<text>Early spring</text>
+	</string>
+	<string id="ui_mm_season_spring">
+		<text>Spring</text>
+	</string>
+	<string id="ui_mm_season_spring_late">
+		<text>Late spring</text>
+	</string>
+	<string id="ui_mm_season_summer">
+		<text>Summer</text>
+	</string>
+	<string id="st_da_x64_weather_hint_season">
+		<text>What the Zone looks like: trees, grass, ground and the map. Switching reloads the textures that differ, which takes a moment.</text>
+	</string>
 	<!-- The weather dialog's own texts, its lists and the levels it lists have no English text: English only. -->
 	<string id="ui_mm_weather_options">
 		<text>Weather options</text>

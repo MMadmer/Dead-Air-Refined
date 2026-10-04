@@ -595,6 +595,9 @@ void CRender::create()
 
     Device.seqFrame.Add(this, REG_PRIORITY_HIGH + 0x12345678);
 
+    // user.ltx has run: textures resolve against its season from the first one on.
+    Resources->SyncTextureSeason();
+
     // user.ltx runs before this and carries preset-owned values from its own last save, below
     // the `_preset` line that would have set them. Replaying the preset here is what makes the
     // quality tier the one place those values come from.
@@ -1131,6 +1134,9 @@ void CRender::OnCameraUpdated()
 void CRender::OnFrame()
 {
     ZoneScoped;
+
+    // r__season moved: what it changes reloads before this frame binds anything.
+    Resources->SyncTextureSeason();
 
 #if defined(USE_DX11)
     ProcessGamesaveScreenshots();

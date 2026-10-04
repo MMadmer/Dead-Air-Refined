@@ -1,3 +1,16 @@
+-- The seasons of r__season in the order of its tokens; the list shows ui_mm_season_<token>.
+local SEASONS = { "autumn", "winter", "spring_early", "spring", "spring_late", "summer" }
+
+-- Row of a season in the list; the first row for anything else.
+local function season_index(season)
+	for i, token in ipairs(SEASONS) do
+		if (token == season) then
+			return i - 1
+		end
+	end
+	return 0
+end
+
 --------------------------------------------------------------------------------
 -- AtmosFear options dialog ----------------------------------------------------
 -- Made by Cromm Cruac ---------------------------------------------------------
@@ -186,6 +199,12 @@ function af_options_dialog:InitControls()
 	self:Register				(btn, "btn_weather_options")
 	btn = xml:Init3tButton		("main_dialog:btn_event_options", self.dialog)
 	self:Register				(btn, "btn_event_options")
+	-- Seasons (r__season): only with an engine that has the command
+	self.has_seasons			= get_console():get_string("r__season") ~= nil
+	if (self.has_seasons) then
+		btn = xml:Init3tButton	("main_dialog:btn_season_options", self.dialog)
+		self:Register			(btn, "btn_season_options")
+	end
 
 	self.dlg_event				= af_opt_event()
 	self.dlg_event:InitControls	(0,0, xml, self)
@@ -198,6 +217,14 @@ function af_options_dialog:InitControls()
 	self.dlg_weather:Show			(false)
 	self.dialog:AttachChild		(self.dlg_weather)
 	xml:InitWindow				("tab_size", 0, self.dlg_weather)
+
+	if (self.has_seasons) then
+		self.dlg_season				= af_opt_season()
+		self.dlg_season:InitControls	(0,0, xml, self)
+		self.dlg_season:Show			(false)
+		self.dialog:AttachChild		(self.dlg_season)
+		xml:InitWindow				("tab_size", 0, self.dlg_season)
+	end
 
 	self:SetCurrentValues()
 
@@ -448,6 +475,10 @@ function af_options_dialog:SetCurrentValues()
 	self:SetComboValue("psi_storm_freq",			config:r_value("atmosfear_current_parameters","opt_psi_storm_freq",0,"24"))
 	self:SetComboValue("psi_storm_task",			config:r_value("atmosfear_current_parameters","opt_psi_storm_task",0,"give"))
 
+	if (self.list_season) then
+		self.list_season:SetCurrentID(season_index(get_console():get_string("r__season")))
+	end
+
 	self.dlg_weather:Show		(true)
 end
 
@@ -476,20 +507,35 @@ function af_options_dialog:InitCallBacks()
 	self:AddCallback("btn_cancel",							ui_events.BUTTON_CLICKED,	self.OnBtnCancel,			self)
 	self:AddCallback("btn_weather_options",					ui_events.BUTTON_CLICKED,	self.OnBtnWeatherOptions,	self)
 	self:AddCallback("btn_event_options",					ui_events.BUTTON_CLICKED,	self.OnBtnEventOptions,		self)
+	if (self.has_seasons) then
+		self:AddCallback("btn_season_options",				ui_events.BUTTON_CLICKED,	self.OnBtnSeasonOptions,	self)
+	end
 end
 
 --######################################################################################################################
 --#								CALLBACK FUNCTIONS
 --######################################################################################################################
 
+-- One page at a time, by name ("weather", "event", "season"; nil hides all): luabind objects have no
+-- == between them.
+function af_options_dialog:ShowPage(name)
+	self.dlg_weather:Show		(name == "weather")
+	self.dlg_event:Show			(name == "event")
+	if (self.dlg_season) then
+		self.dlg_season:Show	(name == "season")
+	end
+end
+
 function af_options_dialog:OnBtnWeatherOptions()
-	self.dlg_weather:Show		(true)
-	self.dlg_event:Show			(false)
+	self:ShowPage("weather")
 end
 
 function af_options_dialog:OnBtnEventOptions()
-	self.dlg_weather:Show		(false)
-	self.dlg_event:Show			(true)
+	self:ShowPage("event")
+end
+
+function af_options_dialog:OnBtnSeasonOptions()
+	self:ShowPage("season")
 end
 
 function af_options_dialog:OnBtnAccept()
@@ -523,8 +569,18 @@ function af_options_dialog:OnBtnAccept()
 	self:SetComboOption("fallout_task",false)
 	self:SetComboOption("psi_storm_task",false)
 
-	self.dlg_weather:Show		(false)
-	self.dlg_event:Show			(false)
+	-- Another season reloads the textures the two differ in: only a real change is sent, and kept
+	-- in user.ltx at once rather than at the game's exit.
+	if (self.list_season) then
+		local chosen = SEASONS[self.list_season:GetCurrentIdx() + 1]
+		local console = get_console()
+		if (chosen and chosen ~= console:get_string("r__season")) then
+			console:execute("r__season " .. chosen)
+			console:execute("cfg_save")
+		end
+	end
+
+	self:ShowPage(nil)
 	self.owner:ShowDialog(true)
 	self:HideDialog()
 	self.owner:Show(true)
@@ -537,8 +593,7 @@ function af_options_dialog:OnBtnAccept()
 end
 
 function af_options_dialog:OnBtnCancel()
-	self.dlg_weather:Show		(false)
-	self.dlg_event:Show			(false)
+	self:ShowPage(nil)
 	self.owner:ShowDialog(true)
 	self:HideDialog()
 	self.owner:Show(true)
@@ -553,8 +608,7 @@ function af_options_dialog:OnKeyboard(dik, keyboard_action)
 
 		if keyboard_action == ui_events.WINDOW_KEY_PRESSED then
 			if dik == DIK_keys.DIK_ESCAPE then
-				self.dlg_weather:Show		(false)
-				self.dlg_event:Show			(false)
+				self:ShowPage(nil)
 				self.owner:ShowDialog(true)
 				self:HideDialog()
 				self.owner:Show(true)
@@ -683,4 +737,36 @@ function af_opt_weather:InitControls(x, y, xml, handler)
 		row.ctrl, row.kind = handler["list_" .. id .. "_period_good"], "list"
 		list.commit_row(self, xml, row)
 	end
+end
+
+-- The seasons page: one row, the texture set the world wears (r__season, docs/dead-air/SEASONS.md).
+-- The list is the dialog's list_season, which SetCurrentValues and OnBtnAccept read and write.
+class "af_opt_season" (CUIWindow)
+
+function af_opt_season:__init() super()
+end
+
+function af_opt_season:__finalize()
+end
+
+function af_opt_season:InitControls(x, y, xml, handler)
+	self:SetWndPos(vector2():set(x,y))
+	self:SetWndSize(vector2():set(624,411))
+	self:SetAutoDelete(true)
+
+	local list = dead_air_x64_option_list
+	list.init(self, xml, "season_page", HINTS)
+	list.add_header(self, xml, "season", "ui_mm_grp_af_season")
+
+	local row = list.new_row(self, xml, "season", "season", "ui_mm_af_season", HINTS .. "season")
+	local combo = xml:InitComboBox("season_page:list_season", row.wnd)
+	combo:ClearList()
+	combo:SetAutoDelete(true)
+	for i, season in ipairs(SEASONS) do
+		combo:AddItem(game.translate_string("ui_mm_season_" .. season), i - 1)
+	end
+	handler.list_season = combo
+	handler:Register(combo, "list_season")
+	row.ctrl, row.kind = combo, "list"
+	list.commit_row(self, xml, row)
 end

@@ -309,12 +309,11 @@ To the **[Gunslinger](https://github.com/gunslingermod)** team, for the 3D PDA:
 the models, animations, textures, sounds, and shaders it is built from come from
 their mod.
 
-To **Akinaro**, for the **[Stalker Two-K](https://www.moddb.com/mods/stalker-two-k)**
-texture set (one texture, the moss on the boulders, recoloured for Dead Air's
-autumn palette), and to **Cromm Cruac**, for the tree and foliage textures of
-**[Absolute Nature 4](http://absolute.crommcruac.com)** (two dead-branch textures
-recoloured from yellow-brown to Dead Air's grey-green). Both sets are free, for
-S.T.A.L.K.E.R. games only, and stay that way here.
+To **[ambientCG](https://ambientcg.com)** and **[Poly Haven](https://polyhaven.com)**,
+whose CC0 leaf, needle and bark scans the mod's own tree textures and seasons are
+built from, and to GSC Game World for the CoP SDK's original texture sources.
+Up to 1.5.x the mod shipped **Akinaro**'s Stalker Two-K and **Cromm Cruac**'s
+Absolute Nature 4; since 1.6.0 both are replaced by the project's own textures.
 
 To **Feel_Fried** (FDDA), **themrdemonized** (Ledge Grabbing), **Mirrowel**
 (FDDA Enhanced Animations), **lizzardman** (Headgear Animations, FDDA Redone)

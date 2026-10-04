@@ -40,6 +40,8 @@ void CRender::level_Load(IReader* fs)
     da_rain_wetness_on_level_load();
     // Nothing the previous level left in TAA or the upscaler belongs to this one.
     da_history_request_reset("level load");
+    // A season changed while no frame ran (a script during the load) applies before the level's textures.
+    Resources->SyncTextureSeason();
     Resources->BeginLevelTextureTracking();
 
     // Begin
