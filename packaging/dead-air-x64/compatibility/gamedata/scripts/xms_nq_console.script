@@ -214,9 +214,26 @@ local function cmd_dump()
 	say("report written to %s (%d bytes)", tostring(path), #text)
 end
 
+-- the modules' global variables: every one, or those of one module
+local function cmd_globals(mod)
+	local all = core.globals()
+	local mods = util.sorted_keys(all)
+	local n = 0
+	for _, m in ipairs(mods) do
+		if (not mod or mod == m) then
+			for _, name in ipairs(util.sorted_keys(all[m])) do
+				local v = all[m][name]
+				say("%s.%s = %s", m, name, type(v) == "string" and ("\"" .. util.cp1251(v) .. "\"") or tostring(v))
+				n = n + 1
+			end
+		end
+	end
+	if (n == 0) then say(mod and ("no global variables in " .. mod) or "no global variables") end
+end
+
 local function cmd_help()
 	say("nq list | state <uid> | activate <uid> | reset <uid> | jump <uid> <node> | fire <uid> <node> [pin]")
-	say("nq reload | debug 0|1 | validate | dump | help")
+	say("nq globals [module] | reload | debug 0|1 | validate | dump | help")
 end
 
 function exec(args)
@@ -230,6 +247,7 @@ function exec(args)
 		elseif (cmd == "reset") then if (need_ready()) then cmd_reset(words[2]) end
 		elseif (cmd == "jump") then if (need_ready()) then cmd_jump(words[2], words[3]) end
 		elseif (cmd == "fire") then if (need_ready()) then cmd_fire(words[2], words[3], words[4]) end
+		elseif (cmd == "globals") then if (need_ready()) then cmd_globals(words[2]) end
 		elseif (cmd == "reload") then
 			if (core.reload()) then say("reloaded") else say("reload failed (runtime disabled?)") end
 		elseif (cmd == "debug") then

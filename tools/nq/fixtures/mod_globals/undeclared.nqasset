@@ -1,0 +1,13 @@
+-- Names a global variable the module never declared: E030, the quest does not load.
+return {
+  nq = 1,
+  id = "undeclared",
+  title = "Undeclared",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "write" } },
+    { id = "write", kind = "flow.step",
+      on_enter = { { kind = "global.set", params = { name = "nowhere", value = 1 } } },
+      out = { next = "finish" } },
+    { id = "finish", kind = "flow.end" },
+  },
+}

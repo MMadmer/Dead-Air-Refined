@@ -11,6 +11,7 @@
 #include "xrServerEntities/xrServer_Objects.h"		// CSE_Shape: restrictors carry their geometry
 #include "xrServerEntities/xrServer_Objects_ALife.h"	// CSE_ALifeObjectPhysic: fixed_bones
 #include "xrServerEntities/xrServer_Objects_ALife_Monsters.h" // world rules: who is population
+#include "xrServerEntities/xrServer_Objects_Alife_Smartcovers.h" // CSE_SmartCover: animpoint description
 #include "xms_game.h"
 #include "xms_world.h"
 #include "xrCore/XMS/xms_core.h"
@@ -115,6 +116,63 @@ bool resolve_custom_data(const XMS::Module& m, pcstr value, shared_str& out)
     buffer[got] = 0;
     out = buffer.data();
     return true;
+}
+
+// "a,b" -> a and b; either may be empty
+void split_pair(pcstr text, xr_string& first, xr_string& second)
+{
+    const xr_string s = text ? text : "";
+    const size_t comma = s.find(',');
+    first = s.substr(0, comma);
+    second = comma == xr_string::npos ? xr_string() : s.substr(comma + 1);
+    auto trim = [](xr_string& v) {
+        while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
+        while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
+    };
+    trim(first);
+    trim(second);
+}
+
+// The light of a hanging lamp as the editor wrote it (EditorModScene's lamp_* keys).
+void apply_lamp(const OpSection& op, CSE_ALifeObjectHangingLamp& lamp)
+{
+    if (pcstr v = op.value("lamp_flags"))
+        lamp.flags.assign(u16(atoi(v)));
+    if (pcstr v = op.value("lamp_color"))
+        lamp.color = u32(strtoul(v, nullptr, 16));
+    if (pcstr v = op.value("lamp_light"))
+        sscanf(v, "%f , %f , %f , %f", &lamp.brightness, &lamp.range, &lamp.spot_cone_angle, &lamp.m_virtual_size);
+    if (pcstr v = op.value("lamp_animator"))
+        lamp.color_animator = v;
+    if (pcstr v = op.value("lamp_texture"))
+        lamp.light_texture = v;
+    xr_string a, b;
+    if (pcstr v = op.value("lamp_bones"))
+    {
+        split_pair(v, a, b);
+        lamp.light_main_bone = a.c_str();
+        lamp.light_ambient_bone = b.c_str();
+    }
+    if (pcstr v = op.value("lamp_ambient"))
+    {
+        sscanf(v, "%f , %f", &lamp.m_ambient_radius, &lamp.m_ambient_power);
+        xr_string rest;
+        split_pair(v, a, rest);
+        split_pair(rest.c_str(), a, b);
+        lamp.m_ambient_texture = b.c_str();
+    }
+    if (pcstr v = op.value("lamp_volumetric"))
+        sscanf(v, "%f , %f , %f", &lamp.m_volumetric_quality, &lamp.m_volumetric_intensity, &lamp.m_volumetric_distance);
+    if (pcstr v = op.value("lamp_glow"))
+    {
+        lamp.glow_radius = float(atof(v));
+        split_pair(v, a, b);
+        lamp.glow_texture = b.c_str();
+    }
+    if (pcstr v = op.value("lamp_health"))
+        lamp.m_health = float(atof(v));
+    if (pcstr fixed = op.value("fixed_bones"))
+        lamp.fixed_bones = fixed;
 }
 } // namespace
 
@@ -506,6 +564,17 @@ void CALifeSpawnRegistry::xms_compose()
             if (pcstr fixed = op.value("fixed_bones"))
                 if (CSE_ALifeObjectPhysic* physic = smart_cast<CSE_ALifeObjectPhysic*>(abstract))
                     physic->fixed_bones = fixed;
+
+            // The description is what makes a smart cover an animpoint (sit, stand at a
+            // table); the section alone leaves it empty and every NPC sent there idles.
+            if (pcstr description = op.value("smart_cover"))
+                if (CSE_SmartCover* cover = smart_cast<CSE_SmartCover*>(abstract))
+                    cover->m_description = description;
+
+            // A hanging lamp's light lives in its own fields, not in its section: without
+            // them every lamp comes out white, 10 m, a spot along its local +Z.
+            if (CSE_ALifeObjectHangingLamp* lamp = smart_cast<CSE_ALifeObjectHangingLamp*>(abstract))
+                apply_lamp(op, *lamp);
 
             if (pcstr custom = op.value("custom_data"))
             {

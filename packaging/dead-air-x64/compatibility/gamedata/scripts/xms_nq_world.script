@@ -300,7 +300,7 @@ local function kill_resolve(ctx)
 	local w = ctx.w
 	if (w.id or w.unresolved) then return w end
 	local t = ctx.params.target
-	if (type(t) ~= "table") then error("target must be {story=} | {ref=} | {spawn=}") end
+	if (type(t) ~= "table") then error("target must be {story=} | {ref=} | {character=} | {spawn=}") end
 	if (t.spawn) then
 		local spec = t.spawn
 		local rname = spec.ref or (ctx.node_id .. "_target")
@@ -337,8 +337,19 @@ local function kill_resolve(ctx)
 			w.kind = "npc"
 			util.warn("%s/%s: story object '%s' does not exist, counted as dead", ctx.uid, ctx.node_id, tostring(t.story))
 		end
+	elseif (t.character) then
+		-- one person of the module: the living one if there is one, otherwise the body
+		w.character = t.character
+		local id = util.character_id(ctx, t.character)
+		w.kind = "npc"
+		if (id) then
+			w.id = id
+		else
+			w.unresolved = true
+			util.warn("%s/%s: character '%s' is not in the world, counted as dead", ctx.uid, ctx.node_id, tostring(t.character))
+		end
 	else
-		error("target must be {story=} | {ref=} | {spawn=}")
+		error("target must be {story=} | {ref=} | {character=} | {spawn=}")
 	end
 	core.mark_dirty()
 	return w
@@ -688,6 +699,8 @@ K["spawn.npc"] = {
 			if (row.dead == true) then core.online_job(ctx.qs, se.id, { kill = true }) end
 			if (row.ref) then core.ref_set(ctx.qs, row.ref, { id = se.id, kind = "object", section = section }) end
 		end
+		-- { character = } refs look the new NPCs up at once instead of on the next index walk
+		util.character_forget()
 	end,
 }
 
@@ -755,6 +768,21 @@ K["npc.remove"] = {
 		end
 		prepare_removal(se.id)
 		release_se(se)
+	end,
+}
+
+-- The trader's shelves are full again the next time the player trades with it: a night
+-- that begins, a caravan that came. Any NPC with a shop, a module's character or not.
+K["trade.restock"] = {
+	run = function(ctx, p)
+		local se = util.resolve_npc_se(ctx, p.who)
+		if not (se) then
+			util.warn("%s/%s: trade.restock: npc not found", ctx.uid, tostring(ctx.node_id))
+			return
+		end
+		if not (xms_characters and xms_characters.restock and xms_characters.restock(se.id)) then
+			util.warn("%s/%s: trade.restock: the resupply clock cannot be reset here", ctx.uid, tostring(ctx.node_id))
+		end
 	end,
 }
 

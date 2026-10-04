@@ -355,6 +355,45 @@ local function on_first_update()
 	RegisterScriptCallback("actor_on_update", on_update)
 end
 
+-- ui_mm_faction_select asks for its start jump on every update until the level changes. After
+-- a module's Player Start the engine refused it every frame, and a request that came after the
+-- start settled could still carry the player off. So the jump stops here: at once while a
+-- module's start stands; otherwise a refused one is not asked again. On fake_start the jump is
+-- the only way into the game: nothing is held there.
+local jump_asker = nil
+
+-- XmsWorld::Describe names the start a module placed: "start: <level> (module <id>)"
+local function start_placed()
+	local w = world()
+	if not (w and w.describe) then return false end
+	local ok, text = pcall(w.describe)
+	return ok and type(text) == "string" and string.find(text, "\n  start: ", 1, true) ~= nil
+end
+
+function faction_jump_held(source, linedefined, level_name, placed)
+	if not (string.find(string.lower(source or ""), "ui_mm_faction_select", 1, true)) then return false end
+	if (level_name == nil or level_name == "fake_start") then return false end
+	if (placed and placed()) then return true end
+	local who = tostring(source) .. ":" .. tostring(linedefined)
+	if (jump_asker == who) then return true end
+	jump_asker = jump_asker or who
+	return false
+end
+
+local change_level_wrapped = false
+
+local function wrap_change_level()
+	local base = rawget(_G, "ChangeLevel")
+	if (change_level_wrapped or type(base) ~= "function" or not (debug and debug.getinfo)) then return end
+	change_level_wrapped = true
+	_G.ChangeLevel = function(...)
+		local info = debug.getinfo(2, "S")
+		local ok, name = pcall(level.name)
+		if (info and faction_jump_held(info.source, info.linedefined, ok and name or nil, start_placed)) then return end
+		return base(...)
+	end
+end
+
 local function on_game_load()
 	local cfg = axr_main and axr_main.config
 	if not (cfg) then return end
@@ -387,6 +426,7 @@ function on_game_start()
 	local cfg = axr_main and axr_main.config
 	local faction = cfg and cfg:r_value("character_creation", "new_game_faction", 3)
 	kit_new_game = faction ~= nil and faction ~= ""
+	wrap_change_level()
 	RegisterScriptCallback("actor_on_first_update", on_first_update)
 	RegisterScriptCallback("on_game_load", on_game_load)
 	RegisterScriptCallback("npc_on_net_spawn", on_npc_spawn)

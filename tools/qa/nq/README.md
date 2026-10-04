@@ -36,7 +36,7 @@ Useful parameters:
 |---|---|---|
 | `-SaveName` | `admin - autosave` | save group copied out of the player's `savedgames`; every derived save is written inside the QA root |
 | `-ResultLabel` | timestamp | subdirectory of `tools\qa\nq\results` |
-| `-Scenario` | `All` | `Scout`, `Main`, `Reload`, `Dialog`, `LevelChange`, `ModuleRemoved`, `ChangedGraph`, `EmptyModule`, `Control`, `World`, `WorldControl`, `Pda`, `PdaControl`; `PdaModule` runs alone |
+| `-Scenario` | `All` | `Scout`, `Main`, `Reload`, `Dialog`, `LevelChange`, `ModuleRemoved`, `ChangedGraph`, `EmptyModule`, `Control`, `World`, `WorldControl`, `Pda`, `PdaControl`, `Commands`; `PdaModule` runs alone |
 | `-PdaModuleDir`, `-PdaMode`, `-PdaQuest`, `-PdaRef`, `-PdaStart` | - / - / - / `parcel` / `_rookie_village` | `-Scenario PdaModule`: a module folder the editor built, the mode its new game runs in and the start location (a section of `plugins\faction_start_locations.ltx`, as a stalker; all answered in `[character_creation]` like the new-game screen, cleared afterwards; `''` stays on `fake_start`, whose map is a placeholder), and the quest and ref an accepted order must create with a map spot |
 | `-TimeoutSeconds` | `900` | per launch |
 | `-RebuildRoot` | off | rebuild `_qa\nq` from scratch instead of refreshing it |
@@ -98,6 +98,7 @@ executable, and stops only the processes it started.
 | `module\` | most scenarios | the three reference quests from `docs\nq\examples` (editor repo) plus two deliberately broken assets: `broken_code.nqasset` (code outside strings → E003) and `broken_pin.nqasset` (undeclared pin and a dangling edge → E007) |
 | `module-changed\` | `ChangedGraph` | `linear_fetch` with the node that holds the live token deleted |
 | `module-empty\` | `EmptyModule` | a manifest with no quests at all |
+| `module-commands\` | `Commands` | two modules, `cmd_qa` and `cmd_qa_b` (loads after it), whose `[commands]` the probe runs through the console in a new game; `cmd_qa` also declares a stock name, a malformed name and function and a `[command.<name>]` without its line, and `cmd_qa_b` one of `cmd_qa`'s names - the runner wants each refusal, the printed result, the reported Lua errors, the refused cheat, the stopped nesting and their `help` lines in the log |
 
 `dialog_branching` and `parallel_triggers` reference `esc_2_12_stalker_wolf` and
 `esc_smart_terrain_3_16`, which exist on `l01_escape`; the save used by default is on that level.

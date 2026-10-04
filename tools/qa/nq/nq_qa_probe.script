@@ -1795,6 +1795,21 @@ end
 -- overlay `order_card` when there is one, captures it, clicks accept and, when the phase ini
 -- names the quest (pda_quest) and its ref (pda_ref), wants the quest to have created the
 -- object with a map spot on it - the app's map shows the player and the order.
+-- ============================================================================ phase psm (scenario SaveModule)
+-- A save the player made with a module the editor built: it loads - the NPCs it held online
+-- spawn with the logic files their orders left - the quests come back and the game runs on.
+local function build_psm()
+	step("sm.quests", function()
+		if not (core() and core().is_ready and core().is_ready()) then return nil end
+		local Q, order, invalid = core().quests()
+		return check("sm.quests", #order > 0 and #invalid == 0, "quests=%d invalid=%d", #order, #invalid)
+	end, { timeout = 60000 })
+	step_wait("sm.soak", 20000)
+	step("sm.alive", function()
+		return check("sm.alive", db.actor ~= nil and db.actor:alive(), "the game ran on for 20 s with the player alive")
+	end)
+end
+
 local function build_ppm()
 	local extra = {}
 	pcall(function()
@@ -2007,6 +2022,73 @@ local function build_ppm()
 		function() return fmt1("the PDA window is shown = %s", tostring(pda_wnd():IsShown())) end)
 end
 
+-- ============================================================================ phase pc (scenario Commands)
+-- Console commands of modules (MODDING.md, "Console commands"): cmd_qa and cmd_qa_b declare
+-- [commands], the engine registered them at the start. Run through the console the way a
+-- script runs a command; the runner checks the log for the refusals and the printed results.
+local function cq(name) return cmdqa and tonumber(cmdqa[name]) or 0 end
+
+local function build_pc()
+	step("pc.scripts", function()
+		return check("pc.scripts", cmdqa ~= nil and cmdqa_b ~= nil, "both modules' scripts load: %s %s",
+			tostring(cmdqa ~= nil), tostring(cmdqa_b ~= nil))
+	end)
+	step("pc.echo", function()
+		console('cmdqa_echo hello "big world"')
+		return check("pc.echo", cq("calls") == 1 and cmdqa.last_args == 'hello "big world"' and
+			cmdqa.last_module == "cmd_qa" and cmdqa.last_command == "cmdqa_echo",
+			"calls=%d args=[%s] module=%s command=%s", cq("calls"), tostring(cmdqa.last_args),
+			tostring(cmdqa.last_module), tostring(cmdqa.last_command))
+	end)
+	step("pc.empty_args", function()
+		console("cmdqa_echo")
+		return check("pc.empty_args", cq("calls") == 2 and cmdqa.last_args == "", "calls=%d args=[%s]", cq("calls"),
+			tostring(cmdqa.last_args))
+	end)
+	step("pc.split", function()
+		local w = (xms and xms.command_args) and xms.command_args('one "two three" four') or {}
+		return check("pc.split", xms.commands_api == 1 and #w == 3 and w[1] == "one" and w[2] == "two three" and
+			w[3] == "four", "api=%s words=%d [%s|%s|%s]", tostring(xms.commands_api), #w, tostring(w[1]),
+			tostring(w[2]), tostring(w[3]))
+	end)
+	step("pc.first_module_wins", function()
+		console("cmdqa_b_ok x")
+		local b = cmdqa_b and tonumber(cmdqa_b.calls) or 0
+		return check("pc.first_module_wins", cq("calls") == 2 and b == 1,
+			"cmd_qa ran %d times, cmd_qa_b once through its own name: %d", cq("calls"), b)
+	end)
+	step("pc.stock_wins", function()
+		console("xms_list")
+		return check("pc.stock_wins", cq("calls") == 2, "xms_list stayed the game's: calls=%d", cq("calls"))
+	end)
+	step("pc.errors", function()
+		console("cmdqa_fail")
+		console("cmdqa_missing")
+		return check("pc.errors", cq("fail_calls") == 1, "a failing and a missing function reported, the game runs on: %d",
+			cq("fail_calls"))
+	end)
+	step("pc.cheat", function()
+		local was = rawget(_G, "DEV_DEBUG")
+		_G.DEV_DEBUG = nil
+		console("cmdqa_cheat")
+		local refused = cq("cheat_calls") == 0
+		_G.DEV_DEBUG = true
+		console("cmdqa_cheat")
+		_G.DEV_DEBUG = was
+		return check("pc.cheat", refused and cq("cheat_calls") == 1, "refused outside debug mode: %s, ran in it: %d",
+			tostring(refused), cq("cheat_calls"))
+	end)
+	step("pc.nesting", function()
+		console("cmdqa_loop")
+		return check("pc.nesting", cq("loop_calls") == 8, "a command running itself stopped at depth %d", cq("loop_calls"))
+	end)
+	-- the runner wants their lines in the listing: help, arguments, module, cheat
+	step("pc.help", function()
+		console("help")
+		return pass("pc.help", "the console's help listed every command, the modules' among them")
+	end)
+end
+
 local BUILDERS = {
 	-- Look inside a save that is not ours: load a player's own game and print what the
 	-- runtime and the PDA each hold. `save` in the phase ini names the quest to dump.
@@ -2079,6 +2161,8 @@ local BUILDERS = {
 	pp2 = build_pp2,
 	pp0 = build_pp0,
 	ppm = build_ppm,
+	psm = build_psm,
+	pc = build_pc,
 	p2 = build_p2,
 	p3 = build_p3,
 	p4 = build_p4,

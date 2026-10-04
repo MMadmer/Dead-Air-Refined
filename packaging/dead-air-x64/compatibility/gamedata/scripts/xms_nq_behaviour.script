@@ -3,7 +3,7 @@
 --   caller side:    behaviour.run, behaviour.stop, behaviour_running, behaviour_done
 --   behaviour side: npc.goto, npc.hold, npc.patrol, npc.anim, npc.follow, npc.attack,
 --                   npc.stance, npc.release, npc_at_place, npc_in_combat, role_alive
---   orders:         order.guard, order.patrol, order.follow, order.attack, order.clear,
+--   orders:         order.guard, order.patrol, order.follow, order.animpoint, order.attack, order.clear,
 --                   and [xms_order] in a placed NPC's custom data
 --
 -- A running behaviour is an instance of the ordinary NQ interpreter (core.instance_*),
@@ -191,8 +191,8 @@ local function destination_pos(ctx, dest)
 		local id = first_living(ctx.qs, dest.role)
 		return id and object_pos(id) or nil
 	end
-	if (dest.story) then
-		local id = util.id_by_story(dest.story)
+	if (dest.story or dest.character) then
+		local id = dest.story and util.id_by_story(dest.story) or util.character_id(ctx, dest.character)
 		local se = id and se_by_id(id)
 		if not (se) then return nil end
 		local lvl, here = util.level_name_of_gvid and util.level_name_of_gvid(se.m_game_vertex_id), util.current_level()
@@ -414,7 +414,7 @@ local function ids_from_binding(owner_ctx, binding)
 	if (type(binding) ~= "table") then return out end
 
 	-- a list of bindings
-	if (#binding > 0 and binding.story == nil and binding.ref == nil and
+	if (#binding > 0 and binding.story == nil and binding.ref == nil and binding.character == nil and
 		binding.squad == nil and binding.community == nil and binding.profile == nil) then
 		for _, one in ipairs(binding) do
 			for _, id in ipairs(ids_from_binding(owner_ctx, one)) do out[#out + 1] = id end
@@ -1227,6 +1227,11 @@ local function follow_spec(ctx, p, id)
 	if (type(p.target) == "table" and not p.target.actor) then
 		local oid = util.ref_object_id(ctx, p.target)
 		local sid = oid and util.story_id_of(oid) or nil
+		-- the companion scheme follows a story id; a character has none of its own
+		if (oid and not sid and p.target.character) then
+			local key = util.character_key(ctx, p.target.character)
+			if (key and util.register_story_id(oid, key)) then sid = key end
+		end
 		if (sid) then story = tostring(sid)
 		else util.warn("order.follow: the target is not in the world, following the player instead") end
 	end
@@ -1235,6 +1240,18 @@ local function follow_spec(ctx, p, id)
 				 "dist_max = " .. tostring(p.distance or 3) .. "\nsound_idle = state\n"
 	if (story ~= "actor") then text = text .. "target = " .. story .. "\n" end
 	return { kind = "follow", text = text }
+end
+
+-- An animation point of the level - a smart cover whose description is animpoint_*: the NPC
+-- walks there and does what the point offers (stands at a table, sits, warms at a fire).
+local function animpoint_spec(ctx, p, id)
+	local cover = util.smart_cover_name(ctx, p.cover)
+	if not (cover) then error("order.animpoint: there is no smart cover '" .. tostring(p.cover) .. "' on the level") end
+	-- the scheme takes a camp by default; a point that is not at a fire must say it is not
+	local text = "[logic@$TAG]\nactive = animpoint@$TAG\n\n[animpoint@$TAG]\ncover_name = " .. cover ..
+		"\nuse_camp = " .. tostring(p.camp == true) .. "\nreach_movement = walk\n"
+	if (type(p.anims) == "string" and p.anims ~= "") then text = text .. "avail_animations = " .. p.anims .. "\n" end
+	return { kind = "animpoint", text = text }
 end
 
 local function give_orders(ctx, p, build)
@@ -1255,6 +1272,7 @@ end
 K["order.guard"] = { run = function(ctx, p) give_orders(ctx, p, guard_spec) end }
 K["order.patrol"] = { run = function(ctx, p) give_orders(ctx, p, patrol_spec) end }
 K["order.follow"] = { run = function(ctx, p) give_orders(ctx, p, follow_spec) end }
+K["order.animpoint"] = { run = function(ctx, p) give_orders(ctx, p, animpoint_spec) end }
 
 K["order.clear"] = {
 	run = function(ctx, p)
@@ -1310,7 +1328,7 @@ K["order.attack"] = {
 -- ---- orders from the NPC's own spawn: [xms_order] in its custom data -------
 -- What the level editor writes for a placed NPC. Adopted ONCE per NPC (the id is
 -- remembered in the state), so a quest that dismissed the order later is not undone
--- by the next load. Keys: order = guard|patrol|follow, route, look, radius, move,
+-- by the next load. Keys: order = guard|patrol|follow|animpoint, route, look, radius, move, cover, camp,
 -- target (actor or a story id), distance, hostile = true (to the player).
 -- The world script (xms_world) hears every NPC spawn and hands the ones carrying
 -- [xms_order] here; NPCs spawn before this runtime is up, so they wait in a queue.
@@ -1328,10 +1346,12 @@ local function adopt(id, go)
 	core.mark_dirty()
 	local function r(k) return ini:line_exist("xms_order", k) and ini:r_string("xms_order", k) or nil end
 	local p = { route = r("route"), look = r("look"), move = r("move"),
-				radius = tonumber(r("radius") or ""), distance = tonumber(r("distance") or "") }
+				radius = tonumber(r("radius") or ""), distance = tonumber(r("distance") or ""),
+				cover = r("cover"), camp = r("camp") == "true" }
 	local ctx = { uid = "spawn", qs = { refs = {} }, refs = {} }
 	local kind, build = r("order"), nil
 	if (kind == "guard") then build = guard_spec
+	elseif (kind == "animpoint") then build = animpoint_spec
 	elseif (kind == "patrol" or kind == "wander") then build = patrol_spec
 	elseif (kind == "follow") then
 		build = follow_spec
@@ -1555,11 +1575,31 @@ function restore_early()
 	end
 end
 
+local restored = false
+
+local function restore_once()
+	if (restored) then return end
+	restored = true
+	local ok, e = pcall(restore_early)
+	if not (ok) then util.err("behaviours: early restore failed: %s", tostring(e)) end
+end
+
+-- on_game_load comes at the end of the actor's net_spawn, and an NPC the save holds online
+-- may spawn before the actor: its "*<tag>" logic is asked for first. The save's blob is read
+-- by then, so the restore runs at that first ask.
+local function wrap_logic_lookup()
+	local base = xr_logic and xr_logic.get_customdata_or_ini_file
+	if (type(base) ~= "function") then return end
+	xr_logic.get_customdata_or_ini_file = function(npc, filename)
+		if (not restored and type(filename) == "string" and string.sub(filename, 1, 1) == "*") then restore_once() end
+		return base(npc, filename)
+	end
+end
+
 function on_game_start()
-	RegisterScriptCallback("on_game_load", function()
-		local ok, e = pcall(restore_early)
-		if not (ok) then util.err("behaviours: early restore failed: %s", tostring(e)) end
-	end)
+	restored = false
+	pcall(wrap_logic_lookup)
+	RegisterScriptCallback("on_game_load", restore_once)
 end
 
 -- A reload rebuilds every graph from the assets: whatever was running stops

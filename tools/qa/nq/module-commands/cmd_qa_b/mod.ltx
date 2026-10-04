@@ -1,0 +1,13 @@
+[module]
+id      = cmd_qa_b
+name    = Console commands acceptance test module B
+version = 1.0.0
+api     = 1
+
+[order]
+after   = cmd_qa
+
+[commands]
+; refused: cmd_qa loads first and has it
+cmdqa_echo = cmdqa_b.echo
+cmdqa_b_ok = cmdqa_b.echo

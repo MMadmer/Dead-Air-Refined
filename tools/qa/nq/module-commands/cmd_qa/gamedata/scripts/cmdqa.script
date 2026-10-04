@@ -1,0 +1,28 @@
+-- QA ONLY (tools\qa\nq, -Scenario Commands): the functions [commands] of the cmd_qa module
+-- name. The probe reads the counters back.
+
+calls, fail_calls, cheat_calls, loop_calls = 0, 0, 0, 0
+last_args, last_module, last_command = nil, nil, nil
+
+function echo(args, module, command)
+	calls = calls + 1
+	last_args, last_module, last_command = args, module, command
+	return "CMDQA-ECHO: [" .. tostring(args) .. "] " .. tostring(module) .. " " .. tostring(command)
+end
+
+function fail(args)
+	fail_calls = fail_calls + 1
+	error("CMDQA intentional failure")
+end
+
+function cheat(args)
+	cheat_calls = cheat_calls + 1
+	return "CMDQA-CHEAT ran"
+end
+
+-- runs itself through the console again: the engine has to stop the nesting
+function loop(args)
+	loop_calls = loop_calls + 1
+	get_console():execute("cmdqa_loop")
+	return loop_calls
+end

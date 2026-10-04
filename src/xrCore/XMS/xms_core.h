@@ -69,6 +69,18 @@ struct WorldRules
     }
 };
 
+// One console command of a module: a [commands] line `name = <script>.<function>` and its
+// [command.<name>] section. The game registers it once every stock command exists and calls
+// the function with the text typed after the name. Contract: MODDING.md, "Console commands".
+struct ModuleCommand
+{
+    xr_string name;     // as the manifest spells it; the game takes [a-z0-9_] only
+    xr_string function; // <script>.<function>; empty when only [command.<name>] names it
+    xr_string help;     // the console's help line; text or a string table id
+    xr_string args;     // what the command takes, e.g. "<night 1-7>"
+    bool cheat{false};  // runs only in Dead Air's debug mode (DEV_DEBUG, -dbg)
+};
+
 struct Module
 {
     xr_string id;      // [a-z0-9_.-]+, unique
@@ -104,6 +116,8 @@ struct Module
     // ('\' separators, never climbing out). Empty = the module leaves the PDA alone. Only the
     // last applying module that declares one is used (XmsPda); contract: MODDING.md "PDA layouts".
     xr_string pda_layout;
+    // [commands]: the console commands the module adds, in manifest order
+    xr_vector<ModuleCommand> commands;
     u32 budget_spawns{256};
     u16 ns{0};        // stable namespace id from the persistent registry
     u16 layer{0};     // 1-based position in the final load order (0 = base game)
@@ -242,9 +256,14 @@ XRCORE_API void WriteReport();
 inline constexpr u16 kReservedNsBase = 0xFF00;
 
 // Grow-only spawn-id range of a module ([base, base+size)). Allocated on
-// first request, persisted in $app_data_root$\xms_registry.ltx. Returns false
-// when the id space is exhausted.
+// first request, persisted in $app_data_root$\xms_registry.ltx. A module that
+// raises its budget grows in place while no other range follows it. Returns
+// false when the id space is exhausted.
 XRCORE_API bool SpawnRange(pcstr module_id, u32 size, u32& base);
+
+// The range a module really holds - smaller than its budget when it could not
+// grow. False when it has none yet.
+XRCORE_API bool SpawnRangeOf(pcstr module_id, u32& base, u32& size);
 
 // Grow-only local key allocation inside the module's spawn range. Returns
 // false when the range is full.

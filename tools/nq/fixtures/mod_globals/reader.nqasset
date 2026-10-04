@@ -1,0 +1,19 @@
+-- Another quest of the same module: it sees what the writer did through the globals alone.
+return {
+  nq = 1,
+  id = "reader",
+  title = "Reader",
+  vars = { saw = false },
+  nodes = {
+    { id = "watch", kind = "trigger.when",
+      cond = {
+        { kind = "global", params = { name = "night", op = "ge", value = 4 } },
+        { kind = "global", params = { name = "seen", value = true } },
+      },
+      out = { next = "mark" } },
+    { id = "mark", kind = "flow.step",
+      on_enter = { { kind = "var.set", params = { name = "saw", value = true } } },
+      out = { next = "finish" } },
+    { id = "finish", kind = "flow.end" },
+  },
+}

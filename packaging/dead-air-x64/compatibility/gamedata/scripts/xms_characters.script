@@ -1,0 +1,59 @@
+-- XFined Editor characters: the game's half.
+--
+-- A character built by the editor may keep a shop: its spawn section names the trade config
+-- the build wrote for it (xms_trade = misc\trade\<module>\<id>.ltx). The stock logic reads a
+-- trader's config from the logic the NPC runs ([logic] trade = ..., xr_logic.configure_schemes)
+-- and falls back to trade_generic.ltx - and every logic a module hands an NPC (a standing
+-- order, a behaviour step, a smart terrain's job) is written without that line. So the
+-- character's own config is put in where the trade manager starts, whatever logic asked for it.
+-- A stalker placed in a level carries the character as its profile, not its section, so the
+-- profile is asked too.
+-- Contract: docs/dead-air/MODDING.md, "Traders of a module's characters".
+
+local configs = {}	-- section or profile -> its trade config, false when it has none
+
+local function config_of(name)
+	if (type(name) ~= "string" or name == "") then return nil end
+	local cfg = configs[name]
+	if (cfg == nil) then
+		cfg = false
+		local ini = system_ini()
+		if (ini:section_exist(name) and ini:line_exist(name, "xms_trade")) then
+			local ok, v = pcall(ini.r_string, ini, name, "xms_trade")
+			if (ok and type(v) == "string" and v ~= "") then cfg = v end
+		end
+		configs[name] = cfg
+	end
+	return cfg or nil
+end
+
+local function field(npc, method)
+	local f = npc and npc[method]
+	if not (f) then return nil end
+	local ok, v = pcall(f, npc)
+	return ok and v or nil
+end
+
+-- the character's own config, or nil for anybody else
+function own_trade(npc)
+	return config_of(field(npc, "section")) or config_of(field(npc, "profile_name"))
+end
+
+-- The trader's stock comes new the next time the player opens the trade: the stock trade
+-- manager keeps its resupply clock per NPC id in the actor's storage, and a trader with no
+-- clock restocks at once (what the game's own erase_pstor_ctime does).
+function restock(id)
+	if not (id and db and db.actor and utils and utils.save_ctime) then return false end
+	return (pcall(utils.save_ctime, db.actor, tostring(id) .. "_resupply_time", nil))
+end
+
+function on_game_start()
+	if not (trade_manager and type(trade_manager.trade_init) == "function") then return end
+	-- once per Lua state: a new game, a load and a level change each build a fresh one
+	if (trade_manager.xms_characters_base) then return end
+	local base = trade_manager.trade_init
+	trade_manager.xms_characters_base = base
+	trade_manager.trade_init = function(npc, cfg, ...)
+		return base(npc, own_trade(npc) or cfg, ...)
+	end
+end

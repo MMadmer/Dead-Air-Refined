@@ -21,7 +21,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 18
+version = 21
 api     = 1
 
 ; ============================================================ triggers
@@ -401,6 +401,28 @@ delta  = float, required
 impl   = core
 since  = 1
 
+[nq.global.set]
+group  = vars
+title  = Set global variable
+desc   = Assigns a value to a global variable of the module - declared in mod.ltx [vars], it is one value every quest and behaviour graph of the module reads and writes. <module>.<name> reaches the variable of another module.
+use    = extra
+params = name, value
+name   = global_name, required
+value  = value, required
+impl   = core
+since  = 19
+
+[nq.global.add]
+group  = vars
+title  = Add to global variable
+desc   = Adds a number to a numeric global variable of the module.
+use    = extra
+params = name, delta
+name   = global_name, required
+delta  = float, required
+impl   = core
+since  = 19
+
 [nq.signal.send]
 group  = vars
 title  = Send signal
@@ -648,6 +670,16 @@ npc    = npc_ref, required
 impl   = core
 since  = 1
 
+[nq.trade.restock]
+group  = npc
+title  = Restock trader
+desc   = The trader's stock comes new the next time the player opens the trade (the resupply clock of the NPC starts over). For a shop that refreshes on an event - a night that begins, a caravan that came - instead of only by its restock hours.
+use    = extra
+params = who
+who    = npc_ref, required
+impl   = core
+since  = 21
+
 [nq.npc.kill]
 group  = npc
 title  = Kill NPC
@@ -831,6 +863,19 @@ value  = value, required
 event  = false
 impl   = core
 since  = 1
+
+[nq.global]
+group  = cond_state
+title  = Global variable
+desc   = Compares a global variable of the module with a value. op: eq, ne, lt, le, gt, ge.
+use    = cond
+params = name, op, value
+name   = global_name, required
+op     = enum, default=eq, enum=eq|ne|lt|le|gt|ge
+value  = value, required
+event  = false
+impl   = core
+since  = 19
 
 [nq.node_done]
 group  = cond_state
@@ -1347,6 +1392,20 @@ look   = way_path
 radius = float, default=20, min=1, max=100
 impl   = core
 since  = 18
+
+[nq.order.animpoint]
+group  = orders
+docs   = quest
+title  = Order - take a place
+desc   = The NPC takes an animation point of the level - a smart cover of an animpoint description placed in the scene - walks there and does what it offers: stands at a table or a counter, leans on a wall, sits on a bench, warms at a fire (camp = true for the points of a campfire). A point of the module is named as in its scene. The order belongs to the NPC like a guard order and outlives the quest.
+use    = extra
+params = who, cover, camp, anims
+who    = npc_ref, required
+cover  = string, required
+camp   = bool, default=false
+anims  = string
+impl   = core
+since  = 20
 
 [nq.order.patrol]
 group  = orders

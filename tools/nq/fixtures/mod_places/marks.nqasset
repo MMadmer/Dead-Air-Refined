@@ -1,0 +1,27 @@
+-- A target that is a place: task markers and map spots on a restrictor, and on a point.
+return {
+  nq = 1,
+  id = "marks",
+  title = "Marks",
+  activation = "auto",
+  tasks = {
+    t = { title = "Task", descr = "Marker on a place", type = "storyline", target = { restrictor = "zone_a" } },
+  },
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "on_zone" } },
+    { id = "on_zone", kind = "flow.step",
+      on_enter = {
+        { kind = "task.give", params = { task = "t" } },
+        { kind = "task.set_target", params = { task = "t", target = { restrictor = "zone_b" } } },
+        { kind = "map.spot", params = { target = { restrictor = "zone_a" }, text = "Zone A" } },
+      },
+      out = { next = "wait_point" } },
+    { id = "wait_point", kind = "wait.when",
+      cond = { { kind = "event.signal", params = { name = "to_point" } } },
+      out = { done = "on_point" } },
+    { id = "on_point", kind = "flow.step",
+      on_enter = {
+        { kind = "task.set_target", params = { task = "t", target = { level = "l01_escape", pos = { 10, 0, 10 } } } },
+      } },
+  },
+}

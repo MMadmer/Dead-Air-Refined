@@ -1,0 +1,8 @@
+-- QA ONLY (tools\qa\nq, -Scenario Commands): the second module's command.
+
+calls = 0
+
+function echo(args, module, command)
+	calls = calls + 1
+	return "CMDQA-B: " .. tostring(module) .. " " .. tostring(command)
+end

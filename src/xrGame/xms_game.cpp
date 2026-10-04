@@ -20,10 +20,14 @@
 #include "alife_spawn_registry.h"
 #include "alife_object_registry.h"
 #include "xrServerEntities/xrServer_Objects_ALife.h"
+#include "xrCore/XMS/xms_catalog.h"
+#include "xrEngine/XR_IOConsole.h"
+#include "xrEngine/xr_ioc_cmd.h"
 
 #include "xrCommon/xr_unordered_map.h"
 
 #include <io.h>
+#include <string_view>
 
 namespace XmsGame
 {
@@ -81,10 +85,10 @@ void build_manifest(xr_vector<u8>& out)
         writer.w_stringZ(m.id.c_str());
         writer.w_stringZ(m.version.c_str());
         writer.w_u16(m.ns);
-        u32 base = 0;
-        const bool has_range = XMS::SpawnRange(m.id.c_str(), m.budget_spawns, base);
+        u32 base = 0, size = 0;
+        const bool has_range = XMS::SpawnRange(m.id.c_str(), m.budget_spawns, base) && XMS::SpawnRangeOf(m.id.c_str(), base, size);
         writer.w_u32(has_range ? base : 0);
-        writer.w_u32(has_range ? m.budget_spawns : 0);
+        writer.w_u32(has_range ? size : 0);
     }
     // active game modes of this session
     writer.w_stringZ(XMS::ActiveModesCsv());
@@ -394,13 +398,14 @@ u32 LateSpawnCompose(CALifeSimulatorBase& sim)
     {
         if (m.disabled || !XMS::ModuleApplies(m))
             continue;
-        u32 base = 0;
-        if (!XMS::SpawnRange(m.id.c_str(), m.budget_spawns, base))
+        u32 base = 0, size = 0;
+        if (!XMS::SpawnRange(m.id.c_str(), m.budget_spawns, base) || !XMS::SpawnRangeOf(m.id.c_str(), base, size))
             continue;
 
         xr_vector<u16>& ledger = state.pending_ledgers[m.ns];
         u32 created = 0;
-        const u32 top = std::min(base + m.budget_spawns, 65535u);
+        // the range it holds, not the budget it asks for: a range that could not grow is followed by another module's
+        const u32 top = std::min(base + size, 65535u);
         for (u32 id = base; id < top; ++id)
         {
             const ALife::_SPAWN_ID spawn_id = ALife::_SPAWN_ID(id);
@@ -914,6 +919,32 @@ xms.pda = {
     describe = function() return xms_native_pda_describe() end,
 }
 
+-- Console commands of the modules (docs/dead-air/MODDING.md, "Console commands"); feature-test
+-- with xms.commands_api. mod.ltx [commands] name = <script>.<function>: the engine calls
+-- function(args, module, command) - args the text after the name - and prints a returned string.
+xms.commands_api = 1
+-- 'a "b c" d' -> { "a", "b c", "d" }: words split at spaces, double quotes keep a phrase together
+function xms.command_args(text)
+    local out = {}
+    text = tostring(text or "")
+    local i, n = 1, #text
+    while i <= n do
+        local c = string.sub(text, i, i)
+        if string.find(c, "%s") then
+            i = i + 1
+        elseif c == '"' then
+            local close = string.find(text, '"', i + 1, true) or (n + 1)
+            out[#out + 1] = string.sub(text, i + 1, close - 1)
+            i = close + 1
+        else
+            local stop = string.find(text, '[%s"]', i) or (n + 1)
+            out[#out + 1] = string.sub(text, i, stop - 1)
+            i = stop
+        end
+    end
+    return out
+end
+
 -- ---- module script namespaces ----------------------------------------------
 local script_cache = {}
 function xms.require(mod_id, name)
@@ -1145,3 +1176,298 @@ void xms_registrator::script_register(lua_State* luaState)
     // libraries are not open yet while export_all is running
     CScriptEngine::g_xms_on_init = &run_bootstrap;
 }
+
+// ---- module console commands -------------------------------------------------
+
+namespace XmsGame
+{
+namespace
+{
+// The console looks a name up as typed and ends it at the first space.
+bool valid_command_name(const xr_string& name)
+{
+    if (name.empty() || name.size() > 64)
+        return false;
+    for (const char c : name)
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+            return false;
+    return true;
+}
+
+bool lua_identifier(std::string_view word)
+{
+    if (word.empty() || (word[0] >= '0' && word[0] <= '9'))
+        return false;
+    for (const char c : word)
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+            return false;
+    return true;
+}
+
+// <script>.<function>, exactly two names
+bool valid_command_function(const xr_string& spec)
+{
+    const size_t dot = spec.find('.');
+    if (dot == xr_string::npos || spec.size() > 128)
+        return false;
+    const std::string_view view(spec.data(), spec.size());
+    return lua_identifier(view.substr(0, dot)) && lua_identifier(view.substr(dot + 1));
+}
+
+// The console draws Windows-1251. A module's text is UTF-8 unless it was written in the game's
+// own code page, which is passed as it is - the Mods window's rule.
+xr_string console_text(std::string_view text)
+{
+    const int length = static_cast<int>(text.size());
+    const int wide_length = length ? MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), length, nullptr, 0) : 0;
+    if (wide_length <= 0)
+        return xr_string(text.data(), text.size());
+    std::wstring wide(static_cast<size_t>(wide_length), L'\0');
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), length, wide.data(), wide_length);
+    const int ansi_length = WideCharToMultiByte(1251, 0, wide.data(), wide_length, nullptr, 0, "?", nullptr);
+    if (ansi_length <= 0)
+        return xr_string(text.data(), text.size());
+    xr_string ansi(static_cast<size_t>(ansi_length), '\0');
+    WideCharToMultiByte(1251, 0, wide.data(), wide_length, ansi.data(), ansi_length, "?", nullptr);
+    return ansi;
+}
+
+// One log line per line of the text, each with `prefix` in front.
+void log_lines(pcstr prefix, std::string_view text)
+{
+    size_t start = 0;
+    while (start <= text.size())
+    {
+        size_t end = text.find('\n', start);
+        if (end == std::string_view::npos)
+            end = text.size();
+        xr_string line(prefix);
+        for (const char c : text.substr(start, end - start))
+        {
+            if (c == '\t')
+                line += "    ";
+            else if (c != '\r')
+                line += c;
+        }
+        if (end < text.size() || line.size() > xr_strlen(prefix))
+            Log(line.c_str());
+        start = end + 1;
+    }
+}
+
+// Dead Air's debug mode: _g.script sets DEV_DEBUG from -dbg, the debug menu switches it.
+bool cheats_allowed(lua_State* L)
+{
+    lua_pushstring(L, "DEV_DEBUG");
+    lua_rawget(L, LUA_GLOBALSINDEX);
+    const bool on = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    return on;
+}
+
+// lua_pcall's message handler: the error with the Lua stack under it.
+int command_traceback(lua_State* L)
+{
+    lua_pushstring(L, "debug");
+    lua_rawget(L, LUA_GLOBALSINDEX);
+    if (lua_istable(L, -1))
+    {
+        lua_pushstring(L, "traceback");
+        lua_rawget(L, -2);
+        if (lua_isfunction(L, -1))
+        {
+            lua_pushvalue(L, 1);
+            lua_pushinteger(L, 2);
+            lua_call(L, 2, 1);
+            return 1;
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    return 1;
+}
+
+// Runs under lua_pcall with [function, args, module, command] on the stack. The script table
+// comes through the globals, whose autoload loads <script>.script on first use; whatever is
+// not a function of that script is an error here, never a fatal in the engine's own lookup.
+int command_call(lua_State* L)
+{
+    pcstr spec = lua_tostring(L, 1);
+    pcstr dot = strchr(spec, '.');
+    lua_pushlstring(L, spec, static_cast<size_t>(dot - spec));
+    lua_pushvalue(L, -1);
+    lua_gettable(L, LUA_GLOBALSINDEX);
+    if (!lua_istable(L, -1))
+        return luaL_error(L, "there is no script %s", lua_tostring(L, -2));
+    // raw: a script's environment falls back to the globals, a typo must not call one of those
+    lua_pushstring(L, dot + 1);
+    lua_rawget(L, -2);
+    if (!lua_isfunction(L, -1))
+        return luaL_error(L, "%s is not a function", spec);
+    lua_pushvalue(L, 2);
+    lua_pushvalue(L, 3);
+    lua_pushvalue(L, 4);
+    lua_call(L, 3, 1);
+    return 1;
+}
+
+class CCC_ModuleCommand final : public IConsole_Command
+{
+public:
+    CCC_ModuleCommand(const shared_str& name, const XMS::Module& owner, const XMS::ModuleCommand& command)
+        : IConsole_Command(name.c_str()), m_name(name), m_module(owner.id), m_function(command.function),
+          m_help(command.help), m_args(command.args), m_cheat(command.cheat)
+    {
+        bEmptyArgsHandled = true;
+        bLowerCaseArgs = false;
+    }
+
+    const xr_string& Owner() const { return m_module; }
+
+    void Execute(pcstr args) override
+    {
+        CScriptEngine* engine = GEnv.ScriptEngine;
+        lua_State* L = engine ? engine->lua() : nullptr;
+        if (!L)
+        {
+            Msg("! %s: the scripts are not loaded yet", Name());
+            return;
+        }
+        if (m_cheat && !cheats_allowed(L))
+        {
+            Msg("! %s: a cheat of module [%s] - it runs only in debug mode (start the game with -dbg)", Name(),
+                m_module.c_str());
+            return;
+        }
+        // a command that runs itself through the console again stops here, not at the end of the C stack
+        static u32 depth = 0;
+        if (depth >= 8)
+        {
+            Msg("! %s: module commands nest too deep", Name());
+            return;
+        }
+        ++depth;
+        // what the module's script does is the module's, not the player's (MOD_CATALOG 9.2)
+        XMS::Protect::OriginScope origin(XMS::Protect::Origin::Script);
+        const int top = lua_gettop(L);
+        try
+        {
+            lua_pushcfunction(L, command_traceback);
+            lua_pushcfunction(L, command_call);
+            lua_pushstring(L, m_function.c_str());
+            lua_pushstring(L, args ? args : "");
+            lua_pushstring(L, m_module.c_str());
+            lua_pushstring(L, Name());
+            if (0 != lua_pcall(L, 4, 1, top + 1))
+            {
+                pcstr error = lua_tostring(L, -1);
+                const xr_string text = console_text(error ? error : "the script raised an error that is not text");
+                Msg("! %s (module [%s], %s) failed:", Name(), m_module.c_str(), m_function.c_str());
+                log_lines("!   ", text);
+            }
+            else if (lua_type(L, -1) == LUA_TSTRING || lua_type(L, -1) == LUA_TNUMBER)
+            {
+                size_t length = 0;
+                pcstr result = lua_tolstring(L, -1, &length);
+                log_lines("", console_text({result, length}));
+            }
+        }
+        catch (...)
+        {
+            Msg("! %s (module [%s], %s) failed in the engine", Name(), m_module.c_str(), m_function.c_str());
+        }
+        lua_settop(L, top);
+        --depth;
+    }
+
+    void Info(TInfo& I) override
+    {
+        xr_string text = m_help;
+        // a word with no space may be a string table id, the way every caption of the game is
+        if (!text.empty() && text.size() <= 128 && text.find_first_of(" \t\n") == xr_string::npos &&
+            StringTable().has_translation(text.c_str()))
+        {
+            const shared_str translated = StringTable().translate(text.c_str());
+            text = translated.c_str() ? translated.c_str() : "";
+        }
+        else
+            text = console_text(text);
+        if (!m_args.empty())
+            text += xr_string(text.empty() ? "" : "; ") + Name() + " " + console_text(m_args);
+        text += (text.empty() ? "(module " : " (module ") + m_module + (m_cheat ? ", cheat: -dbg only)" : ")");
+        strncpy_s(I, sizeof(I), text.c_str(), _TRUNCATE);
+    }
+
+    void fill_tips(vecTips& tips, u32 /*mode*/) override
+    {
+        if (!m_args.empty())
+            tips.push_back(shared_str(console_text(m_args).c_str()));
+    }
+
+private:
+    shared_str m_name; // owns the text cName points at
+    xr_string m_module;
+    xr_string m_function;
+    xr_string m_help;
+    xr_string m_args;
+    bool m_cheat;
+};
+
+xr_vector<CCC_ModuleCommand*>& module_commands()
+{
+    static xr_vector<CCC_ModuleCommand*> commands;
+    return commands;
+}
+} // namespace
+
+void RegisterModuleCommands()
+{
+    if (!Console)
+        return;
+    xr_vector<CCC_ModuleCommand*>& registered = module_commands();
+    for (const XMS::Module& m : XMS::Modules())
+    {
+        if (m.disabled)
+            continue;
+        xr_string added;
+        for (const XMS::ModuleCommand& c : m.commands)
+        {
+            pcstr why = nullptr;
+            xr_string first;
+            if (!valid_command_name(c.name))
+                why = "a command name is a-z, 0-9 and _ only";
+            else if (c.function.empty())
+                why = "its [command.<name>] section has no line in [commands]";
+            else if (!valid_command_function(c.function))
+                why = "[commands] takes <script>.<function>";
+            else if (IConsole_Command* taken = Console->GetCommand(c.name.c_str()))
+            {
+                for (const CCC_ModuleCommand* own : registered)
+                    if (own == taken)
+                        first = own->Owner();
+                why = first.empty() ? "the game has a console command of that name" : "a module earlier in the load order has it";
+            }
+            if (why)
+            {
+                Msg("! XMS: module [%s] console command [%s] refused - %s%s%s", m.id.c_str(), c.name.c_str(), why,
+                    first.empty() ? "" : ": ", first.c_str());
+                continue;
+            }
+            CCC_ModuleCommand* command = xr_new<CCC_ModuleCommand>(shared_str(c.name.c_str()), m, c);
+            Console->AddCommand(command);
+            registered.push_back(command);
+            added += (added.empty() ? "" : ", ") + c.name;
+        }
+        if (!added.empty())
+            Msg("* XMS: module [%s] adds console command(s): %s", m.id.c_str(), added.c_str());
+    }
+}
+
+void UnregisterModuleCommands()
+{
+    // the console may be gone already; a command takes itself out of a live one
+    for (CCC_ModuleCommand*& command : module_commands())
+        xr_delete(command);
+    module_commands().clear();
+}
+} // namespace XmsGame

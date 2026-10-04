@@ -179,6 +179,34 @@ case("W321 button without an action", function(a) a.pages[2].widgets[2].action =
 local e = case("errors make the layout unusable", function(a) a.chrome[1].kind = "circle" end, { E305 = 1 })
 check(e.ok == false, "ok is false with an error")
 
+section("map_spots: the look of the game's map spots, written by the editor's build")
+do
+	local base = { pda = 1, id = "spots", colors = { accent = "#FFD21E" },
+		pages = { { id = "home", widgets = { { kind = "text", x = 0, y = 0, w = 10, h = 10, text = "x" } } } } }
+	base.map_spots = {
+		actor_level_spot = { icon = "ui_xms_icon_circle", color = "#FFFFFF", size = 22, level = -1,
+			inner = { icon = "ui_xms_icon_circle", color = "accent", size = 14 } },
+		secondary_task_spot_mini = { icon = "ui_xms_icon_pin", color = "accent", size = 16, arrows = "secondary_task_spot" },
+	}
+	local r = L.normalize(base, { lang = "rus" })
+	check(r.ok and r.warnings == 0, "a layout with map_spots reads clean")
+	local a = r.map_spots[1]
+	check(#r.map_spots == 2 and a.name == "actor_level_spot" and a.level == -1 and a.size == 22, "the spots come out by name")
+	check(a.inner and a.inner.color == 0xFFFFD21E and a.inner.x == 4 and a.inner.y == 4, "a palette colour resolves and the inner icon centres")
+	check(r.map_spots[2].arrows == "secondary_task_spot", "the minimap arrows are kept")
+	base.map_spots = { green_spot = { icon = [[ui\ui_od_map]], rect = { 128, 0, 64, 64 }, size = 44 } }
+	local rr = L.normalize(base, { lang = "rus" })
+	local g = rr.map_spots[1]
+	check(rr.ok and g and g.rect and g.rect.x == 128 and g.rect.w == 64, "a piece of a texture file: rect")
+	base.map_spots = { green_spot = { icon = "x", rect = { 1, 2 } } }
+	check(codes(L.normalize(base, { lang = "rus" })).E323 == 1, "a rect that is not four numbers is E323")
+
+	base.map_spots = { ["not a node"] = { icon = "x" }, green_spot = { color = "#FFFFFF" }, red_spot = { icon = "x", blink = true } }
+	local bad = L.normalize(base, { lang = "rus" })
+	local c = codes(bad)
+	check(c.E323 == 2 and c.W324 == 1, "a bad entry is E323, an unknown key W324")
+end
+
 section("the file sandbox")
 do
 	local ok = pcall(function()

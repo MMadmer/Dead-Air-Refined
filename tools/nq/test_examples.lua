@@ -3040,6 +3040,10 @@ do
 	end
 	mock.rebuild()
 	check(mock.npc_would_restore(ini_name, active) == nil, "right after the reload neither exists")
+	-- an NPC the save holds online may spawn before the actor sends on_game_load
+	xms_nq_behaviour.on_game_start()
+	check(xr_logic.get_customdata_or_ini_file(wolf, ini_name) ~= nil,
+		"an NPC spawning before on_game_load still finds its logic file")
 	mock.first_update()
 	mock.after_game_load = nil
 	check(seen_before_init and seen_before_init[1] ~= nil,
@@ -3347,6 +3351,24 @@ do
 	check(o and o.path == nil, "a drawn post needs no runtime path: the slot went back to the pool")
 end
 
+section("(z19) order.animpoint: a smart cover of the level, at a fire or not")
+do
+	se_smart_cover = { registered_smartcovers = { ["mod_b.qa_counter"] = {}, agr_kamp1 = {} } }
+	B["order.animpoint"].run(CTX, { who = WOLF, cover = "qa_counter" })
+	local rec = mock.applied[wolf:id()]
+	check(rec and rec.scheme == "animpoint", "it takes the point on the animpoint scheme (" .. tostring(rec and rec.scheme) .. ")")
+	check(rec and string.find(rec.text, "cover_name = mod_b.qa_counter", 1, true) and string.find(rec.text, "use_camp = false", 1, true),
+		"the module's point by its scene name, and not a camp")
+	B["order.animpoint"].run(CTX, { who = WOLF, cover = "agr_kamp1", camp = true, anims = "animpoint_sit_ass_eat_bread" })
+	rec = mock.applied[wolf:id()]
+	check(rec and string.find(rec.text, "use_camp = true", 1, true) and string.find(rec.text, "avail_animations = animpoint_sit_ass_eat_bread", 1, true),
+		"a stock camp point, the animations narrowed")
+	check(not pcall(B["order.animpoint"].run, CTX, { who = WOLF, cover = "nowhere" }), "a point the level does not have is an error")
+	local o = order_rec(wolf:id())
+	check(o and o.kind == "animpoint", "the order is in the state")
+	se_smart_cover = nil
+end
+
 section("(z19) order.patrol along a route")
 do
 	B["order.patrol"].run(CTX, { who = WOLF, route = "qa_walk", move = "run" })
@@ -3566,6 +3588,275 @@ do
 	mock.after_game_load = nil
 	axr_main = nil
 end
+
+-- ============================================================================ (z21) a character by its asset
+-- { character = "id" } in any NPC reference names the module's own character, the one the
+-- editor generates as "<module>_<id>": its section when a quest spawned it, its profile when
+-- it was placed in a level. Online or not, alive before dead, one registry walk for all.
+;(function()
+section("(z21) { character = } names the module's own character wherever it is")
+do
+	setup()
+	mock.first_update()
+	local CTX = { uid = "mod_b.teller", node_id = "n", def = { module = "mod_b" }, qs = { refs = {} } }
+	local util = xms_nq_util
+	check(util.character_key(CTX, "valera") == "mod_b_valera", "a bare id belongs to the graph's module")
+	check(util.character_key(CTX, "other.mod.boss") == "other.mod_boss", "<module>.<id> reaches another module, dots and all")
+
+	local valera = mock.add_npc("mod_b_valera", nil, { community = "stalker", name = "Valera", profile = "mod_b_valera" })
+	local placed = mock.add_npc("stalker", nil, { community = "stalker", name = "Guard", profile = "mod_b_guard" })
+	check(util.npc_matches(CTX, { character = "valera" }, valera), "the dialog side: the partner is that character")
+	check(not util.npc_matches(CTX, { character = "valera" }, wolf), "and Wolf is not")
+	check(util.npc_matches(CTX, { character = "guard" }, placed), "a stalker placed in a level is his character by its profile")
+	check(util.resolve_npc_go(CTX, { character = "valera" }) == valera, "resolved online to the game object")
+	check(util.resolve_target_id(CTX, { character = "valera" }) == valera:id(), "and to its id as a target")
+	check(util.npc_matches(CTX, { character = "valera" }, { id = valera:id(), section = "mod_b_valera" }),
+		"a captured event record matches by its section")
+
+	-- the player walked away: no game object, only the server's
+	local vid = valera:id()
+	db.storage[vid] = nil
+	util.character_forget()
+	check(util.ref_object_id(CTX, { character = "valera" }) == vid, "offline it is found in the registry")
+	check(util.resolve_npc_se(CTX, { character = "valera" }) == mock.se[vid], "as a server object")
+
+	-- a body and a living man of the same character: the living one answers
+	local body_go, body_se = mock.add_npc("mod_b_valera", nil, { community = "stalker", profile = "mod_b_valera" })
+	db.storage[body_go:id()] = nil
+	body_se:kill()
+	util.character_forget()
+	check(util.ref_object_id(CTX, { character = "valera" }) == vid, "alive before dead")
+	mock.se[vid]:kill()
+	util.character_forget()
+	local left = util.ref_object_id(CTX, { character = "valera" })
+	check(left == vid or left == body_se.id, "only bodies left: one of them, not nothing")
+	check(util.ref_object_id(CTX, { character = "nobody" }) == nil, "a character nobody spawned resolves to nothing")
+
+	local function load(params_lua, kind)
+		return xms_nq_load.load_asset("mod_b", "chr.nqasset",
+			'return { nq = 1, id = "chr", title = "x", nodes = { { id = "s", kind = "trigger.start", out = { next = "a" } }, ' ..
+			'{ id = "a", kind = "' .. kind .. '", params = ' .. params_lua .. ' } } }', "quest")
+	end
+	check(load('{ npc = { character = "valera" }, text = "hi" }', "dialog.topic").valid, "a topic on a character loads")
+	check(load('{ target = { character = "valera" } }', "objective.kill").valid, "a kill objective on a character loads")
+	check(not load('{ npc = { character = 5 }, text = "hi" }', "dialog.topic").valid, "a character that is no name is refused")
+end
+end)()
+
+-- ============================================================================ (z22) a character's trade
+-- A character the editor built as a trader names its own trade config in its spawn section
+-- (xms_trade); xms_characters puts it in wherever the trade manager starts, because the logic
+-- a module hands an NPC (an order, a behaviour step) never carries a trade line.
+;(function()
+section("(z22) a character's own trade config wins over whatever its logic asked for")
+do
+	setup()
+	local seen = {}
+	trade_manager = { trade_init = function(npc, cfg) seen[#seen + 1] = cfg end }
+	xms_characters.on_game_start()
+	xms_characters.on_game_start()
+	local GENERIC = "misc\\trade\\trade_generic.ltx"
+	local OWN = "misc\\trade\\mod_b\\trader.ltx"
+	local trader = mock.add_npc("mod_b_trader", nil, { community = "stalker", profile = "mod_b_trader" })
+	local placed = mock.add_npc("stalker", nil, { community = "stalker", profile = "mod_b_trader" })
+	local plain = mock.add_npc("mod_b_plain", nil, { community = "stalker", profile = "mod_b_plain" })
+	trade_manager.trade_init(trader, GENERIC)
+	trade_manager.trade_init(placed, GENERIC)
+	trade_manager.trade_init(plain, GENERIC)
+	trade_manager.trade_init(plain, "misc\\trade\\trade_medic.ltx")
+	check(#seen == 4, "the trade manager was wrapped once, a second on_game_start changed nothing (" .. #seen .. " calls)")
+	check(seen[1] == OWN, "a spawned trader trades from its own config (" .. tostring(seen[1]) .. ")")
+	check(seen[2] == OWN, "so does a stalker placed with the character's profile")
+	check(seen[3] == GENERIC, "an NPC with no shop keeps what its logic asked for")
+	check(seen[4] == "misc\\trade\\trade_medic.ltx", "and a logic that names a config keeps it")
+	check(xms_characters.own_trade(plain) == nil, "own_trade answers nil for anybody without a shop")
+	trade_manager = nil
+end
+end)()
+
+-- ============================================================================ (z23) global variables
+-- A module declares variables in its manifest ([vars]) that every graph of it shares: one
+-- quest writes, another reads, a text shows one, a save keeps them, and a graph naming one
+-- the module never declared does not load.
+;(function()
+section("(z23) global variables: declared in mod.ltx, shared by every quest of the module")
+do
+	local GMOD = { { id = "mod_g", root = FIXTURES .. "\\mod_globals" } }
+	setup({ modules = GMOD })
+	mock.first_update()
+	mock.ticks(2)
+	local core = xms_nq
+	check(core.get_global("mod_g", "night") == 0, "a number takes its default (" .. tostring(core.get_global("mod_g", "night")) .. ")")
+	check(core.get_global("mod_g", "seen") == false, "a bool takes its default")
+	check(core.get_global("mod_g", "who") == "nobody", "a quoted string takes its default, quotes gone")
+	check(core.get_global("mod_g", "note") == "plain", "a bare string stops where its comment starts")
+	check(core.quests()["mod_g.writer"] ~= nil and core.quests()["mod_g.reader"] ~= nil, "the quests that name declared globals load")
+	local _, _, invalid = core.quests()
+	local bad
+	for _, q in ipairs(invalid or {}) do if (q.id == "undeclared") then bad = q end end
+	local e030 = false
+	for _, pr in ipairs(bad and bad.problems or {}) do if (pr.code == "E030") then e030 = true end end
+	check(bad ~= nil and e030, "a quest naming a global the module never declared is E030 and does not load")
+
+	core.emit({ name = "signal", signal = "g_go", module = "mod_g", quest = "mod_g.writer" })
+	mock.ticks(3)
+	check(core.get_global("mod_g", "night") == 4, "global.set then global.add (" .. tostring(core.get_global("mod_g", "night")) .. ")")
+	check(core.quest_state("mod_g.reader").vars.saw == true, "another quest's trigger saw the change")
+	local ctx = core.make_ctx("mod_g.reader", "mark")
+	check(xms_nq_util.format_text(ctx, "{global:night}/{global:mod_g.night}") == "4/4", "{global:name} and {global:module.name} in a text")
+	check(xms_nq_util.format_text(ctx, "{global:who}") == xms_nq_util.to_cp1251("Сыч"), "a string global reaches the text in cp1251")
+
+	-- a save and a load: the values stay, a default never overwrites one
+	mock.rebuild()
+	mock.first_update()
+	mock.ticks(1)
+	core = xms_nq
+	check(core.get_global("mod_g", "night") == 4 and core.get_global("mod_g", "seen") == true, "the values survive a save and a load")
+	check(core.get_global("mod_g", "who") == "Сыч", "strings too, byte for byte")
+	local ok = pcall(xms_nq_console.exec, "globals mod_g")
+	check(ok, "nq globals prints them")
+end
+end)()
+
+-- ============================================================================ (z24) a place as a target
+-- target_ref takes a place as well: a restrictor by name, or a point the task anchors a
+-- space_restrictor on. The editor always offered both; the loader has to take them too.
+;(function()
+section("(z24) a restrictor or a point as the target of a task marker and a map spot")
+do
+	setup({ modules = { { id = "mod_places", root = FIXTURES .. "\\mod_places" } } })
+	local za = mock.add_restrictor("zone_a", vector():set(1, 0, 1), true, 3)
+	local zb = mock.add_restrictor("zone_b", vector():set(5, 0, 5), true, 3)
+	mock.first_update()
+	mock.ticks(3)
+	local core = xms_nq
+	check(core.quests()["mod_places.marks"] ~= nil, "a quest with place targets loads")
+	local t = mock.task_by_id("nq.mod_places.marks.t")
+	check(t ~= nil and t:get_map_object_id() == zb.id, "task.set_target put the marker on the restrictor (" ..
+		tostring(t and t:get_map_object_id()) .. ")")
+	check(mock.spots[za.id .. "|secondary_task_location"] ~= nil, "map.spot put a spot on a restrictor")
+	core.emit({ name = "signal", signal = "to_point", module = "mod_places", quest = "mod_places.marks" })
+	mock.ticks(3)
+	local anchor = t and t:get_map_object_id()
+	local se = anchor and mock.se[anchor]
+	check(se ~= nil and se:section_name() == "space_restrictor" and anchor ~= za.id and anchor ~= zb.id,
+		"a point target is anchored with a space_restrictor of its own")
+end
+end)()
+
+-- ============================================================================ (z25) killing a character
+-- objective.kill on { character = } resolves the module's own person when the node starts and
+-- waits for that one to die - the loader always took the form, the kill has to run it too.
+;(function()
+section("(z25) objective.kill on a character waits for that person")
+do
+	setup({ modules = { { id = "mod_kill", root = FIXTURES .. "\\mod_kill" } } })
+	local boss = mock.add_npc("mod_kill_boss", nil, { community = "stalker", profile = "mod_kill_boss" })
+	mock.first_update()
+	mock.ticks(3)
+	local core = xms_nq
+	check(core.quests()["mod_kill.hunt"] ~= nil, "the quest loads")
+	check(core.tokens_of("mod_kill.hunt") and core.tokens_of("mod_kill.hunt").kill ~= nil, "the kill waits")
+	check(core.tokens_of("mod_kill.hunt").kill.w.id == boss:id(), "on the character's object")
+	boss:kill(db.actor)
+	mock.ticks(3)
+	check(core.quest_status("mod_kill.hunt") == "completed", "the death ends it (" .. tostring(core.quest_status("mod_kill.hunt")) .. ")")
+end
+end)()
+
+-- ============================================================================ (z26) not a person
+-- The engine logs an error with a whole stack for profile_name()/character_community() of
+-- anything that is not an inventory owner and for alive() of what is not an entity - pcall
+-- does not silence it. The walks over db.storage meet anomalies, boxes and physics objects.
+;(function()
+section("(z26) character data is never asked of what is not a person")
+do
+	setup()
+	mock.first_update()
+	local CTX = { uid = "mod_b.teller", node_id = "n", def = { module = "mod_b" }, qs = { refs = {} } }
+	local util = xms_nq_util
+	local asked = {}
+	local mine = mock.new_go("zone_mine_field")
+	mine.is_inventory_owner = function() return false end
+	for _, m in ipairs({ "profile_name", "character_community", "character_name", "alive" }) do
+		mine[m] = function() asked[#asked + 1] = m return nil end
+	end
+	db.storage[mine:id()] = { object = mine }
+	local valera = mock.add_npc("mod_b_valera", nil, { community = "stalker", profile = "mod_b_valera" })
+	valera.is_inventory_owner = function() return true end
+	util.character_forget()
+	check(util.character_id(CTX, "valera") == valera:id(), "the character is found online")
+	check(util.character_id(CTX, "guard") == nil, "a character that is not there is not")
+	check(util.resolve_npc_go(CTX, { profile = "nobody" }) == nil and util.resolve_npc_go(CTX, { community = "monolith" }) == nil,
+		"profile and community lookups walk past it")
+	check(util.go_profile(mine) == nil and util.go_community(mine) == nil, "its profile and community read as none")
+	check(util.go_name(mine) ~= nil, "its name still reads")
+	check(#asked == 0, "and it was never asked (" .. table.concat(asked, ", ") .. ")")
+	check(util.go_profile(valera) == "mod_b_valera", "an inventory owner is asked as before")
+	db.storage[mine:id()] = nil
+end
+end)()
+
+-- ============================================================================ (z27) the faction start jump
+-- ui_mm_faction_select asks for its start jump on every update until the level changes. After a
+-- module's Player Start the engine drops it, and the request must not come back every frame.
+;(function()
+section("(z27) the faction start jump is asked once where the game already stands")
+do
+	setup()
+	local calls = 0
+	ChangeLevel = function() calls = calls + 1 end
+	xms_world.on_game_start()
+	local jump, other = loadstring("return function(n) for i = 1, n do ChangeLevel(1, 2, 3, 4) end end,\n" ..
+		"function() ChangeLevel(5, 6, 7, 8) end", "@gamedata\\scripts\\ui_mm_faction_select.script")()
+	local elsewhere = loadstring("return function() ChangeLevel(1, 2, 3, 4) end", "@gamedata\\scripts\\fast_travel.script")()
+	mock.level_name = "l03_agroprom"
+	jump(1)
+	check(calls == 1, "the first request goes to the engine")
+	jump(5)
+	check(calls == 1, "refused once, the same request is asked no more (" .. calls .. ")")
+	other()
+	check(calls == 2, "another function of that script still goes")
+	elsewhere()
+	check(calls == 3, "a jump of any other script still goes")
+	local src = "@gamedata\\scripts\\ui_mm_faction_select.script"
+	check(not xms_world.faction_jump_held(src, 99, "fake_start") and not xms_world.faction_jump_held(src, 99, "fake_start"),
+		"on fake_start the jump is the way into the game: never held")
+
+	-- a module's Player Start stands: the jump never reaches the engine, whatever the frame order
+	local world_was = xms.world
+	xms.world = { describe = function() return "\n  area: l03_agroprom\n  start: l03_agroprom (module mod_b)" end }
+	local fresh = loadstring("return function() ChangeLevel(1, 2, 3, 4) end",
+		"@gamedata\\scripts\\mods\\ui_mm_faction_select.script")()
+	fresh()
+	check(calls == 3, "a module's start stands: even the first request is held (" .. calls .. ")")
+	check(not xms_world.faction_jump_held(src, 99, "fake_start", function() return true end), "and still nothing on fake_start")
+	xms.world = world_was
+	ChangeLevel = nil
+end
+end)()
+
+-- ============================================================================ (z28) trade.restock
+-- A night that begins restocks the hub's traders: the resupply clock the trade manager keeps
+-- per NPC is cleared, so the next trade rolls the stock anew.
+;(function()
+section("(z28) trade.restock clears the trader's resupply clock")
+do
+	setup()
+	local CTX = { uid = "mod_b.teller", node_id = "n", def = { module = "mod_b" }, qs = { refs = {} } }
+	local W = xms_nq_world.kinds()
+	local trader = mock.add_npc("mod_b_trader", nil, { community = "stalker", profile = "mod_b_trader" })
+	local key = tostring(trader:id()) .. "_resupply_time"
+	mock.ctimes[key] = "yesterday"
+	mock.ctimes["other_resupply_time"] = "yesterday"
+	W["trade.restock"].run(CTX, { who = { character = "trader" } })
+	check(mock.ctimes[key] == nil, "the trader's clock is gone: the next trade restocks")
+	check(mock.ctimes["other_resupply_time"] == "yesterday", "nobody else's clock is touched")
+	local before = mock.log_count("trade.restock: npc not found")
+	W["trade.restock"].run(CTX, { who = { character = "nobody" } })
+	check(mock.log_count("trade.restock: npc not found") == before + 1, "an NPC that is not in the world is a warning, not an error")
+end
+end)()
 
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))

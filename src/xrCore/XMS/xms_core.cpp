@@ -354,6 +354,18 @@ xr_string display_text(pcstr value)
 
 bool normalize_rel_path(xr_string& p);
 
+// The command of that name, made on first mention: its [command.<name>] section may come
+// before or after the [commands] line. Section names arrive lowercased, so the match ignores case.
+ModuleCommand& command_entry(Module& m, pcstr name)
+{
+    for (ModuleCommand& c : m.commands)
+        if (0 == _stricmp(c.name.c_str(), name))
+            return c;
+    ModuleCommand& c = m.commands.emplace_back();
+    c.name = name;
+    return c;
+}
+
 void parse_manifest(Module& m, char* text)
 {
     // a BOM in front of "[module]" would hide the section header
@@ -417,6 +429,25 @@ void parse_manifest(Module& m, char* text)
         {
             if (0 == xr_strcmp(key, "layout"))
                 pda_layout = value;
+        }
+        else if (0 == xr_strcmp(section, "commands"))
+        {
+            ModuleCommand& c = command_entry(m, key);
+            if (c.function.empty())
+                c.function = value;
+            else
+                Msg("! XMS: module [%s] declares console command [%s] twice - the first line stays", m.id.c_str(), key);
+        }
+        else if (0 == strncmp(section, "command.", 8) && section[8])
+        {
+            ModuleCommand& c = command_entry(m, section + 8);
+            if (0 == xr_strcmp(key, "help"))
+                c.help = display_text(value);
+            else if (0 == xr_strcmp(key, "args"))
+                c.args = display_text(value);
+            else if (0 == xr_strcmp(key, "cheat"))
+                c.cheat = 0 == _stricmp(value, "true") || 0 == _stricmp(value, "1") || 0 == _stricmp(value, "yes") ||
+                    0 == _stricmp(value, "on");
         }
         else if (0 == xr_strcmp(section, "vfs"))
             m.vfs_maps.push_back({lower_copy(key), value});
@@ -1758,7 +1789,30 @@ bool SpawnRange(pcstr module_id, u32 size, u32& base)
     State& s = st();
     if (const auto it = s.range_by_id.find(module_id); it != s.range_by_id.end())
     {
-        base = it->second.base;
+        SpawnRangeRec& rec = it->second;
+        base = rec.base;
+        // a module that raised its [budget] spawns keeps its ids and grows in place, as long as no other
+        // module's range starts in the ids it now wants; moving it would orphan the objects saves hold
+        if (size > rec.size)
+        {
+            bool free = rec.base + size <= kSpawnIdCeiling;
+            for (const auto& [id, other] : s.range_by_id)
+                free = free && (&other == &rec || other.base >= rec.base + size || other.base + other.size <= rec.base);
+            if (free)
+            {
+                Msg("* XMS: spawn range of [%s] grows %u -> %u ids", module_id, rec.size, size);
+                rec.size = size;
+                s.registry_dirty = true;
+                save_registry();
+            }
+            else
+            {
+                // asked once per object composed: said once per module
+                static xr_set<xr_string> told;
+                if (told.insert(module_id).second)
+                    Msg("! XMS: spawn range of [%s] cannot grow to %u ids: another module's range follows it", module_id, size);
+            }
+        }
         return true;
     }
     u32 candidate = kSpawnRangeFloor;
@@ -1777,6 +1831,17 @@ bool SpawnRange(pcstr module_id, u32 size, u32& base)
     s.registry_dirty = true;
     save_registry();
     base = candidate;
+    return true;
+}
+
+bool SpawnRangeOf(pcstr module_id, u32& base, u32& size)
+{
+    State& s = st();
+    const auto it = s.range_by_id.find(module_id);
+    if (it == s.range_by_id.end())
+        return false;
+    base = it->second.base;
+    size = it->second.size;
     return true;
 }
 

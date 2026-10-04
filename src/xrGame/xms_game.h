@@ -86,4 +86,12 @@ u32 ReleaseOrphanedModuleSpawns(class CALifeSimulatorBase& sim);
 // once the game world is up, which is long after spawns().load composed with
 // an empty set. Exposed to Lua as xms_native_recompose_spawns().
 u32 RecomposeAndLateSpawn(class CALifeSimulatorBase& sim);
+
+// ---- module console commands ------------------------------------------------
+// The [commands] of every enabled module become console commands that call the
+// module's Lua function (MODDING.md, "Console commands"). Registered once every
+// stock command exists, so a name already taken - by the game or by a module
+// earlier in the load order - is refused with a log line instead of shadowing.
+void RegisterModuleCommands();
+void UnregisterModuleCommands();
 }
