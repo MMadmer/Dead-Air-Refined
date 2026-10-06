@@ -44,16 +44,34 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 		m0.y *= k; m1.y *= k; m2.y *= k;
 	}
 
+	const float3 root	= float3(m0.w, m1.w, m2.w);
+	// The season of the class (da_detail_common.h): keep, height, burial; the previous frame's rows for the
+	// motion vectors (an item that just appeared has no history and keeps this frame's).
+	const float hs	= detail_height_scale(m0, m1, m2);
+	const float sk	= stock_season_k(root, hs, stock_season, false);
+	float sk_prev	= sk;
+	[branch] if ( da_wind_prev_on() )
+	{
+		sk_prev	= stock_season_k(root, hs, stock_season_prev, true);
+		sk_prev	= sk_prev > 0.0f ? sk_prev : sk;
+	}
+	float4	m0p = m0, m1p = m1, m2p = m2;
+	stock_season_rows(m0, m1, m2, sk);
+	stock_season_rows(m0p, m1p, m2p, sk_prev);
+
 	const float4 pos_rest = detail_world_pos(m0, m1, m2, v.pos);
 	const float H 	= detail_height(m0, m1, m2, v.pos.y);
 	const float frac	= v.misc.z*consts.x;		// fractional
-	const float3 root	= float3(m0.w, m1.w, m2.w);
 
 	float4	pos	= detail_bent_pos(pos_rest, H, detail_bend(root, c0.w, H, frac, da_wind_field, wave, dir2D, false));
 	// The same tuft under the previous frame's wind, only while motion vectors are rendered.
 	float4	pos_prev	= pos;
 	[branch] if ( da_wind_prev_on() )
-		pos_prev	= detail_bent_pos(pos_rest, H, detail_bend(root, c0.w, H, frac, da_wind_field_prev, wave_prev, dir2D_prev, true));
+	{
+		const float4 pos_rest_prev = detail_world_pos(m0p, m1p, m2p, v.pos);
+		const float H_prev = detail_height(m0p, m1p, m2p, v.pos.y);
+		pos_prev	= detail_bent_pos(pos_rest_prev, H_prev, detail_bend(root, c0.w, H_prev, frac, da_wind_field_prev, wave_prev, dir2D_prev, true));
+	}
 
 	v2p_flat	O	= detail_v2p(root, pos, pos_prev, v.misc, consts, c0.x);
 

@@ -43,6 +43,11 @@ ref_texture g_field_tex;
 // made once and only ever handed a new surface.
 ref_texture g_fill_tex;
 
+// Running (255) against standing (0) water per field texel, for the season's ice (water.ps): the
+// connected sheets Level_load.cpp classified. Same lifetime rules as the two above.
+constexpr pcstr water_class_name = "$user$water_class";
+ref_texture g_class_tex;
+
 // True while the surfaces hold a real bake rather than the 1x1 placeholder.
 bool g_field_live{};
 
@@ -51,6 +56,7 @@ bool g_field_live{};
 // array (reset_water_field shrink_to_fit's the old one) and squares its own bounding volume, so
 // the pointer, the count and the four bounds cannot all match across a load by accident.
 const void* g_src_data{};
+const void* g_src_class{};
 size_t g_src_count{};
 float g_src_bounds[4]{};
 
@@ -60,7 +66,8 @@ constexpr size_t field_texels = field_dim * field_dim;
 bool same_source(const CEnvironment& env)
 {
     const Fbox& b = env.water_field_bounds;
-    return g_src_data == static_cast<const void*>(env.water_field.data()) && g_src_count == env.water_field.size() &&
+    return g_src_data == static_cast<const void*>(env.water_field.data()) &&
+        g_src_class == static_cast<const void*>(env.water_class.data()) && g_src_count == env.water_field.size() &&
         g_src_bounds[0] == b.vMin.x && g_src_bounds[1] == b.vMin.z && g_src_bounds[2] == b.vMax.x &&
         g_src_bounds[3] == b.vMax.z;
 }
@@ -69,6 +76,7 @@ void remember(const CEnvironment& env)
 {
     const Fbox& b = env.water_field_bounds;
     g_src_data = env.water_field.data();
+    g_src_class = env.water_class.data();
     g_src_count = env.water_field.size();
     g_src_bounds[0] = b.vMin.x;
     g_src_bounds[1] = b.vMin.z;
@@ -79,6 +87,7 @@ void remember(const CEnvironment& env)
 void forget()
 {
     g_src_data = nullptr;
+    g_src_class = nullptr;
     g_src_count = 0;
     ZeroMemory(g_src_bounds, sizeof(g_src_bounds));
 }
@@ -147,11 +156,42 @@ void publish_fill(u32 dim, const u16* texels)
     _RELEASE(surface);
 }
 
+// The water class surface: one byte per field texel, 255 = running water.
+void publish_class(u32 dim, const u8* texels)
+{
+    D3D_TEXTURE2D_DESC desc{};
+    desc.Width = dim;
+    desc.Height = dim;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.SampleDesc.Quality = 0;
+    desc.Usage = D3D_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D_BIND_SHADER_RESOURCE;
+
+    D3D_SUBRESOURCE_DATA init{};
+    init.pSysMem = texels;
+    init.SysMemPitch = UINT(dim);
+
+    ID3DTexture2D* surface = nullptr;
+    CHK_DX(HW.pDevice->CreateTexture2D(&desc, &init, &surface));
+    if (!surface)
+        return;
+
+    if (!g_class_tex)
+        g_class_tex = RImplementation.Resources->_CreateTexture(water_class_name);
+    g_class_tex->surface_set(surface);
+    _RELEASE(surface);
+}
+
 void publish_placeholder()
 {
     const u16 zero[4]{};
     publish(1, zero);
     publish_fill(1, zero);
+    const u8 standing = 0;
+    publish_class(1, &standing);
     g_field_live = false;
     forget();
 }
@@ -184,6 +224,7 @@ void da_water_field_release()
 {
     g_field_tex = nullptr;
     g_fill_tex = nullptr;
+    g_class_tex = nullptr;
     g_field_live = false;
     forget();
 }
@@ -197,7 +238,7 @@ void da_water_field_update()
     const auto& env = g_pGamePersistent->Environment();
     const bool valid = env.water_field_valid() && env.water_field.size() == field_texels;
 
-    if (has_surface(g_field_tex) && has_surface(g_fill_tex) && valid == g_field_live &&
+    if (has_surface(g_field_tex) && has_surface(g_fill_tex) && has_surface(g_class_tex) && valid == g_field_live &&
         (!valid || same_source(env)))
         return;
 
@@ -236,6 +277,14 @@ void da_water_field_update()
 
     publish(u32(field_dim), packed.data());
     publish_fill(u32(field_dim), fill.data());
+    // A level baked before the classification (or without water sheets) reads as standing water.
+    if (env.water_class.size() == field_texels)
+        publish_class(u32(field_dim), env.water_class.data());
+    else
+    {
+        const xr_vector<u8> standing(field_texels, 0);
+        publish_class(u32(field_dim), standing.data());
+    }
     g_field_live = true;
     remember(env);
 

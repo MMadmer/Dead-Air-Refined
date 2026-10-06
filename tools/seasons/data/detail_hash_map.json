@@ -1,0 +1,4874 @@
+{
+ "meta": {
+  "generated": "2026-10-05",
+  "binding_key": "KSPR (map keys below)",
+  "k1": "K1 = FNV-1a 64 (offset 0xcbf29ce484222325, prime 0x100000001b3) over: lower(shader)\\0 lower(texture)\\0 | u32 flags | i32 round(min_scale*1000) | i32 round(max_scale*1000) | u32 nv | u32 ni | nv x (i32 round(x*1000), round(y*1000), round(z*1000), round(u*16384), round(v*16384)) | ni x u16 index, all little-endian, file order (before CDetail::Optimize)",
+  "kspr": "KSPR = K1 folded (FNV-1a continued) with the mip-0 DXT blocks of $level$/build_details.dds (base file, never a season overlay) that the uv rect touches, block rows top to bottom",
+  "unknown": "a KSPR not listed here = class KS_UNKNOWN: stock card path, stock texture resolve (no season overlay unless the level fingerprint matches), generic continuous season keys (stock_keys.json KS_UNKNOWN)",
+  "why_not_k1": "K1 (geometry+uv+flags+scale) has 11 class collisions, 4 of them procedural vs stock (hash_report.json): the CoP-family and darkscape-family levels reuse one mesh+uv layout with different sprites in each atlas",
+  "classes": [
+   "PG_BUNCH",
+   "PG_LEAFY",
+   "PG_PLUME",
+   "PG_FINE",
+   "PG_DRY",
+   "PG_TUFT",
+   "PG_RUSH",
+   "KS_FORB",
+   "KS_HERB",
+   "KS_FERN",
+   "KS_HORSETAIL",
+   "KS_SHRUB",
+   "KS_LITTER",
+   "KS_DECAL",
+   "FIX_EMPTY"
+  ],
+  "source": "levels.xdb0-4 (da_levels byte copies), grass_types.json types[].recommended/visual_class"
+ },
+ "counts": {
+  "KS_LITTER": 168,
+  "PG_BUNCH": 46,
+  "PG_LEAFY": 18,
+  "KS_SHRUB": 57,
+  "PG_PLUME": 22,
+  "KS_FORB": 37,
+  "KS_HORSETAIL": 9,
+  "KS_HERB": 26,
+  "PG_RUSH": 6,
+  "PG_TUFT": 12,
+  "KS_FERN": 46,
+  "PG_FINE": 4,
+  "PG_DRY": 11,
+  "KS_DECAL": 2,
+  "FIX_EMPTY": 14
+ },
+ "objects_per_class": {
+  "KS_LITTER": 184,
+  "PG_BUNCH": 46,
+  "PG_LEAFY": 18,
+  "KS_SHRUB": 57,
+  "PG_PLUME": 22,
+  "KS_FORB": 37,
+  "KS_HORSETAIL": 9,
+  "KS_HERB": 26,
+  "PG_RUSH": 6,
+  "PG_TUFT": 12,
+  "KS_FERN": 46,
+  "PG_FINE": 4,
+  "PG_DRY": 11,
+  "KS_DECAL": 2,
+  "FIX_EMPTY": 14
+ },
+ "map": {
+  "86a6d875363bcd24": {
+   "cls": "PG_BUNCH",
+   "uid": "U045",
+   "k1": [
+    "7e333d03151dc86c"
+   ],
+   "members": [
+    "l08_yantar:1"
+   ]
+  },
+  "00d1480ebe9247a4": {
+   "cls": "PG_BUNCH",
+   "uid": "U052",
+   "k1": [
+    "ee9716b8b716f3ad"
+   ],
+   "members": [
+    "l10_red_forest:2"
+   ]
+  },
+  "0886993be3b3f962": {
+   "cls": "PG_BUNCH",
+   "uid": "U052",
+   "k1": [
+    "ddf6fa93c3447407"
+   ],
+   "members": [
+    "new_military:2"
+   ]
+  },
+  "533db625a2092f28": {
+   "cls": "PG_BUNCH",
+   "uid": "U052",
+   "k1": [
+    "b7dcb143d368259d"
+   ],
+   "members": [
+    "l10_limansk:2"
+   ]
+  },
+  "0f61168b375adc20": {
+   "cls": "PG_BUNCH",
+   "uid": "U056",
+   "k1": [
+    "9e50999b0af4199c"
+   ],
+   "members": [
+    "l08_yantar:11"
+   ]
+  },
+  "3b3fcb4b9eb47abb": {
+   "cls": "PG_BUNCH",
+   "uid": "U056",
+   "k1": [
+    "cad2e2fd85d57ad9"
+   ],
+   "members": [
+    "l08_yantar:4"
+   ]
+  },
+  "7ab7aa89fe8da5ff": {
+   "cls": "PG_BUNCH",
+   "uid": "U056",
+   "k1": [
+    "a9c346b43473b62a"
+   ],
+   "members": [
+    "l02_garbage:5"
+   ]
+  },
+  "d59e8664c7bb6ebb": {
+   "cls": "PG_BUNCH",
+   "uid": "U056",
+   "k1": [
+    "af0944914a39a7d6"
+   ],
+   "members": [
+    "l05_bar:5"
+   ]
+  },
+  "08215279951179bb": {
+   "cls": "PG_BUNCH",
+   "uid": "U061",
+   "k1": [
+    "785666f755173d07"
+   ],
+   "members": [
+    "l12_stancia_2:4"
+   ]
+  },
+  "10870ae3bd78353e": {
+   "cls": "PG_BUNCH",
+   "uid": "U061",
+   "k1": [
+    "fc622fbd974c490a"
+   ],
+   "members": [
+    "l11_pripyat:4"
+   ]
+  },
+  "1380d3967343db7d": {
+   "cls": "PG_BUNCH",
+   "uid": "U061",
+   "k1": [
+    "bc661b16352874d5"
+   ],
+   "members": [
+    "l08_yantar:5"
+   ]
+  },
+  "4e32dfa9c5b2f847": {
+   "cls": "PG_BUNCH",
+   "uid": "U061",
+   "k1": [
+    "a72246fd32f7affb"
+   ],
+   "members": [
+    "l12_stancia:4"
+   ]
+  },
+  "50901fe4071fe289": {
+   "cls": "PG_BUNCH",
+   "uid": "U061",
+   "k1": [
+    "eb912c17ebacbd4e"
+   ],
+   "members": [
+    "l08_yantar:12"
+   ]
+  },
+  "ee014afab36a4c03": {
+   "cls": "PG_BUNCH",
+   "uid": "U062",
+   "k1": [
+    "82b7230e98b9ca0d"
+   ],
+   "members": [
+    "l08_yantar:6"
+   ]
+  },
+  "4fe166f9198a51c3": {
+   "cls": "PG_BUNCH",
+   "uid": "U071",
+   "k1": [
+    "e901f2d07ff65748"
+   ],
+   "members": [
+    "zaton:9"
+   ]
+  },
+  "607b754390b33885": {
+   "cls": "PG_BUNCH",
+   "uid": "U071",
+   "k1": [
+    "219b9316a7ceda66"
+   ],
+   "members": [
+    "k00_marsh:9"
+   ]
+  },
+  "8abead8d0bbb8d87": {
+   "cls": "PG_BUNCH",
+   "uid": "U071",
+   "k1": [
+    "9967f534ef31aa78"
+   ],
+   "members": [
+    "pripyat:9"
+   ]
+  },
+  "a192119944c8b3f7": {
+   "cls": "PG_BUNCH",
+   "uid": "U071",
+   "k1": [
+    "e901f2d07ff65748"
+   ],
+   "members": [
+    "jupiter:9"
+   ]
+  },
+  "c34809cb7e6f59af": {
+   "cls": "PG_BUNCH",
+   "uid": "U071",
+   "k1": [
+    "a1b1a9cd74155a46"
+   ],
+   "members": [
+    "l01_escape:9"
+   ]
+  },
+  "0e58a66e4c68d6de": {
+   "cls": "PG_BUNCH",
+   "uid": "U075",
+   "k1": [
+    "a36d7ff3242649d8"
+   ],
+   "members": [
+    "jupiter:36"
+   ]
+  },
+  "3210c5df49e32093": {
+   "cls": "PG_BUNCH",
+   "uid": "U082",
+   "k1": [
+    "767d3e48c233b405"
+   ],
+   "members": [
+    "k00_marsh:8"
+   ]
+  },
+  "35c9641549b1e60c": {
+   "cls": "PG_BUNCH",
+   "uid": "U082",
+   "k1": [
+    "b7beb4777860f0cb"
+   ],
+   "members": [
+    "jupiter:8"
+   ]
+  },
+  "6d728349a818df9b": {
+   "cls": "PG_BUNCH",
+   "uid": "U082",
+   "k1": [
+    "b7beb4777860f0cb"
+   ],
+   "members": [
+    "pripyat:8"
+   ]
+  },
+  "dafd9af8a6630d34": {
+   "cls": "PG_BUNCH",
+   "uid": "U082",
+   "k1": [
+    "aeee9253b7ac3925"
+   ],
+   "members": [
+    "l01_escape:8"
+   ]
+  },
+  "eeb0925eaed959bb": {
+   "cls": "PG_BUNCH",
+   "uid": "U082",
+   "k1": [
+    "f90e2aed5d3f63ab"
+   ],
+   "members": [
+    "zaton:8"
+   ]
+  },
+  "08b8ec45124ee3f0": {
+   "cls": "PG_BUNCH",
+   "uid": "U089",
+   "k1": [
+    "4386a7691a11c98d"
+   ],
+   "members": [
+    "k01_darkscape:5"
+   ]
+  },
+  "09a81467fd5206b7": {
+   "cls": "PG_BUNCH",
+   "uid": "U089",
+   "k1": [
+    "5d0d866306d68a23"
+   ],
+   "members": [
+    "l06_rostok:5"
+   ]
+  },
+  "1ea01e20c429d10c": {
+   "cls": "PG_BUNCH",
+   "uid": "U089",
+   "k1": [
+    "cfa20239d5fafbf4"
+   ],
+   "members": [
+    "l10_radar:5"
+   ]
+  },
+  "6e0b02aa0a4f1a27": {
+   "cls": "PG_BUNCH",
+   "uid": "U089",
+   "k1": [
+    "d2366ea9eefc5791"
+   ],
+   "members": [
+    "l13_generators:5"
+   ]
+  },
+  "e88bf0e21ef7c07f": {
+   "cls": "PG_BUNCH",
+   "uid": "U089",
+   "k1": [
+    "dce9952c2818b5d4"
+   ],
+   "members": [
+    "k02_trucks_cemetery:10"
+   ]
+  },
+  "11c2dd64a33f2897": {
+   "cls": "PG_BUNCH",
+   "uid": "U091",
+   "k1": [
+    "3af3a6c9e82a95f1"
+   ],
+   "members": [
+    "l11_hospital:5"
+   ]
+  },
+  "68d54424e7bfc74a": {
+   "cls": "PG_BUNCH",
+   "uid": "U093",
+   "k1": [
+    "c7390a135182b736"
+   ],
+   "members": [
+    "l02_garbage:8"
+   ]
+  },
+  "d465157c1c7ef74c": {
+   "cls": "PG_BUNCH",
+   "uid": "U093",
+   "k1": [
+    "4fdb34785cc5ce30"
+   ],
+   "members": [
+    "l05_bar:8"
+   ]
+  },
+  "5bd86a33b4dd2797": {
+   "cls": "PG_BUNCH",
+   "uid": "U095",
+   "k1": [
+    "977e75663c69f895"
+   ],
+   "members": [
+    "l11_pripyat:8"
+   ]
+  },
+  "d838e1c4f1ec2534": {
+   "cls": "PG_BUNCH",
+   "uid": "U095",
+   "k1": [
+    "10161e7091ee7fd6"
+   ],
+   "members": [
+    "k02_trucks_cemetery:6"
+   ]
+  },
+  "5e10d9736d1389e9": {
+   "cls": "PG_BUNCH",
+   "uid": "U099",
+   "k1": [
+    "36994410c3c32b7a"
+   ],
+   "members": [
+    "l04_darkvalley:0"
+   ]
+  },
+  "ca17cd014e3f3707": {
+   "cls": "PG_BUNCH",
+   "uid": "U099",
+   "k1": [
+    "95a937ae8d3e4ab5"
+   ],
+   "members": [
+    "l09_deadcity:0"
+   ]
+  },
+  "cb498eb4f476bc10": {
+   "cls": "PG_BUNCH",
+   "uid": "U099",
+   "k1": [
+    "119975e031540cb3"
+   ],
+   "members": [
+    "l11_hospital:0"
+   ]
+  },
+  "1aee71e5701ff619": {
+   "cls": "PG_BUNCH",
+   "uid": "U102",
+   "k1": [
+    "8238fced0eb9b383"
+   ],
+   "members": [
+    "l02_garbage:0"
+   ]
+  },
+  "5e684053ce5c7089": {
+   "cls": "PG_BUNCH",
+   "uid": "U102",
+   "k1": [
+    "bcecaca037feffb3"
+   ],
+   "members": [
+    "l05_bar:0"
+   ]
+  },
+  "8260b5d68027cb1c": {
+   "cls": "PG_BUNCH",
+   "uid": "U103",
+   "k1": [
+    "2a9374fc8f99720b"
+   ],
+   "members": [
+    "l05_bar:9"
+   ]
+  },
+  "e0dcf2104df674ba": {
+   "cls": "PG_BUNCH",
+   "uid": "U103",
+   "k1": [
+    "1c4d436c36a984c1"
+   ],
+   "members": [
+    "l02_garbage:9"
+   ]
+  },
+  "dea7cfe876b08d79": {
+   "cls": "PG_BUNCH",
+   "uid": "U115",
+   "k1": [
+    "7a6acf23da242155"
+   ],
+   "members": [
+    "jupiter:35"
+   ]
+  },
+  "83ec4edad4aec2e4": {
+   "cls": "PG_BUNCH",
+   "uid": "U124",
+   "k1": [
+    "70c1a4de6a2dbdb1"
+   ],
+   "members": [
+    "l02_garbage:3"
+   ]
+  },
+  "fd9569360af8f3a1": {
+   "cls": "PG_BUNCH",
+   "uid": "U124",
+   "k1": [
+    "46bf906c32d02ce4"
+   ],
+   "members": [
+    "l05_bar:3"
+   ]
+  },
+  "e4aacbaec4cb3172": {
+   "cls": "PG_BUNCH",
+   "uid": "U127",
+   "k1": [
+    "eb9f67777b66f2b8"
+   ],
+   "members": [
+    "l11_pripyat:3"
+   ]
+  },
+  "cb3005877923728e": {
+   "cls": "PG_LEAFY",
+   "uid": "U060",
+   "k1": [
+    "5665d339fcae00a8"
+   ],
+   "members": [
+    "l05_bar:12"
+   ]
+  },
+  "e07c9ac4dd858776": {
+   "cls": "PG_LEAFY",
+   "uid": "U060",
+   "k1": [
+    "fc8e8ce4cd2b4c70"
+   ],
+   "members": [
+    "l02_garbage:12"
+   ]
+  },
+  "b1ccaf5f2d7d00a2": {
+   "cls": "PG_LEAFY",
+   "uid": "U065",
+   "k1": [
+    "db7e2ebdb88a41f5"
+   ],
+   "members": [
+    "l11_pripyat:12"
+   ]
+  },
+  "e5a44b07ff865edc": {
+   "cls": "PG_LEAFY",
+   "uid": "U067",
+   "k1": [
+    "f374669a0cd6fe61"
+   ],
+   "members": [
+    "l12_stancia_2:10"
+   ]
+  },
+  "ed27646b1ebdab31": {
+   "cls": "PG_LEAFY",
+   "uid": "U067",
+   "k1": [
+    "cc7478e238357550"
+   ],
+   "members": [
+    "l12_stancia:10"
+   ]
+  },
+  "a623b0cdfa46e864": {
+   "cls": "PG_LEAFY",
+   "uid": "U081",
+   "k1": [
+    "df82207b3dc26265"
+   ],
+   "members": [
+    "zaton:11"
+   ]
+  },
+  "ed562d2477fd5323": {
+   "cls": "PG_LEAFY",
+   "uid": "U081",
+   "k1": [
+    "b4935e298e71bcb5"
+   ],
+   "members": [
+    "pripyat:11"
+   ]
+  },
+  "0d90ac2bb97a65db": {
+   "cls": "PG_LEAFY",
+   "uid": "U083",
+   "k1": [
+    "9b5a6ff8bbd6cae5"
+   ],
+   "members": [
+    "k00_marsh:10"
+   ]
+  },
+  "540574b5f96f9ed0": {
+   "cls": "PG_LEAFY",
+   "uid": "U083",
+   "k1": [
+    "66d256613ecb334b"
+   ],
+   "members": [
+    "jupiter:10"
+   ]
+  },
+  "78b131a5963c9edb": {
+   "cls": "PG_LEAFY",
+   "uid": "U083",
+   "k1": [
+    "498a02e074ff1a85"
+   ],
+   "members": [
+    "l01_escape:10"
+   ]
+  },
+  "59dff43a2f213a38": {
+   "cls": "PG_LEAFY",
+   "uid": "U092",
+   "k1": [
+    "199be8b288e0778b"
+   ],
+   "members": [
+    "pripyat:10"
+   ]
+  },
+  "c4d5c94963400a25": {
+   "cls": "PG_LEAFY",
+   "uid": "U092",
+   "k1": [
+    "255eda8805cbcb2b"
+   ],
+   "members": [
+    "zaton:10"
+   ]
+  },
+  "3ad63e6e80e437d9": {
+   "cls": "PG_LEAFY",
+   "uid": "U098",
+   "k1": [
+    "d4e61fb0467a1279"
+   ],
+   "members": [
+    "l10_radar:0"
+   ]
+  },
+  "41666a8391e241ec": {
+   "cls": "PG_LEAFY",
+   "uid": "U098",
+   "k1": [
+    "a02b6f9067c671f1"
+   ],
+   "members": [
+    "k01_darkscape:0"
+   ]
+  },
+  "8a5ad6540865e47f": {
+   "cls": "PG_LEAFY",
+   "uid": "U098",
+   "k1": [
+    "97606df7e658ecbf"
+   ],
+   "members": [
+    "l06_rostok:0"
+   ]
+  },
+  "8ca78acf4a598b29": {
+   "cls": "PG_LEAFY",
+   "uid": "U098",
+   "k1": [
+    "a05c5f42dbfd78b5"
+   ],
+   "members": [
+    "l13_generators:0"
+   ]
+  },
+  "9df6caabbc544fca": {
+   "cls": "PG_LEAFY",
+   "uid": "U104",
+   "k1": [
+    "335b6b3595222990"
+   ],
+   "members": [
+    "l08_yantar:0"
+   ]
+  },
+  "435a9aed88a4aff0": {
+   "cls": "PG_LEAFY",
+   "uid": "U145",
+   "k1": [
+    "b8263f32c2156a18"
+   ],
+   "members": [
+    "k02_trucks_cemetery:21"
+   ]
+  },
+  "6261b9ea5e64d01b": {
+   "cls": "PG_PLUME",
+   "uid": "U043",
+   "k1": [
+    "4bef404805b2e201"
+   ],
+   "members": [
+    "k02_trucks_cemetery:22"
+   ]
+  },
+  "413897b2d26f2e07": {
+   "cls": "PG_PLUME",
+   "uid": "U049",
+   "k1": [
+    "afa7af9833e1a330"
+   ],
+   "members": [
+    "l03_agroprom:2"
+   ]
+  },
+  "0ab9a30cf6f6b091": {
+   "cls": "PG_PLUME",
+   "uid": "U059",
+   "k1": [
+    "a812da4a40432fd2"
+   ],
+   "members": [
+    "l02_garbage:11"
+   ]
+  },
+  "9555926e3eedf21c": {
+   "cls": "PG_PLUME",
+   "uid": "U059",
+   "k1": [
+    "48f0cc1eb13c9077"
+   ],
+   "members": [
+    "l05_bar:11"
+   ]
+  },
+  "535dbd620c55ae4c": {
+   "cls": "PG_PLUME",
+   "uid": "U069",
+   "k1": [
+    "6241da7ceca5d4e9"
+   ],
+   "members": [
+    "k02_trucks_cemetery:8"
+   ]
+  },
+  "d16658caf57dae35": {
+   "cls": "PG_PLUME",
+   "uid": "U070",
+   "k1": [
+    "d8632b6809edfcdc"
+   ],
+   "members": [
+    "k02_trucks_cemetery:9"
+   ]
+  },
+  "131805bbfcebdc64": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "51e7be6f8e4181a5"
+   ],
+   "members": [
+    "l01_escape:15"
+   ]
+  },
+  "187c43dfc81d9da0": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "be54a8a6a1ffc88d"
+   ],
+   "members": [
+    "l10_red_forest:5"
+   ]
+  },
+  "3cd61995d99d8035": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "7a752626f31cd2c5"
+   ],
+   "members": [
+    "k00_marsh:15"
+   ]
+  },
+  "491c0323dd0173e6": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "66d256613ecb334b"
+   ],
+   "members": [
+    "pripyat:15"
+   ]
+  },
+  "528fdccfd02743c9": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "199af091fe916b9f"
+   ],
+   "members": [
+    "k02_trucks_cemetery:2"
+   ]
+  },
+  "ada58a747c4d0aaf": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "318e471932ab4963"
+   ],
+   "members": [
+    "l10_limansk:5"
+   ]
+  },
+  "c7936fc8efcbc493": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "d58ba128b9a7c24b"
+   ],
+   "members": [
+    "zaton:15"
+   ]
+  },
+  "e113325da9606aa8": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "800551231208857c"
+   ],
+   "members": [
+    "new_military:5"
+   ]
+  },
+  "f4f612d20ba207b3": {
+   "cls": "PG_PLUME",
+   "uid": "U084",
+   "k1": [
+    "d58ba128b9a7c24b"
+   ],
+   "members": [
+    "jupiter:14"
+   ]
+  },
+  "0049e4b9895e35ce": {
+   "cls": "PG_PLUME",
+   "uid": "U101",
+   "k1": [
+    "47be656af40ab6a7"
+   ],
+   "members": [
+    "k02_trucks_cemetery:1"
+   ]
+  },
+  "fe9211122430189a": {
+   "cls": "PG_PLUME",
+   "uid": "U107",
+   "k1": [
+    "e48bb48269e9c603"
+   ],
+   "members": [
+    "l11_pripyat:9"
+   ]
+  },
+  "e79067ecb915712e": {
+   "cls": "PG_PLUME",
+   "uid": "U126",
+   "k1": [
+    "25a41ec3ac14de4f"
+   ],
+   "members": [
+    "l08_yantar:3"
+   ]
+  },
+  "ce38d5f9ec77855c": {
+   "cls": "PG_PLUME",
+   "uid": "U143",
+   "k1": [
+    "5841a26bd4c5653c"
+   ],
+   "members": [
+    "jupiter:25"
+   ]
+  },
+  "dc34a0640afebb72": {
+   "cls": "PG_PLUME",
+   "uid": "U143",
+   "k1": [
+    "1de61c158d2603ac"
+   ],
+   "members": [
+    "l01_escape:22"
+   ]
+  },
+  "388727a255b8cec6": {
+   "cls": "PG_PLUME",
+   "uid": "U144",
+   "k1": [
+    "3ee52d83e91cdc7c"
+   ],
+   "members": [
+    "zaton:28"
+   ]
+  },
+  "afa0c243d88db031": {
+   "cls": "PG_PLUME",
+   "uid": "U144",
+   "k1": [
+    "5841a26bd4c5653c"
+   ],
+   "members": [
+    "pripyat:27"
+   ]
+  },
+  "038888dde3db57e3": {
+   "cls": "PG_FINE",
+   "uid": "U135",
+   "k1": [
+    "3d089a74455dc316"
+   ],
+   "members": [
+    "l10_radar:1"
+   ]
+  },
+  "06ecaf3ff40ff68a": {
+   "cls": "PG_FINE",
+   "uid": "U135",
+   "k1": [
+    "99d96a55ff58debc"
+   ],
+   "members": [
+    "k01_darkscape:1"
+   ]
+  },
+  "31e70e2c286fa258": {
+   "cls": "PG_FINE",
+   "uid": "U135",
+   "k1": [
+    "0ee9713518e9dd08"
+   ],
+   "members": [
+    "l13_generators:1"
+   ]
+  },
+  "49f68982ffe13d2b": {
+   "cls": "PG_FINE",
+   "uid": "U135",
+   "k1": [
+    "9342987f19d6c03e"
+   ],
+   "members": [
+    "l06_rostok:1"
+   ]
+  },
+  "8b24f17c04f82f55": {
+   "cls": "PG_DRY",
+   "uid": "U053",
+   "k1": [
+    "1f46e676ba2ca7fa"
+   ],
+   "members": [
+    "l11_hospital:2"
+   ]
+  },
+  "45c0b6f70cf24706": {
+   "cls": "PG_DRY",
+   "uid": "U058",
+   "k1": [
+    "b2746b7c160cbf80"
+   ],
+   "members": [
+    "l02_garbage:10"
+   ]
+  },
+  "4df523597552d918": {
+   "cls": "PG_DRY",
+   "uid": "U058",
+   "k1": [
+    "de93f3258aba4a46"
+   ],
+   "members": [
+    "l05_bar:10"
+   ]
+  },
+  "7bb3532bed9b5d3c": {
+   "cls": "PG_DRY",
+   "uid": "U058",
+   "k1": [
+    "c0412cb6c0b076be"
+   ],
+   "members": [
+    "l11_pripyat:11"
+   ]
+  },
+  "5bdec377a2a6218d": {
+   "cls": "PG_DRY",
+   "uid": "U109",
+   "k1": [
+    "914e9e6a90772e58"
+   ],
+   "members": [
+    "l12_stancia_2:9"
+   ]
+  },
+  "9e1102c404aa4070": {
+   "cls": "PG_DRY",
+   "uid": "U109",
+   "k1": [
+    "24dd8576aad962c5"
+   ],
+   "members": [
+    "l12_stancia:9"
+   ]
+  },
+  "0b72d0c0bc62855c": {
+   "cls": "PG_DRY",
+   "uid": "U134",
+   "k1": [
+    "99d96a55ff58debc"
+   ],
+   "members": [
+    "l10_red_forest:1"
+   ]
+  },
+  "73eabc27059f8d6a": {
+   "cls": "PG_DRY",
+   "uid": "U134",
+   "k1": [
+    "4a920b9c5aacfcde"
+   ],
+   "members": [
+    "l03_agroprom:1"
+   ]
+  },
+  "79169fd8f5049569": {
+   "cls": "PG_DRY",
+   "uid": "U134",
+   "k1": [
+    "fc2e6a283eae5c69"
+   ],
+   "members": [
+    "new_military:1"
+   ]
+  },
+  "dddf981ee1a5e80a": {
+   "cls": "PG_DRY",
+   "uid": "U134",
+   "k1": [
+    "9342987f19d6c03e"
+   ],
+   "members": [
+    "l10_limansk:1"
+   ]
+  },
+  "8e64d6ae63b9ec95": {
+   "cls": "PG_DRY",
+   "uid": "U138",
+   "k1": [
+    "c0b3e6de9cb3e54b"
+   ],
+   "members": [
+    "k02_trucks_cemetery:3"
+   ]
+  },
+  "27a4dcf4fd364a71": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "54305c5d6744f01c"
+   ],
+   "members": [
+    "pripyat:25"
+   ]
+  },
+  "510d0d12c89abec9": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "73f303f36f7023ef"
+   ],
+   "members": [
+    "l03_agroprom:14"
+   ]
+  },
+  "66d6049e0126aa74": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "54305c5d6744f01c"
+   ],
+   "members": [
+    "jupiter:24"
+   ]
+  },
+  "7707107f5321280d": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "54305c5d6744f01c"
+   ],
+   "members": [
+    "zaton:26"
+   ]
+  },
+  "9f5fc6e0166cfbe3": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "cd23e37ac3331918"
+   ],
+   "members": [
+    "l10_limansk:14"
+   ]
+  },
+  "b04a201a1d627f99": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "053fa178cb17b292"
+   ],
+   "members": [
+    "new_military:14"
+   ]
+  },
+  "b13befa3872b9be3": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "bb01c164f0c4cce6"
+   ],
+   "members": [
+    "k00_marsh:25"
+   ]
+  },
+  "f7e7397721963f7f": {
+   "cls": "PG_TUFT",
+   "uid": "U132",
+   "k1": [
+    "6eeb68bcce42b7ca"
+   ],
+   "members": [
+    "l10_red_forest:14"
+   ]
+  },
+  "236ed47e6bbf42b2": {
+   "cls": "PG_TUFT",
+   "uid": "U133",
+   "k1": [
+    "6f52d684d38f061c"
+   ],
+   "members": [
+    "jupiter:23"
+   ]
+  },
+  "8ea93e8f6798bda3": {
+   "cls": "PG_TUFT",
+   "uid": "U133",
+   "k1": [
+    "6f52d684d38f061c"
+   ],
+   "members": [
+    "zaton:25"
+   ]
+  },
+  "9d598364bf41491a": {
+   "cls": "PG_TUFT",
+   "uid": "U133",
+   "k1": [
+    "6f52d684d38f061c"
+   ],
+   "members": [
+    "pripyat:24"
+   ]
+  },
+  "a690652e0de4022b": {
+   "cls": "PG_TUFT",
+   "uid": "U133",
+   "k1": [
+    "a40c0c3bc3493166"
+   ],
+   "members": [
+    "k00_marsh:26"
+   ]
+  },
+  "1883e8998d5896c6": {
+   "cls": "PG_RUSH",
+   "uid": "U080",
+   "k1": [
+    "7c6f008d70b92c7f"
+   ],
+   "members": [
+    "k00_marsh:24"
+   ]
+  },
+  "86face7d6095264f": {
+   "cls": "PG_RUSH",
+   "uid": "U080",
+   "k1": [
+    "59d0ecb06942aa5f"
+   ],
+   "members": [
+    "l01_escape:20"
+   ]
+  },
+  "d5f0d4a652332ed4": {
+   "cls": "PG_RUSH",
+   "uid": "U080",
+   "k1": [
+    "3d8267a27ea4b485"
+   ],
+   "members": [
+    "zaton:24"
+   ]
+  },
+  "e6173e13324efbcb": {
+   "cls": "PG_RUSH",
+   "uid": "U080",
+   "k1": [
+    "875d15062e132015"
+   ],
+   "members": [
+    "pripyat:23"
+   ]
+  },
+  "f1e382906fafab38": {
+   "cls": "PG_RUSH",
+   "uid": "U080",
+   "k1": [
+    "875d15062e132015"
+   ],
+   "members": [
+    "jupiter:22"
+   ]
+  },
+  "574d661ae27f8d73": {
+   "cls": "PG_RUSH",
+   "uid": "U116",
+   "k1": [
+    "919ac49976b51af7"
+   ],
+   "members": [
+    "k02_trucks_cemetery:7"
+   ]
+  },
+  "2c5eb0ac39a00765": {
+   "cls": "KS_FORB",
+   "uid": "U040",
+   "k1": [
+    "545c6d5c880ecc8e"
+   ],
+   "members": [
+    "k00_marsh:33"
+   ]
+  },
+  "5d32fe19e1a8f35b": {
+   "cls": "KS_FORB",
+   "uid": "U040",
+   "k1": [
+    "57fd48e9eaeea40b"
+   ],
+   "members": [
+    "jupiter:33"
+   ]
+  },
+  "8dc4af1262559b4a": {
+   "cls": "KS_FORB",
+   "uid": "U040",
+   "k1": [
+    "57fd48e9eaeea40b"
+   ],
+   "members": [
+    "pripyat:34"
+   ]
+  },
+  "d538f155bb2c1cc2": {
+   "cls": "KS_FORB",
+   "uid": "U040",
+   "k1": [
+    "b14bdf43027003ae"
+   ],
+   "members": [
+    "l01_escape:29"
+   ]
+  },
+  "f0b37851de5ce482": {
+   "cls": "KS_FORB",
+   "uid": "U040",
+   "k1": [
+    "57fd48e9eaeea40b"
+   ],
+   "members": [
+    "zaton:35"
+   ]
+  },
+  "2c812721044227eb": {
+   "cls": "KS_FORB",
+   "uid": "U050",
+   "k1": [
+    "aa001a9611303c79"
+   ],
+   "members": [
+    "l10_radar:2"
+   ]
+  },
+  "3eb718476bad8a13": {
+   "cls": "KS_FORB",
+   "uid": "U050",
+   "k1": [
+    "c79c7ebefc6255f1"
+   ],
+   "members": [
+    "l13_generators:2"
+   ]
+  },
+  "453ac7b74a99839d": {
+   "cls": "KS_FORB",
+   "uid": "U050",
+   "k1": [
+    "ece3a4f370feb2c7"
+   ],
+   "members": [
+    "l06_rostok:2"
+   ]
+  },
+  "61b9514988d3e973": {
+   "cls": "KS_FORB",
+   "uid": "U050",
+   "k1": [
+    "cecad239727ae79d"
+   ],
+   "members": [
+    "k01_darkscape:2"
+   ]
+  },
+  "eef97b31452755eb": {
+   "cls": "KS_FORB",
+   "uid": "U054",
+   "k1": [
+    "c8e0ae58f603ec94"
+   ],
+   "members": [
+    "k02_trucks_cemetery:4"
+   ]
+  },
+  "0fd285ed3456fec0": {
+   "cls": "KS_FORB",
+   "uid": "U079",
+   "k1": [
+    "70784b7c22166c05"
+   ],
+   "members": [
+    "jupiter:21"
+   ]
+  },
+  "4cee9ff838e8e226": {
+   "cls": "KS_FORB",
+   "uid": "U079",
+   "k1": [
+    "875d15062e132015"
+   ],
+   "members": [
+    "zaton:23"
+   ]
+  },
+  "635566242eac8747": {
+   "cls": "KS_FORB",
+   "uid": "U079",
+   "k1": [
+    "70784b7c22166c05"
+   ],
+   "members": [
+    "pripyat:22"
+   ]
+  },
+  "9a994b4367488c0a": {
+   "cls": "KS_FORB",
+   "uid": "U079",
+   "k1": [
+    "59dda28a88ee673f"
+   ],
+   "members": [
+    "k00_marsh:23"
+   ]
+  },
+  "a7321d65733ffaa0": {
+   "cls": "KS_FORB",
+   "uid": "U079",
+   "k1": [
+    "8d0560a07bce971f"
+   ],
+   "members": [
+    "l01_escape:19"
+   ]
+  },
+  "37c2eb15f9a852aa": {
+   "cls": "KS_FORB",
+   "uid": "U085",
+   "k1": [
+    "1b32629362917965"
+   ],
+   "members": [
+    "l01_escape:16"
+   ]
+  },
+  "b679166e0fe75718": {
+   "cls": "KS_FORB",
+   "uid": "U085",
+   "k1": [
+    "ba5940eba4faaf8b"
+   ],
+   "members": [
+    "zaton:16"
+   ]
+  },
+  "c9d35b777bb5a544": {
+   "cls": "KS_FORB",
+   "uid": "U085",
+   "k1": [
+    "d58ba128b9a7c24b"
+   ],
+   "members": [
+    "pripyat:16"
+   ]
+  },
+  "d3e971de24257194": {
+   "cls": "KS_FORB",
+   "uid": "U085",
+   "k1": [
+    "3bdb8d00b68f2a05"
+   ],
+   "members": [
+    "k00_marsh:16"
+   ]
+  },
+  "1009c5d58293ce04": {
+   "cls": "KS_FORB",
+   "uid": "U086",
+   "k1": [
+    "aeee9253b7ac3925"
+   ],
+   "members": [
+    "k00_marsh:17"
+   ]
+  },
+  "6c7e954a24e9ded2": {
+   "cls": "KS_FORB",
+   "uid": "U086",
+   "k1": [
+    "ba5940eba4faaf8b"
+   ],
+   "members": [
+    "pripyat:17"
+   ]
+  },
+  "bc54f04b7fc86b7d": {
+   "cls": "KS_FORB",
+   "uid": "U086",
+   "k1": [
+    "cbdc91a0ff795ac5"
+   ],
+   "members": [
+    "l01_escape:17"
+   ]
+  },
+  "bf6ae38f160274ad": {
+   "cls": "KS_FORB",
+   "uid": "U086",
+   "k1": [
+    "9c7faa1a9f245c0b"
+   ],
+   "members": [
+    "zaton:17"
+   ]
+  },
+  "e7048817bae72f0c": {
+   "cls": "KS_FORB",
+   "uid": "U086",
+   "k1": [
+    "ba5940eba4faaf8b"
+   ],
+   "members": [
+    "jupiter:15"
+   ]
+  },
+  "42ed6cfa892b9291": {
+   "cls": "KS_FORB",
+   "uid": "U090",
+   "k1": [
+    "6547fdf0c656c726"
+   ],
+   "members": [
+    "l04_darkvalley:5"
+   ]
+  },
+  "519de98858ed645a": {
+   "cls": "KS_FORB",
+   "uid": "U090",
+   "k1": [
+    "e353dc0408e49071"
+   ],
+   "members": [
+    "l09_deadcity:5"
+   ]
+  },
+  "dc57c60eb5a9b71d": {
+   "cls": "KS_FORB",
+   "uid": "U097",
+   "k1": [
+    "1685b0bb4994df9c"
+   ],
+   "members": [
+    "l03_agroprom:0"
+   ]
+  },
+  "73c9aace6efd6fa1": {
+   "cls": "KS_FORB",
+   "uid": "U108",
+   "k1": [
+    "fa8a8440cc1d4d37"
+   ],
+   "members": [
+    "l12_stancia:0"
+   ]
+  },
+  "f92d55f0e696d2c6": {
+   "cls": "KS_FORB",
+   "uid": "U108",
+   "k1": [
+    "2ea94932b05bcf24"
+   ],
+   "members": [
+    "l12_stancia_2:0"
+   ]
+  },
+  "78d61d5988b4a51c": {
+   "cls": "KS_FORB",
+   "uid": "U119",
+   "k1": [
+    "75b142bc44515bbe"
+   ],
+   "members": [
+    "l04_darkvalley:3"
+   ]
+  },
+  "c1dcb429bcaf2884": {
+   "cls": "KS_FORB",
+   "uid": "U119",
+   "k1": [
+    "499ecd34bc9a4453"
+   ],
+   "members": [
+    "l09_deadcity:3"
+   ]
+  },
+  "9a67870174066394": {
+   "cls": "KS_FORB",
+   "uid": "U131",
+   "k1": [
+    "c3d4c3edbcaa970d"
+   ],
+   "members": [
+    "l04_darkvalley:14"
+   ]
+  },
+  "b7230c7361f198ed": {
+   "cls": "KS_FORB",
+   "uid": "U131",
+   "k1": [
+    "3643fd3c2e5f29bc"
+   ],
+   "members": [
+    "l09_deadcity:14"
+   ]
+  },
+  "43f8abf987aa7fca": {
+   "cls": "KS_FORB",
+   "uid": "U137",
+   "k1": [
+    "532e9e79e636ad18"
+   ],
+   "members": [
+    "l11_hospital:1"
+   ]
+  },
+  "591badb2d7df27f7": {
+   "cls": "KS_FORB",
+   "uid": "U139",
+   "k1": [
+    "31c174da9c6f5b91"
+   ],
+   "members": [
+    "l10_red_forest:15"
+   ]
+  },
+  "a1ea5cbda3873712": {
+   "cls": "KS_FORB",
+   "uid": "U139",
+   "k1": [
+    "f6caeda5a00464fb"
+   ],
+   "members": [
+    "l10_limansk:15"
+   ]
+  },
+  "cc1d266aef3c0c63": {
+   "cls": "KS_FORB",
+   "uid": "U139",
+   "k1": [
+    "9c94ad239239261a"
+   ],
+   "members": [
+    "new_military:15"
+   ]
+  },
+  "6dbec0ec90e48624": {
+   "cls": "KS_HERB",
+   "uid": "U034",
+   "k1": [
+    "997d06dc6b51fc5f"
+   ],
+   "members": [
+    "jupiter:20"
+   ]
+  },
+  "d9e8d6594f888d34": {
+   "cls": "KS_HERB",
+   "uid": "U034",
+   "k1": [
+    "052883d4b7a227f6"
+   ],
+   "members": [
+    "k00_marsh:21"
+   ]
+  },
+  "0988aa3bd70db577": {
+   "cls": "KS_HERB",
+   "uid": "U035",
+   "k1": [
+    "b623a9442acd116e"
+   ],
+   "members": [
+    "k00_marsh:22"
+   ]
+  },
+  "f7cba5b2de49a2f4": {
+   "cls": "KS_HERB",
+   "uid": "U035",
+   "k1": [
+    "80ac9a354fa7bd4f"
+   ],
+   "members": [
+    "zaton:22"
+   ]
+  },
+  "e2e77cc918727222": {
+   "cls": "KS_HERB",
+   "uid": "U036",
+   "k1": [
+    "ed6f2d70920e7ea7"
+   ],
+   "members": [
+    "pripyat:20"
+   ]
+  },
+  "fb27ed36a94fa539": {
+   "cls": "KS_HERB",
+   "uid": "U036",
+   "k1": [
+    "06e11632bc458717"
+   ],
+   "members": [
+    "zaton:21"
+   ]
+  },
+  "7ba58a6c764e87a0": {
+   "cls": "KS_HERB",
+   "uid": "U037",
+   "k1": [
+    "ed6f2d70920e7ea7"
+   ],
+   "members": [
+    "jupiter:19"
+   ]
+  },
+  "c069efd4cd0d91aa": {
+   "cls": "KS_HERB",
+   "uid": "U037",
+   "k1": [
+    "997d06dc6b51fc5f"
+   ],
+   "members": [
+    "pripyat:21"
+   ]
+  },
+  "00350a3309b561c6": {
+   "cls": "KS_HERB",
+   "uid": "U047",
+   "k1": [
+    "ab506c3a45566182"
+   ],
+   "members": [
+    "k02_trucks_cemetery:0"
+   ]
+  },
+  "1accf9dd99c34f57": {
+   "cls": "KS_HERB",
+   "uid": "U063",
+   "k1": [
+    "f5d747541d554828"
+   ],
+   "members": [
+    "l11_pripyat:5"
+   ]
+  },
+  "0ece7f504f9d9344": {
+   "cls": "KS_HERB",
+   "uid": "U087",
+   "k1": [
+    "545854ae30bc00ab"
+   ],
+   "members": [
+    "jupiter:18"
+   ]
+  },
+  "2757b56332079abe": {
+   "cls": "KS_HERB",
+   "uid": "U087",
+   "k1": [
+    "545854ae30bc00ab"
+   ],
+   "members": [
+    "zaton:20"
+   ]
+  },
+  "5c9fa15bd634b7df": {
+   "cls": "KS_HERB",
+   "uid": "U087",
+   "k1": [
+    "1cfcd41133401125"
+   ],
+   "members": [
+    "l01_escape:18"
+   ]
+  },
+  "8467e87568d56688": {
+   "cls": "KS_HERB",
+   "uid": "U087",
+   "k1": [
+    "cbdc91a0ff795ac5"
+   ],
+   "members": [
+    "k00_marsh:20"
+   ]
+  },
+  "3ac5d2783bd110a2": {
+   "cls": "KS_HERB",
+   "uid": "U096",
+   "k1": [
+    "9d6b4577aac644ac"
+   ],
+   "members": [
+    "l12_stancia_2:8"
+   ]
+  },
+  "de73b8822cfd5f9a": {
+   "cls": "KS_HERB",
+   "uid": "U096",
+   "k1": [
+    "cf7782075b787b94"
+   ],
+   "members": [
+    "l12_stancia:8"
+   ]
+  },
+  "5bf3b4194334a4df": {
+   "cls": "KS_HERB",
+   "uid": "U106",
+   "k1": [
+    "910822d335c16b1a"
+   ],
+   "members": [
+    "l11_pripyat:0"
+   ]
+  },
+  "45aa4a18808734b2": {
+   "cls": "KS_HERB",
+   "uid": "U113",
+   "k1": [
+    "350dd5a58524d1b8"
+   ],
+   "members": [
+    "l10_radar:4"
+   ]
+  },
+  "a39db514f635e294": {
+   "cls": "KS_HERB",
+   "uid": "U113",
+   "k1": [
+    "f5d3b9bd4398accb"
+   ],
+   "members": [
+    "k01_darkscape:4"
+   ]
+  },
+  "a47e967c29e2d0a7": {
+   "cls": "KS_HERB",
+   "uid": "U113",
+   "k1": [
+    "56cd6af9daa368ed"
+   ],
+   "members": [
+    "l06_rostok:4"
+   ]
+  },
+  "d511eac85c4fd019": {
+   "cls": "KS_HERB",
+   "uid": "U113",
+   "k1": [
+    "e774775f7fb7b127"
+   ],
+   "members": [
+    "l13_generators:4"
+   ]
+  },
+  "4743c2d50f64d9e2": {
+   "cls": "KS_HERB",
+   "uid": "U121",
+   "k1": [
+    "a71d033a902208d7"
+   ],
+   "members": [
+    "k00_marsh:35"
+   ]
+  },
+  "80e1a888517b1ea8": {
+   "cls": "KS_HERB",
+   "uid": "U121",
+   "k1": [
+    "a5cd93375c150a45"
+   ],
+   "members": [
+    "pripyat:37"
+   ]
+  },
+  "9f8a908b3048f18d": {
+   "cls": "KS_HERB",
+   "uid": "U121",
+   "k1": [
+    "7355c7f81ec912c7"
+   ],
+   "members": [
+    "l01_escape:31"
+   ]
+  },
+  "8059c7be4a230c24": {
+   "cls": "KS_HERB",
+   "uid": "U122",
+   "k1": [
+    "4437858e349162e5"
+   ],
+   "members": [
+    "pripyat:36"
+   ]
+  },
+  "e4ac9986427a6339": {
+   "cls": "KS_HERB",
+   "uid": "U122",
+   "k1": [
+    "0412105dcac3e1b3"
+   ],
+   "members": [
+    "k00_marsh:36"
+   ]
+  },
+  "548828bf6bc3d7a4": {
+   "cls": "KS_FERN",
+   "uid": "U038",
+   "k1": [
+    "8f6d9e94b2707f95"
+   ],
+   "members": [
+    "l01_escape:30"
+   ]
+  },
+  "d8ce49f2885fbace": {
+   "cls": "KS_FERN",
+   "uid": "U038",
+   "k1": [
+    "94e4d4501d0e2a75"
+   ],
+   "members": [
+    "k00_marsh:34"
+   ]
+  },
+  "ef71fe13362b49f7": {
+   "cls": "KS_FERN",
+   "uid": "U038",
+   "k1": [
+    "6851422a1fb3eba4"
+   ],
+   "members": [
+    "jupiter:34"
+   ]
+  },
+  "07c183a0fc7e8e82": {
+   "cls": "KS_FERN",
+   "uid": "U039",
+   "k1": [
+    "d6a2495d13795fd4"
+   ],
+   "members": [
+    "zaton:36"
+   ]
+  },
+  "a610fb9cd166fb34": {
+   "cls": "KS_FERN",
+   "uid": "U039",
+   "k1": [
+    "6851422a1fb3eba4"
+   ],
+   "members": [
+    "pripyat:35"
+   ]
+  },
+  "1dcaa8bb6981c61d": {
+   "cls": "KS_FERN",
+   "uid": "U048",
+   "k1": [
+    "c1d9739a783b0d15"
+   ],
+   "members": [
+    "l01_escape:24"
+   ]
+  },
+  "331abb172a74f260": {
+   "cls": "KS_FERN",
+   "uid": "U048",
+   "k1": [
+    "f14ae784a415a29f"
+   ],
+   "members": [
+    "zaton:30"
+   ]
+  },
+  "bd6fc657f07992df": {
+   "cls": "KS_FERN",
+   "uid": "U055",
+   "k1": [
+    "10ce8a3031807370"
+   ],
+   "members": [
+    "l02_garbage:4"
+   ]
+  },
+  "c17e55a4537cff6a": {
+   "cls": "KS_FERN",
+   "uid": "U055",
+   "k1": [
+    "6d9f8b3fbf7b3aa5"
+   ],
+   "members": [
+    "l05_bar:4"
+   ]
+  },
+  "138076d12c4f2a6e": {
+   "cls": "KS_FERN",
+   "uid": "U057",
+   "k1": [
+    "bef217c6cb02e13a"
+   ],
+   "members": [
+    "l08_yantar:10"
+   ]
+  },
+  "6714a1d16f9ef729": {
+   "cls": "KS_FERN",
+   "uid": "U057",
+   "k1": [
+    "d2a3c239e4e6ea88"
+   ],
+   "members": [
+    "l05_bar:6"
+   ]
+  },
+  "cb984c3f482b4af8": {
+   "cls": "KS_FERN",
+   "uid": "U057",
+   "k1": [
+    "e829935da2ecca2c"
+   ],
+   "members": [
+    "l11_pripyat:6"
+   ]
+  },
+  "f9f73fbd862c8fcf": {
+   "cls": "KS_FERN",
+   "uid": "U057",
+   "k1": [
+    "77329972183d7e1e"
+   ],
+   "members": [
+    "l02_garbage:6"
+   ]
+  },
+  "fc0229279294fba7": {
+   "cls": "KS_FERN",
+   "uid": "U064",
+   "k1": [
+    "6ec9dda69615e6fd"
+   ],
+   "members": [
+    "l11_pripyat:10"
+   ]
+  },
+  "1c78fb697e2a3f62": {
+   "cls": "KS_FERN",
+   "uid": "U068",
+   "k1": [
+    "e1d44ece2d64b68f"
+   ],
+   "members": [
+    "k02_trucks_cemetery:5"
+   ]
+  },
+  "07bfcbce3c08cbce": {
+   "cls": "KS_FERN",
+   "uid": "U073",
+   "k1": [
+    "cf085c05d00fb198"
+   ],
+   "members": [
+    "pripyat:29"
+   ]
+  },
+  "3e29fe77f05d2b3f": {
+   "cls": "KS_FERN",
+   "uid": "U073",
+   "k1": [
+    "a97d0826b76fd7c8"
+   ],
+   "members": [
+    "zaton:31"
+   ]
+  },
+  "573798d8ad95078d": {
+   "cls": "KS_FERN",
+   "uid": "U073",
+   "k1": [
+    "cdbefdfe0adecc06"
+   ],
+   "members": [
+    "k00_marsh:29"
+   ]
+  },
+  "77a7f42ae09d4522": {
+   "cls": "KS_FERN",
+   "uid": "U073",
+   "k1": [
+    "6e6d0d91b9ee0ea6"
+   ],
+   "members": [
+    "l01_escape:25"
+   ]
+  },
+  "d69351fd8e3639ec": {
+   "cls": "KS_FERN",
+   "uid": "U073",
+   "k1": [
+    "cf085c05d00fb198"
+   ],
+   "members": [
+    "jupiter:27"
+   ]
+  },
+  "66d9b3fdbde8ee1d": {
+   "cls": "KS_FERN",
+   "uid": "U076",
+   "k1": [
+    "544e3e28b29ffd26"
+   ],
+   "members": [
+    "k00_marsh:28"
+   ]
+  },
+  "aedf05a7ede8a1bb": {
+   "cls": "KS_FERN",
+   "uid": "U076",
+   "k1": [
+    "c339d4b25e7ca066"
+   ],
+   "members": [
+    "l01_escape:23"
+   ]
+  },
+  "d3dd06b560b67093": {
+   "cls": "KS_FERN",
+   "uid": "U076",
+   "k1": [
+    "ef67d000b2489ac0"
+   ],
+   "members": [
+    "jupiter:26"
+   ]
+  },
+  "ab65f33d8579ec68": {
+   "cls": "KS_FERN",
+   "uid": "U077",
+   "k1": [
+    "ef67d000b2489ac0"
+   ],
+   "members": [
+    "pripyat:28"
+   ]
+  },
+  "d87d484c32d78a36": {
+   "cls": "KS_FERN",
+   "uid": "U077",
+   "k1": [
+    "6d0dc0d86a1742e0"
+   ],
+   "members": [
+    "zaton:29"
+   ]
+  },
+  "05a62f026cbc713b": {
+   "cls": "KS_FERN",
+   "uid": "U117",
+   "k1": [
+    "958116d38fab39e4"
+   ],
+   "members": [
+    "jupiter:28"
+   ]
+  },
+  "3c8e8633963da337": {
+   "cls": "KS_FERN",
+   "uid": "U117",
+   "k1": [
+    "3b8245406a13258a"
+   ],
+   "members": [
+    "k00_marsh:30"
+   ]
+  },
+  "42dd1714979c6080": {
+   "cls": "KS_FERN",
+   "uid": "U117",
+   "k1": [
+    "590ab2455fd5ad4a"
+   ],
+   "members": [
+    "l01_escape:26"
+   ]
+  },
+  "6674985047f0bd52": {
+   "cls": "KS_FERN",
+   "uid": "U117",
+   "k1": [
+    "958116d38fab39e4"
+   ],
+   "members": [
+    "zaton:32"
+   ]
+  },
+  "a69a3607e280e75b": {
+   "cls": "KS_FERN",
+   "uid": "U117",
+   "k1": [
+    "958116d38fab39e4"
+   ],
+   "members": [
+    "pripyat:30"
+   ]
+  },
+  "0fe923fec9720131": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "3d7c7a19fe13f057"
+   ],
+   "members": [
+    "l10_limansk:3"
+   ]
+  },
+  "13698a6e3cc4685b": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "1e0eba7b7391ace9"
+   ],
+   "members": [
+    "l10_red_forest:3"
+   ]
+  },
+  "44e345f7f3276dee": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "d140457edcdbd5ad"
+   ],
+   "members": [
+    "l11_hospital:3"
+   ]
+  },
+  "5e44e9d4a09e13f7": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "ce439d85e41800f1"
+   ],
+   "members": [
+    "l06_rostok:3"
+   ]
+  },
+  "6cd137a8f100880c": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "6ce5acdc6d1270ff"
+   ],
+   "members": [
+    "k01_darkscape:3"
+   ]
+  },
+  "8a416d40ec9d43c0": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "54205f1e624698ca"
+   ],
+   "members": [
+    "l03_agroprom:3"
+   ]
+  },
+  "b1a3ac0b3b13a2bf": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "db70495af51405b9"
+   ],
+   "members": [
+    "new_military:3"
+   ]
+  },
+  "c91cdaf5c63cca61": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "499ecd34bc9a4453"
+   ],
+   "members": [
+    "l13_generators:3"
+   ]
+  },
+  "d368182257e2f53b": {
+   "cls": "KS_FERN",
+   "uid": "U118",
+   "k1": [
+    "64395c0de20aa5d5"
+   ],
+   "members": [
+    "l10_radar:3"
+   ]
+  },
+  "1602102e02a9eea6": {
+   "cls": "KS_FERN",
+   "uid": "U125",
+   "k1": [
+    "d1d8de76496c34c6"
+   ],
+   "members": [
+    "l11_pripyat:7"
+   ]
+  },
+  "1f94b5b1298c49b2": {
+   "cls": "KS_FERN",
+   "uid": "U125",
+   "k1": [
+    "a7d4baeb05dac8ea"
+   ],
+   "members": [
+    "l12_stancia_2:7"
+   ]
+  },
+  "4a22a502305e27a8": {
+   "cls": "KS_FERN",
+   "uid": "U125",
+   "k1": [
+    "f388977f660ad023"
+   ],
+   "members": [
+    "l02_garbage:7"
+   ]
+  },
+  "6621acd9b1313471": {
+   "cls": "KS_FERN",
+   "uid": "U125",
+   "k1": [
+    "7905089751848f2c"
+   ],
+   "members": [
+    "l08_yantar:7"
+   ]
+  },
+  "73dd67917e0717ef": {
+   "cls": "KS_FERN",
+   "uid": "U125",
+   "k1": [
+    "4e085d1c699cc530"
+   ],
+   "members": [
+    "l05_bar:7"
+   ]
+  },
+  "b80e1f7f36f20302": {
+   "cls": "KS_FERN",
+   "uid": "U125",
+   "k1": [
+    "06a91ec568524e1a"
+   ],
+   "members": [
+    "l12_stancia:7"
+   ]
+  },
+  "6a9991747ddcfad7": {
+   "cls": "KS_FERN",
+   "uid": "U141",
+   "k1": [
+    "47b6400b15d98ac8"
+   ],
+   "members": [
+    "l08_yantar:2"
+   ]
+  },
+  "3f04ffac7a939f5f": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U129",
+   "k1": [
+    "ad43da07593ceb7e"
+   ],
+   "members": [
+    "jupiter:16"
+   ]
+  },
+  "55b4ba226529e8c5": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U129",
+   "k1": [
+    "5f5e8ab76f33984e"
+   ],
+   "members": [
+    "zaton:18"
+   ]
+  },
+  "64634b742bd63c92": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U129",
+   "k1": [
+    "5f5e8ab76f33984e"
+   ],
+   "members": [
+    "jupiter:37"
+   ]
+  },
+  "9d39ab060586f1b5": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U129",
+   "k1": [
+    "ad43da07593ceb7e"
+   ],
+   "members": [
+    "pripyat:18"
+   ]
+  },
+  "e28312e8a07ed945": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U129",
+   "k1": [
+    "f39b528ad1b853e8"
+   ],
+   "members": [
+    "k00_marsh:18"
+   ]
+  },
+  "362905bb23e3b855": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U130",
+   "k1": [
+    "5f5e8ab76f33984e"
+   ],
+   "members": [
+    "pripyat:19"
+   ]
+  },
+  "4f7276d84ef57f9b": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U130",
+   "k1": [
+    "a5430341e419b4be"
+   ],
+   "members": [
+    "zaton:19"
+   ]
+  },
+  "7031f3202f8dc5ae": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U130",
+   "k1": [
+    "4ff556e8c9705a18"
+   ],
+   "members": [
+    "k00_marsh:19"
+   ]
+  },
+  "fca81a7d23d57a7c": {
+   "cls": "KS_HORSETAIL",
+   "uid": "U130",
+   "k1": [
+    "a5430341e419b4be"
+   ],
+   "members": [
+    "jupiter:17"
+   ]
+  },
+  "4b6cdf5b3e347a2b": {
+   "cls": "KS_SHRUB",
+   "uid": "U041",
+   "k1": [
+    "271bbd74cb7782ae"
+   ],
+   "members": [
+    "pripyat:33"
+   ]
+  },
+  "b54accd308374893": {
+   "cls": "KS_SHRUB",
+   "uid": "U041",
+   "k1": [
+    "271bbd74cb7782ae"
+   ],
+   "members": [
+    "jupiter:32"
+   ]
+  },
+  "d7a4f2a264866b91": {
+   "cls": "KS_SHRUB",
+   "uid": "U041",
+   "k1": [
+    "05e9721dce65c80c"
+   ],
+   "members": [
+    "k00_marsh:27"
+   ]
+  },
+  "f67b8b602596f8f6": {
+   "cls": "KS_SHRUB",
+   "uid": "U041",
+   "k1": [
+    "e23fbf247d1a29ec"
+   ],
+   "members": [
+    "l01_escape:21"
+   ]
+  },
+  "0390ee3d5016f5d4": {
+   "cls": "KS_SHRUB",
+   "uid": "U042",
+   "k1": [
+    "37f0a47019aaf1ee"
+   ],
+   "members": [
+    "pripyat:26"
+   ]
+  },
+  "dcbb47dcb48666a7": {
+   "cls": "KS_SHRUB",
+   "uid": "U042",
+   "k1": [
+    "9916ab1b965c34ee"
+   ],
+   "members": [
+    "zaton:27"
+   ]
+  },
+  "52da316c8b662e33": {
+   "cls": "KS_SHRUB",
+   "uid": "U044",
+   "k1": [
+    "555249314f3bdc73"
+   ],
+   "members": [
+    "l05_bar:1"
+   ]
+  },
+  "7bfc489295b09abf": {
+   "cls": "KS_SHRUB",
+   "uid": "U044",
+   "k1": [
+    "f41ac37f58aef14f"
+   ],
+   "members": [
+    "l02_garbage:1"
+   ]
+  },
+  "eda4bd2fd11cc40c": {
+   "cls": "KS_SHRUB",
+   "uid": "U044",
+   "k1": [
+    "0309c954724d1d73"
+   ],
+   "members": [
+    "l11_pripyat:1"
+   ]
+  },
+  "45b1869211079499": {
+   "cls": "KS_SHRUB",
+   "uid": "U051",
+   "k1": [
+    "bc41c4185be0e6c1"
+   ],
+   "members": [
+    "l09_deadcity:2"
+   ]
+  },
+  "c2c6eea665c84b2a": {
+   "cls": "KS_SHRUB",
+   "uid": "U051",
+   "k1": [
+    "94508104be9d19bb"
+   ],
+   "members": [
+    "l04_darkvalley:2"
+   ]
+  },
+  "2d1d7873af868093": {
+   "cls": "KS_SHRUB",
+   "uid": "U072",
+   "k1": [
+    "0bfc8c39cddcf368"
+   ],
+   "members": [
+    "jupiter:11"
+   ]
+  },
+  "633de1c837d85cf3": {
+   "cls": "KS_SHRUB",
+   "uid": "U072",
+   "k1": [
+    "c8adba5e13106fe8"
+   ],
+   "members": [
+    "zaton:12"
+   ]
+  },
+  "834ad25c6f389115": {
+   "cls": "KS_SHRUB",
+   "uid": "U072",
+   "k1": [
+    "e1dc46d9ecdb5d26"
+   ],
+   "members": [
+    "k00_marsh:12"
+   ]
+  },
+  "83de46c7f65d122e": {
+   "cls": "KS_SHRUB",
+   "uid": "U072",
+   "k1": [
+    "0bfc8c39cddcf368"
+   ],
+   "members": [
+    "pripyat:12"
+   ]
+  },
+  "cf9bbdc8938b0e4f": {
+   "cls": "KS_SHRUB",
+   "uid": "U072",
+   "k1": [
+    "cdbefdfe0adecc06"
+   ],
+   "members": [
+    "l01_escape:12"
+   ]
+  },
+  "08b08d4d98f0affa": {
+   "cls": "KS_SHRUB",
+   "uid": "U074",
+   "k1": [
+    "c8adba5e13106fe8"
+   ],
+   "members": [
+    "jupiter:29"
+   ]
+  },
+  "13073233979a001f": {
+   "cls": "KS_SHRUB",
+   "uid": "U074",
+   "k1": [
+    "8f2eb1f497b15f78"
+   ],
+   "members": [
+    "zaton:33"
+   ]
+  },
+  "4af4db4124b5a51e": {
+   "cls": "KS_SHRUB",
+   "uid": "U074",
+   "k1": [
+    "4527353aadaab286"
+   ],
+   "members": [
+    "l01_escape:27"
+   ]
+  },
+  "a63f97c60d71d15b": {
+   "cls": "KS_SHRUB",
+   "uid": "U074",
+   "k1": [
+    "1295bda6caa90226"
+   ],
+   "members": [
+    "k00_marsh:31"
+   ]
+  },
+  "b1ea8534d8a7e4a4": {
+   "cls": "KS_SHRUB",
+   "uid": "U074",
+   "k1": [
+    "7cbddf7e56808558"
+   ],
+   "members": [
+    "pripyat:31"
+   ]
+  },
+  "8cb8b8c7088c3b10": {
+   "cls": "KS_SHRUB",
+   "uid": "U078",
+   "k1": [
+    "c87c15fa83be1dbf"
+   ],
+   "members": [
+    "l01_escape:11"
+   ]
+  },
+  "fe1a1ef4489b52a4": {
+   "cls": "KS_SHRUB",
+   "uid": "U078",
+   "k1": [
+    "11a5822f5e6c065f"
+   ],
+   "members": [
+    "k00_marsh:11"
+   ]
+  },
+  "1ff3fa6e5ba3c194": {
+   "cls": "KS_SHRUB",
+   "uid": "U088",
+   "k1": [
+    "5be9027733be382b"
+   ],
+   "members": [
+    "l03_agroprom:5"
+   ]
+  },
+  "4ef7f98ca761e0cc": {
+   "cls": "KS_SHRUB",
+   "uid": "U094",
+   "k1": [
+    "d8e9cee929eb0ede"
+   ],
+   "members": [
+    "l08_yantar:8"
+   ]
+  },
+  "8abd177fc36e0c50": {
+   "cls": "KS_SHRUB",
+   "uid": "U100",
+   "k1": [
+    "794b58a8ce77a12f"
+   ],
+   "members": [
+    "new_military:0"
+   ]
+  },
+  "8c4b616289ba01a3": {
+   "cls": "KS_SHRUB",
+   "uid": "U100",
+   "k1": [
+    "2f2eb34c6c38e4c4"
+   ],
+   "members": [
+    "l10_limansk:0"
+   ]
+  },
+  "b030d600d4729e44": {
+   "cls": "KS_SHRUB",
+   "uid": "U100",
+   "k1": [
+    "51b36f9b32e7deb7"
+   ],
+   "members": [
+    "l10_red_forest:0"
+   ]
+  },
+  "fd2484b0acf05cd1": {
+   "cls": "KS_SHRUB",
+   "uid": "U105",
+   "k1": [
+    "7d2a051a7d899b43"
+   ],
+   "members": [
+    "l08_yantar:9"
+   ]
+  },
+  "19ff7031010c2acb": {
+   "cls": "KS_SHRUB",
+   "uid": "U110",
+   "k1": [
+    "c1e038a254d819ab"
+   ],
+   "members": [
+    "l01_escape:13"
+   ]
+  },
+  "7705faaedf15b3a0": {
+   "cls": "KS_SHRUB",
+   "uid": "U110",
+   "k1": [
+    "4b93092deb4d5ad5"
+   ],
+   "members": [
+    "jupiter:12"
+   ]
+  },
+  "85febbfd749e0a1d": {
+   "cls": "KS_SHRUB",
+   "uid": "U110",
+   "k1": [
+    "4b93092deb4d5ad5"
+   ],
+   "members": [
+    "pripyat:13"
+   ]
+  },
+  "b9e44908baf36211": {
+   "cls": "KS_SHRUB",
+   "uid": "U110",
+   "k1": [
+    "dd7c19a1193680ab"
+   ],
+   "members": [
+    "k00_marsh:13"
+   ]
+  },
+  "c8fd193d2c80cdcc": {
+   "cls": "KS_SHRUB",
+   "uid": "U110",
+   "k1": [
+    "7245c227664674d5"
+   ],
+   "members": [
+    "zaton:13"
+   ]
+  },
+  "7cb174d4db758222": {
+   "cls": "KS_SHRUB",
+   "uid": "U111",
+   "k1": [
+    "f840986d6c338f55"
+   ],
+   "members": [
+    "zaton:14"
+   ]
+  },
+  "9d9798f9e7970fbb": {
+   "cls": "KS_SHRUB",
+   "uid": "U111",
+   "k1": [
+    "7245c227664674d5"
+   ],
+   "members": [
+    "pripyat:14"
+   ]
+  },
+  "b025f3e8703b764b": {
+   "cls": "KS_SHRUB",
+   "uid": "U111",
+   "k1": [
+    "3fd1ab3bc5ffc9cb"
+   ],
+   "members": [
+    "l01_escape:14"
+   ]
+  },
+  "b31c848783eb2f64": {
+   "cls": "KS_SHRUB",
+   "uid": "U111",
+   "k1": [
+    "7245c227664674d5"
+   ],
+   "members": [
+    "jupiter:13"
+   ]
+  },
+  "c757c2c3609953e1": {
+   "cls": "KS_SHRUB",
+   "uid": "U111",
+   "k1": [
+    "f32efcae302aed8b"
+   ],
+   "members": [
+    "k00_marsh:14"
+   ]
+  },
+  "149751a85054c3c7": {
+   "cls": "KS_SHRUB",
+   "uid": "U112",
+   "k1": [
+    "8f713c4b1e4c2dfe"
+   ],
+   "members": [
+    "l10_red_forest:4"
+   ]
+  },
+  "4f7083a31dcec516": {
+   "cls": "KS_SHRUB",
+   "uid": "U112",
+   "k1": [
+    "5e43c0428dbf526b"
+   ],
+   "members": [
+    "new_military:4"
+   ]
+  },
+  "9067c1521f42a94d": {
+   "cls": "KS_SHRUB",
+   "uid": "U112",
+   "k1": [
+    "437c329e397cc5dc"
+   ],
+   "members": [
+    "l10_limansk:4"
+   ]
+  },
+  "f08419ebb448c23b": {
+   "cls": "KS_SHRUB",
+   "uid": "U112",
+   "k1": [
+    "71308882a1f174d6"
+   ],
+   "members": [
+    "l03_agroprom:4"
+   ]
+  },
+  "3a728ec13fb5ef87": {
+   "cls": "KS_SHRUB",
+   "uid": "U114",
+   "k1": [
+    "002b0ca60f3f18b8"
+   ],
+   "members": [
+    "l04_darkvalley:4"
+   ]
+  },
+  "9ca6db81f6d7db41": {
+   "cls": "KS_SHRUB",
+   "uid": "U114",
+   "k1": [
+    "dee382ad24d57142"
+   ],
+   "members": [
+    "l11_hospital:4"
+   ]
+  },
+  "b1ece8d5eb2d93f7": {
+   "cls": "KS_SHRUB",
+   "uid": "U114",
+   "k1": [
+    "e774775f7fb7b127"
+   ],
+   "members": [
+    "l09_deadcity:4"
+   ]
+  },
+  "0fa69d026bcef467": {
+   "cls": "KS_SHRUB",
+   "uid": "U120",
+   "k1": [
+    "bf3d1b49146ac1f7"
+   ],
+   "members": [
+    "k00_marsh:32"
+   ]
+  },
+  "65700193198ed7f8": {
+   "cls": "KS_SHRUB",
+   "uid": "U120",
+   "k1": [
+    "67e26429dd3f6e85"
+   ],
+   "members": [
+    "zaton:34"
+   ]
+  },
+  "7c55784d2b361733": {
+   "cls": "KS_SHRUB",
+   "uid": "U120",
+   "k1": [
+    "91f14acee8d852a5"
+   ],
+   "members": [
+    "jupiter:30"
+   ]
+  },
+  "c33ee86ed2a292a3": {
+   "cls": "KS_SHRUB",
+   "uid": "U120",
+   "k1": [
+    "96b9acf9cd5ceec5"
+   ],
+   "members": [
+    "pripyat:32"
+   ]
+  },
+  "cd659f38d473ccae": {
+   "cls": "KS_SHRUB",
+   "uid": "U120",
+   "k1": [
+    "2724ce09816d5bd7"
+   ],
+   "members": [
+    "l01_escape:28"
+   ]
+  },
+  "cf2a2467205dfbe7": {
+   "cls": "KS_SHRUB",
+   "uid": "U123",
+   "k1": [
+    "96b9acf9cd5ceec5"
+   ],
+   "members": [
+    "jupiter:31"
+   ]
+  },
+  "98209eac6ab29bac": {
+   "cls": "KS_SHRUB",
+   "uid": "U136",
+   "k1": [
+    "ebf243dee2ccffa8"
+   ],
+   "members": [
+    "l04_darkvalley:1"
+   ]
+  },
+  "e64bfe4d5d648cd0": {
+   "cls": "KS_SHRUB",
+   "uid": "U136",
+   "k1": [
+    "0ee9713518e9dd08"
+   ],
+   "members": [
+    "l09_deadcity:1"
+   ]
+  },
+  "46bd3a8c1945d775": {
+   "cls": "KS_SHRUB",
+   "uid": "U140",
+   "k1": [
+    "785787273f8ba7bd"
+   ],
+   "members": [
+    "l02_garbage:2"
+   ]
+  },
+  "4d8a08c7605f8ae1": {
+   "cls": "KS_SHRUB",
+   "uid": "U140",
+   "k1": [
+    "ae5bf2e8e9408bc9"
+   ],
+   "members": [
+    "l05_bar:2"
+   ]
+  },
+  "c9c414ad5f7be9aa": {
+   "cls": "KS_SHRUB",
+   "uid": "U140",
+   "k1": [
+    "310db209047fba1c"
+   ],
+   "members": [
+    "l11_pripyat:2"
+   ]
+  },
+  "000e772a7bece5a9": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "fdf183e0bef6183e"
+   ],
+   "members": [
+    "l12_stancia:16",
+    "l12_stancia_2:16"
+   ]
+  },
+  "081de48f76d4dc60": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "c566300348cdae8c"
+   ],
+   "members": [
+    "l03_agroprom:9"
+   ]
+  },
+  "0e6fb6cdc2315812": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "fdf183e0bef6183e"
+   ],
+   "members": [
+    "l10_radar:9"
+   ]
+  },
+  "2a24bec694099103": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "1e2427f5851e5e80"
+   ],
+   "members": [
+    "l01_escape:3"
+   ]
+  },
+  "2c4bee38b6919bfc": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "fdf183e0bef6183e"
+   ],
+   "members": [
+    "k01_darkscape:9"
+   ]
+  },
+  "4280975e12d39e92": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "d7fc5f1ae83fe7be"
+   ],
+   "members": [
+    "l13_generators:9"
+   ]
+  },
+  "5d50180c6e1ec474": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "1dfef4922c5d0a4c"
+   ],
+   "members": [
+    "jupiter:3"
+   ]
+  },
+  "64f8d53e8df0b1e7": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "fdf183e0bef6183e"
+   ],
+   "members": [
+    "l04_darkvalley:9"
+   ]
+  },
+  "6559cd82054af88d": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "3bfbee671770fb20"
+   ],
+   "members": [
+    "k00_marsh:3"
+   ]
+  },
+  "82e741b9f29e1dd7": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "12827183719921c7"
+   ],
+   "members": [
+    "l06_rostok:9"
+   ]
+  },
+  "f89530e8b8f2a831": {
+   "cls": "KS_LITTER",
+   "uid": "U000",
+   "k1": [
+    "d7fc5f1ae83fe7be"
+   ],
+   "members": [
+    "l09_deadcity:9"
+   ]
+  },
+  "3fd24eda8af356f9": {
+   "cls": "KS_LITTER",
+   "uid": "U001",
+   "k1": [
+    "761e37e2f4fffd6c"
+   ],
+   "members": [
+    "l10_red_forest:9"
+   ]
+  },
+  "451264fe601d3964": {
+   "cls": "KS_LITTER",
+   "uid": "U001",
+   "k1": [
+    "d58b48003d668eb9"
+   ],
+   "members": [
+    "l11_hospital:9"
+   ]
+  },
+  "e0699eecc5057b4b": {
+   "cls": "KS_LITTER",
+   "uid": "U001",
+   "k1": [
+    "761e37e2f4fffd6c"
+   ],
+   "members": [
+    "new_military:9"
+   ]
+  },
+  "ebd8217901f0b346": {
+   "cls": "KS_LITTER",
+   "uid": "U001",
+   "k1": [
+    "99bf77a10b3ab151"
+   ],
+   "members": [
+    "l10_limansk:9"
+   ]
+  },
+  "34ba96377e419c98": {
+   "cls": "KS_LITTER",
+   "uid": "U002",
+   "k1": [
+    "fdf183e0bef6183e"
+   ],
+   "members": [
+    "l02_garbage:16",
+    "l05_bar:16"
+   ]
+  },
+  "5b70d16631c12c1e": {
+   "cls": "KS_LITTER",
+   "uid": "U002",
+   "k1": [
+    "fb84f52bffbebf66"
+   ],
+   "members": [
+    "k02_trucks_cemetery:14"
+   ]
+  },
+  "6e19b4c1120d556a": {
+   "cls": "KS_LITTER",
+   "uid": "U002",
+   "k1": [
+    "fade77a245fa5e3e"
+   ],
+   "members": [
+    "l08_yantar:16"
+   ]
+  },
+  "8886d17eda45cec5": {
+   "cls": "KS_LITTER",
+   "uid": "U002",
+   "k1": [
+    "fdf183e0bef6183e"
+   ],
+   "members": [
+    "l11_pripyat:16"
+   ]
+  },
+  "9982393235aa6c3a": {
+   "cls": "KS_LITTER",
+   "uid": "U002",
+   "k1": [
+    "1dfef4922c5d0a4c"
+   ],
+   "members": [
+    "pripyat:3"
+   ]
+  },
+  "b7fe392d4e56bedf": {
+   "cls": "KS_LITTER",
+   "uid": "U002",
+   "k1": [
+    "946ca1a4717c82cc"
+   ],
+   "members": [
+    "zaton:3"
+   ]
+  },
+  "24c301b7fac099bf": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "5c5153554d943409"
+   ],
+   "members": [
+    "k00_marsh:1"
+   ]
+  },
+  "265d6b12eb5f69fd": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "4bdd27a5d66d8165"
+   ],
+   "members": [
+    "jupiter:1"
+   ]
+  },
+  "2f7c9f9767be0fa6": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "d17b63f7824b816f"
+   ],
+   "members": [
+    "l12_stancia:14",
+    "l12_stancia_2:14"
+   ]
+  },
+  "55ea69347572b5f4": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "d17b63f7824b816f"
+   ],
+   "members": [
+    "k01_darkscape:7"
+   ]
+  },
+  "6097587ea4b0e3db": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "ccad739452387ada"
+   ],
+   "members": [
+    "l06_rostok:7"
+   ]
+  },
+  "9587952c5d4729db": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "e4f7f053874a6cec"
+   ],
+   "members": [
+    "l03_agroprom:7"
+   ]
+  },
+  "bfe92d48038f440a": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "853f52658ee490ef"
+   ],
+   "members": [
+    "l13_generators:7"
+   ]
+  },
+  "ca2d9e865299546a": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "ce87abda43f9a909"
+   ],
+   "members": [
+    "l01_escape:1"
+   ]
+  },
+  "f7ea60565e3a2d8a": {
+   "cls": "KS_LITTER",
+   "uid": "U003",
+   "k1": [
+    "d17b63f7824b816f"
+   ],
+   "members": [
+    "l10_radar:7"
+   ]
+  },
+  "787558717a32fa57": {
+   "cls": "KS_LITTER",
+   "uid": "U004",
+   "k1": [
+    "d17b63f7824b816f"
+   ],
+   "members": [
+    "l04_darkvalley:7"
+   ]
+  },
+  "8fcaeabad5ab635a": {
+   "cls": "KS_LITTER",
+   "uid": "U004",
+   "k1": [
+    "853f52658ee490ef"
+   ],
+   "members": [
+    "l09_deadcity:7"
+   ]
+  },
+  "03838e871760df4d": {
+   "cls": "KS_LITTER",
+   "uid": "U005",
+   "k1": [
+    "7f68e5de55b07831"
+   ],
+   "members": [
+    "l10_limansk:7"
+   ]
+  },
+  "86bf522a96c1288f": {
+   "cls": "KS_LITTER",
+   "uid": "U005",
+   "k1": [
+    "6eb18957e3d4803f"
+   ],
+   "members": [
+    "l11_hospital:7"
+   ]
+  },
+  "c8f232cc44c3d934": {
+   "cls": "KS_LITTER",
+   "uid": "U005",
+   "k1": [
+    "63b52f75c2cb6b4c"
+   ],
+   "members": [
+    "l10_red_forest:7"
+   ]
+  },
+  "ec043cbed0435f1c": {
+   "cls": "KS_LITTER",
+   "uid": "U005",
+   "k1": [
+    "63b52f75c2cb6b4c"
+   ],
+   "members": [
+    "new_military:7"
+   ]
+  },
+  "74bb7f0b12579ea4": {
+   "cls": "KS_LITTER",
+   "uid": "U006",
+   "k1": [
+    "d65095105bb04036"
+   ],
+   "members": [
+    "k02_trucks_cemetery:12"
+   ]
+  },
+  "297ed0815016848f": {
+   "cls": "KS_LITTER",
+   "uid": "U007",
+   "k1": [
+    "4bdd27a5d66d8165"
+   ],
+   "members": [
+    "pripyat:1"
+   ]
+  },
+  "3c61f91db5793bf5": {
+   "cls": "KS_LITTER",
+   "uid": "U007",
+   "k1": [
+    "d17b63f7824b816f"
+   ],
+   "members": [
+    "l11_pripyat:14"
+   ]
+  },
+  "55204e659345b377": {
+   "cls": "KS_LITTER",
+   "uid": "U007",
+   "k1": [
+    "8fd7ea12bbf04065"
+   ],
+   "members": [
+    "zaton:1"
+   ]
+  },
+  "c4a5d78d4ed026fb": {
+   "cls": "KS_LITTER",
+   "uid": "U007",
+   "k1": [
+    "d17b63f7824b816f"
+   ],
+   "members": [
+    "l02_garbage:14",
+    "l05_bar:14"
+   ]
+  },
+  "dbc0b86406a1d00e": {
+   "cls": "KS_LITTER",
+   "uid": "U007",
+   "k1": [
+    "7f823ebd24f00ecf"
+   ],
+   "members": [
+    "l08_yantar:14"
+   ]
+  },
+  "3474f2a9406f4641": {
+   "cls": "KS_LITTER",
+   "uid": "U008",
+   "k1": [
+    "12075d8cb1930985"
+   ],
+   "members": [
+    "k02_trucks_cemetery:13"
+   ]
+  },
+  "78794615791a1d08": {
+   "cls": "KS_LITTER",
+   "uid": "U008",
+   "k1": [
+    "792046f3c650b68a"
+   ],
+   "members": [
+    "zaton:2"
+   ]
+  },
+  "c3ba190c6337c011": {
+   "cls": "KS_LITTER",
+   "uid": "U008",
+   "k1": [
+    "6ec1d3d6bde66623"
+   ],
+   "members": [
+    "l08_yantar:15"
+   ]
+  },
+  "cfe278f30ee90af4": {
+   "cls": "KS_LITTER",
+   "uid": "U008",
+   "k1": [
+    "0271fbe02854c10a"
+   ],
+   "members": [
+    "pripyat:2"
+   ]
+  },
+  "d902c75b225df1df": {
+   "cls": "KS_LITTER",
+   "uid": "U008",
+   "k1": [
+    "009fa4d6a7002163"
+   ],
+   "members": [
+    "l11_pripyat:15"
+   ]
+  },
+  "dafffa84284ea30a": {
+   "cls": "KS_LITTER",
+   "uid": "U008",
+   "k1": [
+    "009fa4d6a7002163"
+   ],
+   "members": [
+    "l02_garbage:15",
+    "l05_bar:15"
+   ]
+  },
+  "03fe74197d11f5bf": {
+   "cls": "KS_LITTER",
+   "uid": "U009",
+   "k1": [
+    "e4e26050c78a7796"
+   ],
+   "members": [
+    "k00_marsh:2"
+   ]
+  },
+  "5f415536d442e496": {
+   "cls": "KS_LITTER",
+   "uid": "U009",
+   "k1": [
+    "0271fbe02854c10a"
+   ],
+   "members": [
+    "jupiter:2"
+   ]
+  },
+  "c308603a077334e7": {
+   "cls": "KS_LITTER",
+   "uid": "U009",
+   "k1": [
+    "78063c2f051b3faf"
+   ],
+   "members": [
+    "l03_agroprom:8"
+   ]
+  },
+  "ed46a81d22570aae": {
+   "cls": "KS_LITTER",
+   "uid": "U009",
+   "k1": [
+    "67a0642b4f7e4016"
+   ],
+   "members": [
+    "l01_escape:2"
+   ]
+  },
+  "0d0fed2b910787f9": {
+   "cls": "KS_LITTER",
+   "uid": "U010",
+   "k1": [
+    "8de067619aa18ee3"
+   ],
+   "members": [
+    "l13_generators:8"
+   ]
+  },
+  "2607b8aabb9108da": {
+   "cls": "KS_LITTER",
+   "uid": "U010",
+   "k1": [
+    "009fa4d6a7002163"
+   ],
+   "members": [
+    "l04_darkvalley:8"
+   ]
+  },
+  "2b2156a91d5cdf91": {
+   "cls": "KS_LITTER",
+   "uid": "U010",
+   "k1": [
+    "009fa4d6a7002163"
+   ],
+   "members": [
+    "k01_darkscape:8"
+   ]
+  },
+  "32be98f91bf78a59": {
+   "cls": "KS_LITTER",
+   "uid": "U010",
+   "k1": [
+    "009fa4d6a7002163"
+   ],
+   "members": [
+    "l12_stancia:15",
+    "l12_stancia_2:15"
+   ]
+  },
+  "a295d2e2ffb89279": {
+   "cls": "KS_LITTER",
+   "uid": "U010",
+   "k1": [
+    "009fa4d6a7002163"
+   ],
+   "members": [
+    "l10_radar:8"
+   ]
+  },
+  "e357787ceb97c8bf": {
+   "cls": "KS_LITTER",
+   "uid": "U010",
+   "k1": [
+    "8de067619aa18ee3"
+   ],
+   "members": [
+    "l09_deadcity:8"
+   ]
+  },
+  "ebe24a47ca99ffd4": {
+   "cls": "KS_LITTER",
+   "uid": "U010",
+   "k1": [
+    "375d1fbe10af6b9a"
+   ],
+   "members": [
+    "l06_rostok:8"
+   ]
+  },
+  "05f7c4eaa328f987": {
+   "cls": "KS_LITTER",
+   "uid": "U011",
+   "k1": [
+    "23be30b80fc8d1cf"
+   ],
+   "members": [
+    "new_military:8"
+   ]
+  },
+  "0c85704dd7b359a2": {
+   "cls": "KS_LITTER",
+   "uid": "U011",
+   "k1": [
+    "23be30b80fc8d1cf"
+   ],
+   "members": [
+    "l10_red_forest:8"
+   ]
+  },
+  "7d635c19ffcd9c1a": {
+   "cls": "KS_LITTER",
+   "uid": "U011",
+   "k1": [
+    "b229cfae2eb663a2"
+   ],
+   "members": [
+    "l10_limansk:8"
+   ]
+  },
+  "f1c1840bb619a651": {
+   "cls": "KS_LITTER",
+   "uid": "U011",
+   "k1": [
+    "f603e09bdcec91e5"
+   ],
+   "members": [
+    "l11_hospital:8"
+   ]
+  },
+  "021c1b7f684138cb": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "ba71727653846e72"
+   ],
+   "members": [
+    "l03_agroprom:6"
+   ]
+  },
+  "12e7d95c4b20cf53": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "7725956f46ff5f5d"
+   ],
+   "members": [
+    "jupiter:0"
+   ]
+  },
+  "2552564eff3b5c7b": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "623ed2c4910c5779"
+   ],
+   "members": [
+    "l10_radar:12"
+   ]
+  },
+  "2aa3e37cee1e4c56": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "4d5c41db82efe831"
+   ],
+   "members": [
+    "l01_escape:0"
+   ]
+  },
+  "846766f8bdf3c350": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "c24924f83cfa67f9"
+   ],
+   "members": [
+    "l09_deadcity:12"
+   ]
+  },
+  "a36d2a24ed2e5a61": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "977b459193a2baf1"
+   ],
+   "members": [
+    "k00_marsh:0"
+   ]
+  },
+  "a6530c38af5faaf9": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "623ed2c4910c5779"
+   ],
+   "members": [
+    "k01_darkscape:12"
+   ]
+  },
+  "b3fd73f49b210922": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "fb0f45ade6905614"
+   ],
+   "members": [
+    "l06_rostok:12"
+   ]
+  },
+  "f0792b098c6620b0": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "623ed2c4910c5779"
+   ],
+   "members": [
+    "l04_darkvalley:12"
+   ]
+  },
+  "f32053d462875dfb": {
+   "cls": "KS_LITTER",
+   "uid": "U012",
+   "k1": [
+    "c24924f83cfa67f9"
+   ],
+   "members": [
+    "l13_generators:12"
+   ]
+  },
+  "587be67118209f1b": {
+   "cls": "KS_LITTER",
+   "uid": "U013",
+   "k1": [
+    "7344c0bbdeee298b"
+   ],
+   "members": [
+    "l04_darkvalley:6"
+   ]
+  },
+  "7ad899292d6cd4a6": {
+   "cls": "KS_LITTER",
+   "uid": "U013",
+   "k1": [
+    "558296a6a497d20b"
+   ],
+   "members": [
+    "l13_generators:6"
+   ]
+  },
+  "7d80012aecfb0727": {
+   "cls": "KS_LITTER",
+   "uid": "U013",
+   "k1": [
+    "558296a6a497d20b"
+   ],
+   "members": [
+    "l09_deadcity:6"
+   ]
+  },
+  "8a7a1bc3e1404c26": {
+   "cls": "KS_LITTER",
+   "uid": "U013",
+   "k1": [
+    "7344c0bbdeee298b"
+   ],
+   "members": [
+    "l10_radar:6"
+   ]
+  },
+  "b866b33acbc5cee3": {
+   "cls": "KS_LITTER",
+   "uid": "U013",
+   "k1": [
+    "c768cddad4682a12"
+   ],
+   "members": [
+    "l06_rostok:6"
+   ]
+  },
+  "bf462c0e16fb1a18": {
+   "cls": "KS_LITTER",
+   "uid": "U013",
+   "k1": [
+    "7344c0bbdeee298b"
+   ],
+   "members": [
+    "k01_darkscape:6"
+   ]
+  },
+  "da8cb1600bd77c27": {
+   "cls": "KS_LITTER",
+   "uid": "U013",
+   "k1": [
+    "7344c0bbdeee298b"
+   ],
+   "members": [
+    "l12_stancia:13",
+    "l12_stancia_2:13"
+   ]
+  },
+  "008074d742f6e7d2": {
+   "cls": "KS_LITTER",
+   "uid": "U014",
+   "k1": [
+    "4d12d658e4705257"
+   ],
+   "members": [
+    "l10_limansk:6"
+   ]
+  },
+  "1784f70b54be187f": {
+   "cls": "KS_LITTER",
+   "uid": "U014",
+   "k1": [
+    "1e7b0608699f3132"
+   ],
+   "members": [
+    "l10_red_forest:6"
+   ]
+  },
+  "8e996ac5233a0d67": {
+   "cls": "KS_LITTER",
+   "uid": "U014",
+   "k1": [
+    "0833f6d086c5eb72"
+   ],
+   "members": [
+    "l11_hospital:6"
+   ]
+  },
+  "b7308307fc6789ee": {
+   "cls": "KS_LITTER",
+   "uid": "U014",
+   "k1": [
+    "aca49652f755704d"
+   ],
+   "members": [
+    "l11_hospital:12"
+   ]
+  },
+  "ec8bc8fe889183c7": {
+   "cls": "KS_LITTER",
+   "uid": "U014",
+   "k1": [
+    "1e7b0608699f3132"
+   ],
+   "members": [
+    "new_military:6"
+   ]
+  },
+  "bcaeb66959668854": {
+   "cls": "KS_LITTER",
+   "uid": "U015",
+   "k1": [
+    "cc6a13ae454c7298"
+   ],
+   "members": [
+    "k02_trucks_cemetery:11"
+   ]
+  },
+  "f50eca66af8f839b": {
+   "cls": "KS_LITTER",
+   "uid": "U015",
+   "k1": [
+    "e140cf70fefe2ef9"
+   ],
+   "members": [
+    "k02_trucks_cemetery:17"
+   ]
+  },
+  "0709476862e869eb": {
+   "cls": "KS_LITTER",
+   "uid": "U016",
+   "k1": [
+    "6df7d9f9780a1d41"
+   ],
+   "members": [
+    "zaton:6"
+   ]
+  },
+  "75091b456ecc74d2": {
+   "cls": "KS_LITTER",
+   "uid": "U016",
+   "k1": [
+    "7725956f46ff5f5d"
+   ],
+   "members": [
+    "pripyat:0"
+   ]
+  },
+  "7bde02eb07c841a5": {
+   "cls": "KS_LITTER",
+   "uid": "U016",
+   "k1": [
+    "7344c0bbdeee298b"
+   ],
+   "members": [
+    "l02_garbage:13",
+    "l05_bar:13"
+   ]
+  },
+  "82222ca5f1051703": {
+   "cls": "KS_LITTER",
+   "uid": "U016",
+   "k1": [
+    "7344c0bbdeee298b"
+   ],
+   "members": [
+    "l11_pripyat:13"
+   ]
+  },
+  "9ad3632ad7da6347": {
+   "cls": "KS_LITTER",
+   "uid": "U016",
+   "k1": [
+    "8068a0d7413f7e69"
+   ],
+   "members": [
+    "l08_yantar:13"
+   ]
+  },
+  "9e53d5901430f37a": {
+   "cls": "KS_LITTER",
+   "uid": "U016",
+   "k1": [
+    "0bff054d3d70f95d"
+   ],
+   "members": [
+    "zaton:0"
+   ]
+  },
+  "d30b5cba7f9c921b": {
+   "cls": "KS_LITTER",
+   "uid": "U016",
+   "k1": [
+    "e9286744932d89d1"
+   ],
+   "members": [
+    "pripyat:6"
+   ]
+  },
+  "7332d3961669394b": {
+   "cls": "KS_LITTER",
+   "uid": "U018",
+   "k1": [
+    "70f77f8a15a20d95"
+   ],
+   "members": [
+    "l08_yantar:19"
+   ]
+  },
+  "7cb8ce6292e5ff41": {
+   "cls": "KS_LITTER",
+   "uid": "U018",
+   "k1": [
+    "9429990b1ddb32bf"
+   ],
+   "members": [
+    "l02_garbage:19",
+    "l05_bar:19"
+   ]
+  },
+  "e5cb05b6ead32d6f": {
+   "cls": "KS_LITTER",
+   "uid": "U018",
+   "k1": [
+    "9429990b1ddb32bf"
+   ],
+   "members": [
+    "l11_pripyat:19"
+   ]
+  },
+  "00cd1b1f57349d43": {
+   "cls": "KS_LITTER",
+   "uid": "U019",
+   "k1": [
+    "9429990b1ddb32bf"
+   ],
+   "members": [
+    "l12_stancia:19",
+    "l12_stancia_2:19"
+   ]
+  },
+  "3d4d7020972498bd": {
+   "cls": "KS_LITTER",
+   "uid": "U020",
+   "k1": [
+    "e9286744932d89d1"
+   ],
+   "members": [
+    "jupiter:6"
+   ]
+  },
+  "9773a5cad2e28769": {
+   "cls": "KS_LITTER",
+   "uid": "U020",
+   "k1": [
+    "32e43a99e51b8655"
+   ],
+   "members": [
+    "l01_escape:6"
+   ]
+  },
+  "d8f6faa6dfe19be7": {
+   "cls": "KS_LITTER",
+   "uid": "U020",
+   "k1": [
+    "6b11fcbd7d465239"
+   ],
+   "members": [
+    "l03_agroprom:12"
+   ]
+  },
+  "f19d8b66800ed18e": {
+   "cls": "KS_LITTER",
+   "uid": "U020",
+   "k1": [
+    "109e6d8899fb31f5"
+   ],
+   "members": [
+    "k00_marsh:6"
+   ]
+  },
+  "4d21c8cdd12259d7": {
+   "cls": "KS_LITTER",
+   "uid": "U021",
+   "k1": [
+    "fe72cc2d312fcef9"
+   ],
+   "members": [
+    "new_military:12"
+   ]
+  },
+  "ad69331257daffde": {
+   "cls": "KS_LITTER",
+   "uid": "U021",
+   "k1": [
+    "7ff260290bb2150c"
+   ],
+   "members": [
+    "l10_limansk:12"
+   ]
+  },
+  "f24c2e1898137577": {
+   "cls": "KS_LITTER",
+   "uid": "U021",
+   "k1": [
+    "fe72cc2d312fcef9"
+   ],
+   "members": [
+    "l10_red_forest:12"
+   ]
+  },
+  "48ea0d8093bc4fd0": {
+   "cls": "KS_LITTER",
+   "uid": "U022",
+   "k1": [
+    "e9646bdc3a9df1a2"
+   ],
+   "members": [
+    "l03_agroprom:10"
+   ]
+  },
+  "4fe7f7cbd97f033c": {
+   "cls": "KS_LITTER",
+   "uid": "U022",
+   "k1": [
+    "05f46af2b5860350"
+   ],
+   "members": [
+    "l01_escape:4"
+   ]
+  },
+  "65fd10900ec1a7f5": {
+   "cls": "KS_LITTER",
+   "uid": "U022",
+   "k1": [
+    "52df573cc00eb39c"
+   ],
+   "members": [
+    "jupiter:4"
+   ]
+  },
+  "dd83c8cc8b353a16": {
+   "cls": "KS_LITTER",
+   "uid": "U022",
+   "k1": [
+    "73cd0451d760eff0"
+   ],
+   "members": [
+    "k00_marsh:4"
+   ]
+  },
+  "5ba8c72ba787c414": {
+   "cls": "KS_LITTER",
+   "uid": "U023",
+   "k1": [
+    "dcd6ff32edc0a0e7"
+   ],
+   "members": [
+    "l06_rostok:10"
+   ]
+  },
+  "653e760b8b6bbae9": {
+   "cls": "KS_LITTER",
+   "uid": "U023",
+   "k1": [
+    "71499fddf1541036"
+   ],
+   "members": [
+    "k01_darkscape:10"
+   ]
+  },
+  "6ba3d52cf4407691": {
+   "cls": "KS_LITTER",
+   "uid": "U023",
+   "k1": [
+    "71499fddf1541036"
+   ],
+   "members": [
+    "l10_radar:10"
+   ]
+  },
+  "82a541a25c9e7311": {
+   "cls": "KS_LITTER",
+   "uid": "U023",
+   "k1": [
+    "341b78834aeb96b6"
+   ],
+   "members": [
+    "l13_generators:10"
+   ]
+  },
+  "a8be4a2c7bd8703b": {
+   "cls": "KS_LITTER",
+   "uid": "U023",
+   "k1": [
+    "71499fddf1541036"
+   ],
+   "members": [
+    "l04_darkvalley:10"
+   ]
+  },
+  "cfa9a5263d4d13a6": {
+   "cls": "KS_LITTER",
+   "uid": "U023",
+   "k1": [
+    "341b78834aeb96b6"
+   ],
+   "members": [
+    "l09_deadcity:10"
+   ]
+  },
+  "daabc6e49418e190": {
+   "cls": "KS_LITTER",
+   "uid": "U023",
+   "k1": [
+    "71499fddf1541036"
+   ],
+   "members": [
+    "l12_stancia:17",
+    "l12_stancia_2:17"
+   ]
+  },
+  "1e3d99b4abd6b234": {
+   "cls": "KS_LITTER",
+   "uid": "U024",
+   "k1": [
+    "4c9a3fdf6f265169"
+   ],
+   "members": [
+    "l11_hospital:10"
+   ]
+  },
+  "8deb54227083aa1e": {
+   "cls": "KS_LITTER",
+   "uid": "U024",
+   "k1": [
+    "9cec6e71a3c12d83"
+   ],
+   "members": [
+    "l10_limansk:10"
+   ]
+  },
+  "99fdfd4fac162762": {
+   "cls": "KS_LITTER",
+   "uid": "U024",
+   "k1": [
+    "16804806635d4af2"
+   ],
+   "members": [
+    "l10_red_forest:10"
+   ]
+  },
+  "b10bd5cc634be6db": {
+   "cls": "KS_LITTER",
+   "uid": "U024",
+   "k1": [
+    "16804806635d4af2"
+   ],
+   "members": [
+    "new_military:10"
+   ]
+  },
+  "2e20ece6c7b26a04": {
+   "cls": "KS_LITTER",
+   "uid": "U025",
+   "k1": [
+    "52df573cc00eb39c"
+   ],
+   "members": [
+    "pripyat:4"
+   ]
+  },
+  "3dac71bf4c5f5c6e": {
+   "cls": "KS_LITTER",
+   "uid": "U025",
+   "k1": [
+    "d48f9890342bf25c"
+   ],
+   "members": [
+    "zaton:4"
+   ]
+  },
+  "3ec0651cb7287baa": {
+   "cls": "KS_LITTER",
+   "uid": "U025",
+   "k1": [
+    "71499fddf1541036"
+   ],
+   "members": [
+    "l11_pripyat:17"
+   ]
+  },
+  "552594621f3c52a2": {
+   "cls": "KS_LITTER",
+   "uid": "U025",
+   "k1": [
+    "cd7f173d3e178116"
+   ],
+   "members": [
+    "l08_yantar:17"
+   ]
+  },
+  "aa26c3ec737806c2": {
+   "cls": "KS_LITTER",
+   "uid": "U025",
+   "k1": [
+    "71499fddf1541036"
+   ],
+   "members": [
+    "l02_garbage:17",
+    "l05_bar:17"
+   ]
+  },
+  "b747b7c117aee3a1": {
+   "cls": "KS_LITTER",
+   "uid": "U025",
+   "k1": [
+    "0292c555f1a6bba0"
+   ],
+   "members": [
+    "k02_trucks_cemetery:15"
+   ]
+  },
+  "2b752740c9677536": {
+   "cls": "KS_LITTER",
+   "uid": "U026",
+   "k1": [
+    "e2470276487e05fa"
+   ],
+   "members": [
+    "l02_garbage:20",
+    "l05_bar:20"
+   ]
+  },
+  "66f31da9938cc947": {
+   "cls": "KS_LITTER",
+   "uid": "U026",
+   "k1": [
+    "3f8a407e6c6ef4dd"
+   ],
+   "members": [
+    "pripyat:7"
+   ]
+  },
+  "96cffd161f53f644": {
+   "cls": "KS_LITTER",
+   "uid": "U026",
+   "k1": [
+    "e2470276487e05fa"
+   ],
+   "members": [
+    "l11_pripyat:20"
+   ]
+  },
+  "b71056a50e56b9f3": {
+   "cls": "KS_LITTER",
+   "uid": "U026",
+   "k1": [
+    "0c014b4976fac7ca"
+   ],
+   "members": [
+    "l08_yantar:20"
+   ]
+  },
+  "e6dfbd58a4d6afc7": {
+   "cls": "KS_LITTER",
+   "uid": "U026",
+   "k1": [
+    "abd70747adeec375"
+   ],
+   "members": [
+    "zaton:7"
+   ]
+  },
+  "222bb11ce6d4e305": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "63bebc92dbc91bd6"
+   ],
+   "members": [
+    "k01_darkscape:13"
+   ]
+  },
+  "2cbeb170742e2bbf": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "63bebc92dbc91bd6"
+   ],
+   "members": [
+    "l10_radar:13"
+   ]
+  },
+  "3392668b504fa83f": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "77dd18fa36805b56"
+   ],
+   "members": [
+    "l13_generators:13"
+   ]
+  },
+  "4de1308bbf927aa6": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "3c66b6445eb24bc9"
+   ],
+   "members": [
+    "l03_agroprom:13"
+   ]
+  },
+  "52a0d2947e93cf47": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "e2470276487e05fa"
+   ],
+   "members": [
+    "l12_stancia:20",
+    "l12_stancia_2:20"
+   ]
+  },
+  "96268acd7934c737": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "c2102717a57a4511"
+   ],
+   "members": [
+    "k00_marsh:7"
+   ]
+  },
+  "aa7f85ee8c4d43d5": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "3f8a407e6c6ef4dd"
+   ],
+   "members": [
+    "jupiter:7"
+   ]
+  },
+  "dbdda84a11cc4492": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "f7974b7cfd39c7c1"
+   ],
+   "members": [
+    "l01_escape:7"
+   ]
+  },
+  "f7aa9a5e3899b5ee": {
+   "cls": "KS_LITTER",
+   "uid": "U027",
+   "k1": [
+    "94d1f7b422150b2b"
+   ],
+   "members": [
+    "l06_rostok:13"
+   ]
+  },
+  "302587ea25a29c37": {
+   "cls": "KS_LITTER",
+   "uid": "U028",
+   "k1": [
+    "77dd18fa36805b56"
+   ],
+   "members": [
+    "l09_deadcity:13"
+   ]
+  },
+  "c1ad05bf0154342a": {
+   "cls": "KS_LITTER",
+   "uid": "U028",
+   "k1": [
+    "63bebc92dbc91bd6"
+   ],
+   "members": [
+    "l04_darkvalley:13"
+   ]
+  },
+  "3da35492920f9aa0": {
+   "cls": "KS_LITTER",
+   "uid": "U029",
+   "k1": [
+    "a62f1af9098313a8"
+   ],
+   "members": [
+    "l10_limansk:13"
+   ]
+  },
+  "a7de74d5d8842525": {
+   "cls": "KS_LITTER",
+   "uid": "U029",
+   "k1": [
+    "625d0eb9f6e662b1"
+   ],
+   "members": [
+    "l10_red_forest:13"
+   ]
+  },
+  "cfea952e82ef05cd": {
+   "cls": "KS_LITTER",
+   "uid": "U029",
+   "k1": [
+    "625d0eb9f6e662b1"
+   ],
+   "members": [
+    "new_military:13"
+   ]
+  },
+  "d3558fe006ba4904": {
+   "cls": "KS_LITTER",
+   "uid": "U029",
+   "k1": [
+    "cbcc7c2e9a9f335c"
+   ],
+   "members": [
+    "l11_hospital:13"
+   ]
+  },
+  "63cd76a9ddfccf65": {
+   "cls": "KS_LITTER",
+   "uid": "U030",
+   "k1": [
+    "498db72a6f498f1b"
+   ],
+   "members": [
+    "k02_trucks_cemetery:18"
+   ]
+  },
+  "00fe03e2e8225dec": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "26204b499f4df712"
+   ],
+   "members": [
+    "l12_stancia:18",
+    "l12_stancia_2:18"
+   ]
+  },
+  "0ef7ef60c9defd10": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "79f56315f6101c7c"
+   ],
+   "members": [
+    "l03_agroprom:11"
+   ]
+  },
+  "310e868e99a19859": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "d4498fe7120878c0"
+   ],
+   "members": [
+    "k00_marsh:5"
+   ]
+  },
+  "46e944de7f9df13f": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "f162a15bf16d9fc7"
+   ],
+   "members": [
+    "l11_hospital:11"
+   ]
+  },
+  "65aeecaae65cfbff": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "26204b499f4df712"
+   ],
+   "members": [
+    "l04_darkvalley:11"
+   ]
+  },
+  "6c41cab55ab626a5": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "c45239b379af6d92"
+   ],
+   "members": [
+    "l09_deadcity:11"
+   ]
+  },
+  "80c9f87c05df4bdd": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "26204b499f4df712"
+   ],
+   "members": [
+    "k01_darkscape:11"
+   ]
+  },
+  "8c3263e9c15772ef": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "c45239b379af6d92"
+   ],
+   "members": [
+    "l13_generators:11"
+   ]
+  },
+  "9befc4961cf6bad4": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "8f8353f81c1b92b0"
+   ],
+   "members": [
+    "l01_escape:5"
+   ]
+  },
+  "d002b88083a5e648": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "9c85cd6dcc5c6384"
+   ],
+   "members": [
+    "jupiter:5"
+   ]
+  },
+  "dafc8af58145016f": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "26204b499f4df712"
+   ],
+   "members": [
+    "l10_radar:11"
+   ]
+  },
+  "f145147c75415ed6": {
+   "cls": "KS_LITTER",
+   "uid": "U031",
+   "k1": [
+    "819389d89057bbab"
+   ],
+   "members": [
+    "l06_rostok:11"
+   ]
+  },
+  "a4b83346da6769f5": {
+   "cls": "KS_LITTER",
+   "uid": "U032",
+   "k1": [
+    "9932fb790b555bc4"
+   ],
+   "members": [
+    "l10_red_forest:11"
+   ]
+  },
+  "dba3c2cdb9da9df7": {
+   "cls": "KS_LITTER",
+   "uid": "U032",
+   "k1": [
+    "9932fb790b555bc4"
+   ],
+   "members": [
+    "new_military:11"
+   ]
+  },
+  "fa126ac7ef9b7cde": {
+   "cls": "KS_LITTER",
+   "uid": "U032",
+   "k1": [
+    "52a297e9df4e9515"
+   ],
+   "members": [
+    "l10_limansk:11"
+   ]
+  },
+  "126c055629787a32": {
+   "cls": "KS_LITTER",
+   "uid": "U033",
+   "k1": [
+    "9c85cd6dcc5c6384"
+   ],
+   "members": [
+    "pripyat:5"
+   ]
+  },
+  "213030297f8a01e7": {
+   "cls": "KS_LITTER",
+   "uid": "U033",
+   "k1": [
+    "72ae40c344f6f35c"
+   ],
+   "members": [
+    "zaton:5"
+   ]
+  },
+  "81cc3f102d428bf1": {
+   "cls": "KS_LITTER",
+   "uid": "U033",
+   "k1": [
+    "812826575610e60e"
+   ],
+   "members": [
+    "k02_trucks_cemetery:16"
+   ]
+  },
+  "9430d09b729181fd": {
+   "cls": "KS_LITTER",
+   "uid": "U033",
+   "k1": [
+    "26204b499f4df712"
+   ],
+   "members": [
+    "l11_pripyat:18"
+   ]
+  },
+  "ebb6b324cad8d15c": {
+   "cls": "KS_LITTER",
+   "uid": "U033",
+   "k1": [
+    "26204b499f4df712"
+   ],
+   "members": [
+    "l02_garbage:18",
+    "l05_bar:18"
+   ]
+  },
+  "ef71122d8e8731fa": {
+   "cls": "KS_LITTER",
+   "uid": "U033",
+   "k1": [
+    "d8d87fcc66a073a2"
+   ],
+   "members": [
+    "l08_yantar:18"
+   ]
+  },
+  "4197996fda537547": {
+   "cls": "KS_DECAL",
+   "uid": "U017",
+   "k1": [
+    "034a2905c1eccbf5"
+   ],
+   "members": [
+    "k02_trucks_cemetery:19"
+   ]
+  },
+  "d6270c8b1f6dc1b5": {
+   "cls": "KS_DECAL",
+   "uid": "U017",
+   "k1": [
+    "4a8dcc00abc3d619"
+   ],
+   "members": [
+    "k02_trucks_cemetery:20"
+   ]
+  },
+  "19310383f9aa1163": {
+   "cls": "FIX_EMPTY",
+   "uid": "U046",
+   "k1": [
+    "7bf92dd1ed4e1163"
+   ],
+   "members": [
+    "l12_stancia:1"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "5e955c15202786aa": {
+   "cls": "FIX_EMPTY",
+   "uid": "U046",
+   "k1": [
+    "edfa47ae721b86aa"
+   ],
+   "members": [
+    "l12_stancia_2:1"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "2500bad93932d6a6": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "bbf0d1c7e9913d29"
+   ],
+   "members": [
+    "l12_stancia:11"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "307c5eaca2bd3fa9": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "dd3787fcb3aa7832"
+   ],
+   "members": [
+    "l12_stancia_2:11"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "4703a92cb078fb07": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "7e35a43d825cfb07"
+   ],
+   "members": [
+    "l12_stancia:5"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "561514cf776adc4c": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "4eb5e8c0184edc4c"
+   ],
+   "members": [
+    "l12_stancia_2:5"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "b08f069fda99ef09": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "aed1c803550def09"
+   ],
+   "members": [
+    "l12_stancia_2:6"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "c42a022e39835cd9": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "fd1d83cca5775cd9"
+   ],
+   "members": [
+    "l12_stancia:6"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "c5cf63ff0b8233de": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "501ceac2187633de"
+   ],
+   "members": [
+    "l12_stancia:12"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "d33f86583a8e3ddc": {
+   "cls": "FIX_EMPTY",
+   "uid": "U066",
+   "k1": [
+    "4f2f2a24aef23ddc"
+   ],
+   "members": [
+    "l12_stancia_2:12"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "716397369d68b5d5": {
+   "cls": "FIX_EMPTY",
+   "uid": "U128",
+   "k1": [
+    "1dc751bcbcdcb5d5"
+   ],
+   "members": [
+    "l12_stancia_2:3"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "ae0576d8c09347d2": {
+   "cls": "FIX_EMPTY",
+   "uid": "U128",
+   "k1": [
+    "da3e2e2ab94747d2"
+   ],
+   "members": [
+    "l12_stancia:3"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "22f759ceb6ea4e9f": {
+   "cls": "FIX_EMPTY",
+   "uid": "U142",
+   "k1": [
+    "2567be0cbc0e4e9f"
+   ],
+   "members": [
+    "l12_stancia:2"
+   ],
+   "remap": "PG_BUNCH"
+  },
+  "2dfd532df13c43e1": {
+   "cls": "FIX_EMPTY",
+   "uid": "U142",
+   "k1": [
+    "b33249fc14f043e1"
+   ],
+   "members": [
+    "l12_stancia_2:2"
+   ],
+   "remap": "PG_BUNCH"
+  }
+ }
+}

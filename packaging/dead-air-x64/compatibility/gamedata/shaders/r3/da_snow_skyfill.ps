@@ -1,0 +1,24 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Before the snow grid (da_snow.cpp): the albedo under the sky pixels (stencil 0) becomes snow. Where
+// the raised snow surface covers the sky at a crest, the grid writes position and normal but keeps the
+// albedo below it, and the sky has none worth keeping. The blender masks every other target off.
+
+struct da_sn_skyfill_out
+{
+	float4 t0 : SV_Target0;
+	float4 t1 : SV_Target1;
+	float4 t2 : SV_Target2;
+};
+
+da_sn_skyfill_out main(float2 tc : TEXCOORD0, float4 pos : SV_Position)
+{
+	// sRGB-encoded settled snow (linear 0.84, 0.85, 0.87) and a dull gloss.
+	const float4 snow = float4(0.925, 0.930, 0.940, 0.1);
+	da_sn_skyfill_out o;
+	o.t0 = snow;
+	o.t1 = snow;
+	o.t2 = snow;
+	return o;
+}

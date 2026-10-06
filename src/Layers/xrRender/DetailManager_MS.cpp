@@ -948,6 +948,9 @@ bool RenderMeshDump(CDetailManager& dm, CBackend& cmd_list, const CDetailManager
     static shared_str strDispatch("grass_dispatch");
     static shared_str strBound("grass_bound");
     static shared_str strPlanes("grass_planes");
+    static shared_str strStockSeason("stock_season");
+    static shared_str strStockSeasonPrev("stock_season_prev");
+    static shared_str strStockObj("stock_obj");
 
     CDetailManager::MeshPath& m = *dm.m_mesh;
     const bool shadow_pass = static_cast<bool>(frustum);
@@ -988,7 +991,8 @@ bool RenderMeshDump(CDetailManager& dm, CBackend& cmd_list, const CDetailManager
     const R_constant_table* resolved_table = nullptr;
     R_constant *cConsts = nullptr, *cWave = nullptr, *cDir2D = nullptr, *cSFade = nullptr, *cSFadeEye = nullptr,
                *cGrassTint = nullptr, *cWavePrev = nullptr, *cDir2DPrev = nullptr, *cWindPrevInfo = nullptr,
-               *cObj = nullptr, *cDispatch = nullptr, *cBound = nullptr, *cPlanes = nullptr;
+               *cObj = nullptr, *cDispatch = nullptr, *cBound = nullptr, *cPlanes = nullptr,
+               *cStockSeason = nullptr, *cStockSeasonPrev = nullptr, *cStockObj = nullptr;
     bool bound_srvs = false;
     bool accepted = true;
     u32 dispatches = 0;
@@ -1052,6 +1056,18 @@ bool RenderMeshDump(CDetailManager& dm, CBackend& cmd_list, const CDetailManager
             cDispatch = cmd_list.get_c(strDispatch)._get();
             cBound = cmd_list.get_c(strBound)._get();
             cPlanes = cmd_list.get_c(strPlanes)._get();
+            cStockSeason = cmd_list.get_c(strStockSeason)._get();
+            cStockSeasonPrev = cmd_list.get_c(strStockSeasonPrev)._get();
+            cStockObj = cmd_list.get_c(strStockObj)._get();
+        }
+        // The season of the object's class: the amplification shader drops what it does not keep, the
+        // mesh shader scales the height and buries under snow (da_detail_common.h).
+        {
+            Fvector4 season, season_prev, season_obj;
+            dm.StockSeasonConstants(objectId, season, season_prev, season_obj);
+            cmd_list.set_c(cStockSeason, season);
+            cmd_list.set_c(cStockSeasonPrev, season_prev);
+            cmd_list.set_c(cStockObj, season_obj);
         }
         cmd_list.set_c(cConsts, in.consts);
         cmd_list.set_c(cWave, in.wave);

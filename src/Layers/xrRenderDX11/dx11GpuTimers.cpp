@@ -48,9 +48,10 @@ void dx11GpuTimers::LogLine() const
     // snprintf: a field that does not fit is cut, never a crash in the log line.
     string1024 extra;
     int length = std::snprintf(extra, sizeof(extra),
-        " ripple=%.3f join=%.3f vrs=%.3f gd=%.3f grass=%.3f rt_scene=%.3f rt_sun=%.3f rt_ao=%.3f rt_refl=%.3f",
-        ms(Ripple), ms(JoinWait), ms(VrsRate) + ms(VrsLuma), ms(GdCull), ms(Grass), ms(RtScene), ms(RtSun),
-        ms(RtAO), ms(RtRefl));
+        " ripple=%.3f join=%.3f vrs=%.3f gd=%.3f grass=%.3f grass_gen=%.3f snow_prep=%.3f snow_grid=%.3f "
+        "snow_layer=%.3f rt_scene=%.3f rt_sun=%.3f rt_ao=%.3f rt_refl=%.3f",
+        ms(Ripple), ms(JoinWait), ms(VrsRate) + ms(VrsLuma), ms(GdCull), ms(Grass), ms(GrassGen), ms(SnowPrep),
+        ms(SnowGrid), ms(SnowLayer), ms(RtScene), ms(RtSun), ms(RtAO), ms(RtRefl));
     for (size_t i = 0; i < g_gpu_log_field_count && length > 0 && size_t(length) < sizeof(extra); ++i)
     {
         const int added = std::snprintf(extra + length, sizeof(extra) - length, " %s=%.3f",
@@ -88,6 +89,10 @@ pcstr dx11GpuTimers::name(Slot slot)
     case VrsLuma: return "vrs_luma";
     case GdCull: return "gd";
     case Grass: return "grass";
+    case GrassGen: return "grass_gen";
+    case SnowPrep: return "snow_prep";
+    case SnowGrid: return "snow_grid";
+    case SnowLayer: return "snow_layer";
     case RtScene: return "rt_scene";
     case RtSun: return "rt_sun";
     case RtAO: return "rt_ao";

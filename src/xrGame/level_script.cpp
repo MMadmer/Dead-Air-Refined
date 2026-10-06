@@ -16,6 +16,7 @@
 #include "xrServer.h"
 #include "client_spawn_manager.h"
 #include "xrEngine/IGame_Persistent.h"
+#include "xrEngine/da_season.h"
 #include "game_cl_base.h"
 #include "UIGameCustom.h"
 #include "ui/UIDialogWnd.h"
@@ -208,6 +209,10 @@ float get_rain_volume() { return g_pGamePersistent->Environment().GetRainVolume(
 float get_rain_exposure() { return g_pGamePersistent->Environment().GetRainExposure(); }
 float get_season_k() { return g_pGamePersistent->Environment().GetSeason(); }
 void set_season_k(float value) { g_pGamePersistent->Environment().SetSeason(value); }
+// The time of year the world shows (r__season, docs/dead-air/SEASONS.md): the day of a 365-day year,
+// 0 = 1 January 00:00, continuous; and the choice, 0 = the computer's calendar, 1..12 = a month.
+float season_day() { return da_season_day(); }
+u32 season_choice() { return da_season_choice(); }
 float snow_factor() { return g_pGamePersistent->Environment().GetSnowFactor(); }
 u32 vertex_in_direction(u32 level_vertex_id, Fvector direction, float max_distance)
 {
@@ -1040,6 +1045,8 @@ void CLevel::script_register(lua_State* luaState)
         def("environment", environment),
         def("get_season_k", get_season_k),
         def("set_season_k", set_season_k),
+        def("season_day", season_day),
+        def("season_choice", season_choice),
 
         def("set_time_factor", set_time_factor),
         def("get_time_factor", get_time_factor),

@@ -371,6 +371,9 @@ void CStepManager::UpdateWaterWake(float dist_sqr)
         const float immersion = surface - (foot.y - wake_sole_below_bone);
         if (immersion <= 0.02f)
             continue; // the foot is out of the water, swinging over it
+        // A frozen surface carries no wake (the ice is drawn by water.ps from the same keys).
+        if (env.ice_at(probe) > 0.5f)
+            continue;
         Fvector at = foot;
         at.y = surface;
         const float wet = clampr(immersion / wake_depth_full, 0.f, 1.f);

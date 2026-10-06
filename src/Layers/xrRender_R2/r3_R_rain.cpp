@@ -61,7 +61,9 @@ static int facetable[6][4] =
 
 void render_rain::init()
 {
-    rain_factor = GetCurrentWetness() + GetCurrentSnowFactor();
+    // Liquid wetness only (scaled by da_precip().liquid at the source): snow switches on neither the rain
+    // map nor the wet look.
+    rain_factor = GetCurrentWetness();
 
     const bool camera_moved = !Device.vCameraPositionSaved.similar(Device.vCameraPosition, EPS_L) ||
         !Device.vCameraDirectionSaved.similar(Device.vCameraDirection, EPS_L);

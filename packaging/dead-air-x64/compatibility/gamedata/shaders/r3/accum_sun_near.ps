@@ -1,6 +1,9 @@
 #include "common.h"
 #include "lmodel.h"
 
+// How far a foliage receiver moves toward the sun before its shadow test (m, view space).
+#define DA_FOLIAGE_SHADOW_PUSH	0.03f
+
 #ifdef USE_MINMAX_SM
 #define SM_MINMAX
 #endif
@@ -32,9 +35,14 @@ float4 main ( v2p_volume I  ) : SV_Target
 
 	gbuffer_data gbd = gbuffer_load_data( GLD_P(I.tc, I.hpos, ISAMPLE) );
 
+	// The receiver's offset against shadow acne. Two-sided foliage (the blade grass) moves TOWARD the sun
+	// instead: the stock push along N carries a back-lit blade behind its own caster, and the sunlight
+	// through it (lmodel.h) would be shadowed by the blade itself.
+	[branch] if (da_is_foliage(gbd.mtl))
+		gbd.P -= Ldynamic_dir.xyz * DA_FOLIAGE_SHADOW_PUSH;
 #ifdef	GBUFFER_OPTIMIZATION
-	//	Emulate virtual offset
-	gbd.P += gbd.N*0.015f;
+	else
+		gbd.P += gbd.N*0.015f;	//	Emulate virtual offset
 #endif	//	GBUFFER_OPTIMIZATION
 
 	float4 _P = float4( gbd.P, 1.f);
@@ -59,9 +67,14 @@ float4 main ( v2p_volume I ) : SV_Target
 
 	gbuffer_data gbd = gbuffer_load_data( GLD_P(I.tc.xy/I.tc.w, I.hpos, ISAMPLE) );
 
+	// The receiver's offset against shadow acne. Two-sided foliage (the blade grass) moves TOWARD the sun
+	// instead: the stock push along N carries a back-lit blade behind its own caster, and the sunlight
+	// through it (lmodel.h) would be shadowed by the blade itself.
+	[branch] if (da_is_foliage(gbd.mtl))
+		gbd.P -= Ldynamic_dir.xyz * DA_FOLIAGE_SHADOW_PUSH;
 #ifdef	GBUFFER_OPTIMIZATION
-	//	Emulate virtual offset
-	gbd.P += gbd.N*0.015f;
+	else
+		gbd.P += gbd.N*0.015f;	//	Emulate virtual offset
 #endif	//	GBUFFER_OPTIMIZATION
 
 	float4 _P = float4( gbd.P, gbd.mtl );

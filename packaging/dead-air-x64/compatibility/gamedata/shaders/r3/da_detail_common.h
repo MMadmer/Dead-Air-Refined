@@ -17,6 +17,69 @@
 // replacement that brings its own wind keeps its look on the vertex path.
 
 #include "da_wind_motors.h"
+#include "da_snow_sample.h"
+
+// The season of the stock detail classes (CDetailManager::StockSeasonConstants, docs/dead-air/GRASS.md):
+// no CPU rebuild and no reload - an item is drawn iff the stable hash of its root is below its class's
+// keep, its height column scales by the class's height, and it is buried where the snow depth reaches
+// max(hide_abs, hide_rel x top - hide_margin). The vertex, mesh and amplification shaders all apply it,
+// so the shadow passes follow for free; *_prev drive the motion vectors while a day glides.
+uniform float4 stock_season;		// x keep, y height, z hide_rel, w hide_margin (this frame)
+uniform float4 stock_season_prev;	// the same on the previous frame
+uniform float4 stock_obj;			// x model top (model space y), y hide_abs, z 1 = snow lies, w 1 = the season applies
+
+uint	stock_pcg	(uint v)
+{
+	v = v * 747796405u + 2891336453u;
+	const uint w = ((v >> ((v >> 28u) + 4u)) ^ v) * 277803737u;
+	return (w >> 22u) ^ w;
+}
+
+// Stable per item: the root is its translation, and x 64 is exact in float (the CPU twin is
+// detail_stock_u in DetailManager.cpp).
+float	stock_u	(float3 root)
+{
+	const int2 q = int2(floor(root.xz * 64.0f));
+	return float(stock_pcg(asuint(q.x) ^ stock_pcg(asuint(q.y) + 0x9E3779B9u)) & 0xFFFFFFu) / 16777216.0f;
+}
+
+// The keep test alone (the amplification shader, before any snow is read).
+bool	stock_season_kept	(float3 root, float4 s)
+{
+	return stock_obj.w < 0.5f || stock_u(root) < s.x;
+}
+
+// The factor of the height column (hs: its current length) under the season s; 0 = not drawn. prev reads
+// the previous frame's snow.
+float	stock_season_k	(float3 root, float hs, float4 s, bool prev)
+{
+	[branch] if (stock_obj.w < 0.5f)
+		return 1.0f;
+	if (stock_u(root) >= s.x)
+		return 0.0f;
+	[branch] if (stock_obj.z > 0.5f)
+	{
+		const float hide = max(stock_obj.y, s.z * stock_obj.x * hs * s.y - s.w);
+		const float depth = prev ? da_snow_depth_prev(root.xz) : da_snow_depth(root.xz);
+		if (depth >= hide)
+			return 0.0f;
+	}
+	return s.y;
+}
+
+// Rows m0..m2 under the factor k: the height column scaled, or every vertex on the root (zero area,
+// the rasteriser drops it) when the item is not drawn.
+void	stock_season_rows	(inout float4 m0, inout float4 m1, inout float4 m2, float k)
+{
+	if (k <= 0.0f)
+	{
+		m0.xyz = 0.0f; m1.xyz = 0.0f; m2.xyz = 0.0f;
+	}
+	else
+	{
+		m0.y *= k; m1.y *= k; m2.y *= k;
+	}
+}
 
 // Grass shadow fade band (sfade: x = start, y = end in metres, zero outside the sun shadow pass;
 // eye: the CAMERA's world position - in the sun pass m_WV belongs to the sun). The shadow cull

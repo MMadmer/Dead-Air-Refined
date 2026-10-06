@@ -603,8 +603,9 @@
 	</event_page>
 
 	<season_page>
-		<!-- The seasons page: one row, the season (atmosfear_options.script, af_opt_season). -->
-		<list_season x="330" y="2" width="185" height="20" list_length="6" always_show_scroll="0">
+		<!-- The seasons page: one row, the time of year (atmosfear_options.script, af_opt_season): the
+		     computer's calendar and the twelve months, all thirteen in the open list. -->
+		<list_season x="330" y="2" width="185" height="20" list_length="13" always_show_scroll="0">
 			<list_font r="170" g="170" b="170" font="letterica16"/>
 			<text_color>
 				<e r="170" g="170" b="170"/>

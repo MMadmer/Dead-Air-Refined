@@ -7,6 +7,7 @@
 #include "WindVegSound.h"
 #include "Rain.h"
 #include "da_particle_suppress.h"
+#include "da_snow_field.h"
 
 #include "IGame_Level.h"
 #include "Common/object_broker.h"
@@ -674,8 +675,12 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
     const float snow_factor = fi * state_a.snow_factor + f * state_b.snow_factor;
     current_state.wetness = wetness;
     current_state.snow_factor = snow_factor;
-    current_wetness.store(wetness, std::memory_order_relaxed);
-    current_snow_factor.store(snow_factor, std::memory_order_relaxed);
+    // The weather authors how much falls; the season's phase (da_precip) says how much of it is water.
+    // Snow wets nothing, and the snow intensity the weather never authors comes from the snow falling
+    // now - an authored value stays the floor.
+    const SPrecipState& precip = da_precip();
+    current_wetness.store(wetness * clampr(precip.liquid, 0.f, 1.f), std::memory_order_relaxed);
+    current_snow_factor.store(std::max(snow_factor, precip.snow_rate), std::memory_order_relaxed);
 
     // trees
     m_fTreeAmplitude = fi * A.m_fTreeAmplitude + f * B.m_fTreeAmplitude;

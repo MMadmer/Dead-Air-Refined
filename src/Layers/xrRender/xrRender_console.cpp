@@ -33,6 +33,8 @@
 #include "Layers/xrRenderPC_R4/da_vrs.h"
 #include "Layers/xrRenderPC_R4/da_grass_mesh.h"
 #include "Layers/xrRenderPC_R4/da_dstorage.h"
+#include "Layers/xrRender/da_grass_blades.h"
+#include "Layers/xrRender/da_snow.h"
 #endif
 
 // How many of the eight wave rows the water shader evaluates - a quality tier, set from the
@@ -450,6 +452,9 @@ int ps_r__gpu_driven = -1;
 int ps_r__grass_mesh = -1;
 int ps_r__dbg_grass_ab = 0;
 // [dx12:mesh] end variables
+// The QA view of the snow passes (da_snow_common.h): 0 off, 1 the paths in colour, 2 also without the grid's cuts.
+int ps_r__dbg_snow = 0;
+int ps_r__dbg_grass = 0;
 // [dx12:offload] begin variables
 float ps_r__offload_margin = 0.1f;
 float ps_r__offload_agree = 3.f;
@@ -943,6 +948,18 @@ public:
     void Execute(pcstr) override { m_call(); }
     void Save(IWriter*) override {}
 };
+
+// A QA command with one argument, never saved.
+class CCC_DaCallArg final : public IConsole_Command
+{
+    void (*m_call)(pcstr);
+
+public:
+    CCC_DaCallArg(pcstr name, void (*call)(pcstr)) : IConsole_Command(name), m_call(call) { bEmptyArgsHandled = true; }
+
+    void Execute(pcstr args) override { m_call(args); }
+    void Save(IWriter*) override {}
+};
 #endif // RENDER == R_R4
 
 class CCC_tf_Aniso : public CCC_Integer
@@ -1418,6 +1435,12 @@ void xrRender_sync_preset_derived()
     ps_r__sun_cascade_far = sun_cascade_far_by_preset[ps_Preset];
     ps_r__sun_shadow_fade = ps_r__sun_cascade_far * 0.875f;
     ps_r__grass_shadow_dist = grass_shadow_by_preset[ps_Preset];
+#if RENDER == R_R4
+    // The blade grass and the snow keep their preset columns in their own modules (GRASS.md, SNOW.md);
+    // both apply at the next frame.
+    da_grass_apply_preset(ps_Preset);
+    da_snow_apply_preset(ps_Preset);
+#endif
 
     // The distances the preset just decided, in the log. Every report about something ending
     // too close - shadows, reflections, grass - is answered by these five numbers, and until
@@ -2119,6 +2142,12 @@ void xrRender_initconsole()
     CMD2(CCC_DaCall, "r__grass_stats", &da_grass_mesh_stats);
     CMD4(CCC_RuntimeInteger, "r__dbg_grass_ab", &ps_r__dbg_grass_ab, 0, 1);
     // [dx12:mesh] end commands
+    // QA: the state of the blade grass and of the snow passes in the log (GRASS.md, SNOW.md).
+    CMD2(CCC_DaCall, "r__grass_blades_stats", &da_grass_stats);
+    CMD2(CCC_DaCallArg, "r__grass_species_pin", &da_grass_pin_species);
+    CMD2(CCC_DaCall, "r__snow_stats", &da_snow_stats);
+    CMD4(CCC_RuntimeInteger, "r__dbg_snow", &ps_r__dbg_snow, 0, 2);
+    CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 255);
     // [dx12:offload] begin commands
     CMD4(CCC_RuntimeFloat, "r__offload_margin", &ps_r__offload_margin, 0.f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__offload_agree", &ps_r__offload_agree, 0.f, 60.f);

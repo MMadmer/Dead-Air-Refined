@@ -16,7 +16,8 @@ public:
     {
         //	Actually these values are 128
         mtMaxPixelShaderTextures = 16,
-        mtMaxVertexShaderTextures = 4,
+        // The detail mesh shaders bind as the vertex stage: three grass buffers and the two snow depth textures.
+        mtMaxVertexShaderTextures = 8,
         mtMaxGeometryShaderTextures = 16,
 #ifdef USE_DX11
         mtMaxHullShaderTextures = 16,

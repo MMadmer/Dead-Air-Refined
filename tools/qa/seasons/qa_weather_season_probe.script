@@ -1,27 +1,37 @@
 -- QA probe: opens the weather dialog (main menu / pause menu "Weather options") on a loaded save, shows its
--- Seasons page, picks winter, accepts, and checks that r__season followed. The window itself is captured by
--- Watch-QaShots.ps1 at the [qa] SHOT lines. Put into <rig>\gamedata\scripts, remove after the run.
+-- Seasons page, checks that Cancel leaves r__season alone and that Accept applies the picked month, then
+-- puts the player's choice back. The window itself is captured by Watch-QaShots.ps1 at the [qa] SHOT lines.
+-- Put into <rig>\gamedata\scripts, remove after the run.
 
-local dlg, step, t_next = nil, 0, 0
+local dlg, step, t_next, original = nil, 0, 0, nil
 local owner = { ShowDialog = function() end, Show = function() end, HideDialog = function() end }
 
 local function con(cmd)
 	get_console():execute(cmd)
 end
 
+local function season()
+	return get_console():get_string("r__season")
+end
+
+local function check(what, ok)
+	printf("[qa] check %s: %s", what, ok and "PASS" or "FAIL")
+end
+
 local steps = {
 	function()
+		original = season()
 		dlg = atmosfear_options.af_options_dialog()
 		dlg.owner = owner
+		dlg:SetCurrentValues()
 		dlg:ShowDialog(true)
-		printf("[qa] weather dialog open, seasons page %s", tostring(dlg.dlg_season ~= nil))
+		printf("[qa] weather dialog open, seasons page %s, r__season %s", tostring(dlg.dlg_season ~= nil), original)
 		printf("[qa] SHOT weather_periods")
 		return 2500
 	end,
 	function()
 		dlg:OnBtnSeasonOptions()
-		printf("[qa] season list shows '%s' (row %s), r__season %s", dlg.list_season:GetText(),
-			tostring(dlg.list_season:GetCurrentIdx()), get_console():get_string("r__season"))
+		printf("[qa] season list shows '%s' (row %s)", dlg.list_season:GetText(), tostring(dlg.list_season:GetCurrentIdx()))
 		return 1500
 	end,
 	function()
@@ -29,22 +39,45 @@ local steps = {
 		return 2500
 	end,
 	function()
+		-- July picked, then Cancel: nothing may change
+		dlg.list_season:SetCurrentID(7)
+		dlg:OnBtnCancel()
+		check("cancel keeps r__season " .. tostring(original), season() == original)
+		return 1500
+	end,
+	function()
+		-- Opened again the way the menus open it: the list shows the choice, not the cancelled pick
+		dlg:SetCurrentValues()
+		dlg:ShowDialog(true)
+		dlg:OnBtnSeasonOptions()
+		printf("[qa] season list shows '%s' (row %s) after cancel", dlg.list_season:GetText(),
+			tostring(dlg.list_season:GetCurrentIdx()))
+		check("list back on the choice", dlg.list_season:GetCurrentIdx() ~= 7 or original == "july")
+		return 1500
+	end,
+	function()
 		dlg.list_season:SetCurrentID(1)
 		dlg:OnBtnAccept()
 		return 1500
 	end,
 	function()
-		printf("[qa] after accept r__season %s", get_console():get_string("r__season"))
+		check("accept applies january", season() == "january")
 		if dlg:IsShown() then
 			dlg:HideDialog()
 		end
 		return 4000
 	end,
 	function()
-		printf("[qa] SHOT weather_winter_world")
+		printf(string.format("[qa] season day %.1f", level.season_day()))
+		printf("[qa] SHOT weather_january_world")
 		return 2500
 	end,
 	function()
+		if original and original ~= season() then
+			con("r__season " .. original)
+			con("cfg_save")
+		end
+		printf("[qa] r__season back to %s", season())
 		printf("[qa] qa_weather_season_done")
 		con("flush")
 		con("quit")
@@ -61,7 +94,7 @@ local function on_update()
 	step = step + 1
 	local ok, wait = pcall(steps[step])
 	if not ok then
-		printf("[qa] step %d failed: %s", step, tostring(wait))
+		printf(string.format("[qa] step %d failed: %s", step, tostring(wait)))
 		printf("[qa] qa_weather_season_done")
 		con("quit")
 		return

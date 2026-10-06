@@ -48,9 +48,6 @@ extern u32 dm_current_cache_size;// = dm_current_cache_line*dm_current_cache_lin
 extern float dm_current_fade;// = float(2*dm_current_size)-.5f;
 extern float ps_current_detail_density;
 extern float ps_current_detail_height;
-// Shares of the details the current season leaves: grass density, grass height, shrub density,
-// shrub height (DetailManager.cpp).
-Fvector4 detail_season_grass();
 
 class ECORE_API CDetailManager
 {
@@ -316,10 +313,27 @@ public:
     struct MeshPath;
     MeshPath* m_mesh{};
     bool m_mesh_frame{};
-    // The season's shares this manager was built with (detail_season_grass): another season rebuilds it.
-    Fvector4 m_season_grass{ 1.f, 1.f, 1.f, 1.f };
-    // Woody details of the level by object index, which keep the shrub shares.
-    xr_vector<bool> m_shrub;
+    // Seasons of the stock classes (docs/dead-air/GRASS.md): no rebuild, no reload - every draw carries
+    // its class's keep, height and burial rule for this and the previous frame, and the vertex, mesh and
+    // amplification shaders apply them (da_detail_common.h). Season class 0 is the generic grass of
+    // unknown keys (and of the blade classes while the stock path draws them), 1..7 forb .. decal.
+    static constexpr u32 season_class_count = 8;
+    // x keep, y height, z hide_rel, w hide_margin of each season class, this and the previous frame.
+    Fvector4 m_stock_season[season_class_count]{};
+    Fvector4 m_stock_season_prev[season_class_count]{};
+    float m_stock_hide_abs[season_class_count]{};
+    // 1 while snow lies anywhere on the level this frame (the shaders skip the depth fetch otherwise).
+    float m_stock_snow{};
+    // A class whose keep stays 0 for the next days is not even packed (UpdateVisibleM).
+    bool m_season_skip[season_class_count]{};
+    // The blade classes are drawn by da_grass_blades.cpp while this is set: decompress leaves them out.
+    bool m_blades{};
+    // Turns the blades on or off for this manager; a change re-decompresses every cached slot.
+    void SetBladesActive(bool active);
+    u32 SeasonClass(u32 object_id) const;
+    // The three constants of an object's draws: stock_season, stock_season_prev, stock_obj.
+    void StockSeasonConstants(u32 object_id, Fvector4& cur, Fvector4& prev, Fvector4& obj) const;
+    void StockSeasonUpdate();
     void ms_Load();
     void ms_Unload();
     bool ms_Latch();

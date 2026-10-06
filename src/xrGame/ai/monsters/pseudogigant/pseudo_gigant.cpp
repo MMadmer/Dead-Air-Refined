@@ -15,6 +15,7 @@
 #include "detail_path_manager.h"
 #include "CharacterPhysicsSupport.h"
 #include "ai/monsters/control_path_builder_base.h"
+#include "da_snow_deformers.h"
 
 CPseudoGigant::CPseudoGigant()
 {
@@ -241,6 +242,8 @@ void CPseudoGigant::on_threaten_execute()
 
     // играть партиклы
     PlayParticles(m_kick_particles, pos, Direction());
+    // The stomp leaves a crater in the snow (only where it lands on the ground with snow under it).
+    da_snow_deform_crater(Position(), 6.f);
 
     CActor* pA = const_cast<CActor*>(smart_cast<const CActor*>(EnemyMan.get_enemy()));
     if (!pA)

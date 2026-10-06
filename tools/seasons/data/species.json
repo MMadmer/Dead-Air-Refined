@@ -1,0 +1,13144 @@
+{
+ "meta": {
+  "what": "Species and communities of the procedural grass (dead_air_x64_seasons.ltx [grass_species_N], [grass_keys_N], [grass_community_N], [grass_class_community])",
+  "generator": "tools/seasons/data/make_species.py"
+ },
+ "species": [
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.32,
+    0.62
+   ],
+   "leaf_w": [
+    0.005,
+    0.01
+   ],
+   "leaf_tilt": [
+    6,
+    24
+   ],
+   "leaf_bend": [
+    0.08,
+    0.22
+   ],
+   "leaf_droop": [
+    0.05,
+    0.2
+   ],
+   "leaf_stiff": 0.55,
+   "culm_h": [
+    0.62,
+    0.98
+   ],
+   "culm_w": [
+    0.0024,
+    0.0034
+   ],
+   "culm_tilt": [
+    2,
+    8
+   ],
+   "culm_bend": [
+    0.02,
+    0.06
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.12,
+    0.28
+   ],
+   "basal_w": [
+    0.004,
+    0.008
+   ],
+   "basal_tilt": [
+    22,
+    48
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.4,
+   "clump_pull": 0.25,
+   "clump_face_away": 0.25,
+   "clump_lean": 5,
+   "density_leaf": 430,
+   "density_culm": 55,
+   "density_basal": 2000,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 6,
+   "head_len": [
+    0.13,
+    0.22
+   ],
+   "head_w": [
+    0.022,
+    0.045
+   ],
+   "head_branches": 6,
+   "head_open": [
+    11,
+    5
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.32,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.15,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -10,
+    "green": 0
+   },
+   "id": "cal_epi",
+   "latin": "Calamagrostis epigejos",
+   "form": 0,
+   "template": "P1_TALL_CALAMAGROSTIS",
+   "colours": {
+    "live": [
+     "#61552C",
+     "#61552C",
+     "#62572C",
+     "#646345",
+     "#575D41",
+     "#404F2D",
+     "#44562F",
+     "#535541",
+     "#494E3A",
+     "#4D4B26",
+     "#58522C",
+     "#61552C"
+    ],
+    "yellowing": [
+     "#827646",
+     "#827646",
+     "#827646",
+     "#6C713C",
+     "#6C713C",
+     "#6C713C",
+     "#6C713C",
+     "#6C713C",
+     "#7C763B",
+     "#86783B",
+     "#837742",
+     "#827646"
+    ],
+    "straw": [
+     "#977C61",
+     "#977C61",
+     "#947754",
+     "#836C47",
+     "#836C47",
+     "#907A4F",
+     "#A8885C",
+     "#998E5F",
+     "#86794B",
+     "#8C7340",
+     "#88734F",
+     "#95785A"
+    ],
+    "thatch": [
+     "#977C61",
+     "#977C61",
+     "#8F7358",
+     "#A48A6D",
+     "#937B60",
+     "#806B51",
+     "#6B5840",
+     "#6B5840",
+     "#6B5840",
+     "#6B5840",
+     "#6B5840",
+     "#6B5840"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#68614A",
+    "0.5": "#937369",
+    "0.75": "#9A8870",
+    "1.0": "#977B66"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.22,
+    0.45
+   ],
+   "leaf_w": [
+    0.004,
+    0.009
+   ],
+   "leaf_tilt": [
+    8,
+    28
+   ],
+   "leaf_bend": [
+    0.15,
+    0.35
+   ],
+   "leaf_droop": [
+    0.08,
+    0.22
+   ],
+   "leaf_stiff": 0.35,
+   "culm_h": [
+    0.5,
+    0.85
+   ],
+   "culm_w": [
+    0.0022,
+    0.003
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.004,
+    0.007
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.3,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 5,
+   "density_leaf": 440,
+   "density_culm": 60,
+   "density_basal": 1600,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 1,
+   "head_len": [
+    0.07,
+    0.14
+   ],
+   "head_w": [
+    0.006,
+    0.011
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.4,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 22,
+    "green": 0
+   },
+   "id": "ely_rep",
+   "latin": "Elytrigia repens",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#625F4B",
+     "#625F4B",
+     "#63614B",
+     "#606446",
+     "#545F41",
+     "#50593D",
+     "#525A40",
+     "#505541",
+     "#474E3A",
+     "#4C4E3B",
+     "#575643",
+     "#625F4B"
+    ],
+    "yellowing": [
+     "#776A3F",
+     "#776A3F",
+     "#776A3F",
+     "#626537",
+     "#626537",
+     "#626537",
+     "#626537",
+     "#626537",
+     "#716A36",
+     "#7A6C36",
+     "#776B3C",
+     "#776A3F"
+    ],
+    "straw": [
+     "#877B5E",
+     "#877B5E",
+     "#857551",
+     "#88754E",
+     "#88754E",
+     "#88794E",
+     "#98834B",
+     "#A18C4E",
+     "#8E773D",
+     "#7F673A",
+     "#7B6748",
+     "#867657"
+    ],
+    "thatch": [
+     "#877B5E",
+     "#877B5E",
+     "#7B6B4E",
+     "#93886A",
+     "#84795D",
+     "#72694E",
+     "#5F573E",
+     "#5F573E",
+     "#5F573E",
+     "#5F573E",
+     "#5F573E",
+     "#5F573E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#646143",
+    "0.5": "#7E6C49",
+    "0.75": "#8E7A56",
+    "1.0": "#786759"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.25,
+    0.5
+   ],
+   "leaf_w": [
+    0.005,
+    0.011
+   ],
+   "leaf_tilt": [
+    22,
+    50
+   ],
+   "leaf_bend": [
+    0.18,
+    0.38
+   ],
+   "leaf_droop": [
+    0.1,
+    0.28
+   ],
+   "leaf_stiff": 0.35,
+   "culm_h": [
+    0.55,
+    0.95
+   ],
+   "culm_w": [
+    0.0025,
+    0.0035
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.12,
+    0.3
+   ],
+   "basal_w": [
+    0.005,
+    0.01
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.32,
+   "clump_pull": 0.65,
+   "clump_face_away": 0.7,
+   "clump_lean": 5,
+   "density_leaf": 400,
+   "density_culm": 45,
+   "density_basal": 1800,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 3,
+   "head_len": [
+    0.07,
+    0.14
+   ],
+   "head_w": [
+    0.03,
+    0.06
+   ],
+   "head_branches": 3,
+   "head_open": [
+    35,
+    15
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.45,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 4,
+    "green": -5
+   },
+   "id": "dac_glo",
+   "latin": "Dactylis glomerata",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#676349",
+     "#676349",
+     "#686549",
+     "#556536",
+     "#4A5F32",
+     "#43562C",
+     "#455933",
+     "#565440",
+     "#4C4D3A",
+     "#4F4E35",
+     "#5B563C",
+     "#676349"
+    ],
+    "yellowing": [
+     "#84733E",
+     "#84733E",
+     "#84733E",
+     "#6E6E36",
+     "#6E6E36",
+     "#6E6E36",
+     "#6E6E36",
+     "#6E6E36",
+     "#7E7335",
+     "#887535",
+     "#85743B",
+     "#84733E"
+    ],
+    "straw": [
+     "#8B7D64",
+     "#8B7D64",
+     "#897856",
+     "#85754F",
+     "#85754F",
+     "#9D8954",
+     "#A78A4F",
+     "#A08F5A",
+     "#8D7947",
+     "#8E7039",
+     "#8A7047",
+     "#8A795D"
+    ],
+    "thatch": [
+     "#8B7D64",
+     "#8B7D64",
+     "#7F6D53",
+     "#978A71",
+     "#887C63",
+     "#756B53",
+     "#625943",
+     "#625943",
+     "#625943",
+     "#625943",
+     "#625943",
+     "#625943"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#63643F",
+    "0.5": "#887550",
+    "0.75": "#94846A",
+    "1.0": "#817160"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.18,
+    0.4
+   ],
+   "leaf_w": [
+    0.002,
+    0.004
+   ],
+   "leaf_tilt": [
+    18,
+    48
+   ],
+   "leaf_bend": [
+    0.18,
+    0.35
+   ],
+   "leaf_droop": [
+    0.1,
+    0.25
+   ],
+   "leaf_stiff": 0.3,
+   "culm_h": [
+    0.35,
+    0.65
+   ],
+   "culm_w": [
+    0.0015,
+    0.0022
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.08,
+    0.22
+   ],
+   "basal_w": [
+    0.002,
+    0.004
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.15,
+   "clump_pull": 0.3,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 700,
+   "density_culm": 60,
+   "density_basal": 1800,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 4,
+   "head_len": [
+    0.05,
+    0.12
+   ],
+   "head_w": [
+    0.03,
+    0.06
+   ],
+   "head_branches": 4,
+   "head_open": [
+    50,
+    30
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.35,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -7,
+    "green": -5
+   },
+   "id": "poa_pra",
+   "latin": "Poa pratensis",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#525E31",
+     "#525E31",
+     "#536031",
+     "#5F6D3E",
+     "#526739",
+     "#465632",
+     "#3F4E25",
+     "#575944",
+     "#4D523D",
+     "#4C4F3B",
+     "#565742",
+     "#525E31"
+    ],
+    "yellowing": [
+     "#7E6F44",
+     "#7E6F44",
+     "#7E6F44",
+     "#696A3B",
+     "#696A3B",
+     "#696A3B",
+     "#696A3B",
+     "#696A3B",
+     "#786F3A",
+     "#82713A",
+     "#7F7040",
+     "#7E6F44"
+    ],
+    "straw": [
+     "#84745F",
+     "#84745F",
+     "#836F52",
+     "#927B47",
+     "#927B47",
+     "#9B8551",
+     "#908053",
+     "#968A5A",
+     "#847547",
+     "#876C3E",
+     "#836C4D",
+     "#837058"
+    ],
+    "thatch": [
+     "#84745F",
+     "#84745F",
+     "#79664F",
+     "#90816B",
+     "#82735E",
+     "#70644F",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#565935",
+    "0.5": "#746A49",
+    "0.75": "#867A6B",
+    "1.0": "#6B6458"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.18,
+    0.38
+   ],
+   "leaf_w": [
+    0.0012,
+    0.002
+   ],
+   "leaf_tilt": [
+    8,
+    28
+   ],
+   "leaf_bend": [
+    0.1,
+    0.25
+   ],
+   "leaf_droop": [
+    0.08,
+    0.2
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.35,
+    0.6
+   ],
+   "culm_w": [
+    0.0015,
+    0.002
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.08,
+    0.2
+   ],
+   "basal_w": [
+    0.0012,
+    0.002
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.15,
+   "clump_pull": 0.35,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 800,
+   "density_culm": 55,
+   "density_basal": 1500,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 4,
+   "head_len": [
+    0.04,
+    0.09
+   ],
+   "head_w": [
+    0.015,
+    0.03
+   ],
+   "head_branches": 4,
+   "head_open": [
+    35,
+    20
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.35,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -14,
+    "green": -5
+   },
+   "id": "poa_ang",
+   "latin": "Poa angustifolia",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#535327",
+     "#535327",
+     "#545527",
+     "#646848",
+     "#576243",
+     "#4C5629",
+     "#4B5121",
+     "#4D532A",
+     "#444C26",
+     "#424821",
+     "#4B5026",
+     "#535327"
+    ],
+    "yellowing": [
+     "#837C4A",
+     "#837C4A",
+     "#837C4A",
+     "#6C7640",
+     "#6C7640",
+     "#6C7640",
+     "#6C7640",
+     "#6C7640",
+     "#7D7C3F",
+     "#877F3F",
+     "#847D45",
+     "#837C4A"
+    ],
+    "straw": [
+     "#918864",
+     "#918864",
+     "#8F8257",
+     "#857445",
+     "#857445",
+     "#968551",
+     "#8D7E5A",
+     "#9C905D",
+     "#897B4A",
+     "#8D7943",
+     "#897954",
+     "#90835D"
+    ],
+    "thatch": [
+     "#918864",
+     "#918864",
+     "#857754",
+     "#9E9671",
+     "#8E8763",
+     "#7B7554",
+     "#676143",
+     "#676143",
+     "#676143",
+     "#676143",
+     "#676143",
+     "#676143"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#635E3A",
+    "0.5": "#827155",
+    "0.75": "#8E8467",
+    "1.0": "#816751"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.16,
+    0.36
+   ],
+   "leaf_w": [
+    0.0008,
+    0.0016
+   ],
+   "leaf_tilt": [
+    18,
+    48
+   ],
+   "leaf_bend": [
+    0.15,
+    0.32
+   ],
+   "leaf_droop": [
+    0.08,
+    0.2
+   ],
+   "leaf_stiff": 0.35,
+   "culm_h": [
+    0.35,
+    0.6
+   ],
+   "culm_w": [
+    0.0012,
+    0.0018
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.08,
+    0.2
+   ],
+   "basal_w": [
+    0.0008,
+    0.0015
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.18,
+   "clump_pull": 0.4,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 900,
+   "density_culm": 55,
+   "density_basal": 1400,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 4,
+   "head_len": [
+    0.05,
+    0.1
+   ],
+   "head_w": [
+    0.012,
+    0.025
+   ],
+   "head_branches": 4,
+   "head_open": [
+    25,
+    12
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.35,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.08,
+    0.92,
+    0.9
+   ],
+   "shift": {
+    "heads": 9,
+    "green": -8
+   },
+   "id": "fes_rub",
+   "latin": "Festuca rubra",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#5B5A39",
+     "#5B5A39",
+     "#5C5C39",
+     "#596239",
+     "#4D5D35",
+     "#52593D",
+     "#435036",
+     "#5E5E48",
+     "#535641",
+     "#4D4D38",
+     "#575440",
+     "#5B5A39"
+    ],
+    "yellowing": [
+     "#7E7248",
+     "#7E7248",
+     "#7E7248",
+     "#686D3E",
+     "#686D3E",
+     "#686D3E",
+     "#686D3E",
+     "#686D3E",
+     "#78723D",
+     "#82743D",
+     "#7F7343",
+     "#7E7248"
+    ],
+    "straw": [
+     "#8A7C60",
+     "#8A7C60",
+     "#887753",
+     "#7C6C46",
+     "#7C6C46",
+     "#947F4B",
+     "#988B5A",
+     "#9C8B65",
+     "#897650",
+     "#876F41",
+     "#836F51",
+     "#897859"
+    ],
+    "thatch": [
+     "#8A7C60",
+     "#8A7C60",
+     "#7E6C50",
+     "#96896C",
+     "#877B5F",
+     "#756A50",
+     "#61583F",
+     "#61583F",
+     "#61583F",
+     "#61583F",
+     "#61583F",
+     "#61583F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#656244",
+    "0.5": "#8E7C58",
+    "0.75": "#8C7B6F",
+    "1.0": "#80715F"
+   }
+  },
+  {
+   "outline": 3,
+   "leaf_h": [
+    0.08,
+    0.2
+   ],
+   "leaf_w": [
+    0.0006,
+    0.001
+   ],
+   "leaf_tilt": [
+    12,
+    50
+   ],
+   "leaf_bend": [
+    0.08,
+    0.2
+   ],
+   "leaf_droop": [
+    0,
+    0.08
+   ],
+   "leaf_stiff": 0.7,
+   "culm_h": [
+    0.2,
+    0.42
+   ],
+   "culm_w": [
+    0.001,
+    0.0014
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.05,
+    0.12
+   ],
+   "basal_w": [
+    0.0006,
+    0.001
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.18,
+   "clump_pull": 0.85,
+   "clump_face_away": 0.85,
+   "clump_lean": 5,
+   "density_leaf": 950,
+   "density_culm": 50,
+   "density_basal": 500,
+   "density_cal": 0.95,
+   "cover": 0.75,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 4,
+   "head_len": [
+    0.03,
+    0.07
+   ],
+   "head_w": [
+    0.008,
+    0.016
+   ],
+   "head_branches": 4,
+   "head_open": [
+    20,
+    8
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.45,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -15,
+    "green": 0
+   },
+   "id": "fes_ovi",
+   "latin": "Festuca ovina agg.",
+   "form": 0,
+   "template": "P6_SPARSE_SAND",
+   "colours": {
+    "live": [
+     "#686249",
+     "#686249",
+     "#6A6449",
+     "#706B4C",
+     "#626547",
+     "#545B3F",
+     "#4E5B3F",
+     "#5B5A45",
+     "#51533E",
+     "#4D513D",
+     "#585945",
+     "#686249"
+    ],
+    "yellowing": [
+     "#82754A",
+     "#82754A",
+     "#82754A",
+     "#6B6F40",
+     "#6B6F40",
+     "#6B6F40",
+     "#6B6F40",
+     "#6B6F40",
+     "#7C753F",
+     "#86773F",
+     "#837646",
+     "#82754A"
+    ],
+    "straw": [
+     "#928162",
+     "#928162",
+     "#907B54",
+     "#8A794D",
+     "#8A794D",
+     "#8E7C4F",
+     "#9D8A5E",
+     "#978559",
+     "#857147",
+     "#8B7244",
+     "#877154",
+     "#917C5A"
+    ],
+    "thatch": [
+     "#928162",
+     "#928162",
+     "#867151",
+     "#9F8E6E",
+     "#8F8061",
+     "#7C6F51",
+     "#685B41",
+     "#685B41",
+     "#685B41",
+     "#685B41",
+     "#685B41",
+     "#685B41"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#63624E",
+    "0.5": "#806E64",
+    "0.75": "#867560",
+    "1.0": "#877961"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.12,
+    0.3
+   ],
+   "leaf_w": [
+    0.0015,
+    0.004
+   ],
+   "leaf_tilt": [
+    18,
+    48
+   ],
+   "leaf_bend": [
+    0.18,
+    0.35
+   ],
+   "leaf_droop": [
+    0.1,
+    0.25
+   ],
+   "leaf_stiff": 0.3,
+   "culm_h": [
+    0.3,
+    0.55
+   ],
+   "culm_w": [
+    0.001,
+    0.0016
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.06,
+    0.18
+   ],
+   "basal_w": [
+    0.0015,
+    0.003
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.16,
+   "clump_pull": 0.35,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 700,
+   "density_culm": 70,
+   "density_basal": 1400,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 5,
+   "head_len": [
+    0.06,
+    0.14
+   ],
+   "head_w": [
+    0.03,
+    0.07
+   ],
+   "head_branches": 6,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.5,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 24,
+    "green": 0
+   },
+   "id": "agr_cap",
+   "latin": "Agrostis capillaris",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#585232",
+     "#585232",
+     "#595332",
+     "#5E6734",
+     "#516130",
+     "#3E5030",
+     "#454E24",
+     "#50503B",
+     "#474A35",
+     "#4E4C3A",
+     "#595442",
+     "#585232"
+    ],
+    "yellowing": [
+     "#81703D",
+     "#81703D",
+     "#81703D",
+     "#6B6B35",
+     "#6B6B35",
+     "#6B6B35",
+     "#6B6B35",
+     "#6B6B35",
+     "#7B7034",
+     "#857234",
+     "#82713A",
+     "#81703D"
+    ],
+    "straw": [
+     "#7D715E",
+     "#7D715E",
+     "#7B6C51",
+     "#8A7644",
+     "#8A7644",
+     "#90814C",
+     "#A0945B",
+     "#9F8155",
+     "#8C6D43",
+     "#8A6D38",
+     "#866D46",
+     "#7C6D57"
+    ],
+    "thatch": [
+     "#7D715E",
+     "#7D715E",
+     "#72634E",
+     "#887D69",
+     "#7A705D",
+     "#69614E",
+     "#58503E",
+     "#58503E",
+     "#58503E",
+     "#58503E",
+     "#58503E",
+     "#58503E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#625B47",
+    "0.5": "#866F6B",
+    "0.75": "#876C55",
+    "1.0": "#887669"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.2,
+    0.42
+   ],
+   "leaf_w": [
+    0.003,
+    0.007
+   ],
+   "leaf_tilt": [
+    18,
+    48
+   ],
+   "leaf_bend": [
+    0.18,
+    0.35
+   ],
+   "leaf_droop": [
+    0.1,
+    0.25
+   ],
+   "leaf_stiff": 0.3,
+   "culm_h": [
+    0.45,
+    0.8
+   ],
+   "culm_w": [
+    0.0018,
+    0.0026
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.22
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.22,
+   "clump_pull": 0.3,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 480,
+   "density_culm": 55,
+   "density_basal": 1500,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 5,
+   "head_len": [
+    0.08,
+    0.16
+   ],
+   "head_w": [
+    0.04,
+    0.08
+   ],
+   "head_branches": 6,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.45,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 34,
+    "green": 0
+   },
+   "id": "agr_gig",
+   "latin": "Agrostis gigantea",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#6D6348",
+     "#6D6348",
+     "#6E6548",
+     "#5C6B3E",
+     "#506539",
+     "#3E4B2A",
+     "#45522E",
+     "#55542D",
+     "#4B4E28",
+     "#4C4C38",
+     "#565440",
+     "#6D6348"
+    ],
+    "yellowing": [
+     "#746D49",
+     "#746D49",
+     "#746D49",
+     "#5F683F",
+     "#5F683F",
+     "#5F683F",
+     "#5F683F",
+     "#5F683F",
+     "#6E6D3E",
+     "#786F3E",
+     "#756E45",
+     "#746D49"
+    ],
+    "straw": [
+     "#8E836C",
+     "#8E836C",
+     "#8C7E5D",
+     "#726445",
+     "#726445",
+     "#9D7F51",
+     "#9E8E64",
+     "#9A8B56",
+     "#887644",
+     "#7C6A43",
+     "#786A53",
+     "#8D7F64"
+    ],
+    "thatch": [
+     "#8E836C",
+     "#8E836C",
+     "#82735A",
+     "#9B9179",
+     "#8B826B",
+     "#78715A",
+     "#655D48",
+     "#655D48",
+     "#655D48",
+     "#655D48",
+     "#655D48",
+     "#655D48"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#656347",
+    "0.5": "#8B7C64",
+    "0.75": "#927F61",
+    "1.0": "#867A6C"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.2,
+    0.4
+   ],
+   "leaf_w": [
+    0.004,
+    0.008
+   ],
+   "leaf_tilt": [
+    22,
+    52
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.2,
+    0.4
+   ],
+   "leaf_stiff": 0.3,
+   "culm_h": [
+    0.5,
+    0.85
+   ],
+   "culm_w": [
+    0.0022,
+    0.003
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.05,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.22
+   ],
+   "basal_w": [
+    0.004,
+    0.007
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.22,
+   "clump_pull": 0.45,
+   "clump_face_away": 0.4,
+   "clump_lean": 5,
+   "density_leaf": 430,
+   "density_culm": 55,
+   "density_basal": 1500,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 2,
+   "head_len": [
+    0.05,
+    0.11
+   ],
+   "head_w": [
+    0.006,
+    0.009
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.5,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 24,
+    "green": 12
+   },
+   "id": "phl_pra",
+   "latin": "Phleum pratense",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#5F5728",
+     "#5F5728",
+     "#605928",
+     "#59622F",
+     "#4D5C2C",
+     "#49592E",
+     "#44552C",
+     "#49542A",
+     "#404D26",
+     "#374624",
+     "#3F4D29",
+     "#5F5728"
+    ],
+    "yellowing": [
+     "#877343",
+     "#877343",
+     "#877343",
+     "#706E3A",
+     "#706E3A",
+     "#706E3A",
+     "#706E3A",
+     "#706E3A",
+     "#817339",
+     "#8B7539",
+     "#88743F",
+     "#877343"
+    ],
+    "straw": [
+     "#867055",
+     "#867055",
+     "#846C49",
+     "#866D46",
+     "#866D46",
+     "#8B7A4C",
+     "#9F8859",
+     "#A58F59",
+     "#927946",
+     "#90703D",
+     "#8C704C",
+     "#856D4E"
+    ],
+    "thatch": [
+     "#867055",
+     "#867055",
+     "#7A6246",
+     "#927D60",
+     "#837054",
+     "#716046",
+     "#5E4F38",
+     "#5E4F38",
+     "#5E4F38",
+     "#5E4F38",
+     "#5E4F38",
+     "#5E4F38"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#626044",
+    "0.5": "#877261",
+    "0.75": "#978464",
+    "1.0": "#79674E"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.2,
+    0.4
+   ],
+   "leaf_w": [
+    0.004,
+    0.008
+   ],
+   "leaf_tilt": [
+    15,
+    40
+   ],
+   "leaf_bend": [
+    0.18,
+    0.35
+   ],
+   "leaf_droop": [
+    0.08,
+    0.22
+   ],
+   "leaf_stiff": 0.3,
+   "culm_h": [
+    0.4,
+    0.75
+   ],
+   "culm_w": [
+    0.002,
+    0.0028
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.004,
+    0.007
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.22,
+   "clump_pull": 0.45,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 460,
+   "density_culm": 50,
+   "density_basal": 1700,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 2,
+   "head_len": [
+    0.04,
+    0.09
+   ],
+   "head_w": [
+    0.007,
+    0.01
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 1.2,
+   "head_petals": 0,
+   "head_share": 0.5,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -36,
+    "green": -15
+   },
+   "id": "alo_pra",
+   "latin": "Alopecurus pratensis",
+   "form": 0,
+   "template": "P3_WET_MEADOW",
+   "colours": {
+    "live": [
+     "#555F2B",
+     "#555F2B",
+     "#56612B",
+     "#546631",
+     "#49602D",
+     "#435834",
+     "#465529",
+     "#4B5727",
+     "#425023",
+     "#454E1F",
+     "#4F5624",
+     "#555F2B"
+    ],
+    "yellowing": [
+     "#847738",
+     "#847738",
+     "#847738",
+     "#6D7130",
+     "#6D7130",
+     "#6D7130",
+     "#6D7130",
+     "#6D7130",
+     "#7E772F",
+     "#88792F",
+     "#857834",
+     "#847738"
+    ],
+    "straw": [
+     "#85674E",
+     "#85674E",
+     "#836343",
+     "#897444",
+     "#897444",
+     "#968248",
+     "#A88453",
+     "#A99357",
+     "#957D44",
+     "#8D7433",
+     "#897440",
+     "#846448"
+    ],
+    "thatch": [
+     "#85674E",
+     "#85674E",
+     "#795A40",
+     "#917358",
+     "#83674D",
+     "#715941",
+     "#5E4933",
+     "#5E4933",
+     "#5E4933",
+     "#5E4933",
+     "#5E4933",
+     "#5E4933"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#63673C",
+    "0.5": "#888053",
+    "0.75": "#AA8F6B",
+    "1.0": "#594F40"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.25,
+    0.48
+   ],
+   "leaf_w": [
+    0.006,
+    0.012
+   ],
+   "leaf_tilt": [
+    15,
+    35
+   ],
+   "leaf_bend": [
+    0.2,
+    0.38
+   ],
+   "leaf_droop": [
+    0.1,
+    0.25
+   ],
+   "leaf_stiff": 0.3,
+   "culm_h": [
+    0.55,
+    0.9
+   ],
+   "culm_w": [
+    0.0025,
+    0.0035
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.12,
+    0.26
+   ],
+   "basal_w": [
+    0.005,
+    0.009
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.35,
+   "clump_pull": 0.2,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 420,
+   "density_culm": 45,
+   "density_basal": 1500,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 4,
+   "head_len": [
+    0.1,
+    0.17
+   ],
+   "head_w": [
+    0.04,
+    0.08
+   ],
+   "head_branches": 4,
+   "head_open": [
+    35,
+    20
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.4,
+   "head_nod": [
+    5,
+    15
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 7,
+    "green": 0
+   },
+   "id": "bro_ine",
+   "latin": "Bromopsis inermis",
+   "form": 0,
+   "template": "P2_MEADOW_MIX",
+   "colours": {
+    "live": [
+     "#5F523F",
+     "#5F523F",
+     "#60543F",
+     "#566539",
+     "#4A5F35",
+     "#48582B",
+     "#445925",
+     "#54563C",
+     "#4B4F36",
+     "#47502F",
+     "#515835",
+     "#5F523F"
+    ],
+    "yellowing": [
+     "#7E6F44",
+     "#7E6F44",
+     "#7E6F44",
+     "#686A3A",
+     "#686A3A",
+     "#686A3A",
+     "#686A3A",
+     "#686A3A",
+     "#786F39",
+     "#827139",
+     "#7F7040",
+     "#7E6F44"
+    ],
+    "straw": [
+     "#89795F",
+     "#89795F",
+     "#877452",
+     "#847043",
+     "#847043",
+     "#9C8B51",
+     "#A3965E",
+     "#A28B5C",
+     "#8F7649",
+     "#876C3E",
+     "#836C4D",
+     "#887558"
+    ],
+    "thatch": [
+     "#89795F",
+     "#89795F",
+     "#7D6A4F",
+     "#95866B",
+     "#86785E",
+     "#74684F",
+     "#61563F",
+     "#61563F",
+     "#61563F",
+     "#61563F",
+     "#61563F",
+     "#61563F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#636741",
+    "0.5": "#897D5F",
+    "0.75": "#917D66",
+    "1.0": "#776854"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.22,
+    0.42
+   ],
+   "leaf_w": [
+    0.002,
+    0.004
+   ],
+   "leaf_tilt": [
+    22,
+    52
+   ],
+   "leaf_bend": [
+    0.2,
+    0.4
+   ],
+   "leaf_droop": [
+    0.12,
+    0.3
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.55,
+    0.95
+   ],
+   "culm_w": [
+    0.0015,
+    0.0022
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.25
+   ],
+   "basal_w": [
+    0.002,
+    0.004
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.45,
+   "clump_pull": 0.75,
+   "clump_face_away": 0.85,
+   "clump_lean": 5,
+   "density_leaf": 650,
+   "density_culm": 45,
+   "density_basal": 1800,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 5,
+   "head_len": [
+    0.15,
+    0.3
+   ],
+   "head_w": [
+    0.08,
+    0.15
+   ],
+   "head_branches": 6,
+   "head_open": [
+    45,
+    30
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.55,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0.05,
+    0.14
+   ],
+   "tussock_share": 0.6,
+   "tussock_r": 0.2,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 15,
+    "green": -8
+   },
+   "id": "des_ces",
+   "latin": "Deschampsia cespitosa",
+   "form": 0,
+   "template": "P3_WET_MEADOW",
+   "colours": {
+    "live": [
+     "#554E31",
+     "#554E31",
+     "#565031",
+     "#4E6331",
+     "#435D2D",
+     "#455726",
+     "#3E4E24",
+     "#4D542E",
+     "#454D29",
+     "#494C27",
+     "#54542D",
+     "#554E31"
+    ],
+    "yellowing": [
+     "#847549",
+     "#847549",
+     "#847549",
+     "#6E703F",
+     "#6E703F",
+     "#6E703F",
+     "#6E703F",
+     "#6E703F",
+     "#7E753E",
+     "#88773E",
+     "#857645",
+     "#847549"
+    ],
+    "straw": [
+     "#8E7F61",
+     "#8E7F61",
+     "#8C7A54",
+     "#816F49",
+     "#816F49",
+     "#8C7A55",
+     "#A38C4D",
+     "#948857",
+     "#837344",
+     "#8E7243",
+     "#897253",
+     "#8D7B5A"
+    ],
+    "thatch": [
+     "#8E7F61",
+     "#8E7F61",
+     "#816F51",
+     "#9A8D6E",
+     "#8A7E60",
+     "#786D51",
+     "#645A41",
+     "#645A41",
+     "#645A41",
+     "#645A41",
+     "#645A41",
+     "#645A41"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#5E5D34",
+    "0.5": "#837249",
+    "0.75": "#908263",
+    "1.0": "#83735D"
+   }
+  },
+  {
+   "outline": 3,
+   "leaf_h": [
+    0.06,
+    0.16
+   ],
+   "leaf_w": [
+    0.0005,
+    0.0009
+   ],
+   "leaf_tilt": [
+    10,
+    45
+   ],
+   "leaf_bend": [
+    0.08,
+    0.2
+   ],
+   "leaf_droop": [
+    0,
+    0.08
+   ],
+   "leaf_stiff": 0.7,
+   "culm_h": [
+    0.12,
+    0.28
+   ],
+   "culm_w": [
+    0.0008,
+    0.0012
+   ],
+   "culm_tilt": [
+    5,
+    18
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.1,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.04,
+    0.1
+   ],
+   "basal_w": [
+    0.0005,
+    0.0008
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.2,
+   "clump_pull": 0.9,
+   "clump_face_away": 0.95,
+   "clump_lean": 5,
+   "density_leaf": 850,
+   "density_culm": 60,
+   "density_basal": 300,
+   "density_cal": 0.95,
+   "cover": 0.5,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 2,
+   "head_len": [
+    0.025,
+    0.06
+   ],
+   "head_w": [
+    0.006,
+    0.012
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.55,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.1,
+    0.88,
+    0.9
+   ],
+   "shift": {
+    "heads": 6,
+    "green": 0
+   },
+   "id": "cor_can",
+   "latin": "Corynephorus canescens",
+   "form": 0,
+   "template": "P6_SPARSE_SAND",
+   "colours": {
+    "live": [
+     "#68604B",
+     "#68604B",
+     "#69624B",
+     "#6B6C4C",
+     "#5E6647",
+     "#585E42",
+     "#525F42",
+     "#5F5B47",
+     "#555440",
+     "#525340",
+     "#5D5C48",
+     "#68604B"
+    ],
+    "yellowing": [
+     "#84734C",
+     "#84734C",
+     "#84734C",
+     "#6E6E42",
+     "#6E6E42",
+     "#6E6E42",
+     "#6E6E42",
+     "#6E6E42",
+     "#7E7341",
+     "#897540",
+     "#857447",
+     "#84734C"
+    ],
+    "straw": [
+     "#8D7C64",
+     "#8D7C64",
+     "#8B7756",
+     "#877449",
+     "#877449",
+     "#8D764F",
+     "#9C8960",
+     "#A08257",
+     "#8D6E45",
+     "#8E7045",
+     "#897055",
+     "#8C785D"
+    ],
+    "thatch": [
+     "#8D7C64",
+     "#8D7C64",
+     "#816D53",
+     "#9A8971",
+     "#8A7B63",
+     "#786B53",
+     "#645843",
+     "#645843",
+     "#645843",
+     "#645843",
+     "#645843",
+     "#645843"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#66634F",
+    "0.5": "#816B61",
+    "0.75": "#8D7359",
+    "1.0": "#806F5D"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.06,
+    0.15
+   ],
+   "leaf_w": [
+    0.002,
+    0.004
+   ],
+   "leaf_tilt": [
+    20,
+    50
+   ],
+   "leaf_bend": [
+    0.2,
+    0.35
+   ],
+   "leaf_droop": [
+    0.1,
+    0.2
+   ],
+   "leaf_stiff": 0.25,
+   "culm_h": [
+    0.22,
+    0.45
+   ],
+   "culm_w": [
+    0.0012,
+    0.0018
+   ],
+   "culm_tilt": [
+    3,
+    15
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.08,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.04,
+    0.1
+   ],
+   "basal_w": [
+    0.002,
+    0.003
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.12,
+   "clump_pull": 0.3,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 300,
+   "density_culm": 120,
+   "density_basal": 500,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 8,
+   "head_len": [
+    0.06,
+    0.12
+   ],
+   "head_w": [
+    0.03,
+    0.06
+   ],
+   "head_branches": 4,
+   "head_open": [
+    60,
+    90
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    20,
+    40
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -5,
+    "green": -35
+   },
+   "id": "ani_tec",
+   "latin": "Anisantha tectorum",
+   "form": 0,
+   "template": "P7_RUDERAL_VERGE",
+   "colours": {
+    "live": [
+     "#5F5241",
+     "#5F5241",
+     "#605441",
+     "#5B643C",
+     "#4F5E37",
+     "#4D5529",
+     "#52593F",
+     "#565340",
+     "#4D4C3A",
+     "#484733",
+     "#534E3A",
+     "#5F5241"
+    ],
+    "yellowing": [
+     "#837545",
+     "#837545",
+     "#837545",
+     "#6C703C",
+     "#6C703C",
+     "#6C703C",
+     "#6C703C",
+     "#6C703C",
+     "#7D753B",
+     "#87773B",
+     "#847641",
+     "#837545"
+    ],
+    "straw": [
+     "#94886F",
+     "#94886F",
+     "#928360",
+     "#806941",
+     "#806941",
+     "#9E7C47",
+     "#978868",
+     "#95835A",
+     "#836F47",
+     "#8C723F",
+     "#88724E",
+     "#938467"
+    ],
+    "thatch": [
+     "#94886F",
+     "#94886F",
+     "#87785D",
+     "#A1977D",
+     "#91876E",
+     "#7D755D",
+     "#69614A",
+     "#69614A",
+     "#69614A",
+     "#69614A",
+     "#69614A",
+     "#69614A"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6A614F",
+    "0.5": "#8B6D65",
+    "0.75": "#836E5D",
+    "1.0": "#887259"
+   }
+  },
+  {
+   "outline": 4,
+   "leaf_h": [
+    0.18,
+    0.6
+   ],
+   "leaf_w": [
+    0.01,
+    0.03
+   ],
+   "leaf_tilt": [
+    30,
+    70
+   ],
+   "leaf_bend": [
+    0.4,
+    0.4
+   ],
+   "leaf_droop": [
+    0.4,
+    0.4
+   ],
+   "leaf_stiff": 0.25,
+   "culm_h": [
+    1.4,
+    2.3
+   ],
+   "culm_w": [
+    0.006,
+    0.01
+   ],
+   "culm_tilt": [
+    0,
+    5
+   ],
+   "culm_bend": [
+    0.02,
+    0.06
+   ],
+   "culm_stiff": 0.8,
+   "culm_knee": 0.0,
+   "culm_leaves": 6,
+   "cauline_h": [
+    0.25,
+    0.45
+   ],
+   "cauline_w": [
+    0.012,
+    0.028
+   ],
+   "cauline_tilt": [
+    35,
+    65
+   ],
+   "cauline_span": [
+    0.2,
+    0.85
+   ],
+   "cauline_taper": 0.75,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.4,
+   "cauline_droop": 0.4,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.5,
+   "clump_pull": 0.1,
+   "clump_face_away": 0.0,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 7,
+   "head_len": [
+    0.18,
+    0.32
+   ],
+   "head_w": [
+    0.05,
+    0.12
+   ],
+   "head_branches": 6,
+   "head_open": [
+    30,
+    20
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.75,
+   "head_nod": [
+    10,
+    30
+   ],
+   "fold_h": 0.15,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 8,
+    "green": 0
+   },
+   "id": "phr_aus",
+   "latin": "Phragmites australis",
+   "form": 0,
+   "template": "P5_REED_BED",
+   "colours": {
+    "live": [
+     "#645841",
+     "#645841",
+     "#655A41",
+     "#565F37",
+     "#4A5933",
+     "#394C2B",
+     "#475438",
+     "#555739",
+     "#4B5033",
+     "#4E4E39",
+     "#595641",
+     "#645841"
+    ],
+    "yellowing": [
+     "#7E6E46",
+     "#7E6E46",
+     "#7E6E46",
+     "#69693D",
+     "#69693D",
+     "#69693D",
+     "#69693D",
+     "#69693D",
+     "#786E3C",
+     "#82703C",
+     "#7F6F42",
+     "#7E6E46"
+    ],
+    "straw": [
+     "#B48F62",
+     "#B48F62",
+     "#B48F62",
+     "#AF937A",
+     "#AF937A",
+     "#A08657",
+     "#AE9575",
+     "#AC9264",
+     "#AC9264",
+     "#A58871",
+     "#A58871",
+     "#B28F68"
+    ],
+    "thatch": [
+     "#B48F62",
+     "#B48F62",
+     "#B48F62",
+     "#B48F62",
+     "#B08E64",
+     "#AC8D66",
+     "#A98C68",
+     "#A98C68",
+     "#A98C68",
+     "#A98C68",
+     "#A98C68",
+     "#A98C68"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#505339",
+    "0.5": "#5F513B",
+    "0.75": "#877755",
+    "1.0": "#84705F"
+   }
+  },
+  {
+   "outline": 4,
+   "leaf_h": [
+    0.25,
+    0.45
+   ],
+   "leaf_w": [
+    0.008,
+    0.015
+   ],
+   "leaf_tilt": [
+    25,
+    55
+   ],
+   "leaf_bend": [
+    0.3,
+    0.45
+   ],
+   "leaf_droop": [
+    0.2,
+    0.35
+   ],
+   "leaf_stiff": 0.3,
+   "culm_h": [
+    0.8,
+    1.35
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 5,
+   "cauline_h": [
+    0.15,
+    0.3
+   ],
+   "cauline_w": [
+    0.008,
+    0.016
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.2,
+    0.8
+   ],
+   "cauline_taper": 0.7,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.35,
+   "cauline_droop": 0.3,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.4,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 150,
+   "density_culm": 60,
+   "density_basal": 600,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 6,
+   "head_len": [
+    0.1,
+    0.2
+   ],
+   "head_w": [
+    0.02,
+    0.05
+   ],
+   "head_branches": 6,
+   "head_open": [
+    25,
+    8
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.55,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 40,
+    "green": -5
+   },
+   "id": "pha_aru",
+   "latin": "Phalaris arundinacea",
+   "form": 0,
+   "template": "P4_SEDGE_MARSH",
+   "colours": {
+    "live": [
+     "#675A43",
+     "#675A43",
+     "#695C43",
+     "#5C6B2D",
+     "#506529",
+     "#4C593D",
+     "#44542B",
+     "#52532E",
+     "#494D29",
+     "#484F2A",
+     "#525730",
+     "#675A43"
+    ],
+    "yellowing": [
+     "#887643",
+     "#887643",
+     "#887643",
+     "#71713A",
+     "#71713A",
+     "#71713A",
+     "#71713A",
+     "#71713A",
+     "#827639",
+     "#8C7839",
+     "#89773F",
+     "#887643"
+    ],
+    "straw": [
+     "#8E7459",
+     "#8E7459",
+     "#8B6F4D",
+     "#817042",
+     "#817042",
+     "#958756",
+     "#A19066",
+     "#9D895D",
+     "#8A7449",
+     "#926A3E",
+     "#8E6847",
+     "#8B5E41"
+    ],
+    "thatch": [
+     "#8D644B",
+     "#8D644B",
+     "#8B513A",
+     "#936C52",
+     "#8B7458",
+     "#78644A",
+     "#64523B",
+     "#64523B",
+     "#64523B",
+     "#64523B",
+     "#64523B",
+     "#64523B"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#5F6240",
+    "0.5": "#81765A",
+    "0.75": "#8C7A65",
+    "1.0": "#7F6850"
+   }
+  },
+  {
+   "outline": 4,
+   "leaf_h": [
+    0.35,
+    0.6
+   ],
+   "leaf_w": [
+    0.008,
+    0.016
+   ],
+   "leaf_tilt": [
+    20,
+    50
+   ],
+   "leaf_bend": [
+    0.3,
+    0.45
+   ],
+   "leaf_droop": [
+    0.2,
+    0.4
+   ],
+   "leaf_stiff": 0.2,
+   "culm_h": [
+    0.8,
+    1.2
+   ],
+   "culm_w": [
+    0.005,
+    0.008
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 4,
+   "cauline_h": [
+    0.2,
+    0.35
+   ],
+   "cauline_w": [
+    0.008,
+    0.014
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.2,
+    0.7
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.4,
+   "clump_pull": 0.2,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 300,
+   "density_culm": 35,
+   "density_basal": 800,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 4,
+   "head_len": [
+    0.15,
+    0.28
+   ],
+   "head_w": [
+    0.08,
+    0.15
+   ],
+   "head_branches": 6,
+   "head_open": [
+    45,
+    30
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.4,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 45,
+    "green": 0
+   },
+   "id": "gly_max",
+   "latin": "Glyceria maxima",
+   "form": 0,
+   "template": "P4_SEDGE_MARSH",
+   "colours": {
+    "live": [
+     "#615A24",
+     "#615A24",
+     "#625C24",
+     "#5C6C35",
+     "#506531",
+     "#46542A",
+     "#495137",
+     "#54552E",
+     "#4A4E29",
+     "#3A5023",
+     "#435828",
+     "#615A24"
+    ],
+    "yellowing": [
+     "#7F723D",
+     "#7F723D",
+     "#7F723D",
+     "#696D35",
+     "#696D35",
+     "#696D35",
+     "#696D35",
+     "#696D35",
+     "#797234",
+     "#837434",
+     "#80733A",
+     "#7F723D"
+    ],
+    "straw": [
+     "#817454",
+     "#817454",
+     "#7F6F48",
+     "#7B6940",
+     "#7B6940",
+     "#947F4D",
+     "#948A60",
+     "#948555",
+     "#837143",
+     "#886739",
+     "#856541",
+     "#7F5F3E"
+    ],
+    "thatch": [
+     "#816547",
+     "#816547",
+     "#805237",
+     "#876C4E",
+     "#7E7353",
+     "#6D6446",
+     "#5B5237",
+     "#5B5237",
+     "#5B5237",
+     "#5B5237",
+     "#5B5237",
+     "#5B5237"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#535641",
+    "0.5": "#635F4F",
+    "0.75": "#7E735B",
+    "1.0": "#7B6E52"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.4,
+    0.75
+   ],
+   "leaf_w": [
+    0.004,
+    0.009
+   ],
+   "leaf_tilt": [
+    5,
+    35
+   ],
+   "leaf_bend": [
+    0.25,
+    0.45
+   ],
+   "leaf_droop": [
+    0.25,
+    0.45
+   ],
+   "leaf_stiff": 0.15,
+   "culm_h": [
+    0.5,
+    0.9
+   ],
+   "culm_w": [
+    0.003,
+    0.004
+   ],
+   "culm_tilt": [
+    2,
+    8
+   ],
+   "culm_bend": [
+    0.02,
+    0.08
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.16,
+    0.35
+   ],
+   "basal_w": [
+    0.004,
+    0.008
+   ],
+   "basal_tilt": [
+    25,
+    52
+   ],
+   "basal_bend": [
+    0.25,
+    0.45
+   ],
+   "basal_droop": [
+    0.2,
+    0.4
+   ],
+   "clump_cell": 0.3,
+   "clump_pull": 0.3,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 420,
+   "density_culm": 25,
+   "density_basal": 1000,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 9,
+   "head_len": [
+    0.06,
+    0.13
+   ],
+   "head_w": [
+    0.005,
+    0.009
+   ],
+   "head_branches": 3,
+   "head_open": [
+    20,
+    40
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.2,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.15,
+   "tussock_h": [
+    0.04,
+    0.12
+   ],
+   "tussock_share": 0.4,
+   "tussock_r": 0.2,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -8,
+    "green": 0
+   },
+   "id": "car_acu",
+   "latin": "Carex acuta",
+   "form": 0,
+   "template": "P4_SEDGE_MARSH",
+   "colours": {
+    "live": [
+     "#534F29",
+     "#534F29",
+     "#545129",
+     "#596A31",
+     "#4D642E",
+     "#3B582E",
+     "#4C5825",
+     "#4E5829",
+     "#455124",
+     "#424523",
+     "#4B4C28",
+     "#534F29"
+    ],
+    "yellowing": [
+     "#7E6E3B",
+     "#7E6E3B",
+     "#7E6E3B",
+     "#696933",
+     "#696933",
+     "#696933",
+     "#696933",
+     "#696933",
+     "#786E32",
+     "#827032",
+     "#7F6F38",
+     "#7E6E3B"
+    ],
+    "straw": [
+     "#9C7647",
+     "#9C7647",
+     "#9A713D",
+     "#86703D",
+     "#86703D",
+     "#947C49",
+     "#95774D",
+     "#92824D",
+     "#806E3D",
+     "#876337",
+     "#84613F",
+     "#985F33"
+    ],
+    "thatch": [
+     "#9B653C",
+     "#9B653C",
+     "#97512D",
+     "#A26D41",
+     "#997547",
+     "#85653B",
+     "#6F532E",
+     "#6F532E",
+     "#6F532E",
+     "#6F532E",
+     "#6F532E",
+     "#6F532E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#4C4E24",
+    "0.5": "#4C3523",
+    "0.75": "#513F2D",
+    "1.0": "#482C16"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.15,
+    0.32
+   ],
+   "leaf_w": [
+    0.003,
+    0.006
+   ],
+   "leaf_tilt": [
+    15,
+    45
+   ],
+   "leaf_bend": [
+    0.2,
+    0.38
+   ],
+   "leaf_droop": [
+    0.1,
+    0.25
+   ],
+   "leaf_stiff": 0.25,
+   "culm_h": [
+    0.25,
+    0.45
+   ],
+   "culm_w": [
+    0.0018,
+    0.0025
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.08,
+    0.18
+   ],
+   "basal_w": [
+    0.003,
+    0.005
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.25,
+   "clump_face_away": 0.3,
+   "clump_lean": 5,
+   "density_leaf": 470,
+   "density_culm": 30,
+   "density_basal": 900,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 9,
+   "head_len": [
+    0.03,
+    0.07
+   ],
+   "head_w": [
+    0.005,
+    0.008
+   ],
+   "head_branches": 3,
+   "head_open": [
+    20,
+    40
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.25,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -43,
+    "green": 0
+   },
+   "id": "car_hir",
+   "latin": "Carex hirta",
+   "form": 0,
+   "template": "P3_WET_MEADOW",
+   "colours": {
+    "live": [
+     "#595B33",
+     "#595B33",
+     "#5A5D33",
+     "#5B7028",
+     "#4E6A25",
+     "#425522",
+     "#4D583A",
+     "#4E5A38",
+     "#455333",
+     "#545739",
+     "#605F40",
+     "#595B33"
+    ],
+    "yellowing": [
+     "#85744B",
+     "#85744B",
+     "#85744B",
+     "#6F6F41",
+     "#6F6F41",
+     "#6F6F41",
+     "#6F6F41",
+     "#6F6F41",
+     "#7F7440",
+     "#8A7640",
+     "#877546",
+     "#85744B"
+    ],
+    "straw": [
+     "#887C5D",
+     "#887C5D",
+     "#867650",
+     "#937844",
+     "#937844",
+     "#8B7A44",
+     "#9A875B",
+     "#907F4E",
+     "#7F6B3D",
+     "#8F7044",
+     "#8B7054",
+     "#877856"
+    ],
+    "thatch": [
+     "#887C5D",
+     "#887C5D",
+     "#7C6C4D",
+     "#948969",
+     "#857B5C",
+     "#736A4D",
+     "#60583D",
+     "#60583D",
+     "#60583D",
+     "#60583D",
+     "#60583D",
+     "#60583D"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#4F4F35",
+    "0.5": "#523B29",
+    "0.75": "#4D3726",
+    "1.0": "#4E3627"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.2,
+    0.4
+   ],
+   "leaf_w": [
+    0.003,
+    0.006
+   ],
+   "leaf_tilt": [
+    12,
+    38
+   ],
+   "leaf_bend": [
+    0.15,
+    0.32
+   ],
+   "leaf_droop": [
+    0.05,
+    0.18
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.4,
+    0.8
+   ],
+   "culm_w": [
+    0.0018,
+    0.0028
+   ],
+   "culm_tilt": [
+    2,
+    22
+   ],
+   "culm_bend": [
+    0.05,
+    0.15
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.35,
+   "clump_pull": 0.9,
+   "clump_face_away": 1.0,
+   "clump_lean": 5,
+   "density_leaf": 0,
+   "density_culm": 320,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 3,
+   "head_len": [
+    0.02,
+    0.05
+   ],
+   "head_w": [
+    0.01,
+    0.025
+   ],
+   "head_branches": 3,
+   "head_open": [
+    30,
+    30
+   ],
+   "head_grain": 0.8,
+   "head_petals": 0,
+   "head_share": 0.6,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0.03,
+    0.1
+   ],
+   "tussock_share": 0.8,
+   "tussock_r": 0.15,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 55,
+    "green": 0
+   },
+   "id": "jun_eff",
+   "latin": "Juncus effusus",
+   "form": 3,
+   "template": "P4_SEDGE_MARSH",
+   "colours": {
+    "live": [
+     "#5F593B",
+     "#5F593B",
+     "#605B3B",
+     "#4F6331",
+     "#445D2D",
+     "#495A32",
+     "#485B23",
+     "#4B5A2A",
+     "#435226",
+     "#4E4F39",
+     "#595741",
+     "#5F593B"
+    ],
+    "yellowing": [
+     "#7A6F42",
+     "#7A6F42",
+     "#7A6F42",
+     "#656A39",
+     "#656A39",
+     "#656A39",
+     "#656A39",
+     "#656A39",
+     "#756F38",
+     "#7E7138",
+     "#7B703E",
+     "#7A6F42"
+    ],
+    "straw": [
+     "#8E7E60",
+     "#8E7E60",
+     "#8C7953",
+     "#877245",
+     "#877245",
+     "#927D4E",
+     "#97824B",
+     "#988354",
+     "#856F42",
+     "#83643D",
+     "#816246",
+     "#8C6747"
+    ],
+    "thatch": [
+     "#8E6E52",
+     "#8E6E52",
+     "#8D5A40",
+     "#947659",
+     "#8B7D5F",
+     "#786D50",
+     "#645A40",
+     "#645A40",
+     "#645A40",
+     "#645A40",
+     "#645A40",
+     "#645A40"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#4E5122",
+    "0.5": "#58381F",
+    "0.75": "#5C3929",
+    "1.0": "#583F2D"
+   }
+  },
+  {
+   "outline": 4,
+   "leaf_h": [
+    0.9,
+    1.4
+   ],
+   "leaf_w": [
+    0.012,
+    0.022
+   ],
+   "leaf_tilt": [
+    5,
+    22
+   ],
+   "leaf_bend": [
+    0.05,
+    0.2
+   ],
+   "leaf_droop": [
+    0.05,
+    0.2
+   ],
+   "leaf_stiff": 0.6,
+   "culm_h": [
+    1.0,
+    1.6
+   ],
+   "culm_w": [
+    0.006,
+    0.01
+   ],
+   "culm_tilt": [
+    0,
+    4
+   ],
+   "culm_bend": [
+    0.01,
+    0.03
+   ],
+   "culm_stiff": 0.85,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.5,
+   "clump_pull": 0.3,
+   "clump_face_away": 0.6,
+   "clump_lean": 5,
+   "density_leaf": 110,
+   "density_culm": 10,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 2,
+   "head_len": [
+    0.12,
+    0.22
+   ],
+   "head_w": [
+    0.018,
+    0.028
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 1.5,
+   "head_petals": 0,
+   "head_share": 0.6,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -51,
+    "green": 0
+   },
+   "id": "typ_lat",
+   "latin": "Typha latifolia",
+   "form": 0,
+   "template": "P5_REED_BED",
+   "colours": {
+    "live": [
+     "#625845",
+     "#625845",
+     "#635A45",
+     "#5A6136",
+     "#4E5B32",
+     "#424F26",
+     "#45592A",
+     "#4E562D",
+     "#454F28",
+     "#4C4E38",
+     "#575640",
+     "#625845"
+    ],
+    "yellowing": [
+     "#817043",
+     "#817043",
+     "#817043",
+     "#6B6B3A",
+     "#6B6B3A",
+     "#6B6B3A",
+     "#6B6B3A",
+     "#6B6B3A",
+     "#7B7039",
+     "#857239",
+     "#82713F",
+     "#817043"
+    ],
+    "straw": [
+     "#AC8B5D",
+     "#AC8B5D",
+     "#AC8B5D",
+     "#A38B6C",
+     "#A38B6C",
+     "#AB8C65",
+     "#AB9161",
+     "#A28766",
+     "#A28766",
+     "#A88B6D",
+     "#A88B6D",
+     "#AA8B63"
+    ],
+    "thatch": [
+     "#AC8B5D",
+     "#AC8B5D",
+     "#AC8B5D",
+     "#AC8B5D",
+     "#A88A5F",
+     "#A48961",
+     "#A18863",
+     "#A18863",
+     "#A18863",
+     "#A18863",
+     "#A18863",
+     "#A18863"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#4A5029",
+    "0.5": "#523926",
+    "0.75": "#452B1E",
+    "1.0": "#4F362C"
+   }
+  },
+  {
+   "outline": 0,
+   "leaf_h": [
+    0.28,
+    0.5
+   ],
+   "leaf_w": [
+    0.004,
+    0.009
+   ],
+   "leaf_tilt": [
+    15,
+    45
+   ],
+   "leaf_bend": [
+    0.2,
+    0.4
+   ],
+   "leaf_droop": [
+    0.12,
+    0.3
+   ],
+   "leaf_stiff": 0.35,
+   "culm_h": [
+    0.55,
+    0.9
+   ],
+   "culm_w": [
+    0.002,
+    0.003
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.02,
+    0.07
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.12,
+    0.28
+   ],
+   "basal_w": [
+    0.004,
+    0.008
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.3,
+   "clump_pull": 0.55,
+   "clump_face_away": 0.6,
+   "clump_lean": 5,
+   "density_leaf": 380,
+   "density_culm": 40,
+   "density_basal": 1500,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.05,
+   "head_type": 6,
+   "head_len": [
+    0.1,
+    0.18
+   ],
+   "head_w": [
+    0.02,
+    0.04
+   ],
+   "head_branches": 6,
+   "head_open": [
+    25,
+    10
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.3,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.2,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": -5,
+    "green": 0
+   },
+   "id": "cal_aru",
+   "latin": "Calamagrostis arundinacea",
+   "form": 0,
+   "template": "P1_TALL_CALAMAGROSTIS",
+   "colours": {
+    "live": [
+     "#59513E",
+     "#59513E",
+     "#5A533E",
+     "#4A6B25",
+     "#406421",
+     "#475728",
+     "#42572C",
+     "#58573D",
+     "#4E5037",
+     "#4F5336",
+     "#5A5B3E",
+     "#59513E"
+    ],
+    "yellowing": [
+     "#85724B",
+     "#85724B",
+     "#85724B",
+     "#6E6D41",
+     "#6E6D41",
+     "#6E6D41",
+     "#6E6D41",
+     "#6E6D41",
+     "#7F7240",
+     "#897440",
+     "#867346",
+     "#85724B"
+    ],
+    "straw": [
+     "#87775E",
+     "#87775E",
+     "#857251",
+     "#887042",
+     "#887042",
+     "#8C7740",
+     "#968455",
+     "#99895C",
+     "#867449",
+     "#8E6F44",
+     "#8A6F54",
+     "#867357"
+    ],
+    "thatch": [
+     "#87775E",
+     "#87775E",
+     "#806E55",
+     "#93846A",
+     "#84765D",
+     "#72664E",
+     "#5F543E",
+     "#5F543E",
+     "#5F543E",
+     "#5F543E",
+     "#5F543E",
+     "#5F543E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#585E3B",
+    "0.5": "#756950",
+    "0.75": "#867968",
+    "1.0": "#7C6B5A"
+   }
+  },
+  {
+   "outline": 3,
+   "leaf_h": [
+    0.1,
+    0.25
+   ],
+   "leaf_w": [
+    0.0005,
+    0.0009
+   ],
+   "leaf_tilt": [
+    15,
+    50
+   ],
+   "leaf_bend": [
+    0.2,
+    0.4
+   ],
+   "leaf_droop": [
+    0.1,
+    0.3
+   ],
+   "leaf_stiff": 0.35,
+   "culm_h": [
+    0.3,
+    0.55
+   ],
+   "culm_w": [
+    0.0008,
+    0.0012
+   ],
+   "culm_tilt": [
+    2,
+    9
+   ],
+   "culm_bend": [
+    0.05,
+    0.12
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 1.0,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.06,
+    0.15
+   ],
+   "basal_w": [
+    0.0005,
+    0.0009
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.2,
+   "clump_pull": 0.75,
+   "clump_face_away": 0.85,
+   "clump_lean": 5,
+   "density_leaf": 900,
+   "density_culm": 50,
+   "density_basal": 900,
+   "density_cal": 0.95,
+   "cover": 0.9,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 5,
+   "head_len": [
+    0.06,
+    0.12
+   ],
+   "head_w": [
+    0.04,
+    0.08
+   ],
+   "head_branches": 6,
+   "head_open": [
+    40,
+    25
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.45,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.6,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "shift": {
+    "heads": 0,
+    "green": 5
+   },
+   "id": "ave_fle",
+   "latin": "Avenella flexuosa",
+   "form": 0,
+   "template": "P6_SPARSE_SAND",
+   "colours": {
+    "live": [
+     "#615B42",
+     "#615B42",
+     "#625D42",
+     "#586135",
+     "#4C5C31",
+     "#45572D",
+     "#495539",
+     "#4E5933",
+     "#45522E",
+     "#444A29",
+     "#4E522F",
+     "#615B42"
+    ],
+    "yellowing": [
+     "#7B7148",
+     "#7B7148",
+     "#7B7148",
+     "#666B3E",
+     "#666B3E",
+     "#666B3E",
+     "#666B3E",
+     "#666B3E",
+     "#75713D",
+     "#7F733D",
+     "#7C7244",
+     "#7B7148"
+    ],
+    "straw": [
+     "#837960",
+     "#837960",
+     "#817453",
+     "#847045",
+     "#847045",
+     "#907F4C",
+     "#99875E",
+     "#A18E5B",
+     "#8E7848",
+     "#846E42",
+     "#806E51",
+     "#827559"
+    ],
+    "thatch": [
+     "#837960",
+     "#837960",
+     "#786A50",
+     "#8F866C",
+     "#80775F",
+     "#6F6750",
+     "#5C5540",
+     "#5C5540",
+     "#5C5540",
+     "#5C5540",
+     "#5C5540",
+     "#5C5540"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#655E4A",
+    "0.5": "#886D61",
+    "0.75": "#A28775",
+    "1.0": "#746B5D"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.14,
+    0.22
+   ],
+   "leaf_w": [
+    0.035,
+    0.06
+   ],
+   "leaf_tilt": [
+    10,
+    35
+   ],
+   "leaf_bend": [
+    0.12,
+    0.25
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.5,
+   "culm_h": [
+    0.12,
+    0.2
+   ],
+   "culm_w": [
+    0.0018,
+    0.0025
+   ],
+   "culm_tilt": [
+    5,
+    20
+   ],
+   "culm_bend": [
+    0.15,
+    0.3
+   ],
+   "culm_stiff": 0.5,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.12,
+   "clump_pull": 0.9,
+   "clump_face_away": 0.6,
+   "clump_lean": 3,
+   "density_leaf": 220,
+   "density_culm": 60,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 14,
+   "head_len": [
+    0.04,
+    0.08
+   ],
+   "head_w": [
+    0.012,
+    0.018
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 0.6,
+   "head_petals": 0,
+   "head_share": 0.6,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "con_maj",
+   "latin": "Convallaria majalis",
+   "form": 2,
+   "template": null,
+   "colours": {
+    "live": [
+     "#655B47",
+     "#655B47",
+     "#675D47",
+     "#596C30",
+     "#4D652C",
+     "#435C3C",
+     "#4D6042",
+     "#4A6535",
+     "#425D30",
+     "#565440",
+     "#615C48",
+     "#655B47"
+    ],
+    "yellowing": [
+     "#816B41",
+     "#816B41",
+     "#816B41",
+     "#6B6738",
+     "#6B6738",
+     "#6B6738",
+     "#6B6738",
+     "#6B6738",
+     "#7B6B37",
+     "#856D37",
+     "#826C3D",
+     "#816B41"
+    ],
+    "straw": [
+     "#91745A",
+     "#91745A",
+     "#8E6F4D",
+     "#866C3E",
+     "#866C3E",
+     "#866E4A",
+     "#8E7A58",
+     "#978258",
+     "#856E45",
+     "#8A683B",
+     "#866849",
+     "#8F7053"
+    ],
+    "thatch": [
+     "#91745A",
+     "#91745A",
+     "#896B51",
+     "#9E8165",
+     "#8E7359",
+     "#7B644A",
+     "#66523B",
+     "#66523B",
+     "#66523B",
+     "#66523B",
+     "#66523B",
+     "#66523B"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#7B816D",
+    "0.5": "#D9CFC3",
+    "0.75": "#B32E29",
+    "1.0": "#9A3230"
+   },
+   "phen": {
+    "up": 105,
+    "full": 135,
+    "bud": 125,
+    "flower": 137,
+    "ripe": 235,
+    "end": 275,
+    "sen0": 240,
+    "sen1": 287,
+    "stand": 0.0,
+    "lodge": 1.0,
+    "winter_green": 0.0,
+    "climate": "P1_TALL_CALAMAGROSTIS"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.7,
+    1.15
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.07,
+    0.12
+   ],
+   "cauline_w": [
+    0.01,
+    0.018
+   ],
+   "cauline_tilt": [
+    35,
+    60
+   ],
+   "cauline_span": [
+    0.12,
+    0.72
+   ],
+   "cauline_taper": 0.55,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.25,
+   "cauline_droop": 0.25,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 150,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 11,
+   "head_len": [
+    0.15,
+    0.28
+   ],
+   "head_w": [
+    0.1,
+    0.2
+   ],
+   "head_branches": 6,
+   "head_open": [
+    55,
+    60
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    5,
+    15
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    0.95,
+    1.0,
+    0.85
+   ],
+   "id": "sol_can",
+   "latin": "Solidago canadensis",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#594F3C",
+     "#594F3C",
+     "#5A513C",
+     "#5F6A39",
+     "#536435",
+     "#465C29",
+     "#455B24",
+     "#525424",
+     "#494E1F",
+     "#474B26",
+     "#52532C",
+     "#594F3C"
+    ],
+    "yellowing": [
+     "#827444",
+     "#827444",
+     "#827444",
+     "#6C6F3B",
+     "#6C6F3B",
+     "#6C6F3B",
+     "#6C6F3B",
+     "#6C6F3B",
+     "#7C743A",
+     "#87773A",
+     "#837540",
+     "#827444"
+    ],
+    "straw": [
+     "#8A6B59",
+     "#8A6B59",
+     "#88674D",
+     "#846F46",
+     "#846F46",
+     "#8C7947",
+     "#948353",
+     "#9A844E",
+     "#88703D",
+     "#8C713E",
+     "#88714E",
+     "#896853"
+    ],
+    "thatch": [
+     "#8A6B59",
+     "#8A6B59",
+     "#7E5D4A",
+     "#977765",
+     "#876A58",
+     "#755C4A",
+     "#624C3B",
+     "#624C3B",
+     "#624C3B",
+     "#624C3B",
+     "#624C3B",
+     "#624C3B"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6F7226",
+    "0.5": "#C4AD2E",
+    "0.75": "#A0998F",
+    "1.0": "#7A6052"
+   },
+   "phen": {
+    "up": 107,
+    "full": 200,
+    "bud": 205,
+    "flower": 241,
+    "ripe": 275,
+    "end": 320,
+    "sen0": 268,
+    "sen1": 305,
+    "stand": 0.85,
+    "lodge": 0.15,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 5,
+   "leaf_h": [
+    0.08,
+    0.14
+   ],
+   "leaf_w": [
+    0.04,
+    0.06
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.8,
+    1.25
+   ],
+   "culm_w": [
+    0.004,
+    0.007
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.8,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.06,
+    0.11
+   ],
+   "cauline_w": [
+    0.03,
+    0.05
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.08,
+    0.65
+   ],
+   "cauline_taper": 0.45,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.2,
+   "cauline_droop": 0.3,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 25,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.2,
+    0.35
+   ],
+   "head_w": [
+    0.06,
+    0.12
+   ],
+   "head_branches": 6,
+   "head_open": [
+    25,
+    20
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.12,
+    0.78,
+    0.82
+   ],
+   "id": "art_vul",
+   "latin": "Artemisia vulgaris",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#6E664A",
+     "#6E664A",
+     "#70684A",
+     "#516932",
+     "#45632E",
+     "#405D25",
+     "#515E36",
+     "#4D5F34",
+     "#44572F",
+     "#465231",
+     "#505A38",
+     "#6E664A"
+    ],
+    "yellowing": [
+     "#786C40",
+     "#786C40",
+     "#786C40",
+     "#636737",
+     "#636737",
+     "#636737",
+     "#636737",
+     "#636737",
+     "#726C36",
+     "#7B6E36",
+     "#796D3C",
+     "#786C40"
+    ],
+    "straw": [
+     "#8D795F",
+     "#8D795F",
+     "#8B7452",
+     "#7F6A45",
+     "#7F6A45",
+     "#88703D",
+     "#92865C",
+     "#94875C",
+     "#837248",
+     "#80693A",
+     "#7C6949",
+     "#8C7558"
+    ],
+    "thatch": [
+     "#8D795F",
+     "#8D795F",
+     "#80694F",
+     "#99866B",
+     "#8A785E",
+     "#77684F",
+     "#64553F",
+     "#64553F",
+     "#64553F",
+     "#64553F",
+     "#64553F",
+     "#64553F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#58603B",
+    "0.5": "#6E664A",
+    "0.75": "#807162",
+    "1.0": "#806B5C"
+   },
+   "phen": {
+    "up": 105,
+    "full": 200,
+    "bud": 190,
+    "flower": 215,
+    "ripe": 265,
+    "end": 310,
+    "sen0": 262,
+    "sen1": 310,
+    "stand": 0.8,
+    "lodge": 0.15,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 6,
+   "leaf_h": [
+    0.08,
+    0.14
+   ],
+   "leaf_w": [
+    0.03,
+    0.05
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.55,
+    0.9
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 10,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.025,
+    0.04
+   ],
+   "cauline_tilt": [
+    45,
+    70
+   ],
+   "cauline_span": [
+    0.1,
+    0.6
+   ],
+   "cauline_taper": 0.5,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.2,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 40,
+   "density_culm": 60,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.15,
+    0.28
+   ],
+   "head_w": [
+    0.06,
+    0.12
+   ],
+   "head_branches": 6,
+   "head_open": [
+    30,
+    20
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "art_abs",
+   "latin": "Artemisia absinthium",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#656550",
+     "#656550",
+     "#676850",
+     "#666E4D",
+     "#596847",
+     "#4E6141",
+     "#545E42",
+     "#565C46",
+     "#4D553F",
+     "#535742",
+     "#5E5F4A",
+     "#656550"
+    ],
+    "yellowing": [
+     "#827447",
+     "#827447",
+     "#827447",
+     "#6B6E3D",
+     "#6B6E3D",
+     "#6B6E3D",
+     "#6B6E3D",
+     "#6B6E3D",
+     "#7C733C",
+     "#86763C",
+     "#837543",
+     "#827447"
+    ],
+    "straw": [
+     "#8C725C",
+     "#8C725C",
+     "#8A6D4F",
+     "#7C6B42",
+     "#7C6B42",
+     "#7F6E4C",
+     "#8D8054",
+     "#8A7D59",
+     "#796A46",
+     "#8B7140",
+     "#877050",
+     "#8B6E55"
+    ],
+    "thatch": [
+     "#8C725C",
+     "#8C725C",
+     "#80644C",
+     "#997F67",
+     "#89715B",
+     "#77624C",
+     "#63513D",
+     "#63513D",
+     "#63513D",
+     "#63513D",
+     "#63513D",
+     "#63513D"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6C6D47",
+    "0.5": "#A89A58",
+    "0.75": "#716859",
+    "1.0": "#736056"
+   },
+   "phen": {
+    "up": 95,
+    "full": 195,
+    "bud": 178,
+    "flower": 228,
+    "ripe": 250,
+    "end": 285,
+    "sen0": 265,
+    "sen1": 310,
+    "stand": 0.75,
+    "lodge": 0.2,
+    "winter_green": 0.3,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 6,
+   "leaf_h": [
+    0.06,
+    0.1
+   ],
+   "leaf_w": [
+    0.015,
+    0.03
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.35,
+    0.65
+   ],
+   "culm_w": [
+    0.002,
+    0.003
+   ],
+   "culm_tilt": [
+    5,
+    25
+   ],
+   "culm_bend": [
+    0.05,
+    0.12
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 10,
+   "cauline_h": [
+    0.03,
+    0.05
+   ],
+   "cauline_w": [
+    0.008,
+    0.015
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.05,
+    0.6
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 60,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.12,
+    0.25
+   ],
+   "head_w": [
+    0.05,
+    0.1
+   ],
+   "head_branches": 6,
+   "head_open": [
+    30,
+    25
+   ],
+   "head_grain": 0.8,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.2,
+    0.8,
+    0.75
+   ],
+   "id": "art_cam",
+   "latin": "Artemisia campestris",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#686247",
+     "#686247",
+     "#696447",
+     "#606A49",
+     "#546444",
+     "#475A3A",
+     "#515A3F",
+     "#5F5D45",
+     "#54563E",
+     "#4E5338",
+     "#595B3F",
+     "#686247"
+    ],
+    "yellowing": [
+     "#7A6D41",
+     "#7A6D41",
+     "#7A6D41",
+     "#656838",
+     "#656838",
+     "#656838",
+     "#656838",
+     "#656838",
+     "#746D37",
+     "#7E6F37",
+     "#7B6E3D",
+     "#7A6D41"
+    ],
+    "straw": [
+     "#87755F",
+     "#87755F",
+     "#857052",
+     "#8C7146",
+     "#8C7146",
+     "#8A7950",
+     "#9C9068",
+     "#907B56",
+     "#7F6944",
+     "#836B3B",
+     "#7F6B49",
+     "#867158"
+    ],
+    "thatch": [
+     "#87755F",
+     "#87755F",
+     "#7B664F",
+     "#93826B",
+     "#84745E",
+     "#72644F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#565B42",
+    "0.5": "#685D4C",
+    "0.75": "#7F6B54",
+    "1.0": "#736055"
+   },
+   "phen": {
+    "up": 90,
+    "full": 200,
+    "bud": 200,
+    "flower": 248,
+    "ripe": 260,
+    "end": 300,
+    "sen0": 280,
+    "sen1": 315,
+    "stand": 0.8,
+    "lodge": 0.15,
+    "winter_green": 0.35,
+    "climate": "P6_SPARSE_SAND"
+   }
+  },
+  {
+   "outline": 5,
+   "leaf_h": [
+    0.12,
+    0.22
+   ],
+   "leaf_w": [
+    0.05,
+    0.08
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.65,
+    1.05
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 10,
+   "cauline_h": [
+    0.08,
+    0.15
+   ],
+   "cauline_w": [
+    0.04,
+    0.07
+   ],
+   "cauline_tilt": [
+    45,
+    70
+   ],
+   "cauline_span": [
+    0.1,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.25,
+   "cauline_droop": 0.25,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 40,
+   "density_culm": 80,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.03,
+    0.06
+   ],
+   "head_w": [
+    0.07,
+    0.13
+   ],
+   "head_branches": 6,
+   "head_open": [
+    40,
+    40
+   ],
+   "head_grain": 2.0,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    0.95,
+    0.9
+   ],
+   "id": "tan_vul",
+   "latin": "Tanacetum vulgare",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#6C6548",
+     "#6C6548",
+     "#6D6748",
+     "#59693C",
+     "#4D6338",
+     "#455C27",
+     "#415023",
+     "#495829",
+     "#405025",
+     "#445429",
+     "#4E5D2F",
+     "#6C6548"
+    ],
+    "yellowing": [
+     "#797142",
+     "#797142",
+     "#797142",
+     "#636C39",
+     "#636C39",
+     "#636C39",
+     "#636C39",
+     "#636C39",
+     "#737138",
+     "#7C7338",
+     "#7A723E",
+     "#797142"
+    ],
+    "straw": [
+     "#7E7561",
+     "#7E7561",
+     "#7C7054",
+     "#7F6F46",
+     "#7F6F46",
+     "#807249",
+     "#87784D",
+     "#967D48",
+     "#846A38",
+     "#826F3C",
+     "#7E6F4B",
+     "#7D715A"
+    ],
+    "thatch": [
+     "#7E7561",
+     "#7E7561",
+     "#736651",
+     "#89816D",
+     "#7B7460",
+     "#6A6451",
+     "#595340",
+     "#595340",
+     "#595340",
+     "#595340",
+     "#595340",
+     "#595340"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#767323",
+    "0.5": "#DAC121",
+    "0.75": "#7B6F5C",
+    "1.0": "#482D20"
+   },
+   "phen": {
+    "up": 105,
+    "full": 190,
+    "bud": 175,
+    "flower": 215,
+    "ripe": 255,
+    "end": 300,
+    "sen0": 265,
+    "sen1": 310,
+    "stand": 0.75,
+    "lodge": 0.2,
+    "winter_green": 0.25,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 6,
+   "leaf_h": [
+    0.08,
+    0.16
+   ],
+   "leaf_w": [
+    0.015,
+    0.03
+   ],
+   "leaf_tilt": [
+    25,
+    55
+   ],
+   "leaf_bend": [
+    0.2,
+    0.35
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.35,
+    0.6
+   ],
+   "culm_w": [
+    0.0022,
+    0.003
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.65,
+   "culm_knee": 0.0,
+   "culm_leaves": 6,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.012,
+    0.02
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.15,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.2,
+   "cauline_droop": 0.15,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 160,
+   "density_culm": 60,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.02,
+    0.04
+   ],
+   "head_w": [
+    0.05,
+    0.1
+   ],
+   "head_branches": 6,
+   "head_open": [
+    40,
+    40
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.75,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "ach_mil",
+   "latin": "Achillea millefolium",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#656133",
+     "#656133",
+     "#676333",
+     "#4D5F24",
+     "#435A21",
+     "#3F522A",
+     "#475022",
+     "#4A5228",
+     "#414B23",
+     "#42461F",
+     "#4B4D24",
+     "#656133"
+    ],
+    "yellowing": [
+     "#7A6E3F",
+     "#7A6E3F",
+     "#7A6E3F",
+     "#656936",
+     "#656936",
+     "#656936",
+     "#656936",
+     "#656936",
+     "#746E36",
+     "#7E7036",
+     "#7B6F3B",
+     "#7A6E3F"
+    ],
+    "straw": [
+     "#907F5F",
+     "#907F5F",
+     "#8D7A52",
+     "#7B6D41",
+     "#7B6D41",
+     "#816A4A",
+     "#9A8650",
+     "#998655",
+     "#877143",
+     "#836B39",
+     "#7F6B48",
+     "#8F7B58"
+    ],
+    "thatch": [
+     "#907F5F",
+     "#907F5F",
+     "#836F4F",
+     "#9C8D6B",
+     "#8C7E5E",
+     "#7A6D4F",
+     "#665A3F",
+     "#665A3F",
+     "#665A3F",
+     "#665A3F",
+     "#665A3F",
+     "#665A3F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#757966",
+    "0.5": "#D0D0CB",
+    "0.75": "#7A6B56",
+    "1.0": "#887956"
+   },
+   "phen": {
+    "up": 80,
+    "full": 170,
+    "bud": 145,
+    "flower": 200,
+    "ripe": 235,
+    "end": 275,
+    "sen0": 280,
+    "sen1": 315,
+    "stand": 0.4,
+    "lodge": 0.5,
+    "winter_green": 0.35,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.1,
+    0.22
+   ],
+   "leaf_w": [
+    0.012,
+    0.025
+   ],
+   "leaf_tilt": [
+    30,
+    65
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.45,
+   "culm_h": [
+    0.2,
+    0.42
+   ],
+   "culm_w": [
+    0.0012,
+    0.0018
+   ],
+   "culm_tilt": [
+    4,
+    15
+   ],
+   "culm_bend": [
+    0.03,
+    0.08
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.15,
+   "clump_pull": 0.9,
+   "clump_face_away": 0.95,
+   "clump_lean": 3,
+   "density_leaf": 280,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 2,
+   "head_len": [
+    0.015,
+    0.035
+   ],
+   "head_w": [
+    0.007,
+    0.01
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 0.8,
+   "head_petals": 0,
+   "head_share": 0.7,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "pla_lan",
+   "latin": "Plantago lanceolata",
+   "form": 2,
+   "template": null,
+   "colours": {
+    "live": [
+     "#666348",
+     "#666348",
+     "#676548",
+     "#5E6B30",
+     "#52652C",
+     "#445A27",
+     "#475526",
+     "#545F37",
+     "#4B5732",
+     "#435228",
+     "#4D5B2E",
+     "#666348"
+    ],
+    "yellowing": [
+     "#7F7441",
+     "#7F7441",
+     "#7F7441",
+     "#696F38",
+     "#696F38",
+     "#696F38",
+     "#696F38",
+     "#696F38",
+     "#797437",
+     "#837637",
+     "#80753D",
+     "#7F7441"
+    ],
+    "straw": [
+     "#8C7C61",
+     "#8C7C61",
+     "#8A7654",
+     "#856C41",
+     "#856C41",
+     "#937F56",
+     "#948352",
+     "#9B8559",
+     "#887146",
+     "#88713B",
+     "#84714A",
+     "#8B785A"
+    ],
+    "thatch": [
+     "#8C7C61",
+     "#8C7C61",
+     "#806C51",
+     "#99896D",
+     "#897B60",
+     "#776A51",
+     "#635840",
+     "#635840",
+     "#635840",
+     "#635840",
+     "#635840",
+     "#635840"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#595F3F",
+    "0.5": "#887E72",
+    "0.75": "#43321F",
+    "1.0": "#3C281C"
+   },
+   "phen": {
+    "up": 74,
+    "full": 150,
+    "bud": 118,
+    "flower": 170,
+    "ripe": 215,
+    "end": 265,
+    "sen0": 280,
+    "sen1": 320,
+    "stand": 0.3,
+    "lodge": 0.6,
+    "winter_green": 0.4,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.08,
+    0.16
+   ],
+   "leaf_w": [
+    0.04,
+    0.07
+   ],
+   "leaf_tilt": [
+    60,
+    85
+   ],
+   "leaf_bend": [
+    0.08,
+    0.18
+   ],
+   "leaf_droop": [
+    0,
+    0.1
+   ],
+   "leaf_stiff": 0.5,
+   "culm_h": [
+    0.15,
+    0.3
+   ],
+   "culm_w": [
+    0.0015,
+    0.0022
+   ],
+   "culm_tilt": [
+    5,
+    20
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.18,
+   "clump_pull": 0.9,
+   "clump_face_away": 1.0,
+   "clump_lean": 3,
+   "density_leaf": 220,
+   "density_culm": 45,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 1,
+   "head_len": [
+    0.06,
+    0.15
+   ],
+   "head_w": [
+    0.005,
+    0.007
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 0.8,
+   "head_petals": 0,
+   "head_share": 0.6,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "pla_maj",
+   "latin": "Plantago major",
+   "form": 2,
+   "template": null,
+   "colours": {
+    "live": [
+     "#67663B",
+     "#67663B",
+     "#68693B",
+     "#586F3C",
+     "#4C6938",
+     "#4D603D",
+     "#475E2A",
+     "#4F5D36",
+     "#465531",
+     "#505831",
+     "#5B6038",
+     "#67663B"
+    ],
+    "yellowing": [
+     "#837545",
+     "#837545",
+     "#837545",
+     "#6D703B",
+     "#6D703B",
+     "#6D703B",
+     "#6D703B",
+     "#6D703B",
+     "#7D753A",
+     "#87773A",
+     "#847641",
+     "#837545"
+    ],
+    "straw": [
+     "#85745D",
+     "#85745D",
+     "#836F50",
+     "#867046",
+     "#867046",
+     "#8D754A",
+     "#8E7F57",
+     "#9D885B",
+     "#8A7448",
+     "#8D723F",
+     "#89724E",
+     "#847056"
+    ],
+    "thatch": [
+     "#85745D",
+     "#85745D",
+     "#79664D",
+     "#918168",
+     "#82735C",
+     "#71644D",
+     "#5E523D",
+     "#5E523D",
+     "#5E523D",
+     "#5E523D",
+     "#5E523D",
+     "#5E523D"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#4E6031",
+    "0.5": "#666846",
+    "0.75": "#4A3524",
+    "1.0": "#4A3223"
+   },
+   "phen": {
+    "up": 100,
+    "full": 170,
+    "bud": 140,
+    "flower": 200,
+    "ripe": 230,
+    "end": 270,
+    "sen0": 285,
+    "sen1": 315,
+    "stand": 0.25,
+    "lodge": 0.7,
+    "winter_green": 0.1,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.7,
+    1.15
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.07,
+    0.13
+   ],
+   "cauline_w": [
+    0.04,
+    0.07
+   ],
+   "cauline_tilt": [
+    55,
+    80
+   ],
+   "cauline_span": [
+    0.1,
+    0.92
+   ],
+   "cauline_taper": 0.55,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.4,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 130,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.06,
+    0.12
+   ],
+   "head_w": [
+    0.03,
+    0.06
+   ],
+   "head_branches": 4,
+   "head_open": [
+    50,
+    60
+   ],
+   "head_grain": 0.7,
+   "head_petals": 0,
+   "head_share": 0.6,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    0.95,
+    1.0,
+    0.95
+   ],
+   "id": "urt_dio",
+   "latin": "Urtica dioica",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#646543",
+     "#646543",
+     "#656743",
+     "#597130",
+     "#4D6A2D",
+     "#455B2D",
+     "#465C31",
+     "#4C5F37",
+     "#435731",
+     "#46572D",
+     "#506033",
+     "#646543"
+    ],
+    "yellowing": [
+     "#76683B",
+     "#76683B",
+     "#76683B",
+     "#626333",
+     "#626333",
+     "#626333",
+     "#626333",
+     "#626333",
+     "#716832",
+     "#7A6A32",
+     "#776937",
+     "#76683B"
+    ],
+    "straw": [
+     "#88735A",
+     "#88735A",
+     "#866E4E",
+     "#77653C",
+     "#77653C",
+     "#8B7749",
+     "#7E7459",
+     "#92814F",
+     "#816D3E",
+     "#7F6535",
+     "#7B6543",
+     "#876F53"
+    ],
+    "thatch": [
+     "#88735A",
+     "#88735A",
+     "#7C654B",
+     "#948066",
+     "#857259",
+     "#73634B",
+     "#60513C",
+     "#60513C",
+     "#60513C",
+     "#60513C",
+     "#60513C",
+     "#60513C"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#485B32",
+    "0.5": "#4F5938",
+    "0.75": "#6F5D49",
+    "1.0": "#796452"
+   },
+   "phen": {
+    "up": 82,
+    "full": 165,
+    "bud": 140,
+    "flower": 195,
+    "ripe": 230,
+    "end": 280,
+    "sen0": 255,
+    "sen1": 300,
+    "stand": 0.5,
+    "lodge": 0.45,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 5,
+   "leaf_h": [
+    0.2,
+    0.35
+   ],
+   "leaf_w": [
+    0.06,
+    0.12
+   ],
+   "leaf_tilt": [
+    35,
+    60
+   ],
+   "leaf_bend": [
+    0.25,
+    0.4
+   ],
+   "leaf_droop": [
+    0.15,
+    0.3
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.7,
+    1.1
+   ],
+   "culm_w": [
+    0.004,
+    0.007
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 3,
+   "cauline_h": [
+    0.08,
+    0.15
+   ],
+   "cauline_w": [
+    0.04,
+    0.08
+   ],
+   "cauline_tilt": [
+    50,
+    75
+   ],
+   "cauline_span": [
+    0.2,
+    0.55
+   ],
+   "cauline_taper": 0.5,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 90,
+   "density_culm": 40,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 13,
+   "head_len": [
+    0.04,
+    0.07
+   ],
+   "head_w": [
+    0.05,
+    0.09
+   ],
+   "head_branches": 6,
+   "head_open": [
+    35,
+    45
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.75,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.05,
+    0.92,
+    0.95
+   ],
+   "id": "ant_syl",
+   "latin": "Anthriscus sylvestris",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#51642E",
+     "#51642E",
+     "#52662E",
+     "#486D30",
+     "#3E672C",
+     "#3E5B2C",
+     "#4C5F27",
+     "#526132",
+     "#49592D",
+     "#41582E",
+     "#4A6134",
+     "#51642E"
+    ],
+    "yellowing": [
+     "#736A3C",
+     "#736A3C",
+     "#736A3C",
+     "#5F6533",
+     "#5F6533",
+     "#5F6533",
+     "#5F6533",
+     "#5F6533",
+     "#6D6A33",
+     "#776C33",
+     "#746B38",
+     "#736A3C"
+    ],
+    "straw": [
+     "#82755C",
+     "#82755C",
+     "#80704F",
+     "#765F3F",
+     "#765F3F",
+     "#8C7B52",
+     "#93794F",
+     "#8E7C4C",
+     "#7D693B",
+     "#7B6737",
+     "#786744",
+     "#817155"
+    ],
+    "thatch": [
+     "#82755C",
+     "#82755C",
+     "#76664C",
+     "#8D8268",
+     "#7F745B",
+     "#6E644C",
+     "#5B533D",
+     "#5B533D",
+     "#5B533D",
+     "#5B533D",
+     "#5B533D",
+     "#5B533D"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#7D8967",
+    "0.5": "#DEE5CB",
+    "0.75": "#5E5A3A",
+    "1.0": "#746B58"
+   },
+   "phen": {
+    "up": 85,
+    "full": 135,
+    "bud": 115,
+    "flower": 145,
+    "ripe": 200,
+    "end": 240,
+    "sen0": 185,
+    "sen1": 235,
+    "stand": 0.25,
+    "lodge": 0.5,
+    "winter_green": 0.3,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.05,
+    0.1
+   ],
+   "leaf_w": [
+    0.008,
+    0.012
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.5,
+    0.95
+   ],
+   "culm_w": [
+    0.003,
+    0.005
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.004,
+    0.008
+   ],
+   "cauline_tilt": [
+    35,
+    60
+   ],
+   "cauline_span": [
+    0.1,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.2,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 20,
+   "density_culm": 90,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.15,
+    0.3
+   ],
+   "head_w": [
+    0.06,
+    0.12
+   ],
+   "head_branches": 6,
+   "head_open": [
+    30,
+    25
+   ],
+   "head_grain": 0.9,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "eri_can",
+   "latin": "Erigeron canadensis",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#696149",
+     "#696149",
+     "#6A6349",
+     "#5B6B38",
+     "#4F6534",
+     "#465F2B",
+     "#455929",
+     "#565B32",
+     "#4D532D",
+     "#494E24",
+     "#535629",
+     "#696149"
+    ],
+    "yellowing": [
+     "#827848",
+     "#827848",
+     "#827848",
+     "#6B723F",
+     "#6B723F",
+     "#6B723F",
+     "#6B723F",
+     "#6B723F",
+     "#7B773E",
+     "#867A3E",
+     "#837944",
+     "#827848"
+    ],
+    "straw": [
+     "#847460",
+     "#847460",
+     "#826F53",
+     "#866B3D",
+     "#866B3D",
+     "#988250",
+     "#9C8C63",
+     "#9F8D57",
+     "#8C7745",
+     "#8B7542",
+     "#877552",
+     "#837059"
+    ],
+    "thatch": [
+     "#847460",
+     "#847460",
+     "#786550",
+     "#90806C",
+     "#81735F",
+     "#706350",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F",
+     "#5D523F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#757D61",
+    "0.5": "#D2CFBD",
+    "0.75": "#A49E93",
+    "1.0": "#736158"
+   },
+   "phen": {
+    "up": 100,
+    "full": 215,
+    "bud": 185,
+    "flower": 228,
+    "ripe": 255,
+    "end": 300,
+    "sen0": 255,
+    "sen1": 300,
+    "stand": 0.5,
+    "lodge": 0.4,
+    "winter_green": 0.2,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.8,
+    1.3
+   ],
+   "culm_w": [
+    0.004,
+    0.007
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.08,
+    0.14
+   ],
+   "cauline_w": [
+    0.012,
+    0.02
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.08,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.2,
+   "cauline_droop": 0.15,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 90,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 14,
+   "head_len": [
+    0.15,
+    0.3
+   ],
+   "head_w": [
+    0.04,
+    0.07
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 1.8,
+   "head_petals": 4,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.11,
+    0.7,
+    1.27
+   ],
+   "id": "cha_ang",
+   "latin": "Chamerion angustifolium",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#575438",
+     "#575438",
+     "#585638",
+     "#597231",
+     "#4C6C2D",
+     "#455021",
+     "#455427",
+     "#52542F",
+     "#484D2A",
+     "#444A31",
+     "#4E5138",
+     "#575438"
+    ],
+    "yellowing": [
+     "#806B3F",
+     "#806B3F",
+     "#806B3F",
+     "#6B6737",
+     "#6B6737",
+     "#6B6737",
+     "#6B6737",
+     "#6B6737",
+     "#7A6B36",
+     "#846D36",
+     "#816C3C",
+     "#806B3F"
+    ],
+    "straw": [
+     "#8C7A61",
+     "#8C7A61",
+     "#897554",
+     "#81663A",
+     "#81663A",
+     "#86744D",
+     "#957F56",
+     "#947F54",
+     "#826B42",
+     "#89683A",
+     "#856848",
+     "#8A765A"
+    ],
+    "thatch": [
+     "#8C7A61",
+     "#8C7A61",
+     "#7F6B51",
+     "#98876D",
+     "#887960",
+     "#766951",
+     "#635640",
+     "#635640",
+     "#635640",
+     "#635640",
+     "#635640",
+     "#635640"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6A585B",
+    "0.5": "#B968B2",
+    "0.75": "#D4CEC6",
+    "1.0": "#9A958C"
+   },
+   "phen": {
+    "up": 112,
+    "full": 185,
+    "bud": 165,
+    "flower": 197,
+    "ripe": 230,
+    "end": 265,
+    "sen0": 250,
+    "sen1": 285,
+    "stand": 0.6,
+    "lodge": 0.3,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.6,
+    1.05
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.05,
+    0.09
+   ],
+   "cauline_w": [
+    0.01,
+    0.018
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.08,
+    0.6
+   ],
+   "cauline_taper": 0.65,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.1,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 60,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 14,
+   "head_len": [
+    0.12,
+    0.25
+   ],
+   "head_w": [
+    0.025,
+    0.04
+   ],
+   "head_branches": 0,
+   "head_open": [
+    0,
+    0
+   ],
+   "head_grain": 1.0,
+   "head_petals": 6,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.23,
+    0.74,
+    1.2
+   ],
+   "id": "lyt_sal",
+   "latin": "Lythrum salicaria",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#575C24",
+     "#575C24",
+     "#585E24",
+     "#5C6B2F",
+     "#50652B",
+     "#475B24",
+     "#424F29",
+     "#50533A",
+     "#474C34",
+     "#51503C",
+     "#5C5844",
+     "#575C24"
+    ],
+    "yellowing": [
+     "#816F3F",
+     "#816F3F",
+     "#816F3F",
+     "#6B6A36",
+     "#6B6A36",
+     "#6B6A36",
+     "#6B6A36",
+     "#6B6A36",
+     "#7B6F35",
+     "#857135",
+     "#82703B",
+     "#816F3F"
+    ],
+    "straw": [
+     "#8A7457",
+     "#8A7457",
+     "#886F4B",
+     "#7E6B43",
+     "#7E6B43",
+     "#98804C",
+     "#8F7C54",
+     "#988052",
+     "#856C40",
+     "#8A6C39",
+     "#866C47",
+     "#897051"
+    ],
+    "thatch": [
+     "#8A7457",
+     "#8A7457",
+     "#7E6548",
+     "#968062",
+     "#877356",
+     "#756348",
+     "#625239",
+     "#625239",
+     "#625239",
+     "#625239",
+     "#625239",
+     "#625239"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#695357",
+    "0.5": "#B963A8",
+    "0.75": "#876D51",
+    "1.0": "#775E49"
+   },
+   "phen": {
+    "up": 110,
+    "full": 185,
+    "bud": 170,
+    "flower": 205,
+    "ripe": 245,
+    "end": 285,
+    "sen0": 250,
+    "sen1": 290,
+    "stand": 0.6,
+    "lodge": 0.3,
+    "winter_green": 0.0,
+    "climate": "P3_WET_MEADOW"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.35,
+    0.6
+   ],
+   "culm_w": [
+    0.002,
+    0.003
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.015,
+    0.028
+   ],
+   "cauline_w": [
+    0.006,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.1,
+    0.75
+   ],
+   "cauline_taper": 0.8,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.1,
+   "cauline_droop": 0.05,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 90,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.04,
+    0.08
+   ],
+   "head_w": [
+    0.07,
+    0.13
+   ],
+   "head_branches": 6,
+   "head_open": [
+    35,
+    40
+   ],
+   "head_grain": 4.0,
+   "head_petals": 5,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.08,
+    0.88,
+    0.85
+   ],
+   "id": "hyp_per",
+   "latin": "Hypericum perforatum",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#65694B",
+     "#65694B",
+     "#666B4B",
+     "#535B31",
+     "#48562D",
+     "#3E5027",
+     "#3F5420",
+     "#505E36",
+     "#475630",
+     "#495430",
+     "#535D36",
+     "#65694B"
+    ],
+    "yellowing": [
+     "#7F6C44",
+     "#7F6C44",
+     "#7F6C44",
+     "#69683B",
+     "#69683B",
+     "#69683B",
+     "#69683B",
+     "#69683B",
+     "#796C3A",
+     "#836E3A",
+     "#806D40",
+     "#7F6C44"
+    ],
+    "straw": [
+     "#8C785E",
+     "#8C785E",
+     "#8A7351",
+     "#846D42",
+     "#846D42",
+     "#917D4C",
+     "#8A7C52",
+     "#8E7E4D",
+     "#7D6B3D",
+     "#88693E",
+     "#84694D",
+     "#8B7457"
+    ],
+    "thatch": [
+     "#8C785E",
+     "#8C785E",
+     "#80694E",
+     "#99856A",
+     "#89775D",
+     "#77674E",
+     "#63553F",
+     "#63553F",
+     "#63553F",
+     "#63553F",
+     "#63553F",
+     "#63553F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6E7121",
+    "0.5": "#C8B726",
+    "0.75": "#63443D",
+    "1.0": "#492E23"
+   },
+   "phen": {
+    "up": 102,
+    "full": 170,
+    "bud": 150,
+    "flower": 180,
+    "ripe": 230,
+    "end": 270,
+    "sen0": 250,
+    "sen1": 290,
+    "stand": 0.7,
+    "lodge": 0.2,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 3,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.3,
+    0.6
+   ],
+   "culm_w": [
+    0.0015,
+    0.0022
+   ],
+   "culm_tilt": [
+    5,
+    25
+   ],
+   "culm_bend": [
+    0.05,
+    0.12
+   ],
+   "culm_stiff": 0.5,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.015,
+    0.025
+   ],
+   "cauline_w": [
+    0.001,
+    0.002
+   ],
+   "cauline_tilt": [
+    55,
+    85
+   ],
+   "cauline_span": [
+    0.05,
+    0.7
+   ],
+   "cauline_taper": 0.8,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.05,
+   "cauline_droop": 0.0,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 160,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.08,
+    0.18
+   ],
+   "head_w": [
+    0.03,
+    0.06
+   ],
+   "head_branches": 6,
+   "head_open": [
+    40,
+    35
+   ],
+   "head_grain": 0.7,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "gal_ver",
+   "latin": "Galium verum",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#565B2F",
+     "#565B2F",
+     "#575D2F",
+     "#5D6847",
+     "#506242",
+     "#42521E",
+     "#455523",
+     "#4A521E",
+     "#424C1B",
+     "#48481F",
+     "#525023",
+     "#565B2F"
+    ],
+    "yellowing": [
+     "#816F3D",
+     "#816F3D",
+     "#816F3D",
+     "#6B6A35",
+     "#6B6A35",
+     "#6B6A35",
+     "#6B6A35",
+     "#6B6A35",
+     "#7B6F34",
+     "#857134",
+     "#827039",
+     "#816F3D"
+    ],
+    "straw": [
+     "#897560",
+     "#897560",
+     "#877153",
+     "#817146",
+     "#817146",
+     "#827246",
+     "#8C8261",
+     "#908051",
+     "#7E6C40",
+     "#8A6C37",
+     "#866C45",
+     "#887159"
+    ],
+    "thatch": [
+     "#897560",
+     "#897560",
+     "#7D6750",
+     "#95826C",
+     "#86745F",
+     "#746550",
+     "#615340",
+     "#615340",
+     "#615340",
+     "#615340",
+     "#615340",
+     "#615340"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6C7329",
+    "0.5": "#BEBA3A",
+    "0.75": "#917B51",
+    "1.0": "#453225"
+   },
+   "phen": {
+    "up": 100,
+    "full": 165,
+    "bud": 148,
+    "flower": 195,
+    "ripe": 240,
+    "end": 270,
+    "sen0": 250,
+    "sen1": 290,
+    "stand": 0.35,
+    "lodge": 0.55,
+    "winter_green": 0.2,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.035,
+    0.06
+   ],
+   "leaf_w": [
+    0.022,
+    0.035
+   ],
+   "leaf_tilt": [
+    50,
+    80
+   ],
+   "leaf_bend": [
+    0.1,
+    0.25
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.2,
+    0.38
+   ],
+   "culm_w": [
+    0.002,
+    0.003
+   ],
+   "culm_tilt": [
+    8,
+    25
+   ],
+   "culm_bend": [
+    0.04,
+    0.1
+   ],
+   "culm_stiff": 0.5,
+   "culm_knee": 0.0,
+   "culm_leaves": 5,
+   "cauline_h": [
+    0.03,
+    0.05
+   ],
+   "cauline_w": [
+    0.018,
+    0.028
+   ],
+   "cauline_tilt": [
+    50,
+    75
+   ],
+   "cauline_span": [
+    0.25,
+    0.85
+   ],
+   "cauline_taper": 0.7,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.1,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 150,
+   "density_culm": 50,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 15,
+   "head_len": [
+    0.022,
+    0.032
+   ],
+   "head_w": [
+    0.024,
+    0.032
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 0.9,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.05,
+    0.9,
+    0.9
+   ],
+   "id": "tri_pra",
+   "latin": "Trifolium pratense",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#626449",
+     "#626449",
+     "#646649",
+     "#546131",
+     "#485B2D",
+     "#41572C",
+     "#455726",
+     "#485D30",
+     "#3F562B",
+     "#3C4F21",
+     "#455726",
+     "#626449"
+    ],
+    "yellowing": [
+     "#836F3D",
+     "#836F3D",
+     "#836F3D",
+     "#6D6A35",
+     "#6D6A35",
+     "#6D6A35",
+     "#6D6A35",
+     "#6D6A35",
+     "#7D6F34",
+     "#877033",
+     "#847039",
+     "#836F3D"
+    ],
+    "straw": [
+     "#8B785F",
+     "#8B785F",
+     "#897352",
+     "#796641",
+     "#796641",
+     "#847146",
+     "#988050",
+     "#8E7F4F",
+     "#7D6C3E",
+     "#8C6B37",
+     "#886C45",
+     "#8A7458"
+    ],
+    "thatch": [
+     "#8B785F",
+     "#8B785F",
+     "#7F694F",
+     "#97856A",
+     "#88775E",
+     "#75674F",
+     "#62553F",
+     "#62553F",
+     "#62553F",
+     "#62553F",
+     "#62553F",
+     "#62553F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#705A58",
+    "0.5": "#C866AB",
+    "0.75": "#4F3321",
+    "1.0": "#402B20"
+   },
+   "phen": {
+    "up": 95,
+    "full": 165,
+    "bud": 150,
+    "flower": 165,
+    "ripe": 230,
+    "end": 275,
+    "sen0": 270,
+    "sen1": 310,
+    "stand": 0.1,
+    "lodge": 0.6,
+    "winter_green": 0.3,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 5,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.4,
+    0.75
+   ],
+   "culm_w": [
+    0.0015,
+    0.0025
+   ],
+   "culm_tilt": [
+    10,
+    30
+   ],
+   "culm_bend": [
+    0.08,
+    0.2
+   ],
+   "culm_stiff": 0.4,
+   "culm_knee": 0.0,
+   "culm_leaves": 8,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.015,
+    0.025
+   ],
+   "cauline_tilt": [
+    45,
+    70
+   ],
+   "cauline_span": [
+    0.15,
+    0.85
+   ],
+   "cauline_taper": 0.8,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.25,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 14,
+   "head_len": [
+    0.04,
+    0.07
+   ],
+   "head_w": [
+    0.016,
+    0.024
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    15
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "vic_cra",
+   "latin": "Vicia cracca",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#5D5F3E",
+     "#5D5F3E",
+     "#5E613E",
+     "#546935",
+     "#496331",
+     "#3C522D",
+     "#35501E",
+     "#505C2A",
+     "#475525",
+     "#4A5228",
+     "#555A2E",
+     "#5D5F3E"
+    ],
+    "yellowing": [
+     "#746C41",
+     "#746C41",
+     "#746C41",
+     "#606738",
+     "#606738",
+     "#606738",
+     "#606738",
+     "#606738",
+     "#6F6C37",
+     "#786E37",
+     "#756D3D",
+     "#746C41"
+    ],
+    "straw": [
+     "#82735D",
+     "#82735D",
+     "#806E50",
+     "#806C3F",
+     "#806C3F",
+     "#947E51",
+     "#918155",
+     "#9B8650",
+     "#88723F",
+     "#7D693B",
+     "#79694A",
+     "#816F56"
+    ],
+    "thatch": [
+     "#82735D",
+     "#82735D",
+     "#76654D",
+     "#8D8068",
+     "#7F725C",
+     "#6E634D",
+     "#5B523D",
+     "#5B523D",
+     "#5B523D",
+     "#5B523D",
+     "#5B523D",
+     "#5B523D"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#55585E",
+    "0.5": "#9872BD",
+    "0.75": "#4B3222",
+    "1.0": "#442D21"
+   },
+   "phen": {
+    "up": 110,
+    "full": 180,
+    "bud": 160,
+    "flower": 180,
+    "ripe": 230,
+    "end": 265,
+    "sen0": 250,
+    "sen1": 290,
+    "stand": 0.2,
+    "lodge": 0.8,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.03,
+    0.05
+   ],
+   "leaf_w": [
+    0.02,
+    0.03
+   ],
+   "leaf_tilt": [
+    55,
+    85
+   ],
+   "leaf_bend": [
+    0.1,
+    0.25
+   ],
+   "leaf_droop": [
+    0.0,
+    0.1
+   ],
+   "leaf_stiff": 0.5,
+   "culm_h": [
+    0.08,
+    0.18
+   ],
+   "culm_w": [
+    0.0012,
+    0.0018
+   ],
+   "culm_tilt": [
+    5,
+    20
+   ],
+   "culm_bend": [
+    0.04,
+    0.1
+   ],
+   "culm_stiff": 0.5,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.12,
+   "clump_pull": 0.6,
+   "clump_face_away": 0.6,
+   "clump_lean": 3,
+   "density_leaf": 320,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 15,
+   "head_len": [
+    0.016,
+    0.022
+   ],
+   "head_w": [
+    0.018,
+    0.025
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 0.8,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "tri_rep",
+   "latin": "Trifolium repens",
+   "form": 2,
+   "template": null,
+   "colours": {
+    "live": [
+     "#646540",
+     "#646540",
+     "#656740",
+     "#56713C",
+     "#4A6A37",
+     "#3D5423",
+     "#36541A",
+     "#4E542B",
+     "#454D26",
+     "#405027",
+     "#4A582D",
+     "#646540"
+    ],
+    "yellowing": [
+     "#7E6C45",
+     "#7E6C45",
+     "#7E6C45",
+     "#68683C",
+     "#68683C",
+     "#68683C",
+     "#68683C",
+     "#68683C",
+     "#786D3B",
+     "#826E3B",
+     "#7F6D41",
+     "#7E6C45"
+    ],
+    "straw": [
+     "#867661",
+     "#867661",
+     "#847254",
+     "#81673F",
+     "#81673F",
+     "#A2894B",
+     "#A48D5C",
+     "#A39053",
+     "#8F7A42",
+     "#866A3F",
+     "#82694E",
+     "#85725A"
+    ],
+    "thatch": [
+     "#867661",
+     "#867661",
+     "#7A6851",
+     "#91836D",
+     "#837560",
+     "#716651",
+     "#5E5440",
+     "#5E5440",
+     "#5E5440",
+     "#5E5440",
+     "#5E5440",
+     "#5E5440"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#76826A",
+    "0.5": "#E2E1D7",
+    "0.75": "#9F835D",
+    "1.0": "#513220"
+   },
+   "phen": {
+    "up": 90,
+    "full": 150,
+    "bud": 135,
+    "flower": 155,
+    "ripe": 220,
+    "end": 280,
+    "sen0": 280,
+    "sen1": 320,
+    "stand": 0.0,
+    "lodge": 0.8,
+    "winter_green": 0.5,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 5,
+   "leaf_h": [
+    0.08,
+    0.2
+   ],
+   "leaf_w": [
+    0.025,
+    0.045
+   ],
+   "leaf_tilt": [
+    55,
+    82
+   ],
+   "leaf_bend": [
+    0.08,
+    0.2
+   ],
+   "leaf_droop": [
+    0.0,
+    0.1
+   ],
+   "leaf_stiff": 0.5,
+   "culm_h": [
+    0.1,
+    0.28
+   ],
+   "culm_w": [
+    0.003,
+    0.0045
+   ],
+   "culm_tilt": [
+    3,
+    15
+   ],
+   "culm_bend": [
+    0.04,
+    0.12
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 0,
+   "cauline_h": [
+    0.1,
+    0.2
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    70
+   ],
+   "cauline_span": [
+    0.25,
+    0.76
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.15,
+   "clump_pull": 0.9,
+   "clump_face_away": 1.0,
+   "clump_lean": 3,
+   "density_leaf": 110,
+   "density_culm": 30,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 15,
+   "head_len": [
+    0.03,
+    0.04
+   ],
+   "head_w": [
+    0.035,
+    0.045
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 0.8,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "tar_off",
+   "latin": "Taraxacum officinale agg.",
+   "form": 2,
+   "template": null,
+   "colours": {
+    "live": [
+     "#586035",
+     "#586035",
+     "#596235",
+     "#526436",
+     "#475E32",
+     "#3B5620",
+     "#354D22",
+     "#485D2C",
+     "#3F5627",
+     "#3C4F21",
+     "#455726",
+     "#586035"
+    ],
+    "yellowing": [
+     "#7F6F42",
+     "#7F6F42",
+     "#7F6F42",
+     "#696A39",
+     "#696A39",
+     "#696A39",
+     "#696A39",
+     "#696A39",
+     "#796F38",
+     "#837138",
+     "#80703E",
+     "#7F6F42"
+    ],
+    "straw": [
+     "#84745C",
+     "#84745C",
+     "#826F4F",
+     "#7D693E",
+     "#7D693E",
+     "#8B764E",
+     "#8F7D57",
+     "#8F7D58",
+     "#7E6A46",
+     "#886C3C",
+     "#846C4B",
+     "#837055"
+    ],
+    "thatch": [
+     "#84745C",
+     "#84745C",
+     "#78664C",
+     "#8F8168",
+     "#81735B",
+     "#6F644C",
+     "#5D523D",
+     "#5D523D",
+     "#5D523D",
+     "#5D523D",
+     "#5D523D",
+     "#5D523D"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#696A24",
+    "0.5": "#C6AD2A",
+    "0.75": "#C2CBBE",
+    "1.0": "#766756"
+   },
+   "phen": {
+    "up": 80,
+    "full": 130,
+    "bud": 105,
+    "flower": 120,
+    "ripe": 140,
+    "end": 170,
+    "sen0": 275,
+    "sen1": 320,
+    "stand": 0.0,
+    "lodge": 0.9,
+    "winter_green": 0.6,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.3,
+    0.6
+   ],
+   "culm_w": [
+    0.0015,
+    0.0025
+   ],
+   "culm_tilt": [
+    15,
+    40
+   ],
+   "culm_bend": [
+    0.1,
+    0.25
+   ],
+   "culm_stiff": 0.35,
+   "culm_knee": 0.0,
+   "culm_leaves": 6,
+   "cauline_h": [
+    0.025,
+    0.045
+   ],
+   "cauline_w": [
+    0.006,
+    0.01
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.2,
+    0.85
+   ],
+   "cauline_taper": 0.8,
+   "cauline_arrange": 0,
+   "cauline_bend": 0.1,
+   "cauline_droop": 0.15,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 55,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 14,
+   "head_len": [
+    0.03,
+    0.05
+   ],
+   "head_w": [
+    0.025,
+    0.035
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 1.4,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "lat_pra",
+   "latin": "Lathyrus pratensis",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#69683F",
+     "#69683F",
+     "#6A6A3F",
+     "#587237",
+     "#4C6C33",
+     "#415723",
+     "#364B1E",
+     "#4C5929",
+     "#435224",
+     "#455127",
+     "#4F5A2D",
+     "#69683F"
+    ],
+    "yellowing": [
+     "#827245",
+     "#827245",
+     "#827245",
+     "#6C6D3B",
+     "#6C6D3B",
+     "#6C6D3B",
+     "#6C6D3B",
+     "#6C6D3B",
+     "#7C723A",
+     "#86743A",
+     "#837340",
+     "#827245"
+    ],
+    "straw": [
+     "#766C59",
+     "#766C59",
+     "#74674C",
+     "#877241",
+     "#877241",
+     "#7F703A",
+     "#9D8159",
+     "#8D7B4E",
+     "#7C683E",
+     "#8B6F3E",
+     "#876F4E",
+     "#756852"
+    ],
+    "thatch": [
+     "#766C59",
+     "#766C59",
+     "#6C5E4A",
+     "#817764",
+     "#736B58",
+     "#645C49",
+     "#534C3A",
+     "#534C3A",
+     "#534C3A",
+     "#534C3A",
+     "#534C3A",
+     "#534C3A"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#747120",
+    "0.5": "#DEC325",
+    "0.75": "#412E23",
+    "1.0": "#34231A"
+   },
+   "phen": {
+    "up": 110,
+    "full": 180,
+    "bud": 165,
+    "flower": 185,
+    "ripe": 235,
+    "end": 265,
+    "sen0": 255,
+    "sen1": 295,
+    "stand": 0.2,
+    "lodge": 0.8,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 6,
+   "leaf_h": [
+    0.06,
+    0.14
+   ],
+   "leaf_w": [
+    0.04,
+    0.07
+   ],
+   "leaf_tilt": [
+    40,
+    70
+   ],
+   "leaf_bend": [
+    0.1,
+    0.25
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.3,
+    0.55
+   ],
+   "culm_w": [
+    0.0018,
+    0.0026
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 3,
+   "cauline_h": [
+    0.03,
+    0.06
+   ],
+   "cauline_w": [
+    0.02,
+    0.04
+   ],
+   "cauline_tilt": [
+    45,
+    70
+   ],
+   "cauline_span": [
+    0.3,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 70,
+   "density_culm": 45,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.04,
+    0.08
+   ],
+   "head_w": [
+    0.06,
+    0.11
+   ],
+   "head_branches": 6,
+   "head_open": [
+    35,
+    40
+   ],
+   "head_grain": 4.0,
+   "head_petals": 5,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "ran_acr",
+   "latin": "Ranunculus acris",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#52592B",
+     "#52592B",
+     "#535A2B",
+     "#5A6430",
+     "#4E5E2C",
+     "#3D5321",
+     "#3E541E",
+     "#4F5D2C",
+     "#465627",
+     "#364A1C",
+     "#3F5221",
+     "#52592B"
+    ],
+    "yellowing": [
+     "#6F623C",
+     "#6F623C",
+     "#6F623C",
+     "#5C5D34",
+     "#5C5D34",
+     "#5C5D34",
+     "#5C5D34",
+     "#5C5D34",
+     "#6A6233",
+     "#736433",
+     "#706339",
+     "#6F623C"
+    ],
+    "straw": [
+     "#816F57",
+     "#816F57",
+     "#7F6A4B",
+     "#847348",
+     "#847348",
+     "#87714D",
+     "#8F7B59",
+     "#977F55",
+     "#856C43",
+     "#775F37",
+     "#745F45",
+     "#806B50"
+    ],
+    "thatch": [
+     "#816F57",
+     "#816F57",
+     "#756148",
+     "#8C7B62",
+     "#7E6E56",
+     "#6D5F48",
+     "#5B4E39",
+     "#5B4E39",
+     "#5B4E39",
+     "#5B4E39",
+     "#5B4E39",
+     "#5B4E39"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#797624",
+    "0.5": "#E2C534",
+    "0.75": "#6C6B50",
+    "1.0": "#826C54"
+   },
+   "phen": {
+    "up": 85,
+    "full": 150,
+    "bud": 130,
+    "flower": 150,
+    "ripe": 200,
+    "end": 230,
+    "sen0": 240,
+    "sen1": 290,
+    "stand": 0.0,
+    "lodge": 0.8,
+    "winter_green": 0.3,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.06,
+    0.12
+   ],
+   "leaf_w": [
+    0.015,
+    0.03
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.35,
+    0.65
+   ],
+   "culm_w": [
+    0.003,
+    0.0045
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 8,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.012,
+    0.025
+   ],
+   "cauline_tilt": [
+    35,
+    60
+   ],
+   "cauline_span": [
+    0.1,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.15,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 25,
+   "density_culm": 45,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.04,
+    0.08
+   ],
+   "head_w": [
+    0.06,
+    0.11
+   ],
+   "head_branches": 5,
+   "head_open": [
+    30,
+    35
+   ],
+   "head_grain": 5.0,
+   "head_petals": 5,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "sil_lat",
+   "latin": "Silene latifolia",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#676847",
+     "#676847",
+     "#686A47",
+     "#556436",
+     "#495F32",
+     "#3F4D29",
+     "#43512B",
+     "#46522C",
+     "#3D4B27",
+     "#474E2D",
+     "#515633",
+     "#676847"
+    ],
+    "yellowing": [
+     "#726841",
+     "#726841",
+     "#726841",
+     "#5E6338",
+     "#5E6338",
+     "#5E6338",
+     "#5E6338",
+     "#5E6338",
+     "#6C6837",
+     "#756A38",
+     "#73693D",
+     "#726841"
+    ],
+    "straw": [
+     "#8D7860",
+     "#8D7860",
+     "#8B7353",
+     "#8A774C",
+     "#8A774C",
+     "#837144",
+     "#94834C",
+     "#98814D",
+     "#856D3C",
+     "#7A663C",
+     "#76654A",
+     "#8C7459"
+    ],
+    "thatch": [
+     "#8D7860",
+     "#8D7860",
+     "#816950",
+     "#9A856C",
+     "#8A775F",
+     "#776750",
+     "#645540",
+     "#645540",
+     "#645540",
+     "#645540",
+     "#645540",
+     "#645540"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#7D8370",
+    "0.5": "#E7E9DB",
+    "0.75": "#856F48",
+    "1.0": "#726458"
+   },
+   "phen": {
+    "up": 95,
+    "full": 175,
+    "bud": 150,
+    "flower": 165,
+    "ripe": 220,
+    "end": 285,
+    "sen0": 270,
+    "sen1": 310,
+    "stand": 0.4,
+    "lodge": 0.4,
+    "winter_green": 0.2,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.05,
+    0.1
+   ],
+   "leaf_w": [
+    0.008,
+    0.015
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.3,
+    0.55
+   ],
+   "culm_w": [
+    0.0018,
+    0.0026
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 6,
+   "cauline_h": [
+    0.03,
+    0.06
+   ],
+   "cauline_w": [
+    0.004,
+    0.008
+   ],
+   "cauline_tilt": [
+    30,
+    55
+   ],
+   "cauline_span": [
+    0.15,
+    0.7
+   ],
+   "cauline_taper": 0.7,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 30,
+   "density_culm": 50,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.04,
+    0.07
+   ],
+   "head_w": [
+    0.06,
+    0.1
+   ],
+   "head_branches": 5,
+   "head_open": [
+    30,
+    35
+   ],
+   "head_grain": 6.0,
+   "head_petals": 5,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "sil_flo",
+   "latin": "Silene flos-cuculi",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#635F45",
+     "#635F45",
+     "#646145",
+     "#505A27",
+     "#455524",
+     "#375421",
+     "#3E531D",
+     "#4C562B",
+     "#434F26",
+     "#444519",
+     "#4E4C1D",
+     "#635F45"
+    ],
+    "yellowing": [
+     "#726536",
+     "#726536",
+     "#726536",
+     "#5E612E",
+     "#5E612E",
+     "#5E612E",
+     "#5E612E",
+     "#5E612E",
+     "#6D652D",
+     "#76672D",
+     "#736632",
+     "#726536"
+    ],
+    "straw": [
+     "#887960",
+     "#887960",
+     "#867453",
+     "#896C3B",
+     "#896C3B",
+     "#867049",
+     "#9D8454",
+     "#8B7B55",
+     "#7A6843",
+     "#7A6331",
+     "#77633D",
+     "#877559"
+    ],
+    "thatch": [
+     "#887960",
+     "#887960",
+     "#7C6A50",
+     "#94866D",
+     "#85785F",
+     "#736850",
+     "#605540",
+     "#605540",
+     "#605540",
+     "#605540",
+     "#605540",
+     "#605540"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#705E58",
+    "0.5": "#CE81B0",
+    "0.75": "#89745C",
+    "1.0": "#3E2E20"
+   },
+   "phen": {
+    "up": 90,
+    "full": 150,
+    "bud": 130,
+    "flower": 145,
+    "ripe": 190,
+    "end": 220,
+    "sen0": 230,
+    "sen1": 280,
+    "stand": 0.2,
+    "lodge": 0.6,
+    "winter_green": 0.3,
+    "climate": "P3_WET_MEADOW"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.06,
+    0.12
+   ],
+   "leaf_w": [
+    0.012,
+    0.025
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.3,
+    0.6
+   ],
+   "culm_w": [
+    0.0022,
+    0.003
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 8,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.008,
+    0.016
+   ],
+   "cauline_tilt": [
+    35,
+    60
+   ],
+   "cauline_span": [
+    0.1,
+    0.75
+   ],
+   "cauline_taper": 0.55,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 30,
+   "density_culm": 50,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 15,
+   "head_len": [
+    0.025,
+    0.035
+   ],
+   "head_w": [
+    0.03,
+    0.04
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 1.3,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "cen_jac",
+   "latin": "Centaurea jacea",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#696146",
+     "#696146",
+     "#6A6346",
+     "#555E38",
+     "#4A5934",
+     "#45591F",
+     "#4B5535",
+     "#4C572E",
+     "#435029",
+     "#4D513C",
+     "#585A43",
+     "#696146"
+    ],
+    "yellowing": [
+     "#80744B",
+     "#80744B",
+     "#80744B",
+     "#6A6F41",
+     "#6A6F41",
+     "#6A6F41",
+     "#6A6F41",
+     "#6A6F41",
+     "#7A7440",
+     "#847640",
+     "#817547",
+     "#80744B"
+    ],
+    "straw": [
+     "#897A5E",
+     "#897A5E",
+     "#877551",
+     "#7D6C44",
+     "#7D6C44",
+     "#967B48",
+     "#958058",
+     "#958056",
+     "#836C44",
+     "#897145",
+     "#857155",
+     "#887657"
+    ],
+    "thatch": [
+     "#897A5E",
+     "#897A5E",
+     "#7D6B4E",
+     "#95876A",
+     "#86795D",
+     "#74694E",
+     "#61573E",
+     "#61573E",
+     "#61573E",
+     "#61573E",
+     "#61573E",
+     "#61573E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6C586E",
+    "0.5": "#B663D2",
+    "0.75": "#4C3121",
+    "1.0": "#463327"
+   },
+   "phen": {
+    "up": 100,
+    "full": 190,
+    "bud": 175,
+    "flower": 195,
+    "ripe": 240,
+    "end": 290,
+    "sen0": 270,
+    "sen1": 310,
+    "stand": 0.5,
+    "lodge": 0.4,
+    "winter_green": 0.2,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.025,
+    0.05
+   ],
+   "leaf_w": [
+    0.005,
+    0.01
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.15,
+    0.3
+   ],
+   "culm_w": [
+    0.0012,
+    0.0018
+   ],
+   "culm_tilt": [
+    5,
+    20
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.5,
+   "culm_knee": 0.0,
+   "culm_leaves": 3,
+   "cauline_h": [
+    0.02,
+    0.04
+   ],
+   "cauline_w": [
+    0.003,
+    0.006
+   ],
+   "cauline_tilt": [
+    30,
+    55
+   ],
+   "cauline_span": [
+    0.1,
+    0.45
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 120,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.06,
+    0.12
+   ],
+   "head_w": [
+    0.025,
+    0.045
+   ],
+   "head_branches": 5,
+   "head_open": [
+    30,
+    25
+   ],
+   "head_grain": 0.6,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.15,
+    0.8,
+    0.8
+   ],
+   "id": "rum_acl",
+   "latin": "Rumex acetosella",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#5F6341",
+     "#5F6341",
+     "#606541",
+     "#636F3A",
+     "#566935",
+     "#4D5A31",
+     "#4D5632",
+     "#505D2F",
+     "#47552A",
+     "#4C5638",
+     "#575F40",
+     "#5F6341"
+    ],
+    "yellowing": [
+     "#7F7148",
+     "#7F7148",
+     "#7F7148",
+     "#696C3E",
+     "#696C3E",
+     "#696C3E",
+     "#696C3E",
+     "#696C3E",
+     "#79713D",
+     "#83733D",
+     "#807244",
+     "#7F7148"
+    ],
+    "straw": [
+     "#897D64",
+     "#897D64",
+     "#877756",
+     "#897442",
+     "#897442",
+     "#98754B",
+     "#977752",
+     "#8C754F",
+     "#7B633E",
+     "#886E42",
+     "#846E51",
+     "#88785C"
+    ],
+    "thatch": [
+     "#897D64",
+     "#897D64",
+     "#7D6D53",
+     "#958A70",
+     "#867B63",
+     "#746B53",
+     "#615842",
+     "#615842",
+     "#615842",
+     "#615842",
+     "#615842",
+     "#615842"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#64573C",
+    "0.5": "#9E5A57",
+    "0.75": "#654442",
+    "1.0": "#35261C"
+   },
+   "phen": {
+    "up": 80,
+    "full": 140,
+    "bud": 120,
+    "flower": 140,
+    "ripe": 180,
+    "end": 220,
+    "sen0": 220,
+    "sen1": 270,
+    "stand": 0.3,
+    "lodge": 0.6,
+    "winter_green": 0.4,
+    "climate": "P6_SPARSE_SAND"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.06,
+    0.12
+   ],
+   "leaf_w": [
+    0.02,
+    0.035
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.35,
+    0.65
+   ],
+   "culm_w": [
+    0.002,
+    0.003
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 4,
+   "cauline_h": [
+    0.03,
+    0.06
+   ],
+   "cauline_w": [
+    0.008,
+    0.015
+   ],
+   "cauline_tilt": [
+    30,
+    55
+   ],
+   "cauline_span": [
+    0.1,
+    0.5
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 50,
+   "density_culm": 40,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.1,
+    0.2
+   ],
+   "head_w": [
+    0.035,
+    0.06
+   ],
+   "head_branches": 6,
+   "head_open": [
+    25,
+    20
+   ],
+   "head_grain": 0.7,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.12,
+    0.82,
+    0.82
+   ],
+   "id": "rum_acs",
+   "latin": "Rumex acetosa",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#5F6834",
+     "#5F6834",
+     "#606A34",
+     "#5F6F35",
+     "#526831",
+     "#425C36",
+     "#4B5528",
+     "#51602E",
+     "#475829",
+     "#435529",
+     "#4D5E2F",
+     "#5F6834"
+    ],
+    "yellowing": [
+     "#81703E",
+     "#81703E",
+     "#81703E",
+     "#6B6B35",
+     "#6B6B35",
+     "#6B6B35",
+     "#6B6B35",
+     "#6B6B35",
+     "#7B7034",
+     "#857234",
+     "#82713A",
+     "#81703E"
+    ],
+    "straw": [
+     "#85775D",
+     "#85775D",
+     "#837251",
+     "#7A6946",
+     "#7A6946",
+     "#927C53",
+     "#A28C54",
+     "#998451",
+     "#867040",
+     "#8A6D38",
+     "#866D46",
+     "#847357"
+    ],
+    "thatch": [
+     "#85775D",
+     "#85775D",
+     "#79684E",
+     "#918369",
+     "#82765C",
+     "#70664E",
+     "#5E543E",
+     "#5E543E",
+     "#5E543E",
+     "#5E543E",
+     "#5E543E",
+     "#5E543E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#5B5C3A",
+    "0.5": "#887365",
+    "0.75": "#887159",
+    "1.0": "#4C3625"
+   },
+   "phen": {
+    "up": 80,
+    "full": 145,
+    "bud": 125,
+    "flower": 145,
+    "ripe": 180,
+    "end": 220,
+    "sen0": 210,
+    "sen1": 260,
+    "stand": 0.3,
+    "lodge": 0.6,
+    "winter_green": 0.3,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.08,
+    0.18
+   ],
+   "leaf_w": [
+    0.015,
+    0.03
+   ],
+   "leaf_tilt": [
+    60,
+    85
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.6,
+    1.0
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.8,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.05,
+    0.1
+   ],
+   "cauline_w": [
+    0.012,
+    0.022
+   ],
+   "cauline_tilt": [
+    35,
+    55
+   ],
+   "cauline_span": [
+    0.1,
+    0.7
+   ],
+   "cauline_taper": 0.55,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.12,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 30,
+   "density_culm": 40,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 14,
+   "head_len": [
+    0.1,
+    0.22
+   ],
+   "head_w": [
+    0.05,
+    0.08
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 2.8,
+   "head_petals": 4,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.1,
+    0.88,
+    0.85
+   ],
+   "id": "oen_bie",
+   "latin": "Oenothera biennis",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#696749",
+     "#696749",
+     "#6A6A49",
+     "#5A642A",
+     "#4E5E27",
+     "#3F5426",
+     "#3E532A",
+     "#515926",
+     "#475222",
+     "#4F543A",
+     "#5A5C41",
+     "#696749"
+    ],
+    "yellowing": [
+     "#817444",
+     "#817444",
+     "#817444",
+     "#6B6E3B",
+     "#6B6E3B",
+     "#6B6E3B",
+     "#6B6E3B",
+     "#6B6E3B",
+     "#7B743A",
+     "#85763A",
+     "#827540",
+     "#817444"
+    ],
+    "straw": [
+     "#947F5F",
+     "#947F5F",
+     "#927952",
+     "#877649",
+     "#877649",
+     "#847049",
+     "#97865B",
+     "#977E4F",
+     "#856B3E",
+     "#8A713E",
+     "#86714D",
+     "#937A58"
+    ],
+    "thatch": [
+     "#947F5F",
+     "#947F5F",
+     "#876F4F",
+     "#A18C6B",
+     "#917E5E",
+     "#7D6D4F",
+     "#695A3F",
+     "#695A3F",
+     "#695A3F",
+     "#695A3F",
+     "#695A3F",
+     "#695A3F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6D702D",
+    "0.5": "#C6B639",
+    "0.75": "#857E5A",
+    "1.0": "#4E3724"
+   },
+   "phen": {
+    "up": 100,
+    "full": 200,
+    "bud": 180,
+    "flower": 200,
+    "ripe": 245,
+    "end": 300,
+    "sen0": 275,
+    "sen1": 315,
+    "stand": 0.7,
+    "lodge": 0.2,
+    "winter_green": 0.4,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 5,
+   "leaf_h": [
+    0.08,
+    0.14
+   ],
+   "leaf_w": [
+    0.025,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.5,
+    0.85
+   ],
+   "culm_w": [
+    0.003,
+    0.005
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 10,
+   "cauline_h": [
+    0.05,
+    0.1
+   ],
+   "cauline_w": [
+    0.015,
+    0.03
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.08,
+    0.75
+   ],
+   "cauline_taper": 0.55,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.15,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 15,
+   "density_culm": 55,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.04,
+    0.08
+   ],
+   "head_w": [
+    0.08,
+    0.14
+   ],
+   "head_branches": 6,
+   "head_open": [
+    35,
+    40
+   ],
+   "head_grain": 3.5,
+   "head_petals": 0,
+   "head_share": 0.75,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "cir_arv",
+   "latin": "Cirsium arvense",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#606040",
+     "#606040",
+     "#616340",
+     "#676E4D",
+     "#5A6848",
+     "#455C26",
+     "#4E563C",
+     "#5B5C46",
+     "#515440",
+     "#4F523B",
+     "#5A5A42",
+     "#606040"
+    ],
+    "yellowing": [
+     "#7A6D3E",
+     "#7A6D3E",
+     "#7A6D3E",
+     "#656836",
+     "#656836",
+     "#656836",
+     "#656836",
+     "#656836",
+     "#746D35",
+     "#7E6F35",
+     "#7B6E3A",
+     "#7A6D3E"
+    ],
+    "straw": [
+     "#837153",
+     "#837153",
+     "#816C47",
+     "#816E48",
+     "#816E48",
+     "#887853",
+     "#908261",
+     "#94865F",
+     "#82724B",
+     "#836A39",
+     "#7F6A47",
+     "#826D4D"
+    ],
+    "thatch": [
+     "#837153",
+     "#837153",
+     "#786345",
+     "#8F7D5E",
+     "#807052",
+     "#6F6145",
+     "#5C5037",
+     "#5C5037",
+     "#5C5037",
+     "#5C5037",
+     "#5C5037",
+     "#5C5037"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#655F61",
+    "0.5": "#A07AAE",
+    "0.75": "#D3C9C6",
+    "1.0": "#7F6B50"
+   },
+   "phen": {
+    "up": 105,
+    "full": 190,
+    "bud": 175,
+    "flower": 195,
+    "ripe": 225,
+    "end": 260,
+    "sen0": 260,
+    "sen1": 300,
+    "stand": 0.5,
+    "lodge": 0.3,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.02,
+    0.04
+   ],
+   "leaf_w": [
+    0.003,
+    0.006
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.15,
+    0.3
+   ],
+   "culm_w": [
+    0.0012,
+    0.0018
+   ],
+   "culm_tilt": [
+    5,
+    20
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.5,
+   "culm_knee": 0.0,
+   "culm_leaves": 4,
+   "cauline_h": [
+    0.015,
+    0.03
+   ],
+   "cauline_w": [
+    0.002,
+    0.004
+   ],
+   "cauline_tilt": [
+    30,
+    55
+   ],
+   "cauline_span": [
+    0.05,
+    0.4
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 60,
+   "density_culm": 50,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 15,
+   "head_len": [
+    0.015,
+    0.022
+   ],
+   "head_w": [
+    0.018,
+    0.026
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 0.6,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "jas_mon",
+   "latin": "Jasione montana",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#5C6130",
+     "#5C6130",
+     "#5D6330",
+     "#62704D",
+     "#556947",
+     "#485428",
+     "#515931",
+     "#52552D",
+     "#494E28",
+     "#4B5337",
+     "#555B3F",
+     "#5C6130"
+    ],
+    "yellowing": [
+     "#807047",
+     "#807047",
+     "#807047",
+     "#6A6B3D",
+     "#6A6B3D",
+     "#6A6B3D",
+     "#6A6B3D",
+     "#6A6B3D",
+     "#7A703C",
+     "#84723C",
+     "#817143",
+     "#807047"
+    ],
+    "straw": [
+     "#8F7C5E",
+     "#8F7C5E",
+     "#8D7751",
+     "#847148",
+     "#847148",
+     "#826D44",
+     "#918051",
+     "#967D4E",
+     "#846A3D",
+     "#896D41",
+     "#856D50",
+     "#8E7857"
+    ],
+    "thatch": [
+     "#8F7C5E",
+     "#8F7C5E",
+     "#826C4E",
+     "#9C896A",
+     "#8C7B5D",
+     "#796A4E",
+     "#65583E",
+     "#65583E",
+     "#65583E",
+     "#65583E",
+     "#65583E",
+     "#65583E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#585F5A",
+    "0.5": "#6F73A7",
+    "0.75": "#7F644E",
+    "1.0": "#3D291F"
+   },
+   "phen": {
+    "up": 100,
+    "full": 170,
+    "bud": 160,
+    "flower": 180,
+    "ripe": 230,
+    "end": 260,
+    "sen0": 250,
+    "sen1": 290,
+    "stand": 0.3,
+    "lodge": 0.5,
+    "winter_green": 0.3,
+    "climate": "P6_SPARSE_SAND"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.03,
+    0.06
+   ],
+   "leaf_w": [
+    0.005,
+    0.009
+   ],
+   "leaf_tilt": [
+    50,
+    80
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.12,
+    0.25
+   ],
+   "culm_w": [
+    0.0015,
+    0.0022
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 6,
+   "cauline_h": [
+    0.02,
+    0.04
+   ],
+   "cauline_w": [
+    0.003,
+    0.006
+   ],
+   "cauline_tilt": [
+    30,
+    50
+   ],
+   "cauline_span": [
+    0.1,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 60,
+   "density_culm": 50,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.02,
+    0.035
+   ],
+   "head_w": [
+    0.025,
+    0.05
+   ],
+   "head_branches": 5,
+   "head_open": [
+    35,
+    35
+   ],
+   "head_grain": 1.3,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "hel_are",
+   "latin": "Helichrysum arenarium",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#625944",
+     "#625944",
+     "#635B44",
+     "#6D7351",
+     "#5F6C4B",
+     "#546042",
+     "#4F593E",
+     "#595844",
+     "#4F513D",
+     "#43482D",
+     "#4D4F34",
+     "#625944"
+    ],
+    "yellowing": [
+     "#796B40",
+     "#796B40",
+     "#796B40",
+     "#646637",
+     "#646637",
+     "#646637",
+     "#646637",
+     "#646637",
+     "#736B36",
+     "#7C6D36",
+     "#7A6C3C",
+     "#796B40"
+    ],
+    "straw": [
+     "#877963",
+     "#877963",
+     "#857456",
+     "#847146",
+     "#847146",
+     "#8E7653",
+     "#8E7D55",
+     "#917A4D",
+     "#7F673D",
+     "#81693A",
+     "#7D6949",
+     "#86755C"
+    ],
+    "thatch": [
+     "#877963",
+     "#877963",
+     "#7B6A52",
+     "#93866F",
+     "#847862",
+     "#726852",
+     "#5F5542",
+     "#5F5542",
+     "#5F5542",
+     "#5F5542",
+     "#5F5542",
+     "#5F5542"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#78753B",
+    "0.5": "#CFBA2B",
+    "0.75": "#C7B33F",
+    "1.0": "#7F6A4F"
+   },
+   "phen": {
+    "up": 110,
+    "full": 180,
+    "bud": 170,
+    "flower": 190,
+    "ripe": 240,
+    "end": 300,
+    "sen0": 280,
+    "sen1": 320,
+    "stand": 0.6,
+    "lodge": 0.3,
+    "winter_green": 0.0,
+    "climate": "P6_SPARSE_SAND"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.03,
+    0.06
+   ],
+   "leaf_w": [
+    0.006,
+    0.012
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.25,
+    0.45
+   ],
+   "culm_w": [
+    0.0018,
+    0.0026
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 8,
+   "cauline_h": [
+    0.025,
+    0.05
+   ],
+   "cauline_w": [
+    0.005,
+    0.01
+   ],
+   "cauline_tilt": [
+    30,
+    50
+   ],
+   "cauline_span": [
+    0.1,
+    0.75
+   ],
+   "cauline_taper": 0.7,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 20,
+   "density_culm": 60,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.02,
+    0.04
+   ],
+   "head_w": [
+    0.02,
+    0.035
+   ],
+   "head_branches": 5,
+   "head_open": [
+    30,
+    30
+   ],
+   "head_grain": 1.0,
+   "head_petals": 4,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "ber_inc",
+   "latin": "Berteroa incana",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#5E5F3C",
+     "#5E5F3C",
+     "#5F613C",
+     "#4F6635",
+     "#456031",
+     "#42502E",
+     "#455A29",
+     "#4C562D",
+     "#434F28",
+     "#515227",
+     "#5C5A2C",
+     "#5E5F3C"
+    ],
+    "yellowing": [
+     "#7D6E42",
+     "#7D6E42",
+     "#7D6E42",
+     "#686939",
+     "#686939",
+     "#686939",
+     "#686939",
+     "#686939",
+     "#776E38",
+     "#817038",
+     "#7E6F3E",
+     "#7D6E42"
+    ],
+    "straw": [
+     "#87795C",
+     "#87795C",
+     "#857450",
+     "#7B6741",
+     "#7B6741",
+     "#917C4C",
+     "#978858",
+     "#8A7A4E",
+     "#79673E",
+     "#866B3C",
+     "#826B4A",
+     "#867556"
+    ],
+    "thatch": [
+     "#87795C",
+     "#87795C",
+     "#7B6A4D",
+     "#938668",
+     "#84785B",
+     "#72684D",
+     "#5F563D",
+     "#5F563D",
+     "#5F563D",
+     "#5F563D",
+     "#5F563D",
+     "#5F563D"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#727D65",
+    "0.5": "#CDCEC5",
+    "0.75": "#5D6040",
+    "1.0": "#7D6549"
+   },
+   "phen": {
+    "up": 105,
+    "full": 170,
+    "bud": 150,
+    "flower": 165,
+    "ripe": 220,
+    "end": 290,
+    "sen0": 280,
+    "sen1": 320,
+    "stand": 0.5,
+    "lodge": 0.3,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.1,
+    0.2
+   ],
+   "leaf_w": [
+    0.03,
+    0.06
+   ],
+   "leaf_tilt": [
+    60,
+    85
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.6,
+    1.0
+   ],
+   "culm_w": [
+    0.004,
+    0.006
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.85,
+   "culm_knee": 0.0,
+   "culm_leaves": 10,
+   "cauline_h": [
+    0.05,
+    0.1
+   ],
+   "cauline_w": [
+    0.015,
+    0.03
+   ],
+   "cauline_tilt": [
+    30,
+    50
+   ],
+   "cauline_span": [
+    0.1,
+    0.55
+   ],
+   "cauline_taper": 0.5,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 20,
+   "density_culm": 25,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.2,
+    0.4
+   ],
+   "head_w": [
+    0.08,
+    0.14
+   ],
+   "head_branches": 6,
+   "head_open": [
+    25,
+    20
+   ],
+   "head_grain": 2.0,
+   "head_petals": 5,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "ver_lyc",
+   "latin": "Verbascum lychnitis",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#67614A",
+     "#67614A",
+     "#69634A",
+     "#64704D",
+     "#576A48",
+     "#435335",
+     "#49512A",
+     "#4D562E",
+     "#444F29",
+     "#51523F",
+     "#5C5A47",
+     "#67614A"
+    ],
+    "yellowing": [
+     "#857143",
+     "#857143",
+     "#857143",
+     "#6E6C3A",
+     "#6E6C3A",
+     "#6E6C3A",
+     "#6E6C3A",
+     "#6E6C3A",
+     "#7F7139",
+     "#897339",
+     "#86723F",
+     "#857143"
+    ],
+    "straw": [
+     "#887861",
+     "#887861",
+     "#867353",
+     "#8A7A47",
+     "#8A7A47",
+     "#947F4D",
+     "#948154",
+     "#96824E",
+     "#846F3D",
+     "#8E6E3D",
+     "#8A6E4C",
+     "#87745A"
+    ],
+    "thatch": [
+     "#887861",
+     "#887861",
+     "#7C6950",
+     "#94856D",
+     "#857760",
+     "#736750",
+     "#605540",
+     "#605540",
+     "#605540",
+     "#605540",
+     "#605540",
+     "#605540"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#716B31",
+    "0.5": "#C5AC46",
+    "0.75": "#7E7053",
+    "1.0": "#3C2C20"
+   },
+   "phen": {
+    "up": 100,
+    "full": 190,
+    "bud": 170,
+    "flower": 185,
+    "ripe": 235,
+    "end": 280,
+    "sen0": 260,
+    "sen1": 300,
+    "stand": 0.7,
+    "lodge": 0.2,
+    "winter_green": 0.5,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.05,
+    0.1
+   ],
+   "leaf_w": [
+    0.015,
+    0.025
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.3,
+    0.6
+   ],
+   "culm_w": [
+    0.0025,
+    0.0035
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 10,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.01,
+    0.02
+   ],
+   "cauline_tilt": [
+    35,
+    55
+   ],
+   "cauline_span": [
+    0.1,
+    0.7
+   ],
+   "cauline_taper": 0.55,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 20,
+   "density_culm": 40,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 12,
+   "head_len": [
+    0.08,
+    0.18
+   ],
+   "head_w": [
+    0.03,
+    0.05
+   ],
+   "head_branches": 5,
+   "head_open": [
+    20,
+    20
+   ],
+   "head_grain": 1.6,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "sol_vir",
+   "latin": "Solidago virgaurea",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#625C43",
+     "#625C43",
+     "#635E43",
+     "#5D744E",
+     "#516D48",
+     "#4B5D3B",
+     "#4C563A",
+     "#4E562C",
+     "#454F28",
+     "#4F553F",
+     "#5A5E47",
+     "#625C43"
+    ],
+    "yellowing": [
+     "#857B54",
+     "#857B54",
+     "#857B54",
+     "#6E7549",
+     "#6E7549",
+     "#6E7549",
+     "#6E7549",
+     "#6E7549",
+     "#7F7B48",
+     "#897E48",
+     "#867C4F",
+     "#857B54"
+    ],
+    "straw": [
+     "#8C7B62",
+     "#8C7B62",
+     "#8A7655",
+     "#7C6848",
+     "#7C6848",
+     "#86734D",
+     "#8C7D52",
+     "#8F824E",
+     "#7E6E3E",
+     "#8F784D",
+     "#8A785F",
+     "#8B775B"
+    ],
+    "thatch": [
+     "#8C7B62",
+     "#8C7B62",
+     "#806C52",
+     "#99886E",
+     "#897A61",
+     "#776A52",
+     "#635741",
+     "#635741",
+     "#635741",
+     "#635741",
+     "#635741",
+     "#635741"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#736F38",
+    "0.5": "#C6AD30",
+    "0.75": "#ABA297",
+    "1.0": "#7C6B5C"
+   },
+   "phen": {
+    "up": 105,
+    "full": 200,
+    "bud": 190,
+    "flower": 215,
+    "ripe": 260,
+    "end": 300,
+    "sen0": 270,
+    "sen1": 310,
+    "stand": 0.4,
+    "lodge": 0.4,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 2,
+   "leaf_h": [
+    0.025,
+    0.05
+   ],
+   "leaf_w": [
+    0.012,
+    0.022
+   ],
+   "leaf_tilt": [
+    50,
+    80
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.1,
+    0.22
+   ],
+   "culm_w": [
+    0.0018,
+    0.0025
+   ],
+   "culm_tilt": [
+    5,
+    20
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.55,
+   "culm_knee": 0.0,
+   "culm_leaves": 4,
+   "cauline_h": [
+    0.02,
+    0.04
+   ],
+   "cauline_w": [
+    0.01,
+    0.018
+   ],
+   "cauline_tilt": [
+    50,
+    75
+   ],
+   "cauline_span": [
+    0.2,
+    0.7
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 60,
+   "density_culm": 70,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 2,
+   "head_len": [
+    0.025,
+    0.04
+   ],
+   "head_w": [
+    0.016,
+    0.022
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 1.3,
+   "head_petals": 0,
+   "head_share": 0.85,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "pru_vul",
+   "latin": "Prunella vulgaris",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#64634B",
+     "#64634B",
+     "#65654B",
+     "#687350",
+     "#5B6D4B",
+     "#475C2B",
+     "#4A5E2B",
+     "#485F2F",
+     "#3F572A",
+     "#4A4F34",
+     "#55573B",
+     "#64634B"
+    ],
+    "yellowing": [
+     "#876C40",
+     "#876C40",
+     "#876C40",
+     "#716837",
+     "#716837",
+     "#716837",
+     "#716837",
+     "#716837",
+     "#816D36",
+     "#8B6E36",
+     "#886D3C",
+     "#876C40"
+    ],
+    "straw": [
+     "#8E7864",
+     "#8E7864",
+     "#8B7356",
+     "#836E49",
+     "#836E49",
+     "#837142",
+     "#927C4E",
+     "#8E7E54",
+     "#7D6A42",
+     "#90693A",
+     "#8C6948",
+     "#8D745C"
+    ],
+    "thatch": [
+     "#8E7864",
+     "#8E7864",
+     "#816953",
+     "#9A8670",
+     "#8B7763",
+     "#786753",
+     "#645542",
+     "#645542",
+     "#645542",
+     "#645542",
+     "#645542",
+     "#645542"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#68656C",
+    "0.5": "#AC7CD4",
+    "0.75": "#473525",
+    "1.0": "#412C1F"
+   },
+   "phen": {
+    "up": 105,
+    "full": 180,
+    "bud": 165,
+    "flower": 190,
+    "ripe": 230,
+    "end": 270,
+    "sen0": 270,
+    "sen1": 310,
+    "stand": 0.2,
+    "lodge": 0.6,
+    "winter_green": 0.3,
+    "climate": "P3_WET_MEADOW"
+   }
+  },
+  {
+   "outline": 6,
+   "leaf_h": [
+    0.08,
+    0.16
+   ],
+   "leaf_w": [
+    0.04,
+    0.07
+   ],
+   "leaf_tilt": [
+    45,
+    75
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.4,
+    0.75
+   ],
+   "culm_w": [
+    0.003,
+    0.0045
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.7,
+   "culm_knee": 0.0,
+   "culm_leaves": 4,
+   "cauline_h": [
+    0.05,
+    0.1
+   ],
+   "cauline_w": [
+    0.025,
+    0.045
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.15,
+    0.6
+   ],
+   "cauline_taper": 0.5,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 35,
+   "density_culm": 35,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 13,
+   "head_len": [
+    0.03,
+    0.06
+   ],
+   "head_w": [
+    0.05,
+    0.09
+   ],
+   "head_branches": 6,
+   "head_open": [
+    35,
+    45
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "dau_car",
+   "latin": "Daucus carota",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#615C44",
+     "#615C44",
+     "#625E44",
+     "#686434",
+     "#5B5F30",
+     "#4C5A2C",
+     "#465037",
+     "#47572C",
+     "#3F5027",
+     "#4E5333",
+     "#595C3A",
+     "#615C44"
+    ],
+    "yellowing": [
+     "#7E7244",
+     "#7E7244",
+     "#7E7244",
+     "#686D3A",
+     "#686D3A",
+     "#686D3A",
+     "#686D3A",
+     "#686D3A",
+     "#78723A",
+     "#82743A",
+     "#7F7340",
+     "#7E7244"
+    ],
+    "straw": [
+     "#81725F",
+     "#81725F",
+     "#7F6D52",
+     "#847041",
+     "#847041",
+     "#8E7C43",
+     "#897D5C",
+     "#998C54",
+     "#877742",
+     "#876F3E",
+     "#836F4D",
+     "#806E58"
+    ],
+    "thatch": [
+     "#81725F",
+     "#81725F",
+     "#75644F",
+     "#8C7F6B",
+     "#7E715E",
+     "#6D624F",
+     "#5B513F",
+     "#5B513F",
+     "#5B513F",
+     "#5B513F",
+     "#5B513F",
+     "#5B513F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#777F71",
+    "0.5": "#D7E0D6",
+    "0.75": "#866D5C",
+    "1.0": "#352419"
+   },
+   "phen": {
+    "up": 105,
+    "full": 190,
+    "bud": 180,
+    "flower": 200,
+    "ripe": 245,
+    "end": 300,
+    "sen0": 275,
+    "sen1": 315,
+    "stand": 0.6,
+    "lodge": 0.3,
+    "winter_green": 0.4,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.03,
+    0.06
+   ],
+   "leaf_w": [
+    0.008,
+    0.014
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.25,
+    0.45
+   ],
+   "culm_w": [
+    0.0012,
+    0.0018
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.5,
+   "culm_knee": 0.0,
+   "culm_leaves": 6,
+   "cauline_h": [
+    0.02,
+    0.04
+   ],
+   "cauline_w": [
+    0.004,
+    0.008
+   ],
+   "cauline_tilt": [
+    30,
+    50
+   ],
+   "cauline_span": [
+    0.1,
+    0.7
+   ],
+   "cauline_taper": 0.7,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.3,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 25,
+   "density_culm": 50,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.04,
+    0.08
+   ],
+   "head_w": [
+    0.06,
+    0.11
+   ],
+   "head_branches": 5,
+   "head_open": [
+    35,
+    40
+   ],
+   "head_grain": 4.0,
+   "head_petals": 5,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "cam_pat",
+   "latin": "Campanula patula",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#675F46",
+     "#675F46",
+     "#686146",
+     "#51632B",
+     "#465D27",
+     "#465923",
+     "#46582C",
+     "#455134",
+     "#3D4B2E",
+     "#3C4523",
+     "#454C29",
+     "#675F46"
+    ],
+    "yellowing": [
+     "#766943",
+     "#766943",
+     "#766943",
+     "#61643A",
+     "#61643A",
+     "#61643A",
+     "#61643A",
+     "#61643A",
+     "#706939",
+     "#796B39",
+     "#776A3F",
+     "#766943"
+    ],
+    "straw": [
+     "#82755A",
+     "#82755A",
+     "#80704E",
+     "#8B793A",
+     "#8B793A",
+     "#7F7248",
+     "#9D8D50",
+     "#887850",
+     "#77653F",
+     "#7E663D",
+     "#7A664C",
+     "#817154"
+    ],
+    "thatch": [
+     "#82755A",
+     "#82755A",
+     "#77664B",
+     "#8E8166",
+     "#7F7459",
+     "#6E644B",
+     "#5C523C",
+     "#5C523C",
+     "#5C523C",
+     "#5C523C",
+     "#5C523C",
+     "#5C523C"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6B5F77",
+    "0.5": "#BB77EA",
+    "0.75": "#6F5D4F",
+    "1.0": "#7A5D43"
+   },
+   "phen": {
+    "up": 110,
+    "full": 170,
+    "bud": 155,
+    "flower": 170,
+    "ripe": 210,
+    "end": 240,
+    "sen0": 240,
+    "sen1": 280,
+    "stand": 0.2,
+    "lodge": 0.6,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 3,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.18,
+    0.38
+   ],
+   "culm_w": [
+    0.0018,
+    0.0026
+   ],
+   "culm_tilt": [
+    3,
+    15
+   ],
+   "culm_bend": [
+    0.03,
+    0.08
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.04,
+    0.08
+   ],
+   "cauline_w": [
+    0.0008,
+    0.0012
+   ],
+   "cauline_tilt": [
+    40,
+    60
+   ],
+   "cauline_span": [
+    0.15,
+    0.85
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.25,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 110,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 2,
+   "head_len": [
+    0.06,
+    0.12
+   ],
+   "head_w": [
+    0.03,
+    0.06
+   ],
+   "head_branches": 4,
+   "head_open": [
+    45,
+    25
+   ],
+   "head_grain": 1.0,
+   "head_petals": 0,
+   "head_share": 0.0,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "equ_arv",
+   "latin": "Equisetum arvense",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#5E5A2B",
+     "#5E5A2B",
+     "#5F5C2B",
+     "#5A5F34",
+     "#4F5A31",
+     "#455726",
+     "#4A5F28",
+     "#4F5637",
+     "#464F32",
+     "#4D5638",
+     "#585E40",
+     "#5E5A2B"
+    ],
+    "yellowing": [
+     "#7F774F",
+     "#7F774F",
+     "#7F774F",
+     "#697144",
+     "#697144",
+     "#697144",
+     "#697144",
+     "#697144",
+     "#797743",
+     "#837943",
+     "#80784A",
+     "#7F774F"
+    ],
+    "straw": [
+     "#958061",
+     "#958061",
+     "#937A54",
+     "#836F3E",
+     "#836F3E",
+     "#917C55",
+     "#92835F",
+     "#918159",
+     "#806D47",
+     "#887448",
+     "#847459",
+     "#947B5A"
+    ],
+    "thatch": [
+     "#958061",
+     "#958061",
+     "#887050",
+     "#A28E6D",
+     "#927F60",
+     "#7E6E51",
+     "#6A5B40",
+     "#6A5B40",
+     "#6A5B40",
+     "#6A5B40",
+     "#6A5B40",
+     "#6A5B40"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#52632F",
+    "0.5": "#6A7044",
+    "0.75": "#6A6044",
+    "1.0": "#5A5040"
+   },
+   "phen": {
+    "up": 100,
+    "full": 160,
+    "bud": 330,
+    "flower": 340,
+    "ripe": 350,
+    "end": 360,
+    "sen0": 255,
+    "sen1": 295,
+    "stand": 0.0,
+    "lodge": 0.9,
+    "winter_green": 0.0,
+    "climate": "P2_MEADOW_MIX"
+   }
+  },
+  {
+   "outline": 1,
+   "leaf_h": [
+    0.08,
+    0.15
+   ],
+   "leaf_w": [
+    0.02,
+    0.04
+   ],
+   "leaf_tilt": [
+    30,
+    60
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.5,
+    0.85
+   ],
+   "culm_w": [
+    0.003,
+    0.0045
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.75,
+   "culm_knee": 0.0,
+   "culm_leaves": 12,
+   "cauline_h": [
+    0.05,
+    0.1
+   ],
+   "cauline_w": [
+    0.015,
+    0.028
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.1,
+    0.75
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 2,
+   "cauline_bend": 0.15,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 0,
+   "density_culm": 60,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.05,
+    0.1
+   ],
+   "head_w": [
+    0.06,
+    0.11
+   ],
+   "head_branches": 6,
+   "head_open": [
+    30,
+    35
+   ],
+   "head_grain": 3.5,
+   "head_petals": 5,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "lys_vul",
+   "latin": "Lysimachia vulgaris",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#6D6348",
+     "#6D6348",
+     "#6E6548",
+     "#5A6930",
+     "#4E632C",
+     "#425324",
+     "#455C2B",
+     "#525F32",
+     "#48572C",
+     "#4F5239",
+     "#5B5B41",
+     "#6D6348"
+    ],
+    "yellowing": [
+     "#85744B",
+     "#85744B",
+     "#85744B",
+     "#6F6F41",
+     "#6F6F41",
+     "#6F6F41",
+     "#6F6F41",
+     "#6F6F41",
+     "#7F7440",
+     "#8A7640",
+     "#877547",
+     "#85744B"
+    ],
+    "straw": [
+     "#957C5E",
+     "#957C5E",
+     "#927751",
+     "#896F42",
+     "#896F42",
+     "#8B7A4D",
+     "#968157",
+     "#948453",
+     "#827041",
+     "#8F7045",
+     "#8B7055",
+     "#947857"
+    ],
+    "thatch": [
+     "#957C5E",
+     "#957C5E",
+     "#886C4E",
+     "#A28969",
+     "#927B5D",
+     "#7E6A4E",
+     "#69583E",
+     "#69583E",
+     "#69583E",
+     "#69583E",
+     "#69583E",
+     "#69583E"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#6D752C",
+    "0.5": "#C0B431",
+    "0.75": "#8C7B5F",
+    "1.0": "#4F2E21"
+   },
+   "phen": {
+    "up": 110,
+    "full": 190,
+    "bud": 180,
+    "flower": 195,
+    "ripe": 240,
+    "end": 280,
+    "sen0": 255,
+    "sen1": 295,
+    "stand": 0.3,
+    "lodge": 0.5,
+    "winter_green": 0.0,
+    "climate": "P3_WET_MEADOW"
+   }
+  },
+  {
+   "outline": 5,
+   "leaf_h": [
+    0.1,
+    0.18
+   ],
+   "leaf_w": [
+    0.04,
+    0.07
+   ],
+   "leaf_tilt": [
+    40,
+    70
+   ],
+   "leaf_bend": [
+    0.15,
+    0.3
+   ],
+   "leaf_droop": [
+    0.05,
+    0.15
+   ],
+   "leaf_stiff": 0.4,
+   "culm_h": [
+    0.35,
+    0.6
+   ],
+   "culm_w": [
+    0.003,
+    0.0045
+   ],
+   "culm_tilt": [
+    1,
+    6
+   ],
+   "culm_bend": [
+    0.02,
+    0.05
+   ],
+   "culm_stiff": 0.6,
+   "culm_knee": 0.0,
+   "culm_leaves": 5,
+   "cauline_h": [
+    0.06,
+    0.12
+   ],
+   "cauline_w": [
+    0.03,
+    0.06
+   ],
+   "cauline_tilt": [
+    40,
+    65
+   ],
+   "cauline_span": [
+    0.2,
+    0.75
+   ],
+   "cauline_taper": 0.6,
+   "cauline_arrange": 1,
+   "cauline_bend": 0.2,
+   "cauline_droop": 0.2,
+   "basal_h": [
+    0.1,
+    0.24
+   ],
+   "basal_w": [
+    0.003,
+    0.006
+   ],
+   "basal_tilt": [
+    22,
+    50
+   ],
+   "basal_bend": [
+    0.15,
+    0.35
+   ],
+   "basal_droop": [
+    0.1,
+    0.28
+   ],
+   "clump_cell": 0.25,
+   "clump_pull": 0.15,
+   "clump_face_away": 0.2,
+   "clump_lean": 3,
+   "density_leaf": 25,
+   "density_culm": 40,
+   "density_basal": 0,
+   "density_cal": 0.95,
+   "cover": 1.0,
+   "shade_density": 1.0,
+   "shade_height": 1.0,
+   "head_type": 10,
+   "head_len": [
+    0.03,
+    0.06
+   ],
+   "head_w": [
+    0.04,
+    0.08
+   ],
+   "head_branches": 5,
+   "head_open": [
+    35,
+    40
+   ],
+   "head_grain": 4.0,
+   "head_petals": 4,
+   "head_share": 0.8,
+   "head_nod": [
+    0,
+    0
+   ],
+   "fold_h": 0.0,
+   "tussock_h": [
+    0,
+    0
+   ],
+   "tussock_share": 0.0,
+   "tussock_r": 0.0,
+   "stem_tint": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "id": "che_maj",
+   "latin": "Chelidonium majus",
+   "form": 1,
+   "template": null,
+   "colours": {
+    "live": [
+     "#5D6440",
+     "#5D6440",
+     "#5E6640",
+     "#566B27",
+     "#4A6423",
+     "#416126",
+     "#45613E",
+     "#516245",
+     "#485A3E",
+     "#415B29",
+     "#4B6430",
+     "#5D6440"
+    ],
+    "yellowing": [
+     "#857245",
+     "#857245",
+     "#857245",
+     "#6F6D3C",
+     "#6F6D3C",
+     "#6F6D3C",
+     "#6F6D3C",
+     "#6F6D3C",
+     "#7F723B",
+     "#89743B",
+     "#867341",
+     "#857245"
+    ],
+    "straw": [
+     "#87755F",
+     "#87755F",
+     "#857052",
+     "#7D6A40",
+     "#7D6A40",
+     "#8B7748",
+     "#897F5F",
+     "#8C7D5B",
+     "#7B6A48",
+     "#8E6E3F",
+     "#8A6E4E",
+     "#867158"
+    ],
+    "thatch": [
+     "#87755F",
+     "#87755F",
+     "#7B664F",
+     "#93826C",
+     "#84745E",
+     "#72644F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F",
+     "#5F533F"
+    ]
+   },
+   "seed_ramp": {
+    "0.25": "#787D3C",
+    "0.5": "#DBC433",
+    "0.75": "#6F7251",
+    "1.0": "#826B55"
+   },
+   "phen": {
+    "up": 85,
+    "full": 150,
+    "bud": 125,
+    "flower": 140,
+    "ripe": 200,
+    "end": 280,
+    "sen0": 280,
+    "sen1": 320,
+    "stand": 0.2,
+    "lodge": 0.6,
+    "winter_green": 0.4,
+    "climate": "P2_MEADOW_MIX"
+   }
+  }
+ ]
+}

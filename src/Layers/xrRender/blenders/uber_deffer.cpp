@@ -6,7 +6,7 @@ namespace xray::render::RENDER_NAMESPACE
 void fix_texture_name(pstr fn);
 
 bool uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOOL _aref, LPCSTR _detail_replace,
-    bool DO_NOT_FINISH, bool zwrite, LPCSTR mesh_ms)
+    bool DO_NOT_FINISH, bool zwrite, LPCSTR mesh_ms, LPCSTR ps_define)
 {
     // Uber-parse
     string256 fname, fnameA, fnameB;
@@ -175,13 +175,22 @@ bool uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
             C.r_dx11Texture("s_tdetailBumpX", texDetailBumpX);
         }
     }
-    else if (mesh_ms)
-    {
-        C.r_Pass(mesh_ms, "deffer_detail_cull#as", static_cast<LPCSTR>(ps), false, TRUE, BOOL(zwrite));
-    }
     else
     {
-        C.r_Pass(vs, ps, FALSE, TRUE, zwrite);
+        // The caller's variant: its own shader object (the name) compiled with the macro (the option).
+        if (ps_define)
+        {
+            xr_strcat(ps, "(");
+            xr_strcat(ps, ps_define);
+            xr_strcat(ps, ",)");
+            RImplementation.addShaderOption(ps_define, "1");
+        }
+        if (mesh_ms)
+            C.r_Pass(mesh_ms, "deffer_detail_cull#as", static_cast<LPCSTR>(ps), false, TRUE, BOOL(zwrite));
+        else
+            C.r_Pass(vs, ps, FALSE, TRUE, zwrite);
+        if (ps_define)
+            RImplementation.clearAllShaderOptions();
     }
     // C.r_Sampler("s_base", C.L_textures[0], false, D3DTADDRESS_WRAP,
     // D3DTEXF_ANISOTROPIC,D3DTEXF_LINEAR,
@@ -221,6 +230,9 @@ bool uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
     // The ripple field, for the rings a puddle carries (da_puddles.h reads it through
     // da_wf_ripple_slope). Same silent-skip contract, same twin in da_puddle_refl.s.
     C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+    // Blade grass cover under the ground tint of deffer_impl_flat.ps (da_grass_blades.cpp publishes it
+    // per level). Same silent-skip contract.
+    C.r_dx11Texture("s_grass_cover", "$user$grass_cover");
     C.r_dx11Sampler("smp_rtlinear");
     if (lmap)
     {

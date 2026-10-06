@@ -1287,13 +1287,10 @@ bool da_rt_scene_build()
     return true;
 }
 
-// A texture reloaded, recreated or written in place: new views into a fresh range, and the read state.
-void da_rt_refresh_textures(DaRtSection& section)
+// The scene's textures whose views changed (a reload, a recreation) move to fresh slots holding the new
+// views; the old slots go back after the frames in flight are done with them.
+void da_rt_repoint_textures()
 {
-    const u64 generation = xrd3d12::TextureWriteGeneration(HW.pDevice);
-    if (generation == g_scene.texture_generation)
-        return;
-    g_scene.texture_generation = generation;
     bool changed = false;
     for (u32 i = 0; i < g_scene.textures.size() && !changed; ++i)
         changed = da_rt_texture_view(g_scene.textures[i]._get()) != g_scene.texture_views[i];
@@ -1312,6 +1309,16 @@ void da_rt_refresh_textures(DaRtSection& section)
         slot.index = index;
         slot.view = view;
     }
+}
+
+// A texture reloaded, recreated or written in place: new views into a fresh range, and the read state.
+void da_rt_refresh_textures(DaRtSection& section)
+{
+    const u64 generation = xrd3d12::TextureWriteGeneration(HW.pDevice);
+    if (generation == g_scene.texture_generation)
+        return;
+    g_scene.texture_generation = generation;
+    da_rt_repoint_textures();
     da_rt_require_textures(section);
 }
 
@@ -2063,6 +2070,16 @@ void da_rt_scene_release()
         g_scene.tlas_view->Release();
     g_scene = {};
     g_scene.level = level;
+#endif
+}
+
+void da_rt_textures_replaced()
+{
+#if defined(XR_D3D12)
+    // The read state of the new textures waits for the next frame's refresh: their writes moved the
+    // generation it compares.
+    if (g_scene.ready)
+        da_rt_repoint_textures();
 #endif
 }
 

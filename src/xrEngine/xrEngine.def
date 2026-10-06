@@ -1514,3 +1514,29 @@ EXPORTS
     ?feel_vision_transparency@Vision@Feel@@QEBAMPEBVIGameObject@@@Z @1512
     ?o_trace_item@Vision@Feel@@AEAAXAEAUfeel_visible_Item@12@AEAU?$_vector3@M@@MMI@Z @1513
     ?da_season_folder@@YAPEBDXZ @1514
+    ?da_season_folder_for@@YAPEBDPEBD@Z @1515
+    ?da_season_folders_stamp@@YAIXZ @1516
+    ?da_season_day@@YAMXZ @1517
+    ?da_season_day_prev@@YAMXZ @1518
+    ?da_season_choice@@YAIXZ @1519
+    ?da_season_qa@@YA_NXZ @1520
+    ?da_season_relatch@@YAXXZ @1521
+    ?da_season_latch@@YAPEBUDaSeasonLatch@@XZ @1522
+    ?da_season_category@@YAIPEBD@Z @1523
+    ?da_snow_field@@YAPEBUSSnowField@@XZ @1524
+    ?da_snow_field_stamp@@YAIXZ @1525
+    ?da_snow_field_set@@YAX$$QEAUSSnowField@@@Z @1526
+    ?da_snow_field_reset@@YAXXZ @1527
+    ?da_snow_frame@@YAAEBUSSnowFrame@@XZ @1528
+    ?da_snow_frame_update@@YAXXZ @1529
+    ?da_snow_stamp_add@@YA_NAEBUSSnowStamp@@@Z @1530
+    ?da_snow_stamps@@YAAEBV?$vector@USSnowStamp@@V?$xalloc@USSnowStamp@@@@@std@@XZ @1531
+    ?da_snow_stamps_publish@@YAXXZ @1532
+    ?da_snow_depth_at@@YAMMM@Z @1533
+    ?da_snow_surface_y@@YAMMM@Z @1534
+    ?da_precip@@YAAEBUSPrecipState@@XZ @1535
+    ?da_snow_targets@@YAAEBUSSnowTargets@@XZ @1536
+    ?da_snow_texel_depth@@YAMAEBUSSnowField@@_KAEBU?$_vector4@M@@2@Z @1537
+    ?ice_at@CEnvironment@@QEBAMAEBU?$_vector3@M@@@Z @1538
+    ?set_water_class@CEnvironment@@QEAAX$$QEAV?$vector@EV?$xalloc@E@@@std@@@Z @1539
+    ?da_snow_stamps_room@@YAIXZ @1540

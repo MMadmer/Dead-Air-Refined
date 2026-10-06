@@ -40,7 +40,10 @@ target_sources_grouped(
     TARGET xrEngine
     NAME "Engine\\Console\\commands"
     FILES
+    da_season.cpp
     da_season.h
+    da_snow_field.cpp
+    da_snow_field.h
     xr_ioc_cmd.cpp
     xr_ioc_cmd.h
 )

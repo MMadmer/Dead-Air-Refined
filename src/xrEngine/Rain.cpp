@@ -3,6 +3,7 @@
 #include "Rain.h"
 #include "IGame_Persistent.h"
 #include "Environment.h"
+#include "da_snow_field.h"
 
 // Rain knobs, see xr_ioc_cmd.cpp.
 extern ENGINE_API float ps_r__rain_splash;
@@ -113,22 +114,59 @@ void CEffect_Rain::Born(Item& dest, float radius, const Fvector& wind_v)
     // constant, which REPLACES the vector, instead of the velocity) sent every drop straight down
     // from its first frame: born on a slanted line over a house, it fell through the roof and out
     // of the ceiling of the room below, until the time its landing in the yard was due.
-    dest.fSpeed = ::Random.randF(da_rain::speed_min, da_rain::speed_max);
-    const float k = dest.fSpeed * ::Random.randF(0.75f, 1.25f) / da_rain::fall_ms;
-    float tx = wind_v.x * k, tz = wind_v.z * k;
-    const float hmax = dest.fSpeed * _sin(da_rain::max_slant);
-    const float h = _sqrt(tx * tx + tz * tz);
-    if (h > hmax)
+    // Snow, sleet or rain: the item takes the phase falling now (da_precip), so a change of phase
+    // spreads through the sheet as items are reborn rather than switching it in one frame.
+    dest.flake = ::Random.randF() >= da_precip().liquid;
+    float column = da_rain::source_offset;
+    float min_fall = 0.4f;
+    if (dest.flake)
     {
-        tx *= hmax / h;
-        tz *= hmax / h;
+        // A flake sinks at its own speed and moves with the whole wind: the slant is atan(wind / fall),
+        // steep in any breeze, capped so a gale does not lay the sheet flat.
+        const float fall = ::Random.randF(da_rain::flake_fall_min, da_rain::flake_fall_max);
+        const float drift = ::Random.randF(0.8f, 1.f);
+        float tx = wind_v.x * drift, tz = wind_v.z * drift;
+        const float hmax = fall * std::tan(da_rain::flake_max_slant);
+        const float h = _sqrt(tx * tx + tz * tz);
+        if (h > hmax)
+        {
+            tx *= hmax / h;
+            tz *= hmax / h;
+        }
+        Fvector v;
+        v.set(tx, -fall, tz);
+        dest.fSpeed = v.magnitude();
+        dest.D.div(v, dest.fSpeed);
+        dest.flutter_amp = ::Random.randF(da_rain::flake_flutter_min, da_rain::flake_flutter_max);
+        dest.flutter_rate = ::Random.randF(da_rain::flake_flutter_rate_min, da_rain::flake_flutter_rate_max);
+        dest.flutter_phase = ::Random.randF(PI_MUL_2);
+        dest.flake_half = ::Random.randF(da_rain::flake_half_min, da_rain::flake_half_max);
+        column = da_rain::flake_column;
+        min_fall = _cos(da_rain::flake_max_slant);
     }
-    // Downwind is (sin dir, 0, cos dir) - the convention the service (WindAt), the grass, the
-    // trees, the puddles and the clouds share.
-    Fvector axis;
-    axis.set(tx, -_sqrt(std::max(dest.fSpeed * dest.fSpeed - tx * tx - tz * tz, 0.f)), tz);
-    axis.div(dest.fSpeed);
-    dest.D.random_dir(axis, da_rain::spread);
+    else
+    {
+        dest.fSpeed = ::Random.randF(da_rain::speed_min, da_rain::speed_max);
+        const float k = dest.fSpeed * ::Random.randF(0.75f, 1.25f) / da_rain::fall_ms;
+        float tx = wind_v.x * k, tz = wind_v.z * k;
+        const float hmax = dest.fSpeed * _sin(da_rain::max_slant);
+        const float h = _sqrt(tx * tx + tz * tz);
+        if (h > hmax)
+        {
+            tx *= hmax / h;
+            tz *= hmax / h;
+        }
+        // Downwind is (sin dir, 0, cos dir) - the convention the service (WindAt), the grass, the
+        // trees, the puddles and the clouds share.
+        Fvector axis;
+        axis.set(tx, -_sqrt(std::max(dest.fSpeed * dest.fSpeed - tx * tx - tz * tz, 0.f)), tz);
+        axis.div(dest.fSpeed);
+        dest.D.random_dir(axis, da_rain::spread);
+        dest.flutter_amp = 0.f;
+        dest.flutter_rate = 0.f;
+        dest.flutter_phase = 0.f;
+        dest.flake_half = 0.f;
+    }
 
     // Landing-disc spawn (the NVIDIA rain-SDK camera-volume idea): pick where the streak's
     // LINE crosses eye level inside the radius, then walk back up the fall axis. That keeps
@@ -141,8 +179,8 @@ void CEffect_Rain::Born(Item& dest, float radius, const Fvector& wind_v)
     Fvector land;
     land.set(view.x + dist * _cos(angle), view.y, view.z + dist * _sin(angle));
 
-    const float inv_fall = 1.f / std::max(-dest.D.y, 0.4f);
-    const float up_range = da_rain::source_offset * inv_fall;
+    const float inv_fall = 1.f / std::max(-dest.D.y, min_fall);
+    const float up_range = column * inv_fall;
 
     // THE cover test. Probe the whole column, and probe it from the CLOUD END down: the first
     // thing the ray meets is the roof over this spot, and everything below that is indoors.
@@ -304,21 +342,25 @@ void CEffect_Rain::RenewItem(Item& dest, float height, bool bHit)
 bool CEffect_Rain::SurfaceIsWater(const Fvector& pos, s32 mtl) const
 {
 #ifndef _EDITOR
+    const auto& env = g_pGamePersistent->Environment();
+    bool water = false;
     if (mtl >= 0 && mtl < s32(GMLib.CountMaterial()))
         if (const SGameMtl* m = GMLib.GetMaterialByIdx(u16(mtl)); m && m->Flags.test(SGameMtl::flLiquid))
-            return true;
+            water = true;
 
-    const auto& env = g_pGamePersistent->Environment();
-    if (env.water_field_valid())
+    if (!water && env.water_field_valid())
     {
         const float surface = env.water_surface_at(pos);
         // Just under the surface counts: the water mesh is passable, so a drop that reaches
         // the bed reports the bed's material.
         if (surface > -flt_max && pos.y < surface + 0.25f)
-            return true;
+            water = true;
     }
-#endif
+    // Frozen water takes a crown like any hard ground.
+    return water && env.ice_at(pos) < 0.5f;
+#else
     return false;
+#endif
 }
 
 // The sky-cover probe.
@@ -461,15 +503,19 @@ void CEffect_Rain::OnFrame()
         break;
     }
 
+    // The share of what falls that is water (da_precip): snow is silent and melts on the glass at a
+    // fraction of the rate rain wets it.
+    const float liquid = clampr(da_precip().liquid, 0.f, 1.f);
+
     // The rain at the head, for what the rain physically wets. Not gated on the sound: a bed
     // that has lost its feedback must not leave the visor dry.
-    rain_exposure = clampr(factor * cover_factor, 0.f, 1.f);
+    rain_exposure = clampr(factor * cover_factor * (liquid + da_rain::flake_visor_share * (1.f - liquid)), 0.f, 1.f);
 
     // ambient sound
     if (snd_Ambient._feedback())
     {
         const float cover_snd = da_rain::cover_snd_floor + (1.f - da_rain::cover_snd_floor) * cover_factor;
-        rain_volume_snd = factor * cover_snd;
+        rain_volume_snd = factor * cover_snd * liquid;
         clamp(rain_volume_snd, 0.f, 1.f);
         snd_Ambient.set_volume(rain_volume_snd);
 
@@ -503,6 +549,9 @@ void CEffect_Rain::Hit(Fvector& pos)
 
 void CEffect_Rain::HitItem(Item& src)
 {
+    // A flake settles where it lands: no crown.
+    if (src.flake)
+        return;
     // The drop keeps to the line its birth ray solved, so it lands exactly where that ray found
     // the surface - whatever the frame the timer fires in has carried it past.
     Splash(src.Phit, src.Nhit, src.mtl_hit);
@@ -515,6 +564,10 @@ void CEffect_Rain::Splash(const Fvector& pos, const Fvector& n, s32 mtl)
     // trace, for no reason and with no way to change it. The share is a knob now, default
     // every drop: splashes, not the drops themselves, are what shows rain hitting GROUND.
     if (::Random.randF() > ps_r__rain_splash)
+        return;
+
+    // Rain on snow soaks in instead of throwing up a crown.
+    if (da_snow_depth_at(pos.x, pos.z) > 0.01f)
         return;
 
     const int tier = ps_r__rain_quality;

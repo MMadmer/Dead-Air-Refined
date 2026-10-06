@@ -1,48 +1,112 @@
 # Seasons (1.6.0)
 
-Dead Air is autumn. 1.6.0 adds five more looks of the same world: winter, early spring, spring,
-late spring and summer. Each look is a set of texture overlays that the renderer prefers over the
-base textures while it is active; the base set stays autumn. Autumn has an overlay folder too, for
-the one thing the level archives cannot carry: the LOD atlases rendered from the base cards.
+Dead Air is autumn. 1.6.0 lets the Zone live through a whole year the way the real Chornobyl
+Exclusion Zone does: by default it follows the computer's calendar, or it holds one month the player
+picks. Two layers make up the look of a day:
 
-## Switching
+- **The season day `D`**, a continuous day of a 365-day year. The procedural grass, the snow, the stock
+  details, the ground tint, the precipitation and the ice evaluate their keyframe curves at `D` every
+  frame: no rebuild, no reload, no step between months. Their keys sit on the 15th of each month and
+  live in `configs/dead_air_x64_seasons.ltx` (field reference: `SEASON_DATA.md`).
+- **Texture overlay folders**, discrete sets of textures (tree cards, LOD atlases, terrain, maps, ...)
+  that the renderer prefers over the base textures. They are latched per texture category and change
+  only at safe points, because a switch reloads textures.
 
-- Main menu or pause menu -> "Опции погоды" -> "Времена года" -> "Сезон", then "Применить"
-  (`atmosfear_options.script`, page `af_opt_season`; shown only when the engine has `r__season`).
-- Console: `r__season autumn|winter|spring_early|spring|spring_late|summer` (saved in user.ltx).
+The legacy DA 1.0 season float (`environment_season`, Lua `level.get_season_k`/`set_season_k`, the
+`SEA1` save chunk) is a separate thing kept for mod compatibility; nothing here reads or writes it.
 
-The switch applies live. On the frame after the change the renderer reloads only the textures that
-have an overlay in the old or the new look, in chunks of 128, keeping the old views alive until the
-new ones exist (ray tracing tables and DX12 descriptors stay valid), then resets TAA/upscaler
-history. Expect a freeze of a few seconds. Code: `CResourceManager::SyncTextureSeason`
-(`src/Layers/xrRender/ResourceManager.cpp`), lookup `texture_season_overlay` (same file), the
-resolver hook in `texture_resolve_name` (`src/Layers/xrRenderDX11/dx11Texture.cpp`), the command
-in `src/xrEngine/xr_ioc_cmd.cpp` (`da_season_folder()` in `da_season.h`).
+## Choosing
 
-## Layout
+- Main menu or pause menu -> "Опции погоды" -> "Времена года" -> "Месяц": «По календарю ПК» /
+  "PC calendar" (top, the default) or one of the twelve months, then "Применить". Cancel leaves the
+  choice as it was (`atmosfear_options.script`, page `af_opt_season`; shown only when the engine has
+  `r__season`). The same dialog serves both menus.
+- Console: `r__season calendar|january|...|december`, kept in user.ltx. `[season] default` of the data
+  file names the choice a fresh user.ltx starts with.
+- Development builds of 1.6.0 kept a look instead of a month; their tokens migrate once, at the next
+  user.ltx save: `autumn` -> `calendar` (it was the untouched default), `winter` -> `january`,
+  `spring_early` -> `march`, `spring` -> `april`, `spring_late` -> `may`, `summer` -> `july`.
 
-| Look | Folder |
-| --- | --- |
-| autumn | `textures/seasons/autumn` (LOD atlases only) |
-| winter | `textures/seasons/winter` |
-| spring_early | `textures/seasons/spring_early` |
-| spring | `textures/seasons/spring_mid` |
-| spring_late | `textures/seasons/spring_late` |
-| summer | `textures/seasons/summer` |
+A month shows its 15th at noon. The calendar shows today: `D = 365 * (yday + seconds / 86400) /
+(365 or 366)`, read once per second.
+
+| Month | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `D` of its 15th | 14.5 | 45.5 | 73.5 | 104.5 | 134.5 | 165.5 | 195.5 | 226.5 | 257.5 | 287.5 | 318.5 | 348.5 |
+
+Day 0 is 1 January 00:00. Every keyframe curve is a periodic monotone cubic through its keys
+(`DaSeasonCurve` in `src/xrEngine/da_season.h`): no overshoot, and a run of equal keys (the winter
+zeros of the grass) stays exactly flat.
+
+## How the day moves
+
+- A new choice glides `D` along the shorter way round the year over `[season] glide` seconds
+  (2 by default), counted in wall-clock seconds of a rendered level: picked in the pause menu, the
+  grass grows or the snow melts in the first two seconds after the menu closes.
+- Startup, a level load and every frame without a level snap `D` to the target at once.
+- `da_season_day_prev()` is last frame's `D` (equal to `D` after a snap), so growing blades and settling
+  snow carry correct motion vectors through a glide or a QA run.
+- The day advances once per frame in `CRenderDevice::FrameMove`, right before `seqFrame.Process()`
+  (`da_season_frame()`), so every `OnFrame` of a frame sees one `D`.
+
+Code: `src/xrEngine/da_season.cpp` (the choice, the day, the glide, the latch, the QA commands), its
+header `da_season.h` (the API every module reads), Lua `level.season_day()` (`D`) and
+`level.season_choice()` (0 = calendar, 1..12 = month) in `src/xrGame/level_script.cpp`.
+
+## Texture folders
+
+Layout:
 
 - `textures/seasons/<folder>/<logical name>.dds` overrides the texture of that name, bump maps
   included.
 - `textures/seasons/<folder>/levels/<level folder>/<name>.dds` overrides a texture the level folder
-  provides (terrain colour, `build_details` grass atlas, `level_lods`); it is checked first, and
-  only for names the level folder itself has.
-- `.thm` descriptions are keyed by logical name, so an overlay uses the base texture's bump,
-  detail and material.
+  provides (terrain colour, `build_details` grass atlas, `level_lods`); it is checked first, and only
+  for names the level folder itself has.
+- `.thm` descriptions are keyed by logical name, so an overlay uses the base texture's bump, detail
+  and material.
+- Folders: `winter`, `spring_early`, `spring_mid`, `spring_late`, `summer`, `autumn` (LOD atlases only:
+  the base set is autumn).
+
+Every texture belongs to a category: the longest `[season_categories]` prefix of its logical name
+(either slash, any case), `default` when none matches. Each category has its own bands in
+`[season_folders]`: `<first day>:<folder>, ...` with `-` for the base set; a band runs to the next
+one, the last into the first. The shipped table:
+
+| Category (prefixes) | 1 Nov - 14 Dec | 15 Dec - 15 Feb | 16 Feb - 9 Apr | 10 - 30 Apr | May | 1 Jun - 19 Sep | 20 Sep - 31 Oct |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| default (`terrain\`, `build_details`, the rest) | spring_early | spring_early | spring_early | spring_mid | spring_late | summer | autumn |
+| trees (`trees\`, `level_lods`, `map\`, `ui\`) | spring_early | winter | spring_early | spring_mid | spring_late | summer | autumn |
+| ground (`grnd\`, `detail\`, `roof\`) | base | base | base | base | base | base | base |
+| decal (`decal\`) | base | winter | base | base | base | base | base |
+| vine (`vine\`) | winter | winter | winter | base | base | base | base |
+
+The ground never wears the painted winter set: the snow layer whitens open ground continuously, and
+painted snow would show under roofs, indoors and in every trail. Trees, their LOD atlases and the maps
+wear winter only while the open snow cover is complete; ivy stays leafless from November to early April.
+Without the data file or one of its sections the engine uses this same table.
+
+**Latching.** The folders follow the latch day: the choice's day (a month's 15th, or the calendar's
+day), or a `qa_season_pin`. A new choice latches at once (the reload happens while the menu is open).
+In calendar mode the folders move only at safe points: startup, a level load, and while the main or
+the pause menu is up; a band edge crossed at midnight waits for the next of them, so play never
+freezes for it (the textures may lag the grass and snow by one band for one session).
+
+**Reload.** Each combination of folders is one immutable latch (`DaSeasonLatch`, alive until exit).
+On the frame after a new one is latched the renderer reloads only the loaded textures whose category
+changed folder and that have an overlay in the old or the new one, in chunks of 128, keeping the old
+views alive until the new ones exist; the ray tracing scene moves its bindless tables to the new views
+before the old ones go (`da_rt_textures_replaced`, so no slot ever holds a released view and the DX12
+layer logs nothing), then TAA/upscaler history resets. About 0.1-0.2 s, seven times a year at most. Code: `CResourceManager::SyncTextureSeason`
+and the lookup `texture_season_overlay` (`src/Layers/xrRender/ResourceManager.cpp`), the resolver hook
+in `texture_resolve_name` (`src/Layers/xrRenderDX11/dx11Texture.cpp`). Log lines:
+`* [season] textures #<id> for day <D> (<why>): default=... trees=...` and
+`* Texture season #<old> -> #<new> (...): <n> textures reloaded in <ms> ms`.
 
 The bundle layout keys the season folders one level deeper (`textures/seasons/<folder>/trees`,
 `.../map`, `.../levels/<level>` and so on; `packaging/dead-air-x64/content/groups.ltx`); the bundle
 builder takes the longest assigned prefix of a path.
 
-## What each look contains
+## What each folder contains
 
 - Tree cards (`trees/`): every card family of Dead Air is the project's own (see ASSET_CREDITS.md),
   one grown structure per family so a tree keeps its silhouette through the year. The grown tree is
@@ -58,49 +122,59 @@ builder takes the longest assigned prefix of a path.
   - late spring: nearly full fresh foliage, oak's young bronze leaves, new light shoots on conifers.
   Reeds, sedge, sprouts, forest walls and the bush follow the same looks from GSC's own pictures.
 - Per level:
-  - terrain colour recoloured (summer towards the summer pack, winter under snow, spring stages from
-    wet bare ground to fresh green);
-  - grass atlas (`build_details`) sprite by sprite, each sprite found through `level.details` with
-    its height and kind: the shrubs of winter stand whole with snow at their foot and frost above;
-    early spring has last year's pale straw with the first green at its foot and no ferns or nettles
-    yet; the later stages walk to the summer pack's colours;
+  - terrain colour recoloured (summer towards the summer pack, spring stages from wet bare ground to
+    fresh green; the winter terrain set is not worn, see above);
+  - grass atlas (`build_details`) sprite by sprite for the stock details the procedural grass does not
+    replace;
   - tree LOD atlas (`level_lods`) rendered from the cards of the look itself, autumn included, so a
     far tree is bare, budding or green exactly like the near one. Each LOD visual lists its tree's
     meshes and eight view quads with their cells in the atlas; colour and alpha follow Dead Air's own
     bake (fitted through a render of the same trees with Dead Air's original textures). Cells of cars,
     ruins and rocks keep Dead Air's pictures in every look.
 - PDA maps: Dead Air's maps are already summer renders; winter and spring stages are recoloured.
-- Winter only: snowy ground materials (`grnd/`) and terrain detail layers (`detail/detail_grnd_*`),
-  with winter bump pairs (the relief and gloss of gravel and leaves do not show through snow); roofs
-  under snow with their own bump pairs (90-100 % of every roof texture's area faces up on the levels);
-  frost and snow in the cracks of every bark, snow on the cut faces of stumps and trunk caps; the
-  fallen-leaf decals gone under the snow; ivy without its leaves.
+- Winter only: frost and snow in the cracks of every bark, snow on the cut faces of stumps and trunk
+  caps; the fallen-leaf decals gone under the snow; ivy without its leaves. The winter folder also
+  carries snowy ground materials (`grnd/`, `detail/`) and roofs, which the category table keeps unworn.
 
-## Grass by season
+## Grass, snow and the rest
 
-The engine takes the grass away by season (`CDetailManager`, `detail_season_grass` in
-`src/Layers/xrRender/DetailManager.cpp`): `configs/dead_air_x64_details.ltx` `[season_grass]` gives
-per season the share of the grass density the graphics preset sets and of the grass height the player
-sets (`r__detail_height`), and the same two for shrubs. The woody details of each level (shrubs and
-branchy dry stalks, by object index in its `level.details`) are listed in `[season_shrubs]`
-(generated by `pipeline\gen_shrubs.py`). Winter has no grass and full shrubs; early spring keeps a
-third of the grass at under half its height; it grows back through spring. A season change rebuilds
-the details between frames; the preset and the player's setting stay what they are.
+They follow `D` and nothing else: the blade grass and its seed heads (`GRASS.md`), the stock details
+by class (keep, height and burial curves on the GPU), the snow layer and its depth by class
+(`SNOW.md`), precipitation phase, ice and the far ground tint (`WINTER.md`). The keyframes and their
+sources are in `SEASON_DATA.md`. The player's grass density and height settings and the graphics preset
+stay what they are under every season.
 
-## Making them again
+## QA
+
+Console commands, never saved:
+
+- `qa_season_year [seconds=60] [from=<calendar|january..december|0..365>] [loop]` drives `D` through the
+  year in that many wall-clock seconds of a rendered level; `time_factor`, the game time and the weather
+  clock are untouched, so the game is not sped up. Log and console lines:
+  `[qa] season_year <month> day <D> at <s> s` at each 15th, `[qa] season_year_done <s> s` at the end
+  (`loop` prints `[qa] season_year lap <n> at <s> s` instead and runs until `qa_season_year stop`).
+  The texture folders stay latched. At the end `D` glides back to `r__season`.
+- `qa_season_pin <0..365|calendar|january..december>` holds `D` and latches that day's folders (frame
+  parity with `env_time_pin` and `wind_freeze`); `qa_season_pin off` hands both back.
+- `qa_season_state` prints the choice, the computer's date, the target and shown `D`, the glide, the QA
+  state and the latched folders.
+
+`tools/qa/seasons/` has three probes: the twelve months by pin with a scene shot each, a whole year run
+with a window shot at every 15th, and the weather dialog's Seasons page the way a player uses it,
+Cancel and Accept included (README there). `tools/qa/Check-OptionHints.py` checks the page's strings in
+both languages, that its list carries exactly the engine's `r__season` tokens in order, and that both
+layouts open the list to all thirteen entries.
+
+## Making the folders again
 
 The generator lives outside the repository, in `D:\Games\Dead-Air-AssetCompare\pipeline`
 (`trees\seasons.py`, `trees\seasons_gsc.py`, `seasons_levels.py`, `seasons_details.py`,
 `seasons_lods.py` with `lod_render.py` and `xr_level.py`, `seasons_ground.py`, `seasons_winter_extra.py`,
-`gen_shrubs.py`, `encode_seasons.py`,
-`assign_seasons.py`); it writes into `Dead-Air-Refined_Assets\source\gamedata-1.6.0`.
-
-## Checking in the game
-
-`tools/qa/seasons/` has two probes: one walks the six looks on a save and shoots each, the other goes
-through the weather dialog's Seasons page the way a player does (README there).
+`encode_seasons.py`, `assign_seasons.py`); it writes into `Dead-Air-Refined_Assets\source\gamedata-1.6.0`.
+The keyframe data is regenerated by `tools/seasons/gen_season_data.py` (`SEASON_DATA.md`).
 
 ## Known limits
 
 - Snow on walls and props is not part of the overlays (a texture cannot tell which way a surface
-  faces); winter covers the ground, the terrain, the vegetation and the roofs.
+  faces); the snow layer covers up-facing surfaces with sky access.
+- Calendar mode: a folder band edge crossed during play waits for the next menu or level load.

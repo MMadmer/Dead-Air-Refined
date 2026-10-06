@@ -1,7 +1,9 @@
--- The seasons of r__season in the order of its tokens; the list shows ui_mm_season_<token>.
-local SEASONS = { "autumn", "winter", "spring_early", "spring", "spring_late", "summer" }
+-- The r__season tokens in the list's order: the computer's calendar first, then the twelve months (each
+-- shows its 15th). The list shows ui_mm_season_<token>.
+local SEASONS = { "calendar", "january", "february", "march", "april", "may", "june",
+	"july", "august", "september", "october", "november", "december" }
 
--- Row of a season in the list; the first row for anything else.
+-- Row of a token in the list; the first row (the calendar, the default) for anything else.
 local function season_index(season)
 	for i, token in ipairs(SEASONS) do
 		if (token == season) then
@@ -569,8 +571,8 @@ function af_options_dialog:OnBtnAccept()
 	self:SetComboOption("fallout_task",false)
 	self:SetComboOption("psi_storm_task",false)
 
-	-- Another season reloads the textures the two differ in: only a real change is sent, and kept
-	-- in user.ltx at once rather than at the game's exit.
+	-- Another time of year glides the grass and the snow there and reloads the textures whose folders
+	-- differ: only a real change is sent, and kept in user.ltx at once rather than at the game's exit.
 	if (self.list_season) then
 		local chosen = SEASONS[self.list_season:GetCurrentIdx() + 1]
 		local console = get_console()
@@ -739,8 +741,9 @@ function af_opt_weather:InitControls(x, y, xml, handler)
 	end
 end
 
--- The seasons page: one row, the texture set the world wears (r__season, docs/dead-air/SEASONS.md).
--- The list is the dialog's list_season, which SetCurrentValues and OnBtnAccept read and write.
+-- The seasons page: one row, the time of year the Zone shows - the computer's calendar or a month
+-- (r__season, docs/dead-air/SEASONS.md). The list is the dialog's list_season, which SetCurrentValues
+-- and OnBtnAccept read and write: Accept applies, Cancel leaves r__season as it was.
 class "af_opt_season" (CUIWindow)
 
 function af_opt_season:__init() super()

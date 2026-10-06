@@ -9,8 +9,12 @@
 #include "xrEngine/Environment.h"
 #include "xrEngine/EnvironmentWeatherState.h"
 #include "xrEngine/thunderbolt.h"
+#include "xrEngine/da_season.h"
+#include "xrEngine/da_snow_field.h"
 #if RENDER == R_R4
 #include "Layers/xrRender/da_wind_history.h"
+#include "Layers/xrRender/da_snow.h"
+#include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
 #endif
 
@@ -1049,6 +1053,104 @@ static class cl_various_rain : public R_constant_setup
     }
 } binder_various_rain;
 
+// The season day (da_season.h): x D/365, y last frame's D/365, z 1 while a QA command drives D,
+// w hour of the game day (0..24).
+static class cl_da_season_day : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const float hour = g_pGamePersistent ? g_pGamePersistent->Environment().GetGameTime() / 3600.f : 12.f;
+        cmd_list.set_c(C, da_season_day() / 365.f, da_season_day_prev() / 365.f, da_season_qa() ? 1.f : 0.f, hour);
+    }
+} binder_da_season_day;
+
+// What the weather does to vegetation now (da_precip()): x hoarfrost, y dew, z rain wetness (liquid
+// share only), w snowfall.
+static class cl_da_season_env : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const SPrecipState& p = da_precip();
+        cmd_list.set_c(C, p.frost, p.dew, GetCurrentWetness(), p.snow_rate);
+    }
+} binder_da_season_env;
+
+// The snow constants of this frame (da_snow_frame()), one binder per vector.
+template <Fvector4 SSnowFrame::*field>
+class cl_da_snow_frame final : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_snow_frame().*field); }
+};
+static cl_da_snow_frame<&SSnowFrame::S> binder_da_snow_S;
+static cl_da_snow_frame<&SSnowFrame::Mc> binder_da_snow_Mc;
+static cl_da_snow_frame<&SSnowFrame::S_prev> binder_da_snow_S_prev;
+static cl_da_snow_frame<&SSnowFrame::Mc_prev> binder_da_snow_Mc_prev;
+static cl_da_snow_frame<&SSnowFrame::cover> binder_da_snow_cover;
+static cl_da_snow_frame<&SSnowFrame::state> binder_da_snow_state;
+static cl_da_snow_frame<&SSnowFrame::surf> binder_da_snow_surf;
+static cl_da_snow_frame<&SSnowFrame::dirt> binder_da_snow_dirt;
+static cl_da_snow_frame<&SSnowFrame::fall> binder_da_snow_fall;
+static cl_da_snow_frame<&SSnowFrame::ice> binder_da_snow_ice;
+static cl_da_snow_frame<&SSnowFrame::albedo_open> binder_da_snow_albedo_open;
+static cl_da_snow_frame<&SSnowFrame::albedo_road> binder_da_snow_albedo_road;
+static cl_da_snow_frame<&SSnowFrame::albedo_trees> binder_da_snow_albedo_trees;
+
+#if RENDER == R_R4
+// r3\da_snow_sample.h: the fine trail window and the level-wide depth texture, and the whole misc
+// vector (x cap, y fine half-size, z depth present, w fine-to-level blend band).
+static class cl_da_snow_fine_xf : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_snow_fine_xf()); }
+} binder_da_snow_fine_xf;
+static class cl_da_snow_level_xf : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_snow_level_xf()); }
+} binder_da_snow_level_xf;
+static class cl_da_snow_misc : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_snow_misc()); }
+} binder_da_snow_misc;
+
+// Blade grass ground tint of the terrain (deffer_impl_flat.ps): cover map mapping, strength and fade,
+// the canopy colours of the 16 communities at the day and at the latched folder's reference day. The
+// values are a copy of what the main thread latched, safe from any context.
+struct da_grass_tint_values
+{
+    Fvector4 xf{}, tint{}, tint2{}, canopy[16]{}, canopy_ref[16]{};
+    da_grass_tint_values() { da_grass_ground_tint(xf, tint, tint2, canopy, canopy_ref); }
+};
+static class cl_da_gcover_xf : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_grass_tint_values().xf); }
+} binder_da_gcover_xf;
+static class cl_da_gtint : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_grass_tint_values().tint); }
+} binder_da_gtint;
+static class cl_da_gtint2 : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_grass_tint_values().tint2); }
+} binder_da_gtint2;
+static class cl_da_gcanopy : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const da_grass_tint_values v;
+        for (u32 i = 0; i < 16; ++i)
+            cmd_list.set_ca(C, i, v.canopy[i]);
+    }
+} binder_da_gcanopy;
+static class cl_da_gcanopy_ref : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const da_grass_tint_values v;
+        for (u32 i = 0; i < 16; ++i)
+            cmd_list.set_ca(C, i, v.canopy_ref[i]);
+    }
+} binder_da_gcanopy_ref;
+#endif
+
 static class cl_temp : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, ps_r2_temp); }
@@ -1262,6 +1364,32 @@ void CBlender_Compile::SetMapping()
     r_Constant("pda_taa_bbox", &binder_pda_taa_bbox);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);
+    // Seasons and snow (da_season.h, da_snow_field.h, docs/dead-air/SNOW.md, GRASS.md).
+    r_Constant("da_season_day", &binder_da_season_day);
+    r_Constant("da_season_env", &binder_da_season_env);
+    r_Constant("da_snow_S", &binder_da_snow_S);
+    r_Constant("da_snow_Mc", &binder_da_snow_Mc);
+    r_Constant("da_snow_S_prev", &binder_da_snow_S_prev);
+    r_Constant("da_snow_Mc_prev", &binder_da_snow_Mc_prev);
+    r_Constant("da_snow_cover", &binder_da_snow_cover);
+    r_Constant("da_snow_state", &binder_da_snow_state);
+    r_Constant("da_snow_surf", &binder_da_snow_surf);
+    r_Constant("da_snow_dirt", &binder_da_snow_dirt);
+    r_Constant("da_snow_fall", &binder_da_snow_fall);
+    r_Constant("da_snow_ice", &binder_da_snow_ice);
+    r_Constant("da_snow_albedo_open", &binder_da_snow_albedo_open);
+    r_Constant("da_snow_albedo_road", &binder_da_snow_albedo_road);
+    r_Constant("da_snow_albedo_trees", &binder_da_snow_albedo_trees);
+#if RENDER == R_R4
+    r_Constant("da_snow_fine_xf", &binder_da_snow_fine_xf);
+    r_Constant("da_snow_level_xf", &binder_da_snow_level_xf);
+    r_Constant("da_snow_misc", &binder_da_snow_misc);
+    r_Constant("da_gcover_xf", &binder_da_gcover_xf);
+    r_Constant("da_gtint", &binder_da_gtint);
+    r_Constant("da_gtint2", &binder_da_gtint2);
+    r_Constant("da_gcanopy", &binder_da_gcanopy);
+    r_Constant("da_gcanopy_ref", &binder_da_gcanopy_ref);
+#endif
     r_Constant("temp", &binder_temp);
     r_Constant("scripted", &binder_scripted);
     r_Constant("postprocess_var", &binder_postprocess_var);

@@ -96,12 +96,19 @@ inline const SDaWaterImpactCfg& da_water_impact_cfg()
 // is passable, so what touches the bottom reports the bottom's material - the point straight
 // above on that surface. Water is water; every response treats them alike, except that open
 // water never dries. mtl_idx may be GAMEMTL_NONE_IDX or negative.
+// Frozen water is not water to these responses: on ice a step, a bullet or a body makes no ring and no
+// splash (CEnvironment::ice_at, the season's ice keys - the same rule water.ps draws the ice by).
+inline bool da_water_open_at(const Fvector& surface)
+{
+    return !g_pGamePersistent || g_pGamePersistent->Environment().ice_at(surface) <= 0.5f;
+}
+
 inline bool da_water_surface(const Fvector& pos, int mtl_idx, float ground_ny, Fvector& surface)
 {
     surface = pos;
     if (mtl_idx >= 0 && mtl_idx < int(GMLib.CountMaterial()))
         if (const SGameMtl* m = GMLib.GetMaterialByIdx(u16(mtl_idx)); m && m->Flags.test(SGameMtl::flLiquid))
-            return true;
+            return da_water_open_at(surface);
     if (!g_pGamePersistent)
         return false;
     if (g_pGamePersistent->Environment().SamplePuddleMask(pos, ground_ny) > da_water_impact_cfg().mask_threshold)
@@ -123,14 +130,14 @@ inline bool da_water_surface(const Fvector& pos, int mtl_idx, float ground_ny, F
     if (space.RayPick(from, Fvector{0.f, -1.f, 0.f}, 2.95f, collide::rqtStatic, rq, nullptr) && liquid_hit(rq))
     {
         surface.y = from.y - rq.range;
-        return true;
+        return da_water_open_at(surface);
     }
     from = pos;
     from.y += 0.05f;
     if (space.RayPick(from, Fvector{0.f, 1.f, 0.f}, 3.f, collide::rqtStatic, rq, nullptr) && liquid_hit(rq))
     {
         surface.y = from.y + rq.range;
-        return true;
+        return da_water_open_at(surface);
     }
     return false;
 }

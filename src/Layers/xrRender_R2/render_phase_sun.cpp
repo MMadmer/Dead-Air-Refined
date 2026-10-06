@@ -3,6 +3,7 @@
 #include "r2_R_sun_support.h"
 #include "xrCore/Threading/ParallelFor.hpp"
 #if RENDER == R_R4
+#include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRenderPC_R4/da_grass_mesh.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
 #endif
@@ -427,7 +428,14 @@ void render_sun::render()
                 (cascade_ind == 0 || ps_r_sun_details >= detail_shadow_high) &&
                 cascade_ind + 1 < R__NUM_SUN_CASCADES && RImplementation.Details &&
                 RImplementation.Details->HasRenderableDetails();
-            if (bNormal || bSpecial || renderDetails)
+#if RENDER == R_R4
+            // The blades cast into the near map always and into the middle one from Default up, never
+            // into the far one; r2_sun_details keeps governing the stock cards only.
+            const bool grassBlades = da_grass_casts(cascade_ind);
+#else
+            constexpr bool grassBlades = false;
+#endif
+            if (bNormal || bSpecial || renderDetails || grassBlades)
             {
                 RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, cascade_ind);
                 dsgraph.cmd_list.set_xform_world(Fidentity);
@@ -444,6 +452,10 @@ void render_sun::render()
                     da_grass_ab_cascade_end(cascade_ind, dsgraph.cmd_list);
 #endif
                 }
+#if RENDER == R_R4
+                if (grassBlades)
+                    da_grass_render_cascade(dsgraph.cmd_list, cascade_ind);
+#endif
                 sun->X.D[cascade_ind].transluent = FALSE;
                 if (bSpecial)
                 {

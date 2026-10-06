@@ -1,0 +1,49 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The full-screen snow layer, second pass (da_snow.cpp): da_snow_layer.ps's scratch targets back into
+// the G-buffer, only where it changed something. The blender's write masks keep the depth (packed
+// layout) or the position and the sky term (plain layout); the packed material word is copied bit for
+// bit, never re-packed from a float.
+
+#ifdef USE_MSAA
+Texture2DMS<float4, MSAA_SAMPLES> s_da_sn_tmp0;
+Texture2DMS<float4, MSAA_SAMPLES> s_da_sn_tmp1;
+#define DA_SN_LOAD(tex, p) tex.Load(int2(p), iSample)
+#else
+Texture2D<float4> s_da_sn_tmp0;
+Texture2D<float4> s_da_sn_tmp1;
+#define DA_SN_LOAD(tex, p) tex.Load(int3(int2(p), 0))
+#endif
+
+struct da_sn_apply_out
+{
+	float4 t0 : SV_Target0;
+	float4 t1 : SV_Target1;
+	float4 t2 : SV_Target2;
+};
+
+da_sn_apply_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
+#ifdef USE_MSAA
+	, uint iSample : SV_SampleIndex
+#endif
+	)
+{
+	const float4 g0 = DA_SN_LOAD(s_da_sn_tmp0, pos2d.xy);
+	const float4 g1 = DA_SN_LOAD(s_da_sn_tmp1, pos2d.xy);
+	da_sn_apply_out o;
+#ifdef GBUFFER_OPTIMIZATION
+	[branch] if (g0.z < 0.5)
+		discard;
+	o.t0 = float4(g0.xy, 0.0, g0.w); // position target, the depth (z) is masked off
+	o.t1 = g1;                       // albedo, gloss
+	o.t2 = float4(0.0, 0.0, 0.0, 0.0);
+#else
+	[branch] if (g0.w == 0.0)
+		discard;
+	o.t0 = float4(0.0, 0.0, 0.0, g0.w);  // position target, only the material
+	o.t1 = float4(g0.xyz, 0.0);          // normal target, the sky term is masked off
+	o.t2 = g1;                           // albedo, gloss
+#endif
+	return o;
+}

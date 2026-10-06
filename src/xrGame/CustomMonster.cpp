@@ -429,6 +429,7 @@ void CCustomMonster::net_update::lerp(CCustomMonster::net_update& A, CCustomMons
 void CCustomMonster::update_sound_player() { sound().update(client_update_fdelta()); }
 #include "xrEngine/Environment.h"
 #include "xrEngine/IGame_Persistent.h"
+#include "da_snow_deformers.h"
 
 void CCustomMonster::UpdateCL()
 {
@@ -454,6 +455,9 @@ void CCustomMonster::UpdateCL()
         // A touch wider than the actor's - this covers boars and bloodsuckers too.
         if (Position().distance_to_sqr(Device.vCameraPosition) < 30.f * 30.f)
             env.wind_motor_press(Position(), 0.6f, 1.0f);
+
+        // Feet and body on the snow and in the grass (stamps for the trail and push maps).
+        da_snow_deform_entity(*this);
 
         const float exposure = env.WindSpeedMs() > 3.f ? env.WindExposure(Position()) : 0.f;
         if (exposure > 0.f && character_physics_support() && character_physics_support()->movement())

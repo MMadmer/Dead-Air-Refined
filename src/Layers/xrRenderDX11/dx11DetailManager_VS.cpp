@@ -105,6 +105,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     static shared_str strWavePrev("wave_prev");
     static shared_str strDir2DPrev("dir2D_prev");
     static shared_str strWindPrevInfo("da_wm_info_prev");
+    static shared_str strStockSeason("stock_season");
+    static shared_str strStockSeasonPrev("stock_season_prev");
+    static shared_str strStockObj("stock_obj");
 
     // Every frustum-culled detail pass today is a shadow pass (see hw_Render).
     const bool shadow_pass = frustum != nullptr;
@@ -149,6 +152,7 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
     R_constant *cConsts = nullptr, *cWave = nullptr, *cDir2D = nullptr, *cXForm = nullptr;
     R_constant *cSFade = nullptr, *cSFadeEye = nullptr, *cGrassTint = nullptr;
     R_constant *cWavePrev = nullptr, *cDir2DPrev = nullptr, *cWindPrevInfo = nullptr;
+    R_constant *cStockSeason = nullptr, *cStockSeasonPrev = nullptr, *cStockObj = nullptr;
 
     vis_list& list = m_visibles[var_id];
 
@@ -163,6 +167,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
         VisiblePartVec& vis = list[objectId];
         const u32 vOffset = m_objectVertexOffsets[objectId];
         const u32 iOffset = m_objectIndexOffsets[objectId];
+        // The season of the object's class: keep, height and burial in the vertex shader.
+        Fvector4 season, season_prev, season_obj;
+        StockSeasonConstants(objectId, season, season_prev, season_obj);
         for (u32 iPass = 0; iPass < Object.shader->E[lod_id]->passes.size(); ++iPass)
         {
             // Setup matrices + colors (and flush it as necessary)
@@ -188,6 +195,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
                 cWavePrev = cmd_list.get_c(strWavePrev)._get();
                 cDir2DPrev = cmd_list.get_c(strDir2DPrev)._get();
                 cWindPrevInfo = cmd_list.get_c(strWindPrevInfo)._get();
+                cStockSeason = cmd_list.get_c(strStockSeason)._get();
+                cStockSeasonPrev = cmd_list.get_c(strStockSeasonPrev)._get();
+                cStockObj = cmd_list.get_c(strStockObj)._get();
             }
 
             cmd_list.set_c(cConsts, consts);
@@ -199,6 +209,9 @@ void CDetailManager::hw_Render_dump(CBackend& cmd_list,
             cmd_list.set_c(cGrassTint, tint);
             cmd_list.set_c(cWavePrev, wave_prev);
             cmd_list.set_c(cDir2DPrev, wind_prev);
+            cmd_list.set_c(cStockSeason, season);
+            cmd_list.set_c(cStockSeasonPrev, season_prev);
+            cmd_list.set_c(cStockObj, season_obj);
             // A shadow map has no motion vectors: its grass skips the second, previous-frame bend.
             // Set here rather than left to the binder, which runs only when the table changes.
             if (cWindPrevInfo)

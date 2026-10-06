@@ -4,6 +4,7 @@
 #include "Render.h"
 #endif
 #include "thunderbolt.h"
+#include "da_snow_field.h"
 
 #include "IGame_Persistent.h"
 #include "LightAnimLibrary.h"
@@ -317,7 +318,9 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
 {
     ZoneScoped;
 
-    const bool enabled = currentEnv.thunderbolt;
+    // The weather authors a storm; the season decides whether it thunders (da_precip: a thunderstorm in
+    // January is forty times rarer than in July, and never while it snows).
+    const bool enabled = currentEnv.thunderbolt && da_precip().thunder_ok;
     if (bEnabled != enabled)
     {
         bEnabled = enabled;
@@ -326,7 +329,7 @@ void CEffect_Thunderbolt::OnFrame(CEnvDescriptorMixer& currentEnv)
     }
     else if (bEnabled && (Device.fTimeGlobal > next_lightning_time))
     {
-        if (state == stIdle && currentEnv.thunderbolt)
+        if (state == stIdle && enabled)
             Bolt(currentEnv);
     }
     if (state == stWorking)

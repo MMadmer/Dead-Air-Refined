@@ -36,6 +36,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrCDB/xr_collide_defs.h"
 #include "da_water_impact.h"
+#include "da_snow_deformers.h"
 #include "xrEngine/da_particle_suppress.h"
 
 #include "Include/xrRender/Kinematics.h"
@@ -361,6 +362,8 @@ void CExplosive::Explode()
     // The wind ring scales with THIS charge's authored lethal radius (Hopkinson-Cranz
     // cube-root scaling: bigger charge = same kick at proportionally larger distance).
     g_pGamePersistent->Environment().wind_motor_impulse(pos, m_fBlastRadius, 1.15f);
+    // ...and through the snow: a blast near the ground blows a ragged hole down to the ground.
+    da_snow_deform_crater(pos, m_fBlastRadius);
 
     // Water response: an epicentre in a puddle throws the water out. The fountain size
     // follows how much water is actually THERE (mask x wetness - a shallow film cannot
@@ -408,6 +411,9 @@ void CExplosive::Explode()
                 gp = gp_d; n = n_d;
             }
             else
+                found = false;
+            // Frozen water throws no fountain and rings nothing: the blast lands on ice.
+            if (found && open_water && env.ice_at(gp) > 0.5f)
                 found = false;
             if (found)
             {

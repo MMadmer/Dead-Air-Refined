@@ -441,7 +441,9 @@ public:
     void dump_cloud_map();
     void phase_clouds_march();
     void phase_clouds_composite();
-    void copy_depth_for_hud(); // the cloud deck field for this frame (before the sun)
+    void copy_depth_for_hud(); // the depth for the local lights' first-person test, with the HUD self-shadow
+    // The depth the G-buffer left, copied into $user$depth_copy; false under MSAA (no copy target).
+    bool copy_depth(CBackend& cmd_list);
     void phase_combine();
     void phase_combine_volumetric();
     void phase_pp();

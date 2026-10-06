@@ -15,7 +15,7 @@ two dialogs take a hint from and asks both tables:
   stock layers included) but the [hidden] ones of dead_air_x64_gameplay_options.ltx:
   ui_mm_<option>_hint, or the option's own `hint` field;
 - the weather dialog: the rows of its events page (EVENTS of atmosfear_options.script, three
-  settings each) and the one hint of its per-level rows;
+  settings each), the one hint of its per-level rows and the one row of its seasons page;
 - every `hint` attribute in ui_mm_opt.xml and ui_mm_opt_16.xml.
 
 What those screens show is checked in both languages as well: subsection headers, row captions (with
@@ -23,6 +23,10 @@ the layouts' [captions] and the Game options' own), the key list's groups and ac
 lists of the weather dialog, the texts the dialogs' nodes carry (tabs, buttons, column captions), the
 questions the options dialog asks, and the entries of the video page's lists - an entry is the string
 st_opt_<token>, else <token>, as the engine's combo box looks it up (a number shows as it is). The
+seasons page is the overlay's alone, so its texts are checked even without the stock layers: the
+entries ui_mm_season_<token> of the SEASONS table, which must also be the r__season tokens of
+src/xrEngine/da_season.cpp in the same order, and the list must open to all of them in both layouts
+(list_length). The
 hints of Sound, Controls, the key list and the weather dialog are new: they must come from the
 overlay (no later file overrides them) and stay within MAX_NEW characters. No hint may hold an em
 dash: the hint popup's font on the 4:3 layout has none and leaves a gap.
@@ -263,6 +267,32 @@ def weather_dialog(stock):
     return hints, texts
 
 
+def season_page():
+    """(hint, texts, gaps) of the weather dialog's seasons page: one row, the time of year (r__season)."""
+    script = lua_text(OVERLAY / 'scripts' / 'atmosfear_options.script')
+    prefix = re.search(r'local\s+HINTS\s*=\s*"([^"]+)"', script).group(1)
+    seasons = re.search(r'local\s+SEASONS\s*=\s*\{([^}]*)\}', script)
+    if not seasons:
+        raise SystemExit('atmosfear_options.script: no SEASONS table - has the page changed?')
+    tokens = re.findall(r'"(\w+)"', seasons.group(1))
+    texts = ([f'ui_mm_season_{token}' for token in tokens] + ['st_cap_af_season_options']
+             + node_texts(WEATHER_UI_FILES, 'main_dialog/btn_season_options', 'season_page'))
+    gaps = []
+    # The menu sends its tokens to r__season: the engine must know each, in the list's order.
+    engine = (REPO / 'src' / 'xrEngine' / 'da_season.cpp').read_text('utf-8', errors='replace')
+    array = re.search(r'season_token\[\]\s*=\s*\{(.*?)\};', engine, re.S)
+    engine_tokens = re.findall(r'\{\s*"(\w+)"', array.group(1)) if array else []
+    if engine_tokens != tokens:
+        gaps.append(f'seasons: SEASONS {tokens} differs from the r__season tokens {engine_tokens} of da_season.cpp')
+    # The open list must show every entry: the scroll view around the page clips a longer one.
+    for root, name in zip(xml_roots(WEATHER_UI_FILES), WEATHER_UI_FILES):
+        node = root.find('season_page/list_season')
+        length = int(node.get('list_length', '4')) if node is not None else 0
+        if length != len(tokens):
+            gaps.append(f'seasons: {name} season_page/list_season has list_length {length}, the list has {len(tokens)}')
+    return prefix + 'season', texts, gaps
+
+
 def video_list_entries():
     """(label ids, tokens) of the video page's lists: st_opt_<token> first, then the token itself."""
     entries = []
@@ -294,6 +324,7 @@ def main():
     main_script = lua_text(OVERLAY / 'scripts' / 'ui_mm_opt_main.script')
     game = game_rows(stock)
     weather_hints, weather_texts = weather_dialog(stock)
+    season_hint, season_texts, season_gaps = season_page()
 
     # (group, ids, new): a new hint must come from the overlay and stay short. Every hint shows in the
     # popup's font, which on the 4:3 layout draws no em dash.
@@ -303,7 +334,8 @@ def main():
         ('controls', controls.hints(), True),
         ('keys', [f'{caption}_hint' for caption, _ in key_actions], True),
         ('game', [hint for hint, _ in game], False),
-        ('weather', weather_hints, True),
+        ('weather', weather_hints + [season_hint], True),
+        ('season-texts', sorted(set(season_texts)), True),
         ('xml', xml_hints(), False),
     ]
     if stock:
@@ -327,7 +359,7 @@ def main():
             ('frame', sorted(set(frame)), False),
         ]
 
-    gaps = []
+    gaps = list(season_gaps)
     for group, ids, new in checks:
         for hint in ids:
             for language in LANGUAGES:

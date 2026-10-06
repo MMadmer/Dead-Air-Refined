@@ -124,18 +124,6 @@ const xr_token snd_precache_all_token[] = {{"off", 0}, {"on", 1}, {0, 0}};
 const xr_token animation_blend_curve_token[] = {
     {"linear", AnimationBlend::Linear}, {"smooth", AnimationBlend::Smooth}, {nullptr, 0}};
 
-// r__season (da_season.h). The token names are what user.ltx keeps; the overlay folder of each sits at
-// the same index below, and "spring" is the middle one of the three spring sets.
-static u32 ps_r__season = 0;
-const xr_token season_token[] = {{"autumn", 0}, {"winter", 1}, {"spring_early", 2}, {"spring", 3},
-    {"spring_late", 4}, {"summer", 5}, {nullptr, 0}};
-
-pcstr da_season_folder()
-{
-    static constexpr pcstr folders[] = {"autumn", "winter", "spring_early", "spring_mid", "spring_late", "summer"};
-    return ps_r__season < std::size(folders) ? folders[ps_r__season] : folders[0];
-}
-
 void IConsole_Command::InvalidSyntax()
 {
     TInfo I;
@@ -1051,8 +1039,8 @@ void CCC_Register()
     CMD4(CCC_Float, "r__color_add_r", &ps_r__color_add_r, -0.5f, 0.5f);
     CMD4(CCC_Float, "r__color_add_g", &ps_r__color_add_g, -0.5f, 0.5f);
     CMD4(CCC_Float, "r__color_add_b", &ps_r__color_add_b, -0.5f, 0.5f);
-    // Here and not in the renderer: the choice outlives a renderer switch and is read on both sides.
-    CMD3(CCC_Token, "r__season", &ps_r__season, season_token);
+    // r__season and its QA commands (da_season.cpp).
+    da_season_register_commands();
 
     CMD1(CCC_Editor, "rs_editor");
 

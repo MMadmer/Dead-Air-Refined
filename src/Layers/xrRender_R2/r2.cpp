@@ -5,6 +5,8 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/GameFont.h"
 #include "xrEngine/PerformanceAlert.hpp"
+#include "xrEngine/da_season.h"
+#include "xrEngine/da_snow_field.h"
 
 #include "Layers/xrRender/FBasicVisual.h"
 #include "Layers/xrRender/SkeletonCustom.h"
@@ -18,6 +20,8 @@
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
 #endif
 #if RENDER == R_R4
+#include "Layers/xrRender/da_snow.h"
+#include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRenderPC_R4/da_upscaler.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
@@ -216,8 +220,11 @@ static void da_wet_tick()
 
     // The raw rain density stays raw regardless of the puddle master: the water shader scales
     // its own rain ripples by it, and the Minimum preset turning puddles off must not also
-    // becalm the lakes.
-    g_da_wet.rain = g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.rain_density : 0.f;
+    // becalm the lakes. Only the liquid share of what falls wets anything (snow neither wets
+    // the ground nor rings the lakes).
+    const SPrecipState& precip = da_precip();
+    g_da_wet.rain =
+        (g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.rain_density : 0.f) * precip.liquid;
     const float rain_for_wetness = ps_r__puddles ? g_da_wet.rain : 0.f;
 
     if (g_da_rain_wetness_reset)
@@ -252,10 +259,11 @@ static void da_wet_tick()
             g_da_wet.porous += dt * speed / buildup;
             g_da_wet.puddle += dt * rain_for_wetness / (buildup * da_wet_pool_fill);
         }
-        else
+        else if (precip.air_temp >= 0.f)
         {
             // Each dries on its own clock. The film goes first and the pool last, which is why
-            // the ground stops shining long before the puddles are gone.
+            // the ground stops shining long before the puddles are gone. Below freezing nothing
+            // dries: the film, the soak and the pools freeze where they stand.
             g_da_wet.film -= dt / (dry * da_wet_film_fall);
             g_da_wet.porous -= dt / dry;
             g_da_wet.puddle -= dt / (dry * da_wet_pool_drain);
@@ -595,7 +603,9 @@ void CRender::create()
 
     Device.seqFrame.Add(this, REG_PRIORITY_HIGH + 0x12345678);
 
-    // user.ltx has run: textures resolve against its season from the first one on.
+    // user.ltx has run: the season latches its texture folders (a safe point) and textures resolve
+    // against them from the first one on.
+    da_season_relatch();
     Resources->SyncTextureSeason();
 
     // user.ltx runs before this and carries preset-owned values from its own last save, below
@@ -990,6 +1000,10 @@ void CRender::destroy()
     // The SDK contexts go before the targets they were created for.
     da_upscaler_destroy();
     da_framegen_destroy();
+    // The blades, the snow and the ground window: their GPU objects and named textures go while the
+    // resource manager that made them is alive.
+    da_grass_destroy();
+    da_snow_destroy();
 #endif
     xr_delete(Target);
 #if RENDER == R_R4
@@ -1042,6 +1056,10 @@ void CRender::reset_begin()
         !fsimilar(ps_r__Detail_density, ps_current_detail_density) ||
         !fsimilar(ps_r__Detail_height, ps_current_detail_height)))
     {
+#if RENDER == R_R4
+        // The blades point into the detail slots: they go first and come back after the reload.
+        da_grass_level_unload();
+#endif
         if (Details)
             Details->Unload();
         xr_delete(Details);
@@ -1088,6 +1106,9 @@ void CRender::reset_end()
     {
         Details = xr_new<CDetailManager>();
         Details->Load();
+#if RENDER == R_R4
+        da_grass_level_load();
+#endif
     }
     //-AVO
 
@@ -1116,6 +1137,12 @@ void CRender::OnCameraUpdated()
     // Frustum
     ViewBase.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB + FRUSTUM_P_FAR);
 
+#if RENDER == R_R4
+    // The snow's passes, windows and constants of this frame, before Calculate starts the sun cascades
+    // that read them.
+    da_snow_frame_publish();
+#endif
+
     if (g_pGamePersistent->MainMenuActiveOrLevelNotExist())
         return;
 
@@ -1135,20 +1162,9 @@ void CRender::OnFrame()
 {
     ZoneScoped;
 
-    // r__season moved: what it changes reloads before this frame binds anything.
+    // The season latched other texture folders (a menu, a level load, a new choice): what they change
+    // reloads before this frame binds anything. Grass, snow and details follow da_season_day() on their own.
     Resources->SyncTextureSeason();
-    // The grass follows the season too: another density or height share rebuilds the details, the
-    // way a changed density does on vid_restart.
-    const Fvector4 season_grass = detail_season_grass();
-    const Fvector4& built_grass = Details ? Details->m_season_grass : season_grass;
-    if (b_loaded && Details && (!fsimilar(built_grass.x, season_grass.x) || !fsimilar(built_grass.y, season_grass.y) ||
-        !fsimilar(built_grass.z, season_grass.z) || !fsimilar(built_grass.w, season_grass.w)))
-    {
-        Details->Unload();
-        xr_delete(Details);
-        Details = xr_new<CDetailManager>();
-        Details->Load();
-    }
 
 #if defined(USE_DX11)
     ProcessGamesaveScreenshots();

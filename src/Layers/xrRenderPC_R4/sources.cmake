@@ -246,6 +246,16 @@ set(XRAY_RENDER_R4_SOURCES
     # [dx12:mesh] begin sources
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/DetailManager_MS.cpp"
     # [dx12:mesh] end sources
+    # [seasons:grass-snow] begin sources
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_ground.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_ground.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_snow.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_snow.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_snow_gpu.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_blades.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_blades.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_data.h"
+    # [seasons:grass-snow] end sources
     # [dx12:offload] begin sources
     "${CMAKE_CURRENT_LIST_DIR}/da_offload.cpp"
     # [dx12:offload] end sources

@@ -73,6 +73,29 @@ Texture2D	s_leaves;
 // x = rain density 0..1.
 uniform float4 rain_params;
 
+// ---- Ice of the season (docs/dead-air/WINTER.md, da_snow_ice.h) ----------------------------------
+// The ice front, the snow on the ice and the bare ice follow one rule with the snow grid, which draws the
+// frozen water near the camera as a sheet the deferred light shades (da_snow_grid.vs, da_snow_layer.ps):
+// this surface shows the ice beyond it, under the same patches and the same cracks.
+#include "da_snow_ice.h"
+// Linear albedo of open-ground snow at this day: the snow on the ice wears the same.
+uniform float4 da_snow_albedo_open;
+// Running water (1) against standing water (0) per texel of the water field; zero (standing) where the
+// map is not bound.
+Texture2D s_water_class;
+
+// The snow layer's cool cast of snow (DA_SNOW_TINT, da_snow_light.h): the same white on the far ice.
+#define DA_W_SNOW_TINT float3( 0.952f, 1.0044f, 1.098f )
+
+// Ice cover 0..1 of the surface here (da_ice_cover: CEnvironment::ice_at's rule).
+float da_water_ice( float2 xz, bool on_field, float shore )
+{
+	[branch]
+	if ( max( da_snow_ice.x, da_snow_ice.y ) < 0.02f )
+		return 0.0f;
+	const bool flowing = on_field && s_water_class.SampleLevel( smp_nofilter, da_wf_uv( xz ), 0 ).r > 0.5f;
+	return da_ice_cover( xz, on_field, flowing, shore );
+}
 // da_underwater and the DA_UW_RAMP submersion ramp come from da_water_common.h, which the
 // deferred underwater pass reads through the same header. One owner, one ramp: this file used
 // to declare its own copy and flip sides on a raw .w test, which put the surface on the far
@@ -115,6 +138,8 @@ float4 main( vf I ) : SV_Target
 	// while the request it loads was written at a fine pixel's centre half a pixel away. Taken here,
 	// in uniform control flow.
 	const float  rt_req_slack = 0.75f * fwidth( I.tctexgen.z );
+	// The pixel's footprint on the surface, for the ice's crack lines (they fade below it).
+	const float  footprint = length( fwidth( I.position_w.xz ) );
 #endif
 
 	// ---- geometry of the sight line ------------------------------------------------------
@@ -159,6 +184,14 @@ float4 main( vf I ) : SV_Target
 	// stand-in stays there: the path through the water does at least go to zero at a waterline.
 	const float  shore = wfield_on ? da_wf_shore( Pw.xz ) : da_w_path;
 
+	// ---- ice -------------------------------------------------------------------------------------
+	// Frozen water carries no wave, ripple, ring, caustic, foam or film; liq scales every one of them.
+	const float  ice_cover = da_water_ice( Pw.xz, d_field > 0.001f, shore );
+	// Frozen from half the cover on, as gameplay takes it (CEnvironment::ice_at under 0.5 is water) and as
+	// the snow grid's sheet over the ice begins: the front is the outer half of the cover.
+	const float  ice = saturate( ice_cover * 2.0f );
+	const float  liq = 1.0f - ice;
+
 	// ---- the surface ---------------------------------------------------------------------
 	const float  t = da_wind_state.w;
 	const float3 gustf = da_wind_field_eval( Pw.xz );
@@ -190,8 +223,8 @@ float4 main( vf I ) : SV_Target
 	const float row_k = sqrt( damp / da_w_damp( da_water_iop.w ) );
 	// The shelter is an amplitude and slope variance goes as amplitude squared, so the budget
 	// below keeps adding up to what this patch of water actually carries.
-	slope *= shelter * row_k;
-	mss_explicit *= shelter * shelter * row_k * row_k;
+	slope *= shelter * row_k * liq;
+	mss_explicit *= shelter * shelter * row_k * row_k * liq * liq;
 
 	// Cox and Munk give the slope variance of the WHOLE surface, capillaries included. That is
 	// a budget the three layers below divide: the explicit waves took their half on the CPU,
@@ -205,7 +238,7 @@ float4 main( vf I ) : SV_Target
 	// Sub-wave detail. Faded out with distance because past a point one texel of it spans more
 	// than a wave and it turns into crawling noise - the aliasing the old shader hid by damping
 	// ALL waves with distance, which also flattened the sea it was trying to show.
-	const float det_near = saturate( 1.0f - dist / WATER_DETAIL_FADE );
+	const float det_near = saturate( 1.0f - dist / WATER_DETAIL_FADE ) * liq;
 	const float mss_detail = WATER_DETAIL_SHARE * mss_total * det_near;
 	[branch]
 	if ( det_near > 0.01f )
@@ -214,7 +247,7 @@ float4 main( vf I ) : SV_Target
 
 	// Rain, and the rings every impact leaves. Both are shallow-water business: they ride on
 	// top of the wind sea and fade out where a ripple would be smaller than a pixel.
-	const float rip_near = saturate( 1.0f - dist / WATER_RIPPLE_FADE );
+	const float rip_near = saturate( 1.0f - dist / WATER_RIPPLE_FADE ) * liq;
 	[branch]
 	if ( rip_near > 0.01f )
 	{
@@ -286,7 +319,7 @@ float4 main( vf I ) : SV_Target
 #ifdef DA_WATER_RT_REQUEST
 	// The ray traced reflections' request (water_rtreq.ps, dxr.md 3.7): where this pixel's mirror ray
 	// starts and where it goes. Nothing from below the surface, nor for a ray heading into the water.
-	if ( under || vreflect.y <= 0.02f )
+	if ( under || vreflect.y <= 0.02f || ice > 0.5f )
 		discard;
 	return float4( da_rt_oct_encode( normalize( vreflect ) ), I.tctexgen.z, 2.0f );
 #else
@@ -423,6 +456,7 @@ float4 main( vf I ) : SV_Target
 			off = tilt.xy * ( 0.2497f * da_w_path * float2( m_P._11, m_P._22 ) / ( 2.0f * max( I.tctexgen.z, 0.5f ) ) );
 		}
 		// Near the camera, looking down, the bed a deep column shows lies below the frame's bottom edge.
+		off *= liq;
 		const float2 uv = PosTc + off * da_w_bend_in_frame( PosTc, off );
 		// A refracted tap that lands on something IN FRONT of the surface is a piece of dry
 		// shore being smeared across the water; fall back to the straight tap there.
@@ -437,7 +471,7 @@ float4 main( vf I ) : SV_Target
 	// under a canopy or an overcast sky throws no net), faded with the detail layer's own
 	// distance, past which its cells are smaller than a pixel.
 	[branch]
-	if ( da_water_qual.y > 0.5f && !under && da_w_path > 0.02f && det_near > 0.01f )
+	if ( da_water_qual.y > 0.5f && !under && da_w_path > 0.02f && det_near > 0.01f && ice < 0.5f )
 	{
 		const float3 lum3 = float3( 0.30f, 0.59f, 0.11f );
 		const float  sun_up = saturate( -L_sun_dir_w.y * 4.0f );
@@ -465,7 +499,7 @@ float4 main( vf I ) : SV_Target
 	{
 		const float4 base = s_base.Sample( smp_base, I.tbase );
 		film_rgb = base.rgb * irradiance;
-		film_w = saturate( base.a * scum * saturate( da_w_depth * 6.0f ) );
+		film_w = saturate( base.a * scum * saturate( da_w_depth * 6.0f ) ) * liq;
 	}
 
 	// Shoreline foam. A shoreline is a fixed number of METRES from the bank, so the band rides on
@@ -484,7 +518,7 @@ float4 main( vf I ) : SV_Target
 		b = b * b;
 		const float n = saturate( 0.55f + 2.2f * ( slope.x + slope.y ) );
 		const float run = 0.15f + 0.85f * saturate( hs * ( 1.0f / 0.01f ) );
-		foam = saturate( b * n * WATER_FOAM_STRENGTH * run ) * saturate( da_w_path * 20.0f );
+		foam = saturate( b * n * WATER_FOAM_STRENGTH * run ) * saturate( da_w_path * 20.0f ) * liq;
 	}
 
 	// Floating debris, in the depth window where a bank actually collects it.
@@ -495,7 +529,7 @@ float4 main( vf I ) : SV_Target
 		float k = smoothstep( WATER_LEAVES_NEAR, WATER_LEAVES_NEAR * 3.0f, da_w_depth );
 		k *= smoothstep( WATER_LEAVES_FAR, WATER_LEAVES_FAR * 0.6f, da_w_depth );
 		leaf_rgb = lv.rgb * irradiance;
-		leaf_w = saturate( lv.a * k * WATER_LEAVES_STRENGTH );
+		leaf_w = saturate( lv.a * k * WATER_LEAVES_STRENGTH ) * liq;
 	}
 
 	// ---- composite -------------------------------------------------------------------------
@@ -508,6 +542,28 @@ float4 main( vf I ) : SV_Target
 	final = lerp( final, film_rgb, film_w );
 	final = lerp( final, leaf_rgb, leaf_w );
 
+	// ---- ice -------------------------------------------------------------------------------------
+	// Opaque where it is thick or snowed over: black ice, dark grey-green with grey frozen-in blotches,
+	// sparse pale cracks and streaks of wind-blown snow dust (da_ice_albedo), the water column showing through
+	// a third while it is young. The snow on it is the season's snow on ice (da_ice_snow: patchy while
+	// partial, the March melt pools), letting the ice through where it is thin as the snow layer lets
+	// the ground through, in the open snow's colour. The mirror is the surface's own (the waves are gone
+	// from Nw), dimmer than water's (ice is rough and scatters) and dimmer still on the dusty ice.
+	[branch]
+	if ( ice > 0.001f && !under )
+	{
+		const float4 bare   = da_ice_albedo( Pw.xz, footprint );
+		const float  d_snow = da_ice_snow( Pw.xz, ice_cover );
+		// settled snow (250 kg/m3, 0.6 mm grains): the snow layer's two-way transmission
+		const float  t_snow = 1.0f / ( 1.0f + 0.135f * d_snow * 250.0f / 0.6f );
+		const float  snowc  = smoothstep( 0.002f, 0.02f, d_snow ) * ( 1.0f - t_snow * t_snow );
+		const float3 column = Br * T * thru + body * thru;
+		const float3 body_i = lerp( bare.rgb * irradiance, column, 0.33f * ( 1.0f - saturate( da_snow_ice.x ) * 0.5f ) );
+		const float  F_i    = F * lerp( 0.25f, 0.6f, saturate( bare.a / DA_ICE_GLOSS_MAX ) );
+		float3 ice_rgb = body_i * ( 1.0f - F_i ) + reflection * F_i;
+		ice_rgb = lerp( ice_rgb, min( da_snow_albedo_open.rgb, 0.9f ) * DA_W_SNOW_TINT * irradiance, snowc );
+		final = lerp( final, ice_rgb, ice );
+	}
 	// ---- atmosphere ------------------------------------------------------------------------
 	[branch]
 	if ( under )

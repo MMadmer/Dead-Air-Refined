@@ -267,7 +267,8 @@ bool texture_resolve_name(pcstr fRName, string_path& fn, bool quiet)
     xr_strcpy(fname, fRName);
     fix_texture_name(fname);
 
-    // The season's own copy goes first, bump maps included (r__season).
+    // The season's own copy goes first, from the folder latched for the texture's category, bump maps
+    // included (r__season, da_season.h).
     if (texture_season_overlay(fname, texture_season(), fn))
         return true;
 

@@ -17,6 +17,18 @@
 uniform float4	da_macro_var;
 uniform float4	da_macro_var2;
 
+// Season tint of the ground (docs/dead-air/GRASS.md): the blade grass carries the season only as far as it
+// is drawn, and the terrain sets barely change brightness between seasons, so the ground under the grass
+// takes the canopy colour of the day - lightly between the near blades, fully where they have faded out.
+// The grass cover map is baked per level from the detail slots (da_grass_blades.cpp); da_gtint.y = 0 is off.
+uniform float3x4	m_v2w;
+uniform float4	da_gcover_xf;		// world xz -> cover map uv: xy scale, zw offset
+uniform float4	da_gtint;			// x near strength, y far strength, z fade start (m), w fade end (m)
+uniform float4	da_gtint2;			// xy where the blades' basal pairs fade out (m: from d1 to halfway to d2), zw unused
+uniform float4	da_gcanopy[16];		// rgb canopy of each blade community at the day (albedo space), w = grass_visible
+uniform float4	da_gcanopy_ref[16];	// rgb canopy at the reference day of the latched terrain folder, w = shade under the blades
+Texture2D		s_grass_cover;		// r blade grass, g herbs, b shrubs, a dominant blade community / 15
+
 #ifdef USE_4_BUMP
 f_deffer 	main	( p_bumped I 	)
 #else
@@ -167,6 +179,48 @@ f_deffer 	main	( p_flat I 		)
 		}
 	}
 #endif
+	// The season tint of the ground under and beyond the blade grass, before the puddles so wet darkening
+	// still applies on top. Only the hue moves: the canopy colour is scaled to the ground's brightness,
+	// times how much brighter the canopy is now than on the day the terrain textures show.
+	[branch] if (da_gtint.y > 0.001f)
+	{
+		const float3 Pw = mul(m_v2w, float4(I.position.xyz, 1.0f));
+		const float2 cover_uv = Pw.xz * da_gcover_xf.xy + da_gcover_xf.zw;
+		const float4 gc = s_grass_cover.SampleLevel(smp_rtlinear, cover_uv, 0);
+		// The community is an index: read the nearest texel, never a blend of two.
+		uint gw, gh;
+		s_grass_cover.GetDimensions(gw, gh);
+		const int2 gt = clamp(int2(floor(cover_uv * float2(gw, gh))), int2(0, 0), int2(gw, gh) - 1);
+		const uint gp = min(uint(s_grass_cover.Load(int3(gt, 0)).a * 15.0f + 0.5f), 15u);
+		const float cover = saturate(gc.r + 0.5f * gc.g) * da_gcanopy[gp].w;
+		const float gdist = length(I.position.xyz);
+		const float gk = lerp(da_gtint.x, da_gtint.y, saturate((gdist - da_gtint.z) / max(da_gtint.w - da_gtint.z, 1.0f)));
+		const float3 LUMW = float3(0.299f, 0.587f, 0.114f);
+		const float lum_d = dot(D.rgb, LUMW);
+		const float lum_c = max(dot(da_gcanopy[gp].rgb, LUMW), 1e-3f);
+		const float ratio = clamp(sqrt(lum_c / max(dot(da_gcanopy_ref[gp].rgb, LUMW), 1e-3f)), 0.75f, 1.33f);
+		D.rgb = lerp(D.rgb, da_gcanopy[gp].rgb * (lum_d / lum_c) * ratio, saturate(cover * gk));
+		// Between the near blades lies the stand's own litter - last year's leaves and straw, matted, in the
+		// shade of the live ones - not bare soil: the canopy's colour turned toward a grey-brown thatch at
+		// 40-65 % of its value, the ground's own light and dark kept as the litter's grain. A little shade on
+		// top (GoT darkens the terrain under its grass with the blades' base occlusion), so the gaps stay below
+		// the blades and never glow; both ease out over the far half of the blades' range, where the blades hide
+		// the ground anyway.
+		// Past the blades' basal pairs (they fade out from d1 to halfway to d2) only the taller layer is drawn, at
+		// the pixel rule, and a gap between its blades looks into the stand's lower leaves, not onto its litter:
+		// on a slope facing the camera (a hill at 10-40 m) the litter read as dark ground between thin pale
+		// strokes. There the ground is the stand's under-layer: the canopy colour with less thatch in it, at
+		// 60-75 % of its value - about the mean of the blades with their base occlusion, so the gaps never glow -
+		// and less shade on top.
+		const float g_near = saturate(gc.r) * (1.0f - smoothstep(0.5f * da_gtint.z, da_gtint.z, gdist));
+		const float under = smoothstep(da_gtint2.x, max(da_gtint2.y, da_gtint2.x + 1.0f), gdist);
+		const float grain = saturate(lum_d / lum_c);
+		const float3 litter = lerp(da_gcanopy[gp].rgb, float3(0.42f, 0.37f, 0.31f), lerp(0.35f, 0.15f, under))
+			* lerp(lerp(0.4f, 0.65f, grain), lerp(0.6f, 0.75f, grain), under);
+		D.rgb = lerp(D.rgb, litter, lerp(0.65f, 0.85f, under) * g_near * da_gcanopy[gp].w);
+		D.rgb *= 1.0f - lerp(0.25f, 0.1f, under) * g_near * da_gcanopy_ref[gp].w;
+	}
+
 	// Puddles and wet ground. Placed here, after everything else: by this point the normal
 	// (after detail maps), gloss and colour are all assembled - exactly the three things
 	// water changes. The function computes ONLY the mask and normal; colour and gloss are

@@ -517,7 +517,8 @@
 	<string id="st_da_x64_weather_hint_period">
 		<text>Weather on the level: left in the good period, right in the bad one. The periods take turns.</text>
 	</string>
-	<!-- The seasons page of the weather dialog: the world's texture set (r__season). -->
+	<!-- The seasons page of the weather dialog: the time of year the world shows (r__season), the
+	     computer's calendar or the 15th of a month. -->
 	<string id="st_cap_af_season_options">
 		<text>Seasons</text>
 	</string>
@@ -525,28 +526,49 @@
 		<text>Time of year</text>
 	</string>
 	<string id="ui_mm_af_season">
-		<text>Season</text>
+		<text>Month</text>
 	</string>
-	<string id="ui_mm_season_autumn">
-		<text>Autumn</text>
+	<string id="ui_mm_season_calendar">
+		<text>PC calendar</text>
 	</string>
-	<string id="ui_mm_season_winter">
-		<text>Winter</text>
+	<string id="ui_mm_season_january">
+		<text>January</text>
 	</string>
-	<string id="ui_mm_season_spring_early">
-		<text>Early spring</text>
+	<string id="ui_mm_season_february">
+		<text>February</text>
 	</string>
-	<string id="ui_mm_season_spring">
-		<text>Spring</text>
+	<string id="ui_mm_season_march">
+		<text>March</text>
 	</string>
-	<string id="ui_mm_season_spring_late">
-		<text>Late spring</text>
+	<string id="ui_mm_season_april">
+		<text>April</text>
 	</string>
-	<string id="ui_mm_season_summer">
-		<text>Summer</text>
+	<string id="ui_mm_season_may">
+		<text>May</text>
+	</string>
+	<string id="ui_mm_season_june">
+		<text>June</text>
+	</string>
+	<string id="ui_mm_season_july">
+		<text>July</text>
+	</string>
+	<string id="ui_mm_season_august">
+		<text>August</text>
+	</string>
+	<string id="ui_mm_season_september">
+		<text>September</text>
+	</string>
+	<string id="ui_mm_season_october">
+		<text>October</text>
+	</string>
+	<string id="ui_mm_season_november">
+		<text>November</text>
+	</string>
+	<string id="ui_mm_season_december">
+		<text>December</text>
 	</string>
 	<string id="st_da_x64_weather_hint_season">
-		<text>What the Zone looks like: trees, grass, ground and the map. Switching reloads the textures that differ, which takes a moment.</text>
+		<text>Time of year in the Zone: grass, snow, trees and ground. PC calendar follows this computer's date.</text>
 	</string>
 	<!-- The weather dialog's own texts, its lists and the levels it lists have no English text: English only. -->
 	<string id="ui_mm_weather_options">

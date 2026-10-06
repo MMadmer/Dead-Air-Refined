@@ -194,7 +194,7 @@ private:
     // Lists-expanded
     CTexture* textures_ps[CTexture::mtMaxPixelShaderTextures]; // stages
     //CTexture* textures_vs[5]; // dmap + 4 vs
-    CTexture* textures_vs[CTexture::mtMaxVertexShaderTextures]; // 4 vs
+    CTexture* textures_vs[CTexture::mtMaxVertexShaderTextures]; // vs (and the mesh shaders)
     CTexture* textures_gs[CTexture::mtMaxGeometryShaderTextures]; // 4 vs
     s8 last_texture_ps;
     s8 last_texture_vs;

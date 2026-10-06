@@ -81,6 +81,36 @@ void CDetail::transfer(Fmatrix& mXform, fvfVertexOut* vDest, u32 C, u16* iDest, 
     transfer_indices(iDest, iOffset);
 }
 
+u64 detail_key_fnv(const void* data, size_t size, u64 hash)
+{
+    for (const u8 *it = static_cast<const u8*>(data), *end = it + size; it != end; ++it)
+        hash = (hash ^ *it) * 0x100000001b3ull;
+    return hash;
+}
+
+namespace
+{
+// Round half away from zero in double, as the reference generator does.
+s32 key_quant(float x, double k)
+{
+    const double v = double(x) * k;
+    return v >= 0.0 ? s32(v + 0.5) : -s32(-v + 0.5);
+}
+
+u64 key_name(pcstr name, u64 hash)
+{
+    for (pcstr c = name; *c; ++c)
+    {
+        // ASCII-only lower case: the reference lowers bytes, not code-page letters.
+        const u8 b = u8(*c);
+        const u8 l = (b >= 'A' && b <= 'Z') ? u8(b + 32) : b;
+        hash = detail_key_fnv(&l, 1, hash);
+    }
+    const u8 zero = 0;
+    return detail_key_fnv(&zero, 1, hash);
+}
+} // namespace
+
 void CDetail::Load(IReader* S)
 {
     // Shader
@@ -88,6 +118,7 @@ void CDetail::Load(IReader* S)
     S->r_stringZ(fnS, sizeof(fnS));
     S->r_stringZ(fnT, sizeof(fnT));
     shader.create(fnS, fnT);
+    m_key = key_name(fnT, key_name(fnS, 0xcbf29ce484222325ull));
 
     // Params
     m_Flags.assign(S->r_u32());
@@ -118,6 +149,32 @@ void CDetail::Load(IReader* S)
     for (u32 i = 0; i < number_vertices; i++)
         bv_bb.modify(vertices[i].P);
     bv_bb.getsphere(bv_sphere.P, bv_sphere.R);
+
+    // K1, from the data in file order (Optimize below permutes it).
+    {
+        const u32 flags = m_Flags.get();
+        const s32 scale[2] = {key_quant(m_fMinScale, 1000.0), key_quant(m_fMaxScale, 1000.0)};
+        const u32 counts[2] = {number_vertices, number_indices};
+        m_key = detail_key_fnv(&flags, sizeof(flags), m_key);
+        m_key = detail_key_fnv(scale, sizeof(scale), m_key);
+        m_key = detail_key_fnv(counts, sizeof(counts), m_key);
+        m_uv_min[0] = m_uv_min[1] = flt_max;
+        m_uv_max[0] = m_uv_max[1] = -flt_max;
+        for (u32 i = 0; i < number_vertices; ++i)
+        {
+            const fvfVertexIn& v = vertices[i];
+            const s32 q[5] = {key_quant(v.P.x, 1000.0), key_quant(v.P.y, 1000.0), key_quant(v.P.z, 1000.0),
+                key_quant(v.u, 16384.0), key_quant(v.v, 16384.0)};
+            m_key = detail_key_fnv(q, sizeof(q), m_key);
+            m_uv_min[0] = std::min(m_uv_min[0], v.u);
+            m_uv_min[1] = std::min(m_uv_min[1], v.v);
+            m_uv_max[0] = std::max(m_uv_max[0], v.u);
+            m_uv_max[1] = std::max(m_uv_max[1], v.v);
+        }
+        m_key = detail_key_fnv(indices, number_indices * sizeof(u16), m_key);
+        if (!number_vertices)
+            m_uv_min[0] = m_uv_min[1] = m_uv_max[0] = m_uv_max[1] = 0.f;
+    }
 
 #if !defined(_EDITOR) && defined(USE_DX11)
     Optimize();

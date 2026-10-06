@@ -3,6 +3,7 @@
 #include "DetailManager.h"
 #include "xrCDB/Intersect.hpp"
 #include "xrMaterialSystem/GameMtlLib.h"
+#include "da_grass_data.h"
 
 #ifdef DEBUG
 #include "dxDebugRender.h"
@@ -120,8 +121,6 @@ void CDetailManager::cache_Decompress(Slot* S)
     // The wave group of each blade, per slot like the rest, so a slot looks the same in every
     // session and after every re-decompression.
     CRandom r_wave(0x7A3C95E1 ^ p_rnd);
-    // The season's thinning, per slot like the rest.
-    CRandom r_season(0x5EA50A11 ^ p_rnd);
 
     // Prepare to actual-bounds-calculations
     Fbox Bounds;
@@ -182,12 +181,10 @@ void CDetailManager::cache_Decompress(Slot* S)
 
             const u32 object_id = DS.r_id(index);
             CDetail* Dobj = objects[object_id];
-            // The season keeps a share of the grass and of the shrubs: none of the grass under winter
-            // snow, the shrubs standing. Drawn for every item, so a slot thins the same way each time.
-            const bool shrub = object_id < m_shrub.size() && m_shrub[object_id];
-            const float keep = shrub ? m_season_grass.z : m_season_grass.x;
-            const float season_height = shrub ? m_season_grass.w : m_season_grass.y;
-            if (r_season.randF() >= keep)
+            // The blade classes are the blades' (da_grass_blades.cpp): the stock path keeps only the rest.
+            // The season does not thin anything here: keep, height and burial are the shaders' (every
+            // item exists, its draw decides), so a slot never has to decompress again for a new day.
+            if (m_blades && da_grass_object_profile(*Dobj) >= 0)
                 continue;
             SlotItem* ItemP = poolSI.create();
             SlotItem& Item = *ItemP;
@@ -249,7 +246,7 @@ void CDetailManager::cache_Decompress(Slot* S)
 
 // Angles and scale
 #ifndef DBG_SWITCHOFF_RANDOMIZE
-            Item.scale = r_scale.randF(Dobj->m_fMinScale * 0.5f, Dobj->m_fMaxScale * 0.9f) * ps_current_detail_height * season_height;
+            Item.scale = r_scale.randF(Dobj->m_fMinScale * 0.5f, Dobj->m_fMaxScale * 0.9f) * ps_current_detail_height;
 #else
             Item.scale = (Dobj->m_fMinScale * 0.5f + Dobj->m_fMaxScale * 0.9f) / 2;
 // Item.scale	= 0.1f;

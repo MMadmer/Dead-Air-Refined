@@ -49,6 +49,11 @@ Fvector4 da_rt_constants();
 void da_rt_level_load();
 void da_rt_level_unload();
 
+// Textures were reloaded with new views (CResourceManager::SyncTextureSeason, main thread between
+// frames): the scene's bindless tables move to the new views now, while the replaced ones are still
+// alive, so no slot holds a released view.
+void da_rt_textures_replaced();
+
 // The frame (r2_R_render.cpp, phase_combine).
 void da_rt_frame_scene(CBackend& cmd_list); // before async fork A: acceleration structures
 void da_rt_sun_pass(CBackend& cmd_list);    // before the sun accumulation

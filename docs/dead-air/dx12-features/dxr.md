@@ -109,6 +109,10 @@ These points supersede the text below where they differ (ids refer to `PLAN.md` 
     (records index it relative to `RtView.scene.y`); on a texture-write-generation change the views
     are compared and, when one changed, written into a fresh range (the old one freed after the
     fence); every change requires the textures in `NON_PIXEL_SHADER_RESOURCE` again (`RequireMany`).
+    The season's texture reload (`CResourceManager::SyncTextureSeason`) calls `da_rt_textures_replaced`
+    after each chunk's new views exist and before it releases the old ones: the tables move to the new
+    views at once (the read state follows on the next frame's refresh), so no slot holds a released view
+    (the layer's `! [d3d12] bindless: a view was released...` line).
   - **Moving objects** (R4, R5): while occlusion or reflections run, `SpatialSpace.q_sphere` around
     the camera (Low 40 m, Medium/High 60 m), skipping the view entity, HUD and invisible renderables.
     Plain meshes use the engine buffers; model parts riding one bone (`RM_SINGLE`) get their

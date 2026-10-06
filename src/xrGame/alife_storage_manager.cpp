@@ -2172,9 +2172,11 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
                 CSE_ALifeDynamicObject* object = it->second;
                 if (object->ID_Parent == 0xffff || object_map.find(object->ID_Parent) != object_map.end())
                     continue;
+                // Through the registry: it also clears the id index and the save-extension type bits, a
+                // bare map erase left a dangling pointer there (alife():object(id) then read freed memory).
+                objects().remove(object->ID);
                 CSE_Abstract* abstract = object;
                 F_entity_Destroy(abstract);
-                object_map.erase(it);
                 removed_any = true;
                 ++pruned;
                 break; // iterator invalidated

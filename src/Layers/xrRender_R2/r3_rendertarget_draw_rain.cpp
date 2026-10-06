@@ -6,7 +6,8 @@ namespace xray::render::RENDER_NAMESPACE
 {
 void CRenderTarget::draw_rain(CBackend& cmd_list, light& RainSetup)
 {
-    const float fRainFactor = GetCurrentWetness() + GetCurrentSnowFactor();
+    // Liquid wetness only: snow does not wet the G-buffer.
+    const float fRainFactor = GetCurrentWetness();
 
     // Common calc for quad-rendering
     u32 Offset;

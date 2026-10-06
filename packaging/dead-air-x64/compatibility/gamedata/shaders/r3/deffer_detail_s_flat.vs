@@ -34,16 +34,32 @@ v2p_flat 	main (v_detail v, uint instance_id : SV_InstanceID)
 		m0.y *= k; m1.y *= k; m2.y *= k;
 	}
 
+	const float3 root	= float3(m0.w, m1.w, m2.w);
+	// The season of the class (da_detail_common.h), see deffer_detail_w_flat.vs.
+	const float hs	= detail_height_scale(m0, m1, m2);
+	const float sk	= stock_season_k(root, hs, stock_season, false);
+	float sk_prev	= sk;
+	[branch] if ( da_wind_prev_on() )
+	{
+		sk_prev	= stock_season_k(root, hs, stock_season_prev, true);
+		sk_prev	= sk_prev > 0.0f ? sk_prev : sk;
+	}
+	float4	m0p = m0, m1p = m1, m2p = m2;
+	stock_season_rows(m0, m1, m2, sk);
+	stock_season_rows(m0p, m1p, m2p, sk_prev);
+
 	const float4 pos_rest = detail_world_pos(m0, m1, m2, v.pos);
 	const float H_s	= detail_height(m0, m1, m2, v.pos.y);
-	const float3 root	= float3(m0.w, m1.w, m2.w);
 
 	// Wind motors: still details do not wave, but a boot or a blast still bends them.
 	float4	pos	= detail_motor_pos(pos_rest, root, H_s, false);
 	// The previous frame's motors, only while motion vectors are rendered.
 	float4	pos_prev	= pos;
 	[branch] if ( da_wind_prev_on() )
-		pos_prev	= detail_motor_pos(pos_rest, root, H_s, true);
+	{
+		const float4 pos_rest_prev = detail_world_pos(m0p, m1p, m2p, v.pos);
+		pos_prev	= detail_motor_pos(pos_rest_prev, root, detail_height(m0p, m1p, m2p, v.pos.y), true);
+	}
 
 	v2p_flat	O	= detail_v2p(root, pos, pos_prev, v.misc, consts, c0.x);
 

@@ -38,6 +38,10 @@ StructuredBuffer<detail_rows>	grass_rows		: register(t2);
 
 groupshared detail_rows	gs_rows[GRASS_MAX_IPG];
 #ifndef DETAIL_DEPTH
+// The previous frame's season factor over this frame's, per tuft (motion vectors).
+groupshared float		gs_kprev[GRASS_MAX_IPG];
+#endif
+#ifndef DETAIL_DEPTH
 groupshared float		gs_tint[GRASS_MAX_IPG];
 #endif
 #ifdef DETAIL_WAVE
@@ -61,7 +65,23 @@ void main (uint tid : SV_GroupThreadID, uint gid : SV_GroupID, in payload grass_
 	// The terms of each tuft, once.
 	if ( tid < n )
 	{
-		const detail_rows d = detail_rows_faded( grass_rows[P.rows[first + tid]] );
+		detail_rows d = detail_rows_faded( grass_rows[P.rows[first + tid]] );
+		// The season of the class: keep, height, burial (da_detail_common.h).
+		{
+			const float3 sroot = float3( d.m0.w, d.m1.w, d.m2.w );
+			const float hs = detail_height_scale( d.m0, d.m1, d.m2 );
+			const float sk = stock_season_k( sroot, hs, stock_season, false );
+#ifndef DETAIL_DEPTH
+			float sk_prev = sk;
+			[branch] if ( da_wind_prev_on() )
+			{
+				sk_prev = stock_season_k( sroot, hs, stock_season_prev, true );
+				sk_prev = sk_prev > 0.0f ? sk_prev : sk;
+			}
+			gs_kprev[tid] = sk > 0.0f ? sk_prev / sk : 1.0f;
+#endif
+			stock_season_rows( d.m0, d.m1, d.m2, sk );
+		}
 		gs_rows[tid] = d;
 #ifdef DETAIL_WAVE
 		const float3 root = float3( d.m0.w, d.m1.w, d.m2.w );
@@ -109,13 +129,19 @@ void main (uint tid : SV_GroupThreadID, uint gid : SV_GroupID, in payload grass_
 		O.hpos = mul( m_WVP, pos );
 #else
 		float4 pos_prev = pos;
+		[branch] if ( da_wind_prev_on() )
+		{
+			// The previous frame's height column under its own season factor.
+			const float kp = gs_kprev[i];
+			const float4 pos_rest_prev = detail_world_pos( float4( d.m0.x, d.m0.y * kp, d.m0.zw ),
+				float4( d.m1.x, d.m1.y * kp, d.m1.zw ), float4( d.m2.x, d.m2.y * kp, d.m2.zw ), vpos );
 #ifdef DETAIL_WAVE
-		[branch] if ( da_wind_prev_on() )
-			pos_prev = detail_bent_pos( pos_rest, H, detail_bend_v( root, gs_wind_prev[i], H, frac, true ) );
+			const float H_prev = H * kp;
+			pos_prev = detail_bent_pos( pos_rest_prev, H_prev, detail_bend_v( root, gs_wind_prev[i], H_prev, frac, true ) );
 #else
-		[branch] if ( da_wind_prev_on() )
-			pos_prev = detail_motor_pos( pos_rest, root, H_s, true );
+			pos_prev = detail_motor_pos( pos_rest_prev, root, H_s * kp, true );
 #endif
+		}
 		GRASS_VERTEX O = detail_v2p( root, pos, pos_prev, misc, consts, d.c0.x );
 		float da_hemi = d.c0.w;
 		[branch] if ( grass_tint.x > 0.001f )

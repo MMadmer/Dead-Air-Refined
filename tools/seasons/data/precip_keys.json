@@ -1,0 +1,817 @@
+{
+ "meta": {
+  "version": "1.0",
+  "generated": "2026-10-05",
+  "conventions": "keyframes.json: 12 keys on the 15th, doy as in keyframes.json, periodic monotone cubic (Fritsch-Carlson) between keys, never Catmull-Rom; a menu month pins doy to its 15th",
+  "model": "phase of a precipitation day = E over daily mean T ~ N(T_month + dT, sigma_month) of a three-phase logistic: P_snow = 1/(1+exp((T-Ts)/w)), P_rain = 1/(1+exp(-(T-Tl)/w)), P_mixed = rest",
+  "fit_to": "Kyiv 33345 solid/mixed/liquid precipitation days per month, Kyiv 1991-2020 monthly T",
+  "fit": {
+   "Ts_C": -0.4,
+   "Tl_C": 2.8,
+   "w_C": 2.0,
+   "dT_precip_day_warm_bias_C": -0.5,
+   "sigma_scale_precip_days": 1.4,
+   "T_equal_snow_rain_C": 1.2,
+   "weighted_sse": 0.4653
+  },
+  "jennings2018_check": "50 % threshold NH mean 1.0 C (95 % of stations -0.4..2.4), 10-90 % width 2.6-4.6 C (VERIFIED, PMC5861046)",
+  "applied_to": "Chornobyl 33231 1981-2010 monthly means (NOAA via en.wiki); sigma from the 2017 Chornobyl daily table, 3-month running mean",
+  "djf_check": {
+   "model_snow_days": 17.7,
+   "model_mixed_days": 3.6,
+   "model_rain_days": 4.8,
+   "station_2018_19": "snow 35 / rain 18 days (Litopys 2019, VERIFIED)",
+   "station_2021_22": "snow 32 / rain 10 days (Litopys 2022, VERIFIED)"
+  },
+  "thunder": "Kyiv/Gomel mean monthly shape scaled to Bragin 29 days/yr (SP 2.04 1991-2020); thunder_weight = P(thunder | precip day) / July value",
+  "tags": "inputs VERIFIED (URLs in followup_3.md); every key INFERRED",
+  "field_defs": {
+   "phase.snow/mixed/rain": "share of precipitation days by phase (sum 1)",
+   "snowfall_share": "phase.snow + 0.5 * phase.mixed: share of falling mass that arrives as snow; drives CEffect_Rain snow mode and the liquid share of the wetness accumulator",
+   "thunder_weight": "P(thunder | precip day) normalised to July: probability a stormy weather keeps bolts",
+   "p_freezing_rain_given_precip_day": "glaze days / precip days: rain onto frozen ground -> crust + icy film",
+   "p_frost_night": "P(daily minimum < 0 C): puddles and wet film freeze that night",
+   "ice.still / ice.flowing": "iced share of still water (ponds, oxbows, marsh pools, floodplain) and of flowing channels; 1 - flowing in Jan/Feb = polynyas",
+   "ice.snow_on_ice_cover/depth_m": "snow lying on the ice: open cover x ice, open depth x 0.8"
+  },
+  "derived_dates_fc": {
+   "snowfall_share_0.5": [
+    [
+     "14 Nov",
+     "up"
+    ],
+    [
+     "17 Mar",
+     "down"
+    ]
+   ],
+   "snowfall_share_0.1": [
+    [
+     "07 Oct",
+     "up"
+    ],
+    [
+     "20 Apr",
+     "down"
+    ]
+   ],
+   "p_rain_0.9": [
+    [
+     "02 Oct",
+     "down"
+    ],
+    [
+     "26 Apr",
+     "up"
+    ]
+   ],
+   "thunder_weight_0.1": [
+    [
+     "04 Oct",
+     "down"
+    ],
+    [
+     "05 Apr",
+     "up"
+    ]
+   ],
+   "thunder_weight_0.5": [
+    [
+     "30 Aug",
+     "down"
+    ],
+    [
+     "04 May",
+     "up"
+    ]
+   ],
+   "p_frost_night_0.5": [
+    [
+     "06 Nov",
+     "up"
+    ],
+    [
+     "27 Mar",
+     "down"
+    ]
+   ],
+   "p_frost_night_0.1": [
+    [
+     "08 Oct",
+     "up"
+    ],
+    [
+     "22 Apr",
+     "down"
+    ]
+   ],
+   "ice_still_0.1": [
+    [
+     "20 Nov",
+     "up"
+    ],
+    [
+     "05 Apr",
+     "down"
+    ]
+   ],
+   "ice_still_0.5": [
+    [
+     "02 Dec",
+     "up"
+    ],
+    [
+     "16 Mar",
+     "down"
+    ]
+   ],
+   "ice_still_0.9": [
+    [
+     "22 Dec",
+     "up"
+    ],
+    [
+     "25 Feb",
+     "down"
+    ]
+   ],
+   "ice_flowing_0.1": [
+    [
+     "24 Nov",
+     "up"
+    ],
+    [
+     "06 Apr",
+     "down"
+    ]
+   ],
+   "ice_flowing_0.5": [
+    [
+     "10 Dec",
+     "up"
+    ],
+    [
+     "21 Mar",
+     "down"
+    ]
+   ],
+   "ice_flowing_0.9": [
+    [
+     "09 Jan",
+     "up"
+    ],
+    [
+     "21 Feb",
+     "down"
+    ]
+   ],
+   "snowfall_share_range": [
+    0.0,
+    0.766
+   ],
+   "p_snow_range": [
+    0.0,
+    0.696
+   ],
+   "p_rain_range": [
+    0.163,
+    1.0
+   ],
+   "thunder_weight_range": [
+    0.002,
+    1.0
+   ],
+   "p_frost_night_range": [
+    0.0,
+    0.934
+   ],
+   "ice_still_range": [
+    0.0,
+    1.0
+   ],
+   "ice_flowing_range": [
+    0.0,
+    0.92
+   ]
+  }
+ },
+ "months": [
+  {
+   "month": 1,
+   "day": 15,
+   "doy": 15,
+   "name": "Jan",
+   "T_mean_C": -3.5,
+   "T_min_C": -6.1,
+   "T_max_C": -0.8,
+   "daily_T_sigma_C": 5.1,
+   "precip_mm_month": 34.0,
+   "precip_days_ge1mm": 8.1,
+   "p_precip_day": 0.261,
+   "phase": {
+    "snow": 0.674,
+    "mixed": 0.129,
+    "rain": 0.197
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.636,
+    "mixed": 0.182,
+    "rain": 0.182,
+    "days": 22
+   },
+   "phase_kyiv_model": {
+    "snow": 0.66,
+    "mixed": 0.132,
+    "rain": 0.208
+   },
+   "thunder_days": 0.17,
+   "p_thunder_day": 0.0055,
+   "p_thunder_given_precip_day": 0.021,
+   "glaze_days_kyiv": 2,
+   "p_freezing_rain_given_precip_day": 0.247,
+   "blizzard_days_kyiv": 2,
+   "fog_days_kyiv_gomel": 4.5,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 8,
+    "tmean_le_0": 8
+   },
+   "thunder_weight": 0.024,
+   "p_frost_night": 0.914,
+   "station_2017_share_tn_below_0": 0.968,
+   "snowfall_share": 0.739,
+   "ice": {
+    "still": 1.0,
+    "flowing": 0.92,
+    "flood_ice_keyframes": 1.0,
+    "snow_on_ice_cover": 1.0,
+    "snow_on_ice_depth_m": 0.136
+   }
+  },
+  {
+   "month": 2,
+   "day": 15,
+   "doy": 46,
+   "name": "Feb",
+   "T_mean_C": -3.4,
+   "T_min_C": -6.7,
+   "T_max_C": 0.1,
+   "daily_T_sigma_C": 4.16,
+   "precip_mm_month": 36.8,
+   "precip_days_ge1mm": 8.9,
+   "p_precip_day": 0.318,
+   "phase": {
+    "snow": 0.696,
+    "mixed": 0.141,
+    "rain": 0.163
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.65,
+    "mixed": 0.15,
+    "rain": 0.2,
+    "days": 20
+   },
+   "phase_kyiv_model": {
+    "snow": 0.638,
+    "mixed": 0.157,
+    "rain": 0.206
+   },
+   "thunder_days": 0.06,
+   "p_thunder_day": 0.002,
+   "p_thunder_given_precip_day": 0.006,
+   "glaze_days_kyiv": 2,
+   "p_freezing_rain_given_precip_day": 0.225,
+   "blizzard_days_kyiv": 2,
+   "fog_days_kyiv_gomel": 4.5,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 6,
+    "tmean_le_0": 3
+   },
+   "thunder_weight": 0.007,
+   "p_frost_night": 0.925,
+   "station_2017_share_tn_below_0": 0.821,
+   "snowfall_share": 0.766,
+   "ice": {
+    "still": 1.0,
+    "flowing": 0.92,
+    "flood_ice_keyframes": 1.0,
+    "snow_on_ice_cover": 1.0,
+    "snow_on_ice_depth_m": 0.176
+   }
+  },
+  {
+   "month": 3,
+   "day": 15,
+   "doy": 74,
+   "name": "Mar",
+   "T_mean_C": 1.5,
+   "T_min_C": -2.3,
+   "T_max_C": 6.0,
+   "daily_T_sigma_C": 3.99,
+   "precip_mm_month": 35.6,
+   "precip_days_ge1mm": 8.1,
+   "p_precip_day": 0.261,
+   "phase": {
+    "snow": 0.416,
+    "mixed": 0.192,
+    "rain": 0.392
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.438,
+    "mixed": 0.188,
+    "rain": 0.375,
+    "days": 16
+   },
+   "phase_kyiv_model": {
+    "snow": 0.358,
+    "mixed": 0.19,
+    "rain": 0.452
+   },
+   "thunder_days": 0.11,
+   "p_thunder_day": 0.0036,
+   "p_thunder_given_precip_day": 0.014,
+   "glaze_days_kyiv": 0.4,
+   "p_freezing_rain_given_precip_day": 0.049,
+   "blizzard_days_kyiv": 1,
+   "fog_days_kyiv_gomel": 3.5,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 9,
+    "tmean_le_0": 0
+   },
+   "thunder_weight": 0.016,
+   "p_frost_night": 0.697,
+   "station_2017_share_tn_below_0": 0.452,
+   "snowfall_share": 0.512,
+   "ice": {
+    "still": 0.5,
+    "flowing": 0.6,
+    "flood_ice_keyframes": 0.5,
+    "snow_on_ice_cover": 0.27,
+    "snow_on_ice_depth_m": 0.08
+   }
+  },
+  {
+   "month": 4,
+   "day": 15,
+   "doy": 105,
+   "name": "Apr",
+   "T_mean_C": 8.9,
+   "T_min_C": 3.9,
+   "T_max_C": 14.5,
+   "daily_T_sigma_C": 3.56,
+   "precip_mm_month": 40.0,
+   "precip_days_ge1mm": 7.5,
+   "p_precip_day": 0.25,
+   "phase": {
+    "snow": 0.076,
+    "mixed": 0.104,
+    "rain": 0.821
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.071,
+    "mixed": 0.071,
+    "rain": 0.857,
+    "days": 14
+   },
+   "phase_kyiv_model": {
+    "snow": 0.054,
+    "mixed": 0.083,
+    "rain": 0.864
+   },
+   "thunder_days": 1.13,
+   "p_thunder_day": 0.0376,
+   "p_thunder_given_precip_day": 0.151,
+   "glaze_days_kyiv": 0.1,
+   "p_freezing_rain_given_precip_day": 0.013,
+   "blizzard_days_kyiv": 0.1,
+   "fog_days_kyiv_gomel": 2.0,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 2,
+    "tmean_le_0": 0
+   },
+   "thunder_weight": 0.176,
+   "p_frost_night": 0.141,
+   "station_2017_share_tn_below_0": 0.3,
+   "snowfall_share": 0.128,
+   "ice": {
+    "still": 0.0,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0,
+    "snow_on_ice_cover": 0.0,
+    "snow_on_ice_depth_m": 0.0
+   }
+  },
+  {
+   "month": 5,
+   "day": 15,
+   "doy": 135,
+   "name": "May",
+   "T_mean_C": 14.9,
+   "T_min_C": 9.1,
+   "T_max_C": 21.0,
+   "daily_T_sigma_C": 3.82,
+   "precip_mm_month": 60.8,
+   "precip_days_ge1mm": 8.7,
+   "p_precip_day": 0.281,
+   "phase": {
+    "snow": 0.007,
+    "mixed": 0.007,
+    "rain": 0.986
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.007,
+    "mixed": 0.007,
+    "rain": 0.986,
+    "days": 14.2
+   },
+   "phase_kyiv_model": {
+    "snow": 0.008,
+    "mixed": 0.019,
+    "rain": 0.973
+   },
+   "thunder_days": 5.08,
+   "p_thunder_day": 0.1639,
+   "p_thunder_given_precip_day": 0.584,
+   "glaze_days_kyiv": 0,
+   "p_freezing_rain_given_precip_day": 0.0,
+   "blizzard_days_kyiv": 0,
+   "fog_days_kyiv_gomel": 1.0,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 8,
+    "tmean_le_0": 0
+   },
+   "phase_note": "clamped to Kyiv observed shares (<= 0.2 solid+mixed days)",
+   "thunder_weight": 0.68,
+   "p_frost_night": 0.012,
+   "station_2017_share_tn_below_0": 0.065,
+   "snowfall_share": 0.011,
+   "ice": {
+    "still": 0.0,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0,
+    "snow_on_ice_cover": 0.0,
+    "snow_on_ice_depth_m": 0.0
+   }
+  },
+  {
+   "month": 6,
+   "day": 15,
+   "doy": 166,
+   "name": "Jun",
+   "T_mean_C": 17.9,
+   "T_min_C": 12.3,
+   "T_max_C": 23.7,
+   "daily_T_sigma_C": 3.3,
+   "precip_mm_month": 73.2,
+   "precip_days_ge1mm": 10.2,
+   "p_precip_day": 0.34,
+   "phase": {
+    "snow": 0.0,
+    "mixed": 0.0,
+    "rain": 1.0
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.0,
+    "mixed": 0.0,
+    "rain": 1.0,
+    "days": 15
+   },
+   "phase_kyiv_model": {
+    "snow": 0.001,
+    "mixed": 0.003,
+    "rain": 0.996
+   },
+   "thunder_days": 7.9,
+   "p_thunder_day": 0.2635,
+   "p_thunder_given_precip_day": 0.775,
+   "glaze_days_kyiv": 0,
+   "p_freezing_rain_given_precip_day": 0.0,
+   "blizzard_days_kyiv": 0,
+   "fog_days_kyiv_gomel": 0.7,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 7,
+    "tmean_le_0": 0
+   },
+   "phase_note": "clamped to Kyiv observed shares (<= 0.2 solid+mixed days)",
+   "thunder_weight": 0.902,
+   "p_frost_night": 0.001,
+   "station_2017_share_tn_below_0": 0.0,
+   "snowfall_share": 0.0,
+   "ice": {
+    "still": 0.0,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0,
+    "snow_on_ice_cover": 0.0,
+    "snow_on_ice_depth_m": 0.0
+   }
+  },
+  {
+   "month": 7,
+   "day": 15,
+   "doy": 196,
+   "name": "Jul",
+   "T_mean_C": 19.9,
+   "T_min_C": 14.5,
+   "T_max_C": 25.7,
+   "daily_T_sigma_C": 3.4,
+   "precip_mm_month": 79.5,
+   "precip_days_ge1mm": 9.2,
+   "p_precip_day": 0.297,
+   "phase": {
+    "snow": 0.0,
+    "mixed": 0.0,
+    "rain": 1.0
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.0,
+    "mixed": 0.0,
+    "rain": 1.0,
+    "days": 14
+   },
+   "phase_kyiv_model": {
+    "snow": 0.0,
+    "mixed": 0.001,
+    "rain": 0.998
+   },
+   "thunder_days": 7.9,
+   "p_thunder_day": 0.255,
+   "p_thunder_given_precip_day": 0.859,
+   "glaze_days_kyiv": 0,
+   "p_freezing_rain_given_precip_day": 0.0,
+   "blizzard_days_kyiv": 0,
+   "fog_days_kyiv_gomel": 0.7,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 11,
+    "tmean_le_0": 0
+   },
+   "phase_note": "clamped to Kyiv observed shares (<= 0.2 solid+mixed days)",
+   "thunder_weight": 1.0,
+   "p_frost_night": 0.0,
+   "station_2017_share_tn_below_0": 0.0,
+   "snowfall_share": 0.0,
+   "ice": {
+    "still": 0.0,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0,
+    "snow_on_ice_cover": 0.0,
+    "snow_on_ice_depth_m": 0.0
+   }
+  },
+  {
+   "month": 8,
+   "day": 15,
+   "doy": 227,
+   "name": "Aug",
+   "T_mean_C": 18.8,
+   "T_min_C": 13.3,
+   "T_max_C": 25.0,
+   "daily_T_sigma_C": 3.77,
+   "precip_mm_month": 55.3,
+   "precip_days_ge1mm": 7.1,
+   "p_precip_day": 0.229,
+   "phase": {
+    "snow": 0.0,
+    "mixed": 0.0,
+    "rain": 1.0
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.0,
+    "mixed": 0.0,
+    "rain": 1.0,
+    "days": 12
+   },
+   "phase_kyiv_model": {
+    "snow": 0.001,
+    "mixed": 0.003,
+    "rain": 0.996
+   },
+   "thunder_days": 4.52,
+   "p_thunder_day": 0.1457,
+   "p_thunder_given_precip_day": 0.636,
+   "glaze_days_kyiv": 0,
+   "p_freezing_rain_given_precip_day": 0.0,
+   "blizzard_days_kyiv": 0,
+   "fog_days_kyiv_gomel": 1.1,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 8,
+    "tmean_le_0": 0
+   },
+   "phase_note": "clamped to Kyiv observed shares (<= 0.2 solid+mixed days)",
+   "thunder_weight": 0.74,
+   "p_frost_night": 0.0,
+   "station_2017_share_tn_below_0": 0.0,
+   "snowfall_share": 0.0,
+   "ice": {
+    "still": 0.0,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0,
+    "snow_on_ice_cover": 0.0,
+    "snow_on_ice_depth_m": 0.0
+   }
+  },
+  {
+   "month": 9,
+   "day": 15,
+   "doy": 258,
+   "name": "Sep",
+   "T_mean_C": 13.4,
+   "T_min_C": 8.7,
+   "T_max_C": 18.9,
+   "daily_T_sigma_C": 3.94,
+   "precip_mm_month": 56.3,
+   "precip_days_ge1mm": 8.7,
+   "p_precip_day": 0.29,
+   "phase": {
+    "snow": 0.0,
+    "mixed": 0.008,
+    "rain": 0.992
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.0,
+    "mixed": 0.008,
+    "rain": 0.992,
+    "days": 13.1
+   },
+   "phase_kyiv_model": {
+    "snow": 0.013,
+    "mixed": 0.026,
+    "rain": 0.96
+   },
+   "thunder_days": 1.69,
+   "p_thunder_day": 0.0565,
+   "p_thunder_given_precip_day": 0.195,
+   "glaze_days_kyiv": 0,
+   "p_freezing_rain_given_precip_day": 0.0,
+   "blizzard_days_kyiv": 0,
+   "fog_days_kyiv_gomel": 2.5,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 4,
+    "tmean_le_0": 0
+   },
+   "phase_note": "clamped to Kyiv observed shares (<= 0.2 solid+mixed days)",
+   "thunder_weight": 0.227,
+   "p_frost_night": 0.01,
+   "station_2017_share_tn_below_0": 0.033,
+   "snowfall_share": 0.004,
+   "ice": {
+    "still": 0.0,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0,
+    "snow_on_ice_cover": 0.0,
+    "snow_on_ice_depth_m": 0.0
+   }
+  },
+  {
+   "month": 10,
+   "day": 15,
+   "doy": 288,
+   "name": "Oct",
+   "T_mean_C": 7.7,
+   "T_min_C": 3.8,
+   "T_max_C": 12.4,
+   "daily_T_sigma_C": 3.47,
+   "precip_mm_month": 42.2,
+   "precip_days_ge1mm": 7.4,
+   "p_precip_day": 0.239,
+   "phase": {
+    "snow": 0.103,
+    "mixed": 0.128,
+    "rain": 0.769
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.071,
+    "mixed": 0.071,
+    "rain": 0.857,
+    "days": 14
+   },
+   "phase_kyiv_model": {
+    "snow": 0.079,
+    "mixed": 0.109,
+    "rain": 0.812
+   },
+   "thunder_days": 0.34,
+   "p_thunder_day": 0.0109,
+   "p_thunder_given_precip_day": 0.046,
+   "glaze_days_kyiv": 0,
+   "p_freezing_rain_given_precip_day": 0.0,
+   "blizzard_days_kyiv": 0.03,
+   "fog_days_kyiv_gomel": 5.0,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 16,
+    "tmean_le_0": 0
+   },
+   "thunder_weight": 0.054,
+   "p_frost_night": 0.154,
+   "station_2017_share_tn_below_0": 0.129,
+   "snowfall_share": 0.167,
+   "ice": {
+    "still": 0.0,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0,
+    "snow_on_ice_cover": 0.0,
+    "snow_on_ice_depth_m": 0.0
+   }
+  },
+  {
+   "month": 11,
+   "day": 15,
+   "doy": 319,
+   "name": "Nov",
+   "T_mean_C": 1.4,
+   "T_min_C": -1.1,
+   "T_max_C": 4.2,
+   "daily_T_sigma_C": 3.77,
+   "precip_mm_month": 47.7,
+   "precip_days_ge1mm": 8.7,
+   "p_precip_day": 0.29,
+   "phase": {
+    "snow": 0.419,
+    "mixed": 0.199,
+    "rain": 0.382
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.333,
+    "mixed": 0.167,
+    "rain": 0.5,
+    "days": 18
+   },
+   "phase_kyiv_model": {
+    "snow": 0.346,
+    "mixed": 0.198,
+    "rain": 0.456
+   },
+   "thunder_days": 0.02,
+   "p_thunder_day": 0.0006,
+   "p_thunder_given_precip_day": 0.002,
+   "glaze_days_kyiv": 1,
+   "p_freezing_rain_given_precip_day": 0.115,
+   "blizzard_days_kyiv": 1,
+   "fog_days_kyiv_gomel": 6.5,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 11,
+    "tmean_le_0": 2
+   },
+   "thunder_weight": 0.002,
+   "p_frost_night": 0.646,
+   "station_2017_share_tn_below_0": 0.5,
+   "snowfall_share": 0.518,
+   "ice": {
+    "still": 0.05,
+    "flowing": 0.0,
+    "flood_ice_keyframes": 0.05,
+    "snow_on_ice_cover": 0.017,
+    "snow_on_ice_depth_m": 0.024
+   }
+  },
+  {
+   "month": 12,
+   "day": 15,
+   "doy": 349,
+   "name": "Dec",
+   "T_mean_C": -2.8,
+   "T_min_C": -5.2,
+   "T_max_C": -0.3,
+   "daily_T_sigma_C": 4.29,
+   "precip_mm_month": 42.6,
+   "precip_days_ge1mm": 9.1,
+   "p_precip_day": 0.294,
+   "phase": {
+    "snow": 0.662,
+    "mixed": 0.148,
+    "rain": 0.191
+   },
+   "phase_kyiv_observed": {
+    "snow": 0.571,
+    "mixed": 0.19,
+    "rain": 0.238,
+    "days": 21
+   },
+   "phase_kyiv_model": {
+    "snow": 0.608,
+    "mixed": 0.16,
+    "rain": 0.232
+   },
+   "thunder_days": 0.07,
+   "p_thunder_day": 0.0024,
+   "p_thunder_given_precip_day": 0.008,
+   "glaze_days_kyiv": 2,
+   "p_freezing_rain_given_precip_day": 0.22,
+   "blizzard_days_kyiv": 1,
+   "fog_days_kyiv_gomel": 6.5,
+   "station_2017_precip_days_ge1mm_cold": {
+    "days": 19,
+    "tmean_le_0": 7
+   },
+   "thunder_weight": 0.009,
+   "p_frost_night": 0.934,
+   "station_2017_share_tn_below_0": 0.645,
+   "snowfall_share": 0.736,
+   "ice": {
+    "still": 0.85,
+    "flowing": 0.6,
+    "flood_ice_keyframes": 0.6,
+    "snow_on_ice_cover": 0.85,
+    "snow_on_ice_depth_m": 0.08
+   }
+  }
+ ]
+}

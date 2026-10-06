@@ -48,6 +48,22 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
     }
 }
 #else
+// The season's snow under the stock details (da_detail_common.h buries a tuft its depth covers): the two
+// textures of r3\da_snow_sample.h by name, and the samplers it may use. Each call looks its name up in
+// the compiled shaders' tables and returns silently where none reads it.
+// The stock detail cards write the foliage material (deffer_base_aref_flat.ps): the full-screen snow layer
+// leaves them to their own season (keep, height, burial in the snow) like the blade grass beside them.
+constexpr pcstr k_stock_detail = "DA_STOCK_DETAIL";
+
+static void detail_bind_snow(CBlender_Compile& C)
+{
+    C.r_dx11Texture("s_da_snow_fine", "$user$da_snow_fine");
+    C.r_dx11Texture("s_da_snow_level", "$user$da_snow_level");
+    C.r_dx11Sampler("smp_rtlinear");
+    C.r_dx11Sampler("smp_nofilter");
+    C.r_dx11Sampler("smp_linear");
+}
+
 void CBlender_Detail_Still::Compile(CBlender_Compile& C)
 {
     IBlender::Compile(C);
@@ -60,6 +76,7 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
         if (bUseATOC)
         {
             uber_deffer(C, false, "detail_w", "base_atoc", true, 0, true);
+            detail_bind_snow(C);
             C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
             C.r_StencilRef(0x01);
             C.r_ColorWriteEnable(false, false, false, false);
@@ -69,7 +86,8 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
             C.r_End();
         }
 
-        uber_deffer(C, false, "detail_w", "base", true, 0, true);
+        uber_deffer(C, false, "detail_w", "base", true, 0, true, true, nullptr, k_stock_detail);
+        detail_bind_snow(C);
         C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
         C.r_StencilRef(0x01);
         C.r_CullMode(D3DCULL_NONE);
@@ -81,6 +99,7 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
         if (bUseATOC)
         {
             uber_deffer(C, false, "detail_s", "base_atoc", true, 0, true);
+            detail_bind_snow(C);
             C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
             C.r_StencilRef(0x01);
             C.r_CullMode(D3DCULL_NONE);
@@ -90,7 +109,8 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
             C.r_End();
         }
 
-        uber_deffer(C, false, "detail_s", "base", true, 0, true);
+        uber_deffer(C, false, "detail_s", "base", true, 0, true, true, nullptr, k_stock_detail);
+        detail_bind_snow(C);
         C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
         C.r_StencilRef(0x01);
         C.r_CullMode(D3DCULL_NONE);
@@ -114,8 +134,11 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
             constexpr pcstr still_ms = "deffer_detail_mesh#ms";
             const ref_vs ms = RImplementation.Resources->_CreateVS(wave ? wave_ms : still_ms);
             RImplementation.clearAllShaderOptions();
-            if (ms->sh && uber_deffer(C, false, wave ? "detail_w" : "detail_s", "base", true, 0, true, true, wave ? wave_ms : still_ms))
+            if (ms->sh &&
+                uber_deffer(C, false, wave ? "detail_w" : "detail_s", "base", true, 0, true, true, wave ? wave_ms : still_ms,
+                    k_stock_detail))
             {
+                detail_bind_snow(C);
                 C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
                 C.r_StencilRef(0x01);
                 C.r_CullMode(D3DCULL_NONE);
@@ -140,6 +163,7 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
             if (ms->sh)
             {
                 uber_detail_mesh_depth(C, wave ? wave_ms : still_ms);
+                detail_bind_snow(C);
                 C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
                 C.r_StencilRef(0x01);
                 C.r_CullMode(D3DCULL_NONE);

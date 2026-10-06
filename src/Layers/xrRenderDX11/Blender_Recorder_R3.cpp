@@ -59,9 +59,30 @@ void CBlender_Compile::r_dx11Texture(LPCSTR ResourceName, LPCSTR texture, bool r
         return;
 
     R_ASSERT(C->type == RC_dx11texture);
-    u32 stage = C->samp.index;
+    const ref_texture tex(RImplementation.Resources->_CreateTexture(TexName));
 
-    passTextures.emplace_back(stage, ref_texture(RImplementation.Resources->_CreateTexture(TexName)));
+    // The merged table keeps one slot per name, the last merged stage's, so a texture that several stages
+    // of the pass read (a vertex and a pixel shader both sampling a field) is bound at each stage's own slot.
+    u32 bound = 0;
+    const auto bind_at = [&](const auto& stage) {
+        if (!stage)
+            return;
+        const R_constant_table& table = stage->constants;
+        const ref_constant S = table.get(ResourceName, table.dx9compatibility ? RC_dx11texture : u16(-1));
+        if (S && S->type == RC_dx11texture)
+        {
+            passTextures.emplace_back(S->samp.index, tex);
+            ++bound;
+        }
+    };
+    bind_at(dest.ps);
+    bind_at(dest.vs);
+    bind_at(dest.gs);
+    bind_at(dest.hs);
+    bind_at(dest.ds);
+    bind_at(dest.cs);
+    if (!bound)
+        passTextures.emplace_back(C->samp.index, tex);
 }
 
 void CBlender_Compile::i_dx11FilterAnizo(u32 s, BOOL value)

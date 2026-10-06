@@ -4,6 +4,10 @@
 // The G-buffer's bit packing: pure functions with no resources, shared by the FXC shaders (through
 // common_functions.h) and the DXC ray tracing passes (rt/).
 
+// Material codes 27-31 above the stock range: two-sided foliage (the blade grass) and snow. Pass the
+// mtl through da_mtl_from_code / da_pack_foliage_mtl; never re-pack a .w read back as a float.
+#include "da_material_codes.h"
+
 #define USABLE_BIT_1                uint(0x00002000)
 #define USABLE_BIT_2                uint(0x00004000)
 #define USABLE_BIT_3                uint(0x00008000)

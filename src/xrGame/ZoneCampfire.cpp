@@ -5,6 +5,7 @@
 #include "Level.h"
 #include "xrEngine/LightAnimLibrary.h"
 #include "xrEngine/Rain.h"
+#include "xrEngine/da_snow_field.h"
 
 //  Rain puts campfires out. Off restores the pre-1.4.1 behaviour, where a fire in the open
 //  burned through a thunderstorm.
@@ -171,11 +172,18 @@ bool CZoneCampfire::SkyAbove() const
     return CEffect_Rain::SkyOpen(p, up, 20.f);
 }
 
+//  What falls on a fire: the rain at full weight, snow at a third (it melts on the embers, but slowly).
+static float DouseDensity()
+{
+    const float liquid = clampr(da_precip().liquid, 0.f, 1.f);
+    return GamePersistent().Environment().CurrentEnv.rain_density * (liquid + 0.3f * (1.f - liquid));
+}
+
 bool CZoneCampfire::can_turn_on() const
 {
     if (!g_dar_rain_douses_fires)
         return true;
-    if (GamePersistent().Environment().CurrentEnv.rain_density < 0.20f)
+    if (DouseDensity() < 0.20f)
         return true;
     return !SkyAbove();
 }
@@ -186,7 +194,7 @@ void CZoneCampfire::UpdateRainDouse(u32 dt)
         return;
 
     //  Light drizzle and up. Below this the sky is merely damp and a fire shrugs it off.
-    const float density = GamePersistent().Environment().CurrentEnv.rain_density;
+    const float density = DouseDensity();
     if (density < 0.20f)
     {
         m_rain_soak = 0.f;

@@ -11,6 +11,8 @@
 #include "xrCommon/xr_hash_map.h"
 #include "xrScriptEngine/script_engine.hpp"
 
+struct DaSeasonLatch;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 class dx11ConstantBuffer;
@@ -19,13 +21,15 @@ class dx11ConstantBuffer;
 // (DXBC twins, dxc.md 3.6). The shader maps key such a shader with a "|fxc" suffix.
 constexpr u32 RSC_FXC = 1u << 31;
 
-// Texture seasons (r__season, xrEngine/da_season.h). The overlay folder textures resolve against now,
-// null until the first sync; it moves only in CResourceManager::SyncTextureSeason.
-pcstr texture_season();
-// The overlay file of texture `name` (no extension) in `season`: for a texture of the level folder the
-// level's own copy (seasons\<season>\levels\<level>\<name>.dds) first, then the common one
-// (seasons\<season>\<name>.dds). False without a season or an overlay; `fn` is scratch then.
-bool texture_season_overlay(pcstr name, pcstr season, string_path& fn);
+// Texture seasons (r__season, xrEngine/da_season.h). The latched overlay folders (one per texture
+// category) textures resolve against now, null until the first sync; it moves only in
+// CResourceManager::SyncTextureSeason.
+const DaSeasonLatch* texture_season();
+// The overlay file of texture `name` (no extension) in the folder `latch` gives its category: for a
+// texture of the level folder the level's own copy (seasons\<folder>\levels\<level>\<name>.dds) first,
+// then the common one (seasons\<folder>\<name>.dds). False when the category wears the base set or
+// there is no overlay; `fn` is scratch then.
+bool texture_season_overlay(pcstr name, const DaSeasonLatch* latch, string_path& fn);
 
 // defs
 class ECORE_API CResourceManager
@@ -286,8 +290,9 @@ public:
     void DeferredUnload();
     void BeginLevelTextureTracking();
     void UnloadLevelTextures();
-    // r__season moved since the textures were resolved: switches the resolver over and reloads every
-    // loaded texture with an overlay in either season. Main thread, between frames.
+    // The season latched other texture folders since the textures were resolved: switches the resolver
+    // over and reloads every loaded texture whose category changed folder and that has an overlay in
+    // either. Main thread, between frames.
     void SyncTextureSeason();
     static void ShutdownTextureUploadPool();
     void Evict();

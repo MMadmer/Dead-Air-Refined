@@ -12,6 +12,7 @@
 #include "WindVegSound.h"
 #include "xrHemisphere.h"
 #include "perlin.h"
+#include "da_snow_field.h"
 
 #ifndef _EDITOR
 #include "IGame_Level.h"
@@ -110,6 +111,9 @@ CEnvironment::CEnvironment()
     m_ambients_config                = load_config("environment\\ambients.ltx");
     m_sound_channels_config          = load_config("environment\\sound_channels.ltx");
     m_effects_config                 = load_config("environment\\effects.ltx");
+
+    // The snow and precipitation QA commands (qa_precip, qa_air_temp, qa_snow_state).
+    da_snow_register_console();
 }
 
 CEnvironment::~CEnvironment()
@@ -1270,6 +1274,8 @@ void CEnvironment::reset_water_body()
     // Both level load and level unload already go through here; the bake therefore has to run
     // after this call, which is where it sits (measure_water_body, Level_load.cpp).
     reset_water_field();
+    // So is the level's snow bake (da_snow_bake.cpp runs after the water bake).
+    da_snow_field_reset();
     // Nothing is wading on a level that is not loaded yet.
     for (auto& w : water_wakes)
         w.used = false;
@@ -1309,6 +1315,8 @@ void CEnvironment::reset_water_field()
     water_field.shrink_to_fit(); // 16 MB has no business surviving into the next level
     puddle_fill.clear();
     puddle_fill.shrink_to_fit();
+    water_class.clear();
+    water_class.shrink_to_fit();
     water_field_bounds.invalidate();
     water_field_inv_extent.set(0.f, 0.f);
     water_field_texel = 1.f;
@@ -1369,6 +1377,61 @@ bool CEnvironment::water_at(const Fvector& p, float& surface, float& bed) const
     surface = water_field[at].surface;
     bed = water_field[at].bed;
     return true;
+}
+
+void CEnvironment::set_water_class(xr_vector<u8>&& flow)
+{
+    water_class = std::move(flow);
+    if (water_class.size() != water_field.size())
+        water_class.assign(water_field.size(), 0);
+}
+
+// Value noise of 20 m lobes, the same integer hash and fade as da_water_ice_noise in water.ps, so the
+// ragged ice edge and the polynyas the picture draws are where gameplay finds them.
+static float da_ice_noise(float x, float z)
+{
+    const float px = x * 0.05f, pz = z * 0.05f;
+    const float fx = std::floor(px), fz = std::floor(pz);
+    const int ix = int(fx), iz = int(fz);
+    float tx = px - fx, tz = pz - fz;
+    tx = tx * tx * (3.f - 2.f * tx);
+    tz = tz * tz * (3.f - 2.f * tz);
+    const auto h = [](int cx, int cz) {
+        u32 v = u32(cx) * 0x8da6b343u ^ u32(cz) * 0xd8163841u;
+        v ^= v >> 15;
+        v *= 0x2c1b3c6du;
+        v ^= v >> 12;
+        v *= 0x297a2d39u;
+        v ^= v >> 15;
+        return float(v >> 8) * (1.f / 16777216.f);
+    };
+    const float a = h(ix, iz) + (h(ix + 1, iz) - h(ix, iz)) * tx;
+    const float b = h(ix, iz + 1) + (h(ix + 1, iz + 1) - h(ix, iz + 1)) * tx;
+    return a + (b - a) * tz;
+}
+
+float CEnvironment::ice_at(const Fvector& p) const
+{
+    const Fvector4& k = da_snow_frame().ice;
+    if (std::max(k.x, k.y) < 0.02f)
+        return 0.f;
+    const float n01 = da_ice_noise(p.x, p.z);
+    const int at = da_water_field_texel(*this, p);
+    if (at < 0 || !water_field[at].mask)
+    {
+        // Water the field does not carry (a passable sheet that is not liquid): still water, patchy
+        // while the key is partial.
+        return k.x < 0.02f ? 0.f : clampr((k.x * 1.2f - n01) * 5.f, 0.f, 1.f);
+    }
+    // Ice grows out from the banks: the front stands key * reach metres from the nearest bank, ragged
+    // by the noise. Still water closes over completely at key 1; running water keeps a lane wider than
+    // twice its reach.
+    const bool flowing = size_t(at) < water_class.size() && water_class[at] > 127;
+    const float key = flowing ? k.y : k.x;
+    if (key < 0.02f)
+        return 0.f;
+    const float reach = key * (flowing ? 32.f : 38.f);
+    return clampr((reach - water_field[at].shore + 3.f * (n01 * 2.f - 1.f)) * 0.5f, 0.f, 1.f);
 }
 
 namespace
@@ -1761,9 +1824,17 @@ void CEnvironment::water_tick(float delta)
     // full-density storm at 25 mm/h (heavy rain) and a drizzle at a fraction of a millimetre,
     // which is what the drop size distribution, the splash rate, the puddle fill rate and the
     // extinction below all want as their input.
+    //
+    // Only the liquid share falls as rain (da_precip, the season's phase); the rest is snow, which
+    // thickens the haze far more per millimetre of water: ext += 2.5 * S^0.7, S in mm/h w.e., so a
+    // millimetre an hour of snow closes the view to about a kilometre.
     const float rain_d = clampr(CurrentEnv.rain_density, 0.f, 1.f);
-    rain_rate_mmh = 25.f * powf(rain_d, 1.5f);
-    rain_ext_km = rain_rate_mmh > 0.f ? 0.312f * powf(rain_rate_mmh, 0.67f) : 0.f;
+    const float liquid = clampr(da_precip().liquid, 0.f, 1.f);
+    const float d15 = powf(rain_d, 1.5f);
+    rain_rate_mmh = 25.f * d15 * liquid;
+    const float snow_we = 2.5f * d15 * (1.f - liquid);
+    rain_ext_km = (rain_rate_mmh > 0.f ? 0.312f * powf(rain_rate_mmh, 0.67f) : 0.f) +
+        (snow_we > 0.f ? 2.5f * powf(snow_we, 0.7f) : 0.f);
 
     // ---- Camera against the baked field. ----------------------------------------------------
     // Nothing else knows whether the eye is under water: the surface is a forward pass and the
@@ -2315,6 +2386,8 @@ void CEnvironment::OnFrame()
         return;
 
     lerp();
+    // What falls this frame (rain, sleet or snow), before the wind, the rain and the lightning read it.
+    da_precip_tick(*this);
 
     PerlinNoise1D->SetFrequency(wind_gust_factor * MAX_NOISE_FREQ);
     wind_strength_factor = clampr(PerlinNoise1D->GetContinious(Device.fTimeGlobal) + 0.5f, 0.f, 1.f);

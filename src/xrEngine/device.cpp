@@ -12,6 +12,8 @@
 #include "IGame_Level.h"
 #include "IGame_Persistent.h"
 #include "x_ray.h"
+#include "da_season.h"
+#include "da_snow_field.h"
 
 #include "xrScriptEngine/script_space.hpp"
 
@@ -701,6 +703,11 @@ void CRenderDevice::FrameMove()
     stats.EngineTotal.Begin();
     // TODO: HACK to test loading screen.
     // if(!g_bLoaded)
+
+    // One season day, one snow state and one stamp list for every OnFrame of this frame.
+    da_season_frame();
+    da_snow_stamps_publish();
+    da_snow_frame_update();
 
     seqFrame.Process();
 

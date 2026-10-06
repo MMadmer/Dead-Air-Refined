@@ -1,0 +1,111 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Blade grass, the G-buffer pixel shader of leaves and culms (docs/dead-air/GRASS.md; the seed heads have
+// da_grass_head.ps): opaque geometry with no alpha test and no discard (early-Z stays on), except the short
+// bin's variant (da_grass_blade_cut.ps, GRASS_CUT) that cuts the lobes of pinnate leaves. Translucent
+// two-sided foliage goes into the free material codes 27-30 (da_material_codes.h, stochastically rounded -
+// TAA resolves it), the sky occlusion is the ground's hemi times the blade's ambient occlusion (no 3.5
+// factor of the stock grass), the normal is rounded across the width and blended towards the canopy with
+// distance, and the gloss is filtered by the normal's screen variance (Tokuyoshi & Kaplanyan 2021). The
+// blades carry their own snow and never take the snow layer.
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_material_codes.h"
+
+struct p_grass
+{
+	float4	hpos		: SV_Position;
+	float4	hpos_cur	: TEXCOORD0;
+	float4	hpos_prev	: TEXCOORD1;
+	float4	pv_t		: TEXCOORD2;
+	float4	nb_u		: TEXCOORD3;
+	float4	lat_g		: TEXCOORD4;
+	float4	nc			: TEXCOORD5;
+	float4	alb_h		: TEXCOORD6;
+	float4	misc		: TEXCOORD7;
+};
+
+uniform float4	da_grass_vmisc;	// x frame & 63, y 1 = motion vectors
+// A cut leaf's mean cover (da_grass_common.h, which the pixel shaders do not include).
+#ifndef GRASS_CUT_COVER
+#define GRASS_CUT_COVER		0.6f
+#endif
+
+f_deffer	main	(p_grass I)
+{
+#ifdef GRASS_CUT
+	// A cut leaf (misc.w its outline): pairs of lobes along it, alternate and leaning to the tip, cut out round
+	// the whole rachis, a dissected leaf's narrower and twice as many. Where a lobe spans under two pixels the
+	// leaf narrows to its mean cover instead, so the middle distance has no dither; the edges are dithered
+	// (interleaved gradient noise, TAA resolves them).
+	[branch] if (I.misc.y < 0.5f && I.misc.w > 4.5f)
+	{
+		const bool dissected = I.misc.w > 5.5f;
+		const float uc = I.nb_u.w;
+		const float x = abs(uc * 2.0f - 1.0f);
+		const float ph = (dissected ? 15.0f : 8.0f) * I.pv_t.w - (dissected ? 0.8f : 0.5f) * x + (uc < 0.5f ? 0.5f : 0.0f);
+		const float aa = max(fwidth(ph), 1e-4f), ax = max(fwidth(x), 1e-4f);
+		const float lobe_w = dissected ? lerp(0.3f, 0.07f, x) : lerp(0.42f, 0.12f, x);
+		const float lobes = max(saturate((lobe_w - abs(frac(ph) - 0.5f)) / aa + 0.5f), saturate((0.09f - x) / ax + 0.5f));
+		const float narrow = saturate((GRASS_CUT_COVER - x) / ax + 0.5f);
+		const float cov = lerp(narrow, lobes, saturate((1.0f / aa - 2.0f) * 0.5f));
+		const float frame = da_grass_vmisc.y > 0.5f ? da_grass_vmisc.x : 0.0f;
+		const float2 pix = I.hpos.xy + float2(29.0f, 7.0f) + 7.13f * frame;
+		clip(cov - frac(52.9829189f * frac(dot(pix, float2(0.06711056f, 0.00583715f)))) - 1e-3f);
+	}
+#endif
+
+	const float3 V = -normalize(I.pv_t.xyz);
+	// A flat leaf shows whichever face looks at the camera; the rounding keeps pointing outwards.
+	float3 nb = I.nb_u.xyz;
+	if (dot(nb, V) < 0.0f)
+		nb = -nb;
+	float3 N = normalize(nb + I.lat_g.xyz);
+	N = normalize(lerp(N, normalize(I.nc.xyz), I.nc.w));
+
+	float3 albedo = I.alb_h.rgb;
+	const float kind = I.misc.y;
+	const float u = I.nb_u.w;
+	[branch] if (kind < 0.5f)
+	{
+		// Leaves, near LOD: darker margins and a faint midrib, averaged away once the blade is a few pixels.
+		[branch] if (I.misc.z > 0.5f)
+		{
+			const float fade = saturate(1.0f - 4.0f * fwidth(u));
+			const float x = u * 2.0f - 1.0f;
+			const float vein = lerp(1.0f, (0.9f + 0.1f * (1.0f - x * x)) * (1.0f + 0.06f * saturate(1.0f - abs(x) * 12.0f)), fade);
+			albedo *= vein;
+		}
+	}
+	else if (kind < 1.5f)
+	{
+		// Grass culms: darker nodes at 15, 35 and 60 % of the height, faded below a pixel (a forb's stem and
+		// a rush have none).
+		const float m = I.misc.w;
+		const float per_px = max(fwidth(m), 1e-5f);
+		const float h = max(m / max(I.pv_t.w, 1e-3f), 1e-3f);
+		float band = 0.0f;
+		[unroll] for (uint k = 0; k < 3; ++k)
+		{
+			const float node = (k == 0u ? 0.15f : (k == 1u ? 0.35f : 0.6f)) * h;
+			band = max(band, saturate(1.0f - abs(m - node) / max(0.004f, 0.5f * per_px)) * saturate(0.008f / per_px));
+		}
+		albedo = lerp(albedo, albedo * float3(0.75f, 0.68f, 0.6f), band);
+	}
+
+	// Gloss as sub-pixel normal variance (GoT), on the Oren-Nayar slice's Blinn lobe (exponent 16).
+	float gloss = I.lat_g.w;
+	{
+		const float3 dndu = ddx(N), dndv = ddy(N);
+		const float kernel_r2 = 2.0f * 0.15915494f * (dot(dndu, dndu) + dot(dndv, dndv));
+		const float a2 = 2.0f / (16.0f + 2.0f);
+		gloss *= a2 / (a2 + min(kernel_r2, 0.18f));
+	}
+
+	const float mtl = da_pack_foliage_mtl(I.misc.x, I.hpos.xy, uint(da_grass_vmisc.x));
+	f_deffer O = pack_gbuffer(float4(N, I.alb_h.w), float4(I.pv_t.xyz, mtl), float4(saturate(albedo), saturate(gloss)));
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
+	return O;
+}

@@ -14,6 +14,7 @@
 
 #if defined(USE_DX11)
 #include "Layers/xrRenderPC_R4/da_dstorage.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
 #include "da_temporal.h"
 #endif
 
@@ -243,9 +244,10 @@ xr_vector<CTexture*> collect_unloaded_textures(const CResourceManager::map_Textu
 }
 #endif
 
-// The season the resolver serves; null until the first sync, when only base textures resolve. Moved by
-// SyncTextureSeason with the upload pool idle; read by every texture load, the upload workers' included.
-std::atomic<pcstr> textureSeason{};
+// The season folders the resolver serves; null until the first sync, when only base textures resolve.
+// Moved by SyncTextureSeason with the upload pool idle; read by every texture load, the upload workers'
+// included.
+std::atomic<const DaSeasonLatch*> textureSeason{};
 
 // The current level's folder name, "" before one is set: the last component of the $level$ alias.
 void season_level_name(string_path& level)
@@ -263,11 +265,15 @@ void season_level_name(string_path& level)
 }
 }
 
-pcstr texture_season() { return textureSeason.load(std::memory_order_acquire); }
+const DaSeasonLatch* texture_season() { return textureSeason.load(std::memory_order_acquire); }
 
-bool texture_season_overlay(pcstr name, pcstr season, string_path& fn)
+bool texture_season_overlay(pcstr name, const DaSeasonLatch* latch, string_path& fn)
 {
-    if (!season || !name || !name[0])
+    if (!name || !name[0])
+        return false;
+    // The category of the name picks the folder; null = its base texture.
+    pcstr const season = da_season_latch_folder(latch, name);
+    if (!season)
         return false;
     string_path level;
     season_level_name(level);
@@ -762,9 +768,9 @@ void CResourceManager::UnloadLevelTextures()
 
 void CResourceManager::SyncTextureSeason()
 {
-    pcstr const target = da_season_folder();
-    pcstr const current = texture_season();
-    // Both point into the one folder table of xrEngine.
+    const DaSeasonLatch* const target = da_season_latch();
+    const DaSeasonLatch* const current = texture_season();
+    // A latch is one immutable combination of folders: another pointer, other folders.
     if (target == current || !Device.b_is_Ready)
         return;
 
@@ -779,25 +785,29 @@ void CResourceManager::SyncTextureSeason()
         uploadPool->Wait();
 #endif
 
-    // A loaded texture changes file when either season has an overlay of it. $user$ and the other
+    // A loaded texture changes file when its category moved to another folder and either folder has an
+    // overlay of it; the categories that kept their folder are not even looked up. $user$ and the other
     // engine-made names have no file: their owners set their surfaces.
     xr_vector<CTexture*> textures;
     string_path scratch;
     for (const auto& [name, texture] : m_textures)
     {
-        if (texture->flags.bLoaded && name[0] != '$' &&
-            (texture_season_overlay(name, current, scratch) || texture_season_overlay(name, target, scratch)))
+        if (!texture->flags.bLoaded || name[0] == '$' ||
+            da_season_latch_folder(current, name) == da_season_latch_folder(target, name))
         {
-            textures.push_back(texture);
+            continue;
         }
+        if (texture_season_overlay(name, current, scratch) || texture_season_overlay(name, target, scratch))
+            textures.push_back(texture);
     }
     // Every load from here on resolves against the new season, the later ones of cold wrappers included.
     textureSeason.store(target, std::memory_order_release);
 
 #if defined(USE_DX11)
     // In chunks, each keeping the views it drops alive until its new ones exist: a new view never takes the
-    // address of the one it replaces, which is how the ray tracing tables tell a reloaded texture
-    // (da_rt_refresh_textures). The chunk also bounds the memory both copies take at once.
+    // address of the one it replaces, which is how the ray tracing tables tell a reloaded texture. They move
+    // to the new views before the old ones go (da_rt_textures_replaced): a released view still named by a
+    // bindless slot would read null for a frame. The chunk also bounds the memory both copies take at once.
     constexpr size_t chunkSize = 128;
     if (!textures.empty() && !uploadPool)
         uploadPool = xr_new<TextureUploadPool>();
@@ -820,6 +830,7 @@ void CResourceManager::SyncTextureSeason()
         }
         const size_t workerCount = texture_upload_worker_count(chunk.size());
         uploadPool->Run(std::move(chunk), workerCount, "season");
+        da_rt_textures_replaced();
         for (ID3DShaderResourceView* view : held)
             view->Release();
         held.clear();
@@ -837,11 +848,11 @@ void CResourceManager::SyncTextureSeason()
 #   error No graphics API selected or enabled!
 #endif
 
-    // The first sync of a session only names the season; a reload is worth a line either way.
+    // The first sync of a session only names the folders; a reload is worth a line either way.
     if (current || !textures.empty())
     {
-        Msg("* Texture season %s -> %s: %zu textures reloaded in %u ms", current ? current : "(none)", target,
-            textures.size(), u32(timer.GetElapsed_ms()));
+        Msg("* Texture season #%u -> #%u (%s): %zu textures reloaded in %u ms", current ? current->id : 0,
+            target->id, target->name, textures.size(), u32(timer.GetElapsed_ms()));
     }
 }
 

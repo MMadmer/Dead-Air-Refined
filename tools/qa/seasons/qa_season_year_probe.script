@@ -1,0 +1,81 @@
+-- QA probe: runs the season year on a loaded save (qa_season_year, a year in SECONDS of wall clock, from
+-- the 15th of January) and asks for a window shot at every month's 15th. The weather clock and the wind are
+-- held, so the frames differ by the season alone. Run Watch-QaShots.ps1 -DoneMarker qa_season_year_probe_done
+-- next to it. Put into <rig>\gamedata\scripts, remove after the run.
+
+local SECONDS = 60
+local KEYS = { 14.5, 45.5, 73.5, 104.5, 134.5, 165.5, 195.5, 226.5, 257.5, 287.5, 318.5, 348.5 }
+local NAMES = { "january", "february", "march", "april", "may", "june", "july", "august", "september",
+	"october", "november", "december" }
+
+local started, finished, t_next, t_limit = false, false, 0, 0
+local last, shots = 0, 0
+
+local function con(cmd)
+	get_console():execute(cmd)
+end
+
+-- Forward progress of the day this frame, through the turn of the year.
+local function forward(from, to)
+	return (to - from) % 365
+end
+
+local function on_update()
+	device():pause(false)
+	local now = time_global()
+	if now < t_next then
+		return
+	end
+	if finished then
+		con("qa_season_state")
+		printf("[qa] qa_season_year_probe_done")
+		con("env_time_pin -1")
+		con("wind_freeze 0")
+		con("flush")
+		con("quit")
+		t_next = now + 100000
+		return
+	end
+	if not started then
+		con("qa_season_year " .. SECONDS .. " from=january")
+		started = true
+		last = level.season_day()
+		-- A ceiling, should frames stall: the run itself counts only rendered wall-clock seconds
+		t_limit = now + (SECONDS + 60) * 1000
+		printf(string.format("[qa] season_year_probe start at day %.1f", last))
+		return
+	end
+	local day = level.season_day()
+	local step = forward(last, day)
+	-- The 15th of January the run starts on comes round again at its end: twelve shots a year
+	for i, key in ipairs(KEYS) do
+		local ahead = forward(last, key)
+		if ahead > 0 and ahead <= step then
+			printf(string.format("[qa] SHOT season_year_%02d_%s", i, NAMES[i]))
+			shots = shots + 1
+		end
+	end
+	last = day
+	-- The engine prints [qa] season_year_done at the end; the last shot gets two seconds before the quit
+	if shots >= #KEYS or now > t_limit then
+		if shots < #KEYS then
+			printf(string.format("[qa] season_year_probe stalled after %d shots", shots))
+		end
+		finished = true
+		t_next = now + 2000
+	end
+end
+
+local function on_first_update()
+	con("g_pause_in_background 0")
+	con("main_menu off")
+	con("env_time_pin 12:00")
+	con("wind_freeze 1")
+	device():pause(false)
+	t_next = time_global() + 6000
+	RegisterScriptCallback("actor_on_update", on_update)
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+end

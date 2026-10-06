@@ -38,6 +38,7 @@ function normal                (shader, t_base, t_second, t_detail)
 	-- they resolve to a name with no surface and sample as zero, which is what the shader's own
 	-- gates expect.
 	shader:dx10texture	("s_water_field",	"$user$water_field")
+	shader:dx10texture	("s_water_class",	"$user$water_class")	-- running / standing water: the season's ice
 	shader:dx10texture	("s_water_ripple",	"$user$water_ripple0")
 
 	shader:dx10texture	("s_image",	"$user$ssr")	-- scene-grab RT for SSLR

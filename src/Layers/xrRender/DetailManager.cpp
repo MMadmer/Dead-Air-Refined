@@ -8,6 +8,9 @@
 #include "DetailManager.h"
 #include "xrCDB/Intersect.hpp"
 #include "xrEngine/da_season.h"
+#include "xrEngine/da_snow_field.h"
+#include "da_grass_data.h"
+#include "da_grass_blades.h"
 
 #include <thread>
 
@@ -99,35 +102,160 @@ void CDetailManager::SSwingValue::lerp(const SSwingValue& A, const SSwingValue& 
 }
 //---------------------------------------------------
 
-// What the current season leaves of the details, as shares of the preset's density and the
-// player's height: dead_air_x64_details.ltx [season_grass] <season folder> = <grass density>,
-// <grass height>, <shrub density>, <shrub height>. Shrubs are the woody details a level lists in
-// [season_shrubs]; they stand through the winter that lays the grass flat. Full details when the
-// file or the line is missing. Asked every frame, read once per season (the folder names are one
-// static table, so the pointer tells the season).
-Fvector4 detail_season_grass()
+namespace
 {
-    static pcstr cached_season = nullptr;
-    static Fvector4 cached{ 1.f, 1.f, 1.f, 1.f };
-    pcstr season = da_season_folder();
-    if (season == cached_season)
-        return cached;
-    cached_season = season;
-    cached.set(1.f, 1.f, 1.f, 1.f);
-    if (!season || !FS.exist("$game_config$", "dead_air_x64_details.ltx"))
-        return cached;
+// The models' content keys (KSPR, docs/dead-air/SEASON_DATA.md): CDetail::Load's K1 folded with the mip-0
+// DXT blocks of the level's BASE atlas ($level$\build_details.dds - season overlays are resolved per
+// texture name, never here) that the model's uv rectangle touches, block rows top to bottom. Byte for byte
+// the reference generator's rule, Python slicing and floor division included.
+void detail_fold_sprites(CDetailManager::DetailVec& objects)
+{
+    if (!FS.exist("$level$", "build_details.dds"))
+        return;
     string_path fn;
-    FS.update_path(fn, "$game_config$", "dead_air_x64_details.ltx");
-    CInifile ini(fn, TRUE);
-    if (ini.line_exist("season_grass", season))
+    FS.update_path(fn, "$level$", "build_details.dds");
+    IReader* atlas = FS.r_open(fn);
+    if (!atlas)
+        return;
+    const u8* bytes = static_cast<const u8*>(atlas->pointer());
+    const s64 size = atlas->length();
+    if (size >= 128)
     {
-        cached = ini.r_fvector4("season_grass", season);
-        clamp(cached.x, 0.f, 1.f);
-        clamp(cached.y, 0.1f, 1.f);
-        clamp(cached.z, 0.f, 1.f);
-        clamp(cached.w, 0.1f, 1.f);
+        u32 h = 0, w = 0;
+        CopyMemory(&h, bytes + 12, 4);
+        CopyMemory(&w, bytes + 16, 4);
+        const bool dx10 = !memcmp(bytes + 84, "DX10", 4);
+        const bool dxt1 = !memcmp(bytes + 84, "DXT1", 4);
+        const s64 off = 128 + (dx10 ? 20 : 0);
+        const s64 bs = dxt1 ? 8 : 16;
+        const s64 bw = (s64(w) + 3) / 4;
+        const s64 W = s64(w), H = s64(h);
+        const auto floor4 = [](s64 a) { return a >= 0 ? a / 4 : -((-a + 3) / 4); };
+        const auto clamp_index = [size](s64 i) {
+            if (i < 0)
+                i += size;
+            return std::clamp<s64>(i, 0, size);
+        };
+        for (CDetail* object : objects)
+        {
+            const s64 x0 = std::max<s64>(0, s64(double(object->m_uv_min[0]) * double(W)));
+            const s64 x1 = std::min<s64>(W - 1, s64(double(object->m_uv_max[0]) * double(W) - 1e-6));
+            const s64 y0 = std::max<s64>(0, s64(double(object->m_uv_min[1]) * double(H)));
+            const s64 y1 = std::min<s64>(H - 1, s64(double(object->m_uv_max[1]) * double(H) - 1e-6));
+            for (s64 by = floor4(y0); by < floor4(y1) + 1; ++by)
+            {
+                const s64 row = off + (by * bw + floor4(x0)) * bs;
+                const s64 start = clamp_index(row);
+                const s64 stop = clamp_index(row + (floor4(x1) - floor4(x0) + 1) * bs);
+                if (stop > start)
+                    object->m_key = detail_key_fnv(bytes + start, size_t(stop - start), object->m_key);
+            }
+        }
     }
-    return cached;
+    FS.r_close(atlas);
+}
+
+// The class of every model of the level from its content key.
+void detail_classify(CDetailManager::DetailVec& objects)
+{
+    detail_fold_sprites(objects);
+    const DaSeasonData& data = da_season_data();
+    u32 blades = 0, known = 0;
+    for (CDetail* object : objects)
+    {
+        const auto it = data.detail_types.find(object->m_key);
+        object->m_class = it != data.detail_types.end() ? it->second : dcUnknown;
+        known += it != data.detail_types.end() ? 1 : 0;
+        blades += da_grass_object_profile(*object) >= 0 ? 1 : 0;
+    }
+    Msg("* [details] %u models: %u known by content key, %u grown as blades", u32(objects.size()), known, blades);
+}
+
+// The per-item hash of the stock season (da_detail_common.h stock_u): drawn iff u < keep.
+u32 detail_pcg(u32 v)
+{
+    v = v * 747796405u + 2891336453u;
+    const u32 w = ((v >> ((v >> 28u) + 4u)) ^ v) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+
+float detail_stock_u(float x, float z)
+{
+    const s32 qx = s32(floorf(x * 64.f)), qz = s32(floorf(z * 64.f));
+    return float(detail_pcg(u32(qx) ^ detail_pcg(u32(qz) + 0x9E3779B9u)) & 0xFFFFFFu) / 16777216.f;
+}
+} // namespace
+
+u32 CDetailManager::SeasonClass(u32 object_id) const
+{
+    return object_id < objects.size() ? da_season_class(objects[object_id]->m_class) : 0u;
+}
+
+void CDetailManager::StockSeasonConstants(u32 object_id, Fvector4& cur, Fvector4& prev, Fvector4& obj) const
+{
+    const u32 season_class = SeasonClass(object_id);
+    cur = m_stock_season[season_class];
+    prev = m_stock_season_prev[season_class];
+    const float top = object_id < objects.size() ? objects[object_id]->bv_bb.vMax.y : 0.f;
+    obj.set(top, m_stock_hide_abs[season_class], m_stock_snow, 1.f);
+}
+
+// Main thread, once per frame (and at load, both with no calc task running): the season classes' keep,
+// height and burial rule at D and at D_prev, and the classes whose keep stays zero over the next days
+// (their parts are not even packed). A slot repacks every 15-30 frames, so the look-ahead covers 32
+// frames of D's current motion (the QA year run, the glide after an r__season change), and a class that
+// comes back after all (a pin jumping D) repacks every cached slot at once.
+void CDetailManager::StockSeasonUpdate()
+{
+    const DaSeasonData& data = da_season_data();
+    const float day = da_season_day(), day_prev = da_season_day_prev();
+    const SSnowFrame& snow = da_snow_frame();
+    const float visible = std::clamp(snow.grass_visible, 0.f, 1.f);
+    m_stock_snow = snow.active ? 1.f : 0.f;
+    // Days per frame along the shorter arc of the year; the look-ahead follows the direction D moves.
+    const float rate = da_season_wrap(day - day_prev + 182.5f) - 182.5f;
+    const float ahead_days = std::min(std::max(4.f, std::abs(rate) * 32.f), 365.f);
+    const float dir = rate < 0.f ? -1.f : 1.f;
+    bool returned = false;
+    for (u32 c = 0; c < season_class_count; ++c)
+    {
+        const DaStockSeason& k = data.stock[c];
+        const auto eval = [&k, visible](float d) {
+            const float keep = k.keep.n ? std::clamp(k.keep.at(d), 0.f, 1.f) : 1.f;
+            const float height = k.height.n ? std::clamp(k.height.at(d), 0.05f, 1.f) : 1.f;
+            const float hide_rel = k.hide_rel.n ? std::max(k.hide_rel.at(d), 0.f) : 1.f;
+            return Fvector4{keep * (k.grass_visible ? visible : 1.f), height, hide_rel, k.hide_margin};
+        };
+        m_stock_season[c] = eval(day);
+        m_stock_season_prev[c] = eval(day_prev);
+        m_stock_hide_abs[c] = k.hide_abs;
+        float ahead = std::max(m_stock_season[c].x, m_stock_season_prev[c].x);
+        for (float step = 1.f; step <= ahead_days && ahead <= 0.f; step += 1.f)
+            ahead = std::max(ahead, k.keep.n ? k.keep.at(day + dir * step) : 1.f);
+        if (ahead <= 0.f && k.keep.n)
+            ahead = std::max(ahead, k.keep.at(day + dir * ahead_days));
+        const bool skip = ahead <= 0.f;
+        returned = returned || (m_season_skip[c] && !skip);
+        m_season_skip[c] = skip;
+    }
+    if (returned && cache_pool)
+        for (u32 i = 0; i < dm_cache_size; ++i)
+            cache_pool[i].frame = 0;
+}
+
+// The blades take over the blade classes (or give them back): every cached slot decompresses again.
+void CDetailManager::SetBladesActive(bool active)
+{
+    if (m_blades == active)
+        return;
+    WaitForCalc();
+    m_blades = active;
+    if (!dtFS || !cache)
+        return;
+    for (u32 z = 0; z < dm_cache_line; ++z)
+        for (u32 x = 0; x < dm_cache_line; ++x)
+            if (Slot* slot = cache[z][x])
+                cache_Task(int(x), int(z), slot);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -158,8 +286,6 @@ CDetailManager::CDetailManager() : xrc("detail manager")
     dm_fade = dm_current_fade;
     ps_r__Detail_density = ps_current_detail_density;
     ps_current_detail_height = ps_r__Detail_height;
-    // The season thins and shortens the slots' items on top of these (cache_Decompress).
-    m_season_grass = detail_season_grass();
     cache_task.reserve(dm_cache_size);
     cache_level1 = (CacheSlot1**)xr_malloc(dm_cache1_line * sizeof(CacheSlot1*));
     for (u32 i = 0; i < dm_cache1_line; ++i)
@@ -254,37 +380,17 @@ void CDetailManager::Load()
     }
     m_fs->close();
 
-    // The level's woody details by object index (dead_air_x64_details.ltx [season_shrubs] <level> =
-    // i, j, ...): they keep the season's shrub shares.
-    m_shrub.assign(objects.size(), false);
-    if (FS.exist("$game_config$", "dead_air_x64_details.ltx"))
+    // Every model's class by its content key (dead_air_x64_seasons.ltx [detail_types]): blades, a stock
+    // season class, or unknown (stock card with the generic grass season).
+    da_season_data_reload();
+    detail_classify(objects);
     {
-        FS_Path* level_path = nullptr;
-        string_path level{};
-        if (FS.get_path("$level$", &level_path) && level_path->m_Add)
-        {
-            xr_strcpy(level, level_path->m_Add);
-            size_t length = xr_strlen(level);
-            while (length && (level[length - 1] == '\\' || level[length - 1] == '/'))
-                level[--length] = 0;
-            if (pcstr last = strrchr(level, '\\'))
-                memmove(level, last + 1, xr_strlen(last + 1) + 1);
-        }
-        string_path ltx;
-        FS.update_path(ltx, "$game_config$", "dead_air_x64_details.ltx");
-        CInifile ini(ltx, TRUE);
-        if (level[0] && ini.line_exist("season_shrubs", level))
-        {
-            pcstr list = ini.r_string("season_shrubs", level);
-            string16 item;
-            for (u32 i = 0, n = _GetItemCount(list); i < n; ++i)
-            {
-                const int id = atoi(_GetItem(list, i, item));
-                if (id >= 0 && u32(id) < m_shrub.size())
-                    m_shrub[id] = true;
-            }
-        }
+        bool any_blade = false;
+        for (const CDetail* object : objects)
+            any_blade = any_blade || da_grass_object_profile(*object) >= 0;
+        m_blades = any_blade && UseVS() && da_grass_blades_available();
     }
+    StockSeasonUpdate();
 
     // The trample-rustle grass test classifies details by height (see k_veg_min_height).
     // Dump what this level actually ships so the threshold can be checked against real
@@ -515,6 +621,9 @@ void CDetailManager::UpdateVisibleM()
                         sp.r_rows[0].clear();
                         sp.r_rows[1].clear();
                         sp.r_rows[2].clear();
+                        // A class the season keeps out for the next days draws nothing: nothing to pack.
+                        if (m_season_skip[SeasonClass(sp.id)])
+                            continue;
 
                         const float Rq_drcp = m_objectRadiusSquared[sp.id] * dist_sq_rcp;
 
@@ -702,16 +811,22 @@ void CDetailManager::UpdateRenderState()
     // Before DispatchMTCalc: the calc task reads it.
     m_mesh_frame = ms_Latch();
 #endif
+    // The season of the stock classes and the blades' frame state, before the calc task and the
+    // passes of this frame read them.
+    StockSeasonUpdate();
+    if (m_blades)
+        da_grass_frame_latch();
 
 #ifndef _EDITOR
-    // Publish "how much green is around" for the vegetation-audio layer: the visible-instance
-    // sets are already maintained per frame, counting them is free. ~600 visible tufts reads
-    // as a full meadow.
-    u32 visible_count = 0;
+    // Publish "how much green is around" for the vegetation-audio layer: the visible stock parts
+    // (~600 read as a full meadow) weighted by what the season keeps of their class, plus the share of
+    // blade grass around the camera the calc task measured.
+    float visible_count = 0.f;
     for (const auto& list : m_visibles)
-        for (const auto& part : list)
-            visible_count += u32(part.size());
-    g_pGamePersistent->Environment().wind_veg_green = clampr(float(visible_count) / 600.f, 0.f, 1.f);
+        for (u32 object = 0; object < list.size(); ++object)
+            visible_count += float(list[object].size()) * m_stock_season[SeasonClass(object)].x;
+    const float blades = m_blades ? da_grass_green() : 0.f;
+    g_pGamePersistent->Environment().wind_veg_green = clampr(visible_count / 600.f + blades, 0.f, 1.f);
 #endif
 }
 
@@ -837,6 +952,9 @@ void CDetailManager::DispatchMTCalc()
         if (m_mesh_frame)
             ms_Calc();
 #endif
+        // The blades' tiles of this frame (da_grass_blades.cpp).
+        if (m_blades)
+            da_grass_calc(EYE);
 
         // Feed the press wind-motors the one fact only this side knows: is there actual
         // grass in the detail cache under the pressing entity. The sound layer
@@ -886,16 +1004,31 @@ void CDetailManager::DispatchMTCalc()
                             const CDetail* obj = objects[part.id];
                             if (!obj)
                                 continue;
-                            const float model_h = obj->bv_bb.vMax.y - obj->bv_bb.vMin.y;
+                            // What the season leaves of the class: the shaders' keep, height and
+                            // burial, on the CPU (a buried or wintered-away tuft does not rustle).
+                            const u32 season_class = SeasonClass(part.id);
+                            const Fvector4& season = m_stock_season[season_class];
+                            if (season.x <= 0.f)
+                                continue;
+                            const float model_h = (obj->bv_bb.vMax.y - obj->bv_bb.vMin.y) * season.y;
                             for (const SlotItem* it : part.items)
                             {
                                 if (!it || model_h * it->scale < k_veg_min_height)
+                                    continue;
+                                if (detail_stock_u(it->mRotY.c.x, it->mRotY.c.z) >= season.x)
                                     continue;
                                 // The tuft has to straddle the height the feet are at: its top
                                 // above them (grass a storey down is not brushed) AND its root
                                 // not above them (grass a storey up is not brushed either).
                                 const float root = it->mRotY.c.y;
                                 const float top = root + model_h * it->scale;
+                                if (m_stock_snow > 0.f)
+                                {
+                                    const float h_top = obj->bv_bb.vMax.y * it->scale * season.y;
+                                    const float hide = std::max(m_stock_hide_abs[season_class], season.z * h_top - season.w);
+                                    if (da_snow_depth_at(it->mRotY.c.x, it->mRotY.c.z) >= hide)
+                                        continue;
+                                }
                                 if (wvdbg)
                                 {
                                     const float sx = it->mRotY.c.x - m.pos.x;
@@ -925,6 +1058,10 @@ void CDetailManager::DispatchMTCalc()
                         }
                     }
                 }
+                // The blades: no tufts to walk, the slot's grass, the season and the snow decide.
+                if (vegetation == 0.f && m_blades && da_grass_brushes(m.pos, k_veg_probe_r, k_veg_min_height,
+                                                         k_veg_below_feet, k_veg_above_feet))
+                    vegetation = 1.f;
                 if (wvdbg && dbg_d2 < flt_max)
                     Msg("* [wind-veg] probe[%u]: feet=%.2f nearest tuft root=%.2f top=%.2f -> veg=%.0f", i,
                         m.pos.y, dbg_root, dbg_top, vegetation);

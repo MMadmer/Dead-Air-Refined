@@ -28,6 +28,7 @@
 #pragma warning(pop)
 #include "Weapon.h"
 #include "xrEngine/Environment.h"
+#include "xrEngine/da_snow_field.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 
 namespace DaAi::Sense
@@ -482,8 +483,11 @@ float receive(CAI_Stalker& hearer, const Fvector& position, float power, u16 sou
 
     const Config& c = config();
     power *= profile(hearer).hear_gain;
-    // Rain is a noise floor: quiet sounds drown in it, gunfire does not.
-    const float rain = c.rain_mask * GamePersistent().Environment().CurrentEnv.rain_density;
+    // Rain is a noise floor: quiet sounds drown in it, gunfire does not. Falling snow is nearly silent
+    // and fresh snow swallows sound, so it raises the floor only a little.
+    const float liquid = clampr(da_precip().liquid, 0.f, 1.f);
+    const float rain =
+        c.rain_mask * GamePersistent().Environment().CurrentEnv.rain_density * (liquid + 0.15f * (1.f - liquid));
     if (power - rain < threshold)
         return _max(power - rain, 0.f);
 

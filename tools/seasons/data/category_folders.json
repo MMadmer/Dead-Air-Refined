@@ -1,0 +1,1032 @@
+{
+ "tables": {
+  "terrain": [
+   [
+    "10 Apr",
+    "spring_mid"
+   ],
+   [
+    "01 May",
+    "spring_late"
+   ],
+   [
+    "01 Jun",
+    "summer"
+   ],
+   [
+    "20 Sep",
+    "autumn"
+   ],
+   [
+    "01 Nov",
+    "spring_early"
+   ]
+  ],
+  "build_details": [
+   [
+    "10 Apr",
+    "spring_mid"
+   ],
+   [
+    "01 May",
+    "spring_late"
+   ],
+   [
+    "01 Jun",
+    "summer"
+   ],
+   [
+    "20 Sep",
+    "autumn"
+   ],
+   [
+    "01 Nov",
+    "spring_early"
+   ]
+  ],
+  "level_lods": [
+   [
+    "16 Feb",
+    "spring_early"
+   ],
+   [
+    "10 Apr",
+    "spring_mid"
+   ],
+   [
+    "01 May",
+    "spring_late"
+   ],
+   [
+    "01 Jun",
+    "summer"
+   ],
+   [
+    "20 Sep",
+    "autumn"
+   ],
+   [
+    "01 Nov",
+    "spring_early"
+   ],
+   [
+    "15 Dec",
+    "winter"
+   ]
+  ],
+  "trees": [
+   [
+    "16 Feb",
+    "spring_early"
+   ],
+   [
+    "10 Apr",
+    "spring_mid"
+   ],
+   [
+    "01 May",
+    "spring_late"
+   ],
+   [
+    "01 Jun",
+    "summer"
+   ],
+   [
+    "20 Sep",
+    "autumn"
+   ],
+   [
+    "01 Nov",
+    "spring_early"
+   ],
+   [
+    "15 Dec",
+    "winter"
+   ]
+  ],
+  "map": [
+   [
+    "16 Feb",
+    "spring_early"
+   ],
+   [
+    "10 Apr",
+    "spring_mid"
+   ],
+   [
+    "01 May",
+    "spring_late"
+   ],
+   [
+    "01 Jun",
+    "summer"
+   ],
+   [
+    "20 Sep",
+    "autumn"
+   ],
+   [
+    "01 Nov",
+    "spring_early"
+   ],
+   [
+    "15 Dec",
+    "winter"
+   ]
+  ],
+  "ui": [
+   [
+    "16 Feb",
+    "spring_early"
+   ],
+   [
+    "10 Apr",
+    "spring_mid"
+   ],
+   [
+    "01 May",
+    "spring_late"
+   ],
+   [
+    "01 Jun",
+    "summer"
+   ],
+   [
+    "20 Sep",
+    "autumn"
+   ],
+   [
+    "01 Nov",
+    "spring_early"
+   ],
+   [
+    "15 Dec",
+    "winter"
+   ]
+  ],
+  "grnd": [
+   [
+    "01 Jan",
+    null
+   ]
+  ],
+  "detail": [
+   [
+    "01 Jan",
+    null
+   ]
+  ],
+  "roof": [
+   [
+    "01 Jan",
+    null
+   ]
+  ],
+  "decal": [
+   [
+    "16 Feb",
+    "spring_early"
+   ],
+   [
+    "10 Apr",
+    "spring_mid"
+   ],
+   [
+    "01 May",
+    "spring_late"
+   ],
+   [
+    "01 Jun",
+    "summer"
+   ],
+   [
+    "20 Sep",
+    "autumn"
+   ],
+   [
+    "01 Nov",
+    "spring_early"
+   ],
+   [
+    "15 Dec",
+    "winter"
+   ]
+  ],
+  "vine": [
+   [
+    "10 Apr",
+    null
+   ],
+   [
+    "01 Nov",
+    "winter"
+   ]
+  ]
+ },
+ "old": [
+  [
+   "08 Mar",
+   "spring_early"
+  ],
+  [
+   "10 Apr",
+   "spring_mid"
+  ],
+  [
+   "01 May",
+   "spring_late"
+  ],
+  [
+   "01 Jun",
+   "summer"
+  ],
+  [
+   "20 Sep",
+   "autumn"
+  ],
+  [
+   "01 Nov",
+   "spring_early"
+  ],
+  [
+   "01 Dec",
+   "winter"
+  ]
+ ],
+ "painted_where_cover_lt_1_new": {
+  "vine": [
+   97,
+   "16 Feb",
+   "14 Dec"
+  ]
+ },
+ "painted_where_cover_lt_1_old": {
+  "terrain": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "build_details": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "level_lods": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "trees": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "map": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "ui": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "grnd": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "detail": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "roof": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "decal": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ],
+  "vine": [
+   34,
+   "16 Feb",
+   "14 Dec"
+  ]
+ },
+ "events_new": [
+  [
+   "16 Feb",
+   [
+    [
+     "level_lods",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "trees",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "map",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "ui",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "decal",
+     "winter",
+     "spring_early"
+    ]
+   ],
+   187
+  ],
+  [
+   "10 Apr",
+   [
+    [
+     "terrain",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "build_details",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "level_lods",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "trees",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "map",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "ui",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "decal",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "vine",
+     "winter",
+     null
+    ]
+   ],
+   185
+  ],
+  [
+   "01 May",
+   [
+    [
+     "terrain",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "build_details",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "level_lods",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "trees",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "map",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "ui",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "decal",
+     "spring_mid",
+     "spring_late"
+    ]
+   ],
+   183
+  ],
+  [
+   "01 Jun",
+   [
+    [
+     "terrain",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "build_details",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "level_lods",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "trees",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "map",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "ui",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "decal",
+     "spring_late",
+     "summer"
+    ]
+   ],
+   183
+  ],
+  [
+   "20 Sep",
+   [
+    [
+     "terrain",
+     "summer",
+     "autumn"
+    ],
+    [
+     "build_details",
+     "summer",
+     "autumn"
+    ],
+    [
+     "level_lods",
+     "summer",
+     "autumn"
+    ],
+    [
+     "trees",
+     "summer",
+     "autumn"
+    ],
+    [
+     "map",
+     "summer",
+     "autumn"
+    ],
+    [
+     "ui",
+     "summer",
+     "autumn"
+    ],
+    [
+     "decal",
+     "summer",
+     "autumn"
+    ]
+   ],
+   181
+  ],
+  [
+   "01 Nov",
+   [
+    [
+     "terrain",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "build_details",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "level_lods",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "trees",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "map",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "ui",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "decal",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "vine",
+     null,
+     "winter"
+    ]
+   ],
+   185
+  ],
+  [
+   "15 Dec",
+   [
+    [
+     "level_lods",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "trees",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "map",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "ui",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "decal",
+     "spring_early",
+     "winter"
+    ]
+   ],
+   187
+  ]
+ ],
+ "events_old": [
+  [
+   "08 Mar",
+   [
+    [
+     "terrain",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "build_details",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "level_lods",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "trees",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "map",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "ui",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "grnd",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "detail",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "roof",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "decal",
+     "winter",
+     "spring_early"
+    ],
+    [
+     "vine",
+     "winter",
+     "spring_early"
+    ]
+   ],
+   356
+  ],
+  [
+   "10 Apr",
+   [
+    [
+     "terrain",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "build_details",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "level_lods",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "trees",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "map",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "ui",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "grnd",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "detail",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "roof",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "decal",
+     "spring_early",
+     "spring_mid"
+    ],
+    [
+     "vine",
+     "spring_early",
+     "spring_mid"
+    ]
+   ],
+   183
+  ],
+  [
+   "01 May",
+   [
+    [
+     "terrain",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "build_details",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "level_lods",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "trees",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "map",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "ui",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "grnd",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "detail",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "roof",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "decal",
+     "spring_mid",
+     "spring_late"
+    ],
+    [
+     "vine",
+     "spring_mid",
+     "spring_late"
+    ]
+   ],
+   183
+  ],
+  [
+   "01 Jun",
+   [
+    [
+     "terrain",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "build_details",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "level_lods",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "trees",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "map",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "ui",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "grnd",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "detail",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "roof",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "decal",
+     "spring_late",
+     "summer"
+    ],
+    [
+     "vine",
+     "spring_late",
+     "summer"
+    ]
+   ],
+   183
+  ],
+  [
+   "20 Sep",
+   [
+    [
+     "terrain",
+     "summer",
+     "autumn"
+    ],
+    [
+     "build_details",
+     "summer",
+     "autumn"
+    ],
+    [
+     "level_lods",
+     "summer",
+     "autumn"
+    ],
+    [
+     "trees",
+     "summer",
+     "autumn"
+    ],
+    [
+     "map",
+     "summer",
+     "autumn"
+    ],
+    [
+     "ui",
+     "summer",
+     "autumn"
+    ],
+    [
+     "grnd",
+     "summer",
+     "autumn"
+    ],
+    [
+     "detail",
+     "summer",
+     "autumn"
+    ],
+    [
+     "roof",
+     "summer",
+     "autumn"
+    ],
+    [
+     "decal",
+     "summer",
+     "autumn"
+    ],
+    [
+     "vine",
+     "summer",
+     "autumn"
+    ]
+   ],
+   181
+  ],
+  [
+   "01 Nov",
+   [
+    [
+     "terrain",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "build_details",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "level_lods",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "trees",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "map",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "ui",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "grnd",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "detail",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "roof",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "decal",
+     "autumn",
+     "spring_early"
+    ],
+    [
+     "vine",
+     "autumn",
+     "spring_early"
+    ]
+   ],
+   183
+  ],
+  [
+   "01 Dec",
+   [
+    [
+     "terrain",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "build_details",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "level_lods",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "trees",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "map",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "ui",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "grnd",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "detail",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "roof",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "decal",
+     "spring_early",
+     "winter"
+    ],
+    [
+     "vine",
+     "spring_early",
+     "winter"
+    ]
+   ],
+   356
+  ]
+ ],
+ "winter_cover_eq_1_window": [
+  "15 Dec",
+  "15 Feb"
+ ]
+}

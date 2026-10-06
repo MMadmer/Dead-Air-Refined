@@ -8,6 +8,9 @@
 
 #include "Layers/xrRender/FBasicVisual.h"
 #if RENDER == R_R4
+#include "Layers/xrRender/da_ground.h"
+#include "Layers/xrRender/da_snow.h"
+#include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_async.h"
 #include "Layers/xrRenderPC_R4/da_vrs.h"
@@ -46,6 +49,7 @@ struct parallel_details
     batch batches[CDetailManager::dump_count];
     u32 inline_dumps = 0; // batches no context was free for: the immediate context draws them
     bool started = false;
+    bool cleared = false; // finish() executed lists: the immediate context lost its G-buffer targets
 
     void start()
     {
@@ -110,6 +114,7 @@ struct parallel_details
             imm.Invalidate();
             r.rmNormal(imm);
         }
+        cleared = executed;
         return true;
     }
 
@@ -344,6 +349,17 @@ void CRender::Render()
 #if RENDER == R_R4
     // The grass rows the calc task produced go to the GPU.
     da_grass_mesh_frame_prepare(RCache);
+    // The season's ground window, snow depth and blade generation, in this order: the snow sits on
+    // the window, the blades read both (da_grass_frame_prepare waits for the detail calc task).
+    {
+        dx11GpuTimerScope gpu_snow(dx11GpuTimers::SnowPrep);
+        da_ground_frame_prepare(RCache);
+        da_snow_frame_prepare(RCache);
+    }
+    {
+        dx11GpuTimerScope gpu_grass_gen(dx11GpuTimers::GrassGen);
+        da_grass_frame_prepare(RCache);
+    }
 #endif
 
     r_main.sync();
@@ -393,23 +409,39 @@ void CRender::Render()
 #if defined(USE_DX11)
     GpuTimers.Begin(dx11GpuTimers::Scene);
 #endif
-    // The G-buffer grass, once per frame, the mesh/vertex A/B tool around it.
+    // The G-buffer grass, once per frame, the mesh/vertex A/B tool around it: the stock detail
+    // cards, then the blades, then the near snow grid over both (contract order, before
+    // phase_scene_end).
 #if defined(XR_D3D12)
     parallel_details details_job;
     const auto render_details = [&] {
-        dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
-        da_grass_ab_gbuffer_begin();
-        if (!details_job.finish(dsgraph.cmd_list) && Details)
-            Details->Render(dsgraph.cmd_list, true);
-        da_grass_ab_gbuffer_end();
+        {
+            dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
+            da_grass_ab_gbuffer_begin();
+            if (!details_job.finish(dsgraph.cmd_list) && Details)
+                Details->Render(dsgraph.cmd_list, true);
+            // The executed lists left the immediate context without the G-buffer, and the blades and
+            // the snow grid draw on that context: the targets come back only when one of them draws.
+            if (details_job.cleared && (da_grass_active() || da_snow_active()))
+                Target->phase_scene_begin_parallel(dsgraph.cmd_list, dsgraph.cmd_list.xforms.m_motion_pass);
+            da_grass_render_gbuffer(dsgraph.cmd_list);
+            da_grass_ab_gbuffer_end();
+        }
+        dx11GpuTimerScope gpu_snow(dx11GpuTimers::SnowGrid);
+        da_snow_render_grid(dsgraph.cmd_list);
     };
 #elif RENDER == R_R4
     const auto render_details = [&] {
-        dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
-        da_grass_ab_gbuffer_begin();
-        if (Details)
-            Details->Render(dsgraph.cmd_list, true);
-        da_grass_ab_gbuffer_end();
+        {
+            dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
+            da_grass_ab_gbuffer_begin();
+            if (Details)
+                Details->Render(dsgraph.cmd_list, true);
+            da_grass_render_gbuffer(dsgraph.cmd_list);
+            da_grass_ab_gbuffer_end();
+        }
+        dx11GpuTimerScope gpu_snow(dx11GpuTimers::SnowGrid);
+        da_snow_render_grid(dsgraph.cmd_list);
     };
 #else
     const auto render_details = [&] {
@@ -650,6 +682,11 @@ void CRender::Render()
     r_rain.sync();
 
 #if RENDER == R_R4
+    // The snow layer rewrites the G-buffer over every opaque surface, the rain's wet look included.
+    {
+        dx11GpuTimerScope gpu_snow(dx11GpuTimers::SnowLayer);
+        da_snow_apply_layer(RCache);
+    }
     // Fork B: the G-buffer is final, GTAO may run as a job.
     da_async_fork_gtao(RCache);
 #endif

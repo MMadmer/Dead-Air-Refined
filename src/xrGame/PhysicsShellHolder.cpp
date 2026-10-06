@@ -9,6 +9,7 @@
 #include "Level.h"
 #include "xrPhysics/PHCommander.h"
 #include "xrPhysics/PHScriptCall.h"
+#include "da_snow_deformers.h"
 #include "CustomRocket.h"
 #include "Grenade.h"
 
@@ -455,6 +456,9 @@ void CPhysicsShellHolder::PHLoadState(IReader& P)
 bool CPhysicsShellHolder::register_schedule() const { return (b_sheduled); }
 void CPhysicsShellHolder::on_physics_disable()
 {
+    // Come to rest: a corpse, loot, a prop leaves its footprint in the snow instead of lying buried.
+    da_snow_deform_settled(*this);
+
     if (IsGameTypeSingle())
         return;
 

@@ -165,6 +165,11 @@ extern ECORE_API int ps_r__gpu_driven; // r__gpu_driven: the GPU-driven trees (-
 extern ECORE_API int ps_r__grass_mesh; // r__grass_mesh: mesh grass (-1 auto, 0 off, 1 on)
 extern ECORE_API int ps_r__dbg_grass_ab; // r__dbg_grass_ab: one A/B of the grass paths next frame
 // [dx12:mesh] end variables
+extern ECORE_API int ps_r__dbg_snow; // r__dbg_snow: the QA view of the snow passes (0 off, 1 paths, 2 no grid cuts)
+// r__dbg_grass (QA, cost experiments of the blade generation): 1 no basal pairs, 2 no litter, 4 the community's first
+// graminoid only, 8 no early out, 16 no stem leaves, 32 the palette's presence near the camera too, 64 every lane
+// ends after the early out, 128 no wind forces.
+extern ECORE_API int ps_r__dbg_grass;
 // [dx12:offload] begin variables
 // The auto value of r__gpu_driven and r__grass_mesh (da_offload.h): its thresholds.
 extern ECORE_API float ps_r__offload_margin; // how much slower the bottleneck side is, 0.1 = 10 %

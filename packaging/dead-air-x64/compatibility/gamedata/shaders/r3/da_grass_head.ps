@@ -1,0 +1,219 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Blade grass, the G-buffer pixel shader of the seed heads (docs/dead-air/GRASS.md): the blades' rounded
+// normal, gloss filter and translucent foliage code (da_grass_blade.ps), plus the head's own texture. Every
+// ribbon is built of spikelets: ellipses of the type's grain size on a jittered grid in metres along and
+// across the ribbon, denser on the axis and in the clusters (lobes) along it, thinning towards a fluffy rim,
+// each grain with its own tone and a lighter tip. Air between the grains is cut. Once a grain is under
+// about two pixels the grains fade into their mean cover, cut stochastically (interleaved gradient noise,
+// a new pattern every frame while the motion vectors run, so TAA resolves it into a soft, see-through head;
+// a fixed pattern otherwise). A ribbon under two pixels wide is only a stroke of colour and keeps it. The
+// heads are a few thousand small ribbons, so the discard costs early-Z only on them.
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_material_codes.h"
+
+struct p_grass
+{
+	float4	hpos		: SV_Position;
+	float4	hpos_cur	: TEXCOORD0;
+	float4	hpos_prev	: TEXCOORD1;
+	float4	pv_t		: TEXCOORD2;	// view-space position, s along the head
+	float4	nb_u		: TEXCOORD3;
+	float4	lat_g		: TEXCOORD4;
+	float4	nc			: TEXCOORD5;
+	float4	alb_h		: TEXCOORD6;
+	float4	misc		: TEXCOORD7;	// x translucency, y kind (2), z detail, w lobes + rim fluff (0..0.95)
+	float4	sp			: TEXCOORD8;	// x metres along, y metres across, z ribbon seed, w type
+	float4	sp2			: TEXCOORD9;	// x the species' grain scale, y its flowers' petals (0: round grains), z a disc's radius,
+								// w 1 = a forb's flowers
+};
+
+uniform float4	da_grass_vmisc;	// x frame & 63, y 1 = motion vectors
+
+// The grain of a head type: x spikelet (floret, flower) length, y width (m), z cover of the axis, w how
+// lobed it is. The forbs' grains are round: a capitulum, a floret of an umbel, a flower of a raceme.
+float4	grass_grain	(uint type)
+{
+	if (type == 1u)
+		return float4(0.0030f, 0.0022f, 0.97f, 0.2f);
+	if (type == 2u)
+		return float4(0.0028f, 0.0020f, 0.97f, 0.1f);
+	if (type == 3u)
+		return float4(0.0050f, 0.0030f, 0.85f, 0.7f);
+	if (type == 4u)
+		return float4(0.0040f, 0.0024f, 0.62f, 0.4f);
+	if (type == 5u)
+		return float4(0.0025f, 0.0018f, 0.45f, 0.3f);
+	if (type == 6u)
+		return float4(0.0050f, 0.0022f, 0.85f, 0.75f);
+	if (type == 7u)
+		return float4(0.0060f, 0.0024f, 0.70f, 0.4f);
+	if (type == 8u)
+		return float4(0.0120f, 0.0040f, 0.75f, 0.2f);
+	if (type == 10u)
+		return float4(0.0050f, 0.0046f, 0.92f, 0.1f);
+	if (type == 11u)
+		return float4(0.0030f, 0.0026f, 0.90f, 0.35f);
+	if (type == 12u)
+		return float4(0.0026f, 0.0024f, 0.62f, 0.3f);
+	if (type == 13u)
+		return float4(0.0024f, 0.0022f, 0.92f, 0.1f);
+	if (type == 14u)
+		return float4(0.0120f, 0.0105f, 0.85f, 0.15f);
+	if (type == 15u)
+		return float4(0.0045f, 0.0040f, 0.92f, 0.0f);
+	return float4(0.0030f, 0.0020f, 0.95f, 0.2f);
+}
+
+float	grass_grain_hash	(int2 c, uint salt)
+{
+	uint v = uint(c.x) * 0x8da6b343u ^ uint(c.y) * 0xd8163841u ^ salt * 0x9e3779b9u;
+	v ^= v >> 15;
+	v *= 0x2c1b3c6du;
+	v ^= v >> 12;
+	v *= 0x297a2d39u;
+	v ^= v >> 15;
+	return float(v >> 8) * (1.0f / 16777216.0f);
+}
+
+// The grains around q (in grain cells): the depth inside the nearest grain that is present (0 outside
+// every grain), its tone, the position along it (-1 base .. 1 tip) and the distance from its centre. A grain
+// overlaps its neighbours along the ribbon, so the four nearest cells decide. A flower (petals > 0) is round,
+// cut into its petals, each turned its own way.
+float	grass_grains	(float2 q, float cover, uint salt, float petals, out float tone, out float along, out float rad)
+{
+	float best = 0.0f;
+	tone = 0.5f;
+	along = 0.0f;
+	rad = 1.0f;
+	const float2 b = floor(q - 0.5f);
+	const bool flower = petals > 0.5f;
+	[unroll] for (int j = 0; j < 2; ++j)
+	{
+		[unroll] for (int i = 0; i < 2; ++i)
+		{
+			const int2 c = int2(b) + int2(i, j);
+			const float r0 = grass_grain_hash(c, salt);
+			const float r1 = grass_grain_hash(c, salt + 1u);
+			const float r2 = grass_grain_hash(c, salt + 2u);
+			const float2 centre = float2(c) + 0.5f + (float2(r1, r2) - 0.5f) * 0.5f;
+			const float2 e = (q - centre) / (flower ? float2(0.55f, 0.55f) : float2(0.65f, 0.5f));
+			float r2e = dot(e, e);
+			[branch] if (flower)
+			{
+				const float star = 0.4f + 0.6f * pow(abs(cos(0.5f * petals * (atan2(e.y, e.x) + 6.2831853f * r1))), 0.7f);
+				r2e /= star * star;
+			}
+			const float k = (r0 < cover) ? 1.0f - r2e : 0.0f;
+			[flatten] if (k > best)
+			{
+				best = k;
+				tone = frac(r1 * 7.0f + r2 * 3.0f);
+				along = e.x;
+				rad = sqrt(dot(e, e));
+			}
+		}
+	}
+	return best;
+}
+
+f_deffer	main	(p_grass I)
+{
+	const float3 V = -normalize(I.pv_t.xyz);
+	float3 nb = I.nb_u.xyz;
+	if (dot(nb, V) < 0.0f)
+		nb = -nb;
+	float3 N = normalize(nb + I.lat_g.xyz);
+	N = normalize(lerp(N, normalize(I.nc.xyz), I.nc.w));
+
+	const uint type = uint(I.sp.w + 0.5f);
+	float4 grain = grass_grain(type);
+	grain.xy *= I.sp2.x;
+	// A raceme opens from its base: the upper third is buds, smaller, closed and darker.
+	const float bud = type == 14u ? smoothstep(0.55f, 1.0f, I.pv_t.w) : 0.0f;
+	grain.xy *= lerp(1.0f, 0.55f, bud);
+	const float petals = bud < 0.5f ? I.sp2.y : 0.0f;
+	// Flowers stand apart, with air between them.
+	grain.z *= petals > 0.5f ? 0.8f : 1.0f;
+	// Clusters along the head (1 on a cluster, 0 between two), phased per ribbon, faded below a pixel.
+	const float lobes = floor(I.misc.w), fluff = frac(I.misc.w);
+	const float ls = lobes * I.pv_t.w + I.sp.z;
+	const float lobe = 0.5f + 0.5f * cos(6.2831853f * ls);
+	// A head without clusters (the flowers' discs, globes and racemes) has no lobe darkening.
+	const float lobe_k = lobes > 0.5f ? saturate(1.0f - 2.0f * fwidth(ls)) : 0.0f;
+	// Across the ribbon: the axis is dense, the rim thins out (more on fluffy heads), deeper between clusters.
+	const float u = I.nb_u.w;
+	const float e = abs(u * 2.0f - 1.0f);
+	const float rim = smoothstep(lerp(0.55f, 0.15f, fluff), 1.0f, e);
+	float cover = grain.z * (1.0f - lerp(0.45f, 0.85f, fluff) * rim);
+	cover *= lerp(1.0f, lerp(1.0f - grain.w, 1.0f, lobe), lobe_k);
+	// An umbel's florets gather in its umbellets: round clusters a fifth of its width across, air between them
+	// (their mean cover once they are under two pixels).
+	[branch] if (type == 13u && I.sp2.z > 0.0f)
+	{
+		const float2 uq = I.sp.xy / (0.4f * I.sp2.z);
+		const float2 b0 = floor(uq - 0.5f);
+		float dmin = 4.0f;
+		[unroll] for (int j = 0; j < 2; ++j)
+		{
+			[unroll] for (int i = 0; i < 2; ++i)
+			{
+				const int2 c = int2(b0) + int2(i, j);
+				const float2 o = float2(grass_grain_hash(c, 0x51u), grass_grain_hash(c, 0x52u)) - 0.5f;
+				dmin = min(dmin, length(uq - (float2(c) + 0.5f + 0.45f * o)));
+			}
+		}
+		const float um = saturate((0.4f - dmin) / max(fwidth(dmin), 1e-4f) + 0.5f);
+		cover *= lerp(0.55f, um, saturate(1.0f - 0.5f * max(fwidth(uq.x), fwidth(uq.y))));
+	}
+
+	// The grains, while one spans about two pixels; their mean cover beyond.
+	const float2 q = float2(I.sp.x / grain.x, I.sp.y / grain.y);
+	const float2 fq = fwidth(q);
+	const float fine = 1.0f - smoothstep(0.3f, 0.7f, max(fq.x, fq.y));
+	float tone = 0.5f, along = 0.0f, inside = 0.0f, rad = 1.0f;
+	float cov = (I.sp2.w > 0.5f ? 0.95f : 0.85f) * cover;
+	[branch] if (fine > 0.0f)
+	{
+		inside = grass_grains(q, cover, uint(I.sp.z) * 0x3Bu + type, petals, tone, along, rad);
+		cov = lerp(cov, inside > 0.0f ? 1.0f : 0.0f, fine);
+	}
+	// A ribbon under two pixels wide is a stroke of colour: it keeps it.
+	const float cut_k = saturate((1.0f / max(fwidth(u), 1e-4f) - 2.0f) / 3.0f);
+	cov = lerp(1.0f, cov, cut_k);
+	const float frame = da_grass_vmisc.y > 0.5f ? da_grass_vmisc.x : 0.0f;
+	const float2 pix = I.hpos.xy + float2(17.0f, 41.0f) + 7.13f * frame;
+	const float ign = frac(52.9829189f * frac(dot(pix, float2(0.06711056f, 0.00583715f))));
+	// A middle-distance head is spikelets and air: under TAA a new share of its pixels is cut every frame,
+	// which resolves into a see-through head; without the motion vectors it stays solid.
+	const float solid = (I.misc.z < 0.5f && da_grass_vmisc.y > 0.5f && I.sp2.w < 0.5f) ? 0.75f : 1.0f;
+	clip(cov * solid - ign - 1e-3f);
+
+	// Each grain its own tone, its glumes lighter towards the tip and shaded at its margin; darker between
+	// the clusters; the fluff catches a little more light at grazing angles.
+	float3 albedo = I.alb_h.rgb * (1.0f - 0.2f * lobe_k * (1.0f - lobe)) * lerp(1.0f, 0.78f, bud);
+	// A grass head's glumes vary round a darker mean (shade between the spikelets); a forb's flowers are their own
+	// colour on average (their photo colour already holds their shade), varied a little petal to petal.
+	const float3 vary = I.sp2.w > 0.5f ? float3(0.88f, 1.1f, 0.94f) : float3(0.72f, 1.12f, 0.82f);
+	albedo *= lerp(1.0f, lerp(vary.x, vary.y, tone) * lerp(0.85f, 1.1f, saturate(along * 0.5f + 0.5f)) * lerp(vary.z, 1.0f, sqrt(saturate(inside))), fine);
+	// A flower's eye (stamens, the throat) is darker than its petals.
+	albedo *= lerp(1.0f, lerp(0.72f, 1.0f, smoothstep(0.12f, 0.35f, rad)), fine * (petals > 0.5f ? 1.0f : 0.0f));
+	albedo *= 1.0f + 0.1f * fluff * (1.0f - abs(dot(N, V)));
+
+	// Gloss as sub-pixel normal variance (GoT), on the Oren-Nayar slice's Blinn lobe (exponent 16).
+	float gloss = I.lat_g.w;
+	{
+		const float3 dndu = ddx(N), dndv = ddy(N);
+		const float kernel_r2 = 2.0f * 0.15915494f * (dot(dndu, dndu) + dot(dndv, dndv));
+		const float a2 = 2.0f / (16.0f + 2.0f);
+		gloss *= a2 / (a2 + min(kernel_r2, 0.18f));
+	}
+
+	const float mtl = da_pack_foliage_mtl(I.misc.x, I.hpos.xy, uint(da_grass_vmisc.x));
+	f_deffer O = pack_gbuffer(float4(N, I.alb_h.w), float4(I.pv_t.xyz, mtl), float4(saturate(albedo), saturate(gloss)));
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
+	return O;
+}

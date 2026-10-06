@@ -191,10 +191,22 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 	hdiffuse *= occ;
 	hspecular *= occ;
 
+	// Snow takes the eye's white balance (da_snow_light.h): the sun and the lights by the sun's colour, the
+	// sky term by its own. Its lights came divided by the albedo's cool cast (DA_SNOW_TINT) so the sunlit
+	// diffuse stays neutral; the specular, which no albedo multiplies, takes the light without that division.
+	float3 L_spec = L.rgb;
+	[branch] if ( da_is_snow( mtl ) )
+	{
+		const float wb = da_snow_wb_weight( gbd.C, L_sun_color.rgb );
+		L.rgb    *= lerp( 1.0h, da_snow_wb_gain( L_sun_color.rgb ), wb );
+		hdiffuse *= lerp( 1.0h, da_snow_wb_gain( hdiffuse ) * DA_SNOW_SKY_TINT, wb );
+		L_spec    = L.rgb * DA_SNOW_TINT;
+	}
+
         float4         light       = float4         (L.rgb + hdiffuse, L.w)        ;
         float4         C           = D*light       ;                             // rgb.gloss * light(diffuse.specular)
 //        float3         spec        = (C.rgb*.5h + .5h)*C.w + hspecular + hspecular + hspecular;			// replicated specular
-	float3         spec        = C.www*L.rgb*5         + hspecular;      // replicated specular
+	float3         spec        = C.www*L_spec*5         + hspecular;      // replicated specular
 
 #ifdef         USE_SUPER_SPECULAR
                       spec      = (C.rgb*.5h + .5h)*C.w + hspecular        ;

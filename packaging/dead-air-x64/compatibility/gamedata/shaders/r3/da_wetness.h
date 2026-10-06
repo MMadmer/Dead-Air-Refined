@@ -1,6 +1,8 @@
 #ifndef DA_WETNESS_H
 #define DA_WETNESS_H
 
+#include "da_material_codes.h"
+
 // ---- The shared wet-surface model ---------------------------------------------------------
 //
 // Included by BOTH halves of the puddle system (da_puddles.h, which the G-buffer terrain pass
@@ -58,8 +60,15 @@ float2 da_wet_hash2(float2 p)
 //
 // One class drives both the darkening and, for free, the drying rate: a non-porous surface has
 // no porous term to hold, so it keeps only the film and is dry a minute after the rain stops.
+//
+// The codes above the stock range (da_material_codes.h) carry no slice: foliage (the blade grass) is a
+// leaf, between waxy live blades (0.15) and dead straw (0.5); snow holds water like soil.
 float da_porosity(float mtl)
 {
+	if (da_is_foliage(mtl))
+		return 0.35f;
+	if (da_is_snow(mtl))
+		return 1.0f;
 	const float m = clamp(mtl * 4.0f - 0.5f, 0.0f, 3.0f);
 	const float a = lerp(1.00f, 0.75f, saturate(m));        // soil, cloth -> stone, concrete
 	const float b = lerp(0.35f, 0.05f, saturate(m - 2.0f)); // painted, plastic -> metal

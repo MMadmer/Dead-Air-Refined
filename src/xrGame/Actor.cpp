@@ -67,6 +67,7 @@
 #include "InventoryBox.h"
 #include "location_manager.h"
 #include "player_hud.h"
+#include "da_snow_deformers.h"
 #include "da_script_cam.h"
 #include "da_water_actor.h"
 #include "PHMovementControl.h"
@@ -1491,6 +1492,11 @@ void CActor::UpdateCL()
     {
         auto& env = g_pGamePersistent->Environment();
         env.wind_motor_press(Position(), 0.55f, 1.15f);
+
+        // The actor's feet on the snow and in the grass, and once a frame the resting objects round
+        // the camera that still need their footprint.
+        da_snow_deform_entity(*this);
+        da_snow_deform_frame();
 
         // Wind pushes the body too: the drag equation F = 0.5*rho*Cd*A*v^2 gives ~0.46*v^2 N
         // for a standing human - about 56 N in a real gale. Ground friction eats most of it

@@ -1,0 +1,68 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+
+#include "common.h"
+#include "da_fog_common.h"
+
+// Snowflakes: the snow mode of the rain sheet (dxRainRender::RenderFlakes, docs/dead-air/WINTER.md).
+//
+// The quad is camera-facing and carries the corner of the flake in TEXCOORD0 and the flake's alpha in
+// COLOR; the flake itself is drawn here, so snow needs no texture asset. A flake is a loose aggregate of
+// crystals, not a disc: a soft edge with a denser core. Lit like the streaks of da_rain.ps - the pass
+// writes after the tonemap, so the scene's HDR light only modulates the weather's precipitation tint -
+// with the strong forward scatter of ice toward a low sun. Fogged by the shared haze and softened
+// against the scene so a flake never cuts a hard edge across a silhouette.
+
+struct v2p_rain
+{
+	float2 Tex0     : TEXCOORD0;
+	float4 Color    : COLOR;
+	float3 wpos     : TEXCOORD1;
+	float4 tctexgen : TEXCOORD2;
+	float4 HPos     : SV_Position;
+	float  fog      : FOG;
+};
+
+//	Must be less than view near
+#define DEPTH_EPSILON 0.1h
+//	Metres over which a flake dissolves into whatever it crosses.
+#define FLAKE_SOFT 0.12
+
+float4 main (v2p_rain I) : SV_Target
+{
+	const float2 q  = I.Tex0 * 2.0 - 1.0;
+	const float  r2 = dot(q, q);
+	const float  edge = saturate(1.0 - r2);
+	float a = edge * edge * (0.55 + 0.45 * saturate(1.0 - r2 * 2.5));
+	a *= I.Color.a;
+
+	const float3 V    = I.wpos - eye_position;
+	const float  dist = length(V);
+	const float3 Vn   = V / max(dist, 0.001);
+
+	const float3 skyc = L_hemi_color.rgb / (1.0 + L_hemi_color.rgb);
+	const float3 sunc = L_sun_color / (1.0 + L_sun_color);
+	const float  fwd  = pow(saturate(dot(Vn, -L_sun_dir_w)), 6.0);
+	float3 col = I.Color.rgb * (0.50 + 0.35 * skyc + 0.25 * sunc + 0.80 * sunc * fwd);
+	col = saturate(col);
+
+	float fogd = saturate(1.0 - I.fog);
+	[branch] if (da_fog_extras_on())
+		fogd = da_fog_height(fogd, I.wpos, eye_position, dist);
+	fogd = da_fog_ceiling(fogd);
+	col = lerp(col, fog_color.rgb, fogd * 0.6);
+	a  *= 1.0 - fogd;
+
+	const float2 tcProj = I.tctexgen.xy / I.tctexgen.w;
+#ifdef GBUFFER_OPTIMIZATION
+	gbuffer_data gbd = gbuffer_load_data(tcProj, I.HPos);
+#else
+	gbuffer_data gbd = gbuffer_load_data(tcProj);
+#endif
+	float spaceDepth = gbd.P.z - I.tctexgen.z - DEPTH_EPSILON;
+	if (spaceDepth < -2.0 * DEPTH_EPSILON)
+		spaceDepth = 100000.0; // the skybox writes no position
+	a *= saturate(spaceDepth / FLAKE_SOFT);
+
+	return float4(col, a);
+}

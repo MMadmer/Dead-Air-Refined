@@ -40,8 +40,10 @@ void main (uint tid : SV_GroupThreadID, uint gid : SV_GroupID)
 		const float sx = length( float3( d.m0.x, d.m1.x, d.m2.x ) );
 		const float sy = length( float3( d.m0.y, d.m1.y, d.m2.y ) );
 		const float sz = length( float3( d.m0.z, d.m1.z, d.m2.z ) );
-		// No footprint left: nothing rasterizes. A flat row (height zero) still does and stays.
-		keep = max( sx, sz ) > 0.0f;
+		// No footprint left: nothing rasterizes. A flat row (height zero) still does and stays. The season
+		// keeps the item out (its class's keep, da_detail_common.h): nothing to launch either; burial under
+		// snow is the mesh shader's.
+		keep = max( sx, sz ) > 0.0f && stock_season_kept( root, stock_season );
 		// The rigid model sphere, grown by the farthest the bend can carry a vertex (1.103 of its
 		// height above the root: the 0.92 cap plus the arc-length drop).
 		const float3 c = root + float3( dot( d.m0.xyz, grass_bound.xyz ), dot( d.m1.xyz, grass_bound.xyz ),

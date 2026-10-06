@@ -1,0 +1,73 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The snow grid in the G-buffer (da_snow.cpp): position, normal, material code 31 and the motion
+// vector. The albedo target is masked off in the blender: what was drawn under the grid (the ground, a
+// blade, the sky pre-fill of da_snow_skyfill.ps) stays there, and the full-screen snow layer shades
+// the grid pixels like any other snow, the thin-snow see-through included. The sky term comes from the
+// class weights: open snow sees the sky, snow under the crowns much less of it.
+// Over water the sheet ends per pixel, not along the grid's triangles: at the ice front (cover one half,
+// as water.ps and gameplay take it), and at the waterline where the bank's snow is thin. A frozen pond's
+// waterline is continuous (da_sn_pond), so is its sheet's edge. Across the shore the depth blends by the
+// water share (da_snow_grid.vs), so deep snow on the ice runs on into the bank's.
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_material_codes.h"
+#include "da_snow_common.h"
+#include "da_snow_grid.h"
+
+float da_sn_grid_trees(float2 xz)
+{
+	const float2 p = xz * da_snow_level_xf.xy + da_snow_level_xf.zw - 0.5;
+	const float2 i = floor(p);
+	const float2 f = p - i;
+	const int2 t = int2(i);
+	const float w00 = s_da_sn_weights.Load(int3(t, 0)).y;
+	const float w10 = s_da_sn_weights.Load(int3(t + int2(1, 0), 0)).y;
+	const float w01 = s_da_sn_weights.Load(int3(t + int2(0, 1), 0)).y;
+	const float w11 = s_da_sn_weights.Load(int3(t + int2(1, 1), 0)).y;
+	return lerp(lerp(w00, w10, f.x), lerp(w01, w11, f.x), f.y);
+}
+
+f_deffer main(da_sn_grid_v2p I)
+{
+	[branch] if (I.wet > 0.001 && da_sn_debug() < 2)
+	{
+		const float3 b = da_sn_base(I.Pw.xz);
+		// Over a frozen pond (its share per pixel and continuous, da_sn_pond: the shore follows the ground's own
+		// contour, not the triangles nor the water texels' squares) the sheet stays; over open water the ice
+		// front ends it (water.ps draws on).
+		float3 pond = float3(DA_SN_NONE, 0.0, 0.0);
+		[branch] if (da_snow_ice.x > 0.02)
+			pond = da_sn_pond(I.Pw.xz, b);
+		const float2 ice = da_sn_ice_at(I.Pw.xz);
+		const bool frozen = ice.x > 0.5;
+		const bool water = frozen ? pond.y > 0.5 : b.z > 0.5;
+		[branch] if (water)
+		{
+			if (!frozen)
+				discard;
+		}
+		// Over the bank: where the bank's own snow is thin, a shore triangle is cut, so the sheet ends at the
+		// waterline (along the bank's contour) and the snow layer draws the bank's cover; where the bank's snow
+		// is deep the two are one snow surface. A triangle bridging from the ice up to the bank that floats over a
+		// hollow of the bank higher than the snow on the ice reaches is cut too: left standing, it hid the bank
+		// behind its straight edges like a lid. Ground that may lie no higher than the top of the pond's ice (its
+		// surface, the bob and the depth steps, da_sn_ice_top: the grid stands at least there; the base's slack
+		// over the ground, da_sn_bank_slack) is the ice's edge, not the bank: cut there, the water mesh's own ice
+		// showed through over the ground in grey slivers and bands.
+		else if (!(pond.x > DA_SN_NONE * 0.5 &&
+			b.x < da_sn_ice_top(pond.x, I.Pv.z) + da_sn_bank_slack(-I.Nw.xz / max(I.Nw.y, 0.2))))
+		{
+			const float Dl = da_snow_depth(I.Pw.xz);
+			[branch] if (Dl < 0.03 || I.Pw.y > b.x + max(Dl, ice.y) + 0.08)
+				discard;
+		}
+	}
+	const float3 Nv = normalize(mul(m_V, float4(normalize(I.Nw), 0.0)));
+	const float hemi = lerp(0.95, 0.5, da_sn_grid_trees(I.Pw.xz));
+	f_deffer o = pack_gbuffer(float4(Nv, hemi), float4(I.Pv, da_mtl_from_code(DA_MTL_SNOW)), float4(0.9, 0.9, 0.9, 0.1));
+	o.velocity = da_velocity(I.hcur, I.hprev);
+	return o;
+}

@@ -12,6 +12,7 @@
 #include "GamePersistent.h"
 #include "xrEngine/Rain.h"
 #include "xrEngine/Environment.h"
+#include "da_snow_bake.h"
 
 namespace
 {
@@ -479,7 +480,57 @@ void bake_water_field(CObjectSpace& space)
     xr_vector<float> fill;
     bake_puddle_fill(field, terrain, fill);
 
+    // Running against standing water, for the ice of the season (water.ps, CEnvironment::ice_at): every
+    // connected sheet (8-connected, surfaces within half a metre) is judged by its width - about twice
+    // the distance to the bank deep inside it - against its area. A channel narrower than 60 m and at
+    // least six widths long runs; it freezes later and keeps open lanes.
+    xr_vector<u8> flow(field.size(), 0);
+    {
+        xr_vector<u8> seen(field.size(), 0);
+        xr_vector<size_t> stack, members;
+        xr_vector<float> shores;
+        for (size_t start = 0; start < field.size(); ++start)
+        {
+            if (!field[start].mask || seen[start])
+                continue;
+            members.clear();
+            shores.clear();
+            stack.clear();
+            stack.push_back(start);
+            seen[start] = 1;
+            while (!stack.empty())
+            {
+                const size_t i = stack.back();
+                stack.pop_back();
+                members.push_back(i);
+                shores.push_back(field[i].shore);
+                const int x = int(i % size_t(dim)), z = int(i / size_t(dim));
+                for (int dz = -1; dz <= 1; ++dz)
+                    for (int dx = -1; dx <= 1; ++dx)
+                    {
+                        const int xx = x + dx, zz = z + dz;
+                        if ((!dx && !dz) || xx < 0 || zz < 0 || xx >= dim || zz >= dim)
+                            continue;
+                        const size_t j = size_t(zz) * dim + size_t(xx);
+                        if (field[j].mask && !seen[j] && _abs(field[j].surface - field[i].surface) < 0.5f)
+                        {
+                            seen[j] = 1;
+                            stack.push_back(j);
+                        }
+                    }
+            }
+            const size_t k = std::min(shores.size() - 1, size_t(float(shores.size()) * 0.95f));
+            std::nth_element(shores.begin(), shores.begin() + k, shores.end());
+            const float width = std::max(2.1f * shores[k], texel);
+            const float area = float(members.size()) * texel * texel;
+            if (width < 60.f && area >= 6.f * width * width)
+                for (const size_t i : members)
+                    flow[i] = 255;
+        }
+    }
+
     env.set_water_field(std::move(field), std::move(fill), bounds);
+    env.set_water_class(std::move(flow));
 }
 
 // Measures the level's water body once, from the static collision - the same liquid-material
@@ -804,6 +855,9 @@ bool CLevel::Load_GameSpecific_After()
     // coverage rather than on the map existing - but the puddle fill it bakes alongside them is
     // terrain concavity, and that is worth having on the levels that are nothing but terrain.
     bake_water_field(ObjectSpace);
+    // The season's snow: 1 m fields of ground, top and classes and this level's LUT, after the water
+    // (the water reset above clears the old level's snow too).
+    da_snow_bake_level();
 
     return TRUE;
 }

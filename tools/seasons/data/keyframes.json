@@ -1,0 +1,4235 @@
+{
+ "meta": {
+  "version": "1.0",
+  "generated": "2026-10-05",
+  "representative_year": "a snowy modern ChEZ year (continuous cover ~10 Dec-20 Feb), chosen because the brief requires winter = snow only; ~1 winter in 3 is near-snowless in reality (2019/20, 2023/24, 2024/25)",
+  "depth_cap_m": 0.536,
+  "depth_cap_basis": "VERIFIED engine_snow.md: tushkan head-top 0.536 (small) / 0.670 / 0.770 m; blind-dog back 0.75-0.79 m, small dog back ~0.66 m, belly 0.41-0.47 m. 0.536 keeps every dog's back above snow; 0.670 would bury a small dog's back",
+  "depth_mapping": "INFERRED: open, under_trees and roads depths are real-world representative depths (1:1). drifts_neglected peaks exactly at the cap on 15 Feb; real counterpart = lee drifts / abandoned yards in snowy winters 0.35-0.57 m (Bragin / Mozyr extreme of the winter-max dekad 0.52 / 0.57 m, VERIFIED SP 2.04)",
+  "rollover": "grass cohort year rolls over on ~1 Jan, inside the window where grass_visible = 0 (Dec 15 - Feb 15 keys are all 0). In Jan-Aug 'thatch_*' = last season's dead blades; current-year dead tissue uses straw_* and straw_lodging. thatch_* are held (constant) Aug-Dec when thatch_fraction ~0",
+  "interpolation": "scalars: periodic monotone cubic (Fritsch-Carlson) over the 12 keys at the 15th (no overshoot; exact zeros stay zero); colours: lerp in LINEAR rgb with the same t (or smoothstep(t)); never Catmull-Rom",
+  "grass_visible_runtime": "grass_visible = saturate((0.9 - snow.coverage.open) / 0.6) evaluated on the interpolated cover; the keyed values equal this formula. Blades are additionally buried where (blade top - local snow depth) < 0.02-0.03 m",
+  "field_defs": {
+   "new_growth_height": "height of the current-season cohort / profile full summer height (grass_profiles.height_summer_m); 0..1",
+   "green_fraction": "share of visible blade area that is live green, both cohorts counted (what QA sees); must be <= 1 - thatch_fraction",
+   "cohort_green": "DERIVED = green_fraction / (1 - thatch_fraction): live share of current-cohort blades (use as 1 - senescence)",
+   "live_color / yellowing_color / straw_color / thatch_color / seed_color": "sRGB hex of DRY albedo (mid-blade); see colour_library for photo and spectral grounding; wetness darkening is applied by the shader from 'wetness' (Lagarde porosity factor), not baked in",
+   "thatch_fraction": "share of visible blades that are last season's dead blades (spring-summer); old seed heads ride on these blades",
+   "thatch_lodging": "0 upright .. 1 flat, for the thatch cohort",
+   "straw_lodging": "EXTRA field (not in the brief): lodging of current-year dead blades (summer cure, autumn, early winter)",
+   "seed_heads": "share of the profile's max head density (grass_profiles.head_share_max) carrying CURRENT-year heads",
+   "seed_stage": "0 none, 0.25 heading, 0.5 anthesis, 0.75 ripe, 1.0 shattered / weathered",
+   "tip_dryness": "dry share of live blade length from the tip",
+   "wetness": "climatological baseline wetness of blades and litter (dew, fog, melt, autumn RH) before live rain; 0..1",
+   "frost": "probability of a frosted-grass morning = P(grass-surface min < 0 C) x clear-sky share (Chornobyl Tmin 1981-2010, grass 4 C below air, sd 3.5 C; Kyiv overcast days)",
+   "density": "blade count relative to the profile's July count",
+   "burnt_patch_share": "typical-year share of profile area showing fresh burn / early regrowth (<~30 d) on the 15th; ~0.001/yr of open land burns in a normal year; megafire years (2015, 2020) are x100-x200",
+   "flood": "floodplain profiles only: share of area under standing water / waterlogged",
+   "flood_ice": "share of that water that is ice-covered"
+  },
+  "snow_field_defs": {
+   "coverage": "area fraction covered per surface class: open ground, under tree canopy, roads (game rule: compacted and fully covered wherever open ground is covered), drifts_neglected (lee of forest edges, fences, buildings, ditches, abandoned yards)",
+   "depth_m": "depth where snow lies (game metres); roads = compacted depth = max(road_min, open * rho_open / rho_road), except Mar (melt first)",
+   "depth_norm_of_cap": "drifts_neglected / cap",
+   "depth_real_m": "real-world reference (typical conditional open depth, range seen in station data/photos, climatological P(cover) and mean depth incl. snow-free days)",
+   "state / state_weights": "fresh, settled, old (crusted), wet (granular), slush",
+   "albedo_linear / colour": "linear albedo and sRGB hex; open = state-weighted (appearance.md 6.2), roads = compacted x dirt tint, under_trees = litter tint",
+   "grass_visible": "global multiplier on blade density; 0 = NOT A SINGLE BLADE"
+  },
+  "tags": "VERIFIED anchors are listed per month in keyframes.md with URLs; every keyframe number itself is INFERRED (a synthesis of those anchors)",
+  "derived_dates_fc": {
+   "open_cover_0.1": [
+    [
+     "30 Oct",
+     "up"
+    ],
+    [
+     "04 Apr",
+     "down"
+    ]
+   ],
+   "open_cover_0.5": [
+    [
+     "22 Nov",
+     "up"
+    ],
+    [
+     "13 Mar",
+     "down"
+    ]
+   ],
+   "open_cover_0.9": [
+    [
+     "07 Dec",
+     "up"
+    ],
+    [
+     "24 Feb",
+     "down"
+    ]
+   ],
+   "trees_cover_0.1": [
+    [
+     "05 Nov",
+     "up"
+    ],
+    [
+     "10 Apr",
+     "down"
+    ]
+   ],
+   "drifts_cover_0.1": [
+    [
+     "26 Oct",
+     "up"
+    ],
+    [
+     "16 Apr",
+     "down"
+    ]
+   ],
+   "grass_visible_zero_window": [
+    [
+     "07 Dec",
+     "24 Feb"
+    ]
+   ],
+   "P1_green_fraction_0.5": [
+    [
+     "04 May",
+     "up"
+    ],
+    [
+     "16 Sep",
+     "down"
+    ]
+   ],
+   "P1_seed_stage_0.5_anthesis": [
+    [
+     "15 Jul",
+     "up"
+    ]
+   ],
+   "P1_new_growth_height_0.5": [
+    [
+     "15 May",
+     "up"
+    ]
+   ],
+   "P2_green_fraction_0.5": [
+    [
+     "24 Apr",
+     "up"
+    ],
+    [
+     "01 Oct",
+     "down"
+    ]
+   ],
+   "P2_seed_stage_0.5_anthesis": [
+    [
+     "08 Jun",
+     "up"
+    ]
+   ],
+   "P2_new_growth_height_0.5": [
+    [
+     "09 May",
+     "up"
+    ]
+   ],
+   "P3_green_fraction_0.5": [
+    [
+     "02 May",
+     "up"
+    ],
+    [
+     "12 Oct",
+     "down"
+    ]
+   ],
+   "P3_seed_stage_0.5_anthesis": [
+    [
+     "25 Jun",
+     "up"
+    ]
+   ],
+   "P3_new_growth_height_0.5": [
+    [
+     "19 May",
+     "up"
+    ]
+   ],
+   "P5_green_fraction_0.5": [
+    [
+     "26 May",
+     "up"
+    ],
+    [
+     "12 Oct",
+     "down"
+    ]
+   ],
+   "P5_seed_stage_0.5_anthesis": [
+    [
+     "15 Aug",
+     "up"
+    ]
+   ],
+   "P5_new_growth_height_0.5": [
+    [
+     "31 May",
+     "up"
+    ]
+   ],
+   "P8_green_fraction_0.5": [
+    [
+     "29 Mar",
+     "up"
+    ],
+    [
+     "26 Nov",
+     "down"
+    ]
+   ],
+   "P8_seed_stage_0.5_anthesis": [
+    [
+     "15 Jun",
+     "up"
+    ]
+   ],
+   "P8_new_growth_height_0.5": [
+    [
+     "02 Apr",
+     "up"
+    ]
+   ],
+   "P3_flood_peak": "15 Apr",
+   "drifts_depth_peak": "15 Feb"
+  },
+  "continuity": {
+   "hard_issues": [],
+   "fast_transitions_flagged": [
+    "P1_TALL_CALAMAGROSTIS seed_heads Jun->Jul: 0.35 -> 0.85",
+    "P2_MEADOW_MIX green_fraction Apr->May: 0.35 -> 0.88",
+    "P2_MEADOW_MIX thatch_fraction Apr->May: 0.58 -> 0.1",
+    "P2_MEADOW_MIX seed_heads May->Jun: 0.25 -> 0.85",
+    "P3_WET_MEADOW thatch_fraction Apr->May: 0.72 -> 0.25",
+    "P4_SEDGE_MARSH green_fraction Apr->May: 0.2 -> 0.78",
+    "P4_SEDGE_MARSH thatch_fraction Apr->May: 0.78 -> 0.2",
+    "P4_SEDGE_MARSH seed_heads Apr->May: 0.3 -> 0.8",
+    "P4_SEDGE_MARSH seed_color May->Jun: Y 0.050->0.118",
+    "P5_REED_BED seed_heads Jul->Aug: 0.2 -> 0.8",
+    "P5_REED_BED seed_color Aug->Sep: Y 0.132->0.290",
+    "P6_SPARSE_SAND seed_heads May->Jun: 0.1 -> 0.6",
+    "P6_SPARSE_SAND seed_color Jun->Jul: Y 0.112->0.217",
+    "P7_RUDERAL_VERGE green_fraction Apr->May: 0.38 -> 0.86",
+    "P7_RUDERAL_VERGE seed_heads May->Jun: 0.35 -> 0.9",
+    "P7_RUDERAL_VERGE seed_color Jun->Jul: Y 0.113->0.234",
+    "snow coverage.open Feb->Mar: 1.0 -> 0.45",
+    "snow coverage.roads Feb->Mar: 1.0 -> 0.45",
+    "grass_visible Feb->Mar: 0.0 -> 0.75",
+    "snow coverage.under_trees Mar->Apr: 0.72 -> 0.05",
+    "snow coverage.drifts_neglected Mar->Apr: 0.9 -> 0.1",
+    "snow coverage.drifts_neglected Oct->Nov: 0 -> 0.5",
+    "snow coverage.open Nov->Dec: 0.35 -> 1.0",
+    "snow coverage.under_trees Nov->Dec: 0.2 -> 0.9",
+    "snow coverage.roads Nov->Dec: 0.35 -> 1.0",
+    "snow coverage.drifts_neglected Nov->Dec: 0.5 -> 1.0",
+    "grass_visible Nov->Dec: 0.917 -> 0.0"
+   ]
+  }
+ },
+ "grass_profiles": [
+  {
+   "id": "P1_TALL_CALAMAGROSTIS",
+   "role": "tall Calamagrostis old field (dominant modern ChEZ open ground)",
+   "species_md_profile": "P1 REEDGRASS_FALLOW",
+   "species_mix": "C. epigejos 0.55, Elytrigia 0.15, Poa angustifolia 0.15, Carex hirta 0.05 (+forb accents)",
+   "habitat": "old fields on sand / loamy sand, burns (Didukh c13/c8)",
+   "stock_content_profiles": [
+    "PG_BUNCH (35.8 % of stock tufts)",
+    "PG_FINE (5.3 %)"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.45,
+     0.9
+    ],
+    "culm": [
+     0.9,
+     1.4
+    ]
+   },
+   "head_share_max": 0.3,
+   "head_type": "dense erect lobed panicle 15-25 x 2-5 cm",
+   "winter_class": "standing straw, slowly collapsing",
+   "floodplain": false,
+   "seed_ramp_srgb": {
+    "0.25": "#6A6A55",
+    "0.5": "#725C60",
+    "0.75": "#8A7458",
+    "1.0": "#8E8272"
+   }
+  },
+  {
+   "id": "P2_MEADOW_MIX",
+   "role": "meadow mix (mesic fallow, abandoned hayfield)",
+   "species_md_profile": "P2 MESIC_FALLOW_MEADOW",
+   "species_mix": "Elytrigia 0.30, Dactylis 0.15, Poa pratensis 0.15, Agrostis gigantea 0.12, Schedonorus 0.08, Alopecurus 0.06, Phleum 0.04, Bromopsis 0.04, Apera 0.06",
+   "habitat": "mesic fallows, upper floodplain (Didukh c12/c19/c20)",
+   "stock_content_profiles": [
+    "PG_LEAFY (8.3 %)",
+    "PG_PLUME (3.9 %)"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.25,
+     0.6
+    ],
+    "culm": [
+     0.6,
+     1.1
+    ]
+   },
+   "head_share_max": 0.35,
+   "head_type": "mixed: spikes, cylinders (Phleum/Alopecurus), one-sided clusters (Dactylis), open panicles",
+   "winter_class": "lodging mat 5-15 cm",
+   "floodplain": false,
+   "seed_ramp_srgb": {
+    "0.25": "#6A6C4E",
+    "0.5": "#808268",
+    "0.75": "#8C7A5C",
+    "1.0": "#7A6F5E"
+   }
+  },
+  {
+   "id": "P3_WET_MEADOW",
+   "role": "wet floodplain meadow (tussock grass + small sedges)",
+   "species_md_profile": "P3 WET_MEADOW_TUSSOCK",
+   "species_mix": "Deschampsia 0.25, Schedonorus 0.20, Poa pratensis 0.15, Festuca rubra 0.12, Alopecurus 0.10, Carex hirta/nigra/panicea 0.13, Agrostis 0.05",
+   "habitat": "Pripyat floodplain inter-strip depressions (Didukh c10/c11)",
+   "stock_content_profiles": [
+    "PG_TUFT (0.3 %)"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.2,
+     0.45
+    ],
+    "culm": [
+     0.5,
+     1.1
+    ]
+   },
+   "head_share_max": 0.4,
+   "head_type": "Deschampsia airy panicle <=50 x 20 cm; others as P2",
+   "winter_class": "semi-evergreen tussock + lodging mat",
+   "floodplain": true,
+   "seed_ramp_srgb": {
+    "0.25": "#66694F",
+    "0.5": "#807684",
+    "0.75": "#988A60",
+    "1.0": "#7E7462"
+   }
+  },
+  {
+   "id": "P4_SEDGE_MARSH",
+   "role": "wet tall-sedge marsh (floodplain)",
+   "species_md_profile": "P4 TALL_SEDGE_MARSH",
+   "species_mix": "Carex acuta 0.55, C. vesicaria 0.15, Glyceria maxima 0.15, Phalaris 0.10, Agrostis stolonifera 0.05",
+   "habitat": "canal banks, lake shores, floodplain depressions (Didukh c9)",
+   "stock_content_profiles": [
+    "PG_RUSH (0.5 %)"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.5,
+     1.0
+    ],
+    "culm": [
+     0.6,
+     1.2
+    ]
+   },
+   "head_share_max": 0.15,
+   "head_type": "sedge spikes: 2-4 dark male + 2-4 female 3-15 cm",
+   "winter_class": "collapses to wet mat (Phalaris culms stand)",
+   "floodplain": true,
+   "seed_ramp_srgb": {
+    "0.25": "#6E4637",
+    "0.5": "#463E30",
+    "0.75": "#78643C",
+    "1.0": "#5F503C"
+   }
+  },
+  {
+   "id": "P5_REED_BED",
+   "role": "wet reed bed (Phragmites, floodplain/canals/cooling pond)",
+   "species_md_profile": "P5 REED_BED",
+   "species_mix": "Phragmites australis ~monodominant",
+   "habitat": "canals, drained cooling pond, floodplain bands, alder swamps",
+   "stock_content_profiles": [
+    "none in stock sprites: place by water-edge mask"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.18,
+     0.6
+    ],
+    "culm": [
+     1.5,
+     3.0
+    ]
+   },
+   "head_share_max": 0.7,
+   "head_type": "plume 15-40 x 3-12 cm, nodding",
+   "winter_class": "rigid standing culms (always above snow in reality)",
+   "floodplain": true,
+   "seed_ramp_srgb": {
+    "0.25": "#6E5A5A",
+    "0.5": "#765A54",
+    "0.75": "#A08670",
+    "1.0": "#A09888"
+   }
+  },
+  {
+   "id": "P6_SPARSE_SAND",
+   "role": "sparse sandy grassland (grey hair-grass, sand fescue)",
+   "species_md_profile": "P6 SAND_GREYHAIR",
+   "species_mix": "Corynephorus 0.45, Festuca ovina agg. 0.15, Agrostis capillaris/vinealis 0.12, Carex praecox 0.08, Poa angustifolia 0.08, Elytrigia 0.07, C. epigejos 0.05; cover 30-70 %",
+   "habitat": "river-terrace sands, sandy fallows, streets of abandoned settlements (Didukh c14/c15)",
+   "stock_content_profiles": [
+    "none in stock sprites: place by sand material / level mask"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.06,
+     0.2
+    ],
+    "culm": [
+     0.15,
+     0.35
+    ]
+   },
+   "head_share_max": 0.5,
+   "head_type": "small dense panicle 2-8 cm, purple then silver-straw",
+   "winter_class": "wintergreen tufts",
+   "floodplain": false,
+   "seed_ramp_srgb": {
+    "0.25": "#6A5B60",
+    "0.5": "#6E4C68",
+    "0.75": "#9A9078",
+    "1.0": "#8E8572"
+   }
+  },
+  {
+   "id": "P7_RUDERAL_VERGE",
+   "role": "roadside / yard ruderal grass",
+   "species_md_profile": "P7 RUDERAL_VERGE",
+   "species_mix": "Elytrigia 0.35, Anisantha tectorum 0.12, Poa angustifolia 0.12, Dactylis 0.10, C. epigejos 0.10, Bromopsis 0.06, Apera 0.05, Lolium/Poa annua 0.10",
+   "habitat": "verges, couch fallows, yards (shaded variant under Robinia/Acer negundo)",
+   "stock_content_profiles": [
+    "PG_DRY (3.3 %)"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.2,
+     0.5
+    ],
+    "culm": [
+     0.4,
+     1.0
+    ]
+   },
+   "head_share_max": 0.35,
+   "head_type": "Elytrigia spikes, Anisantha nodding awned panicles, Bromopsis drooping",
+   "winter_class": "lodging grass + standing forb skeletons (FA layer)",
+   "floodplain": false,
+   "seed_ramp_srgb": {
+    "0.25": "#5C6544",
+    "0.5": "#6A4452",
+    "0.75": "#857358",
+    "1.0": "#786C5A"
+   }
+  },
+  {
+   "id": "P8_SHORT_LAWN_YARD",
+   "role": "short lawn / trampled yard",
+   "species_md_profile": "P8 LAWN_TRAMPLED",
+   "species_mix": "Poa pratensis 0.30, Lolium perenne 0.20, Poa annua 0.15, Festuca rubra 0.15, Agrostis 0.10, Dactylis 0.05",
+   "habitat": "trampled roadsides, tracks, still-used yards, residual Pripyat lawns (Didukh c16)",
+   "stock_content_profiles": [
+    "none in stock sprites: place by road/settlement proximity"
+   ],
+   "height_summer_m": {
+    "leaf": [
+     0.05,
+     0.2
+    ],
+    "culm": [
+     0.1,
+     0.3
+    ]
+   },
+   "head_share_max": 0.1,
+   "head_type": "small spikes (Lolium), tiny panicles (Poa annua)",
+   "winter_class": "wintergreen sward",
+   "floodplain": false,
+   "seed_ramp_srgb": {
+    "0.25": "#727C56",
+    "0.5": "#808064",
+    "0.75": "#857658",
+    "1.0": "#786C5A"
+   }
+  }
+ ],
+ "colour_library": {
+  "G_SPRING": {
+   "hex": "#5B6536",
+   "linear": [
+    0.1053,
+    0.1288,
+    0.0371
+   ],
+   "Y": 0.1172,
+   "spectral_ref": {
+    "srgb8": [
+     93,
+     100,
+     55
+    ],
+    "hex": "#5D6437",
+    "source": "fresh spring = USGS Lawn_Grass GDS91 + Spartina patens green (species_work/mixes.txt)"
+   },
+   "photo_refs": [
+    "2018-04-28 Przewalski horses meadow, new green 10-30 cm [#81894D, MEASURED G-class median] <https://commons.wikimedia.org/wiki/File:Коні_Пржевальського_у_Зоні_відчуження.jpg>",
+    "2019-05-09 Uzh floodplain, sedge through lodged thatch, water [#697D41, MEASURED G-class median] <https://commons.wikimedia.org/wiki/File:Uzh_River_floodplain_2019_G1.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "G_SUMMER": {
+   "hex": "#45502B",
+   "linear": [
+    0.0602,
+    0.0804,
+    0.0245
+   ],
+   "Y": 0.0721,
+   "spectral_ref": {
+    "srgb8": [
+     69,
+     80,
+     47
+    ],
+    "hex": "#45502F",
+    "source": "USGS Lawn_Grass GDS91 green"
+   },
+   "photo_refs": [
+    "2020-06-28 meadow by the railway, 88 % green [#606B32, MEASURED] <https://commons.wikimedia.org/wiki/File:Рыжий_лес.jpg>",
+    "2025-06-21 Vyazishche street, PSRER, lush 30-80 cm [#586D36, MEASURED] <https://commons.wikimedia.org/wiki/File:Vyazishche_overgrown_village_street.jpg>",
+    "2019-06-03 former Red Forest meadow, headed, pale panicles [#60683B, MEASURED] <https://commons.wikimedia.org/wiki/File:Pripjat_red_forest_2019_03.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "G_GLAUCOUS": {
+   "hex": "#54573A",
+   "linear": [
+    0.088,
+    0.0954,
+    0.0429
+   ],
+   "Y": 0.09,
+   "spectral_ref": {
+    "srgb8": [
+     104,
+     106,
+     77
+    ],
+    "hex": "#686A4D",
+    "source": "0.6 lawn + 0.4 sagebrush (glaucous bloom mix, species.md)"
+   },
+   "photo_refs": [
+    "2019-06-03 former Red Forest meadow, headed, pale panicles [#60683B, MEASURED, C. epigejos old field] <https://commons.wikimedia.org/wiki/File:Pripjat_red_forest_2019_03.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.3,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "G_WET": {
+   "hex": "#495B3E",
+   "linear": [
+    0.0667,
+    0.1055,
+    0.0475
+   ],
+   "Y": 0.0931,
+   "spectral_ref": {
+    "srgb8": [
+     82,
+     89,
+     64
+    ],
+    "hex": "#525940",
+    "source": "USGS J.roemerianus green (rush/sedge)"
+   },
+   "photo_refs": [
+    "2021-07-25 Narovlya left-bank floodplain drone [#445D44, MEASURED] <https://commons.wikimedia.org/wiki/File:Pripyat_River_and_wild_left_bank_in_Narovlya_District_(drone_view).jpg>",
+    "2021-06-14 Teremtsi floodplain drone, lowlands still flooded [#37562E, MEASURED] <https://commons.wikimedia.org/wiki/File:Teremcy.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "G_TUFT": {
+   "hex": "#6B7C63",
+   "linear": [
+    0.1471,
+    0.2005,
+    0.1236
+   ],
+   "Y": 0.1836,
+   "spectral_ref": {
+    "srgb8": [
+     122,
+     120,
+     93
+    ],
+    "hex": "#7A785D",
+    "source": "silvery tuft = 0.3 lawn + 0.7 sagebrush (species.md)"
+   },
+   "photo_refs": [
+    "2020-12-20 Corynephorus tuft stays grey-green, Kyiv Polesia sands [#5C8169, MEASURED] <https://commons.wikimedia.org/wiki/File:Corynephorus_canescens_110006280.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "G_AUTUMN": {
+   "hex": "#454E2A",
+   "linear": [
+    0.0588,
+    0.0753,
+    0.0228
+   ],
+   "Y": 0.068,
+   "spectral_ref": {
+    "srgb8": [
+     69,
+     80,
+     47
+    ],
+    "hex": "#45502F",
+    "source": "USGS Lawn_Grass GDS91 (dull, Y x0.93)"
+   },
+   "photo_refs": [
+    "2010-10-10 Przewalski pasture, 40-60 % green base (IAEA) [#535B3E, MEASURED] <https://commons.wikimedia.org/wiki/File:Przewalski's_Horse_(02710137).jpg>",
+    "2013-12-04 Skorinets (Chernihiv Polesia), verges ~50 % green, snowless [#4A5226, MEASURED] <https://commons.wikimedia.org/wiki/File:Скорінець,_Чернігівський_район._Сільська_дорога.JPG>",
+    "2017-11-03 southern ChEZ road, mown verges vivid green [#717C27, MEASURED] <https://commons.wikimedia.org/wiki/File:Chernobyl_(30079770627).jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "G_WINTER": {
+   "hex": "#595D36",
+   "linear": [
+    0.0995,
+    0.1095,
+    0.0368
+   ],
+   "Y": 0.1021,
+   "spectral_ref": {
+    "srgb8": [
+     87,
+     93,
+     63
+    ],
+    "hex": "#575D3F",
+    "source": "P8 winter dull green mid (species.md 78 88 56 -> 96 98 70)"
+   },
+   "photo_refs": [
+    "2014-02-23 Mezhyhirya paddock, faded mown verge, snowless [#999D4E, MEASURED faded verge] <https://commons.wikimedia.org/wiki/File:Paddock_in_Mezhyhirya.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "Y_DRY": {
+   "hex": "#6A6B3A",
+   "linear": [
+    0.1431,
+    0.1473,
+    0.0426
+   ],
+   "Y": 0.1389,
+   "spectral_ref": {
+    "srgb8": [
+     110,
+     105,
+     72
+    ],
+    "hex": "#6E6948",
+    "source": "USGS Grass dry .4 + .6 green AMX27"
+   },
+   "photo_refs": [
+    "2013-08-07 cooling-towers road verge, sun-cured [#757D32, MEASURED G-class among cured verge] <https://commons.wikimedia.org/wiki/File:Chernobyl_nuclear_plant4.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "Y_AUTUMN": {
+   "hex": "#847239",
+   "linear": [
+    0.2298,
+    0.1698,
+    0.0409
+   ],
+   "Y": 0.1732,
+   "spectral_ref": {
+    "srgb8": [
+     132,
+     114,
+     65
+    ],
+    "hex": "#847241",
+    "source": "0.5 golden + 0.3 lawn + 0.2 aspen (species.md)"
+   },
+   "photo_refs": [
+    "2022-09-07 Kamianka meadow, straw-gold seed stalks over green, ~50/50 [#938131, MEASURED S-class sunlit seed stalks] <https://commons.wikimedia.org/wiki/File:Kamjanka.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.4,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "Y_FROST": {
+   "hex": "#807043",
+   "linear": [
+    0.2146,
+    0.1622,
+    0.0555
+   ],
+   "Y": 0.1657,
+   "spectral_ref": {
+    "srgb8": [
+     132,
+     110,
+     75
+    ],
+    "hex": "#846E4B",
+    "source": "frost straw = GDS480 + meadow NPV (species.md)"
+   },
+   "photo_refs": [
+    "2017-11-03 southern ChEZ road, mown verges vivid green [#635B2D, MEASURED S-class] <https://commons.wikimedia.org/wiki/File:Chernobyl_(30079770627).jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "S_CURED": {
+   "hex": "#968355",
+   "linear": [
+    0.3046,
+    0.2286,
+    0.0915
+   ],
+   "Y": 0.2349,
+   "spectral_ref": {
+    "srgb8": [
+     149,
+     131,
+     97
+    ],
+    "hex": "#958361",
+    "source": "USGS Dry_Long_Grass AV87-2 endmember"
+   },
+   "photo_refs": [
+    "2013-08-07 cooling-towers road verge, sun-cured [#C1A955, MEASURED S-class 68 %] <https://commons.wikimedia.org/wiki/File:Chernobyl_nuclear_plant4.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.4,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "S_GOLDEN": {
+   "hex": "#846F43",
+   "linear": [
+    0.2309,
+    0.1593,
+    0.0565
+   ],
+   "Y": 0.1671,
+   "spectral_ref": {
+    "srgb8": [
+     130,
+     111,
+     81
+    ],
+    "hex": "#826F51",
+    "source": "USGS Golden Dry Grass GDS480"
+   },
+   "photo_refs": [
+    "2022-09-07 Kamianka meadow, straw-gold seed stalks over green, ~50/50 [#938131, MEASURED] <https://commons.wikimedia.org/wiki/File:Kamjanka.jpg>",
+    "2021-09-18 sandy two-track, abandoned village [#775D31, MEASURED] <https://commons.wikimedia.org/wiki/File:Дорога._Зона_відчуження.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "S_TAWNY": {
+   "hex": "#896D3D",
+   "linear": [
+    0.2518,
+    0.1526,
+    0.046
+   ],
+   "Y": 0.166,
+   "spectral_ref": {
+    "srgb8": [
+     136,
+     109,
+     69
+    ],
+    "hex": "#886D45",
+    "source": "USGS meadow NPV CA01-TACA-1"
+   },
+   "photo_refs": [
+    "2018-10-10 Teremtsi reed beds tawny, pink-tan panicles [#71612E, MEASURED] <https://commons.wikimedia.org/wiki/File:Осінь_у_Теремцях.jpg>",
+    "2019-10-18 Pripyat floodplain lake, reed fringe straw-tan [#6C4C20, MEASURED] <https://commons.wikimedia.org/wiki/File:Задивляються_у_воду_на_свою_хорошу_вроду._Заплава_Прип'яті.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "S_NOV": {
+   "hex": "#856D4C",
+   "linear": [
+    0.2359,
+    0.1541,
+    0.0731
+   ],
+   "Y": 0.1657,
+   "spectral_ref": {
+    "srgb8": [
+     132,
+     110,
+     75
+    ],
+    "hex": "#846E4B",
+    "source": "frost straw mix (dry albedo; wetness applied separately)"
+   },
+   "photo_refs": [
+    "2020-11-01 Red Forest start, tawny over green base 25-35 %, wet, partly lodged [#5C4928, MEASURED, wet] <https://commons.wikimedia.org/wiki/File:Прип'ять_2020_-_2.jpg>",
+    "2018-11-26 first snow 1-3 cm, 50-60 % patchy, grass 20-50 cm through [#866D5C, MEASURED] <https://commons.wikimedia.org/wiki/File:Зимові_розваги_вожака.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "S_WINTER": {
+   "hex": "#88785F",
+   "linear": [
+    0.2465,
+    0.1866,
+    0.1134
+   ],
+   "Y": 0.194,
+   "spectral_ref": {
+    "srgb8": [
+     134,
+     120,
+     99
+    ],
+    "hex": "#867863",
+    "source": "midpoint of winter-weathered mix (119 106 85) and USGS D.spicata dry NPV (148 133 112)"
+   },
+   "photo_refs": [
+    "2022-01-07 Przewalski horse meadow, ChEZ, snowless, upright straw [#A88F75, MEASURED S 97 %] <https://commons.wikimedia.org/wiki/File:Przewalski’s_horse_in_Chernobyl.jpg>",
+    "2015-02-01 Vyshhorod, lodged dead-grass mat, snowless [#9D866F, MEASURED] <https://commons.wikimedia.org/wiki/File:YMR-2015-02-01_003.jpg>",
+    "2014-02-23 Mezhyhirya paddock, faded mown verge, snowless [#AD9A61, MEASURED] <https://commons.wikimedia.org/wiki/File:Paddock_in_Mezhyhirya.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "T_MELT": {
+   "hex": "#7C694F",
+   "linear": [
+    0.2003,
+    0.1407,
+    0.0786
+   ],
+   "Y": 0.1489,
+   "spectral_ref": {
+    "srgb8": [
+     119,
+     106,
+     85
+    ],
+    "hex": "#776A55",
+    "source": "winter weathered = S.alterniflora gray + GDS480 (species.md)"
+   },
+   "photo_refs": [
+    "2009-03-26 Red Forest hill, mat combed flat after snow [#907959, MEASURED S 80 % (HDR)] <https://commons.wikimedia.org/wiki/File:Red_Forest_Hill.jpg>",
+    "2017-03-15 ChEZ canal, lodged reed/grass mats (graded dark) [#5B4327, MEASURED (graded dark)] <https://commons.wikimedia.org/wiki/File:Canal_Z.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.4,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "T_SPRING": {
+   "hex": "#94856B",
+   "linear": [
+    0.2959,
+    0.2362,
+    0.147
+   ],
+   "Y": 0.2424,
+   "spectral_ref": {
+    "srgb8": [
+     148,
+     133,
+     112
+    ],
+    "hex": "#948570",
+    "source": "USGS Distichlis spicata dry NPV (bleached grey thatch)"
+   },
+   "photo_refs": [
+    "2022-04-13 Red Forest, standing dead 60-120 cm [#9E8A69, MEASURED S 94 %] <https://commons.wikimedia.org/wiki/File:Red_Forest_after_Russian_invasion_(01).jpg>",
+    "2018-04-28 Przewalski horses meadow, new green 10-30 cm [#837958, MEASURED] <https://commons.wikimedia.org/wiki/File:Коні_Пржевальського_у_Зоні_відчуження.jpg>",
+    "2015-04-20 Red Forest sign, half-lodged thatch + 5-15 cm green [#6B624D, MEASURED overcast] <https://commons.wikimedia.org/wiki/File:Рудий_ліс.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.5,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "T_SUMMER": {
+   "hex": "#60553F",
+   "linear": [
+    0.1171,
+    0.0906,
+    0.0501
+   ],
+   "Y": 0.0933,
+   "spectral_ref": {
+    "srgb8": [
+     98,
+     84,
+     66
+    ],
+    "hex": "#625442",
+    "source": "USGS marsh wrack dry NPV (decomposing litter)"
+   },
+   "photo_refs": [
+    "2019-05-09 Uzh floodplain, sedge through lodged thatch, water [#79704E, MEASURED S-class 20 %] <https://commons.wikimedia.org/wiki/File:Uzh_River_floodplain_2019_G1.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.4,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "SEDGE_RUST": {
+   "hex": "#87553F",
+   "linear": [
+    0.2442,
+    0.0901,
+    0.0502
+   ],
+   "Y": 0.12,
+   "spectral_ref": {
+    "srgb8": [
+     98,
+     84,
+     66
+    ],
+    "hex": "#625442",
+    "source": "no rust spectrum; luminance set to 0.12 (INFERRED)"
+   },
+   "photo_refs": [
+    "2021-03-16 Olkhova swamp drone, rust sedge tussocks emerge first (eye est.) [#96513A, eye est. #8C4A30-#A0583A] <https://commons.wikimedia.org/wiki/File:Село_Ольховая_и_железная_дорога_в_Припять_(12).jpg>"
+   ],
+   "photo_weight_in_chroma": 0.7,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "REED_CULM": {
+   "hex": "#AC8C60",
+   "linear": [
+    0.413,
+    0.2621,
+    0.1172
+   ],
+   "Y": 0.2837,
+   "spectral_ref": {
+    "srgb8": [
+     168,
+     141,
+     104
+    ],
+    "hex": "#A88D68",
+    "source": "USGS Phragmites australis stem"
+   },
+   "photo_refs": [
+    "2019-12-01 Snov river reed bed, first ice, snowless [#957547, MEASURED low sun] <https://commons.wikimedia.org/wiki/File:Снов_зимовий.jpg>",
+    "2019-01-21 Nesvich floodplain, reed 1.5-2 m above flat snow [#C89A5A, eye est. lit] <https://commons.wikimedia.org/wiki/File:Заплави_р._Несвіч.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.4,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "REED_LEAF": {
+   "hex": "#505E3F",
+   "linear": [
+    0.0801,
+    0.111,
+    0.0498
+   ],
+   "Y": 0.1,
+   "spectral_ref": {
+    "srgb8": [
+     97,
+     108,
+     87
+    ],
+    "hex": "#616C57",
+    "source": "glaucous reed leaf (species.md 90 104 82 -> 104 112 92)"
+   },
+   "photo_refs": [
+    "2019-05-23 Pripyat floodplain, reed beds green 0.5-1 m [#45591F, MEASURED] <https://commons.wikimedia.org/wiki/File:Заплава_р.Прип’ять.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.3,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  },
+  "REED_LEAF_DEAD": {
+   "hex": "#A78B6C",
+   "linear": [
+    0.3877,
+    0.2592,
+    0.1504
+   ],
+   "Y": 0.2786,
+   "spectral_ref": {
+    "srgb8": [
+     164,
+     140,
+     114
+    ],
+    "hex": "#A48C72",
+    "source": "USGS Phragmites dry NPV"
+   },
+   "photo_refs": [
+    "2018-10-10 Teremtsi reed beds tawny, pink-tan panicles [#B8946A, eye est. reed tawny] <https://commons.wikimedia.org/wiki/File:Осінь_у_Теремцях.jpg>"
+   ],
+   "photo_weight_in_chroma": 0.4,
+   "method": "INFERRED: chromaticity = (1-w)*spectral + w*mean(photo) in linear rgb; luminance Y = spectral (or stated target); photos are JPEG with camera white balance"
+  }
+ },
+ "months": [
+  {
+   "month": 1,
+   "day": 15,
+   "doy": 15,
+   "name": "Jan",
+   "climate": {
+    "T_mean_C": -3.5,
+    "T_min_C": -6.1,
+    "P_snow_cover_clim": 0.69
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.97,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.45,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6C6A5A",
+     "tip_dryness": 0.15,
+     "wetness": 0.3,
+     "frost": 0.386,
+     "density": 0.75,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0,
+     "green_fraction": 0.04,
+     "cohort_green": 0.5,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.92,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.8,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E7050",
+     "tip_dryness": 0.2,
+     "wetness": 0.3,
+     "frost": 0.386,
+     "density": 0.65,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0,
+     "green_fraction": 0.1,
+     "cohort_green": 0.667,
+     "live_color": "#545D38",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.85,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.8,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#696C55",
+     "tip_dryness": 0.25,
+     "wetness": 0.5,
+     "frost": 0.426,
+     "density": 0.6,
+     "burnt_patch_share": 0.0,
+     "flood": 0.1,
+     "flood_ice": 1.0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 1.0,
+     "thatch_color": "#886851",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E4637",
+     "tip_dryness": 0.15,
+     "wetness": 0.55,
+     "frost": 0.426,
+     "density": 0.45,
+     "burnt_patch_share": 0.0,
+     "flood": 0.3,
+     "flood_ice": 1.0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#AC8C60",
+     "thatch_fraction": 1.0,
+     "thatch_color": "#AC8C60",
+     "thatch_lodging": 0.1,
+     "straw_lodging": 0.05,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#735F5F",
+     "tip_dryness": 0.15,
+     "wetness": 0.45,
+     "frost": 0.426,
+     "density": 0.9,
+     "burnt_patch_share": 0.0,
+     "flood": 0.5,
+     "flood_ice": 1.0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.3,
+     "green_fraction": 0.38,
+     "cohort_green": 0.76,
+     "live_color": "#657256",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.5,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.3,
+     "straw_lodging": 0.15,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E5F64",
+     "tip_dryness": 0.3,
+     "wetness": 0.2,
+     "frost": 0.426,
+     "density": 0.75,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0,
+     "green_fraction": 0.04,
+     "cohort_green": 0.4,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.9,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#5F6946",
+     "tip_dryness": 0.2,
+     "wetness": 0.25,
+     "frost": 0.386,
+     "density": 0.62,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.4,
+     "green_fraction": 0.35,
+     "cohort_green": 0.5,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.3,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.8,
+     "straw_lodging": 0.4,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#78825A",
+     "tip_dryness": 0.3,
+     "wetness": 0.25,
+     "frost": 0.346,
+     "density": 0.75,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 1.0,
+     "under_trees": 0.95,
+     "roads": 1.0,
+     "drifts_neglected": 1.0
+    },
+    "depth_m": {
+     "open": 0.17,
+     "under_trees": 0.11,
+     "roads": 0.084,
+     "drifts_neglected": 0.4
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.746,
+    "depth_real_m": {
+     "open_typical": 0.17,
+     "open_range": [
+      0.08,
+      0.35
+     ],
+     "drifts_range": [
+      0.25,
+      0.45
+     ],
+     "clim_p_cover": 0.69,
+     "clim_mean_depth_incl_zero": 0.085,
+     "clim_conditional": 0.123
+    },
+    "compaction_roads": 0.85,
+    "density_kg_m3": {
+     "open": 226,
+     "roads": 459
+    },
+    "state": "settled",
+    "state_weights": {
+     "fresh": 0.35,
+     "settled": 0.4,
+     "old": 0.2,
+     "wet": 0.05,
+     "slush": 0
+    },
+    "age": 0.4,
+    "crust": 0.4,
+    "wetness": 0.08,
+    "drift_strength": 0.45,
+    "dirt_roadside": 0.15,
+    "litter_under_trees": 0.05,
+    "albedo_linear": {
+     "open": [
+      0.824,
+      0.842,
+      0.878
+     ],
+     "roads": [
+      0.695,
+      0.702,
+      0.72
+     ],
+     "under_trees": [
+      0.814,
+      0.829,
+      0.862
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#EAECF1",
+     "roads": "#D9DADD",
+     "under_trees": "#E9EBEF",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 0.0
+   },
+   "refs": [
+    "2019-01-13 woodland village, 25-35 cm, trench path 10-15 cm lower <https://www.forgottenchernobyl.net/kindergarten-in-a-snowy-village>",
+    "2019-01-13 cooling-tower pit, 20-30 cm, reed 50-100 cm through <https://www.forgottenchernobyl.net/chernobyl-cooling-towers-in-winter>",
+    "2012-01-28 Pripyat river-port embankment, flat 20-30 cm <https://ukrainetrek.com/blog/cities/abandoned-pripyat-covered-in-snow/>",
+    "2019-01-21 Nesvich floodplain, reed 1.5-2 m above flat snow <https://commons.wikimedia.org/wiki/File:Заплави_р._Несвіч.jpg>",
+    "2026-01 reserve: 25-40 cm, tussocks buried as mounds; forest road 20-30 cm with packed ruts <https://www.unian.ua/ecology/gulyayut-zasnizhenimi-hashchami-fahivci-pokazali-meshkanciv-chornobilskogo-zapovidnika-foto-13269357.html>",
+    "2021-01 reserve drone: thin 5-15 cm, tawny straw rings round ponds <https://glavcom.ua/kyiv/news/snig-kriga-ta-tisha-neymovirni-foto-zimi-v-chornobilskomu-zapovidniku-731713.html>",
+    "2022-01-07 Przewalski horse meadow, ChEZ, snowless, upright straw <https://commons.wikimedia.org/wiki/File:Przewalski’s_horse_in_Chernobyl.jpg>"
+   ]
+  },
+  {
+   "month": 2,
+   "day": 15,
+   "doy": 46,
+   "name": "Feb",
+   "climate": {
+    "T_mean_C": -3.4,
+    "T_min_C": -6.7,
+    "P_snow_cover_clim": 0.78
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.97,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.5,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6C6A5A",
+     "tip_dryness": 0.15,
+     "wetness": 0.35,
+     "frost": 0.464,
+     "density": 0.7,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0,
+     "green_fraction": 0.04,
+     "cohort_green": 0.5,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.92,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.88,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E7050",
+     "tip_dryness": 0.2,
+     "wetness": 0.35,
+     "frost": 0.464,
+     "density": 0.62,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0,
+     "green_fraction": 0.1,
+     "cohort_green": 0.667,
+     "live_color": "#545D38",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.85,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.85,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#696C55",
+     "tip_dryness": 0.25,
+     "wetness": 0.55,
+     "frost": 0.504,
+     "density": 0.58,
+     "burnt_patch_share": 0.0,
+     "flood": 0.15,
+     "flood_ice": 1.0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 1.0,
+     "thatch_color": "#886851",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E4637",
+     "tip_dryness": 0.15,
+     "wetness": 0.6,
+     "frost": 0.504,
+     "density": 0.42,
+     "burnt_patch_share": 0.0,
+     "flood": 0.35,
+     "flood_ice": 1.0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#AC8C60",
+     "thatch_fraction": 1.0,
+     "thatch_color": "#AC8C60",
+     "thatch_lodging": 0.12,
+     "straw_lodging": 0.05,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#735F5F",
+     "tip_dryness": 0.15,
+     "wetness": 0.5,
+     "frost": 0.504,
+     "density": 0.88,
+     "burnt_patch_share": 0.0,
+     "flood": 0.55,
+     "flood_ice": 1.0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.3,
+     "green_fraction": 0.38,
+     "cohort_green": 0.76,
+     "live_color": "#657256",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.5,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.35,
+     "straw_lodging": 0.15,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E5F64",
+     "tip_dryness": 0.3,
+     "wetness": 0.25,
+     "frost": 0.504,
+     "density": 0.75,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0,
+     "green_fraction": 0.04,
+     "cohort_green": 0.4,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.9,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.78,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#5F6946",
+     "tip_dryness": 0.2,
+     "wetness": 0.3,
+     "frost": 0.464,
+     "density": 0.6,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.4,
+     "green_fraction": 0.35,
+     "cohort_green": 0.5,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#88785F",
+     "thatch_fraction": 0.3,
+     "thatch_color": "#88785F",
+     "thatch_lodging": 0.85,
+     "straw_lodging": 0.4,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#78825A",
+     "tip_dryness": 0.3,
+     "wetness": 0.3,
+     "frost": 0.424,
+     "density": 0.75,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 1.0,
+     "under_trees": 0.95,
+     "roads": 1.0,
+     "drifts_neglected": 1.0
+    },
+    "depth_m": {
+     "open": 0.22,
+     "under_trees": 0.14,
+     "roads": 0.12,
+     "drifts_neglected": 0.536
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 1.0,
+    "depth_real_m": {
+     "open_typical": 0.22,
+     "open_range": [
+      0.1,
+      0.3
+     ],
+     "drifts_range": [
+      0.35,
+      0.57
+     ],
+     "clim_p_cover": 0.78,
+     "clim_mean_depth_incl_zero": 0.1,
+     "clim_conditional": 0.128
+    },
+    "compaction_roads": 0.9,
+    "density_kg_m3": {
+     "open": 260,
+     "roads": 476
+    },
+    "state": "settled",
+    "state_weights": {
+     "fresh": 0.25,
+     "settled": 0.35,
+     "old": 0.3,
+     "wet": 0.1,
+     "slush": 0
+    },
+    "age": 0.6,
+    "crust": 0.5,
+    "wetness": 0.15,
+    "drift_strength": 0.5,
+    "dirt_roadside": 0.25,
+    "litter_under_trees": 0.1,
+    "albedo_linear": {
+     "open": [
+      0.801,
+      0.819,
+      0.853
+     ],
+     "roads": [
+      0.661,
+      0.665,
+      0.677
+     ],
+     "under_trees": [
+      0.781,
+      0.794,
+      0.821
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#E7E9EE",
+     "roads": "#D4D5D7",
+     "under_trees": "#E5E6EA",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 0.0
+   },
+   "refs": [
+    "2018-02-19 pine-birch wood, 5-10 cm, 85-90 % cover, litter holes at trunks <https://commons.wikimedia.org/wiki/File:Chernobyl_-_39484641685.jpg>",
+    "2018-02-25 Zalissia forest road 15-25 cm, light ruts <https://commons.wikimedia.org/wiki/File:Олені_в_резиденції_\"Залісся\".jpg>",
+    "2012-02-19 Chernihiv rural road packed, plough berms 40-70 cm <https://commons.wikimedia.org/wiki/File:Зимова_дорога.jpg>",
+    "2014-02-07 village green, 1-5 cm, straw blades through everywhere <https://commons.wikimedia.org/wiki/File:Андріївка,_Чернігівський_район._Сільський_пейзаж.JPG>",
+    "2015-02-01 Vyshhorod, lodged dead-grass mat, snowless <https://commons.wikimedia.org/wiki/File:YMR-2015-02-01_003.jpg>",
+    "2014-02-23 Mezhyhirya paddock, faded mown verge, snowless <https://commons.wikimedia.org/wiki/File:Paddock_in_Mezhyhirya.jpg>"
+   ]
+  },
+  {
+   "month": 3,
+   "day": 15,
+   "doy": 74,
+   "name": "Mar",
+   "climate": {
+    "T_mean_C": 1.5,
+    "T_min_C": -2.3,
+    "P_snow_cover_clim": 0.47
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0.03,
+     "green_fraction": 0.02,
+     "cohort_green": 0.4,
+     "live_color": "#5A5F36",
+     "yellowing_color": "#807043",
+     "straw_color": "#867352",
+     "thatch_fraction": 0.95,
+     "thatch_color": "#816F56",
+     "thatch_lodging": 0.55,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6C6A5A",
+     "tip_dryness": 0.15,
+     "wetness": 0.7,
+     "frost": 0.56,
+     "density": 0.66,
+     "burnt_patch_share": 8.5e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.04,
+     "green_fraction": 0.08,
+     "cohort_green": 0.8,
+     "live_color": "#5A5F36",
+     "yellowing_color": "#807043",
+     "straw_color": "#867352",
+     "thatch_fraction": 0.9,
+     "thatch_color": "#7C694F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E7050",
+     "tip_dryness": 0.18,
+     "wetness": 0.7,
+     "frost": 0.56,
+     "density": 0.6,
+     "burnt_patch_share": 7.9e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0.02,
+     "green_fraction": 0.12,
+     "cohort_green": 0.8,
+     "live_color": "#555E38",
+     "yellowing_color": "#807043",
+     "straw_color": "#867352",
+     "thatch_fraction": 0.85,
+     "thatch_color": "#7C694F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#696C55",
+     "tip_dryness": 0.22,
+     "wetness": 0.9,
+     "frost": 0.6,
+     "density": 0.55,
+     "burnt_patch_share": 5.2e-05,
+     "flood": 0.35,
+     "flood_ice": 0.5
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0.02,
+     "green_fraction": 0.01,
+     "cohort_green": 0.5,
+     "live_color": "#5A5F36",
+     "yellowing_color": "#807043",
+     "straw_color": "#867352",
+     "thatch_fraction": 0.98,
+     "thatch_color": "#87553F",
+     "thatch_lodging": 0.97,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E4637",
+     "tip_dryness": 0.15,
+     "wetness": 0.95,
+     "frost": 0.6,
+     "density": 0.4,
+     "burnt_patch_share": 2e-05,
+     "flood": 0.55,
+     "flood_ice": 0.5
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#5A5F36",
+     "yellowing_color": "#807043",
+     "straw_color": "#AC8C60",
+     "thatch_fraction": 1.0,
+     "thatch_color": "#AC8C60",
+     "thatch_lodging": 0.15,
+     "straw_lodging": 0.05,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#735F5F",
+     "tip_dryness": 0.15,
+     "wetness": 0.85,
+     "frost": 0.6,
+     "density": 0.85,
+     "burnt_patch_share": 3.9e-05,
+     "flood": 0.7,
+     "flood_ice": 0.5
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.32,
+     "green_fraction": 0.4,
+     "cohort_green": 0.8,
+     "live_color": "#657356",
+     "yellowing_color": "#807043",
+     "straw_color": "#867352",
+     "thatch_fraction": 0.5,
+     "thatch_color": "#7C694F",
+     "thatch_lodging": 0.4,
+     "straw_lodging": 0.15,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E5F64",
+     "tip_dryness": 0.28,
+     "wetness": 0.6,
+     "frost": 0.6,
+     "density": 0.75,
+     "burnt_patch_share": 5.2e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0.05,
+     "green_fraction": 0.08,
+     "cohort_green": 0.667,
+     "live_color": "#5A5F36",
+     "yellowing_color": "#807043",
+     "straw_color": "#867352",
+     "thatch_fraction": 0.88,
+     "thatch_color": "#7C694F",
+     "thatch_lodging": 0.82,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#5F6946",
+     "tip_dryness": 0.18,
+     "wetness": 0.65,
+     "frost": 0.56,
+     "density": 0.58,
+     "burnt_patch_share": 0.000196,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.42,
+     "green_fraction": 0.4,
+     "cohort_green": 0.571,
+     "live_color": "#5A5F36",
+     "yellowing_color": "#807043",
+     "straw_color": "#867352",
+     "thatch_fraction": 0.3,
+     "thatch_color": "#7C694F",
+     "thatch_lodging": 0.88,
+     "straw_lodging": 0.4,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#78825A",
+     "tip_dryness": 0.25,
+     "wetness": 0.65,
+     "frost": 0.52,
+     "density": 0.75,
+     "burnt_patch_share": 3.3e-05,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0.45,
+     "under_trees": 0.72,
+     "roads": 0.45,
+     "drifts_neglected": 0.9
+    },
+    "depth_m": {
+     "open": 0.1,
+     "under_trees": 0.1,
+     "roads": 0.04,
+     "drifts_neglected": 0.32
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.597,
+    "depth_real_m": {
+     "open_typical": 0.1,
+     "open_range": [
+      0.05,
+      0.25
+     ],
+     "drifts_range": [
+      0.2,
+      0.4
+     ],
+     "clim_p_cover": 0.47,
+     "clim_mean_depth_incl_zero": 0.065,
+     "clim_conditional": 0.139
+    },
+    "compaction_roads": 0.95,
+    "density_kg_m3": {
+     "open": 451,
+     "roads": 498
+    },
+    "state": "wet",
+    "state_weights": {
+     "fresh": 0,
+     "settled": 0,
+     "old": 0.2,
+     "wet": 0.55,
+     "slush": 0.25
+    },
+    "age": 0.9,
+    "crust": 0.3,
+    "wetness": 0.7,
+    "drift_strength": 0.15,
+    "dirt_roadside": 0.5,
+    "litter_under_trees": 0.35,
+    "albedo_linear": {
+     "open": [
+      0.609,
+      0.62,
+      0.633
+     ],
+     "roads": [
+      0.545,
+      0.539,
+      0.536
+     ],
+     "under_trees": [
+      0.556,
+      0.554,
+      0.549
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#CDCED0",
+     "roads": "#C3C2C1",
+     "under_trees": "#C5C4C4",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 0.75
+   },
+   "refs": [
+    "2013-03-10 Chornobyl 'memory lane', 100 %, 15-25 cm (snowy year) <https://commons.wikimedia.org/wiki/File:Г.ЧЕРНОБЫЛЬ-ПРИПЯТЬ_(10-03-2013)_015.JPG>",
+    "2013-03-10 Chornobyl parking: slush, asphalt in wheel tracks <https://commons.wikimedia.org/wiki/File:Г.ЧЕРНОБЫЛЬ-ПРИПЯТЬ_-_1016.JPG>",
+    "2021-03-16 Olkhova rail crossing, 5-15 cm, packed tracks vs fresh <https://commons.wikimedia.org/wiki/File:Село_Ольховая_и_железная_дорога_в_Припять_(2).jpg>",
+    "2021-03-16 old burn, 70-80 % snow, grey stubble through <https://commons.wikimedia.org/wiki/File:Село_Ольховая_и_железная_дорога_в_Припять_(15).jpg>",
+    "2021-03-16 Olkhova swamp drone, rust sedge tussocks emerge first (eye est.) <https://commons.wikimedia.org/wiki/File:Село_Ольховая_и_железная_дорога_в_Припять_(12).jpg>",
+    "2017-03-15 ChEZ canal, lodged reed/grass mats (graded dark) <https://commons.wikimedia.org/wiki/File:Canal_Z.jpg>",
+    "2009-03-26 Red Forest hill, mat combed flat after snow <https://commons.wikimedia.org/wiki/File:Red_Forest_Hill.jpg>"
+   ]
+  },
+  {
+   "month": 4,
+   "day": 15,
+   "doy": 105,
+   "name": "Apr",
+   "climate": {
+    "T_mean_C": 8.9,
+    "T_min_C": 3.9,
+    "P_snow_cover_clim": 0.03
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0.15,
+     "green_fraction": 0.25,
+     "cohort_green": 0.893,
+     "live_color": "#586236",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.72,
+     "thatch_color": "#94856B",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.05,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6C6A5A",
+     "tip_dryness": 0.08,
+     "wetness": 0.35,
+     "frost": 0.341,
+     "density": 0.8,
+     "burnt_patch_share": 0.000358,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.18,
+     "green_fraction": 0.35,
+     "cohort_green": 0.833,
+     "live_color": "#5A6834",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.58,
+     "thatch_color": "#94856B",
+     "thatch_lodging": 0.88,
+     "straw_lodging": 0.05,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E7050",
+     "tip_dryness": 0.07,
+     "wetness": 0.35,
+     "frost": 0.341,
+     "density": 0.78,
+     "burnt_patch_share": 0.00033,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0.08,
+     "green_fraction": 0.25,
+     "cohort_green": 0.893,
+     "live_color": "#566238",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.72,
+     "thatch_color": "#94856B",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.05,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#696C55",
+     "tip_dryness": 0.08,
+     "wetness": 0.55,
+     "frost": 0.381,
+     "density": 0.62,
+     "burnt_patch_share": 0.00022,
+     "flood": 0.6,
+     "flood_ice": 0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0.15,
+     "green_fraction": 0.2,
+     "cohort_green": 0.909,
+     "live_color": "#556139",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.78,
+     "thatch_color": "#8E7058",
+     "thatch_lodging": 0.97,
+     "straw_lodging": 0.05,
+     "seed_heads": 0.3,
+     "seed_stage": 0.3,
+     "seed_color": "#674436",
+     "tip_dryness": 0.08,
+     "wetness": 0.6,
+     "frost": 0.381,
+     "density": 0.55,
+     "burnt_patch_share": 8.2e-05,
+     "flood": 0.8,
+     "flood_ice": 0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 0.03,
+     "green_fraction": 0.03,
+     "cohort_green": 0.75,
+     "live_color": "#56613B",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0.96,
+     "thatch_color": "#AC8C60",
+     "thatch_lodging": 0.2,
+     "straw_lodging": 0.02,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#735F5F",
+     "tip_dryness": 0.1,
+     "wetness": 0.5,
+     "frost": 0.381,
+     "density": 0.88,
+     "burnt_patch_share": 0.000165,
+     "flood": 0.85,
+     "flood_ice": 0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.4,
+     "green_fraction": 0.5,
+     "cohort_green": 0.862,
+     "live_color": "#667456",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.42,
+     "thatch_color": "#94856B",
+     "thatch_lodging": 0.45,
+     "straw_lodging": 0.1,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6E5F64",
+     "tip_dryness": 0.15,
+     "wetness": 0.25,
+     "frost": 0.381,
+     "density": 0.82,
+     "burnt_patch_share": 0.00022,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0.2,
+     "green_fraction": 0.38,
+     "cohort_green": 0.844,
+     "live_color": "#5A6237",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.55,
+     "thatch_color": "#94856B",
+     "thatch_lodging": 0.82,
+     "straw_lodging": 0.05,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#5F6946",
+     "tip_dryness": 0.07,
+     "wetness": 0.3,
+     "frost": 0.341,
+     "density": 0.78,
+     "burnt_patch_share": 0.000825,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.6,
+     "green_fraction": 0.68,
+     "cohort_green": 0.872,
+     "live_color": "#5A6834",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.22,
+     "thatch_color": "#94856B",
+     "thatch_lodging": 0.88,
+     "straw_lodging": 0.3,
+     "seed_heads": 0.05,
+     "seed_stage": 0.25,
+     "seed_color": "#78825A",
+     "tip_dryness": 0.1,
+     "wetness": 0.3,
+     "frost": 0.301,
+     "density": 0.88,
+     "burnt_patch_share": 0.000138,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0.0,
+     "under_trees": 0.05,
+     "roads": 0.0,
+     "drifts_neglected": 0.1
+    },
+    "depth_m": {
+     "open": 0.0,
+     "under_trees": 0.05,
+     "roads": 0.0,
+     "drifts_neglected": 0.12
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.224,
+    "depth_real_m": {
+     "open_typical": 0.0,
+     "open_range": [
+      0.0,
+      0.0
+     ],
+     "drifts_range": [
+      0.0,
+      0.15
+     ],
+     "clim_p_cover": 0.03,
+     "clim_mean_depth_incl_zero": 0.0,
+     "clim_conditional": 0.0
+    },
+    "compaction_roads": 1.0,
+    "density_kg_m3": {
+     "open": 546,
+     "roads": 500
+    },
+    "state": "slush",
+    "state_weights": {
+     "fresh": 0,
+     "settled": 0,
+     "old": 0,
+     "wet": 0.3,
+     "slush": 0.7
+    },
+    "age": 1.0,
+    "crust": 0.1,
+    "wetness": 0.9,
+    "drift_strength": 0.0,
+    "dirt_roadside": 0.6,
+    "litter_under_trees": 0.5,
+    "albedo_linear": {
+     "open": [
+      0.517,
+      0.529,
+      0.532
+     ],
+     "roads": [
+      0.498,
+      0.49,
+      0.482
+     ],
+     "under_trees": [
+      0.452,
+      0.45,
+      0.431
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#BEC0C1",
+     "roads": "#BBBAB8",
+     "under_trees": "#B3B3AF",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 1.0
+   },
+   "refs": [
+    "2015-04-20 Red Forest sign, half-lodged thatch + 5-15 cm green <https://commons.wikimedia.org/wiki/File:Рудий_ліс.jpg>",
+    "2018-04-28 Przewalski horses meadow, new green 10-30 cm <https://commons.wikimedia.org/wiki/File:Коні_Пржевальського_у_Зоні_відчуження.jpg>",
+    "2026-04-22 Krasnoselye PSRER aerial, meadows ~50/50 <https://commons.wikimedia.org/wiki/File:Krasnoselye_PSRER_Aerial_view_of_abandoned_village_2026-04-22.jpg>",
+    "2022-04-13 Red Forest, standing dead 60-120 cm <https://commons.wikimedia.org/wiki/File:Red_Forest_after_Russian_invasion_(01).jpg>"
+   ]
+  },
+  {
+   "month": 5,
+   "day": 15,
+   "doy": 135,
+   "name": "May",
+   "climate": {
+    "T_mean_C": 14.9,
+    "T_min_C": 9.1,
+    "P_snow_cover_clim": 0.0
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0.5,
+     "green_fraction": 0.78,
+     "cohort_green": 0.97,
+     "live_color": "#4F5E32",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.18,
+     "thatch_color": "#85775E",
+     "thatch_lodging": 0.8,
+     "straw_lodging": 0.02,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#6C6A5A",
+     "tip_dryness": 0.03,
+     "wetness": 0.15,
+     "frost": 0.058,
+     "density": 0.92,
+     "burnt_patch_share": 0.000235,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.6,
+     "green_fraction": 0.88,
+     "cohort_green": 0.978,
+     "live_color": "#4E6230",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.1,
+     "thatch_color": "#85775E",
+     "thatch_lodging": 0.88,
+     "straw_lodging": 0.02,
+     "seed_heads": 0.25,
+     "seed_stage": 0.32,
+     "seed_color": "#7F8262",
+     "tip_dryness": 0.03,
+     "wetness": 0.15,
+     "frost": 0.058,
+     "density": 0.95,
+     "burnt_patch_share": 0.000217,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0.45,
+     "green_fraction": 0.8,
+     "cohort_green": 0.933,
+     "live_color": "#4A6035",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.15,
+     "thatch_color": "#85775E",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.03,
+     "seed_heads": 0.15,
+     "seed_stage": 0.25,
+     "seed_color": "#696C55",
+     "tip_dryness": 0.03,
+     "wetness": 0.35,
+     "frost": 0.098,
+     "density": 0.9,
+     "burnt_patch_share": 0.000145,
+     "flood": 0.35,
+     "flood_ice": 0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0.6,
+     "green_fraction": 0.86,
+     "cohort_green": 0.975,
+     "live_color": "#496035",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.12,
+     "thatch_color": "#85775E",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.03,
+     "seed_heads": 0.8,
+     "seed_stage": 0.5,
+     "seed_color": "#463E30",
+     "tip_dryness": 0.03,
+     "wetness": 0.4,
+     "frost": 0.098,
+     "density": 0.88,
+     "burnt_patch_share": 5.4e-05,
+     "flood": 0.6,
+     "flood_ice": 0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 0.3,
+     "green_fraction": 0.35,
+     "cohort_green": 0.875,
+     "live_color": "#505D3B",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0.6,
+     "thatch_color": "#A88B62",
+     "thatch_lodging": 0.3,
+     "straw_lodging": 0.0,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#735F5F",
+     "tip_dryness": 0.03,
+     "wetness": 0.3,
+     "frost": 0.098,
+     "density": 0.9,
+     "burnt_patch_share": 0.000109,
+     "flood": 0.75,
+     "flood_ice": 0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.6,
+     "green_fraction": 0.68,
+     "cohort_green": 0.907,
+     "live_color": "#637255",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.25,
+     "thatch_color": "#85775E",
+     "thatch_lodging": 0.55,
+     "straw_lodging": 0.05,
+     "seed_heads": 0.1,
+     "seed_stage": 0.2,
+     "seed_color": "#6E5F64",
+     "tip_dryness": 0.08,
+     "wetness": 0.05,
+     "frost": 0.098,
+     "density": 0.95,
+     "burnt_patch_share": 0.000145,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0.6,
+     "green_fraction": 0.86,
+     "cohort_green": 0.977,
+     "live_color": "#4F6031",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.12,
+     "thatch_color": "#85775E",
+     "thatch_lodging": 0.85,
+     "straw_lodging": 0.02,
+     "seed_heads": 0.35,
+     "seed_stage": 0.3,
+     "seed_color": "#626349",
+     "tip_dryness": 0.03,
+     "wetness": 0.1,
+     "frost": 0.058,
+     "density": 0.95,
+     "burnt_patch_share": 0.000543,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.9,
+     "green_fraction": 0.94,
+     "cohort_green": 0.989,
+     "live_color": "#4E6230",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.05,
+     "thatch_color": "#85775E",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.25,
+     "seed_heads": 0.4,
+     "seed_stage": 0.35,
+     "seed_color": "#808663",
+     "tip_dryness": 0.03,
+     "wetness": 0.1,
+     "frost": 0.018,
+     "density": 1.05,
+     "burnt_patch_share": 9.1e-05,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_m": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.0,
+    "depth_real_m": null,
+    "compaction_roads": 1.0,
+    "density_kg_m3": {
+     "open": 546,
+     "roads": 500
+    },
+    "state": "slush",
+    "state_weights": {
+     "fresh": 0,
+     "settled": 0,
+     "old": 0,
+     "wet": 0.3,
+     "slush": 0.7
+    },
+    "age": 1.0,
+    "crust": 0.1,
+    "wetness": 0.9,
+    "drift_strength": 0.0,
+    "dirt_roadside": 0.6,
+    "litter_under_trees": 0.5,
+    "albedo_linear": {
+     "open": [
+      0.517,
+      0.529,
+      0.532
+     ],
+     "roads": [
+      0.498,
+      0.49,
+      0.482
+     ],
+     "under_trees": [
+      0.452,
+      0.45,
+      0.431
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#BEC0C1",
+     "roads": "#BBBAB8",
+     "under_trees": "#B3B3AF",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 1.0,
+    "note": "no snow; state fields are held values for clean interpolation only"
+   },
+   "refs": [
+    "2019-05-09 Uzh floodplain, sedge through lodged thatch, water <https://commons.wikimedia.org/wiki/File:Uzh_River_floodplain_2019_G1.jpg>",
+    "2016-05-18 edge of 30 km zone, meadow 20-40 cm all green <https://commons.wikimedia.org/wiki/File:Countryside_on_Edge_of_30km_Exclusion_Zone_-_Chernobyl_Exclusion_Zone_-_Northern_Ukraine_(27066574316).jpg>",
+    "2019-05-23 Pripyat floodplain, reed beds green 0.5-1 m <https://commons.wikimedia.org/wiki/File:Заплава_р.Прип’ять.jpg>"
+   ]
+  },
+  {
+   "month": 6,
+   "day": 15,
+   "doy": 166,
+   "name": "Jun",
+   "climate": {
+    "T_mean_C": 17.9,
+    "T_min_C": 12.3,
+    "P_snow_cover_clim": 0.0
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0.85,
+     "green_fraction": 0.9,
+     "cohort_green": 0.977,
+     "live_color": "#4A5A2F",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#8D7A4D",
+     "thatch_fraction": 0.07,
+     "thatch_color": "#73674F",
+     "thatch_lodging": 0.88,
+     "straw_lodging": 0.0,
+     "seed_heads": 0.35,
+     "seed_stage": 0.3,
+     "seed_color": "#726A60",
+     "tip_dryness": 0.06,
+     "wetness": 0.12,
+     "frost": 0.007,
+     "density": 1.0,
+     "burnt_patch_share": 0.000161,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.86,
+     "cohort_green": 0.896,
+     "live_color": "#45572A",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#8D7A4D",
+     "thatch_fraction": 0.04,
+     "thatch_color": "#73674F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.02,
+     "seed_heads": 0.85,
+     "seed_stage": 0.55,
+     "seed_color": "#A0A07F",
+     "tip_dryness": 0.08,
+     "wetness": 0.12,
+     "frost": 0.007,
+     "density": 1.02,
+     "burnt_patch_share": 0.000149,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0.85,
+     "green_fraction": 0.92,
+     "cohort_green": 0.979,
+     "live_color": "#445C32",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#8D7A4D",
+     "thatch_fraction": 0.06,
+     "thatch_color": "#73674F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.03,
+     "seed_heads": 0.6,
+     "seed_stage": 0.45,
+     "seed_color": "#8E868C",
+     "tip_dryness": 0.05,
+     "wetness": 0.32,
+     "frost": 0.047,
+     "density": 1.0,
+     "burnt_patch_share": 9.9e-05,
+     "flood": 0.15,
+     "flood_ice": 0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.95,
+     "cohort_green": 0.99,
+     "live_color": "#465C33",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#8D7A4D",
+     "thatch_fraction": 0.04,
+     "thatch_color": "#73674F",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.05,
+     "seed_heads": 0.9,
+     "seed_stage": 0.7,
+     "seed_color": "#705E3A",
+     "tip_dryness": 0.04,
+     "wetness": 0.37,
+     "frost": 0.047,
+     "density": 1.0,
+     "burnt_patch_share": 3.7e-05,
+     "flood": 0.4,
+     "flood_ice": 0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 0.7,
+     "green_fraction": 0.75,
+     "cohort_green": 1.0,
+     "live_color": "#4D5A3A",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0.25,
+     "thatch_color": "#A48A64",
+     "thatch_lodging": 0.45,
+     "straw_lodging": 0.0,
+     "seed_heads": 0,
+     "seed_stage": 0,
+     "seed_color": "#735F5F",
+     "tip_dryness": 0.03,
+     "wetness": 0.27,
+     "frost": 0.047,
+     "density": 0.95,
+     "burnt_patch_share": 7.4e-05,
+     "flood": 0.6,
+     "flood_ice": 0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.9,
+     "green_fraction": 0.6,
+     "cohort_green": 0.682,
+     "live_color": "#606F54",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#8D7A4D",
+     "thatch_fraction": 0.12,
+     "thatch_color": "#73674F",
+     "thatch_lodging": 0.65,
+     "straw_lodging": 0.05,
+     "seed_heads": 0.6,
+     "seed_stage": 0.45,
+     "seed_color": "#765370",
+     "tip_dryness": 0.2,
+     "wetness": 0.02,
+     "frost": 0.047,
+     "density": 1.05,
+     "burnt_patch_share": 9.9e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.84,
+     "cohort_green": 0.884,
+     "live_color": "#48582D",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#8D7A4D",
+     "thatch_fraction": 0.05,
+     "thatch_color": "#73674F",
+     "thatch_lodging": 0.88,
+     "straw_lodging": 0.03,
+     "seed_heads": 0.9,
+     "seed_stage": 0.55,
+     "seed_color": "#775658",
+     "tip_dryness": 0.1,
+     "wetness": 0.07,
+     "frost": 0.007,
+     "density": 1.02,
+     "burnt_patch_share": 0.000372,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.88,
+     "cohort_green": 0.88,
+     "live_color": "#45572A",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#8D7A4D",
+     "thatch_fraction": 0,
+     "thatch_color": "#73674F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.25,
+     "seed_heads": 0.6,
+     "seed_stage": 0.5,
+     "seed_color": "#8C8C6E",
+     "tip_dryness": 0.1,
+     "wetness": 0.07,
+     "frost": 0,
+     "density": 1.05,
+     "burnt_patch_share": 6.2e-05,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_m": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.0,
+    "depth_real_m": null,
+    "compaction_roads": 0.4,
+    "density_kg_m3": {
+     "open": 243,
+     "roads": 346
+    },
+    "state": "fresh",
+    "state_weights": {
+     "fresh": 0.5,
+     "settled": 0.1,
+     "old": 0,
+     "wet": 0.4,
+     "slush": 0
+    },
+    "age": 0.15,
+    "crust": 0.0,
+    "wetness": 0.45,
+    "drift_strength": 0.1,
+    "dirt_roadside": 0.05,
+    "litter_under_trees": 0.1,
+    "albedo_linear": {
+     "open": [
+      0.769,
+      0.783,
+      0.811
+     ],
+     "roads": [
+      0.707,
+      0.717,
+      0.737
+     ],
+     "under_trees": [
+      0.75,
+      0.76,
+      0.78
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#E3E5E9",
+     "roads": "#DBDCDF",
+     "under_trees": "#E1E2E5",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 1.0,
+    "note": "no snow; state fields are held values for clean interpolation only"
+   },
+   "refs": [
+    "2019-06-03 former Red Forest meadow, headed, pale panicles <https://commons.wikimedia.org/wiki/File:Pripjat_red_forest_2019_03.jpg>",
+    "2020-06-28 meadow by the railway, 88 % green <https://commons.wikimedia.org/wiki/File:Рыжий_лес.jpg>",
+    "2022-06-22 Stipa borysthenica on sand, straw-gold stems <https://commons.wikimedia.org/wiki/File:Stipaborysthenica.jpg>",
+    "2021-06-14 Teremtsi floodplain drone, lowlands still flooded <https://commons.wikimedia.org/wiki/File:Teremcy.jpg>",
+    "2025-06-21 Vyazishche street, PSRER, lush 30-80 cm <https://commons.wikimedia.org/wiki/File:Vyazishche_overgrown_village_street.jpg>"
+   ]
+  },
+  {
+   "month": 7,
+   "day": 15,
+   "doy": 196,
+   "name": "Jul",
+   "climate": {
+    "T_mean_C": 19.9,
+    "T_min_C": 14.5,
+    "P_snow_cover_clim": 0.0
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.82,
+     "cohort_green": 0.872,
+     "live_color": "#4B5930",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.06,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.0,
+     "seed_heads": 0.85,
+     "seed_stage": 0.5,
+     "seed_color": "#876974",
+     "tip_dryness": 0.15,
+     "wetness": 0.12,
+     "frost": 0.001,
+     "density": 1.0,
+     "burnt_patch_share": 0.000153,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.7,
+     "cohort_green": 0.714,
+     "live_color": "#46552A",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.02,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.03,
+     "seed_heads": 1.0,
+     "seed_stage": 0.72,
+     "seed_color": "#A08F6D",
+     "tip_dryness": 0.2,
+     "wetness": 0.12,
+     "frost": 0.001,
+     "density": 1.0,
+     "burnt_patch_share": 0.000142,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.86,
+     "cohort_green": 0.887,
+     "live_color": "#445C32",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.03,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.94,
+     "straw_lodging": 0.05,
+     "seed_heads": 0.95,
+     "seed_stage": 0.6,
+     "seed_color": "#A19488",
+     "tip_dryness": 0.1,
+     "wetness": 0.32,
+     "frost": 0.041,
+     "density": 1.0,
+     "burnt_patch_share": 9.4e-05,
+     "flood": 0.05,
+     "flood_ice": 0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.92,
+     "cohort_green": 0.939,
+     "live_color": "#465C33",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.02,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.96,
+     "straw_lodging": 0.06,
+     "seed_heads": 0.8,
+     "seed_stage": 0.85,
+     "seed_color": "#6F5D3C",
+     "tip_dryness": 0.08,
+     "wetness": 0.37,
+     "frost": 0.041,
+     "density": 1.0,
+     "burnt_patch_share": 3.5e-05,
+     "flood": 0.25,
+     "flood_ice": 0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.9,
+     "cohort_green": 1.0,
+     "live_color": "#4D5A3A",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0.1,
+     "thatch_color": "#A18966",
+     "thatch_lodging": 0.6,
+     "straw_lodging": 0.0,
+     "seed_heads": 0.2,
+     "seed_stage": 0.2,
+     "seed_color": "#735F5F",
+     "tip_dryness": 0.05,
+     "wetness": 0.27,
+     "frost": 0.041,
+     "density": 1.0,
+     "burnt_patch_share": 7.1e-05,
+     "flood": 0.5,
+     "flood_ice": 0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.45,
+     "cohort_green": 0.489,
+     "live_color": "#606F54",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.08,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.08,
+     "seed_heads": 0.9,
+     "seed_stage": 0.6,
+     "seed_color": "#917B7E",
+     "tip_dryness": 0.38,
+     "wetness": 0.02,
+     "frost": 0.041,
+     "density": 1.0,
+     "burnt_patch_share": 9.4e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.62,
+     "cohort_green": 0.639,
+     "live_color": "#48582D",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.03,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.04,
+     "seed_heads": 1.0,
+     "seed_stage": 0.75,
+     "seed_color": "#968264",
+     "tip_dryness": 0.25,
+     "wetness": 0.07,
+     "frost": 0.001,
+     "density": 1.0,
+     "burnt_patch_share": 0.000354,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.68,
+     "cohort_green": 0.68,
+     "live_color": "#46552A",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.3,
+     "seed_heads": 0.5,
+     "seed_stage": 0.7,
+     "seed_color": "#948666",
+     "tip_dryness": 0.25,
+     "wetness": 0.07,
+     "frost": 0,
+     "density": 1.0,
+     "burnt_patch_share": 5.9e-05,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_m": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.0,
+    "depth_real_m": null,
+    "compaction_roads": 0.4,
+    "density_kg_m3": {
+     "open": 243,
+     "roads": 346
+    },
+    "state": "fresh",
+    "state_weights": {
+     "fresh": 0.5,
+     "settled": 0.1,
+     "old": 0,
+     "wet": 0.4,
+     "slush": 0
+    },
+    "age": 0.15,
+    "crust": 0.0,
+    "wetness": 0.45,
+    "drift_strength": 0.1,
+    "dirt_roadside": 0.05,
+    "litter_under_trees": 0.1,
+    "albedo_linear": {
+     "open": [
+      0.769,
+      0.783,
+      0.811
+     ],
+     "roads": [
+      0.707,
+      0.717,
+      0.737
+     ],
+     "under_trees": [
+      0.75,
+      0.76,
+      0.78
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#E3E5E9",
+     "roads": "#DBDCDF",
+     "under_trees": "#E1E2E5",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 1.0,
+    "note": "no snow; state fields are held values for clean interpolation only"
+   },
+   "refs": [
+    "2021-07-25 Narovlya left-bank floodplain drone <https://commons.wikimedia.org/wiki/File:Pripyat_River_and_wild_left_bank_in_Narovlya_District_(drone_view).jpg>",
+    "2020-07-25 PSRER pasture fully sun-cured (dusk) <https://commons.wikimedia.org/wiki/File:Feeding_Przewalski's_horses.jpg>"
+   ]
+  },
+  {
+   "month": 8,
+   "day": 15,
+   "doy": 227,
+   "name": "Aug",
+   "climate": {
+    "T_mean_C": 18.8,
+    "T_min_C": 13.3,
+    "P_snow_cover_clim": 0.0
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.65,
+     "cohort_green": 0.67,
+     "live_color": "#515735",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.03,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.94,
+     "straw_lodging": 0.02,
+     "seed_heads": 1.0,
+     "seed_stage": 0.7,
+     "seed_color": "#9B8467",
+     "tip_dryness": 0.3,
+     "wetness": 0.15,
+     "frost": 0.003,
+     "density": 0.98,
+     "burnt_patch_share": 0.000107,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.52,
+     "cohort_green": 0.525,
+     "live_color": "#4E562F",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.01,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.06,
+     "seed_heads": 0.85,
+     "seed_stage": 0.85,
+     "seed_color": "#958466",
+     "tip_dryness": 0.35,
+     "wetness": 0.15,
+     "frost": 0.003,
+     "density": 0.95,
+     "burnt_patch_share": 9.8e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.72,
+     "cohort_green": 0.735,
+     "live_color": "#4C5937",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.02,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.1,
+     "seed_heads": 0.85,
+     "seed_stage": 0.8,
+     "seed_color": "#A99A6D",
+     "tip_dryness": 0.2,
+     "wetness": 0.35,
+     "frost": 0.043,
+     "density": 0.98,
+     "burnt_patch_share": 6.6e-05,
+     "flood": 0.02,
+     "flood_ice": 0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.85,
+     "cohort_green": 0.859,
+     "live_color": "#4B5938",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.01,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.96,
+     "straw_lodging": 0.12,
+     "seed_heads": 0.6,
+     "seed_stage": 0.95,
+     "seed_color": "#65543C",
+     "tip_dryness": 0.18,
+     "wetness": 0.4,
+     "frost": 0.043,
+     "density": 0.98,
+     "burnt_patch_share": 2.5e-05,
+     "flood": 0.15,
+     "flood_ice": 0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.92,
+     "cohort_green": 0.979,
+     "live_color": "#4F5C3B",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0.06,
+     "thatch_color": "#A18966",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.0,
+     "seed_heads": 0.8,
+     "seed_stage": 0.5,
+     "seed_color": "#7D5F58",
+     "tip_dryness": 0.1,
+     "wetness": 0.3,
+     "frost": 0.043,
+     "density": 1.0,
+     "burnt_patch_share": 4.9e-05,
+     "flood": 0.4,
+     "flood_ice": 0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.38,
+     "cohort_green": 0.4,
+     "live_color": "#627055",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.05,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.75,
+     "straw_lodging": 0.12,
+     "seed_heads": 0.8,
+     "seed_stage": 0.8,
+     "seed_color": "#ACA28A",
+     "tip_dryness": 0.5,
+     "wetness": 0.05,
+     "frost": 0.043,
+     "density": 0.95,
+     "burnt_patch_share": 6.6e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.35,
+     "cohort_green": 0.357,
+     "live_color": "#505733",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0.02,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.06,
+     "seed_heads": 0.85,
+     "seed_stage": 0.88,
+     "seed_color": "#8C7C63",
+     "tip_dryness": 0.4,
+     "wetness": 0.1,
+     "frost": 0.003,
+     "density": 0.95,
+     "burnt_patch_share": 0.000246,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.5,
+     "cohort_green": 0.5,
+     "live_color": "#4E562F",
+     "yellowing_color": "#6A6B3A",
+     "straw_color": "#968355",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.35,
+     "seed_heads": 0.4,
+     "seed_stage": 0.8,
+     "seed_color": "#928164",
+     "tip_dryness": 0.35,
+     "wetness": 0.1,
+     "frost": 0,
+     "density": 0.92,
+     "burnt_patch_share": 4.1e-05,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_m": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.0,
+    "depth_real_m": null,
+    "compaction_roads": 0.4,
+    "density_kg_m3": {
+     "open": 243,
+     "roads": 346
+    },
+    "state": "fresh",
+    "state_weights": {
+     "fresh": 0.5,
+     "settled": 0.1,
+     "old": 0,
+     "wet": 0.4,
+     "slush": 0
+    },
+    "age": 0.15,
+    "crust": 0.0,
+    "wetness": 0.45,
+    "drift_strength": 0.1,
+    "dirt_roadside": 0.05,
+    "litter_under_trees": 0.1,
+    "albedo_linear": {
+     "open": [
+      0.769,
+      0.783,
+      0.811
+     ],
+     "roads": [
+      0.707,
+      0.717,
+      0.737
+     ],
+     "under_trees": [
+      0.75,
+      0.76,
+      0.78
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#E3E5E9",
+     "roads": "#DBDCDF",
+     "under_trees": "#E1E2E5",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 1.0,
+    "note": "no snow; state fields are held values for clean interpolation only"
+   },
+   "refs": [
+    "2013-08-07 cooling-towers road verge, sun-cured <https://commons.wikimedia.org/wiki/File:Chernobyl_nuclear_plant4.jpg>",
+    "2016-08-21 ChNPP canal bank, sun-dried short sward <https://commons.wikimedia.org/wiki/File:Chernobyl_Nuclear_Power_Plant_Oct_2016.jpg>",
+    "2019-08-07 Uzh reed, purple-brown flowering panicles (eye) <https://commons.wikimedia.org/wiki/File:Вранішній_туман_над_р.Уж.jpg>"
+   ]
+  },
+  {
+   "month": 9,
+   "day": 15,
+   "doy": 258,
+   "name": "Sep",
+   "climate": {
+    "T_mean_C": 13.4,
+    "T_min_C": 8.7,
+    "P_snow_cover_clim": 0.0
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.5,
+     "cohort_green": 0.505,
+     "live_color": "#4B5232",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.01,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.94,
+     "straw_lodging": 0.05,
+     "seed_heads": 1.0,
+     "seed_stage": 0.82,
+     "seed_color": "#A28F6E",
+     "tip_dryness": 0.4,
+     "wetness": 0.25,
+     "frost": 0.066,
+     "density": 0.96,
+     "burnt_patch_share": 7.2e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.98,
+     "green_fraction": 0.55,
+     "cohort_green": 0.55,
+     "live_color": "#454F2A",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.12,
+     "seed_heads": 0.6,
+     "seed_stage": 0.92,
+     "seed_color": "#8C7E64",
+     "tip_dryness": 0.35,
+     "wetness": 0.25,
+     "frost": 0.066,
+     "density": 0.92,
+     "burnt_patch_share": 6.6e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.62,
+     "cohort_green": 0.62,
+     "live_color": "#475433",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.15,
+     "seed_heads": 0.6,
+     "seed_stage": 0.9,
+     "seed_color": "#9B8E6B",
+     "tip_dryness": 0.28,
+     "wetness": 0.45,
+     "frost": 0.106,
+     "density": 0.95,
+     "burnt_patch_share": 4.4e-05,
+     "flood": 0.02,
+     "flood_ice": 0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.7,
+     "cohort_green": 0.7,
+     "live_color": "#475535",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.96,
+     "straw_lodging": 0.22,
+     "seed_heads": 0.4,
+     "seed_stage": 1.0,
+     "seed_color": "#5F503C",
+     "tip_dryness": 0.3,
+     "wetness": 0.5,
+     "frost": 0.106,
+     "density": 0.95,
+     "burnt_patch_share": 1.7e-05,
+     "flood": 0.15,
+     "flood_ice": 0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.82,
+     "cohort_green": 0.854,
+     "live_color": "#4D593A",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0.04,
+     "thatch_color": "#A18966",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.0,
+     "seed_heads": 1.0,
+     "seed_stage": 0.7,
+     "seed_color": "#AB8D74",
+     "tip_dryness": 0.2,
+     "wetness": 0.4,
+     "frost": 0.106,
+     "density": 1.0,
+     "burnt_patch_share": 3.3e-05,
+     "flood": 0.4,
+     "flood_ice": 0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.9,
+     "green_fraction": 0.45,
+     "cohort_green": 0.464,
+     "live_color": "#606F54",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0.03,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.75,
+     "straw_lodging": 0.15,
+     "seed_heads": 0.6,
+     "seed_stage": 0.9,
+     "seed_color": "#A69C85",
+     "tip_dryness": 0.42,
+     "wetness": 0.15,
+     "frost": 0.106,
+     "density": 0.92,
+     "burnt_patch_share": 4.4e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.42,
+     "cohort_green": 0.42,
+     "live_color": "#49512F",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.12,
+     "seed_heads": 0.6,
+     "seed_stage": 0.95,
+     "seed_color": "#867962",
+     "tip_dryness": 0.38,
+     "wetness": 0.2,
+     "frost": 0.066,
+     "density": 0.92,
+     "burnt_patch_share": 0.000165,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.72,
+     "cohort_green": 0.72,
+     "live_color": "#454F2A",
+     "yellowing_color": "#7A7039",
+     "straw_color": "#846F43",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.35,
+     "seed_heads": 0.3,
+     "seed_stage": 0.85,
+     "seed_color": "#8E7F63",
+     "tip_dryness": 0.2,
+     "wetness": 0.2,
+     "frost": 0.026,
+     "density": 0.95,
+     "burnt_patch_share": 2.8e-05,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_m": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.0,
+    "depth_real_m": null,
+    "compaction_roads": 0.4,
+    "density_kg_m3": {
+     "open": 243,
+     "roads": 346
+    },
+    "state": "fresh",
+    "state_weights": {
+     "fresh": 0.5,
+     "settled": 0.1,
+     "old": 0,
+     "wet": 0.4,
+     "slush": 0
+    },
+    "age": 0.15,
+    "crust": 0.0,
+    "wetness": 0.45,
+    "drift_strength": 0.1,
+    "dirt_roadside": 0.05,
+    "litter_under_trees": 0.1,
+    "albedo_linear": {
+     "open": [
+      0.769,
+      0.783,
+      0.811
+     ],
+     "roads": [
+      0.707,
+      0.717,
+      0.737
+     ],
+     "under_trees": [
+      0.75,
+      0.76,
+      0.78
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#E3E5E9",
+     "roads": "#DBDCDF",
+     "under_trees": "#E1E2E5",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 1.0,
+    "note": "no snow; state fields are held values for clean interpolation only"
+   },
+   "refs": [
+    "2022-09-07 Kamianka meadow, straw-gold seed stalks over green, ~50/50 <https://commons.wikimedia.org/wiki/File:Kamjanka.jpg>",
+    "2021-09-18 Pripyat/Dnieper mouth drone, rust-tawny vs olive (same site as Jun) <https://commons.wikimedia.org/wiki/File:Плавні_Дніпра.jpg>",
+    "2021-09-18 sandy two-track, abandoned village <https://commons.wikimedia.org/wiki/File:Дорога._Зона_відчуження.jpg>"
+   ]
+  },
+  {
+   "month": 10,
+   "day": 15,
+   "doy": 288,
+   "name": "Oct",
+   "climate": {
+    "T_mean_C": 7.7,
+    "T_min_C": 3.8,
+    "P_snow_cover_clim": 0.02
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.3,
+     "cohort_green": 0.3,
+     "live_color": "#4A512F",
+     "yellowing_color": "#847239",
+     "straw_color": "#896D3D",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.94,
+     "straw_lodging": 0.1,
+     "seed_heads": 0.95,
+     "seed_stage": 0.9,
+     "seed_color": "#A59578",
+     "tip_dryness": 0.6,
+     "wetness": 0.4,
+     "frost": 0.337,
+     "density": 0.94,
+     "burnt_patch_share": 3.1e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.42,
+     "cohort_green": 0.42,
+     "live_color": "#454E2A",
+     "yellowing_color": "#847239",
+     "straw_color": "#896D3D",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.22,
+     "seed_heads": 0.45,
+     "seed_stage": 0.97,
+     "seed_color": "#867963",
+     "tip_dryness": 0.5,
+     "wetness": 0.4,
+     "frost": 0.337,
+     "density": 0.9,
+     "burnt_patch_share": 2.9e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.48,
+     "cohort_green": 0.48,
+     "live_color": "#465231",
+     "yellowing_color": "#847239",
+     "straw_color": "#896D3D",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.28,
+     "seed_heads": 0.42,
+     "seed_stage": 0.96,
+     "seed_color": "#92866A",
+     "tip_dryness": 0.45,
+     "wetness": 0.6,
+     "frost": 0.377,
+     "density": 0.9,
+     "burnt_patch_share": 1.9e-05,
+     "flood": 0.05,
+     "flood_ice": 0
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.4,
+     "cohort_green": 0.4,
+     "live_color": "#465231",
+     "yellowing_color": "#847239",
+     "straw_color": "#89653E",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.96,
+     "straw_lodging": 0.38,
+     "seed_heads": 0.22,
+     "seed_stage": 1.0,
+     "seed_color": "#5F503C",
+     "tip_dryness": 0.55,
+     "wetness": 0.65,
+     "frost": 0.377,
+     "density": 0.85,
+     "burnt_patch_share": 7e-06,
+     "flood": 0.2,
+     "flood_ice": 0
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.45,
+     "cohort_green": 0.45,
+     "live_color": "#4B5636",
+     "yellowing_color": "#847239",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0,
+     "thatch_color": "#A18966",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.02,
+     "seed_heads": 1.0,
+     "seed_stage": 0.85,
+     "seed_color": "#B29E88",
+     "tip_dryness": 0.5,
+     "wetness": 0.55,
+     "frost": 0.377,
+     "density": 1.0,
+     "burnt_patch_share": 1.4e-05,
+     "flood": 0.45,
+     "flood_ice": 0
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.85,
+     "green_fraction": 0.5,
+     "cohort_green": 0.5,
+     "live_color": "#606E54",
+     "yellowing_color": "#847239",
+     "straw_color": "#896D3D",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.75,
+     "straw_lodging": 0.18,
+     "seed_heads": 0.42,
+     "seed_stage": 0.96,
+     "seed_color": "#A39982",
+     "tip_dryness": 0.38,
+     "wetness": 0.3,
+     "frost": 0.377,
+     "density": 0.88,
+     "burnt_patch_share": 1.9e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0.98,
+     "green_fraction": 0.35,
+     "cohort_green": 0.35,
+     "live_color": "#48502E",
+     "yellowing_color": "#847239",
+     "straw_color": "#896D3D",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.2,
+     "seed_heads": 0.45,
+     "seed_stage": 1.0,
+     "seed_color": "#827662",
+     "tip_dryness": 0.5,
+     "wetness": 0.35,
+     "frost": 0.337,
+     "density": 0.88,
+     "burnt_patch_share": 7.2e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.9,
+     "green_fraction": 0.7,
+     "cohort_green": 0.7,
+     "live_color": "#454E2A",
+     "yellowing_color": "#847239",
+     "straw_color": "#896D3D",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.35,
+     "seed_heads": 0.2,
+     "seed_stage": 0.9,
+     "seed_color": "#8A7C63",
+     "tip_dryness": 0.2,
+     "wetness": 0.35,
+     "frost": 0.297,
+     "density": 0.92,
+     "burnt_patch_share": 1.2e-05,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_m": {
+     "open": 0,
+     "under_trees": 0,
+     "roads": 0,
+     "drifts_neglected": 0
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.0,
+    "depth_real_m": {
+     "open_typical": 0.0,
+     "open_range": [
+      0.0,
+      0.0
+     ],
+     "drifts_range": [
+      0.0,
+      0.0
+     ],
+     "clim_p_cover": 0.02,
+     "clim_mean_depth_incl_zero": 0.0,
+     "clim_conditional": 0.0
+    },
+    "compaction_roads": 0.4,
+    "density_kg_m3": {
+     "open": 243,
+     "roads": 346
+    },
+    "state": "fresh",
+    "state_weights": {
+     "fresh": 0.5,
+     "settled": 0.1,
+     "old": 0,
+     "wet": 0.4,
+     "slush": 0
+    },
+    "age": 0.15,
+    "crust": 0.0,
+    "wetness": 0.45,
+    "drift_strength": 0.1,
+    "dirt_roadside": 0.05,
+    "litter_under_trees": 0.1,
+    "albedo_linear": {
+     "open": [
+      0.769,
+      0.783,
+      0.811
+     ],
+     "roads": [
+      0.707,
+      0.717,
+      0.737
+     ],
+     "under_trees": [
+      0.75,
+      0.76,
+      0.78
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#E3E5E9",
+     "roads": "#DBDCDF",
+     "under_trees": "#E1E2E5",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 1.0,
+    "note": "no snow; state fields are held values for clean interpolation only"
+   },
+   "refs": [
+    "2010-10-10 Przewalski pasture, 40-60 % green base (IAEA) <https://commons.wikimedia.org/wiki/File:Przewalski's_Horse_(02710137).jpg>",
+    "2018-10-10 Teremtsi reed beds tawny, pink-tan panicles <https://commons.wikimedia.org/wiki/File:Осінь_у_Теремцях.jpg>",
+    "2019-10-15 road to Otashiv, silvery fluffy Calamagrostis panicles (eye, backlit) <https://commons.wikimedia.org/wiki/File:Покинута_людьми_на_довгі_дні,_дорога_помирає_в_бур'яні..._(дорога_на_Оташів).jpg>",
+    "2019-10-18 Pripyat floodplain lake, reed fringe straw-tan <https://commons.wikimedia.org/wiki/File:Задивляються_у_воду_на_свою_хорошу_вроду._Заплава_Прип'яті.jpg>"
+   ]
+  },
+  {
+   "month": 11,
+   "day": 15,
+   "doy": 319,
+   "name": "Nov",
+   "climate": {
+    "T_mean_C": 1.4,
+    "T_min_C": -1.1,
+    "P_snow_cover_clim": 0.28
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0.97,
+     "green_fraction": 0.12,
+     "cohort_green": 0.12,
+     "live_color": "#505632",
+     "yellowing_color": "#81713F",
+     "straw_color": "#856D4C",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.94,
+     "straw_lodging": 0.2,
+     "seed_heads": 0.8,
+     "seed_stage": 0.95,
+     "seed_color": "#A6997E",
+     "tip_dryness": 0.8,
+     "wetness": 0.6,
+     "frost": 0.371,
+     "density": 0.88,
+     "burnt_patch_share": 6e-06,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.92,
+     "green_fraction": 0.22,
+     "cohort_green": 0.22,
+     "live_color": "#4F5630",
+     "yellowing_color": "#81713F",
+     "straw_color": "#856D4C",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.42,
+     "seed_heads": 0.32,
+     "seed_stage": 1.0,
+     "seed_color": "#827662",
+     "tip_dryness": 0.72,
+     "wetness": 0.6,
+     "frost": 0.371,
+     "density": 0.82,
+     "burnt_patch_share": 5e-06,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0.9,
+     "green_fraction": 0.28,
+     "cohort_green": 0.28,
+     "live_color": "#4E5735",
+     "yellowing_color": "#81713F",
+     "straw_color": "#856D4C",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.48,
+     "seed_heads": 0.3,
+     "seed_stage": 1.0,
+     "seed_color": "#8C8069",
+     "tip_dryness": 0.65,
+     "wetness": 0.8,
+     "frost": 0.411,
+     "density": 0.8,
+     "burnt_patch_share": 4e-06,
+     "flood": 0.08,
+     "flood_ice": 0.05
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0.85,
+     "green_fraction": 0.1,
+     "cohort_green": 0.1,
+     "live_color": "#4F5630",
+     "yellowing_color": "#81713F",
+     "straw_color": "#866347",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.96,
+     "straw_lodging": 0.62,
+     "seed_heads": 0.1,
+     "seed_stage": 1.0,
+     "seed_color": "#5F503C",
+     "tip_dryness": 0.8,
+     "wetness": 0.85,
+     "frost": 0.411,
+     "density": 0.7,
+     "burnt_patch_share": 1e-06,
+     "flood": 0.25,
+     "flood_ice": 0.05
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0.05,
+     "cohort_green": 0.05,
+     "live_color": "#505835",
+     "yellowing_color": "#81713F",
+     "straw_color": "#A78B6C",
+     "thatch_fraction": 0,
+     "thatch_color": "#A18966",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.05,
+     "seed_heads": 1.0,
+     "seed_stage": 0.95,
+     "seed_color": "#B0A595",
+     "tip_dryness": 0.85,
+     "wetness": 0.75,
+     "frost": 0.411,
+     "density": 0.97,
+     "burnt_patch_share": 3e-06,
+     "flood": 0.5,
+     "flood_ice": 0.05
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.8,
+     "green_fraction": 0.45,
+     "cohort_green": 0.45,
+     "live_color": "#627055",
+     "yellowing_color": "#81713F",
+     "straw_color": "#856D4C",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.75,
+     "straw_lodging": 0.22,
+     "seed_heads": 0.3,
+     "seed_stage": 1.0,
+     "seed_color": "#A09680",
+     "tip_dryness": 0.35,
+     "wetness": 0.5,
+     "frost": 0.411,
+     "density": 0.82,
+     "burnt_patch_share": 4e-06,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.15,
+     "cohort_green": 0.15,
+     "live_color": "#505631",
+     "yellowing_color": "#81713F",
+     "straw_color": "#856D4C",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.36,
+     "seed_heads": 0.3,
+     "seed_stage": 1.0,
+     "seed_color": "#827662",
+     "tip_dryness": 0.72,
+     "wetness": 0.55,
+     "frost": 0.371,
+     "density": 0.8,
+     "burnt_patch_share": 1.4e-05,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.75,
+     "green_fraction": 0.55,
+     "cohort_green": 0.55,
+     "live_color": "#4F5630",
+     "yellowing_color": "#81713F",
+     "straw_color": "#856D4C",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.4,
+     "seed_heads": 0.1,
+     "seed_stage": 0.95,
+     "seed_color": "#867962",
+     "tip_dryness": 0.28,
+     "wetness": 0.55,
+     "frost": 0.331,
+     "density": 0.85,
+     "burnt_patch_share": 2e-06,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 0.35,
+     "under_trees": 0.2,
+     "roads": 0.35,
+     "drifts_neglected": 0.5
+    },
+    "depth_m": {
+     "open": 0.03,
+     "under_trees": 0.015,
+     "roads": 0.021,
+     "drifts_neglected": 0.06
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.112,
+    "depth_real_m": {
+     "open_typical": 0.03,
+     "open_range": [
+      0.01,
+      0.1
+     ],
+     "drifts_range": [
+      0.03,
+      0.1
+     ],
+     "clim_p_cover": 0.28,
+     "clim_mean_depth_incl_zero": 0.02,
+     "clim_conditional": 0.071
+    },
+    "compaction_roads": 0.4,
+    "density_kg_m3": {
+     "open": 243,
+     "roads": 346
+    },
+    "state": "fresh",
+    "state_weights": {
+     "fresh": 0.5,
+     "settled": 0.1,
+     "old": 0,
+     "wet": 0.4,
+     "slush": 0
+    },
+    "age": 0.15,
+    "crust": 0.0,
+    "wetness": 0.45,
+    "drift_strength": 0.1,
+    "dirt_roadside": 0.05,
+    "litter_under_trees": 0.1,
+    "albedo_linear": {
+     "open": [
+      0.769,
+      0.783,
+      0.811
+     ],
+     "roads": [
+      0.707,
+      0.717,
+      0.737
+     ],
+     "under_trees": [
+      0.75,
+      0.76,
+      0.78
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#E3E5E9",
+     "roads": "#DBDCDF",
+     "under_trees": "#E1E2E5",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 0.917
+   },
+   "refs": [
+    "2020-11-01 Red Forest start, tawny over green base 25-35 %, wet, partly lodged <https://commons.wikimedia.org/wiki/File:Прип'ять_2020_-_2.jpg>",
+    "2017-11-03 southern ChEZ road, mown verges vivid green <https://commons.wikimedia.org/wiki/File:Chernobyl_(30079770627).jpg>",
+    "2018-11-26 first snow 1-3 cm, 50-60 % patchy, grass 20-50 cm through <https://commons.wikimedia.org/wiki/File:Зимові_розваги_вожака.jpg>",
+    "2022-11 Pripyat port bank, 5-10 cm fresh snow, reed thatch 40-80 cm through <https://bigkyiv.com.ua/u-chornobylskyj-zapovidnyk-pryjshla-zyma/>"
+   ]
+  },
+  {
+   "month": 12,
+   "day": 15,
+   "doy": 349,
+   "name": "Dec",
+   "climate": {
+    "T_mean_C": -2.8,
+    "T_min_C": -5.2,
+    "P_snow_cover_clim": 0.58
+   },
+   "grass": {
+    "P1_TALL_CALAMAGROSTIS": {
+     "new_growth_height": 0.95,
+     "green_fraction": 0.02,
+     "cohort_green": 0.02,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#877458",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.94,
+     "straw_lodging": 0.35,
+     "seed_heads": 0.65,
+     "seed_stage": 1.0,
+     "seed_color": "#A89C84",
+     "tip_dryness": 0.9,
+     "wetness": 0.45,
+     "frost": 0.353,
+     "density": 0.82,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P2_MEADOW_MIX": {
+     "new_growth_height": 0.9,
+     "green_fraction": 0.08,
+     "cohort_green": 0.08,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#877458",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.92,
+     "straw_lodging": 0.62,
+     "seed_heads": 0.22,
+     "seed_stage": 1.0,
+     "seed_color": "#827662",
+     "tip_dryness": 0.85,
+     "wetness": 0.45,
+     "frost": 0.353,
+     "density": 0.72,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P3_WET_MEADOW": {
+     "new_growth_height": 0.85,
+     "green_fraction": 0.15,
+     "cohort_green": 0.15,
+     "live_color": "#545D38",
+     "yellowing_color": "#807043",
+     "straw_color": "#877458",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.95,
+     "straw_lodging": 0.7,
+     "seed_heads": 0.2,
+     "seed_stage": 1.0,
+     "seed_color": "#8C8069",
+     "tip_dryness": 0.8,
+     "wetness": 0.65,
+     "frost": 0.393,
+     "density": 0.68,
+     "burnt_patch_share": 0.0,
+     "flood": 0.1,
+     "flood_ice": 0.6
+    },
+    "P4_SEDGE_MARSH": {
+     "new_growth_height": 0.75,
+     "green_fraction": 0.02,
+     "cohort_green": 0.02,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#866246",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.96,
+     "straw_lodging": 0.85,
+     "seed_heads": 0.03,
+     "seed_stage": 1.0,
+     "seed_color": "#5F503C",
+     "tip_dryness": 0.92,
+     "wetness": 0.7,
+     "frost": 0.393,
+     "density": 0.55,
+     "burnt_patch_share": 0.0,
+     "flood": 0.3,
+     "flood_ice": 0.6
+    },
+    "P5_REED_BED": {
+     "new_growth_height": 1.0,
+     "green_fraction": 0,
+     "cohort_green": 0.0,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#AA8C66",
+     "thatch_fraction": 0,
+     "thatch_color": "#A18966",
+     "thatch_lodging": 0.7,
+     "straw_lodging": 0.08,
+     "seed_heads": 1.0,
+     "seed_stage": 1.0,
+     "seed_color": "#AFA89B",
+     "tip_dryness": 0.95,
+     "wetness": 0.6,
+     "frost": 0.393,
+     "density": 0.94,
+     "burnt_patch_share": 0.0,
+     "flood": 0.5,
+     "flood_ice": 0.6
+    },
+    "P6_SPARSE_SAND": {
+     "new_growth_height": 0.6,
+     "green_fraction": 0.4,
+     "cohort_green": 0.4,
+     "live_color": "#657256",
+     "yellowing_color": "#807043",
+     "straw_color": "#877458",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.75,
+     "straw_lodging": 0.25,
+     "seed_heads": 0.2,
+     "seed_stage": 1.0,
+     "seed_color": "#A09680",
+     "tip_dryness": 0.32,
+     "wetness": 0.35,
+     "frost": 0.393,
+     "density": 0.78,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P7_RUDERAL_VERGE": {
+     "new_growth_height": 0.9,
+     "green_fraction": 0.06,
+     "cohort_green": 0.06,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#877458",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.58,
+     "seed_heads": 0.2,
+     "seed_stage": 1.0,
+     "seed_color": "#827662",
+     "tip_dryness": 0.85,
+     "wetness": 0.4,
+     "frost": 0.353,
+     "density": 0.7,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    },
+    "P8_SHORT_LAWN_YARD": {
+     "new_growth_height": 0.55,
+     "green_fraction": 0.42,
+     "cohort_green": 0.42,
+     "live_color": "#595D36",
+     "yellowing_color": "#807043",
+     "straw_color": "#877458",
+     "thatch_fraction": 0,
+     "thatch_color": "#60553F",
+     "thatch_lodging": 0.9,
+     "straw_lodging": 0.45,
+     "seed_heads": 0.05,
+     "seed_stage": 1.0,
+     "seed_color": "#827662",
+     "tip_dryness": 0.32,
+     "wetness": 0.4,
+     "frost": 0.313,
+     "density": 0.8,
+     "burnt_patch_share": 0.0,
+     "flood": null,
+     "flood_ice": null
+    }
+   },
+   "snow": {
+    "coverage": {
+     "open": 1.0,
+     "under_trees": 0.9,
+     "roads": 1.0,
+     "drifts_neglected": 1.0
+    },
+    "depth_m": {
+     "open": 0.1,
+     "under_trees": 0.06,
+     "roads": 0.047,
+     "drifts_neglected": 0.24
+    },
+    "depth_cap_m": 0.536,
+    "depth_norm_of_cap": 0.448,
+    "depth_real_m": {
+     "open_typical": 0.1,
+     "open_range": [
+      0.04,
+      0.26
+     ],
+     "drifts_range": [
+      0.15,
+      0.3
+     ],
+     "clim_p_cover": 0.58,
+     "clim_mean_depth_incl_zero": 0.05,
+     "clim_conditional": 0.086
+    },
+    "compaction_roads": 0.7,
+    "density_kg_m3": {
+     "open": 194,
+     "roads": 408
+    },
+    "state": "fresh",
+    "state_weights": {
+     "fresh": 0.5,
+     "settled": 0.35,
+     "old": 0.1,
+     "wet": 0.05,
+     "slush": 0
+    },
+    "age": 0.25,
+    "crust": 0.25,
+    "wetness": 0.12,
+    "drift_strength": 0.3,
+    "dirt_roadside": 0.1,
+    "litter_under_trees": 0.05,
+    "albedo_linear": {
+     "open": [
+      0.839,
+      0.857,
+      0.893
+     ],
+     "roads": [
+      0.713,
+      0.722,
+      0.742
+     ],
+     "under_trees": [
+      0.828,
+      0.844,
+      0.876
+     ],
+     "roadside_dirty": [
+      0.55,
+      0.53,
+      0.5
+     ]
+    },
+    "colour": {
+     "open": "#ECEEF3",
+     "roads": "#DCDDE0",
+     "under_trees": "#EBEDF1",
+     "roadside_dirty": "#C4C0BC"
+    },
+    "grass_visible": 0.0
+   },
+   "refs": [
+    "2014-12-01 Novosilky (Kyiv obl.), 5-10 cm, asphalt wet-black, shoulder packed <https://commons.wikimedia.org/wiki/File:Каплычка_в_Новосёлках.JPG>",
+    "2018-12-17 tour text: ChEZ roads 'are cleaned often' <https://www.jessicalynnwiebe.com/post/chernobyl>",
+    "2013-12-04 Skorinets (Chernihiv Polesia), verges ~50 % green, snowless <https://commons.wikimedia.org/wiki/File:Скорінець,_Чернігівський_район._Сільська_дорога.JPG>",
+    "2013-12-21 Muromets park, standing straw 60-100 cm, snowless <https://commons.wikimedia.org/wiki/File:Muromets_Park_Kyiv_1.jpg>",
+    "2019-12-01 Snov river reed bed, first ice, snowless <https://commons.wikimedia.org/wiki/File:Снов_зимовий.jpg>",
+    "2020-12-20 Corynephorus tuft stays grey-green, Kyiv Polesia sands <https://commons.wikimedia.org/wiki/File:Corynephorus_canescens_110006280.jpg>"
+   ]
+  }
+ ]
+}

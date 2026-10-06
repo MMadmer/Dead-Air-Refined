@@ -18,7 +18,11 @@
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidVolume.h"
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
 #endif
+#include "xrEngine/da_season.h"
 #if RENDER == R_R4
+#include "Layers/xrRender/da_ground.h"
+#include "Layers/xrRender/da_snow.h"
+#include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #include "Layers/xrRenderPC_R4/da_offload.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
@@ -40,7 +44,9 @@ void CRender::level_Load(IReader* fs)
     da_rain_wetness_on_level_load();
     // Nothing the previous level left in TAA or the upscaler belongs to this one.
     da_history_request_reset("level load");
-    // A season changed while no frame ran (a script during the load) applies before the level's textures.
+    // A level load is a safe point: the season latches its texture folders (the calendar may have moved
+    // on) and snaps its day; the change applies before the level's textures.
+    da_season_relatch();
     Resources->SyncTextureSeason();
     Resources->BeginLevelTextureTracking();
 
@@ -115,6 +121,12 @@ void CRender::level_Load(IReader* fs)
         // Details
         g_pGamePersistent->LoadTitle("st_loading_details");
         Details->Load();
+#if RENDER == R_R4
+        // The collision mesh on the GPU, then the snow fields on it, then the blades over both.
+        da_ground_level_load();
+        da_snow_level_load();
+        da_grass_level_load();
+#endif
     }
 
     // Sectors
@@ -271,6 +283,13 @@ void CRender::level_Unload()
 
     // HOM
     HOM.Unload();
+
+#if RENDER == R_R4
+    // In reverse of the load, and before the details: the blades point into the detail slots.
+    da_grass_level_unload();
+    da_snow_level_unload();
+    da_ground_level_unload();
+#endif
 
     //*** Details
     if (Details) // a double unload is reachable through the deferred-quit race

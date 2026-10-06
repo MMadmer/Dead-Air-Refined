@@ -139,9 +139,16 @@ void CRender::render_hud_shadow()
 // the self-shadow toward each light. Nothing to copy under MSAA - the feature stays off there.
 void CRenderTarget::copy_depth_for_hud()
 {
-    if (!ps_r__hud_shadow || !rt_depth_copy || RImplementation.o.msaa)
-        return;
-    HW.get_context(RCache.context_id)->CopyResource(rt_depth_copy->pSurface, rt_Render_Depth->pSurface);
+    if (ps_r__hud_shadow)
+        copy_depth(RCache);
+}
+
+bool CRenderTarget::copy_depth(CBackend& cmd_list)
+{
+    if (!rt_depth_copy || RImplementation.o.msaa)
+        return false;
+    HW.get_context(cmd_list.context_id)->CopyResource(rt_depth_copy->pSurface, rt_Render_Depth->pSurface);
+    return true;
 }
 
 void CRenderTarget::phase_smap_hud(CBackend& cmd_list)

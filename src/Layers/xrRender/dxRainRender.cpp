@@ -15,6 +15,7 @@ extern ENGINE_API int ps_r__rain_quality;
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/Rain.h"
+#include "xrEngine/da_snow_field.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -35,6 +36,10 @@ dxRainRender::dxRainRender()
     // down with them if the compatibility gamedata is out of step with the binary.
     if (RImplementation.Resources->_lua_HasShader("effects" DELIMITER "rain_splash"))
         SH_Splash.create("effects" DELIMITER "rain_splash", "fx" DELIMITER "fx_rainsplash1");
+    // Snow mode: the flakes are drawn by the pixel shader (a soft lit disc), so they need no texture of
+    // their own. Guarded like the crowns: without the loose script the flakes take the streak blender.
+    if (RImplementation.Resources->_lua_HasShader("effects" DELIMITER "rain_flake"))
+        SH_Flake.create("effects" DELIMITER "rain_flake", "fx" DELIMITER "fx_rain");
 
     hGeom_Rain.create(FVF::F_LIT, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
     hGeom_Drops.create(D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1, RImplementation.Vertex.Buffer(), RImplementation.Index.Buffer());
@@ -58,6 +63,10 @@ void dxRainRender::Render(CEffect_Rain& owner)
     // but "how much rain" is a rate in mm/h, and drop count, streak alpha and splash
     // brightness all answer to that instead of to a number with no physical meaning.
     const float rate01 = clampr(powf(env.RainRateMmh() * (1.f / 25.f), 0.7f), 0.f, 1.f);
+    // The rate is the LIQUID share's (Environment::water_tick); the snow falling alongside it has its
+    // own (da_precip), and the sheet is sized on whichever is heavier.
+    const float snow01 = clampr(powf(da_precip().snow_rate, 0.7f), 0.f, 1.f);
+    const float fall01 = std::max(rate01, snow01);
 
     // The sheet stops when the weather does; the splash pool must NOT. That early-out used to
     // sit above the particle loop, which is the only place a crown ages and is freed, so every
@@ -73,7 +82,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
         static const float tier_drops[4] = {0.45f, 0.70f, 1.00f, 1.15f};
         const float tier_k = tier_drops[clampr(tier, 1, 4) - 1];
         const u32 desired_items =
-            iFloor(float(_max(ps_r__rain_drops, 1)) * (0.20f + 0.80f * rate01) * tier_k);
+            iFloor(float(_max(ps_r__rain_drops, 1)) * (0.20f + 0.80f * fall01) * tier_k);
 
         // The wind every drop born this frame is solved on (Born). Sampled once at the camera and
         // shared by the whole sheet: the gust field varies over tens of metres while the sheet
@@ -114,6 +123,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
 
         const float b_radius_wrap_sqr = _sqr((ps_r__rain_radius + .5f));
 
+        u32 flakes = 0;
         for (u32 I = 0; I < desired_items; I++)
         {
             CEffect_Rain::Item& one = owner.items[I];
@@ -146,6 +156,8 @@ void dxRainRender::Render(CEffect_Rain& owner)
             wdir.set(one.P.x + one.D.x * t_eye - vEye.x, 0, one.P.z + one.D.z * t_eye - vEye.z);
             if (wdir.square_magnitude() > b_radius_wrap_sqr || (one.P.y - vEye.y) < da_rain::sink_offset)
                 one.invalidate();
+            else if (one.flake)
+                ++flakes;
         }
 
         u32 vOffset;
@@ -159,8 +171,9 @@ void dxRainRender::Render(CEffect_Rain& owner)
 
             // A drop the membership test just killed, and one parked under a roof, are both
             // gone. The stock loop drew them anyway - the invalidated one for a whole extra
-            // frame at its stale position, since rebirth only happens on the next pass.
-            if (one.sheltered || 0 == one.dwTime_Life)
+            // frame at its stale position, since rebirth only happens on the next pass. Flakes
+            // are a batch of their own (RenderFlakes).
+            if (one.sheltered || 0 == one.dwTime_Life || one.flake)
                 continue;
 
             // Build line. Streak length is exposure times SPEED, not intensity: the stock
@@ -232,6 +245,9 @@ void dxRainRender::Render(CEffect_Rain& owner)
             RCache.Render(D3DPT_TRIANGLELIST, vOffset, 0, vCount, 0, vCount / 2);
             RCache.set_CullMode(CULL_CCW);
         }
+
+        if (flakes)
+            RenderFlakes(owner, desired_items, flakes, snow01);
     }
 
     // Particles
@@ -344,6 +360,84 @@ void dxRainRender::Render(CEffect_Rain& owner)
             RCache.set_Geometry(hGeom_Drops);
             RCache.Render(D3DPT_TRIANGLELIST, v_offset, 0, vCount_Lock, i_offset, dwNumPrimitives);
         }
+    }
+}
+
+// Snow mode: the flakes as camera-facing quads, each swinging round the line it falls along. The quad
+// carries the disc's corner in the texture coordinate and the flake's own alpha in the colour; the pixel
+// shader (da_rain_flake.ps) shapes and lights it.
+void dxRainRender::RenderFlakes(CEffect_Rain& owner, u32 items, u32 flakes, float snow01)
+{
+    const Fvector& vEye = Device.vCameraPosition;
+    const Fvector& right = Device.vCameraRight;
+    const Fvector& top = Device.vCameraTop;
+    const float t = Device.fTimeGlobal;
+    // A flake stays readable as one across the sheet; the count, not the alpha, carries the intensity.
+    const float sheet_alpha = 0.65f + 0.35f * snow01;
+    // The weather's own precipitation colour, as the streaks take it, lifted toward white: a flake is
+    // ice, it reads lighter than a drop against the same sky.
+    const Fvector3& tint = g_pGamePersistent->Environment().CurrentEnv.rain_color;
+    const float lift = ps_r__rain_bright * 1.15f;
+    const float fr = _min(1.f, tint.x * lift), fg = _min(1.f, tint.y * lift), fb = _min(1.f, tint.z * lift);
+    const float fade_start = ps_r__rain_radius * 0.35f;
+    const float fade_len = std::max(ps_r__rain_radius * 0.65f, 1.f);
+
+    u32 vOffset;
+    FVF::LIT* verts = (FVF::LIT*)RImplementation.Vertex.Lock(flakes * 4, hGeom_Rain->vb_stride, vOffset);
+    FVF::LIT* start = verts;
+    u32 seen = 0;
+    for (u32 I = 0; I < items && seen < flakes; I++)
+    {
+        CEffect_Rain::Item& one = owner.items[I];
+        if (!one.flake || one.sheltered || 0 == one.dwTime_Life)
+            continue;
+        ++seen;
+
+        // The swing is horizontal and elliptical, so no two flakes side by side move in step.
+        const float ph = one.flutter_phase + one.flutter_rate * t;
+        Fvector P;
+        P.set(one.P.x + _sin(ph) * one.flutter_amp, one.P.y,
+            one.P.z + _cos(ph * 0.71f + one.flutter_phase) * one.flutter_amp * 0.7f);
+
+        const float h = one.flake_half;
+        if (!RImplementation.ViewBase.testSphere_dirty(P, h * 1.5f))
+            continue;
+
+        const float cam_dist = P.distance_to(vEye);
+        float a = sheet_alpha;
+        a *= 1.f - clampr((cam_dist - fade_start) / fade_len, 0.f, 1.f);
+        // A flake brushing the lens would fill the screen with a soft blob: gone inside 30 cm.
+        a *= clampr((cam_dist - 0.15f) / 0.35f, 0.f, 1.f);
+        a *= 0.7f + 0.3f * float((I * 2654435761u) >> 29) * (1.f / 7.f);
+        if (a <= 0.004f)
+            continue;
+        const u32 c = color_rgba_f(fr, fg, fb, _min(a, 1.f));
+
+        Fvector Q;
+        Q.mad(P, top, -h).mad(right, -h);
+        verts->set(Q, c, 0.f, 1.f);
+        verts++;
+        Q.mad(P, top, -h).mad(right, h);
+        verts->set(Q, c, 1.f, 1.f);
+        verts++;
+        Q.mad(P, top, h).mad(right, -h);
+        verts->set(Q, c, 0.f, 0.f);
+        verts++;
+        Q.mad(P, top, h).mad(right, h);
+        verts->set(Q, c, 1.f, 0.f);
+        verts++;
+    }
+    const u32 vCount = u32(verts - start);
+    RImplementation.Vertex.Unlock(vCount, hGeom_Rain->vb_stride);
+
+    if (vCount)
+    {
+        RCache.set_CullMode(CULL_NONE);
+        RCache.set_xform_world(Fidentity);
+        RCache.set_Shader(SH_Flake ? SH_Flake : SH_Rain);
+        RCache.set_Geometry(hGeom_Rain);
+        RCache.Render(D3DPT_TRIANGLELIST, vOffset, 0, vCount, 0, vCount / 2);
+        RCache.set_CullMode(CULL_CCW);
     }
 }
 

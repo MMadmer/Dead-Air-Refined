@@ -1,7 +1,10 @@
--- QA probe: walks the six season looks on a loaded save and takes one scene shot per look.
+-- QA probe: pins the season day to the 15th of each month on a loaded save (qa_season_pin, which also
+-- latches that day's texture folders) and takes one scene shot per month with the engine's capture.
+-- The weather clock and the wind are held, so a month differs from the next by the season alone.
 -- Put into <rig>\gamedata\scripts, remove after the run.
 
-local looks = { "autumn", "winter", "spring_early", "spring", "spring_late", "summer" }
+local months = { "january", "february", "march", "april", "may", "june", "july", "august", "september",
+	"october", "november", "december" }
 local step, t_next, shooting = 0, 0, false
 
 local function con(cmd)
@@ -16,22 +19,26 @@ local function on_update()
 	end
 	if shooting then
 		con("r__screenshot_every 0")
-		printf(string.format("[qa] SHOT season_%s", looks[step]))
+		printf(string.format("[qa] SHOT season_%s", months[step]))
 		shooting = false
 		t_next = now + 500
 		return
 	end
 	step = step + 1
-	if step > #looks then
+	if step > #months then
+		con("qa_season_pin off")
+		con("qa_season_state")
+		con("env_time_pin -1")
+		con("wind_freeze 0")
 		printf("[qa] qa_season_done")
 		con("flush")
 		con("quit")
 		t_next = now + 100000
 		return
 	end
-	con("r__season " .. looks[step])
-	printf(string.format("[qa] season %s", looks[step]))
-	-- Give the reload and the texture upload a few seconds, then shoot for one second
+	con("qa_season_pin " .. months[step])
+	printf(string.format("[qa] season %s day %.1f", months[step], level.season_day()))
+	-- The pin reloads the textures whose folder moved: give the upload a few seconds, then shoot for one
 	shooting = true
 	CreateTimeEvent("qa_season", "shot", 4, function()
 		con("r__screenshot_every 1")
@@ -43,6 +50,8 @@ end
 local function on_first_update()
 	con("g_pause_in_background 0")
 	con("main_menu off")
+	con("env_time_pin 12:00")
+	con("wind_freeze 1")
 	device():pause(false)
 	t_next = time_global() + 6000
 	RegisterScriptCallback("actor_on_update", on_update)

@@ -47,6 +47,10 @@ public:
         VrsLuma, // the VRS luminance contrast
         GdCull, // GPU-driven trees: main-view cull, args and scatter
         Grass, // the G-buffer grass, parallel lists included
+        GrassGen, // blade grass compute: generation, args, ground window, push field
+        SnowPrep, // the ground window and the snow depth (stamps, refill, composite)
+        SnowGrid, // the near snow grid in the G-buffer
+        SnowLayer, // the full-screen snow layer over the G-buffer
         RtScene, // ray tracing: acceleration structure builds
         RtSun, // ray traced sun shadows
         RtAO, // ray traced ambient occlusion

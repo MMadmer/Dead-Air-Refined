@@ -93,6 +93,26 @@ constexpr int cover_rays = 5;
 constexpr float cover_slant = deg2rad(30.f);
 constexpr float cover_spread = 0.47f; // tan of ~25 degrees, as the off-axis mad below uses it
 constexpr float cover_range = 20.f;
+
+// Snow mode (docs/dead-air/WINTER.md). What falls is decided per item at its birth by the season's
+// phase (da_precip().liquid: snow 0, sleet 0.5, rain 1), so a sheet turns from streaks to flakes as its
+// items are reborn. A flake sinks at its own terminal speed and drifts with the whole wind - a low
+// fall speed against a breeze is a steep slant, capped where the sheet would lie flat - and flutters
+// round its line. It is born in a short column, lands without a crown and makes no sound.
+constexpr float flake_fall_min = 0.6f;
+constexpr float flake_fall_max = 1.5f;
+constexpr float flake_column = 14.f;
+constexpr float flake_max_slant = deg2rad(75.f);
+// Flutter: a sideways swing of 5-20 cm at 1-3 rad/s round the flake's line.
+constexpr float flake_flutter_min = 0.05f;
+constexpr float flake_flutter_max = 0.20f;
+constexpr float flake_flutter_rate_min = 1.f;
+constexpr float flake_flutter_rate_max = 3.f;
+// Half the width of a flake's quad (a flake is 1.5-3 cm across).
+constexpr float flake_half_min = 0.0075f;
+constexpr float flake_half_max = 0.015f;
+// A visor gets wet from snow too: the flakes melt on the glass, at this share of what rain would do.
+constexpr float flake_visor_share = 0.3f;
 } // namespace da_rain
 
 class IGameObject;
@@ -121,6 +141,13 @@ private:
         u32 dwTime_Life;
         u32 dwTime_Hit;
         u32 uv_set;
+        // Snow mode: a flake rather than a drop, its flutter (amplitude m, rate rad/s, phase rad)
+        // and its half size (m).
+        float flutter_amp;
+        float flutter_rate;
+        float flutter_phase;
+        float flake_half;
+        bool flake;
         // The spawn column is blocked at its very top: the drop would be born inside geometry.
         // Parked out of the sheet instead of being reborn, and re-raycast, every frame.
         bool sheltered;

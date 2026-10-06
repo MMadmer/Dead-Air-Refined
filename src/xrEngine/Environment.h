@@ -641,6 +641,13 @@ public:
     // Where rain pools, baked in the same sweep from the same heights (Level_load.cpp): one
     // entry per field texel, same indexing, always either empty or exactly as long as the field.
     xr_vector<float> puddle_fill;
+    // Running water (255) against standing water (0) per field texel, same indexing, empty with the
+    // field: channels and streams freeze later and keep open lanes. Uploaded as $user$water_class.
+    xr_vector<u8> water_class;
+    void set_water_class(xr_vector<u8>&& flow);
+    // Ice on the water surface at a point, 0..1, by the season's ice keys (da_snow_frame().ice): the
+    // same rule water.ps draws (da_water_ice in the shader). 0 where there is no water or no ice.
+    float ice_at(const Fvector& p) const;
     Fbox water_field_bounds;
     // Derived once in set_water_field so a query is a multiply rather than a divide:
     // (1/extent.x, 1/extent.z) and the metres one texel spans.
