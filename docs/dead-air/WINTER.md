@@ -76,7 +76,10 @@ deck's underside, a ceiling), or a floor more than 1.2 m under a roof of one she
 solid left at the ground (a concrete block's, a car's bottom) or a low object of one surface (a stump) is a
 **solid object** (1): the ground's snow runs on at its full depth up to its sides and its own snow lies on its
 top. (Sheltering every cover sank a ragged moat a texel or two wide round every block, cart and stump, the 1 m
-squares of the field drawn into the snow.) The log says how much of each:
+squares of the field drawn into the snow.) An overhang must be broad enough to keep the snow off: a cover's
+connected texels with fewer than five of overhang are a solid object (a tall stump or a post open at its bottom
+read as a sheet over a floor more than 1.2 m under it, and sheltered a bare pit round itself). The log says how
+much of each:
 
 ```
 * [snow] covers: <n> texels of overhangs, <n> of solid objects
@@ -201,7 +204,7 @@ snow alone). The grass push map uses `radius` and `push` of every stamp.
 | 1 moving | physics in motion within 40 m of the camera (an enabled shell, no parent, no living creature; up to 8 objects of up to 16 elements, rescanned every 0.15 s) | each element's box bottom swept since the last frame ploughs a furrow at its own height, the narrower of its flattest axes wide (0.06-0.4 m), `fall` 0.35: a barrel rolling, a crate pushed, a body dragged or kicked; at rest again the settle callback lays its print |
 | 2 resting | corpses, loot, artefacts, props | each physics element's box laid on the ground as discs. Its physics lies on the ground under the snow, so a loose object lies on the bare, flat floor of its own hollow (discs of at least 0.3 m radius, laid dense enough that their flat floors - `dist^8` walls - join into one over the box, no compacted residual - packed by its weight, a rifle went under a drift whole, and a hollow narrower than the snow grid's 12.5 cm cells closed over it again); a corpse packs it by its creature's `pack`, at most 0.4 of each element's height under the snow (`sink`), each disc a little off its place and size, with ten shallow ploughed scuffs round the body (the snow it fell into churned); when it comes to rest (`on_physics_disable`) and whenever it comes into the window (scans every 0.5 s; again on crossing 44 m and 22 m) |
 | 3 crater | explosions near the ground (not an air burst more than 0.4 of the hole's radius over the snow) | an irregular hole, 0.3 x the blast radius (0.6-3 m): a core and seven lobes of random reach and size, each a flat bare floor in steep walls (`r^4`; a bowl from the centre read as a soft dimple, not a blast) |
-| 3 bullet | every bullet striking the static world under the snow within 60 m (`Level_bullet_manager_firetrace`) | the channel it bored from where it went into the snow (back along its flight, a metre at most) to where it struck, 7-12 cm wide by the wallmark, with a dent where it went in; a load of shot lands as a cluster of them |
+| 3 bullet | every bullet striking the static world under the snow within 60 m (`Level_bullet_manager_firetrace`; under the snow by the surface bilinear at the point - the lowest of the texels round it lay under a slope's ground, and shallow snow on a slope took no marks) | the channel it bored from where it went into the snow (back along its flight, a metre at most) to where it struck, 7-12 cm wide by the wallmark, with a dent where it went in; a load of shot lands as a cluster of them |
 | 3 campfire | every campfire within 60 m, every frame | the pit never holds more than a 3 cm dusting (the fire can be lit, its logs and stones show); a lit fire thaws the snow round it over 90 s (`CZoneCampfire::snow_melt`, back over 30 min once out): bare in the pit, thinner and thinner out to 2.5 m - `sink` 1, a soft bowl with no edge. What melted comes back only with fresh snow |
 
 A frame keeps at most 4096 stamps (`da_snow_stamp_add` returns false past it, `da_snow_stamps_room` says how many
@@ -263,9 +266,10 @@ Console (never saved):
 | `qa_snow_state` | prints the frame (S, Mc, covers, state, surface, fall, ice, mean depth), the precipitation (phase, liquid, snow rate, air, frost, dew, thunder) and the field (size, class shares, stamps, depth and surface under the camera) |
 | `qa_precip auto\|snow\|sleet\|rain` | forces what falls (the weather still says how much) |
 | `qa_air_temp <C>\|off` | pins the air temperature |
-| `qa_snow_shot <n> [spread]` | n strikes along the view (spread in degrees round it) on the static world through the bullets' snow path: a burst or a load of shot without a weapon; a negative spread presses a boot where the ray strikes instead (a roof's print without a walk) and probes there |
+| `qa_snow_shot <n> [spread]` | n strikes along the view (spread in degrees round it) on the static world through the bullets' snow path, and how many marked the snow: a burst or a load of shot without a weapon; a negative spread presses a boot where the ray strikes instead (a roof's print without a walk) and probes there |
 | `qa_snow_fire_melt [0..1]` | sets every campfire's thaw at once (a lit fire takes 90 s to get there) and lists their places, states and thaw |
 | `qa_snow_probe` | the contact gate at the actor's feet: top, ground, cover, depth, open depth, in snow or not |
+| `qa_snow_objects [radius]` | the small raised things of the bake round the actor (connected texels standing over the ground, under 40 of them), nearest first: centre, top, height, cover kinds |
 
 With `qa_season_year` / `qa_season_pin` (SEASONS.md) the phase is redrawn every half second from the
 climatological shares of the day, the synoptic noise and the snow surface dynamics stand still and the hour is

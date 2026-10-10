@@ -61,6 +61,8 @@ public:
         RtSun, // ray traced sun shadows
         RtAO, // ray traced ambient occlusion
         RtRefl, // ray traced reflections
+        Fire, // the fluid fires' volumes drawn, every one of the frame
+        FireSim, // the fluid fires' simulation steps, every grid of the frame
         Count
     };
 
@@ -94,7 +96,7 @@ public:
     void LogLine() const;
 
 private:
-    static constexpr u32 RingSize = 4, Pairs = 4;
+    static constexpr u32 RingSize = 4, Pairs = 8;
 
     struct FrameQueries
     {

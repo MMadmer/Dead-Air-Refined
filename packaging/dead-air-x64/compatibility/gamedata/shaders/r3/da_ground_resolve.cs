@@ -32,7 +32,8 @@ Texture2D<uint> s_gr_low;
 Texture2D<float> s_gr_ground;
 // The highest node of the level's AI in each of those texels, the same encoding (0 = none).
 Texture2D<float> s_gr_walk;
-// The overhangs among the covers at 1 m (da_snow.cpp, dilated by a texel): only those shelter the ground under them.
+// The bake's covers at 1 m (da_snow.cpp, dilated by a texel): 1 an overhang (only those shelter the ground under
+// them), 0.5 a solid object, 0 none.
 Texture2D<float> s_gr_overhang;
 
 RWTexture2D<float> u_top : register(u0);
@@ -130,14 +131,14 @@ bool da_gr_walked(int2 t, float y)
 	return walked;
 }
 
-// Is the cover over a window texel an overhang (a roof, an eave: it shelters the ground under it) and not a solid
-// object (a block, a car, a stump: the ground's snow runs on at its full depth up to its sides)?
-bool da_gr_overhang(int2 t)
+// The bake's kind of cover over a window texel: 1 an overhang (a roof, an eave: it shelters the ground under it), 0.5
+// a solid object (a block, a car, a stump: the ground's snow runs on at its full depth up to its sides), 0 none.
+float da_gr_bake_cover(int2 t)
 {
 	[branch] if (da_gr_lvl.z < 0.5)
-		return true;
+		return 1.0;
 	const int2 q = int2(floor(((float2(t) + 0.5) * da_gr_win.x) * da_gr_level.xy + da_gr_level.zw));
-	return s_gr_overhang.Load(int3(q, 0)) > 0.5;
+	return s_gr_overhang.Load(int3(q, 0));
 }
 
 [numthreads(DA_GR_T, DA_GR_T, 1)]
@@ -203,6 +204,7 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		const bool has_floor = low > DA_GR_NONE * 0.5 && m - low > DA_GR_OVER_FLOOR;
 		bool cover = false;
 		float under = hg;
+		const float bake = da_gr_bake_cover(t);
 		[branch] if (hg == m && m > DA_GR_NONE * 0.5)
 		{
 			const float terrain = da_gr_terrain(t);
@@ -212,7 +214,10 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 				// raised floor (a house's plinth): the ground's snow runs on under it at the terrain's level, hidden,
 				// instead of ramping up into the doorway in white teeth; nor a cellar's (the grid ran down into it
 				// along the walls, a moat round the house)
-				cover = m - terrain > DA_GR_OVER_TERRAIN && (has_floor || m - terrain > 1.0) && !da_gr_walked(t, m);
+				// (a low block or a stump with no floor in the collision under it is a cover where the bake found one: as
+				// the base its top ran the grid up on to it, torn into sheets and teeth at its edges)
+				cover = m - terrain > DA_GR_OVER_TERRAIN && (has_floor || m - terrain > 1.0 || bake > 0.25) &&
+					!da_gr_walked(t, m);
 				under = has_floor ? clamp(low, terrain - 0.3, terrain + 0.1) : terrain;
 			}
 			else
@@ -222,7 +227,7 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 			}
 		}
 		// 1 an overhang (it shelters), 0.5 a solid object (it only takes the ground's snow under it, hidden)
-		gs_cover[k2] = cover ? (da_gr_overhang(t) ? 1.0 : 0.5) : 0.0;
+		gs_cover[k2] = cover ? (bake > 0.75 ? 1.0 : 0.5) : 0.0;
 		gs_base[k2] = cover ? under : hg;
 	}
 	GroupMemoryBarrierWithGroupSync();

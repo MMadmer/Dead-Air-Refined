@@ -1368,12 +1368,20 @@ hand side carries the volume the reaction makes out of the wood. The simulation 
 The volume is drawn by its own ray-cast: hot soot radiates as the fourth power of its
 temperature through a four-band ramp (dull red tips, orange body, yellow, a white-yellow core),
 only the soot that has cooled absorbs - so a flame is never hidden behind its own smoke - and
-where a ray ends on the wood the gas a step back from it lights the embers there. Beyond
-`r__fire_fluid_dist` the fire falls back to the marched flame, and the two cross over in half a
-second rather than swapping in a frame. A fresh grid starts empty: its whole fuel bed lights at
-once, and the expansion throws a glowing ball of gas that rises out of the box as a thermal. So a
-campfire's grid runs unseen for its first 3.5 simulated seconds, the marched flame standing in,
-and only then crosses over (a blast shows from its first step: the ball is the point).
+where a ray ends on the wood the gas a step back from it lights the embers there. Only the
+nearest fire simulates (`r__fire_fluid_grids`, 1); every other campfire of the same preset within
+`r__fire_fluid_dist` (60 m) draws a copy of that grid's volume at its own place - the simulation
+is the cost (0.8 ms a step), drawing a volume is not (hundredths of a millisecond far off) - and a
+copied fire that goes out dims its copy away on the bed's own douse ramp. Beyond the range the
+fire falls back to the marched flame (standing on the bed the grid would find its fuel on), and
+they cross over in half a second rather than swapping in a frame. A fresh grid starts empty: its
+whole fuel bed lights at once, and the expansion throws a glowing ball of gas that rises out of
+the box as a thermal. So a campfire's grid runs unseen for its first 3.5 simulated seconds (four
+times as fast as real time, under a second), the copy standing in, and only then crosses over (a
+blast shows from its first step: the ball is the point). The grid passes to another fire only when
+that one is a quarter nearer, the old owner keeps its own until the new one's is up to be copied,
+and a campfire keeps its voxelised level between grids. Only a fire drawn in the last three seconds
+claims a grid: one behind a wall would hold a grid that is never built.
 
 ```ini
 [shader_fire_campfire]
@@ -1463,10 +1471,10 @@ their ray agrees with it: a texel that marched past the edge disagrees and drops
 of them agrees the ray is simply marched again here. Marching every pixel at full resolution
 fixes it too and costs a third of the frame rate.
 
-`r__fire_fluid` (preset ladder `0 0 0 1 1`) turns it on and `r__fire_fluid_dist` sets the range;
-both are session overrides like the other render controls. Only the nearest eligible fire is
-simulated - one grid is what the frame can afford, and it costs about 3 frames out of 60 with
-the fire filling the screen. The log line the fire prints when it builds its grid gives the
+`r__fire_fluid` (preset ladder `0 0 0 1 1`) turns it on, `r__fire_fluid_dist` sets the range (preset
+ladder `25 25 25 60 60` m) and `r__fire_fluid_grids` how many fires simulate (1; each more costs
+0.8-1.6 ms); all are session overrides like the other render controls. `r__gpu_log` reports
+`fire` (the volumes drawn) and `fire_sim` (the steps). The log line the fire prints when it builds its grid gives the
 number of cells the flame can take hold on and how far the fuel bed reaches above the effect's
 origin, which is what `fluid_radius` and `fluid_bed` should be sized against.
 

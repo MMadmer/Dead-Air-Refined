@@ -129,7 +129,9 @@ rebuilds the strip and an 8-texel apron (`k_apron`, `DA_GR_AP`: the reach of the
   `Hg` is that surface: the grid crosses frozen water on it and the shore is no step;
 - a cover: `Hg` more than 0.35 m over the texel's floor and more than 0.6 m over the level's terrain (a roof,
   a bus, a block; the road over a culvert is terrain, no cover; where the collision has no floor under a cover
-  more than a metre over the terrain, the terrain stands in), and no node of the level's AI walks on it: a bridge's
+  more than a metre over the terrain, or a lower one the bake found a cover at - a block or a stump with no floor
+  in the collision, whose top as the base ran the grid up on to it in sheets and teeth -, the terrain stands in),
+  and no node of the level's AI walks on it: a bridge's
   deck, a platform or a flat roof with a ladder is ground, its snow the grid's with its trails (`s_gr_walk`, the
   bake's highest node per metre in the texel's 3 x 3 metres, within -0.5..+0.3 m of the top). The bake decides
   the same at 1 m (`SSnowField::cover`, `shelter`, `da_snow_cover_at` in `da_snow_field.h`), so the level base,
@@ -143,7 +145,7 @@ rebuilds the strip and an 8-texel apron (`k_apron`, `DA_GR_AP`: the reach of the
 - the shelter (z): from the share of the 5 x 5 texels round it under an **overhang** (`smoothstep(0.35, 0.9,
   share)`): 1 deep under a roof (no snow on its floor, not along its walls either), a part under an eave (the wind
   blows some under), none a texel out from the footprint - a soft drip line, no moat. Only an overhang shelters
-  (`s_gr_overhang`, the bake's `cover == 2` dilated by a metre): under a **solid object** - a concrete block, a
+  (`s_gr_overhang`, the bake's cover kinds dilated by a metre: 1 an overhang, 0.5 a solid object): under a **solid object** - a concrete block, a
   cart, a car, a stump - the ground's snow runs on at its full depth up to its sides and on under it, hidden
   (sheltered like a roof, every block and stump stood in a ragged moat a texel or two wide, the 1 m squares of
   the bake drawn into the snow);

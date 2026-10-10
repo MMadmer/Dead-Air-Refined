@@ -12,9 +12,11 @@
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidData.h"
 #include "Layers/xrRenderDX11/3DFluid/dx113DFluidManager.h"
+#include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #endif
 
 #include <algorithm>
+#include <mutex>
 
 namespace xray::render::RENDER_NAMESPACE::PS
 {
@@ -137,13 +139,38 @@ VertexElement smoke_decl[] =
     D3DDECL_END()
 };
 
-// Only the fire nearest the camera runs on the grid; the rest fall back to the marched
-// flame. The winner of one frame is the owner of the next, which costs a frame at a fire's
-// first appearance and saves an ordering problem between effects.
-CDaFireEffect* g_fluid_owner = nullptr;
-CDaFireEffect* g_fluid_claim = nullptr;
-float g_fluid_claim_d2 = flt_max;
+// The fires nearest the camera run on grids (r__fire_fluid_grids of them, the manager keeps a volume per fire and
+// shares only its scratch targets); the rest fall back to the marched flame. The winners of one frame own the grids
+// on the next, which costs a frame at a fire's first appearance and saves an ordering problem between effects.
+// Effects update in parallel: the lists are under one lock.
+constexpr int g_fluid_max = 6;
+struct SFluidClaim
+{
+    CDaFireEffect* fx;
+    float rank;
+};
+SFluidClaim g_fluid_claims[g_fluid_max];
+int g_fluid_claim_n = 0;
+CDaFireEffect* g_fluid_owners[g_fluid_max];
+int g_fluid_owner_n = 0;
+// A grid good to be copied: built, warmed, burning, fully shown (its owner says so every frame). Every other fire of
+// the same preset in range draws its volume at its own place: the simulation is the cost, drawing a volume is not.
+CDaFireEffect* g_fluid_donors[g_fluid_max];
+int g_fluid_donor_n = 0;
 u32 g_fluid_frame = u32(-1);
+std::mutex g_fluid_lock;
+// The frame a grid was last built on: building one voxelises the level round it, so a camp's fires coming into range
+// together build one a frame.
+u32 g_fluid_built = u32(-1);
+
+void fluid_forget(const CDaFireEffect* fx)
+{
+    std::scoped_lock lock(g_fluid_lock);
+    g_fluid_owner_n = int(std::remove(g_fluid_owners, g_fluid_owners + g_fluid_owner_n, fx) - g_fluid_owners);
+    g_fluid_donor_n = int(std::remove(g_fluid_donors, g_fluid_donors + g_fluid_donor_n, fx) - g_fluid_donors);
+    g_fluid_claim_n = int(std::remove_if(g_fluid_claims, g_fluid_claims + g_fluid_claim_n,
+                              [fx](const SFluidClaim& c) { return c.fx == fx; }) - g_fluid_claims);
+}
 
 float axis_of(const Fvector& v, int a) { return a == 0 ? v.x : (a == 1 ? v.y : v.z); }
 
@@ -218,10 +245,7 @@ CDaFireEffect::CDaFireEffect() = default;
 
 CDaFireEffect::~CDaFireEffect()
 {
-    if (g_fluid_owner == this)
-        g_fluid_owner = nullptr;
-    if (g_fluid_claim == this)
-        g_fluid_claim = nullptr;
+    fluid_forget(this);
     fluid_destroy();
     CDaFireEffect::OnDeviceDestroy();
 }
@@ -251,17 +275,17 @@ void CDaFireEffect::fluid_create()
     const bool blast = m_preset->blast;
     m_fluid_cell = blast ? m_preset->bl_cell : m_preset->fl_cell;
     const int maxDim = _max(W, _max(H, D));
-    const Fvector O = origin();
-    const float srcY = O.y + (blast ? m_preset->bl_lift : m_preset->fl_base);
-    //  The floor of the box sits below the source so the ground under it - and the way the
-    //  fireball spreads along that ground - is inside; the rest is headroom for the plume.
-    const float below = blast ? (m_preset->bl_radius + 0.5f) : 0.6f;
-    m_fluid_centre.set(O.x, srcY - below + m_fluid_cell * float(H) * 0.5f, O.z);
+    fluid_place(m_fluid_cell);
 
     //  A blast has two seconds to live and cannot afford a triangle sweep of the level; the
     //  ground under it is what shapes it, and that is a grid of downward rays.
-    if (blast ? !fluid_ground() : !fluid_voxelize())
+    //  A campfire keeps its voxelised level between grids (it does not move; built again, the grid cost a 30 ms frame
+    //  every time it passed between two fires).
+    if (m_fluid_obst && (blast || m_obst_at.distance_to_sqr(origin()) > 1e-4f))
+        _RELEASE(m_fluid_obst);
+    if (blast ? !fluid_ground() : (!m_fluid_obst && !fluid_voxelize()))
         return;
+    m_obst_at = origin();
 
     Fmatrix scale, translate, transform;
     const float s = m_fluid_cell * float(maxDim);
@@ -287,7 +311,7 @@ void CDaFireEffect::fluid_create()
     if (blast)
         Msg("* [fire] blast [%s] from [%s], %.2f m/cell, box %.1f x %.1f m at %.1f %.1f %.1f",
             m_preset->name.c_str(), (m_Def && m_Def->Name()) ? m_Def->Name() : "?", m_fluid_cell,
-            m_fluid_cell * float(W), m_fluid_cell * float(H), O.x, srcY, O.z);
+            m_fluid_cell * float(W), m_fluid_cell * float(H), origin().x, origin().y + m_preset->bl_lift, origin().z);
 #endif
 }
 
@@ -678,12 +702,71 @@ Fvector CDaFireEffect::fluid_plume_start() const
     return p;
 }
 
-void CDaFireEffect::fluid_destroy()
+void CDaFireEffect::fluid_destroy(bool keep_obstacles)
 {
 #if defined(USE_DX11)
     m_fluid.reset();
-    _RELEASE(m_fluid_obst);
+    if (!keep_obstacles)
+        _RELEASE(m_fluid_obst);
     m_fluid_time = 0.f;
+#endif
+}
+
+// The grid box's centre for a cell size: the floor of the box sits below the source so the ground under it - and the
+// way a fireball spreads along that ground - is inside; the rest is headroom for the plume.
+void CDaFireEffect::fluid_place(float cell)
+{
+#if defined(USE_DX11)
+    const bool blast = m_preset->blast;
+    const Fvector O = origin();
+    const float srcY = O.y + (blast ? m_preset->bl_lift : m_preset->fl_base);
+    const float below = blast ? (m_preset->bl_radius + 0.5f) : 0.6f;
+    m_fluid_cell = cell;
+    m_fluid_centre.set(O.x, srcY - below + cell * float(FluidManager.GetTextureHeight()) * 0.5f, O.z);
+#endif
+}
+
+// Another fire's volume drawn in this one's box: the nearest donor of the same preset (render thread, as the donors'
+// own grids are built and dropped there).
+void CDaFireEffect::fluid_render_copy(float fade)
+{
+#if defined(USE_DX11)
+    std::scoped_lock lock(g_fluid_lock);
+    CDaFireEffect* best = nullptr;
+    float best_d2 = flt_max;
+    for (int i = 0; i < g_fluid_donor_n; ++i)
+    {
+        CDaFireEffect* d = g_fluid_donors[i];
+        if (d == this || d->m_preset != m_preset || !d->m_fluid)
+            continue;
+        const float d2 = d->origin().distance_to_sqr(origin());
+        if (d2 < best_d2)
+        {
+            best_d2 = d2;
+            best = d;
+        }
+    }
+    if (!best)
+        return;
+    dx113DFluidData& data = *best->m_fluid;
+    const Fmatrix keep = data.GetTransform();
+    dx113DFluidData::Settings settings = data.GetSettings();
+    const float keep_fade = settings.m_DaFire.m_fFade;
+    fluid_place(best->m_fluid_cell);
+    Fmatrix moved = keep;
+    moved.c = m_fluid_centre;
+    data.SetTransform(moved);
+    settings.m_DaFire.m_fFade = fade;
+    data.SetSettings(settings);
+    {
+        dx11GpuTimerScope gpu(dx11GpuTimers::Fire);
+        FluidManager.RenderFluid(data);
+    }
+    settings.m_DaFire.m_fFade = keep_fade;
+    data.SetSettings(settings);
+    data.SetTransform(keep);
+#else
+    (void)fade;
 #endif
 }
 
@@ -696,20 +779,27 @@ void CDaFireEffect::fluid_render(CBackend& cmd_list, bool draw)
 
     //  A fixed step keeps the flame the same shape whatever the frame rate; two steps is the
     //  most we will spend catching up, the rest of the backlog is simply dropped.
-    m_fluid_acc += std::min(Device.fTimeDelta, 0.1f);
+    //  A fresh grid runs its unseen warm-up four times as fast: walking back to a fire, the marched flame stood in
+    //  for three and a half seconds, metres from it.
+    const bool warming = m_fluid_time < g_fluid_warmup && !m_preset->blast;
+    m_fluid_acc += std::min(Device.fTimeDelta, 0.1f) * (warming ? 4.f : 1.f);
     int steps = 0;
-    while (m_fluid_acc >= g_fluid_step && steps < 2)
+    while (m_fluid_acc >= g_fluid_step && steps < (warming ? 6 : 2))
     {
         m_fluid_acc -= g_fluid_step;
         m_fluid_time += g_fluid_step;
         ++steps;
         fluid_params();
+        dx11GpuTimerScope gpu(dx11GpuTimers::FireSim);
         FluidManager.Update(*m_fluid, 1.f);
     }
     if (!steps)
         fluid_params();
     if (draw)
+    {
+        dx11GpuTimerScope gpu(dx11GpuTimers::Fire);
         FluidManager.RenderFluid(*m_fluid);
+    }
 #endif
 }
 
@@ -816,8 +906,28 @@ Fvector CDaFireEffect::origin() const
 Fvector CDaFireEffect::flame_base() const
 {
     Fvector b = origin();
-    b.y += m_preset->base_height;
+    b.y = m_bed_valid ? m_bed_y : b.y + m_preset->base_height;
     return b;
+}
+
+// The bed the grid finds its fuel on (the first solid face under its source, within the bed's reach): the marched
+// flame stands there too. A fixed height over the origin floated it half a metre over a fire on the ground.
+void CDaFireEffect::find_bed()
+{
+    const Fvector O = origin();
+    if (m_bed_valid && m_bed_from.distance_to_sqr(O) < 0.0025f)
+        return;
+    m_bed_from = O;
+    m_bed_valid = false;
+    const CDB::MODEL* model = g_pGameLevel ? g_pGameLevel->ObjectSpace.GetStaticModel() : nullptr;
+    if (!model || !m_preset)
+        return;
+    const float reach = m_preset->fl_bed;
+    const Fvector from{O.x, O.y + m_preset->fl_base + reach, O.z};
+    CDB::COLLIDER xrc;
+    xrc.ray_query(CDB::OPT_ONLYNEAREST, model, from, Fvector{0.f, -1.f, 0.f}, 2.f * reach + 0.3f);
+    m_bed_y = xrc.r_count() ? from.y - xrc.r_begin()->range : O.y + m_preset->fl_base;
+    m_bed_valid = true;
 }
 
 float CDaFireEffect::wind_speed() const
@@ -993,13 +1103,8 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     // Near enough, on a preset that runs it, and the nearest such fire in the scene: only one
     // grid is worth the passes. The grid itself is built or dropped on the render thread.
     const float d2 = Device.vCameraPosition.distance_to_sqr(origin());
-    if (Device.dwFrame != g_fluid_frame)
-    {
-        g_fluid_frame = Device.dwFrame;
-        g_fluid_owner = g_fluid_claim;
-        g_fluid_claim = nullptr;
-        g_fluid_claim_d2 = flt_max;
-    }
+    if (g_pGameLevel && g_pGameLevel->bReady && !m_preset->blast)
+        find_bed();
     //  Never while the level is still coming up: the frames the engine pumps through the
     //  loading screen are not worth a fluid step, and building the grid needs the level's
     //  collision model to be there in the first place.
@@ -1009,19 +1114,55 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
     const float lim = ps_r__fire_fluid_dist * (m_fluid ? 1.25f : 1.f);
     //  A fire that is going out keeps the grid it already has - that is where the flame it
     //  still has to burn out lives - but it never claims a new one.
-    const bool eligible =
-        ready && ps_r__fire_fluid && m_preset->fluid && d2 < lim * lim && (m_dying <= 0.f || m_fluid);
+    //  Only a fire drawn in the last few seconds: one behind a wall or out of the view would hold a grid that is never
+    //  built (the grid is built where the effect renders).
+    const bool seen = Device.fTimeGlobal - m_seen < 3.f;
+    const bool eligible = ready && ps_r__fire_fluid && m_preset->fluid && d2 < lim * lim &&
+        (m_fluid || (m_dying <= 0.f && seen));
     //  A blast outranks a campfire for the one grid the frame can afford, but by a factor
     //  rather than absolutely: something going off across the camp has no business taking the
     //  grid from the fire the player is standing at. It does take it on the frame it goes off
     //  rather than waiting its turn.
-    const float rank = m_preset->blast ? d2 * 0.2f : (m_dying > 0.f ? d2 * 4.f : d2);
-    if (eligible && rank < g_fluid_claim_d2)
+    //  The fire holding a grid keeps it until another is a quarter nearer: walking between two fires the grid does
+    //  not hop back and forth.
+    const float rank = (m_preset->blast ? d2 * 0.2f : (m_dying > 0.f ? d2 * 4.f : d2)) * (m_fluid ? 0.6f : 1.f);
+    bool owned = false, copy = false, handed = false;
     {
-        g_fluid_claim_d2 = rank;
-        g_fluid_claim = this;
+        std::scoped_lock lock(g_fluid_lock);
+        if (Device.dwFrame != g_fluid_frame)
+        {
+            g_fluid_frame = Device.dwFrame;
+            g_fluid_owner_n = g_fluid_claim_n;
+            for (int i = 0; i < g_fluid_claim_n; ++i)
+                g_fluid_owners[i] = g_fluid_claims[i].fx;
+            g_fluid_claim_n = 0;
+        }
+        //  The claims stay sorted by rank, the frame's grid count of them kept.
+        const int cap = clampr(ps_r__fire_fluid_grids, 1, g_fluid_max);
+        if (eligible && (g_fluid_claim_n < cap || rank < g_fluid_claims[cap - 1].rank))
+        {
+            int i = std::min(g_fluid_claim_n, cap - 1);
+            for (; i > 0 && g_fluid_claims[i - 1].rank > rank; --i)
+                g_fluid_claims[i] = g_fluid_claims[i - 1];
+            g_fluid_claims[i] = {this, rank};
+            g_fluid_claim_n = std::min(g_fluid_claim_n + 1, cap);
+        }
+        owned = std::find(g_fluid_owners, g_fluid_owners + g_fluid_owner_n, this) != g_fluid_owners + g_fluid_owner_n;
+        const bool donor = m_fluid && !m_preset->blast && m_dying <= 0.f && m_fluid_fade >= 1.f;
+        CDaFireEffect** end = g_fluid_donors + g_fluid_donor_n;
+        CDaFireEffect** at = std::find(g_fluid_donors, end, this);
+        if (donor && at == end && g_fluid_donor_n < g_fluid_max)
+            g_fluid_donors[g_fluid_donor_n++] = this;
+        else if (!donor && at != end)
+            g_fluid_donor_n = int(std::remove(g_fluid_donors, end, this) - g_fluid_donors);
+        const float copy_lim = ps_r__fire_fluid_dist * (m_copy_fade > 0.f ? 1.25f : 1.f);
+        handed = std::any_of(g_fluid_donors, g_fluid_donors + g_fluid_donor_n,
+            [this](const CDaFireEffect* d) { return d != this && d->m_preset == m_preset; });
+        copy = !m_preset->blast && ps_r__fire_fluid && d2 < copy_lim * copy_lim && (seen || m_copy_fade > 0.f) && handed;
     }
-    m_fluid_wanted = eligible && g_fluid_owner == this;
+    //  A grid outranked is kept until the new owner's is up to be copied: let go at once, the fire showed the marched
+    //  flame while the other grid warmed up.
+    m_fluid_wanted = eligible && (owned || (m_fluid && !m_preset->blast && !handed));
     //  Half a second of crossover: at the distance where the grid takes over, both are drawn
     //  and one fades into the other instead of the flame changing shape in a single frame.
     if (m_preset->blast)
@@ -1038,6 +1179,8 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
         //  standing in.
         const bool shown = m_fluid_wanted && m_fluid_time >= g_fluid_warmup;
         m_fluid_fade = clampr(m_fluid_fade + (shown ? dt : -dt) / 0.5f, 0.f, 1.f);
+        //  Another fire's volume while this one has no grid of its own (or its own is still warming up unseen).
+        m_copy_fade = clampr(m_copy_fade + (copy ? dt : -dt) / 0.5f, 0.f, 1.f);
     }
 
     // Tilt. The AGA correlation (cos theta = u*^-1/2) is for pool fires a metre and more
@@ -1052,7 +1195,9 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
 
     // While the grid is running it carries the flame and the first couple of metres of the
     // plume itself, so the billboards start where the box ends instead of at the flame's tip.
-    const Fvector tip = (m_fluid && m_fluid_fade > 0.f) ? fluid_plume_start() : flame_tip();
+    if (!m_fluid && m_copy_fade > 0.f)
+        fluid_place(m_preset->fl_cell);
+    const Fvector tip = (m_fluid_fade > 0.f || m_copy_fade > 0.f) ? fluid_plume_start() : flame_tip();
     if (!m_preset->blast)
         update_smoke(dt, tip);
 
@@ -1287,10 +1432,15 @@ void CDaFireEffect::Render(CBackend& cmd_list, float, bool)
         if (Device.vCameraPosition.distance_to_sqr(origin()) > lim * lim)
             return;
     }
-    if (m_fluid_wanted && !m_fluid)
+    m_seen = Device.fTimeGlobal;
+    if (m_fluid_wanted && !m_fluid && g_fluid_built != Device.dwFrame)
+    {
         fluid_create();
+        if (m_fluid)
+            g_fluid_built = Device.dwFrame;
+    }
     else if (!m_fluid_wanted && m_fluid && m_fluid_fade <= 0.f)
-        fluid_destroy();
+        fluid_destroy(true);
     //  The marched flame has no simulation to burn itself out in, so it does it by hand, on
     //  the same ramp the bed's fuel follows. render_flame takes it on the emission AND on the
     //  flame's length: emission alone would leave a flame-shaped hole, because the march
@@ -1305,8 +1455,13 @@ void CDaFireEffect::Render(CBackend& cmd_list, float, bool)
     }
     if (m_fluid)
         fluid_render(cmd_list, m_fluid_fade > 0.f);
-    if (fade > 0.f && m_fluid_fade < 1.f)
-        render_flame(cmd_list, fade * (1.f - m_fluid_fade));
+    //  A copied volume burns out on the bed's own ramp (the flame dims away over the douse, the steam is the puffs').
+    const float copied = m_copy_fade * (1.f - m_fluid_fade);
+    if (copied > 0.f && fade > 0.f)
+        fluid_render_copy(copied * fade);
+    const float vol = std::max(m_fluid_fade, m_copy_fade);
+    if (fade > 0.f && vol < 1.f)
+        render_flame(cmd_list, fade * (1.f - vol));
     render_smoke(cmd_list);
 }
 } // namespace xray::render::RENDER_NAMESPACE::PS

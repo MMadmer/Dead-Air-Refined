@@ -12,8 +12,9 @@ class CEntityAlive;
 void da_snow_deform_entity(CEntityAlive& entity);
 // An explosion at `pos` with blast radius `radius`.
 void da_snow_deform_crater(const Fvector& pos, float radius);
-// A bullet (a pellet) striking the static world at `point`, flying along `dir`; `wallmark` its mark's size (m).
-void da_snow_deform_bullet(const Fvector& point, const Fvector& dir, float wallmark);
+// A bullet (a pellet) striking the static world at `point`, flying along `dir`; `wallmark` its mark's size (m);
+// false when it left no mark (not under the snow, out of the window, the frame's list full).
+bool da_snow_deform_bullet(const Fvector& point, const Fvector& dir, float wallmark);
 
 class CPhysicsShellHolder;
 // A physics object that just came to rest - a corpse, loot, an artefact, a prop: its footprint once.

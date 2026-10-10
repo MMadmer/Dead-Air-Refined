@@ -142,18 +142,26 @@ class CDaFireEffect final : public CParticleEffect
     std::unique_ptr<dx113DFluidData> m_fluid;
     bool m_fluid_wanted{};
     float m_fluid_fade{};       // 0 = the marched flame, 1 = the grid; they cross over
+    float m_copy_fade{};        // another fire's volume drawn here while this one has no grid shown (fluid_render_copy)
     float m_fluid_time{};       // simulated seconds since the grid was built, 0 without one
     float m_fluid_acc{};        // real seconds waiting to be stepped
     float m_fluid_retry{};      // seconds before another attempt to build the grid
     float m_blast_t{-1.f};      // seconds since the charge went off; < 0 = not a blast, or over
     Fvector m_fluid_centre{};   // the grid box's centre in the world
+    float m_bed_y{};            // the fuel bed's height, the marched flame's base (find_bed)
+    Fvector m_bed_from{};       // the origin it was found for
+    bool m_bed_valid{};
+    float m_seen{-1000.f};      // when it was last drawn (Device.fTimeGlobal)
     float m_fluid_cell{};
 #if defined(USE_DX11)
     ID3DTexture3D* m_fluid_obst{}; // the level, voxelised once into the box
+    Fvector m_obst_at{};           // the origin it was voxelised for
 #endif
     void fluid_create();
-    void fluid_destroy();
+    void fluid_destroy(bool keep_obstacles = false);
     void fluid_render(CBackend& cmd_list, bool draw);
+    void fluid_render_copy(float fade);
+    void fluid_place(float cell);
     void fluid_params();
     bool fluid_voxelize();
     bool fluid_ground();
@@ -161,6 +169,7 @@ class CDaFireEffect final : public CParticleEffect
 
     Fvector origin() const;
     Fvector flame_base() const;
+    void find_bed();
     float flame_length() const;
     //  Going out: what is left of the bed's output, and how hard the soaked bed is steaming.
     float douse_k() const;

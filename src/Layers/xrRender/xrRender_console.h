@@ -214,6 +214,7 @@ extern ECORE_API int ps_r__grass_shadow_fade;
 // which a fire is simulated rather than drawn as the procedural flame.
 extern ECORE_API int ps_r__fire_fluid;
 extern ECORE_API float ps_r__fire_fluid_dist;
+extern ECORE_API int ps_r__fire_fluid_grids;
 extern ECORE_API float ps_r__grass_tint;
 extern ECORE_API float ps_r__grass_tint_scale;
 extern ECORE_API float ps_r__grass_tint_base;

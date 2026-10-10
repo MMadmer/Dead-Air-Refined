@@ -624,21 +624,22 @@ bool upload_level()
     g.yrange = std::max(hi - lo + 2.f, 1.f);
     const auto encode = [](float y) { return u16(std::max(clampr((y - g.ymin) / g.yrange, 0.f, 1.f) * 65535.f + 0.5f, 1.f)); };
     xr_vector<u16> base(cells), terrain(cells), top16(cells), walk(cells, 0);
-    // The overhangs (the covers that shelter the ground under them, da_snow_cover_at) for the window's resolve,
-    // dilated by a texel: an eave's texels at the 1 m cell's edge are the roof's.
+    // The covers' kinds (da_snow_cover_at) for the window's resolve - 255 an overhang (it shelters the ground under
+    // it), 128 a solid object -, dilated by a texel: an eave's texels at the 1 m cell's edge are the roof's.
     xr_vector<u8> overhang(cells, 0);
     for (u32 z = 0; z < h; ++z)
         for (u32 x = 0; x < w; ++x)
         {
             u8 v = 0;
-            for (int dz = -1; dz <= 1 && !v; ++dz)
-                for (int dx = -1; dx <= 1 && !v; ++dx)
+            for (int dz = -1; dz <= 1 && v < 255; ++dz)
+                for (int dx = -1; dx <= 1 && v < 255; ++dx)
                 {
                     const int sx = int(x) + dx, sz = int(z) + dz;
                     if (sx < 0 || sz < 0 || sx >= int(w) || sz >= int(h))
                         continue;
                     const size_t j = size_t(sz) * w + sx;
-                    v = (baked ? f->cover[j] == 2 : cover[j] != 0) ? 255 : 0;
+                    const u8 kind = baked ? f->cover[j] : u8(cover[j] != 0 ? 2 : 0);
+                    v = std::max<u8>(v, kind == 2 ? 255 : (kind == 1 ? 128 : 0));
                 }
             overhang[size_t(z) * w + x] = v;
         }

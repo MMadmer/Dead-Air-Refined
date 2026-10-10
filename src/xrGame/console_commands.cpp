@@ -1025,7 +1025,7 @@ public:
         float spread = 0.f;
         sscanf(args, "%d %f", &n, &spread);
         const Fvector& eye = Device.vCameraPosition;
-        u32 hits = 0;
+        u32 hits = 0, marks = 0;
         for (int i = 0; i < clampr(n, 1, 64); ++i)
         {
             Fvector dir = Device.vCameraDirection;
@@ -1057,11 +1057,11 @@ public:
                 s.pack = 520.f;
                 da_snow_stamp_add(s);
             }
-            else
-                da_snow_deform_bullet(point, dir, spread > 0.f ? 0.06f : 0.1f);
+            else if (da_snow_deform_bullet(point, dir, spread > 0.f ? 0.06f : 0.1f))
+                ++marks;
             ++hits;
         }
-        Msg("* [qa] snow shot: %u of %d strikes on the static world", hits, n);
+        Msg("* [qa] snow shot: %u of %d strikes on the static world, %u marked the snow", hits, n, marks);
     }
 };
 
@@ -1081,6 +1081,81 @@ public:
                 fire->set_snow_melt(melt);
             const Fvector& p = fire->Position();
             Msg("* [qa] campfire at %.1f %.1f %.1f: %s, melt %.2f", p.x, p.y, p.z, fire->is_on() ? "lit" : "out", fire->snow_melt());
+        }
+    }
+};
+
+// QA: `qa_snow_objects [radius]` - the small raised things of the snow bake round the actor (a stump, a block, a cart):
+// connected texels whose top stands over the ground, under 40 of them, nearest first, with their cover kinds.
+class CCC_QaSnowObjects : public IConsole_Command
+{
+public:
+    CCC_QaSnowObjects(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR args)
+    {
+        const SSnowField* f = da_snow_field();
+        CActor* a = Actor();
+        if (!f || !a || f->cover.size() != f->top.size())
+            return;
+        float radius = 40.f;
+        sscanf(args, "%f", &radius);
+        const Fvector& p = a->Position();
+        const int w = int(f->dim_x), h = int(f->dim_z);
+        const int cx = iFloor((p.x - f->origin.x) / f->texel), cz = iFloor((p.z - f->origin.y) / f->texel);
+        const int r = iCeil(radius / f->texel);
+        const auto raised = [&](int x, int z) {
+            const size_t i = size_t(z) * w + x;
+            return f->solid[i] && f->top[i] - f->ground[i] > 0.2f;
+        };
+        xr_vector<u8> seen(size_t(w) * h, 0);
+        struct SObj
+        {
+            float d2, x, z, top, ground;
+            u32 n, kinds[3];
+        };
+        xr_vector<SObj> objs;
+        xr_vector<int> stack;
+        for (int z = std::max(cz - r, 0); z <= std::min(cz + r, h - 1); ++z)
+            for (int x = std::max(cx - r, 0); x <= std::min(cx + r, w - 1); ++x)
+            {
+                if (seen[size_t(z) * w + x] || !raised(x, z))
+                    continue;
+                SObj o{0.f, 0.f, 0.f, -flt_max, flt_max, 0, {0, 0, 0}};
+                stack.assign(1, z * w + x);
+                seen[size_t(z) * w + x] = 1;
+                while (!stack.empty() && o.n < 400)
+                {
+                    const int i = stack.back();
+                    stack.pop_back();
+                    const int ix = i % w, iz = i / w;
+                    ++o.n;
+                    o.x += float(ix);
+                    o.z += float(iz);
+                    o.top = std::max(o.top, f->top[size_t(i)]);
+                    o.ground = std::min(o.ground, f->ground[size_t(i)]);
+                    ++o.kinds[std::min<u32>(f->cover[size_t(i)], 2u)];
+                    for (const auto [dx, dz] : {std::pair{1, 0}, {-1, 0}, {0, 1}, {0, -1}})
+                    {
+                        const int nx = ix + dx, nz = iz + dz;
+                        if (nx < 0 || nz < 0 || nx >= w || nz >= h || seen[size_t(nz) * w + nx] || !raised(nx, nz))
+                            continue;
+                        seen[size_t(nz) * w + nx] = 1;
+                        stack.push_back(nz * w + nx);
+                    }
+                }
+                if (o.n >= 40)
+                    continue;
+                o.x = f->origin.x + (o.x / float(o.n) + 0.5f) * f->texel;
+                o.z = f->origin.y + (o.z / float(o.n) + 0.5f) * f->texel;
+                o.d2 = _sqr(o.x - p.x) + _sqr(o.z - p.z);
+                objs.push_back(o);
+            }
+        std::sort(objs.begin(), objs.end(), [](const SObj& l, const SObj& r) { return l.d2 < r.d2; });
+        for (size_t i = 0; i < std::min<size_t>(objs.size(), 40); ++i)
+        {
+            const SObj& o = objs[i];
+            Msg("* [qa] snow object %.2f %.2f: %u texels, top %.2f ground %.2f (+%.2f), none %u solid %u overhang %u",
+                o.x, o.z, o.n, o.top, o.ground, o.top - o.ground, o.kinds[0], o.kinds[1], o.kinds[2]);
         }
     }
 };
@@ -3833,6 +3908,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_QaSnowShot, "qa_snow_shot");
     CMD1(CCC_QaSnowFireMelt, "qa_snow_fire_melt");
     CMD1(CCC_QaSnowProbe, "qa_snow_probe");
+    CMD1(CCC_QaSnowObjects, "qa_snow_objects");
     CMD1(CCC_ClearLog, "clear_log");
 
     // XMS module system

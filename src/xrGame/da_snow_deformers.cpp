@@ -616,17 +616,19 @@ void da_snow_deform_crater(const Fvector& pos, float radius)
 
 // A bullet's strike on the ground under the snow: the channel it bored from where it went in to where it struck, a
 // few centimetres wide, with a dent where it went in; a load of shot lands as a cluster of them.
-void da_snow_deform_bullet(const Fvector& point, const Fvector& dir, float wallmark)
+bool da_snow_deform_bullet(const Fvector& point, const Fvector& dir, float wallmark)
 {
     const SSnowField* field = da_snow_field();
     if (!field || !da_snow_frame().active || !in_window(point, 60.f))
-        return;
-    const float top = top_under(*field, point.x, point.z);
+        return false;
+    // (the surface bilinear at the very point: the lowest of the texels round it lay well under a slope's ground, and
+    // every strike into shallow snow on a slope read as over the snow and left nothing)
     const float depth = da_snow_depth_at(point.x, point.z);
-    if (depth < 0.02f || point.y < top - under_roof || point.y > top + depth + 0.05f)
-        return;
+    const float surface = da_snow_surface_y(point.x, point.z);
+    if (depth < 0.02f || point.y < surface - depth - under_roof || point.y > surface + 0.08f)
+        return false;
     // where it went in: back along its flight to the snow's surface, a metre at most
-    const float t = std::min(std::max(top + depth - point.y, 0.f) / std::max(-dir.y, 0.05f), 1.f);
+    const float t = std::min(std::max(surface - point.y, 0.f) / std::max(-dir.y, 0.05f), 1.f);
     Fvector in;
     in.mad(point, dir, -t);
     const float r = clampr(0.5f * wallmark, 0.035f, 0.06f);
@@ -635,7 +637,7 @@ void da_snow_deform_bullet(const Fvector& point, const Fvector& dir, float wallm
     s.xz0.set(in.x, in.z);
     s.foot_y0 = in.y;
     da_snow_stamp_add(s);
-    da_snow_stamp_add(make_stamp(in.x, in.z, in.y - 0.04f, 1.6f * r, 0.05f, still, 3));
+    return da_snow_stamp_add(make_stamp(in.x, in.z, in.y - 0.04f, 1.6f * r, 0.05f, still, 3));
 }
 
 namespace

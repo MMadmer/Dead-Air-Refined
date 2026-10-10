@@ -1232,6 +1232,46 @@ void da_snow_bake_level()
             field.cover[i] = overhang_at(xrc, cx, cz, field.top[i], field.ground[i]) ? 2 : 1;
         }
     });
+    // An overhang is a roof over open space, broad enough to keep the snow off: a cover's connected texels with fewer
+    // than five of overhang are a solid object (a tall stump or a post open at its bottom read as a sheet over a floor
+    // more than 1.2 m under it, and sheltered a bare pit round itself).
+    {
+        constexpr u32 overhang_min = 5;
+        xr_vector<u8> seen(n, 0);
+        xr_vector<size_t> part, stack;
+        for (size_t s = 0; s < n; ++s)
+        {
+            if (seen[s] || !field.cover[s])
+                continue;
+            part.clear();
+            stack.assign(1, s);
+            seen[s] = 1;
+            u32 over = 0;
+            while (!stack.empty())
+            {
+                const size_t i = stack.back();
+                stack.pop_back();
+                part.push_back(i);
+                over += field.cover[i] == 2 ? 1u : 0u;
+                const int x = int(i % size_t(g.nx)), z = int(i / size_t(g.nx));
+                for (const auto [dx, dz] : {std::pair{1, 0}, {-1, 0}, {0, 1}, {0, -1}})
+                {
+                    const int sx = x + dx, sz = z + dz;
+                    if (sx < 0 || sz < 0 || sx >= g.nx || sz >= g.nz)
+                        continue;
+                    const size_t j = g.at(sx, sz);
+                    if (!seen[j] && field.cover[j])
+                    {
+                        seen[j] = 1;
+                        stack.push_back(j);
+                    }
+                }
+            }
+            if (over < overhang_min)
+                for (const size_t i : part)
+                    field.cover[i] = std::min<u8>(field.cover[i], 1);
+        }
+    }
     field.shelter.assign(n, 0);
     parallel_rows(g.nz, [&](int z) {
         if (z == 0 || z + 1 >= g.nz)
