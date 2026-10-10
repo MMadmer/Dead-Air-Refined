@@ -117,8 +117,14 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	const float4 jn = abs(hn - hb);
 	const float4 jl = (wn > 0.5 && jn < 1.0) ? 0.0 : jn;
 	const bool shore = max(max(wn.x, wn.y), max(wn.z, wn.w)) > 0.5 || lvl > DA_SN_NONE * 0.5;
-	const bool cliff = none || (wsh < 0.5 && (max(max(jl.x, jl.y), max(jl.z, jl.w)) > max(0.35, 1.2 * s) ||
-		(!shore && dot(slope, slope) > 3.0)));
+	// Inside the window a step cuts only where its resolve sees a cliff within half a metre (taper under 1): the base
+	// steps across a cover's footprint by design, and cut there a crate's or a stump's edge tore the grid's triangles
+	// into a ragged hole beside it. (The taper alone thins the snow, not the base: trusted alone, a wall's raised
+	// texels hung the grid from the eaves in curtains.) Past the window the level base knows no taper.
+	const float2 wd = abs(x - da_sn_win.xy);
+	const bool in_window = max(wd.x, wd.y) < da_sn_win.z - da_sn_win.w;
+	const bool steep = max(max(jl.x, jl.y), max(jl.z, jl.w)) > max(0.35, 1.2 * s) || (!shore && dot(slope, slope) > 3.0);
+	const bool cliff = none || (wsh < 0.5 && steep && (!in_window || b0.y < 0.999));
 
 	const float2 D = da_snow_depth2(x);
 

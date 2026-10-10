@@ -142,10 +142,16 @@ rebuilds the strip and an 8-texel apron (`k_apron`, `DA_GR_AP`: the reach of the
   10 cm over it (a plinth's teeth in the doorway). The ground's snow runs on under the eaves and round a bus or a
   wall up to its sides; it never climbs a roof (the old grid did, and hung curtains, torn shards and a ribbon
   along a wire from every eave); the cover's own snow is a shell;
+- the cover's floor: beside a small cover (up to some five texels across) the ground round it as the eroded top
+  reaches it, ground-like (within half a metre of the terrain: by a house's wall it was a sill or an eave, and the
+  grid hung from it in curtains), never more than 5 cm under it (a crate's collision sunk into the ground faced up
+  there, and the visible ground showed through the snow in a bare wedge); else the terrain as above. A low block or a
+  stump with no floor in the collision is a cover where the bake found one (`bake > 0.25`);
 - the shelter (z): from the share of the 5 x 5 texels round it under an **overhang** (`smoothstep(0.35, 0.9,
   share)`): 1 deep under a roof (no snow on its floor, not along its walls either), a part under an eave (the wind
   blows some under), none a texel out from the footprint - a soft drip line, no moat. Only an overhang shelters
-  (`s_gr_overhang`, the bake's cover kinds dilated by a metre: 1 an overhang, 0.5 a solid object): under a **solid object** - a concrete block, a
+  (`s_gr_overhang`, the bake's cover kinds dilated by a metre: 1 an overhang, 0.5 a solid object; an overhang only
+  where the cover itself stands 1.5 m over the terrain - crates a metre from a house's eave took the eave's): under a **solid object** - a concrete block, a
   cart, a car, a stump - the ground's snow runs on at its full depth up to its sides and on under it, hidden
   (sheltered like a roof, every block and stump stood in a ragged moat a texel or two wide, the 1 m squares of
   the bake drawn into the snow);
@@ -259,7 +265,9 @@ A vertex stands on the snow base raised by the current depth, and only where geo
   a jump of the base that remains - a bank, a retaining wall - (more than max(0.35 m, 50 degrees over the spacing),
   slopes steeper than 60 degrees, no surface) is a cliff vertex; every triangle touching one is clipped
   away (`SV_ClipDistance` -1000 at that corner leaves a sliver), cells with three cliff corners are culled
-  (`SV_CullDistance`); the height tapers to nothing within half a metre of a cliff. Tree trunks and branches
+  (`SV_CullDistance`); the height tapers to nothing within half a metre of a cliff. Inside the window a step cuts
+  only where the resolve sees a cliff within half a metre (taper under 1): the base steps across a cover's footprint by
+  design, and cut there a crate's or a stump's edge tore the grid into a ragged hole. Tree trunks and branches
   (`[snow_bake] trunk`) and the `skip` materials are no snow base: the snow lies on the ground round a trunk,
   never on a sheet stretched over its collision.
 - **Frozen water**: where water whose ice (`da_snow_ice.h`, the rule `water.ps` and `CEnvironment::ice_at`
@@ -410,9 +418,11 @@ target cannot be read while written). Per pixel:
   0.6 m margin; roads covered kerb to kerb from December to February (`cover.z` = 1, decision D5). A static surface
   standing above the snow surface and open to the sky - a roof past the shells' reach, a crate's or a slab's top,
   a sill, a wreck's roof - carries the snow a roof keeps (the same formula as the shells) as a cover of its own:
-  the topmost static surface stands 0.3 m over the ground's snow there (a cover: not the ground a body or a boot
-  lies on, which the coat painted white), the pixel lies on it (at most 6 cm over the raster's highest point,
-  under it by the slope's run over a texel) and faces up, by its own normal as well. Anything else above the snow
+  the pixel itself stands a cover's height over the snow (eased in from 15 to 30 cm: not the ground a body or a
+  boot lies on), lies open to the sky (at most 6 cm over the raster's highest point, under it by no more than a
+  rim's or a rail's 30 cm and the slope's run over a texel) and faces up, by its own normal as well. (Gated by its
+  texel's top over the texel's base instead, a stump's roots, a crate's slats and a trailer's bed beside its rails
+  turned white in the window's 0.25 m squares: sheets with toothed edges.) Anything else above the snow
   surface - corpses, creatures, tree crowns - gets at most a light up-facing dusting (decision D8; winter trees
   carry their own snow). The step from what lies under the snow to what stands in it is 4 cm (over 15, a rifle in
   its hollow took the snow's cover). What stands over the snow facing sideways or down - a wall, a trunk, a fence,
@@ -588,7 +598,9 @@ noise of `sun`: 0.07 + 0.22-0.25 + 0.36-0.40 = some 0.7 ms. The same frames with
   it beyond the window's water), the
   layer's snow yellow, its thin snow and wet rings orange, the lake bed magenta; whatever stays in its own
   colours is the ground the layer left alone or the water pass's ice; in every mode over 0 the prints the roof
-  map holds are red, on a shell or not. 2 does the same with the grid's
+  map holds are red, on a shell or not. 3 paints the window's texels over everything: red where the snow tapers to
+  a cliff, green a cover (its base dropped under its opened top), blue a texel standing over its lowest neighbour
+  by a cliff's step - where a ragged hole beside an object comes from. 2 does the same with the grid's
   per-pixel cuts off, so a pair of frames shows what the cuts remove. 11..16 cut the layer short after its stage
   (the reads, the base and depth, the water, the season and coverage, the albedo, the normal's detail), for their
   costs in `r__gpu_log`.

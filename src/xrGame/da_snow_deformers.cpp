@@ -64,6 +64,7 @@ constexpr float moving_scan = 0.15f;
 constexpr float moving_window = 40.f;
 constexpr u32 moving_max = 8;
 constexpr u32 moving_elements = 16;
+constexpr float moving_speed_min = 0.25f;
 // A campfire's melt: its pit's thin snow out to this radius, and the thaw round a lit one out to this.
 constexpr float fire_pit_r = 0.55f;
 constexpr float fire_thaw_r = 2.5f;
@@ -355,10 +356,9 @@ void resolve_feet(CEntityAlive& e, IKinematics& K, SCreature& c)
     }
 }
 
-// The footprint of a resting physics object: each element's box projected on the ground, as discs
-// laid over its two most horizontal axes, packing the snow under it by its weight: a dropped rifle dents
-// it, a crate sinks, a barrel or a wreck goes down to firm snow (carved to the box's bottom, a rifle cut two
-// clean trenches into a drift). Its physics lies on the ground under the snow: a loose object lies at the
+// The footprint of a resting loot item or corpse: each element's box projected on the ground, as discs
+// laid over its two most horizontal axes, packing the snow under it by its weight (a rifle cut two clean
+// trenches into a drift). Its physics lies on the ground under the snow: a loose object lies at the
 // bottom of its own hollow, a body no more than two fifths of each element's height under the snow (packed by
 // weight alone, a rifle went under a drift out of sight; a hollow narrower than the snow grid's cells closed
 // over it again). A corpse packs it by its creature's weight, each disc a little off its place
@@ -370,6 +370,12 @@ void plan_resting(CPhysicsShellHolder& o, SRestPrint& out)
     if (!shell)
         return;
     const CEntityAlive* corpse = smart_cast<CEntityAlive*>(&o);
+    // Only loot sinks into a hollow of its own, to be found again; a prop - a crate, a plank, a barrel, a cart - lies
+    // in the snow up to its sides: it fell or stood there before the snow, which drifted against it. (Its hollow, a
+    // bare floor a hand wider than its box, read as a pit round it, under a cart's body the bare ground.) Moving, it
+    // ploughs its furrow all the same.
+    if (!corpse && !o.cast_inventory_item())
+        return;
     const float pack = corpse ? profile_of(corpse->CLS_ID).pack : clampr(220.f + 3.f * shell->getMass(), 230.f, 650.f);
     // a corpse keeps room for its scuffs
     constexpr u32 scuffs = 10;
@@ -713,11 +719,14 @@ void moving_frame(const SSnowField& field)
             m.bottom[i] = to;
             if (from.distance_to_sqr(to) > 1.f)
                 from = to;
-            if (from.distance_to_sqr(to) < 1e-6f)
+            // (a prop settling after a load or jittering where it lies creeps by millimetres a frame: it ploughed a bare
+            // pit round every crate; a barrel rolling or a body dragged goes faster than a quarter metre a second)
+            const float dt = std::max(Device.fTimeDelta, 1e-3f);
+            if (from.distance_to_sqr(to) < _sqr(moving_speed_min * dt))
                 continue;
             if (!in_snow(field, to.x, to.z, bottom))
                 continue;
-            const Fvector2 push{(to.x - from.x) / std::max(Device.fTimeDelta, 1e-3f), (to.z - from.z) / std::max(Device.fTimeDelta, 1e-3f)};
+            const Fvector2 push{(to.x - from.x) / dt, (to.z - from.z) / dt};
             stamp_swept(from, to, clampr(half == flt_max ? 0.15f : half, 0.06f, 0.4f), 0.1f, push, 1, 0.f, 0.f, 0.35f);
         }
         ++it;

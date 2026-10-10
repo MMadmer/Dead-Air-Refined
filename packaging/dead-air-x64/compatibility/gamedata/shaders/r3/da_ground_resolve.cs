@@ -114,7 +114,7 @@ float da_gr_terrain(int2 t)
 }
 
 // Does the level's AI walk on a surface at about y round a window texel (its own 1 m texel and the eight round it:
-// a deck's nodes stop short of its edge)? da_snow_walkable.
+// a deck's nodes stop short of its edge), a node over its metre's ground (da_snow_walkable, da_snow_deck_node)?
 bool da_gr_walked(int2 t, float y)
 {
 	[branch] if (da_gr_lvl.z < 0.5)
@@ -126,7 +126,9 @@ bool da_gr_walked(int2 t, float y)
 		{
 			const float v = s_gr_walk.Load(int3(q + int2(i, j), 0));
 			const float w = da_gr_lvl.x + v * da_gr_lvl.y;
-			walked = walked || (v > 0.0 && w > y - 0.5 && w < y + 0.3);
+			const float gv = s_gr_ground.Load(int3(q + int2(i, j), 0));
+			const float g = da_gr_lvl.x + gv * da_gr_lvl.y;
+			walked = walked || (v > 0.0 && w > y - 0.25 && w < y + 0.3 && (gv <= 0.0 || w > g + 0.25));
 		}
 	return walked;
 }
@@ -192,10 +194,14 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 	[loop] for (uint k2 = gi; k2 < uint(DA_GR_S2 * DA_GR_S2); k2 += DA_GR_T * DA_GR_T)
 	{
 		const int2 c = int2(k2 % DA_GR_S2, k2 / DA_GR_S2) + 1;
-		float m = DA_GR_NONE;
+		float m = DA_GR_NONE, lo_e = -DA_GR_NONE;
 		[unroll] for (int j = -1; j <= 1; ++j)
 			[unroll] for (int i = -1; i <= 1; ++i)
-				m = max(m, gs_ero[(c.y + j) * DA_GR_S1 + c.x + i]);
+			{
+				const float e = gs_ero[(c.y + j) * DA_GR_S1 + c.x + i];
+				m = max(m, e);
+				lo_e = min(lo_e, e);
+			}
 		const float hg = da_gr_surface(m, gs_wat[(c.y + 1) * DA_GR_S0 + c.x + 1]);
 		gs_hg[k2] = hg;
 		const int2 t = org + c + 1;
@@ -205,9 +211,11 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		bool cover = false;
 		float under = hg;
 		const float bake = da_gr_bake_cover(t);
+		float terrain_t = DA_GR_NONE;
 		[branch] if (hg == m && m > DA_GR_NONE * 0.5)
 		{
 			const float terrain = da_gr_terrain(t);
+			terrain_t = terrain;
 			[branch] if (terrain > DA_GR_NONE * 0.5)
 			{
 				// over the terrain: the floor under it, or the terrain where the collision has no floor there; never a
@@ -218,7 +226,17 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 				// the base its top ran the grid up on to it, torn into sheets and teeth at its edges)
 				cover = m - terrain > DA_GR_OVER_TERRAIN && (has_floor || m - terrain > 1.0 || bake > 0.25) &&
 					!da_gr_walked(t, m);
-				under = has_floor ? clamp(low, terrain - 0.3, terrain + 0.1) : terrain;
+				// The ground the cover stands on: beside a small one (a stump, a crate, up to some five texels across) the
+				// ground round it, as the eroded top reaches it - the bake's metre-wide terrain lay a few decimetres
+				// under it there and the snow's surface sank under the visible ground in a bare wedge -, else the
+				// terrain.
+				// (and a floor known so never more than 5 cm under it: a crate's collision sunk into the ground faced up
+				// there, the base followed it down and the visible ground showed through the snow)
+				// (ground-like only: by a house's wall the lowest eroded top round a texel was a sill or an eave, and the
+				// grid hung from it down the wall in white curtains)
+				const bool ring = lo_e > DA_GR_NONE * 0.5 && lo_e < m - DA_GR_OVER_TERRAIN && lo_e < terrain + 0.5;
+				const float ref = ring ? max(terrain, lo_e) : terrain;
+				under = has_floor ? clamp(low, ref - (ring ? 0.05 : 0.3), ref + 0.1) : ref;
 			}
 			else
 			{
@@ -226,8 +244,10 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 				under = low;
 			}
 		}
-		// 1 an overhang (it shelters), 0.5 a solid object (it only takes the ground's snow under it, hidden)
-		gs_cover[k2] = cover ? (bake > 0.75 ? 1.0 : 0.5) : 0.0;
+		// 1 an overhang (it shelters), 0.5 a solid object (it only takes the ground's snow under it, hidden). The bake's
+		// kind is a metre wide and dilated by one: only a cover standing an overhang's clearance (1.5 m, da_snow_bake.cpp)
+		// over the terrain takes it - crates a metre from a house's eave took the eave's and stood in a bare patch.
+		gs_cover[k2] = cover ? ((bake > 0.75 && m - terrain_t > 1.5) ? 1.0 : 0.5) : 0.0;
 		gs_base[k2] = cover ? under : hg;
 	}
 	GroupMemoryBarrierWithGroupSync();

@@ -395,7 +395,10 @@ species('pop_alb', 'Populus alba L.', [20, 30], [0.6, 0.9],
              **spray(4, 0.03), leaf_len=cm(6, 12), leaf_wid=cm(5, 10), petiole=0.04, leaf_angle=[45, 70],
              leaf_flat=0.5, lai=4.2, spur_share=0.25, catkin_share=0.2, catkin_len=0.07, catkin_droop=1.0,
              bloom_place='axil', bloom_share=0.05, bloom_size=0.03, fruit_size=0.05),
-        dict(outline='lobed', lobes=5, gloss=0.15, translucency=0.45, flutter=0.3, fold=0.08, underside=[2.6, 0.08],
+        # (the felt under the leaf sends most of the light back: translucency under an aspen's 0.55; its white is a
+        # close leaf's - the undersides a crown shows from below lie in its shade, at 2.6 every white poplar read
+        # beige-white against the sky)
+        dict(outline='lobed', lobes=5, gloss=0.15, translucency=0.3, flutter=0.3, fold=0.08, underside=[1.6, 0.08],
              jitter=[0.15, 0.06], bloom_shape='none', fruit_shape='cotton', fruits=1, catkin_shape='hanging'),
         autumn_order=(0.45, 0.4), crown_fill=0.65, follow=0.6, dead=0.03, bark_zone=(1.0, 4.0),
         bark_zone_order='ridges',
@@ -560,7 +563,9 @@ species('t_pru_cer', 'Prunus cerasus L.', [3, 20], [0.85, 1.15],
         dict(outline='elliptic', gloss=0.35, translucency=0.45, flutter=0.1, fold=0.12, underside=[1.2, 0.03],
              jitter=[0.15, 0.06], bloom_shape='umbel', petals=5, fruit_shape='drupe', fruits=2),
         photos='pru_cer', autumn_order=(0.4, -0.2), crown_fill=0.7, follow=0.7, dead=0.08, bark_zone=None,
-        bark=[0.15, 0.4, 0.7], bark_scale=2.0, bark_contrast=1.15, lichen=0.25)
+        # (cooled and with its relief brought out: its red-brown read salmon-pink and flat, painted plastic among the
+        # grey barks round it)
+        bark=[0.15, 0.4, 0.7], bark_scale=2.0, bark_contrast=1.35, bark_tint=[0.8, 0.9, 1.0], lichen=0.25)
 # Plum: dense low sparry crowns, root-sucker thickets filling the former gardens, sometimes thorny; dull green
 # oblong-elliptic leaves; white blossom in late April, blue-purple or yellow plums in August and September.
 species('pru_dom', 'Prunus domestica L.', [4, 12], [0.7, 1.0],
@@ -900,7 +905,7 @@ LIGHTER = {'bet_pen': 1.1, 'aln_glu': 0.85, 'que_rob': 0.92, 'fra_exc': 1.1, 'ro
            'pop_nig': 0.95, 'bet_pub': 0.95, 'mal_dom': 0.95, 'pyr_com': 0.95, 'pru_dom': 0.95}
 # Undersides the upper sides' photos do not tell (tint, linear luminance): white poplar's white felt, white willow's
 # silky silver, lime's bluish white.
-UNDER = {'pop_alb': ('#C8CCC4', 0.3), 'sal_alb': ('#B8C0B4', 0.2), 'til_cor': ('#A8B4AC', 0.12)}
+UNDER = {'pop_alb': ('#87917F', 0.269), 'sal_alb': ('#B8C0B4', 0.2), 'til_cor': ('#A8B4AC', 0.12)}
 # Twigs of the winter crown where the photos have none (the species cards).
 TWIG = {'pin_syl': '#8C735B', 'pic_abi': '#795F3A', 'bet_pen': '#5E4A42', 'bet_pub': '#4E4744', 'pop_tre': '#736C5E',
         'que_rob': '#735E4C', 'car_bet': '#756450', 'ace_pla': '#7D5D4A', 'til_cor': '#7A4A3A', 'fra_exc': '#7A7A6A',

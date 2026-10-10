@@ -624,7 +624,9 @@ bool walked_at(const SSnowField& f, float x, float z, float y)
         for (int dx = -1; dx <= 1; ++dx)
         {
             const int sx = cx + dx, sz = cz + dz;
-            if (sx >= 0 && sz >= 0 && sx < int(f.dim_x) && sz < int(f.dim_z) && da_snow_walkable(y, f.walk[size_t(sz) * f.dim_x + sx]))
+            const size_t j = size_t(sz) * f.dim_x + sx;
+            if (sx >= 0 && sz >= 0 && sx < int(f.dim_x) && sz < int(f.dim_z) && da_snow_walkable(y, f.walk[j]) &&
+                da_snow_deck_node(f.walk[j], f.ground[j]))
                 return true;
         }
     return false;

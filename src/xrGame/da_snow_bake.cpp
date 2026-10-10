@@ -892,6 +892,46 @@ void da_snow_bake_level()
             });
     }
 
+    // The highest solid surface facing up anywhere in each texel, sampled at nine points of it: what the covers are
+    // told by (the centre alone missed a stump or a post narrower than the metre, and the window, finding no cover
+    // there, laid the snow's base on its top and tore the snow round it).
+    xr_vector<float> top_max(top);
+    // (and where it was: against the ground right there, a slope's higher corner is no cover)
+    xr_vector<Fvector2> top_max_at(n);
+    for (int z = 0; z < g.nz; ++z)
+        for (int x = 0; x < g.nx; ++x)
+            top_max_at[g.at(x, z)].set(g.cx(x), g.cz(z));
+    {
+        SGrid g3 = g;
+        g3.texel = g.texel / 3.f;
+        g3.nx = g.nx * 3;
+        g3.nz = g.nz * 3;
+        for (u32 t = 0; t < tcount; ++t)
+        {
+            const CDB::TRI& tri = tris[t];
+            const u16 mc = mclass(tri.material);
+            if (mc & (mc_crown | mc_water | mc_skip | mc_trunk))
+                continue;
+            const Fvector& a = verts[tri.verts[0]];
+            const Fvector& b = verts[tri.verts[1]];
+            const Fvector& c = verts[tri.verts[2]];
+            Fvector nrm;
+            nrm.mknormal_non_normalized(a, b, c);
+            const float len = nrm.magnitude();
+            if (len < 1e-8f || nrm.y / len <= 0.05f)
+                continue;
+            raster_centres(g3, a, b, c, [&](size_t k, float y) {
+                const size_t sx = k % size_t(g3.nx), sz = k / size_t(g3.nx);
+                const size_t i = g.at(int(sx / 3), int(sz / 3));
+                if (y > top_max[i])
+                {
+                    top_max[i] = y;
+                    top_max_at[i].set(g3.cx(int(sx)), g3.cz(int(sz)));
+                }
+            });
+        }
+    }
+
     // ---- Ground: the terrain under everything, hole-filled -------------------------------------------
     xr_vector<float> ground(n, 0.f);
     xr_vector<u8> slot_ok(n, 0);
@@ -921,6 +961,54 @@ void da_snow_bake_level()
             else
                 ground[i] = (top[i] > none_y && _abs(top[i] - filled[i]) < 1.5f) ? top[i] : filled[i];
         }
+    }
+
+    // The highest node of the level's AI in each texel: the surfaces it walks on.
+    xr_vector<float> walk(n, -flt_max);
+    if (ai().get_level_graph())
+    {
+        const CLevelGraph& graph = ai().level_graph();
+        for (u32 v = 0, nv = graph.header().vertex_count(); v < nv; ++v)
+        {
+            const Fvector p = graph.vertex_position(v);
+            const int x = iFloor((p.x - g.x0) / g.texel), z = iFloor((p.z - g.z0) / g.texel);
+            if (x >= 0 && z >= 0 && x < g.nx && z < g.nz)
+                walk[g.at(x, z)] = std::max(walk[g.at(x, z)], p.y);
+        }
+    }
+
+    // Small things standing on the ground are no ground: the slot's span (a few decimetres over its lowest point)
+    // or the 1.5 m off the filled ground took a stump's, a block's, a cart's top for the terrain, and the snow lay on
+    // them as on a bank, torn at their edges. The ground opened with a 3 x 3 m square (erode, then dilate) drops what
+    // is narrower than that and keeps slopes; where the AI walks on a top, it is terrain after all.
+    {
+        xr_vector<float> ero(n), open(n);
+        const auto pass = [&](const xr_vector<float>& src, xr_vector<float>& dst, bool lo) {
+            parallel_rows(g.nz, [&](int z) {
+                for (int x = 0; x < g.nx; ++x)
+                {
+                    float m = src[g.at(x, z)];
+                    for (int dz = -1; dz <= 1; ++dz)
+                        for (int dx = -1; dx <= 1; ++dx)
+                        {
+                            const int sx = clampr(x + dx, 0, g.nx - 1), sz = clampr(z + dz, 0, g.nz - 1);
+                            const float v = src[g.at(sx, sz)];
+                            m = lo ? std::min(m, v) : std::max(m, v);
+                        }
+                    dst[g.at(x, z)] = m;
+                }
+            });
+        };
+        pass(ground, ero, true);
+        pass(ero, open, false);
+        u32 dropped = 0;
+        for (size_t i = 0; i < n; ++i)
+            if (ground[i] - open[i] > 0.25f && !da_snow_walkable(ground[i], walk[i]))
+            {
+                ground[i] = open[i];
+                ++dropped;
+            }
+        Msg("* [snow] ground: %u texels of small objects off the terrain", dropped);
     }
 
     // ---- Masks -----------------------------------------------------------------------------------------
@@ -1148,19 +1236,7 @@ void da_snow_bake_level()
         field.solid[i] = top[i] > none_y ? 1 : 0;
         field.top[i] = top[i] > none_y ? top[i] : ground[i];
     }
-    // The highest node of the level's AI in each texel: the surfaces it walks on.
-    field.walk.assign(n, -flt_max);
-    if (ai().get_level_graph())
-    {
-        const CLevelGraph& graph = ai().level_graph();
-        for (u32 v = 0, nv = graph.header().vertex_count(); v < nv; ++v)
-        {
-            const Fvector p = graph.vertex_position(v);
-            const int x = iFloor((p.x - g.x0) / g.texel), z = iFloor((p.z - g.z0) / g.texel);
-            if (x >= 0 && z >= 0 && x < g.nx && z < g.nz)
-                field.walk[g.at(x, z)] = std::max(field.walk[g.at(x, z)], p.y);
-        }
-    }
+    field.walk = std::move(walk);
     // A cover's kind, along a ray down from over its top: the top entered, the next solid face met either leaves the
     // solid (faces down) or is a floor (faces up). A slab left well over the ground under it (a roof's or a deck's
     // underside, a ceiling) or a floor more than 1.2 m under a roof of one sheet with nothing between is an overhang;
@@ -1206,7 +1282,19 @@ void da_snow_bake_level()
                 below = hits[j].y;
                 break;
             }
-        return next.y - below > 0.6f;
+        // (a vehicle's or a cart's body under 1.5 m: no roof - the wind fills the snow in under it, bare it read as
+        // a pit round its wheels)
+        return next.y - below > 1.5f;
+    };
+    // The ground bilinear at a point (texel centres at +0.5).
+    const auto field_at = [&](const xr_vector<float>& v, const Fvector2& p) {
+        const float fx = clampr(g.fx(p.x), 0.f, float(g.nx - 1)), fz = clampr(g.fz(p.y), 0.f, float(g.nz - 1));
+        const int x0 = clampr(iFloor(fx), 0, std::max(g.nx - 2, 0)), z0 = clampr(iFloor(fz), 0, std::max(g.nz - 2, 0));
+        const int x1 = std::min(x0 + 1, g.nx - 1), z1 = std::min(z0 + 1, g.nz - 1);
+        const float tx = fx - float(x0), tz = fz - float(z0);
+        const float a = v[g.at(x0, z0)] + (v[g.at(x1, z0)] - v[g.at(x0, z0)]) * tx;
+        const float b = v[g.at(x0, z1)] + (v[g.at(x1, z1)] - v[g.at(x0, z1)]) * tx;
+        return a + (b - a) * tz;
     };
     // The covers (da_snow_cover_at): a solid top over the terrain no node of the 3 x 3 texels round it walks on (a
     // deck's own nodes stop short of its edge), an overhang or a solid object; the shelter, the overhangs eroded by a
@@ -1217,19 +1305,21 @@ void da_snow_bake_level()
         for (int x = 0; x < g.nx; ++x)
         {
             const size_t i = g.at(x, z);
-            if (!field.solid[i] || field.top[i] - field.ground[i] <= da_snow_cover_over)
+            const float tm = top_max[i];
+            if (tm <= none_y || tm - field_at(field.ground, top_max_at[i]) <= da_snow_cover_over)
                 continue;
             bool walked = false;
             for (int dz = -1; dz <= 1 && !walked; ++dz)
                 for (int dx = -1; dx <= 1 && !walked; ++dx)
                 {
                     const int sx = x + dx, sz = z + dz;
-                    walked = sx >= 0 && sz >= 0 && sx < g.nx && sz < g.nz && da_snow_walkable(field.top[i], field.walk[g.at(sx, sz)]);
+                    walked = sx >= 0 && sz >= 0 && sx < g.nx && sz < g.nz && da_snow_walkable(tm, field.walk[g.at(sx, sz)]) &&
+                        da_snow_deck_node(field.walk[g.at(sx, sz)], field.ground[g.at(sx, sz)]);
                 }
             if (walked)
                 continue;
             const float cx = g.x0 + (float(x) + 0.5f) * g.texel, cz = g.z0 + (float(z) + 0.5f) * g.texel;
-            field.cover[i] = overhang_at(xrc, cx, cz, field.top[i], field.ground[i]) ? 2 : 1;
+            field.cover[i] = overhang_at(xrc, cx, cz, tm, field.ground[i]) ? 2 : 1;
         }
     });
     // An overhang is a roof over open space, broad enough to keep the snow off: a cover's connected texels with fewer

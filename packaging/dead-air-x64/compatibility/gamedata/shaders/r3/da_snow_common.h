@@ -369,7 +369,8 @@ float da_sn_edge_slope(float h_minus, float h0, float h_plus, float e)
 
 // The QA view of the snow passes (r__dbg_snow): 0 off, 1 the layer paints each path in its own colour,
 // 2 the same with the grid's per-pixel cuts off.
-// r__dbg_snow: 1 the passes' false colours, 2 without the wet tint; 10 + n a QA cut of the layer (da_sn_cut).
+// r__dbg_snow: 1 the passes' false colours, 2 without the wet tint, 3 the window's taper, shelter and covers; 10 + n
+// a QA cut of the layer (da_sn_cut).
 int da_sn_debug()
 {
 	const int v = int(da_sn_win2.z + 0.5);

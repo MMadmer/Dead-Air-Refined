@@ -2428,14 +2428,24 @@ def t_apple(r):
 
 
 def t_cherry_trunk(r):
-    """Prunus cerasus, a trunk: smooth glossy red-brown bark ringed by bands of transverse lenticels 1-2.5 cm, the
-    outer skin peeling in horizontal curling strips, grey-brown where weathered."""
-    h = tsmooth(r, 0.2, 2.0)
-    alb = tbase(r, '#6a4840', '#5a3c36', 14.0, 25.0, streak=0.04, grain=0.04, s=1.8)
-    alb = mix(alb, C('#6e6058'), 0.3 * ss(0.4, 1.6, fbm(r, 12.0, 8.0, 3)))
-    res = tgrain(r, dict(h=h, alb=alb), 0.01, 0.035, scale=1.5, aspect=0.4)
+    """Prunus cerasus, an old trunk in an abandoned village: dull dark red-brown bark weathered grey-brown in patches,
+    ringed by bands of pale transverse lenticels 1-2.5 cm, the outer skin peeling in horizontal curling strips;
+    shallow cracks across along the bands and a few splits along the stem."""
+    h = tsmooth(r, 0.25, 2.0)
+    # A dark red-brown under grey-brown weathering, mottled at three scales and grained (one flat red-brown with
+    # big grey patches read as painted plastic beside the other trees' barks).
+    alb = tbase(r, '#54403a', '#443430', 10.0, 18.0, streak=0.08, grain=0.08, s=1.8)
+    alb = mix(alb, C('#655d58'), 0.5 * ss(0.0, 1.4, fbm(r, 9.0, 6.0, 3)))
+    alb = mix(alb, C('#3a2b27'), 0.35 * ss(0.6, 1.8, fbm(r, 4.0, 3.0, 3)))
+    alb = vary(alb, 0.12, fbm(r, 1.2, 0.8, 4))
+    cross = lines(nz(r, 8.0, 0.5), 0.22) * ss(0.3, 1.2, fbm(r, 10.0, 3.0, 3))
+    split = lines(nz(r, 0.5, 10.0), 0.18) * ss(0.9, 1.9, fbm(r, 3.0, 18.0, 3))
+    cracks = np.clip(cross + split, 0.0, 1.0)
+    h = h - 0.08 * cracks
+    alb = mix(alb, C('#211816'), 0.8 * cracks)
+    res = tgrain(r, dict(h=h, alb=alb), 0.012, 0.05, scale=1.5, aspect=0.4)
     # Lenticel bands: rows of transverse lenticels a few centimetres apart, each a band of a few rows.
-    rows = 7
+    rows = 11
     ys = (np.arange(rows) + r.uniform(-0.25, 0.25, rows)) * N / rows
     pts = []
     for y0 in ys:
@@ -2445,16 +2455,16 @@ def t_cherry_trunk(r):
             yy = y0 + sub * r.uniform(2.0, 4.0) * MM
             while x < end - 8.0 * MM:
                 pts.append((x % N, (yy + r.normal(0, 0.5) * MM) % N))
-                x += r.uniform(12.0, 24.0) * MM
-    L = lenticel_layer(r, 0, None, 13.0, 0.35, (0.07, 0.12), 0.14, 0.08, Lmin=6.0, Lmax=26.0, Wmin=0.8, Wmax=2.2,
+                x += r.uniform(10.0, 20.0) * MM
+    L = lenticel_layer(r, 0, None, 11.0, 0.35, (0.07, 0.12), 0.14, 0.08, Lmin=5.0, Lmax=22.0, Wmin=0.7, Wmax=2.0,
                        ang_sd=0.025, pts=np.array(pts))
     res['h'] = res['h'] + L['h']
-    alb = paint_lenticels(res['alb'], L, '#9a8270', '#867060', '#2a1c18', slit_amt=0.75)
+    alb = paint_lenticels(res['alb'], L, '#9a8a7a', '#857464', '#22181a', slit_amt=0.75)
     # The outer skin: horizontal strips curling at their torn edges, a thin shadow under each lifted edge.
-    m, sd = film(r, 0.32, 40.0, 5.0, jag=0.45)
-    skin = vary(field('#6e625a', '#625650', ss(-1, 1, fbm(r, 10.0, 6.0, 3))), 0.06, fbm(r, 2.5, 0.6, 3))
-    res.update(h=res['h'] + 0.08 * m, alb=mix(alb, skin, m), gloss=0.65 * (1.0 - m) + 0.22 * m - 0.4 * L['cov'],
-               susc=0.2)
+    m, sd = film(r, 0.2, 22.0, 3.5, jag=0.55)
+    skin = vary(field('#4e4540', '#5c524c', ss(-1, 1, fbm(r, 8.0, 5.0, 3))), 0.12, fbm(r, 1.5, 0.5, 3))
+    res.update(h=res['h'] + 0.08 * m, alb=mix(alb, skin, m), gloss=0.35 * (1.0 - m) + 0.15 * m - 0.3 * L['cov'],
+               susc=0.25)
     peel_s(r, res, m, sd, 0.5, 1.2, '#a49488', 0.45, 0.5, 1.5)
     res['tint'] = 0.05
     return res

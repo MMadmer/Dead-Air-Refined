@@ -150,7 +150,7 @@ about three texels across, each its own brightness, and soft isotropic grit - no
 | horse_chestnut | 3 | lighter grey-brown thin irregular plates lifting at an edge, browner under-bark where one fell | horse chestnut |
 | apple | 2.5 | grey-brown thin flakes curling over an orange-brown under-bark | apple |
 | pear | 2.5 | small square blocks, deep cracks | pear |
-| cherry_trunk | 2.5 | glossy red-brown, bands of transverse lenticels, horizontal peeling strips | sour cherry (tree) |
+| cherry_trunk | 2.5 | an old trunk: dull dark red-brown weathered grey-brown in patches, mottled at three scales, bands of pale transverse lenticels, horizontal peeling strips, shallow cracks across and splits along; little gloss (a flat glossy red-brown read as painted plastic, salmon-pink in the light; the species' tint cools it, `bark_tint` 0.8 0.9 1) | sour cherry (tree) |
 | plum | 2.5 | dark grey-brown, fissured and flaking in small plates | plum |
 | walnut / walnut_young | 3.5 / 2 | silver-grey flat ridges in a vertical net round deep dark fissures / smooth silver-grey | walnut |
 | deadwood_bark | 4 | a dead pine's bleached plates loosening off the silver wood, a third fallen | the dead pines (data) |

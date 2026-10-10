@@ -536,6 +536,21 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	const int dbg = da_sn_debug();
 	[branch] if (cut == 2)
 		return o;
+	// r__dbg_snow 3: the window's texels over everything - red where the snow tapers to a cliff, green a cover (its
+	// base dropped under its opened top), blue a texel standing over its lowest neighbour by a cliff's step.
+	[branch] if (dbg == 3)
+	{
+		const int n3 = int(da_sn_win2.x);
+		const int2 t3 = int2(floor(Pw.xz * da_sn_win2.y));
+		const float4 b3 = s_da_ground_base.Load(int3(da_sn_wrap(t3, n3), 0));
+		const float lo3 = min(min(s_da_ground_base.Load(int3(da_sn_wrap(t3 + int2(1, 0), n3), 0)).x,
+			s_da_ground_base.Load(int3(da_sn_wrap(t3 - int2(1, 0), n3), 0)).x),
+			min(s_da_ground_base.Load(int3(da_sn_wrap(t3 + int2(0, 1), n3), 0)).x,
+			s_da_ground_base.Load(int3(da_sn_wrap(t3 - int2(0, 1), n3), 0)).x));
+		const float3 c3 = float3(1.0 - saturate(abs(base.y)), (b3.w - b3.x > 0.3) ? 1.0 : 0.0, (b3.x - lo3 > 0.35) ? 1.0 : 0.0);
+		da_sn_write(o, P, Nw, 0.0, true, lerp(float3(0.5, 0.5, 0.5), c3, 0.8) * (grid ? float3(0.7, 1.0, 0.7) : float3(1.0, 1.0, 1.0)), 0.0);
+		return o;
+	}
 	// A snow shell (da_snow_shell.ps marks it with a hemi of 1): the snow on a roof or a vehicle. It is deep snow;
 	// the ground's depth and trails are not its own. (Told by its height over the ground's snow, a grid pixel of
 	// a coarse ring over a hollow or of the snow over a pond's ice lost its ice and its trails.)
@@ -670,16 +685,20 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	float Dcoat = 0.0;
 	[branch] if (above > 0.0 && ny > 0.5 && Nw.y > 0.45)
 	{
-		// On a cover only (its top a cover's height over the snow base there: a roof, a slab, a vehicle, a stump - not
-		// the ground a body or a boot lies on), and on its very surface: a few centimetres over the raster's highest
-		// point at most, under it by the slope's run over a texel.
+		// On a cover only - the pixel itself standing a cover's height over the snow (a roof, a slab, a vehicle, a
+		// stump; not the ground a body or a boot lies on), eased in over its lowest 15 cm - and open to the sky: a few
+		// centimetres over the raster's highest point at most, under it by no more than a rim's or a rail's height and
+		// the slope's run over a texel. (Gated by its texel's top over the texel's base instead, a stump's flaring
+		// roots, a crate's slats and a trailer's bed beside its rails turned white in squares of the 0.25 m window:
+		// sheets with toothed edges.)
 		const float2 st = da_sn_static_top(Pw.xz);
 		const float dy = Pw.y - st.x;
 		const float run = st.y * sqrt(saturate(1.0 - ny * ny)) / ny;
-		[branch] if (st.x > DA_SN_NONE * 0.5 && st.x > base.x + 0.3 && dy < 0.06 && dy > -(0.06 + run))
+		const float over = Pw.y - (base.x + D);
+		[branch] if (st.x > DA_SN_NONE * 0.5 && over > 0.15 && dy < 0.06 && dy > -(0.3 + run))
 		{
 			Dcoat = da_sn_roof_depth(Pw.xz, ny).x;
-			coat = smoothstep(0.005, 0.03, Dcoat);
+			coat = smoothstep(0.005, 0.03, Dcoat) * smoothstep(0.15, 0.3, over);
 		}
 	}
 	// the dusting (a corpse, a creature, a loose prop) grows while it snows: a fresh body is not white

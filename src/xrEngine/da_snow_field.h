@@ -40,7 +40,12 @@ struct SSnowField
 // platform, a flat roof with a ladder) is ground: its snow is the trodden ground's, with its trails. The bake (1 m),
 // the window's resolve (da_ground_resolve.cs, DA_GR_OVER_TERRAIN) and the shells take the same test.
 constexpr float da_snow_cover_over = 0.35f;
-inline bool da_snow_walkable(float top, float walk) { return walk > top - 0.5f && walk < top + 0.3f; }
+// (a node more than 25 cm under the top is the ground beside a crate or a block, not the block's own: within half a
+// metre every low prop by a path was a deck and the snow's base climbed it)
+inline bool da_snow_walkable(float top, float walk) { return walk > top - 0.25f && walk < top + 0.3f; }
+// A node of a deck rather than of the ground (its metre's ground under it by a quarter metre): round an object on a
+// slope the ground's nodes uphill stand at its edge's height, and every stump on a hillside was a deck on that side.
+inline bool da_snow_deck_node(float walk, float ground) { return walk > ground + 0.25f; }
 
 // Snow constants of this frame (season day D and D_prev of da_season.h).
 struct SSnowFrame
