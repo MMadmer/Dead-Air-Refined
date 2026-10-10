@@ -45,4 +45,12 @@ bool da_snow_depth_active();
 void da_snow_destroy();
 // QA diagnostic (r__snow_stats): the state of the snow passes in the log.
 void da_snow_stats();
+// The level's terrain texture ($user$da_snow_ground, R16_UNORM: y = lvl.x + v * lvl.y, 0 = none) and its texel
+// transform (texel = xz * xf.xy + xf.zw, centres at +0.5): da_ground's cover test. Returns the upload's version,
+// 0 while there is none.
+u32 da_snow_level_terrain(Fvector4& xf, Fvector4& lvl);
+// The snow grid in the sun cascades (render_phase_sun.cpp, worker threads): the two near ones, so the walls of
+// a trail and a drift's lee cast shadows; `vp` the cascade's world to clip transform (its tiles culled by it).
+bool da_snow_casts(u32 cascade);
+void da_snow_render_cascade(CBackend& cmd_list, u32 cascade, const Fmatrix& vp);
 } // namespace xray::render::RENDER_NAMESPACE

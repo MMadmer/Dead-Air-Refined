@@ -255,6 +255,17 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_blades.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_blades.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_data.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrub_gen.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrub_gen.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrubs.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrubs.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_trees.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_trees.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_trees_bake.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_trees_bake.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_veg.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_veg.h"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_veg_internal.h"
     # [seasons:grass-snow] end sources
     # [dx12:offload] begin sources
     "${CMAKE_CURRENT_LIST_DIR}/da_offload.cpp"

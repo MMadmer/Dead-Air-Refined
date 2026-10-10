@@ -163,9 +163,26 @@ extern ECORE_API int ps_r__gpu_driven; // r__gpu_driven: the GPU-driven trees (-
 // [dx12:gd] end variables
 // [dx12:mesh] begin variables
 extern ECORE_API int ps_r__grass_mesh; // r__grass_mesh: mesh grass (-1 auto, 0 off, 1 on)
+extern ECORE_API int ps_r__shrubs; // r__shrubs (QA): 0 = the stock bushes in place of the procedural shrubs
+extern ECORE_API int ps_r__dbg_shrubs; // r__dbg_shrubs (QA): draws of the shrubs left out (da_shrubs.cpp draw_range)
+extern ECORE_API float ps_r__shrubs_lod_scale; // r__shrubs_lod_scale (QA): the shrubs' tier distances scaled (da_shrubs.cpp view_bush)
+extern ECORE_API int ps_r__shrubs_force_tier; // r__shrubs_force_tier (QA): every bush in one tier, -1 off (da_shrubs.cpp view_bush)
+extern ECORE_API int ps_r__trees; // r__trees (QA): 0 = the stock trees in place of the upgraded trees
+extern ECORE_API int ps_r__dbg_trees; // r__dbg_trees (QA): draws of the trees left out (da_trees.cpp skip_draw)
+extern ECORE_API int ps_r__trees_cut; // r__trees_cut (QA): 0 = the trees' view without the GPU cut (da_veg.cpp cut)
+extern ECORE_API int ps_r__veg_soft; // r__veg_soft (QA): the vegetation's soft switches, bits (1 thinned, 2 wood, 4 morphs)
+extern ECORE_API int ps_r__dbg_wood; // r__dbg_wood (QA): the wood's bark in false colour (da_shrub_wood.ps shrub_dbg_*)
+extern ECORE_API float ps_r__trees_lod_scale; // r__trees_lod_scale (QA): the trees' tier distances scaled (da_trees.cpp tiers)
+extern ECORE_API float ps_r__shrubs_far_detail; // r__shrubs_far_detail (QA): the shrubs' leaf tier longer
+extern ECORE_API float ps_r__trees_far_detail; // r__trees_far_detail (QA): the thinned leaves' and clusters' tiers longer
+extern ECORE_API float ps_r__trees_detail; // r__trees_detail (QA): the crowns' leaf and wood floors divided (da_trees.cpp frame_begin)
+extern ECORE_API int ps_r__trees_force_tier; // r__trees_force_tier (QA): every tree in one tier, -1 off (da_trees.cpp view)
 extern ECORE_API int ps_r__dbg_grass_ab; // r__dbg_grass_ab: one A/B of the grass paths next frame
 // [dx12:mesh] end variables
 extern ECORE_API int ps_r__dbg_snow; // r__dbg_snow: the QA view of the snow passes (0 off, 1 paths, 2 no grid cuts)
+extern ECORE_API float ps_r__snow_glint; // r__snow_glint: the glints' strength (QA, 1 as built)
+extern ECORE_API int ps_r__snow_shells; // r__snow_shells: the snow shells (QA, 1 as built)
+extern ECORE_API int ps_r__snow_shadow; // r__snow_shadow: the snow grid in the near sun cascade (QA, 1 as built)
 // r__dbg_grass (QA, cost experiments of the blade generation): 1 no basal pairs, 2 no litter, 4 the community's first
 // graminoid only, 8 no early out, 16 no stem leaves, 32 the palette's presence near the camera too, 64 every lane
 // ends after the early out, 128 no wind forces.
@@ -237,6 +254,7 @@ extern ECORE_API int ps_r__parallax_debug;
 extern ECORE_API float ps_r__sun_shadow_fade;
 extern ECORE_API float ps_r__sun_cascade_mid;
 extern ECORE_API float ps_r__sun_cascade_far;
+extern ECORE_API float ps_r__sun_cascade_blend;
 extern ECORE_API int ps_r__dbg_sun_cascades;
 extern ECORE_API int ps_r__particle_dist;
 extern ECORE_API float ps_r__macro_var;

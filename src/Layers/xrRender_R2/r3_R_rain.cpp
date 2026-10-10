@@ -6,6 +6,7 @@
 #include "xrEngine/IRenderable.h"
 #include "xrEngine/EnvironmentWeatherState.h"
 #include "Layers/xrRender/FBasicVisual.h"
+#include "Layers/xrRender/da_veg.h"
 
 #if defined(USE_DX11)
 #include "DirectXMath.h"
@@ -359,6 +360,22 @@ void render_rain::flush()
         // backend's state cache so subsequent state sets are re-applied for real.
         RCache.Invalidate();
         RImplementation.release_context(context_id);
+
+        // The procedural shrubs shelter the ground under them as the stock bushes did: their crowns from
+        // above into the map just drawn (their frame is built in Calculate). A map this frame did not redraw
+        // keeps its older transform: nothing goes into it.
+        if (rain_smap_frame == Device.dwFrame && da_veg_casts_rain())
+        {
+            auto& cmd = RImplementation.get_imm_context().cmd_list;
+            CRenderTarget* T = RImplementation.Target;
+            T->u_setrt(cmd, nullptr, nullptr, nullptr, T->rt_smap_rain);
+            cmd.SetViewport({0, 0, T->rt_smap_rain->dwWidth, T->rt_smap_rain->dwHeight, 0.0, 1.0});
+            cmd.set_Stencil(FALSE);
+            cmd.set_xform_world(Fidentity);
+            cmd.set_xform_view(Fidentity);
+            cmd.set_xform_project(RainLight.X.D[0].combine);
+            da_veg_render_rain(cmd);
+        }
     }
 
     if (!ps_r2_ls_flags.test(R3FLAG_DYN_WET_SURF))

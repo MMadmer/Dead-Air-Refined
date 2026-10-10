@@ -149,6 +149,9 @@ struct DaRtSceneBinding
     D3D12_GPU_VIRTUAL_ADDRESS tables[da_rt_max_tables]{}; // geometry, instances, per-frame geometry, per-frame instances
     u32 static_instances{};
     u32 static_texture_base{};
+    // The vegetation tables (da_veg_rt_tables): bindless slot (~0u none), a species' profile rows, the season block's
+    // first float4, a species' season rows.
+    u32 veg_tables{~0u}, veg_prof{}, veg_seas{}, veg_rows{};
 };
 const DaRtSceneBinding& da_rt_scene_binding();
 class DaRtSection;

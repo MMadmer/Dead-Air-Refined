@@ -66,6 +66,7 @@ f_deffer main(da_sn_grid_v2p I)
 		}
 	}
 	const float3 Nv = normalize(mul(m_V, float4(normalize(I.Nw), 0.0)));
+	// (0.95 at most: a hemi of 1 marks a shell's pixel, da_snow_shell.ps)
 	const float hemi = lerp(0.95, 0.5, da_sn_grid_trees(I.Pw.xz));
 	f_deffer o = pack_gbuffer(float4(Nv, hemi), float4(I.Pv, da_mtl_from_code(DA_MTL_SNOW)), float4(0.9, 0.9, 0.9, 0.1));
 	o.velocity = da_velocity(I.hcur, I.hprev);

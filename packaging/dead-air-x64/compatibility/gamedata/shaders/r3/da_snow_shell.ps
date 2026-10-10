@@ -1,0 +1,88 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The snow shells in the G-buffer (da_ground.cpp, da_snow.cpp): position, normal, material code 31 and the
+// motion vector, as the snow grid writes them, and the shell's mark: a hemi of 1 (the grid's is 0.95 at most). The
+// albedo target is masked off in the blender; the snow layer shades a shell pixel as deep snow.
+// The shell stands on the collision, and the collision does not always show: a ruin's roof is one plane over bare
+// rafters, a fence is one box over its gaps. Away from its open edges, a shell pixel whose view ray runs on well
+// past its supporting face before it meets the scene (the depth drawn so far, copied before the shells) has
+// nothing under it and is dropped: the snow lies on the rafters, not on a slab over them.
+// The prints on a roof (the roof map, da_snow_stamp.cs): the view ray runs on into the shell's snow to the pressed
+// surface (three steps against the map), which the pixel takes - its position, the print's slope and its depth
+// (only ever farther: the depth test stays early).
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_material_codes.h"
+#include "da_snow_common.h"
+#include "da_snow_shell.h"
+
+uniform float4 da_sn_shell; // x reach (m), y unused, z depth bias (NDC z), w unused
+uniform float4 da_sn_shell2; // x 1 = the depth copy holds the scene, z, w the projection's _33 and _43
+Texture2D s_depth_copy;
+Texture2D<uint> s_da_sn_roof;
+
+// How far a roof's snow is pressed at xz (m), bilinear; 0 outside the near trail window.
+float da_sn_roof_dep(float2 xz)
+{
+	const float2 dd = abs(xz - da_snow_fine_xf.zw);
+	[branch] if (da_snow_misc.z < 0.5 || max(dd.x, dd.y) > da_snow_misc.y - 0.5)
+		return 0.0;
+	const float n = da_snow_fine_xf.y;
+	const float2 p = xz * da_snow_fine_xf.x - 0.5;
+	const float2 i = floor(p);
+	const float2 f = p - i;
+	const float2 a = i - n * floor(i / n);
+	const float2 b = a + 1.0 - n * step(n, a + 1.0);
+	const float k = da_snow_misc.x / 65535.0;
+	const float v00 = float(s_da_sn_roof.Load(int3(int2(a), 0)) & 0xFFFFu), v10 = float(s_da_sn_roof.Load(int3(int(b.x), int(a.y), 0)) & 0xFFFFu);
+	const float v01 = float(s_da_sn_roof.Load(int3(int(a.x), int(b.y), 0)) & 0xFFFFu), v11 = float(s_da_sn_roof.Load(int3(int2(b), 0)) & 0xFFFFu);
+	return lerp(lerp(v00, v10, f.x), lerp(v01, v11, f.x), f.y) * k;
+}
+
+struct da_sn_shell_out
+{
+	f_deffer g;
+	float depth : SV_DepthGreaterEqual;
+};
+
+da_sn_shell_out main(da_sn_shell_v2p I)
+{
+	[branch] if (da_sn_shell2.x > 0.5 && I.lift.y > 0.2)
+	{
+		const float d = s_depth_copy.Load(int3(int2(I.hpos.xy), 0)).x;
+		const float zs = da_sn_shell2.w / max(d - da_sn_shell2.z, 1e-6);
+		const float3 rd = normalize(I.Pw - eye_position);
+		const float t_face = I.lift.x / max(abs(dot(rd, normalize(I.Nf))), 0.05);
+		const float t_scene = (zs - I.Pv.z) / max(normalize(I.Pv).z, 0.05);
+		[branch] if (t_scene > t_face + 0.3)
+			discard;
+	}
+	float3 Pw = I.Pw;
+	float3 Nw = normalize(I.Nw);
+	float3 Pv = I.Pv;
+	float depth = I.hpos.z;
+	float dep = min(da_sn_roof_dep(Pw.xz), I.lift.x);
+	[branch] if (dep > 0.002)
+	{
+		const float3 rd = normalize(Pw - eye_position);
+		const float k = 1.0 / max(-rd.y, 0.2);
+		float s = dep * k;
+		[unroll] for (int it = 0; it < 3; ++it)
+			s = min(da_sn_roof_dep(Pw.xz + rd.xz * s), I.lift.x) * k;
+		Pw += rd * s;
+		const float e = 0.03;
+		const float2 g = float2(da_sn_roof_dep(Pw.xz + float2(e, 0.0)) - da_sn_roof_dep(Pw.xz - float2(e, 0.0)),
+			da_sn_roof_dep(Pw.xz + float2(0.0, e)) - da_sn_roof_dep(Pw.xz - float2(0.0, e))) * (0.5 / e);
+		Nw = normalize(Nw + float3(g.x, 0.0, g.y));
+		Pv = mul(m_V, float4(Pw, 1.0));
+		depth = max(depth, da_sn_shell2.z + da_sn_shell2.w / max(Pv.z, 1e-3) - da_sn_shell.z);
+	}
+	const float3 Nv = normalize(mul(m_V, float4(Nw, 0.0)));
+	da_sn_shell_out o;
+	o.g = pack_gbuffer(float4(Nv, 1.0), float4(Pv, da_mtl_from_code(DA_MTL_SNOW)), float4(0.9, 0.9, 0.9, 0.02));
+	o.g.velocity = da_velocity(I.hcur, I.hprev);
+	o.depth = depth;
+	return o;
+}

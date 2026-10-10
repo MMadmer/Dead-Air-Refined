@@ -1,0 +1,28 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The billboards' bake, the stock path's atlas (da_trees_bake.cpp): the runtime copy of the level's level_lods. Mode 0:
+// a level of the base atlas as it is (cars, ruins, rocks and every cell not drawn again keep Dead Air's pictures);
+// mode 1: a level of a vegetation cell drawn again, from the staging's filled chain (filtered: the atlas's cells do not
+// sit on the levels' grid), its alpha scaled by the cell's factor of this level (da_tree_bake_cover.cs); mode 2: a
+// base cell's texels packed into the staging for the calibration's readback.
+
+#include "common.h"
+#include "da_tree_bake.h"
+
+Texture2D<float4>	da_tree_bake_base	: register(t0);	// the base atlas, every level
+Texture2D<float4>	da_tree_bake_fill	: register(t1);	// the staging's filled albedo and coverage, every level
+ByteAddressBuffer	da_tree_bake_k		: register(t2);	// a cell's alpha factor by level
+uniform float4		da_tree_bake_m;	// x the level, y mode, z the levels a cell has
+
+float4	main	(v2p_tree_bake_quad I)	: SV_Target
+{
+	const uint level = uint(da_tree_bake_m.x + 0.5f);
+	[branch] if (da_tree_bake_m.y < 0.5f)
+		return da_tree_bake_base.Load(int3(int2(floor(I.src)), int(level)));
+	[branch] if (da_tree_bake_m.y > 1.5f)
+		return da_tree_bake_base.Load(int3(int2(floor(I.src)), 0));
+	const float4 c = da_tree_bake_fill.SampleLevel(smp_rtlinear, I.src, float(level));
+	const float k = asfloat(da_tree_bake_k.Load((I.info.x * uint(da_tree_bake_m.z + 0.5f) + level) * 4u));
+	return float4(c.rgb, saturate(c.a * k));
+}

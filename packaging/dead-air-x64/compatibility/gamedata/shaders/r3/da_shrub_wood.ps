@@ -1,0 +1,737 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Procedural shrubs, the G-buffer pixel shader of the wood (docs/dead-air/SHRUBS.md): opaque tubes; a twig the
+// wire rule widened to the pixel floor keeps only its true share of the pixels (cut against interleaved gradient
+// noise, the temporal resolve averages it), so a crown's thousands of shoots do not paint over its leaves. The
+// species' bark texture (tools/shrubs/textures: albedo, cavity, relief, gloss) without its tile's repeat (hex tiling)
+// on the old wood in the species' tint and contrast, fading to the young twig colour and a smoother skin on the current
+// shoots (the species' share of the bark's relief and detail kept: a warty spindle's warts on its green twigs); a tree's
+// upper bark breaking through its lower in patches over its zone; near a junction the parent's bark, a stock patch's by
+// its two nearest tubes (a second mapping, the two met by their relief: no seam where they meet); crustose lichen in
+// patches on the old stems where the texture lets it settle; the noises by the rest position, one over every seam; a
+// tree's cut end its end grain (shrub_end_grain); the snow on the upper side takes the snow code.
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_material_codes.h"
+#include "da_shrub_common.h"
+
+struct p_shrub_wood
+{
+	float4	hpos		: SV_Position;
+	float4	hpos_cur	: TEXCOORD0;
+	float4	hpos_prev	: TEXCOORD1;
+	float4	pv_g		: TEXCOORD2;
+	float4	n_u			: TEXCOORD3;
+	float4	t_v			: TEXCOORD4;
+	float4	alb_h		: TEXCOORD5;
+	float4	lit			: TEXCOORD6;
+	float4	misc		: TEXCOORD7;
+	float4	moss		: TEXCOORD8;
+	nointerpolation float4	bark	: TEXCOORD9;
+	nointerpolation float4	bark2	: TEXCOORD10;
+	float	ring		: TEXCOORD11;
+	float4	zone		: TEXCOORD12;
+	nointerpolation float4	bark3	: TEXCOORD13;
+	float3	pr			: TEXCOORD14;
+	float3	jn			: TEXCOORD15;
+	float	jw			: TEXCOORD16;
+	nointerpolation float4	jc0	: TEXCOORD17;
+	nointerpolation float4	jc1	: TEXCOORD18;
+};
+
+// The bark's texture without its tile's repeat (hex tiling, after Mikkelsen 2022): the plane of tiles cut into
+// equilateral triangles a tile on a side (one side along u, so a whole number of them goes round the stem: period),
+// each corner of the pixel's triangle reading the tile at an offset of its own (its hash), half of them mirrored round
+// the stem and each at its own scale (0.9 .. 1.1 each way) and turn (3.5 degrees at the most) about its corner (the
+// relief turned with it; mirrored only, a pine's plates and a black poplar's forks still came back twice a metre, flipped:
+// the grain's up and down kept),
+// the three taken by their weights lifted a little by the bark's height there (its cavity: where two meet, a ridge of one
+// over another's fissure shows the ridge, not a ghost of both - a little: lifted much, the ridges ate the fissures
+// wherever two met), within a band a fifth of a tile wide. A corner too far behind to win anywhere in the pixel is not
+// read. The gradients are the pixel's own (an offset is a translation).
+void	shrub_bark_hex	(float3 tc, float2 gx, float2 gy, float period, out float4 D, out float4 Nm)
+{
+	const float b = tc.y * 1.15470054f;
+	const float2 sk = float2(tc.x - 0.5f * b, b);
+	const float2 ci = floor(sk), f = sk - ci;
+	const bool up = f.x + f.y > 1.0f;
+	const float3 w = up ? float3(f.x + f.y - 1.0f, 1.0f - f.x, 1.0f - f.y) : float3(1.0f - f.x - f.y, f.x, f.y);
+	const float2 c0 = ci + (up ? float2(1.0f, 1.0f) : float2(0.0f, 0.0f));
+	const float2 c1 = ci + (up ? float2(0.0f, 1.0f) : float2(1.0f, 0.0f));
+	const float2 c2 = ci + (up ? float2(1.0f, 0.0f) : float2(0.0f, 1.0f));
+	float3 cx = float3(c0.x, c1.x, c2.x);
+	// (Integral cells over a whole count: half a cell in, a division an ulp short cannot floor a whole period wrong.)
+	[flatten] if (period > 0.5f)
+		cx -= period * floor((cx + 0.5f) / period);
+	const uint3 hc = asuint(int3(cx)) * 0x8da6b343u ^ asuint(int3(float3(c0.y, c1.y, c2.y))) * 0xd8163841u;
+	const uint3 h = uint3(shrub_hash(hc.x), shrub_hash(hc.y), shrub_hash(hc.z));
+	const float2 o0 = float2(h.x & 0xFFFFu, h.x >> 16) * (1.0f / 65536.0f);
+	const float2 o1 = float2(h.y & 0xFFFFu, h.y >> 16) * (1.0f / 65536.0f);
+	const float2 o2 = float2(h.z & 0xFFFFu, h.z >> 16) * (1.0f / 65536.0f);
+	// (Each corner's transform about its own place - the corner in the tile's coordinates, unwrapped: across the turn's
+	// wrap both sides read the same texel, a whole period apart -: mirrored by a bit of its hash, scaled and turned by a
+	// second hash's.)
+	float2x2 M0 = float2x2(1.0f, 0.0f, 0.0f, 1.0f), M1 = M0, M2 = M0;
+	float2 t0 = tc.xy, t1 = tc.xy, t2 = tc.xy;
+	{
+		const float2 C0 = float2(c0.x + 0.5f * c0.y, c0.y * 0.8660254f), C1 = float2(c1.x + 0.5f * c1.y, c1.y * 0.8660254f);
+		const float2 C2 = float2(c2.x + 0.5f * c2.y, c2.y * 0.8660254f);
+		const uint3 g = uint3(shrub_hash(h.x ^ 0x9e3779b9u), shrub_hash(h.y ^ 0x9e3779b9u), shrub_hash(h.z ^ 0x9e3779b9u));
+		[unroll] for (uint k = 0u; k < 3u; ++k)
+		{
+			const uint gk = k == 0u ? g.x : (k == 1u ? g.y : g.z), hk = k == 0u ? h.x : (k == 1u ? h.y : h.z);
+			const float sx = (0.9f + 0.2f * float(gk & 0xFFu) / 255.0f) * ((hk & 0x100u) != 0u ? -1.0f : 1.0f);
+			const float sy = 0.9f + 0.2f * float((gk >> 8) & 0xFFu) / 255.0f;
+			const float th = 0.06f * (float((gk >> 16) & 0xFFu) / 127.5f - 1.0f);
+			const float cs = 1.0f - 0.5f * th * th;
+			const float2x2 M = float2x2(cs * sx, -th * sy, th * sx, cs * sy);
+			const float2 Ck = k == 0u ? C0 : (k == 1u ? C1 : C2), ok = k == 0u ? o0 : (k == 1u ? o1 : o2);
+			const float2 tk = mul(M, tc.xy - Ck) + Ck + ok;
+			if (k == 0u) { M0 = M; t0 = tk; }
+			else if (k == 1u) { M1 = M; t1 = tk; }
+			else { M2 = M; t2 = tk; }
+		}
+	}
+	// (A corner's score is its weight and 0.15 of its cavity: one more than 0.35 behind the first never wins.)
+	const float wm = max(w.x, max(w.y, w.z)) - 0.35f;
+	float4 D0 = 0.0f, D1 = 0.0f, D2 = 0.0f;
+	float3 s = -10.0f;
+	[branch] if (w.x > wm)
+	{
+		D0 = s_shrub_bark_d.SampleGrad(smp_base, float3(t0, tc.z), mul(M0, gx), mul(M0, gy));
+		s.x = w.x + 0.15f * D0.a;
+	}
+	[branch] if (w.y > wm)
+	{
+		D1 = s_shrub_bark_d.SampleGrad(smp_base, float3(t1, tc.z), mul(M1, gx), mul(M1, gy));
+		s.y = w.y + 0.15f * D1.a;
+	}
+	[branch] if (w.z > wm)
+	{
+		D2 = s_shrub_bark_d.SampleGrad(smp_base, float3(t2, tc.z), mul(M2, gx), mul(M2, gy));
+		s.z = w.z + 0.15f * D2.a;
+	}
+	const float3 k = max(s - (max(s.x, max(s.y, s.z)) - 0.2f), 0.0f);
+	const float3 kn = k / max(k.x + k.y + k.z, 1e-6f);
+	// (The blend keeps one corner's contrast: each corner's departure from the tile's mean over the root of the weights'
+	// squares - the plain mean flattened the bands where the corners meet, a lattice of smooth lines over a far trunk of
+	// small tiles, an alder's, a spruce's.)
+	const float vk = rsqrt(max(dot(kn, kn), 0.25f));
+	const float4 Dm = s_shrub_bark_d.SampleLevel(smp_base, float3(0.5f, 0.5f, tc.z), 16.0f);
+	D = saturate(Dm + (D0 * kn.x + D1 * kn.y + D2 * kn.z - Dm) * vk);
+	// (A corner's relief back into the stem's frame: its slope's xy by the transform's transpose - the turn and the mirror;
+	// the scale a tenth at the most, left.)
+	Nm = 0.0f;
+	[branch] if (kn.x > 0.0f)
+	{
+		float4 n0 = s_shrub_bark_n.SampleGrad(smp_base, float3(t0, tc.z), mul(M0, gx), mul(M0, gy));
+		n0.rg = mul(transpose(M0), n0.rg - 0.5f) + 0.5f;
+		Nm += n0 * kn.x;
+	}
+	[branch] if (kn.y > 0.0f)
+	{
+		float4 n1 = s_shrub_bark_n.SampleGrad(smp_base, float3(t1, tc.z), mul(M1, gx), mul(M1, gy));
+		n1.rg = mul(transpose(M1), n1.rg - 0.5f) + 0.5f;
+		Nm += n1 * kn.y;
+	}
+	[branch] if (kn.z > 0.0f)
+	{
+		float4 n2 = s_shrub_bark_n.SampleGrad(smp_base, float3(t2, tc.z), mul(M2, gx), mul(M2, gy));
+		n2.rg = mul(transpose(M2), n2.rg - 0.5f) + 0.5f;
+		Nm += n2 * kn.z;
+	}
+	// (The relief's slope the same way about the flat.)
+	Nm.rg = saturate(0.5f + (Nm.rg - 0.5f) * vk);
+}
+
+// A stock patch's two whole counts of tiles round its axis either side of a pixel's stretch and the second's share
+// (da_tree_patch_vs.h tree_patch_runs_of): the tube's own round the rings - the count round the triangle's first ring
+// and each step's change before them, sparse or dense (counts.x negative) -, by the ring coordinate x from that ring.
+void	shrub_patch_counts	(float4 counts, float x, out float wa, out float wb, out float k)
+{
+	const float i0 = floor(max(x, 0.0f));
+	k = saturate(x - i0);
+	wa = abs(counts.x);
+	wb = wa;
+	[branch] if (counts.x < 0.0f)
+	{
+		const uint3 bits = uint3(counts.yzw);
+		const uint n = uint(min(i0, 35.0f));
+		k = i0 > 35.0f ? 1.0f : k;
+		[loop] for (uint j = 0u; j <= n; ++j)
+		{
+			const uint code = ((j < 12u ? bits.x : (j < 24u ? bits.y : bits.z)) >> (2u * (j % 12u))) & 3u;
+			const float d = code == 1u ? 1.0f : (code == 2u ? -1.0f : 0.0f);
+			wa += j < n ? d : 0.0f;
+			wb += d;
+		}
+	}
+	else [branch] if (counts.y > 0.5f)
+	{
+		[unroll] for (uint i = 0u; i < 6u; ++i)
+		{
+			const float f = i < 2u ? counts.y : (i < 4u ? counts.z : counts.w), hi = floor(f * (1.0f / 2048.0f));
+			const float code = (i & 1u) != 0u ? hi : f - 2048.0f * hi;
+			const float j = floor((code - 1.0f) * (1.0f / 16.0f)), d = code > 0.5f ? code - 9.0f - 16.0f * j : 0.0f;
+			wa += j < i0 ? d : 0.0f;
+			wb += j < i0 + 1.0f ? d : 0.0f;
+		}
+	}
+	wa = max(wa, 1.0f);
+	wb = max(wb, 1.0f);
+}
+
+// QA (r__dbg_wood): the wood's bark in false colour. 1: what draws it - a tube or grafted wood green, a stock patch red,
+// a cut end white; the second mapping's weight blue over it, a patch's world projection yellow. 2: the counts of tiles
+// round the stem, a colour each whole count, blended as the bark blends them (the second's by its weight). 3: the upper
+// bark's zone - red its share there, green the upper bark's share. 4 and 5: the first and the second mapping in a
+// checker of half tiles (the turn's wrap red).
+float3	shrub_dbg_count	(float n)
+{
+	return 0.5f + 0.45f * cos(6.2831853f * (n * 0.318f + float3(0.0f, 0.33f, 0.67f)));
+}
+
+float3	shrub_dbg_counts	(float wa, float wb, float k)
+{
+	return lerp(shrub_dbg_count(wa), shrub_dbg_count(wb), wb != wa ? smoothstep(0.0f, 1.0f, k) : 0.0f);
+}
+
+float3	shrub_dbg_checker	(float u, float v, float wa, float wb, float k)
+{
+	const float n = wb != wa && smoothstep(0.0f, 1.0f, k) > 0.5f ? wb : wa;
+	const bool odd = (frac(u * n * 2.0f) < 0.5f) != (frac(v * 2.0f) < 0.5f);
+	const float3 c = odd ? float3(0.85f, 0.85f, 0.8f) : float3(0.15f, 0.15f, 0.2f);
+	return frac(u + 0.004f) < 0.008f ? float3(0.9f, 0.1f, 0.1f) : c;
+}
+
+// A mapping's frame from its coordinates' screen derivatives (the cotangent frame): the surface's directions of u (round)
+// and v (along).
+void	shrub_cotangent	(float3 n, float3 dpx, float3 dpy, float2 gx, float2 gy, out float3 tu, out float3 tv)
+{
+	const float3 px = cross(dpy, n), py = cross(n, dpx);
+	const float3 T = px * gx.x + py * gy.x, B = px * gx.y + py * gy.y;
+	const float k = rsqrt(max(max(dot(T, T), dot(B, B)), 1e-20f));
+	tu = T * k;
+	tv = B * k;
+}
+
+// A relief sample's normal (view space) in its mapping's frame, the young growth's share (keep) of it.
+float3	shrub_bark_normal	(float4 Nm, float keep, float3 n, float3 tu, float3 tv)
+{
+	float3 nt = shrub_unpack_n(Nm.rg);
+	nt.xy *= keep;
+	return normalize(n * nt.z + tu * nt.x + tv * nt.y);
+}
+
+struct shrub_bark_px
+{
+	float4	D;		// albedo (sRGB) | cavity
+	float4	Nm;		// relief (rg) | gloss | lichen mask
+	float	zk;		// the upper bark's share
+};
+
+// One mapping's bark - a: the turn round the stem, v: the tiles along it, wa and wb: the tiles round the segment's first
+// and last ring (each a whole number round, no seam; k1 the last's share where the count steps: one count interpolated
+// between them seamed and twisted the bark), wrapped: round the stem (the world's projection: a and v in tiles, no
+// wrap) - with a tree's upper bark over its zone, at its own tile size (a whole
+// number of its tiles round the ring) and the species' value and chroma (a pine's mirror bark less saturated than its
+// tile). The upper bark takes over in patches: the zone's height share shifted by the boundary's run (zone_n.x: tongues
+// of the lower bark up along the stem and of the upper down, most in the zone's middle, none at its ends - its foot all
+// lower, its top all upper), against each place's own level (the lower bark's height: its fissures fill first, its
+// plates stand longest - or its ridges first where the zone says so (zone.z negative): a poplar's smooth bark over its
+// rough foot, the fissures left as dark lenses -; and a patch noise of a few centimetres stretched along the stem,
+// ragged by an octave of a centimetre or two (one octave's soft edges read as airbrushed soot), zone_n.y: a birch's
+// dark lenses left in the white, a pine's grey plates as islands in the orange) - not one picture
+// fading into another, nor a line round the stem. The threshold eases over what a pixel spans of it (the lower bark's
+// relief over the tiles a pixel covers, the lenses over its metres, px_m): a hard edge sparkled and crawled in a
+// spray of single pixels from a few metres off; far off the two barks blend by the zone's share.
+shrub_bark_px	shrub_bark_at	(p_shrub_wood I, float a, float v, float wa, float wb, float k1, float2 gx, float2 gy, float2 zone_n,
+	float px_m, bool wrapped)
+{
+	shrub_bark_px B;
+	B.D = float4(0.5f, 0.5f, 0.5f, 1.0f);
+	B.Nm = float4(0.5f, 0.5f, 0.5f, 0.0f);
+	B.zk = 0.0f;
+	const bool zoned = I.zone.x >= 0.0f;
+	const bool upper_all = zoned && I.zone.y >= 0.999f;
+	const float kw = wb != wa ? smoothstep(0.0f, 1.0f, k1) : 0.0f;
+	// (Each count's sample only where its share counts.)
+	const bool need_a = kw < 0.999f, need_b = kw > 0.001f;
+	[branch] if (!upper_all)
+	{
+		float4 D1 = 0.0f, N1 = 0.0f;
+		[branch] if (need_a)
+			shrub_bark_hex(float3(a * wa, v, I.misc.x), gx * float2(wa, 1.0f), gy * float2(wa, 1.0f), wrapped ? wa : 0.0f, B.D, B.Nm);
+		[branch] if (need_b)
+			shrub_bark_hex(float3(a * wb, v, I.misc.x), gx * float2(wb, 1.0f), gy * float2(wb, 1.0f), wrapped ? wb : 0.0f, D1, N1);
+		B.D = need_a ? (need_b ? lerp(B.D, D1, kw) : B.D) : D1;
+		B.Nm = need_a ? (need_b ? lerp(B.Nm, N1, kw) : B.Nm) : N1;
+	}
+	[branch] if (zoned && I.zone.y > 0.001f)
+	{
+		const float h0 = saturate((B.D.a - 0.35f) / 0.65f), hl = I.zone.z < 0.0f ? 1.0f - h0 : h0, zy = I.zone.y;
+		// (The tongues reach most of the zone's height: at five times the share's spread the hem ran level round the trunk
+		// with small teeth.)
+		const float zs = saturate(zy + (zone_n.x - 0.5f) * 7.0f * zy * (1.0f - zy));
+		// (Ridges first, each place's level more by the lenses than by the lower bark's height: by its height alike the
+		// last of the lower bark stood as thin ink-black lines - its narrow furrows - in the white. The height counts only
+		// while the tile spans a dozen pixels and more: under that its ridges at the threshold dithered the hem into a
+		// fringe of specks.)
+		const float wk = lerp(wa, wb, kw), fp = max(length(gx * float2(wk, 1.0f)), length(gy * float2(wk, 1.0f)));
+		const float kh = (I.zone.z < 0.0f ? 0.25f : 0.5f) * saturate(1.5f - 12.0f * fp);
+		const float level = 0.15f + 0.7f * saturate(kh * hl + (1.0f - kh) * zone_n.y);
+		// (Past a third of the threshold's range the share itself takes over: exactly none at the zone's foot and all at
+		// its top - a wide ease left a band of half and half there, a line round the trunk at each end.)
+		const float ease = 0.05f + 7.0f * fp + 6.0f * px_m, e = min(ease, 0.3f), xz = zs * 1.3f - 0.15f;
+		B.zk = upper_all ? 1.0f : lerp(smoothstep(level - e, level + e, xz), saturate((xz - 0.15f) / 0.7f), saturate((ease - 0.3f) / 0.7f));
+		[branch] if (B.zk > 0.001f)
+		{
+			const float ratio = I.bark3.y;
+			const float ua = wrapped ? max(round(wa * ratio), 1.0f) : ratio, ub = wrapped ? max(round(wb * ratio), 1.0f) : ratio;
+			const float ku = ub != ua ? kw : 0.0f;
+			float4 Du = 0.0f, Nu = 0.0f, D1 = 0.0f, N1 = 0.0f;
+			[branch] if (ku < 0.999f)
+				shrub_bark_hex(float3(a * ua, v * ratio, I.zone.x), gx * float2(ua, ratio), gy * float2(ua, ratio), wrapped ? ua : 0.0f, Du, Nu);
+			[branch] if (ku > 0.001f)
+				shrub_bark_hex(float3(a * ub, v * ratio, I.zone.x), gx * float2(ub, ratio), gy * float2(ub, ratio), wrapped ? ub : 0.0f, D1, N1);
+			Du = ku < 0.999f ? (ku > 0.001f ? lerp(Du, D1, ku) : Du) : D1;
+			Nu = ku < 0.999f ? (ku > 0.001f ? lerp(Nu, N1, ku) : Nu) : N1;
+			Du.rgb = lerp(dot(Du.rgb, float3(0.2126f, 0.7152f, 0.0722f)).xxx, Du.rgb, I.bark3.w) * pow(max(I.bark3.z, 1e-3f), 1.0f / 2.2f);
+			B.D = lerp(B.D, Du, B.zk);
+			B.Nm = lerp(B.Nm, Nu, B.zk);
+		}
+	}
+	return B;
+}
+
+// A cut end's cap (zone.w 2, da_tree_patch_vs.h): the cross-section of the species' wood. The year rings nested about
+// the pith - off the centre (the eccentric growth of a leaning limb) and pulled back to the rim, a year's width the
+// species' wobbling round the stem and year to year -, each ring's latewood its dark, slightly raised band at the
+// year's end; the heartwood's darker core (pine's red-brown, oak's yellow-brown; a birch's or a spruce's wood alike
+// throughout); the checks the old cuts split into, from the rim inward; the dark pith; the bark round the rim over its
+// inner bark, and on a living tree the callus it rolls over the cut's edge. The Zone's cuts are thirty years old: the
+// wood weathered most of the way to a dark silver-grey (its hue a trace), a rotten core browner and darker on some, the
+// checks many and open. The rings, checks and pith fade to their mean as they near a pixel (the derivatives of the
+// cross-section's coordinates, gx and gy, and of the position, dpx and dpy, taken before the branch). A cap off its own
+// plane (a gable, a cone: a break, zone.z 0) shows no rings, checks or pith - its wood torn along the grain instead,
+// splinters streaking along the axis (drawn by the cross-section alone, they read as a paper fan).
+void	shrub_end_grain	(p_shrub_wood I, float3 n, float3 dpx, float3 dpy, float3 tu, float3 tv, float2 gx, float2 gy, inout float3 c,
+	inout float3 N, inout float cavity, inout float gloss)
+{
+	const uint sp = uint(I.bark3.x + 0.5f);
+	const float seed = I.bark3.y, R = max(I.bark3.z, 0.002f), callus_k = I.bark3.w;
+	const float3 LUMW = float3(0.2126f, 0.7152f, 0.0722f);
+	const float4 W0 = shrub_prof(sp, 19), W1 = shrub_prof(sp, 20);
+	// The cut's outline: by the rim gauge on a cap with one (zone.y: 1 on the open border, 0 at the fan's centre, linear
+	// between, so the border lies at rp over the gauge along the fan's ray - its straight edges too), else at the mean
+	// radius. The bark round the rim and the callus follow it; the rings' scale is the mean radius pulled near the rim
+	// a third of the way to it (sized by it inside, the rings kinked into chevrons along the cap's triangles' edges).
+	const float2 p = float2(I.n_u.w, I.t_v.w);
+	const float rp = length(p), g = I.zone.y;
+	const float dist = g > 1e-3f ? rp * (1.0f - g) / g : (g < -0.5f ? R - rp : R);
+	const float frac_r = g > -0.5f ? g : rp / R;
+	const float R_here = lerp(R, lerp(R, max(rp + dist, 0.5f * R), 0.35f), smoothstep(0.75f, 1.0f, rp / R));
+	const float u = rp / R_here;
+	const float2 off = (float2(frac(seed * 13.71f), frac(seed * 71.37f)) - 0.5f) * (0.24f * R);
+	const float2 q = p - off * saturate(1.0f - u);
+	const float rho = max(length(q), 1e-6f);
+	const float2 dir = q / rho;
+	// (A pixel's footprint on the cut, the radius's change over one.)
+	const float foot = max(max(length(gx), length(gy)), 1e-6f);
+	const float drho = abs(dot(dir, gx)) + abs(dot(dir, gy));
+	// The rings: the years out to the rim at the mean radius's count, along the outline.
+	const float ang = atan2(q.y, rho > 1e-6f ? q.x : 1e-6f);
+	const float wob = 1.0f + 0.06f * sin(3.0f * ang + seed * 40.0f) + 0.03f * sin(7.0f * ang + seed * 97.0f);
+	const float ring_w = max(W1.w, 0.0005f) * wob * R_here / R;
+	const float yr = rho / ring_w + 0.35f * sin(rho / ring_w * 0.37f + seed * 23.0f);
+	const float f = frac(yr);
+	const float late = smoothstep(0.6f, 0.88f, f) * (1.0f - smoothstep(0.95f, 1.0f, f));
+	// (On a face far off square to the axis the rings stretch into long ellipses as an oblique cut's do, and fade toward
+	// a face along the axis - its section's rings drawn as near-parallel lines - to the weathered face's grain. By the
+	// face as it stands: a pixel's area in the cross-section over its area on the face, the cosine to the section's own
+	// axis. A break (zone.z 0, da_trees.cpp) has none: its folded faces kinked them into chevrons.)
+	const float square = smoothstep(0.2f, 0.5f, abs(gx.x * gy.y - gx.y * gy.x) / max(length(cross(dpx, dpy)), 1e-20f)) * I.zone.z;
+	const float aa = saturate(1.6f - 2.2f * drho / ring_w) * square;
+	const float band = lerp(0.24f, late, aa);
+	// The wood: the heartwood's core, the latewood darker; the years in groups - good and poor decades, bands of a few
+	// rings lighter or darker, which still read from metres where the single rings are under a pixel - then weathered.
+	// (No heartwood on a break: its edge kinks at the folds as the rings do, and a soft one read as a stain.)
+	const float heart = W0.w > 0.0f ? (1.0f - smoothstep(W0.w - 0.04f, W0.w + 0.04f, u)) * I.zone.z : 0.0f;
+	const float decades = sin(yr * (6.2831853f / lerp(5.0f, 9.0f, frac(seed * 3.97f))) + seed * 31.0f) * 0.6f
+		+ sin(yr * (6.2831853f / 2.7f) + seed * 17.0f) * 0.4f;
+	const float aa_d = saturate(1.6f - 2.2f * drho / (ring_w * 4.0f)) * square;
+	float3 wood = lerp(W0.rgb, W1.rgb, heart) * lerp(1.0f, 0.7f, band) * (1.0f + 0.22f * decades * aa_d);
+	// (Weathered silver-grey at a quarter of its value: at nearly half it stood twice as light as the bark round it,
+	// a plaster cast, and at a third still beige; the face's grain - pits and fibres of a few millimetres, blotches of a
+	// few centimetres - faded to its mean as it nears a pixel.)
+	const float weather = lerp(0.86f, 0.95f, frac(seed * 7.31f)) + (callus_k > 0.5f ? 0.0f : 0.04f);
+	wood = lerp(wood, dot(wood, LUMW) * 0.26f * float3(0.92f, 0.95f, 1.0f), weather);
+	const float2 gp = q * 260.0f + seed * 31.0f;
+	const float grain_f = (shrub_noise3(float3(gp, seed * 7.0f)) - 0.5f) * saturate(1.6f - 2.2f * foot * 260.0f);
+	const float grain_m = (shrub_noise3(float3(q * 45.0f + seed * 13.0f, seed * 3.0f)) - 0.5f) * saturate(1.6f - 2.2f * foot * 45.0f);
+	wood *= 1.0f + 0.28f * grain_f + 0.18f * grain_m;
+	// (A rotten core on some: browner and darker, its edge ragged with the rings' wobble.)
+	const float rot = step(0.45f, frac(seed * 2.17f)) * (1.0f - smoothstep(0.18f, 0.42f, u + 0.06f * (wob - 1.0f) * 8.0f)) * I.zone.z;
+	wood = lerp(wood, wood * float3(0.62f, 0.55f, 0.48f), 0.75f * rot);
+	// The weathering in patches over the face: rain-darkened and sun-paled blotches a few centimetres across, a green
+	// film of algae in the wettest (a cut's face is no smooth board).
+	{
+		const float2 bp = p / max(0.035f, 0.18f * R) + seed * 13.0f;
+		const float2 bi = floor(bp), bf = bp - bi, bu = bf * bf * (3.0f - 2.0f * bf);
+		const float h00 = frac(sin(dot(bi, float2(127.1f, 311.7f))) * 43758.5453f), h10 = frac(sin(dot(bi + float2(1.0f, 0.0f), float2(127.1f, 311.7f))) * 43758.5453f);
+		const float h01 = frac(sin(dot(bi + float2(0.0f, 1.0f), float2(127.1f, 311.7f))) * 43758.5453f), h11 = frac(sin(dot(bi + float2(1.0f, 1.0f), float2(127.1f, 311.7f))) * 43758.5453f);
+		const float blot = lerp(0.5f, lerp(lerp(h00, h10, bu.x), lerp(h01, h11, bu.x), bu.y),
+			saturate(1.6f - 2.2f * foot / max(0.035f, 0.18f * R)));
+		wood *= 0.86f + 0.24f * blot;
+		wood = lerp(wood, wood * float3(0.82f, 0.95f, 0.7f), smoothstep(0.68f, 0.92f, blot) * 0.5f * weather);
+	}
+	// A break: the wood torn through its fibres - bundles a centimetre across, raised splinters and recesses between
+	// them, and the fibres a few millimetres across on them, both drawn out along the axis (a noise of the
+	// cross-section's coordinates and, ten times slower, of the place along the axis: a face square to the axis shows
+	// their ends, one along it their length). Value noise, not its zero lines: those drew a maze of worms; each scale two
+	// octaves turned apart in the cross-section, or the lattice showed as soft blocks. Their relief bent into the normal
+	// below.
+	const bool torn = I.zone.z < 0.5f;
+	float splinter = 0.0f;
+	[branch] if (torn)
+	{
+		const float2x2 t1 = float2x2(0.825f, -0.565f, 0.565f, 0.825f), t2 = float2x2(0.268f, -0.963f, 0.963f, 0.268f);
+		const float kb = saturate(1.6f - 2.2f * foot * 80.0f), kf = saturate(1.6f - 2.2f * foot * 250.0f);
+		const float nb = shrub_noise3(float3(q * 80.0f, I.ring * 8.0f) + seed * 29.0f) * 0.6f
+			+ shrub_noise3(float3(mul(t1, q) * 170.0f, I.ring * 17.0f) + seed * 31.0f) * 0.4f - 0.5f;
+		const float nf = shrub_noise3(float3(mul(t2, q) * 250.0f, I.ring * 25.0f) + seed * 17.0f) * 0.6f
+			+ shrub_noise3(float3(mul(t1, q) * 560.0f, I.ring * 50.0f) + seed * 37.0f) * 0.4f - 0.5f;
+		splinter = nb * kb + 0.5f * nf * kf;
+		wood *= (1.0f + 0.8f * nb * kb) * (1.0f + 0.5f * nf * kf);
+	}
+	// The checks: five to eight, each from a share of the radius out to the rim, widening outward, wandering as they go
+	// (straight scores from the pith read as sawn).
+	float crack = 0.0f;
+	const uint checks = I.zone.z > 0.5f ? 5u + uint(frac(seed * 5.13f) * 4.0f) : 0u;
+	[loop] for (uint k = 0u; k < 8u; ++k)
+	{
+		if (k >= checks)
+			break;
+		const float h = frac(seed * (11.3f + 7.1f * float(k)));
+		const float a = 6.2831853f * (float(k) + 0.6f * h) / float(checks) + seed * 6.2831853f;
+		const float wander = 0.035f * sin(u * 7.0f + h * 20.0f) + 0.02f * sin(u * 19.0f + h * 7.0f);
+		float dphi = ang - a - wander;
+		dphi -= 6.2831853f * round(dphi * (1.0f / 6.2831853f));
+		const float u0 = lerp(0.1f, 0.6f, frac(h * 3.7f));
+		const float grow = saturate((u - u0) / max(1.0f - u0, 1e-3f));
+		const float w = clamp(0.05f * R, 0.001f, 0.015f) * grow;
+		const float jag = (frac(sin((floor(u * 60.0f) + h * 113.0f) * 91.7f) * 43758.5453f) - 0.5f) * 0.6f * w;
+		const float across = max(rho * abs(dphi) + jag, 0.0f);
+		crack = max(crack, abs(dphi) < 1.0f ? saturate((0.5f * w - across) / foot + 0.5f) * saturate(w / foot) : 0.0f);
+	}
+	// The pith, a share of the cut's radius (a millimetre or two on a twig, a few on a limb), and the first years' wood
+	// round it darker and browner (a spruce's stub read as a plain putty disc).
+	const float pr_ = clamp(0.03f * R, 0.0015f, 0.005f);
+	const float pith = saturate((pr_ - rho) / foot + 0.5f) * saturate(2.0f * pr_ / foot) * I.zone.z;
+	wood = lerp(wood, wood * float3(0.78f, 0.72f, 0.68f), 0.6f * (1.0f - smoothstep(0.08f, 0.16f, u)) * I.zone.z);
+	wood = lerp(wood, wood * float3(0.45f, 0.38f, 0.32f), pith);
+	// The bark round the rim (its texture's mean in the species' tint) over its inner bark.
+	const float bark_t = clamp(0.08f * R, 0.0015f, 0.025f);
+	const float3 bark_c = pow(max(s_shrub_bark_d.SampleLevel(smp_base, float3(0.5f, 0.5f, I.misc.x), 16.0f).rgb, 0.0f), 2.2f) * I.bark.rgb;
+	const float rim = saturate((bark_t - dist) / foot + 0.5f);
+	const float inner = saturate((1.4f * bark_t - dist) / foot + 0.5f) * (1.0f - rim);
+	// The callus a living tree rolls over the cut's edge: bark-skinned, rounded off outward.
+	const float lip = callus_k * lerp(0.06f, 0.14f, frac(seed * 3.3f));
+	const float callus = lip > 0.0f ? smoothstep(1.0f - lip - 0.02f, 1.0f - lip + 0.02f, frac_r) : 0.0f;
+	c = lerp(wood, wood * float3(0.75f, 0.62f, 0.5f), inner);
+	c = lerp(c, bark_c, max(rim, callus));
+	c *= 1.0f - 0.65f * crack;
+	cavity = 1.0f - 0.6f * crack;
+	gloss = 0.006f;
+	// The relief: the latewood a little raised, the years' groups as low ridges (the earlywood weathered out between
+	// them), the callus's roll; the frame round the cut by its coordinates' axes.
+	const float d_late = (smoothstep(0.6f, 0.88f, frac(yr + 0.05f)) - smoothstep(0.6f, 0.88f, frac(yr - 0.05f))) * 10.0f * aa;
+	const float d_dec = 1.6f * cos(yr * (6.2831853f / lerp(5.0f, 9.0f, frac(seed * 3.97f))) + seed * 31.0f) * aa_d;
+	const float roll = callus > 0.0f && callus < 1.0f ? 1.5f * callus * (1.0f - callus) : 0.0f;
+	const float slope = (0.12f * d_late + 0.25f * d_dec) * (1.0f - max(rim, callus)) + roll + 0.6f * rim;
+	const float3 radial = normalize(tu * dir.x + tv * dir.y + n * 1e-4f);
+	N = normalize(n + radial * slope);
+	// (A break's splinters bent into it by the height's derivatives - the branch is the cap's, the same over a quad;
+	// fine ones, a coarse pair a 2x2 block: the surface gradient, a few millimetres of relief, off the bark and callus.)
+	[branch] if (torn)
+	{
+		const float k = 0.006f * (1.0f - max(rim, callus));
+		const float hx = ddx_fine(splinter) * k, hy = ddy_fine(splinter) * k;
+		const float3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+		const float det = dot(dpx, r1);
+		[flatten] if (abs(det) > 1e-20f)
+			N = normalize(abs(det) * N - (det < 0.0f ? -1.0f : 1.0f) * (hx * r1 + hy * r2));
+	}
+}
+
+f_deffer	main	(p_shrub_wood I)
+{
+	// A widened twig: the square root of its true width over the floor's (the vertex shader stood its axis by the same
+	// share: the two make the ratio).
+	[branch] if (I.misc.w < 0.999f)
+	{
+		const float2 q = I.hpos.xy + float2(29.0f, 7.0f) + 7.13f * (da_shrub_time.z > 0.5f ? da_shrub_fwd.w : 0.0f);
+		clip(sqrt(saturate(I.misc.w)) - frac(52.9829189f * frac(dot(q, float2(0.06711056f, 0.00583715f)))) - 1e-3f);
+	}
+	const float twig = I.misc.y;
+	const float young_k = I.bark2.x;
+	// The young growth keeps the species' share of the bark's relief and detail; the old wood all of it.
+	const float keep = lerp(1.0f, young_k, twig);
+	// The bark round the stem: the turn round it times the tiles round the segment's rings (shrub_bark_at); a stock
+	// patch's round its first axis, the tube's own counts round the rings its triangle spans (jc1) stepped where the tube
+	// steps them (shrub_patch_counts), its turn unwrapped triangle by triangle, its frame from the mapping's derivatives
+	// (the cotangent frame): the patch and the tube meet without a seam; a cut end's its cross-section. (Gradients taken
+	// before the branches: the mapping's, the second mapping's, the position's.)
+	const float a = I.n_u.w;
+	const float2 gax = float2(ddx(a), ddx(I.t_v.w)), gay = float2(ddy(a), ddy(I.t_v.w));
+	const float3 gjx = ddx(I.jn), gjy = ddy(I.jn);
+	const float3 dpx = ddx(I.pv_g.xyz), dpy = ddy(I.pv_g.xyz), drx = ddx(I.pr), dry = ddy(I.pr);
+	const bool cut = I.zone.w > 1.5f, is_patch = !cut && I.zone.w > 0.5f;
+	const float3 n = normalize(I.n_u.xyz);
+	float3 tv = normalize(I.t_v.xyz - n * dot(I.t_v.xyz, n));
+	// (Round the stem the way the bark's u runs: a mirrored bush turns the cross product over.)
+	float3 tu = cross(tv, n) * I.moss.z;
+	float base_wa = I.bark2.z, base_wb = I.bark2.w, base_k = I.ring;
+	[branch] if (cut)
+		shrub_cotangent(n, dpx, dpy, gax, gay, tu, tv);
+	else [branch] if (is_patch)
+	{
+		shrub_patch_counts(I.jc1, I.ring, base_wa, base_wb, base_k);
+		const float aw = lerp(base_wa, base_wb, smoothstep(0.0f, 1.0f, base_k));
+		shrub_cotangent(n, dpx, dpy, gax * float2(aw, 1.0f), gay * float2(aw, 1.0f), tu, tv);
+	}
+	// The upper bark's patches by noises of the rest position (one over every seam), stretched along the stem: the
+	// boundary's run over the zone (tongues a tile and more across at the species' tile - an aspen's a hand wide, a
+	// pine's a forearm: at one size for all a thin aspen's foot rose in a rounded sock -, three times as tall - at seven
+	// a pine's tongue ran down its trunk as a ruler-straight stripe -, its value spread toward its ends) and each place's
+	// own level (lenses of a few centimetres, three times as tall).
+	// (The pixel's size in metres for the zone's threshold.)
+	float2 zone_n = 0.5f;
+	const float px_m = sqrt(max(max(dot(drx, drx), dot(dry, dry)), 1e-12f));
+	[branch] if (I.zone.x >= 0.0f && I.zone.y > 0.001f && I.zone.y < 0.999f)
+	{
+		// (And under them a swell a metre and more across: the zone higher up one side of the trunk than the other.)
+		zone_n = float2(shrub_zone_run(I.pr, clamp(0.3f / max(I.lit.w, 0.05f), 0.6f, 2.5f)),
+			saturate((shrub_noise3(I.pr * float3(16.0f, 5.0f, 16.0f) + 31.0f) * 0.75f
+				+ shrub_noise3(I.pr * float3(40.0f, 12.0f, 40.0f) + 43.0f) * 0.25f - 0.5f) * 2.8f + 0.5f));
+	}
+	// The second mapping and its weight. A stock patch's second axis's, per vertex as its first's. A child near its
+	// junction: the parent's, per pixel from the child's place against the junction (the turn round the parent by its
+	// angle, the weight by its distance from the parent's axis and from the junction's point, the parent segment's counts
+	// stepping along it as its tube's do; the turn's derivative by the angle's, which has no wrap) - and only as far as it
+	// lies on the child as its own does: past a stretch of 1.6 between the two (a co-dominant leader running off along the
+	// parent, the parent's turn drawn along it in streaks) it fades out.
+	float w_alt = 0.0f, alt_u = 0.0f, alt_v = 0.0f, alt_wa = 1.0f, alt_wb = 1.0f, alt_k = 0.0f;
+	float2 agx = 0.0f, agy = 0.0f;
+	[branch] if (is_patch)
+	{
+		// (Where it blends, wobbled by a noise of the rest position a few centimetres to a decimetre across: the weight
+		// interpolated over the patch's triangles met a limb's grain with its trunk's along a straight line.)
+		w_alt = saturate(I.jn.z);
+		[branch] if (w_alt > 0.01f && w_alt < 0.99f)
+		{
+			const float wob = shrub_noise3(I.pr * 6.0f + 53.0f) * 0.6f + shrub_noise3(I.pr * 17.0f + 71.0f) * 0.4f - 0.5f;
+			w_alt = saturate(w_alt + wob * 2.4f * w_alt * (1.0f - w_alt));
+		}
+		shrub_patch_counts(I.jc0, I.jw, alt_wa, alt_wb, alt_k);
+		alt_u = I.jn.x;
+		alt_v = I.jn.y;
+		agx = gjx.xy;
+		agy = gjy.xy;
+	}
+	else [branch] if (!cut && I.jc1.z > 0.0f)
+	{
+		const float2 q0 = I.jn.xy, q = dot(q0, q0) > 1e-18f ? q0 : float2(1e-9f, 0.0f);
+		const float rq2 = dot(q, q);
+		w_alt = (1.0f - smoothstep(I.jc1.x, I.jc1.x + I.jc1.y, sqrt(rq2))) * (1.0f - smoothstep(0.5f * I.jc1.z, I.jc1.z, length(I.jn)));
+		alt_u = atan2(q.y, q.x) * (1.0f / 6.2831853f) + I.jc0.x;
+		alt_v = I.jn.z * I.jc0.z + I.jc0.y;
+		alt_wa = I.jc0.w;
+		alt_wb = I.jc1.w;
+		alt_k = saturate(I.jw);
+		agx = float2((q.x * gjx.y - q.y * gjx.x) / (6.2831853f * rq2), gjx.z * I.jc0.z);
+		agy = float2((q.x * gjy.y - q.y * gjy.x) / (6.2831853f * rq2), gjy.z * I.jc0.z);
+		// (The parent's tiles over the child's own, through the screen: the singular values of the one's derivatives
+		// over the other's - their ratio 1 wherever the parent's mapping lies on the child undistorted.)
+		const float bw = lerp(base_wa, base_wb, smoothstep(0.0f, 1.0f, base_k)), aw = lerp(alt_wa, alt_wb, smoothstep(0.0f, 1.0f, alt_k));
+		const float2x2 Mb = float2x2(gax * float2(bw, 1.0f), gay * float2(bw, 1.0f)), Ma = float2x2(agx * float2(aw, 1.0f), agy * float2(aw, 1.0f));
+		const float db = determinant(Mb);
+		[branch] if (abs(db) > 1e-12f)
+		{
+			const float2x2 K = mul(float2x2(Mb._22, -Mb._12, -Mb._21, Mb._11) / db, Ma);
+			const float tr = dot(K[0], K[0]) + dot(K[1], K[1]), dk = determinant(K);
+			const float disc = sqrt(max(tr * tr - 4.0f * dk * dk, 0.0f));
+			w_alt *= smoothstep(0.4f, 0.62f, sqrt(max(tr - disc, 0.0f) / max(tr + disc, 1e-12f)));
+		}
+	}
+	shrub_bark_px B;
+	B.D = float4(0.5f, 0.5f, 0.5f, 1.0f);
+	B.Nm = float4(0.5f, 0.5f, 0.5f, 0.0f);
+	B.zk = 0.0f;
+	float3 N = n;
+	// (The base mapping where the second does not cover it whole; the second in its own frame, the two normals blended
+	// in view space; the two met by their heights about the weight - one's ridges over the other's fissures, a fork's
+	// limbs' barks interlocking where they meet, not cross-faded -, the plain weight at its ends; neither under a stock
+	// patch's world projection whole.)
+	const float w3 = is_patch ? saturate(I.moss.y) : 0.0f;
+	[branch] if (!cut && w_alt < 0.999f && w3 < 0.998f)
+	{
+		B = shrub_bark_at(I, a, I.t_v.w, base_wa, base_wb, base_k, gax, gay, zone_n, px_m, true);
+		N = shrub_bark_normal(B.Nm, keep, n, tu, tv);
+	}
+	[branch] if (!cut && w_alt > 0.002f && w3 < 0.998f)
+	{
+		const shrub_bark_px J = shrub_bark_at(I, alt_u, alt_v, alt_wa, alt_wb, alt_k, agx, agy, zone_n, px_m, true);
+		const float aw = lerp(alt_wa, alt_wb, smoothstep(0.0f, 1.0f, alt_k));
+		float3 ju, jv;
+		shrub_cotangent(n, dpx, dpy, agx * float2(aw, 1.0f), agy * float2(aw, 1.0f), ju, jv);
+		const float3 NJ = shrub_bark_normal(J.Nm, keep, n, ju, jv);
+		float wj = 1.0f;
+		[branch] if (w_alt < 0.999f)
+		{
+			const float ta = B.D.a + 1.0f - w_alt, tb = J.D.a + w_alt, top = max(ta, tb) - 0.25f;
+			const float ka = max(ta - top, 0.0f), kb = max(tb - top, 0.0f);
+			wj = lerp(w_alt, kb / max(ka + kb, 1e-5f), 4.0f * w_alt * (1.0f - w_alt));
+		}
+		N = normalize(lerp(N, NJ, wj));
+		B.D = lerp(B.D, J.D, wj);
+		B.Nm = lerp(B.Nm, J.Nm, wj);
+		B.zk = lerp(B.zk, J.zk, wj);
+	}
+	// A stock patch's third mapping where both tubes' smear (a saddle looking along both limbs): the bark projected from
+	// the rest position (its instance offset under 64 m: the fp32 texel exact) along the world's three axes at the
+	// species' tile, the grain upright on the sides, each projection by the surface's facing there (the
+	// interpolated normal in the world, sharpened: no step at a facet's edge), its frame from its coordinates'
+	// derivatives; no wrap. The projections met by their heights about their weights, the whole met with the tubes' bark
+	// the same way (cross-faded, two and three barks averaged into a flat brown smear round an oak's joins).
+	[branch] if (w3 > 0.02f)
+	{
+		const float3 wn = abs(normalize(mul(n, (float3x3)m_V)));
+		float3 wt = wn * wn;
+		wt *= wt;
+		wt *= wt;
+		wt /= max(wt.x + wt.y + wt.z, 1e-6f);
+		const float tile = max(I.lit.w, 1e-3f);
+		const float3 pl = I.pr;
+		shrub_bark_px W;
+		W.D = 0.0f;
+		W.Nm = 0.0f;
+		W.zk = 0.0f;
+		float3 NW = 0.0f, sk = -10.0f;
+		shrub_bark_px Bp[3];
+		float3 Np[3];
+		[unroll] for (uint k = 0u; k < 3u; ++k)
+		{
+			Bp[k] = W;
+			Np[k] = n;
+			const float wk = k == 0u ? wt.x : (k == 1u ? wt.y : wt.z);
+			[branch] if (wk > 0.02f)
+			{
+				const float2 uv = (k == 0u ? pl.zy : (k == 1u ? pl.xz : pl.xy)) / tile;
+				const float2 gx = (k == 0u ? drx.zy : (k == 1u ? drx.xz : drx.xy)) / tile;
+				const float2 gy = (k == 0u ? dry.zy : (k == 1u ? dry.xz : dry.xy)) / tile;
+				Bp[k] = shrub_bark_at(I, uv.x, uv.y, 1.0f, 1.0f, 0.0f, gx, gy, zone_n, px_m, false);
+				float3 ku, kv;
+				shrub_cotangent(n, dpx, dpy, gx, gy, ku, kv);
+				Np[k] = shrub_bark_normal(Bp[k].Nm, keep, n, ku, kv);
+				const float s = wk + 0.3f * Bp[k].D.a;
+				sk = k == 0u ? float3(s, sk.yz) : (k == 1u ? float3(sk.x, s, sk.z) : float3(sk.xy, s));
+			}
+		}
+		// (Each projection by its weight lifted by its height, within a fifth of the highest.)
+		const float3 kk = max(sk - (max(sk.x, max(sk.y, sk.z)) - 0.2f), 0.0f);
+		const float3 kp = kk / max(kk.x + kk.y + kk.z, 1e-6f);
+		[unroll] for (uint k2 = 0u; k2 < 3u; ++k2)
+		{
+			const float wk = k2 == 0u ? kp.x : (k2 == 1u ? kp.y : kp.z);
+			NW += Np[k2] * wk;
+			W.D += Bp[k2].D * wk;
+			W.Nm += Bp[k2].Nm * wk;
+			W.zk += Bp[k2].zk * wk;
+		}
+		float ww = 1.0f;
+		[branch] if (w3 < 0.998f)
+		{
+			const float ta = B.D.a + 1.0f - w3, tb = W.D.a + w3, top = max(ta, tb) - 0.25f;
+			const float ka = max(ta - top, 0.0f), kb = max(tb - top, 0.0f);
+			ww = lerp(w3, kb / max(ka + kb, 1e-5f), 4.0f * w3 * (1.0f - w3));
+		}
+		N = normalize(lerp(N, normalize(NW + n * 1e-4f), ww));
+		B.D = lerp(B.D, W.D, ww);
+		B.Nm = lerp(B.Nm, W.Nm, ww);
+		B.zk = lerp(B.zk, W.zk, ww);
+	}
+	const float4 D = B.D, Nm = B.Nm;
+
+	// The old bark: the texture in the species' tint, its contrast taken about the tile's mean (its last mip) by a power
+	// of the luminance ratio, the hue kept (the textures' plates and fissures differ more in hue than in value), the
+	// upper bark's mean and contrast by its share. A slow swell of its value over the stem (a noise of the rest position,
+	// a fifth of a metre to a metre) breaks the tiles' sameness. The young twig's colour over it, with the texture's
+	// detail at the species' share; the cavity darkens the fissures a little in the direct light too.
+	const float3 LUMW = float3(0.2126f, 0.7152f, 0.0722f);
+	const float bark_mean = lerp(I.bark2.y, abs(I.zone.z) * I.bark3.z, B.zk), contrast = lerp(I.bark.w, I.bark3.x, B.zk);
+	const float3 bark = pow(max(D.rgb, 0.0f), 2.2f);
+	const float rel = max(dot(bark, LUMW), 1e-4f) / bark_mean;
+	const float macro = shrub_noise3(I.pr * float3(2.2f, 1.3f, 2.2f)) * 0.6f + shrub_noise3(I.pr * float3(6.0f, 3.6f, 6.0f) + 9.0f) * 0.4f;
+	const float3 old_c = bark * pow(rel, contrast - 1.0f) * I.bark.rgb * (0.88f + 0.24f * macro);
+	float3 c = lerp(old_c, I.alb_h.rgb * pow(rel, young_k), twig);
+	float cavity = lerp(1.0f, D.a, keep);
+	c *= lerp(1.0f, cavity, 0.35f);
+	// Crustose lichen: soft grey-green blotches of one to four centimetres over a tenth of an old stem, a fifth
+	// lighter than the bark under them at most and half covering it (the bark's lenticels painted pale as lichen
+	// stitched the stems white); the green film of algae at the foot's shaded side.
+	[branch] if (I.moss.x > 0.0f)
+	{
+		const float patch = shrub_noise3(I.pr * 33.0f) * 0.7f + shrub_noise3(I.pr * 77.0f + 5.0f) * 0.3f;
+		const float lichen = smoothstep(0.66f, 0.8f, patch + 0.12f * I.moss.x) * saturate(I.moss.x * 3.0f);
+		const float y = dot(c, LUMW);
+		c = lerp(c, y * 1.15f * float3(0.93f, 1.03f, 0.9f), lichen * 0.5f);
+	}
+	// A few hundredths: the combine scales the sun's specular five times over.
+	float gloss_old = lerp(0.003f, 0.03f, Nm.b);
+	[branch] if (cut)
+		shrub_end_grain(I, n, dpx, dpy, tu, tv, gax, gay, c, N, cavity, gloss_old);
+	c = lerp(c, c * float3(0.8f, 1.0f, 0.7f), saturate(I.moss.w) * 0.6f);
+	// The snow along the top of the stem, its bark relief buried: a line on the stem's own top (the shading normal
+	// within some 55 degrees of the highest a normal round the stem points, by its axis: a twig a few pixels wide
+	// seen from the side still shows it), on stems up to some 65 degrees steep. Against the world's up alone only the
+	// near-level twigs took any - an alder's or a poplar's rising limbs stood bare all winter. (By the shading normal:
+	// a stock patch's interpolated one faces in, its light comes from its projections'.)
+	const float ny = dot(N, da_shrub_up.xyz);
+	const float ay = dot(normalize(I.t_v.xyz), da_shrub_up.xyz);
+	const float top = sqrt(saturate(1.0f - ay * ay));
+	const float snow = I.misc.z * smoothstep(0.35f, 0.6f, top) * smoothstep(0.5f, 0.8f, ny / max(top, 1e-3f));
+	N = normalize(lerp(N, normalize(N + 0.6f * da_shrub_up.xyz), snow));
+	c = lerp(c, float3(0.8f, 0.82f, 0.85f), snow);
+	float3 albedo = shrub_to_albedo(c * I.lit.xyz);
+	[branch] if (da_shrub_chunk0.y > 0.5f)
+	{
+		const uint dbg = uint(da_shrub_chunk0.y + 0.5f);
+		float3 q = float3(0.5f, 0.5f, 0.5f);
+		if (dbg == 1u)
+		{
+			q = cut ? float3(0.9f, 0.9f, 0.9f) : (is_patch ? float3(0.8f, 0.25f, 0.15f) : float3(0.2f, 0.55f, 0.2f));
+			q = lerp(q, float3(0.15f, 0.3f, 0.95f), cut ? 0.0f : w_alt);
+			q = lerp(q, float3(0.95f, 0.85f, 0.1f), w3);
+		}
+		else if (dbg == 2u)
+			q = lerp(shrub_dbg_counts(base_wa, base_wb, base_k), shrub_dbg_counts(alt_wa, alt_wb, alt_k), cut ? 0.0f : w_alt);
+		else if (dbg == 3u)
+			q = float3(I.zone.x >= 0.0f ? saturate(I.zone.y) : 0.0f, B.zk, 0.1f);
+		else if (dbg == 4u)
+			q = cut ? float3(0.5f, 0.5f, 0.5f) : shrub_dbg_checker(a, I.t_v.w, base_wa, base_wb, base_k);
+		else if (dbg == 6u)
+			q = float3(snow, top, saturate(ny));
+		else
+			q = cut || w_alt < 0.002f ? float3(0.4f, 0.4f, 0.4f) : shrub_dbg_checker(alt_u, alt_v, alt_wa, alt_wb, alt_k);
+		albedo = q;
+	}
+	const float gloss = lerp(gloss_old, 0.008f + 0.05f * I.pv_g.w, twig) * (1.0f - snow);
+	// Oren-Nayar bark (stock material 0); the snow's own code where it lies.
+	const float mtl = snow > 0.5f ? da_mtl_from_code(DA_MTL_SNOW) : 0.125f;
+	f_deffer O = pack_gbuffer(float4(N, I.alb_h.w * lerp(1.0f, cavity, 0.7f)), float4(I.pv_g.xyz, mtl), float4(saturate(albedo), gloss));
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
+	return O;
+}

@@ -2,7 +2,8 @@
 // Released under the MIT licence, see License.txt
 //
 // Shared helpers of the snow passes (da_snow_*.cs/.vs/.ps, docs/dead-air/SNOW.md): the level fields at
-// 1 m, the snow base (the grey-opened topmost surface the snow lies on, the water surface over water),
+// 1 m, the snow base (the grey-opened topmost surface the snow lies on, the floor under a cover - a roof,
+// a deck, a vehicle -, the water surface over water), the shelter of the covers,
 // the season depth per class (bilinear, and the smooth cubic B-spline the depth textures carry), the
 // ragged margin of thin snow, the trail resolve and the baked water field. Integer and float textures
 // are read with Load, so every stage can use them.
@@ -19,10 +20,12 @@
 Texture2D<float4> s_da_sn_weights; // RGBA8: open, under trees, road, drift (sum 1)
 Texture2D<float4> s_da_sn_factors; // RGBA8: A / 2, M / 2, n * 0.5 + 0.5, N
 Texture2D<float> s_da_sn_base;     // R16_UNORM: snow base of the level (y = da_sn_lvl.x + v * da_sn_lvl.y), 0 = no collision
-// Near window of da_ground.cpp, toroidal (world texel modulo da_sn_win2.x): x = Hg, the grey-opened
-// topmost non-passable surface (world y, DA_SN_NONE where nothing is; the water surface over water),
-// y = cliff taper 0..1 on land, -1 - taper under a water surface.
-Texture2D<float2> s_da_ground_base;
+Texture2D<float> s_da_sn_shelter;  // R8_UNORM: 1 where a cover keeps the sky's snow off the level texel
+// Near window of da_ground.cpp, toroidal (world texel modulo da_sn_win2.x): x = the snow base (the grey-opened
+// topmost non-passable surface, the floor under a cover; world y, DA_SN_NONE where nothing is; the water
+// surface over water), y = cliff taper 0..1 on land, -1 - taper under a water surface, z = the shelter of a
+// cover over the texel, w = the opened topmost surface itself.
+Texture2D<float4> s_da_ground_base;
 // The same window's waterline (da_ground_resolve.cs): x the opened solid surface, the bed under water too
 // (DA_SN_NONE where nothing is), y the highest water surface within 8 texels (DA_SN_NONE: none), z how far
 // inside that reach the texel lies (1 up to half of it, 0 at its end). Bound by the grid and the layer only.
@@ -97,6 +100,23 @@ float4 da_sn_class_depth(float4 f, float4 S, float4 Mc)
 	return clamp(S * Ac - Mc * Mf, 0.0, da_snow_misc.x);
 }
 
+// The share of the open snow an exposed roof, a deck or a vehicle keeps (the wind sweeps it).
+#define DA_SN_ROOF_SHARE 0.85
+
+// The snow on a cover's face of slope ny at xz now (x) and on the previous frame (y): the open class's
+// formula for that slope (all of it to 32 degrees, none past 60) with the level texel's noise and melt.
+float2 da_sn_roof_depth(float2 xz, float ny)
+{
+	const int2 t = int2(floor(xz * da_snow_level_xf.xy + da_snow_level_xf.zw));
+	const float4 f = s_da_sn_factors.Load(int3(t, 0));
+	const float n = f.z * 2.0 - 1.0;
+	const float M = f.y * 2.0;
+	const float A = saturate((ny - 0.5) / 0.35) * (1.0 + 0.35 * n);
+	const float now = clamp(da_snow_S.x * A - da_snow_Mc.x * M, 0.0, da_snow_misc.x);
+	const float prev = clamp(da_snow_S_prev.x * A - da_snow_Mc_prev.x * M, 0.0, da_snow_misc.x);
+	return float2(now, prev) * DA_SN_ROOF_SHARE;
+}
+
 // Season depth (no trails) of a level texel now.
 float da_sn_texel_depth(int2 t)
 {
@@ -163,6 +183,38 @@ float2 da_sn_level_coord(float2 xz)
 	return xz * da_snow_level_xf.xy + da_snow_level_xf.zw - 0.5;
 }
 
+// How much a cover (a roof, a deck, a vehicle) keeps the sky's snow off the ground at xz, 0..1: the near
+// window's (its last texel fading), blended into the level's over the band at the window's edge.
+float da_sn_shelter(float2 xz)
+{
+	const float2 d = abs(xz - da_sn_win.xy);
+	const float lw = saturate((max(d.x, d.y) - (da_sn_win.z - da_sn_win.w)) / max(da_sn_win.w, 1e-3));
+	float s = 0.0;
+	[branch] if (lw > 0.0)
+	{
+		const float2 p = da_sn_level_coord(xz);
+		const float2 i = floor(p);
+		const float2 f = p - i;
+		const int2 t = int2(i);
+		s = lerp(lerp(s_da_sn_shelter.Load(int3(t, 0)), s_da_sn_shelter.Load(int3(t + int2(1, 0), 0)), f.x),
+			lerp(s_da_sn_shelter.Load(int3(t + int2(0, 1), 0)), s_da_sn_shelter.Load(int3(t + int2(1, 1), 0)), f.x), f.y);
+	}
+	[branch] if (lw < 1.0)
+	{
+		const int n = int(da_sn_win2.x);
+		const float2 p = xz * da_sn_win2.y - 0.5;
+		const float2 i = floor(p);
+		const float2 f = p - i;
+		const int2 t = int2(i);
+		const float w00 = s_da_ground_base.Load(int3(da_sn_wrap(t, n), 0)).z;
+		const float w10 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 0), n), 0)).z;
+		const float w01 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(0, 1), n), 0)).z;
+		const float w11 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 1), n), 0)).z;
+		s = lerp(lerp(lerp(w00, w10, f.x), lerp(w01, w11, f.x), f.y), s, lw);
+	}
+	return saturate(s);
+}
+
 // The season depth (no trails) at xz the fine depth texture carries: a cubic B-spline over the 4 x 4 level
 // texels round the warped point (da_sn_warp), smooth to the second derivative, so the snow's slope - and its
 // light - has no crease at the 1 m texel borders a bilinear read leaves; thin snow shaped by da_sn_shape.
@@ -183,7 +235,7 @@ float da_sn_depth_smooth(float2 xz)
 			row += wx[k] * da_sn_texel_depth(t0 + int2(k, j));
 		D += wz[j] * row;
 	}
-	return da_sn_shape(max(D, 0.0), xz, 1.0, patchy);
+	return da_sn_shape(max(D, 0.0), xz, 1.0, patchy) * (1.0 - da_sn_shelter(xz));
 }
 
 // The season depth (no trails) at xz, bilinear over the level texels: the 1 m level texture's read of a
@@ -264,10 +316,10 @@ float3 da_sn_window_base(float2 xz)
 	const float2 i = floor(p);
 	const float2 fr = p - i;
 	const int2 t = int2(i);
-	const float2 v00 = s_da_ground_base.Load(int3(da_sn_wrap(t, n), 0));
-	const float2 v10 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 0), n), 0));
-	const float2 v01 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(0, 1), n), 0));
-	const float2 v11 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 1), n), 0));
+	const float2 v00 = s_da_ground_base.Load(int3(da_sn_wrap(t, n), 0)).xy;
+	const float2 v10 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 0), n), 0)).xy;
+	const float2 v01 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(0, 1), n), 0)).xy;
+	const float2 v11 = s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 1), n), 0)).xy;
 	const float4 h = float4(v00.x, v10.x, v01.x, v11.x);
 	const float4 g = float4(v00.y, v10.y, v01.y, v11.y);
 	const float4 bw = float4((1.0 - fr.x) * (1.0 - fr.y), fr.x * (1.0 - fr.y), (1.0 - fr.x) * fr.y, fr.x * fr.y);
@@ -317,9 +369,18 @@ float da_sn_edge_slope(float h_minus, float h0, float h_plus, float e)
 
 // The QA view of the snow passes (r__dbg_snow): 0 off, 1 the layer paints each path in its own colour,
 // 2 the same with the grid's per-pixel cuts off.
+// r__dbg_snow: 1 the passes' false colours, 2 without the wet tint; 10 + n a QA cut of the layer (da_sn_cut).
 int da_sn_debug()
 {
-	return int(da_sn_win2.z + 0.5);
+	const int v = int(da_sn_win2.z + 0.5);
+	return v >= 10 ? 0 : v;
+}
+
+// QA (r__dbg_snow 11..16): the snow layer cut short after its stage n, for the stages' costs.
+int da_sn_cut()
+{
+	const int v = int(da_sn_win2.z + 0.5);
+	return v >= 10 ? v - 10 : 0;
 }
 
 // The baked water field at xz, read the way the water shaders sample it (da_water_field.h): x surface y
@@ -468,12 +529,13 @@ float3 da_sn_pond(float2 xz, float3 b)
 
 // The snow surface of a trail texel (heights above the base): untouched texels and deformers that
 // never got below the surface keep the season depth; a print never goes below the compacted residual;
-// a crater's floor (the word 0) is bare until snowfall refills it.
+// a crater's floor (the word 0) is bare until snowfall refills it, and so is the hollow of a loose object
+// lying on the ground (no foot: the low half 0) - a pistol on 3 cm of packed snow was out of sight.
 float da_sn_resolve(float D, uint v, float residual_ratio)
 {
 	const float carve = da_sn_f16(v >> 16);
 	const float foot = da_sn_f16(v & 0xFFFFu);
-	const float residual = min(D, max(0.02, D * residual_ratio));
+	const float residual = ((v & 0xFFFFu) == 0u) ? 0.0 : min(D, max(0.02, D * residual_ratio));
 	float surf = (foot < D) ? clamp(carve, residual, D) : D;
 	surf = (v == DA_SN_UNTOUCHED) ? D : surf;
 	return (v == 0u) ? 0.0 : surf;

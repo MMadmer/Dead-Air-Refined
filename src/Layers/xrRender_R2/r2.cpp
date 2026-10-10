@@ -22,6 +22,8 @@
 #if RENDER == R_R4
 #include "Layers/xrRender/da_snow.h"
 #include "Layers/xrRender/da_grass_blades.h"
+#include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRenderPC_R4/da_upscaler.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
@@ -1002,6 +1004,8 @@ void CRender::destroy()
     da_framegen_destroy();
     // The blades, the snow and the ground window: their GPU objects and named textures go while the
     // resource manager that made them is alive.
+    da_trees_bake_destroy();
+    da_veg_destroy();
     da_grass_destroy();
     da_snow_destroy();
 #endif

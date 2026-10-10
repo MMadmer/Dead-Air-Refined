@@ -34,6 +34,10 @@
 #include "Layers/xrRenderPC_R4/da_grass_mesh.h"
 #include "Layers/xrRenderPC_R4/da_dstorage.h"
 #include "Layers/xrRender/da_grass_blades.h"
+#include "Layers/xrRender/da_shrubs.h"
+#include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_trees.h"
+#include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRender/da_snow.h"
 #endif
 
@@ -450,10 +454,48 @@ int ps_r__gpu_driven = -1;
 // Mesh-shader grass: 0 the vertex path, 1 mesh, -1 auto (the default, as r__gpu_driven): mesh grass cuts
 // the CPU grass work from 8.6 to 1.8 ms a frame on the foliage save and costs 0.4-0.6 ms of GPU (mesh.md).
 int ps_r__grass_mesh = -1;
+// QA: 0 draws the stock bushes again in place of the procedural shrubs (SHRUBS.md).
+int ps_r__shrubs = 1;
+// QA: draws of the shrubs left out (bits: 1 wood, 2 leaves, 4 blooms, 8 clusters, 16 blobs, 32 every shadow map; the
+// leaves one by one: 64 the shaped ones, 128 the cut quads, 256 the near sprays).
+int ps_r__dbg_shrubs = 0;
+float ps_r__shrubs_lod_scale = 1.f;
+int ps_r__shrubs_force_tier = -1;
+// QA: 0 draws the stock trees again in place of the upgraded trees (TREES.md).
+int ps_r__trees = 1;
+// QA: draws of the trees left out (bits: 1 the stock tubes, 2 the stock patches, 4 the grafted wood, 8 the leaves, 32 the
+// blooms, 64 the clusters, 128 the blobs, 256 the billboards, 512 every shadow map and the rain map; 1024, 2048, 4096,
+// 8192 the trees in the leaves', the thinned leaves', the clusters' or the blobs' tier; 16384 the clusters and the blobs
+// unthinned past the floor; 32768 the patches without their runs - their bark's seams: the runs' cost; 65536 the
+// clusters' and the blobs' pixels out at once - their pixels' cost; 131072 the stock patches untessellated everywhere).
+int ps_r__dbg_trees = 0;
+// QA: 0 the trees' view drawn as the CPU cut it, without the GPU cut (r3\da_tree_cut.cs) - an A/B.
+int ps_r__trees_cut = 1;
+// QA: the vegetation's soft switches (bits, all on by default; off: the hard switch, an A/B) - 1 the thinned prefixes'
+// soft ends (da_veg.cpp emit_thinned), 2 the crowns' wood prefixes' (da_veg_internal.h wood_runs), 4 the trees' stock
+// wood morphs (the ring levels and the patches' tessellation, da_trees.cpp).
+int ps_r__veg_soft = 7;
+// QA: the wood's bark in false colour (TREES.md; da_shrub_wood.ps, its main's last block and shrub_dbg_*): 1 what draws
+// it, 2 its counts of tiles round the stem, 3 the upper bark's zone, 4 the first mapping's checker, 5 the second's.
+int ps_r__dbg_wood = 0;
+float ps_r__trees_lod_scale = 1.f;
+// QA: the crowns' fine detail - the leaves' floor past the quads and the leafy crowns' wood floors divided by it (1 the
+// preset's; the floors never under the pixel floor and the wire rule).
+float ps_r__trees_detail = 1.f;
+// QA: the thinned leaves' and the clusters' tiers end at their leaf pixels divided by it.
+float ps_r__trees_far_detail = 1.f;
+// QA: the shrubs' leaves end at their pixel floors over it.
+float ps_r__shrubs_far_detail = 1.f;
+int ps_r__trees_force_tier = -1;
 int ps_r__dbg_grass_ab = 0;
 // [dx12:mesh] end variables
 // The QA view of the snow passes (da_snow_common.h): 0 off, 1 the paths in colour, 2 also without the grid's cuts.
 int ps_r__dbg_snow = 0;
+// The snow's glints (da_snow_layer.ps): 1 as built, 0 none.
+float ps_r__snow_glint = 1.f;
+// QA: the snow shells on roofs and covers, and the snow grid in the near sun cascade (1 as built, 0 off).
+int ps_r__snow_shells = 1;
+int ps_r__snow_shadow = 1;
 int ps_r__dbg_grass = 0;
 // [dx12:offload] begin variables
 float ps_r__offload_margin = 0.1f;
@@ -546,6 +588,9 @@ float ps_r__sun_shadow_fade = 140.f;
 // The middle and far sun cascade boxes, metres; the near one stays at 20. The preset's.
 float ps_r__sun_cascade_mid = 40.f;
 float ps_r__sun_cascade_far = 160.f;
+// The seam between two sun cascades: the outer share of a map's square whose pixels pass by dither to the next map
+// (accum_sun_near.ps da_sun_cascade_seam; 0 a hard seam).
+float ps_r__sun_cascade_blend = 0.2f;
 // Tint sun light per cascade (near=R, middle=G, far=B) to see cascade borders in place.
 int ps_r__dbg_sun_cascades = 0;
 // Particle effect draw distance, metres from the camera; 0 = no limit (stock). Culled
@@ -1440,6 +1485,7 @@ void xrRender_sync_preset_derived()
     // both apply at the next frame.
     da_grass_apply_preset(ps_Preset);
     da_snow_apply_preset(ps_Preset);
+    da_veg_apply_preset(ps_Preset);
 #endif
 
     // The distances the preset just decided, in the log. Every report about something ending
@@ -2146,8 +2192,40 @@ void xrRender_initconsole()
     CMD2(CCC_DaCall, "r__grass_blades_stats", &da_grass_stats);
     CMD2(CCC_DaCallArg, "r__grass_species_pin", &da_grass_pin_species);
     CMD2(CCC_DaCall, "r__snow_stats", &da_snow_stats);
-    CMD4(CCC_RuntimeInteger, "r__dbg_snow", &ps_r__dbg_snow, 0, 2);
+    // QA: the procedural shrubs (SHRUBS.md) - the stock bushes back for an A/B, the frame's numbers, one species everywhere.
+    CMD4(CCC_RuntimeInteger, "r__shrubs", &ps_r__shrubs, 0, 1);
+    CMD2(CCC_DaCall, "r__shrubs_stats", &da_shrubs_stats);
+    CMD2(CCC_DaCallArg, "r__shrubs_species_pin", &da_shrubs_pin_species);
+    CMD2(CCC_DaCallArg, "r__shrubs_probe", &da_shrubs_probe);
+    // (10 + n: QA, the snow layer cut short after its stage n, for the stages' costs - SNOW.md, costs)
+    CMD4(CCC_RuntimeInteger, "r__dbg_snow", &ps_r__dbg_snow, 0, 19);
+    CMD4(CCC_RuntimeFloat, "r__snow_glint", &ps_r__snow_glint, 0.f, 4.f);
+    CMD4(CCC_RuntimeInteger, "r__snow_shells", &ps_r__snow_shells, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__snow_shadow", &ps_r__snow_shadow, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 255);
+    CMD4(CCC_RuntimeInteger, "r__dbg_shrubs", &ps_r__dbg_shrubs, 0, 511);
+    CMD4(CCC_RuntimeFloat, "r__shrubs_lod_scale", &ps_r__shrubs_lod_scale, 0.05f, 20.f);
+    CMD4(CCC_RuntimeInteger, "r__shrubs_force_tier", &ps_r__shrubs_force_tier, -1, 3);
+    // QA: the upgraded trees (TREES.md) - the stock trees back for an A/B, the frame's numbers, one kind or one species, the
+    // nearest trees; draws left out, the tiers' distances scaled, every tree in one tier (0 hulls .. 4 blobs, 5 billboards).
+    CMD4(CCC_RuntimeInteger, "r__trees", &ps_r__trees, 0, 1);
+    CMD2(CCC_DaCall, "r__trees_stats", &da_trees_stats);
+    CMD2(CCC_DaCallArg, "r__trees_species_pin", &da_trees_pin_species);
+    CMD2(CCC_DaCallArg, "r__trees_kind_pin", &da_trees_pin_kind);
+    CMD2(CCC_DaCallArg, "r__trees_probe", &da_trees_probe);
+    CMD4(CCC_RuntimeInteger, "r__dbg_trees", &ps_r__dbg_trees, 0, 262143);
+    CMD4(CCC_RuntimeInteger, "r__trees_cut", &ps_r__trees_cut, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__veg_soft", &ps_r__veg_soft, 0, 7);
+    CMD4(CCC_RuntimeInteger, "r__dbg_wood", &ps_r__dbg_wood, 0, 6);
+    CMD4(CCC_RuntimeFloat, "r__trees_lod_scale", &ps_r__trees_lod_scale, 0.05f, 20.f);
+    CMD4(CCC_RuntimeFloat, "r__trees_detail", &ps_r__trees_detail, 0.25f, 8.f);
+    CMD4(CCC_RuntimeFloat, "r__trees_far_detail", &ps_r__trees_far_detail, 0.25f, 4.f);
+    CMD4(CCC_RuntimeFloat, "r__shrubs_far_detail", &ps_r__shrubs_far_detail, 0.25f, 4.f);
+    CMD4(CCC_RuntimeInteger, "r__trees_force_tier", &ps_r__trees_force_tier, -1, 5);
+    // QA: the billboards' runtime bake (TREES.md) - both atlases and the stock path's level_lods copy into $screenshots$,
+    // every billboard baked again.
+    CMD2(CCC_DaCall, "r__trees_bb_dump", &da_trees_bake_dump);
+    CMD2(CCC_DaCall, "r__trees_bb_rebake", &da_trees_bake_rebake);
     // [dx12:offload] begin commands
     CMD4(CCC_RuntimeFloat, "r__offload_margin", &ps_r__offload_margin, 0.f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__offload_agree", &ps_r__offload_agree, 0.f, 60.f);
@@ -2225,6 +2303,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__sun_shadow_fade", &ps_r__sun_shadow_fade, 20.f, 800.f);
     CMD4(CCC_RuntimeFloat, "r__sun_cascade_mid", &ps_r__sun_cascade_mid, 20.f, 200.f);
     CMD4(CCC_RuntimeFloat, "r__sun_cascade_far", &ps_r__sun_cascade_far, 60.f, 800.f);
+    CMD4(CCC_RuntimeFloat, "r__sun_cascade_blend", &ps_r__sun_cascade_blend, 0.f, 0.5f);
     CMD4(CCC_Integer, "r__dbg_sun_cascades", &ps_r__dbg_sun_cascades, 0, 1);
     CMD4(CCC_Integer, "r__particle_dist", &ps_r__particle_dist, 0, 1000);
     CMD4(CCC_Float, "r__macro_var", &ps_r__macro_var, 0.f, 1.f);

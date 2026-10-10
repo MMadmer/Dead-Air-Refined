@@ -116,7 +116,7 @@ void CRenderTarget::phase_scene_begin_parallel(CBackend& cmd_list, bool velocity
     }
     else
     {
-        // elocity: what phase_scene_begin decided; it clears them before this list runs.
+        // Velocity: what phase_scene_begin decided; it clears them before this list runs.
         const ref_rt& albedo = RImplementation.o.albedo_wo ? rt_Accumulator : rt_Color;
         if (velocity)
             u_setrt(cmd_list, rt_Position, albedo, rt_Velocity, rt_MSAADepth);

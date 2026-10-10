@@ -11,6 +11,8 @@
 #include "Layers/xrRender/da_ground.h"
 #include "Layers/xrRender/da_snow.h"
 #include "Layers/xrRender/da_grass_blades.h"
+#include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_async.h"
 #include "Layers/xrRenderPC_R4/da_vrs.h"
@@ -360,6 +362,11 @@ void CRender::Render()
         dx11GpuTimerScope gpu_grass_gen(dx11GpuTimers::GrassGen);
         da_grass_frame_prepare(RCache);
     }
+    // The vegetation's frame (the shrubs, the trees) is built in Calculate, before the sun and rain passes that draw it;
+    // its bends here, on the immediate context, ahead of every list that draws it (each population under its timer).
+    da_veg_bend(RCache);
+    // The billboards' bakes (the trees' atlas, the stock path's level_lods) before any list draws them.
+    da_trees_bake_frame(RCache);
 #endif
 
     r_main.sync();
@@ -415,6 +422,10 @@ void CRender::Render()
 #if defined(XR_D3D12)
     parallel_details details_job;
     const auto render_details = [&] {
+        // The procedural trees, their far billboards and the shrubs first (each under its own GPU timer), the grass after
+        // them: their trunks and crowns hide the grass behind them from its pixel shaders, as the stock trees drawn with
+        // the level did (drawn after the grass, the trees cost it and the shrubs a millisecond).
+        da_veg_render_gbuffer(dsgraph.cmd_list);
         {
             dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
             da_grass_ab_gbuffer_begin();
@@ -432,6 +443,8 @@ void CRender::Render()
     };
 #elif RENDER == R_R4
     const auto render_details = [&] {
+        // The procedural trees, their far billboards and the shrubs first, the grass after them (see above).
+        da_veg_render_gbuffer(dsgraph.cmd_list);
         {
             dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
             da_grass_ab_gbuffer_begin();

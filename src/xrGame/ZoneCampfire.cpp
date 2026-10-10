@@ -21,13 +21,22 @@ void turn_zone()
         g_zone->turn_on_script();
 }
 */
+namespace
+{
+xr_vector<CZoneCampfire*> s_campfires;
+}
+
+const xr_vector<CZoneCampfire*>& CZoneCampfire::all() { return s_campfires; }
+
 CZoneCampfire::CZoneCampfire()
 {
     //.	g_zone = this;
+    s_campfires.push_back(this);
 }
 
 CZoneCampfire::~CZoneCampfire()
 {
+    s_campfires.erase(std::remove(s_campfires.begin(), s_campfires.end(), this), s_campfires.end());
     CParticlesObject::Destroy(m_pDisabledParticles);
     CParticlesObject::Destroy(m_pEnablingParticles);
     m_disabled_sound.destroy();
@@ -101,6 +110,10 @@ void CZoneCampfire::turn_off_script()
 bool CZoneCampfire::is_on() { return m_turned_on; }
 void CZoneCampfire::shedule_Update(u32 dt)
 {
+    //  The snow round it: a lit fire thaws it in a minute and a half, a dead one lets it come back over half an hour
+    //  (with the snow that falls: the melted hollow itself refills only from snowfall).
+    const float s = float(dt) * 0.001f;
+    m_snow_melt = clampr(snow_melt() + (m_turned_on ? s / 90.f : -s / 1800.f), 0.f, 1.f);
     if (!IsEnabled() && m_turn_time)
     {
         UpdateWorkload(dt);

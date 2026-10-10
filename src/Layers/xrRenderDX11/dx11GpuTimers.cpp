@@ -49,9 +49,11 @@ void dx11GpuTimers::LogLine() const
     string1024 extra;
     int length = std::snprintf(extra, sizeof(extra),
         " ripple=%.3f join=%.3f vrs=%.3f gd=%.3f grass=%.3f grass_gen=%.3f snow_prep=%.3f snow_grid=%.3f "
-        "snow_layer=%.3f rt_scene=%.3f rt_sun=%.3f rt_ao=%.3f rt_refl=%.3f",
+        "snow_layer=%.3f shrubs=%.3f shrubs_bend=%.3f trees=%.3f trees_bend=%.3f trees_bb=%.3f trees_bake=%.3f rt_scene=%.3f rt_sun=%.3f "
+        "rt_ao=%.3f rt_refl=%.3f",
         ms(Ripple), ms(JoinWait), ms(VrsRate) + ms(VrsLuma), ms(GdCull), ms(Grass), ms(GrassGen), ms(SnowPrep),
-        ms(SnowGrid), ms(SnowLayer), ms(RtScene), ms(RtSun), ms(RtAO), ms(RtRefl));
+        ms(SnowGrid), ms(SnowLayer), ms(Shrubs), ms(ShrubsBend), ms(Trees), ms(TreesBend), ms(TreesBb), ms(TreesBake), ms(RtScene), ms(RtSun),
+        ms(RtAO), ms(RtRefl));
     for (size_t i = 0; i < g_gpu_log_field_count && length > 0 && size_t(length) < sizeof(extra); ++i)
     {
         const int added = std::snprintf(extra + length, sizeof(extra) - length, " %s=%.3f",
@@ -93,6 +95,12 @@ pcstr dx11GpuTimers::name(Slot slot)
     case SnowPrep: return "snow_prep";
     case SnowGrid: return "snow_grid";
     case SnowLayer: return "snow_layer";
+    case Shrubs: return "shrubs";
+    case ShrubsBend: return "shrubs_bend";
+    case Trees: return "trees";
+    case TreesBend: return "trees_bend";
+    case TreesBb: return "trees_bb";
+    case TreesBake: return "trees_bake";
     case RtScene: return "rt_scene";
     case RtSun: return "rt_sun";
     case RtAO: return "rt_ao";
@@ -117,12 +125,13 @@ void dx11GpuTimers::OnDeviceCreate()
     {
         ok = ok && SUCCEEDED(HW.pDevice->CreateQuery(&disjoint, &f.disjoint));
         for (u32 i = 0; i < Count && ok; ++i)
-        {
-            ok = ok && SUCCEEDED(HW.pDevice->CreateQuery(&stamp, &f.begin[i]));
-            ok = ok && SUCCEEDED(HW.pDevice->CreateQuery(&stamp, &f.end[i]));
-        }
+            for (u32 k = 0; k < Pairs && ok; ++k)
+            {
+                ok = ok && SUCCEEDED(HW.pDevice->CreateQuery(&stamp, &f.begin[i][k]));
+                ok = ok && SUCCEEDED(HW.pDevice->CreateQuery(&stamp, &f.end[i][k]));
+            }
         f.pending = false;
-        std::fill(std::begin(f.issued), std::end(f.issued), false);
+        std::fill(std::begin(f.issued), std::end(f.issued), u8(0));
     }
     if (!ok)
     {
@@ -141,10 +150,11 @@ void dx11GpuTimers::OnDeviceDestroy()
     {
         _RELEASE(f.disjoint);
         for (u32 i = 0; i < Count; ++i)
-        {
-            _RELEASE(f.begin[i]);
-            _RELEASE(f.end[i]);
-        }
+            for (u32 k = 0; k < Pairs; ++k)
+            {
+                _RELEASE(f.begin[i][k]);
+                _RELEASE(f.end[i][k]);
+            }
         f.pending = false;
     }
     m_enabled = false;
@@ -165,7 +175,7 @@ void dx11GpuTimers::FrameBegin()
 
     auto* ctx = HW.get_context(HW.IMM_CTX_ID);
     ctx->Begin(f.disjoint);
-    std::fill(std::begin(f.issued), std::end(f.issued), false);
+    std::fill(std::begin(f.issued), std::end(f.issued), u8(0));
     m_in_frame = true;
     Begin(Frame);
 }
@@ -188,7 +198,8 @@ void dx11GpuTimers::Begin(Slot slot)
     if (!m_enabled || !m_in_frame)
         return;
     FrameQueries& f = m_ring[m_write];
-    HW.get_context(HW.IMM_CTX_ID)->End(f.begin[slot]);
+    if (f.issued[slot] < Pairs)
+        HW.get_context(HW.IMM_CTX_ID)->End(f.begin[slot][f.issued[slot]]);
 }
 
 void dx11GpuTimers::End(Slot slot)
@@ -196,8 +207,8 @@ void dx11GpuTimers::End(Slot slot)
     if (!m_enabled || !m_in_frame)
         return;
     FrameQueries& f = m_ring[m_write];
-    HW.get_context(HW.IMM_CTX_ID)->End(f.end[slot]);
-    f.issued[slot] = true;
+    if (f.issued[slot] < Pairs)
+        HW.get_context(HW.IMM_CTX_ID)->End(f.end[slot][f.issued[slot]++]);
 }
 
 void dx11GpuTimers::Resolve(FrameQueries& f)
@@ -217,19 +228,15 @@ void dx11GpuTimers::Resolve(FrameQueries& f)
     const double to_ms = 1000.0 / double(dj.Frequency);
     for (u32 i = 0; i < Count; ++i)
     {
-        if (!f.issued[i])
+        double ms = 0.0;
+        for (u32 k = 0; k < f.issued[i]; ++k)
         {
-            m_ms[i] = 0.f;
-            continue;
+            UINT64 t0 = 0, t1 = 0;
+            if (ctx->GetData(f.begin[i][k], &t0, sizeof(t0), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
+                ctx->GetData(f.end[i][k], &t1, sizeof(t1), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK && t1 >= t0)
+                ms += double(t1 - t0) * to_ms;
         }
-        UINT64 t0 = 0, t1 = 0;
-        if (ctx->GetData(f.begin[i], &t0, sizeof(t0), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
-            ctx->GetData(f.end[i], &t1, sizeof(t1), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK)
-        {
-            m_ms[i] = 0.f;
-            continue;
-        }
-        m_ms[i] = t1 >= t0 ? float(double(t1 - t0) * to_ms) : 0.f;
+        m_ms[i] = float(ms);
     }
     for (u32 i = 0; i < Count; ++i)
         m_sum[i] += m_ms[i];

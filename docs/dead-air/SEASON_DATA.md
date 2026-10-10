@@ -67,7 +67,7 @@ fails on any check of the "Checks" list below.
 | D9 Stancia FIX_EMPTY | the 14 keys of the empty Stancia sprites are written as `PG_BUNCH`. |
 | D11 no burns | the keyframes' `burnt_patch_share` is not exported. Always the snowy representative year. |
 | D12 stock atlas | no atlas weights: `build_details` belongs to the `default` texture category (the latched folder). The stock classes get continuous `keep` / `height` / `hide_rel` curves. `[season_grass]` and `[season_shrubs]` are gone from `dead_air_x64_details.ltx`. |
-| D15 texture folders | `[season_categories]` + `[season_folders]` = the brief's per-category table: ground sets never winter; trees, LOD atlases, maps and decals wear winter only from 15 Dec to 15 Feb (open cover 1). |
+| D15 texture folders | `[season_categories]` + `[season_folders]` = the brief's per-category table: ground sets never winter; tree cards, maps and decals wear winter only from 15 Dec to 15 Feb (open cover 1); autumn is the base set (`-`), and `level_lods` has no category (the engine composes it, `TREES.md`). |
 | flood ice | the floodplain profiles' `flood_ice` equals the still-water ice keys (`[ice_keys] still`): flooded ground freezes with the oxbows (0.85 on 15 Dec). |
 
 ## Field reference
@@ -83,12 +83,12 @@ fails on any check of the "Checks" list below.
 
 `<texture name prefix> = <category>`: names relative to `textures\`, either slash, case-insensitive; the longest
 matching prefix wins, a name without one is `default`. Level textures are matched by their logical name
-(`terrain\terrain_escape`, `build_details`, `level_lods`).
+(`terrain\terrain_escape`, `build_details`).
 
 | Category | Prefixes | Folders |
 |---|---|---|
-| `default` | `terrain\`, `build_details` (and everything unlisted) | spring_mid from 10 Apr, spring_late from 1 May, summer from 1 Jun, autumn (base) from 20 Sep, spring_early from 1 Nov |
-| `trees` | `trees\`, `level_lods`, `map\`, `ui\` | as default, but spring_early from 16 Feb and winter from 15 Dec |
+| `default` | `terrain\`, `build_details` (and everything unlisted) | spring_mid from 10 Apr, spring_late from 1 May, summer from 1 Jun, base (autumn) from 20 Sep, spring_early from 1 Nov |
+| `trees` | `trees\`, `map\`, `ui\` | as default, but spring_early from 16 Feb and winter from 15 Dec |
 | `ground` | `grnd\`, `detail\`, `roof\` | base all year (the snow layer covers them) |
 | `decal` | `decal\` | winter from 15 Dec to 15 Feb, else base |
 | `vine` | `vine\` | winter (leafless) from 1 Nov to 9 Apr, else base |
@@ -366,7 +366,7 @@ and members included.
 | 15 Jul 12:00 | 195.5 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.00 | 0.00 / 0.00 | summer / summer / - |
 | 15 Aug 12:00 | 226.5 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.00 | 0.00 / 0.00 | summer / summer / - |
 | 15 Sep 12:00 | 257.5 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.00 | 0.00 / 0.00 | summer / summer / - |
-| 15 Oct 12:00 | 287.5 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.17 | 0.00 / 0.00 | autumn / autumn / - |
+| 15 Oct 12:00 | 287.5 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.17 | 0.00 / 0.00 | - / - / - |
 | 15 Nov 12:00 | 318.5 | 0.35 / 0.20 / 0.35 / 0.50 | 3.0 / 1.5 / 2.1 / 6.0 | 0.917 | 0.52 | 0.05 / 0.00 | spring_early / spring_early / winter |
 | 15 Dec 12:00 | 348.5 | 1.00 / 0.90 / 1.00 / 1.00 | 10.0 / 6.0 / 4.7 / 24.0 | 0.000 | 1.00 | 0.85 / 0.60 | spring_early / winter / winter |
 
@@ -398,7 +398,7 @@ and members included.
 | 1 Jul 00:00 | 181 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.00 | 0.00 / 0.00 | summer / summer / - |
 | 1 Aug 00:00 | 212 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.00 | 0.00 / 0.00 | summer / summer / - |
 | 1 Sep 00:00 | 243 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.00 | 0.00 / 0.00 | summer / summer / - |
-| 1 Oct 00:00 | 273 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.06 | 0.00 / 0.00 | autumn / autumn / - |
+| 1 Oct 00:00 | 273 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.06 | 0.00 / 0.00 | - / - / - |
 | 1 Nov 00:00 | 304 | 0.00 / 0.00 / 0.00 / 0.00 | 0.0 / 0.0 / 0.0 / 0.0 | 1.000 | 0.31 | 0.01 / 0.00 | spring_early / spring_early / winter |
 | 1 Dec 00:00 | 334 | 0.90 / 0.79 / 1.00 / 0.92 | 6.3 / 3.5 / 3.4 / 14.4 | 0.000 | 1.00 | 0.45 / 0.26 | spring_early / spring_early / winter |
 

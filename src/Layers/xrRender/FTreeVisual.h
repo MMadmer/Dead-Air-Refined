@@ -62,6 +62,7 @@ protected:
     _5color c_scale;
     _5color c_bias;
     Fmatrix xform;
+    u32 m_vb_id{}, m_ib_id{};
 
     // The tree's memory - ONE record per tree, shared by every visual of it. A tree model in
     // a level is several visuals on one root (the trunk, the crown, sometimes more); a state
@@ -86,6 +87,9 @@ public:
     // The weather's tree speed this frame and as the previous frame drew with it (the frequency factor
     // of every crown divides by it; the GPU-driven trees' wind pass takes both).
     static void FrameSpeeds(float& now, float& previous);
+    // The frame-wide sway every tree shader takes - the wave (its phase in w) and the wind's heading times its amplitude
+    // - now and as the previous frame drew with it: the upgraded trees' trunk sway on the stock roots (da_trees.cpp).
+    static void FrameWind(Fvector4& wave, Fvector4& wind, Fvector4& wave_prev, Fvector4& wind_prev);
 
     // The vegetation-audio layer harvests tree world positions once per level load.
     const Fvector& root_position() const { return xform.c; }
@@ -110,6 +114,10 @@ public:
 #endif
     // The registry's instance index of this visual, u32(-1) while it is not registered.
     u32 gd_instance{u32(-1)};
+    // The level vertex and index buffers it draws from (level.geom chunks fsL_VB / fsL_IB): the procedural shrubs
+    // read the stock bushes' geometry back from the file to key them (da_shrubs.cpp).
+    u32 vb_id() const { return m_vb_id; }
+    u32 ib_id() const { return m_ib_id; }
 
     virtual void Render(CBackend& cmd_list, float LOD, bool use_fast_geo) override; // LOD - Level Of Detail  [0.0f - min, 1.0f - max], Ignored
 #ifdef USE_DX11

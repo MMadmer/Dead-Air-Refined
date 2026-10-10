@@ -1,0 +1,45 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The billboards' bake (da_trees_bake.cpp): a level of a template's cells in the trees' atlases, from the staging's
+// filled chain - written so the billboard shader (lod.ps, da_tree_lod.ps) puts into the G-buffer what the tree's far
+// tiers put there: lod.ps's saturation and brightness (da_lod_tune) taken back from the albedo; the hemisphere light
+// over what lod.vs and lod.ps multiply it by (the facets' vertex light x 3.1 x r__lod_hemi, per template); the coverage
+// scaled by the cell's factor of this level (da_tree_bake_cover.cs), so the alpha test keeps the cell's coverage at
+// every level; the foliage as it is (its atlas half the pair's size: this level is its level above; the top level
+// alone, TREE_BAKE_MIP_TOP, writes the pair alone).
+
+#include "common.h"
+#include "da_tree_bake.h"
+
+Texture2D<float4>	da_tree_bake_fill		: register(t0);	// the staging's filled albedo and coverage, every level
+Texture2D<float4>	da_tree_bake_fill_nm	: register(t1);	// its normal and hemisphere light
+ByteAddressBuffer	da_tree_bake_k			: register(t2);	// a cell's alpha factor by level
+Texture2D<float4>	da_tree_bake_fill_m		: register(t3);	// its foliage
+uniform float4		da_tree_bake_m;	// x the level, z the levels a cell has
+uniform float4		da_tree_bake_t;	// x lod.ps's saturation, y its brightness (r__lod_sat, r__lod_bright)
+
+#ifdef TREE_BAKE_MIP_TOP
+f_tree_bake_pair	main	(v2p_tree_bake_quad I)
+#else
+f_tree_bake	main	(v2p_tree_bake_quad I)
+#endif
+{
+	const int2 p = int2(floor(I.src));
+	const uint level = uint(da_tree_bake_m.x + 0.5f), levels = uint(da_tree_bake_m.z + 0.5f);
+	const float4 c = da_tree_bake_fill.Load(int3(p, int(level)));
+	const float4 n = da_tree_bake_fill_nm.Load(int3(p, int(level)));
+	const float k = asfloat(da_tree_bake_k.Load((I.info.x * levels + level) * 4u));
+	// lod.ps: D = lerp(lum(D), D, sat) * bright, the luminance its own (0.299, 0.587, 0.114) - taken back.
+	const float lum = dot(c.rgb, float3(0.299f, 0.587f, 0.114f));
+	const float3 rgb = (lum + (c.rgb - lum) / max(da_tree_bake_t.x, 0.05f)) / max(da_tree_bake_t.y, 0.05f);
+#ifdef TREE_BAKE_MIP_TOP
+	f_tree_bake_pair O;
+#else
+	f_tree_bake O;
+	O.mtl = da_tree_bake_fill_m.Load(int3(p, int(level)));
+#endif
+	O.albedo = float4(saturate(rgb), saturate(c.a * k));
+	O.normal = float4(n.rgb, saturate(n.a * asfloat(I.info.y)));
+	return O;
+}

@@ -23,6 +23,8 @@
 #include "Layers/xrRender/da_ground.h"
 #include "Layers/xrRender/da_snow.h"
 #include "Layers/xrRender/da_grass_blades.h"
+#include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #include "Layers/xrRenderPC_R4/da_offload.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
@@ -63,10 +65,9 @@ void CRender::level_Load(IReader* fs)
         R_ASSERT2(chunk, "Level doesn't builded correctly.");
         u32 count = chunk->r_u32();
         Shaders.resize(count);
-        const bool keep_names = !!strstr(Core.Params, "-wvdbg");
+        // The names stay for the procedural shrubs' content keys (da_shrubs.cpp) and the -wvdbg listing.
         ShaderNames_dbg.clear();
-        if (keep_names)
-            ShaderNames_dbg.resize(count);
+        ShaderNames_dbg.resize(count);
         for (u32 i = 0; i < count; i++) // skip first shader as "reserved" one
         {
             string512 n_sh, n_tlist;
@@ -74,8 +75,7 @@ void CRender::level_Load(IReader* fs)
             chunk->skip_stringZ();
             if (0 == n[0])
                 continue;
-            if (keep_names)
-                ShaderNames_dbg[i] = n;
+            ShaderNames_dbg[i] = n;
             xr_strcpy(n_sh, n);
             pstr delim = strchr(n_sh, '/');
             *delim = 0;
@@ -145,6 +145,10 @@ void CRender::level_Load(IReader* fs)
     // The offloads' auto choice measures the new level from scratch; its path decides whether the GPU
     // registry (built below in auto either way) is applied from the first frame.
     da_offload_level_load();
+    // The stock bushes and trees the procedural vegetation stands in for, before the GPU registry leaves them out.
+    da_veg_level_load();
+    // The stock path's vegetation whose billboard cells the bake draws again (the census of da_veg_level_load).
+    da_trees_bake_level_load();
     // Every tree of the level is known now, module overlays included: the GPU registry.
     da_gpu_trees_level_load();
 #endif
@@ -286,6 +290,8 @@ void CRender::level_Unload()
 
 #if RENDER == R_R4
     // In reverse of the load, and before the details: the blades point into the detail slots.
+    da_trees_bake_level_unload();
+    da_veg_level_unload();
     da_grass_level_unload();
     da_snow_level_unload();
     da_ground_level_unload();

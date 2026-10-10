@@ -1,0 +1,175 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Procedural shrubs, the G-buffer pixel shader of the clusters and blobs (docs/dead-air/SHRUBS.md): the part's
+// leaves (da_shrub_mass.h), each coloured and lit by the near leaves' rules so a bush keeps its look from tier to
+// tier: shrub_leaf_colour (its unfolding, its place in the autumn wave, its hash) under its texture's luminance and
+// veins, a leaf of its own facing round the leaves' mean (up and out of the crown) whose upper or under side shows
+// by the way it faces the eye, its shading normal half its own and half the part's - the crown's at the part's centre
+// turned across it as a clump's sphere (da_shrub_leaf_ps.h); a flower or fruit cell when the part blooms or fruits,
+// the twigs when bare; the translucent foliage codes.
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_shrub_mass.h"
+
+// The sun's share on a part's shading normal N (view space); the trees' billboard bake takes its mean over the sun's
+// headings (da_tree_bake_mass.ps: one billboard stands for trees turned every way).
+#ifndef SHRUB_SUNLIT
+#define SHRUB_SUNLIT(N) saturate(dot(N, normalize(mul((float3x3)m_V, da_shrub_sun.xyz))))
+#endif
+
+struct p_shrub_mass
+{
+	float4	hpos		: SV_Position;
+	float4	hpos_cur	: TEXCOORD0;
+	float4	hpos_prev	: TEXCOORD1;
+	float4	pv_x		: TEXCOORD2;
+	float4	n_y			: TEXCOORD3;
+	float4	t_h			: TEXCOORD4;
+	float4	part		: TEXCOORD5;
+	float4	dens		: TEXCOORD6;
+	float4	misc		: TEXCOORD7;
+	float4	xy_t		: TEXCOORD8;
+};
+
+f_deffer	main	(p_shrub_mass I)
+{
+	// (QA, r__dbg_trees 65536: every pixel out at once - the draw's vertices, its rasterizing and its shader launches
+	// alone.)
+	[branch] if (da_shrub_chunk0.w > 1.5f)
+		discard;
+	const float2 p = I.xy_t.xy;
+	const float frame = da_shrub_time.z > 0.5f ? da_shrub_fwd.w : 0.0f;
+	// The leaves' clump level: the vertex shader's continuous one, its switches dithered over a band of it (the temporal
+	// resolve blends the two grids; a part switching whole popped as one walked by), at least three cells across.
+	// (One choice a pixel, its edges' footprints the part's own gradients - da_shrub_mass.h: one a 2x2 quad left squares
+	// of the two grids side by side, a brick mosaic on a crown in the band.)
+	const float lc = I.n_y.w, lm = round(lc);
+	const float2 nq = floor(I.hpos.xy) + float2(13.0f, 41.0f) + 7.13f * frame;
+	const float ign = frac(52.9829189f * frac(dot(nq, float2(0.06711056f, 0.00583715f))));
+	const float level = clamp(lm + (ign < smoothstep(-0.15f, 0.15f, lc - lm) ? 1.0f : 0.0f), 0.0f, 3.0f);
+	float4 dens = I.dens;
+	dens.y = max(I.dens.y * exp2(-level), min(I.dens.y, 3.0f));
+	const float clump = log2(I.dens.y / dens.y);
+	// The quad's frame in view space and the crown's normal at the part (a blob's leaves thin on its outer side).
+	const float3 V = -normalize(I.pv_x.xyz);
+	const float3 nx = normalize(I.t_h.xyz);
+	const float3 qx = normalize(nx - V * dot(nx, V));
+	const float3 qy = cross(V, qx);
+	const float3 crown = normalize(I.n_y.xyz);
+	const float2 outer = I.misc.z > 0.5f ? float2(dot(crown, qx), dot(crown, qy)) : float2(0.0f, 0.0f);
+	const shrub_mass M = shrub_mass_at(p, I.part, dens, I.misc, I.xy_t.w, clump, outer);
+	shrub_mass_clip(M.cover, I.hpos.xy, frame, I.misc.w);
+
+	const uint sp = uint(I.part.x + 0.5f);
+	const uint kind = shrub_mass_kind(I.misc);
+	const float leaf_kind = shrub_prof(sp, 0).x;
+	const bool needles = leaf_kind > 1.5f && leaf_kind < 2.5f;
+	const bool blob = I.misc.z > 0.5f;
+	const float4 P2 = shrub_prof(sp, 2);
+	// The part's light (the sky its leaves see) pulled a little toward the crown's middle: one value a part read as a
+	// patchwork of flat discs, the low ones near-black; the turn of the light across a part is its normal (below).
+	const float light = lerp(I.part.w, 0.6f, blob ? 0.35f : 0.2f);
+	// The leaf at the pixel: a clump's own leaf there (its facing and colour step; a clump of one facing and colour read
+	// as a smooth disc), else the cell's.
+	const float hl = clump > 0.5f ? M.hs : M.h;
+	// The part's shading normal: the crown's at its centre, turned out toward its rim as a dome on the crown's surface
+	// (production foliage's clump normals) - each part lit on its sun side and shaded on the other as the near leaves'
+	// mass is (the same top-lit gradient on every part stacked them as coins); a whole sphere's turned every part's
+	// middle to the eye and dimmed the sunlit tops at noon against the near leaves. A needle brush's parts a shallow
+	// dome: its small parts overlap thickly, each with its own lit top and shaded foot read as fish scales.
+	const float3 n_part = normalize(crown + (qx * p.x + qy * p.y) * (needles ? 0.2f : 0.6f));
+	// The leaf's normal round the leaves' mean - up and out of the crown (the outer leaves turn to the light: a bush
+	// seen from the side shows their upper sides; straight up showed half the cells' undersides, a frosted mint crown),
+	// each leaning its own way, the willows' silvery leaves more - its face the one the eye sees, turning over across a
+	// sliver of angles as the near leaves do.
+	const float3 up_v = da_shrub_up.xyz;
+	const float2 r2 = float2(frac(hl * 7.71f), frac(hl * 11.37f)) * 2.0f - 1.0f;
+	const float jit = P2.y > 0.05f ? 0.9f : 0.7f;
+	// (A needle brush looks the same from every side: its own normal faces the eye, as the near brush's billboard.)
+	const float3 nl = needles ? V : normalize(lerp(up_v, crown, 0.65f) + (qx * r2.x + V * r2.y) * jit);
+	const float facing = dot(nl, V);
+	const float side_k = smoothstep(-0.2f, 0.2f, facing);
+	float3 colour;
+	float tr = 0.3f, gloss = 0.008f;
+	if (M.leaf > 0.5f)
+	{
+		// (A Red Forest pine's dead needles all year and a tree's withered leaves through the winter in the dead colour.)
+		const float4 c = kind == 2u || M.withered > 0.5f ? float4(shrub_seas(sp, 7).rgb, 1.0f)
+			: shrub_leaf_colour_k(sp, shrub_seas_lead(sp, shrub_mass_unpack(I.misc).y), M.rank, M.fall, I.part.w, hl, 0.0f);
+		// The underside as the near leaves have it: lighter and, for the willows' silvery ones, bluer.
+		float3 under = lerp(c.rgb * P2.x, shrub_seas(sp, 8).rgb, 0.5f * (1.0f - c.w));
+		under.b *= 1.0f + P2.y;
+		// The leaf texture's luminance and veins (the upper side's; under the part's few pixels a leaf is its mean).
+		const float3 up_c = lerp(c.rgb, c.rgb * float3(1.03f, 1.02f, 0.9f), M.tex.g * 0.4f) * (M.tex.r * 2.0f);
+		colour = lerp(under, up_c, side_k) * shrub_crown_light(light, sp, kind == 1u, c.rgb).yzw;
+		// A part's cells are its leaves; the near crown also shows its dark inside between them - the twigs and the
+		// inner leaves in the crown's shade - while the part's light is its leaves' mean, the inner ones' too
+		// (measured at July noon over eight species from 40 m and six from 14 m, against the near tier forced in the
+		// same view). A needle brush's parts lighter: the near tufts the eye meets are its outer, lit ones (the juniper at
+		// 40 m against its near tier, its 14 m tiers within a tenth; at 0.8 its far crown read near black).
+		colour *= needles ? (blob ? 0.88f : 1.2f) : 0.95f;
+		tr = lerp(DA_FOLIAGE_TR_MIN, I.xy_t.z, (M.withered > 0.5f ? 0.15f : lerp(1.0f, 0.6f, c.w)) * saturate(M.tex.b));
+		// The near leaves' gloss at their distance (da_shrub_leaf_vs.h), a needle brush's a third of it.
+		gloss = (0.01f + 0.075f * shrub_prof(sp, 1).y) * lerp(1.0f, 0.3f, c.w) * 0.5f * (needles ? 0.35f : 1.0f);
+		if (M.bloom > 0.5f)
+		{
+			const float4 K1 = shrub_seas(sp, 1);
+			// A fruit as the near ones colour it (da_shrub_bloom.vs): green while it grows, turning in its last stretch
+			// (ripeness 0.7 .. 1), darkening once it shrivels past 1.
+			float3 fruit = lerp(shrub_seas(sp, 13).rgb, shrub_seas(sp, 14).rgb, smoothstep(0.7f, 1.0f, K1.w));
+			fruit = lerp(fruit, fruit * float3(0.55f, 0.45f, 0.4f), saturate(K1.w - 1.0f));
+			colour = K1.z > K1.x ? fruit : shrub_seas(sp, 11).rgb;
+		}
+	}
+	else
+	{
+		// The twigs, in their bark's own colour.
+		colour = lerp(shrub_seas(sp, 9).rgb, shrub_seas(sp, 10).rgb, 0.6f);
+	}
+	// The self-shadow the far shadow maps lose (shrub_far_shade); its leaves keep a little less chroma than the near
+	// ones (mint against the trees beside them with all of it, sage grey with a fifth less); its flowers, fruits and
+	// twigs keep theirs.
+	// (Not a needle brush's: its cells face the eye with the crown's light of the tufts they stand for - with the far
+	// self-shade on top a juniper's far crown went near black, half its near tier's light.)
+	colour *= needles ? 1.0f : shrub_far_shade(light, I.pv_x.z);
+	[branch] if (M.leaf > 0.5f && M.bloom < 0.5f)
+	{
+		const float y_c = dot(colour, float3(0.2126f, 0.7152f, 0.0722f));
+		colour = lerp(y_c.xxx, colour, blob ? 0.93f : 0.97f);
+	}
+	// Snow on the part's upper side, the near leaves' rule (da_shrub_leaf_vs.h) on its dome's normal and its leaf's: a
+	// wash of half the snow over every part turned the far conifers to beige cotton.
+	const float3 n_snow = normalize(n_part + (needles ? 0.0f : 0.5f) * nl);
+	colour = lerp(colour, float3(0.8f, 0.82f, 0.85f), da_shrub_sun.w * saturate(dot(n_snow, up_v) * 1.8f - 0.4f));
+
+	// Half its own, half the part's, the own half fading as the leaf goes edge-on, kept on the viewer's side - the near
+	// leaves' rule (da_shrub_leaf_ps.h); a cell of a few pixels keeps two fifths of its own half, the rest growing in
+	// from two pixels to eight (its own facing's light, a step from leaf to leaf, read as a mosaic of flat facets against
+	// the sun; with none of it the crown's top went smooth as cotton wool).
+	const float foot = 0.5f * lerp(0.4f, 1.0f, saturate((I.misc.w / dens.y - 2.0f) / 6.0f));
+	const float3 nf = facing < 0.0f ? -nl : nl;
+	float3 N = normalize(nf * (foot * abs(2.0f * side_k - 1.0f)) + n_part * (1.0f - foot) + V * 0.02f);
+	N = normalize(N + V * saturate((needles ? 0.35f : 0.12f) - dot(N, V)));
+	// (The part's share of the normal is a whole unit facing where its leaves' mean is shorter, about four fifths: the
+	// sunlit side came out a fifth lighter for the share it takes, measured on the lit tops - four fifths of it taken back
+	// where it faces the sun, by the sun's share of the light: under an overcast sky or at night the share gains nothing.)
+	const float l_sun = dot(L_sun_color.rgb, float3(0.2126f, 0.7152f, 0.0722f)), l_sky = dot(L_hemi_color.rgb, float3(0.2126f, 0.7152f, 0.0722f));
+	const float sunlit = l_sun / max(l_sun + l_sky, 1e-4f) * SHRUB_SUNLIT(N);
+	colour *= 1.0f - 0.8f * (1.0f - 2.0f * foot) * sunlit;
+	// The species' own far value and chroma on its open, light top, where its calibration is off (shrub_prof row 16: a
+	// dog rose's young leaflets on its canes' tips; the body kept - a trim of the whole colour left the tops pale).
+	// (Skipped where the species keeps the defaults: one value for a whole draw of it.)
+	const float4 P16 = shrub_prof(sp, 16);
+	[branch] if (M.leaf > 0.5f && M.bloom < 0.5f && any(P16.yz != 1.0f))
+	{
+		const float top = smoothstep(0.35f, 0.85f, I.part.w);
+		colour = lerp(dot(colour, float3(0.2126f, 0.7152f, 0.0722f)).xxx, colour, lerp(1.0f, P16.z, top)) * lerp(1.0f, P16.y, top);
+	}
+	const float mtl = M.leaf > 0.5f ? da_pack_foliage_mtl(tr, I.hpos.xy, uint(frame)) : 0.125f;
+	f_deffer O = pack_gbuffer(float4(N, M.leaf > 0.5f ? shrub_face_hemi(I.t_h.w, N) : I.t_h.w), float4(I.pv_x.xyz, mtl),
+		float4(saturate(shrub_to_albedo(colour)), gloss));
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
+	return O;
+}

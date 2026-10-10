@@ -4,6 +4,8 @@
 #include "xrCore/Threading/TaskManager.hpp"
 #if RENDER == R_R4
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
+#include "Layers/xrRender/da_grass_blades.h"
+#include "Layers/xrRender/da_veg.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -81,6 +83,8 @@ void CRender::Calculate()
     // A changed r__gpu_driven moves the GPU-driven trees between the sector roots and their own list,
     // before any view walks the graph.
     da_gpu_trees_apply_switch();
+    // A changed r__shrubs or r__trees: the stock bushes and trees leave or rejoin their hierarchies before the views walk them.
+    da_veg_apply_switch();
 #endif
 
     // Transfer to global space to avoid deep pointer access
@@ -208,6 +212,16 @@ void CRender::Calculate()
         r_main.run();
     }
     BasicStats.Culling.End();
+
+#if RENDER == R_R4
+    // Everything the sun cascades draw of the shrubs and the blades is ready before r_sun.run(): with the
+    // multithreaded draw its task draws the cascades on a worker while Render has not begun. The shrubs' frame
+    // built in Render came after it now and then (a bush's whole shadow off for a frame); the blades' latch is
+    // normally taken before Calculate, but not in a frame without the detail manager's update (a save's
+    // screenshot under the menu).
+    da_veg_frame_prepare(RCache);
+    da_grass_frame_ensure_latch();
+#endif
 
     // Rain calc
 #if RENDER != R_R2

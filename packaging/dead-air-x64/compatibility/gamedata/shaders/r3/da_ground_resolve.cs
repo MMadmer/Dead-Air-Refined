@@ -2,29 +2,48 @@
 // Released under the MIT licence, see License.txt
 //
 // The near ground window's products from its raster (da_ground.cpp), one 16 x 16 tile per group:
-//   Htop  the topmost non-passable surface (world y)
-//   Hg    Htop opened with a 3 x 3 square (erode, then dilate): posts, rails and thin props drop out, so
-//         the snow passes under them and they stick out of it; roofs, walls and banks stay. Under a water
-//         surface Hg is that surface: the snow grid crosses frozen water on it, and the shore is no step
-//   taper 0 on a cliff texel (a jump of the surface or no surface), 1 at half a metre from the nearest
-//         one: the snow grid thins to nothing at walls instead of hanging a curtain. Under a water
-//         surface the texel stores -1 - taper (the snow skips the lake bed under it)
-//   shore the continuous quantities of the waterline: the opened solid surface under the water too (the
-//         bed), the highest water surface within DA_GR_AP texels and how far inside that reach the texel
-//         lies (1 up to half of it, 0 at its end). The snow passes cut a frozen pond's sheet where the
-//         bilinear ground crosses that level (da_sn_shore), not along the water texels' squares.
+//   Htop     the topmost non-passable surface (world y)
+//   Hg       Htop opened with a 3 x 3 square (erode, then dilate): posts, rails, wires and thin props drop
+//            out, so the snow passes under them and they stick out of it. Under a water surface Hg is that
+//            surface: the snow grid crosses frozen water on it, and the shore is no step
+//   base     the surface the ground's snow lies on. Hg, except where Hg is something standing over the
+//            ground - a roof, a deck, a vehicle, a block: more than 0.35 m over the lowest floor of the
+//            texel (the low map) and more than 0.6 m over the level's terrain (the bake's ground), and no
+//            node of the level's AI walks on it (a bridge's deck, a platform: ground, with its trails). There
+//            the base is that floor: the ground's snow runs on under the eaves and round a bus or a wall
+//            up to its sides, never up a roof (the snow shells lie on top of those, da_snow_shell.vs)
+//   shelter  how much of the sky's snow such a cover keeps off the ground under it, from the share of the
+//            5 x 5 texels round it under a cover: 1 deep under a roof (no snow on its floor, not along its
+//            walls either), a part under an eave or the edge of a vehicle (the wind blows some under), none a
+//            texel out from the footprint: a soft drip line, no moat
+//   taper    0 on a cliff texel (a jump of the base or no surface), 1 at half a metre from the nearest
+//            one: the snow grid thins to nothing at a bank instead of hanging a curtain. Under a water
+//            surface the texel stores -1 - taper (the snow skips the lake bed under it)
+//   shore    the continuous quantities of the waterline: the opened solid surface under the water too (the
+//            bed), the highest water surface within DA_GR_AP texels and how far inside that reach the texel
+//            lies (1 up to half of it, 0 at its end). The snow passes cut a frozen pond's sheet where the
+//            bilinear ground crosses that level (da_sn_shore), not along the water texels' squares.
 // Texels outside the window are read as "nothing here": the toroidal map holds another place there.
 
 Texture2D<uint> s_gr_solid;
 Texture2D<uint> s_gr_water;
+Texture2D<uint> s_gr_low;
+// The level's terrain at 1 m (da_snow.cpp, R16_UNORM: y = da_gr_lvl.x + v * da_gr_lvl.y, 0 = none).
+Texture2D<float> s_gr_ground;
+// The highest node of the level's AI in each of those texels, the same encoding (0 = none).
+Texture2D<float> s_gr_walk;
+// The overhangs among the covers at 1 m (da_snow.cpp, dilated by a texel): only those shelter the ground under them.
+Texture2D<float> s_gr_overhang;
 
 RWTexture2D<float> u_top : register(u0);
-RWTexture2D<float2> u_base : register(u1);
+RWTexture2D<float4> u_base : register(u1);
 RWTexture2D<float4> u_shore : register(u2);
 
 uniform float4 da_gr_rect;  // world texels x0, z0, x1, z1 (exclusive) to write
 uniform float4 da_gr_win;   // x texel (m), y texels per metre, z texels per side, w taper radius (texels, 1..2)
 uniform float4 da_gr_valid; // world texels x0, z0, x1, z1 (exclusive) the window holds
+uniform float4 da_gr_level; // the terrain texture: texel = xz * xy + zw (texel centres at +0.5)
+uniform float4 da_gr_lvl;   // x lowest y, y range (m), z 1 = the terrain texture is there, w unused
 
 #define DA_GR_NONE (-10000.0)
 #define DA_GR_T 16
@@ -36,12 +55,16 @@ uniform float4 da_gr_valid; // world texels x0, z0, x1, z1 (exclusive) the windo
 #define DA_GR_S3 (DA_GR_S2 - 2)
 // A water surface this far above the opened solid surface makes the texel a water texel.
 #define DA_GR_WET 0.05
+// A cover: this far over the texel's lowest floor and over the terrain (da_snow_field.h, da_snow_cover_over).
+#define DA_GR_OVER_FLOOR 0.35
+#define DA_GR_OVER_TERRAIN 0.35
 
 groupshared float gs_top[DA_GR_S0 * DA_GR_S0];
 groupshared float gs_wat[DA_GR_S0 * DA_GR_S0];
 groupshared float gs_ero[DA_GR_S1 * DA_GR_S1];
 groupshared float gs_hg[DA_GR_S2 * DA_GR_S2];
-groupshared float gs_open[DA_GR_S2 * DA_GR_S2];
+groupshared float gs_base[DA_GR_S2 * DA_GR_S2];
+groupshared float gs_cover[DA_GR_S2 * DA_GR_S2];
 groupshared float gs_cliff[DA_GR_S3 * DA_GR_S3];
 // The water level along each row over the output columns: the highest surface within DA_GR_AP texels, and
 // DA_GR_AP minus the distance to the nearest water texel in that row (-1: none).
@@ -70,6 +93,51 @@ int2 da_gr_addr(int2 t)
 float da_gr_surface(float hg, float water)
 {
 	return (water > DA_GR_NONE * 0.5 && water > hg + DA_GR_WET) ? water : hg;
+}
+
+// The level's terrain at a window texel, bilinear (DA_GR_NONE: none there, or no terrain texture).
+float da_gr_terrain(int2 t)
+{
+	[branch] if (da_gr_lvl.z < 0.5)
+		return DA_GR_NONE;
+	const float2 xz = (float2(t) + 0.5) * da_gr_win.x;
+	const float2 p = xz * da_gr_level.xy + da_gr_level.zw - 0.5;
+	const float2 i = floor(p);
+	const float2 f = p - i;
+	const int2 q = int2(i);
+	const float a = s_gr_ground.Load(int3(q, 0)), b = s_gr_ground.Load(int3(q + int2(1, 0), 0));
+	const float c = s_gr_ground.Load(int3(q + int2(0, 1), 0)), d = s_gr_ground.Load(int3(q + int2(1, 1), 0));
+	[branch] if (min(min(a, b), min(c, d)) <= 0.0)
+		return DA_GR_NONE;
+	return da_gr_lvl.x + lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y) * da_gr_lvl.y;
+}
+
+// Does the level's AI walk on a surface at about y round a window texel (its own 1 m texel and the eight round it:
+// a deck's nodes stop short of its edge)? da_snow_walkable.
+bool da_gr_walked(int2 t, float y)
+{
+	[branch] if (da_gr_lvl.z < 0.5)
+		return false;
+	const int2 q = int2(floor(((float2(t) + 0.5) * da_gr_win.x) * da_gr_level.xy + da_gr_level.zw));
+	bool walked = false;
+	[unroll] for (int j = -1; j <= 1; ++j)
+		[unroll] for (int i = -1; i <= 1; ++i)
+		{
+			const float v = s_gr_walk.Load(int3(q + int2(i, j), 0));
+			const float w = da_gr_lvl.x + v * da_gr_lvl.y;
+			walked = walked || (v > 0.0 && w > y - 0.5 && w < y + 0.3);
+		}
+	return walked;
+}
+
+// Is the cover over a window texel an overhang (a roof, an eave: it shelters the ground under it) and not a solid
+// object (a block, a car, a stump: the ground's snow runs on at its full depth up to its sides)?
+bool da_gr_overhang(int2 t)
+{
+	[branch] if (da_gr_lvl.z < 0.5)
+		return true;
+	const int2 q = int2(floor(((float2(t) + 0.5) * da_gr_win.x) * da_gr_level.xy + da_gr_level.zw));
+	return s_gr_overhang.Load(int3(q, 0)) > 0.5;
 }
 
 [numthreads(DA_GR_T, DA_GR_T, 1)]
@@ -118,7 +186,8 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 	}
 	GroupMemoryBarrierWithGroupSync();
 
-	// dilation: the highest eroded of the 3 x 3, then the water surface over it
+	// dilation: the highest eroded of the 3 x 3, then the water surface over it; a cover over the floor and
+	// the terrain hands the base to the floor
 	[loop] for (uint k2 = gi; k2 < uint(DA_GR_S2 * DA_GR_S2); k2 += DA_GR_T * DA_GR_T)
 	{
 		const int2 c = int2(k2 % DA_GR_S2, k2 / DA_GR_S2) + 1;
@@ -126,21 +195,51 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		[unroll] for (int j = -1; j <= 1; ++j)
 			[unroll] for (int i = -1; i <= 1; ++i)
 				m = max(m, gs_ero[(c.y + j) * DA_GR_S1 + c.x + i]);
-		gs_open[k2] = m;
-		gs_hg[k2] = da_gr_surface(m, gs_wat[(c.y + 1) * DA_GR_S0 + c.x + 1]);
+		const float hg = da_gr_surface(m, gs_wat[(c.y + 1) * DA_GR_S0 + c.x + 1]);
+		gs_hg[k2] = hg;
+		const int2 t = org + c + 1;
+		const uint lw = da_gr_inside(t) ? s_gr_low.Load(int3(da_gr_addr(t), 0)) : 0u;
+		const float low = (lw == 0u) ? DA_GR_NONE : da_ground_unord(~lw);
+		const bool has_floor = low > DA_GR_NONE * 0.5 && m - low > DA_GR_OVER_FLOOR;
+		bool cover = false;
+		float under = hg;
+		[branch] if (hg == m && m > DA_GR_NONE * 0.5)
+		{
+			const float terrain = da_gr_terrain(t);
+			[branch] if (terrain > DA_GR_NONE * 0.5)
+			{
+				// over the terrain: the floor under it, or the terrain where the collision has no floor there; never a
+				// raised floor (a house's plinth): the ground's snow runs on under it at the terrain's level, hidden,
+				// instead of ramping up into the doorway in white teeth; nor a cellar's (the grid ran down into it
+				// along the walls, a moat round the house)
+				cover = m - terrain > DA_GR_OVER_TERRAIN && (has_floor || m - terrain > 1.0) && !da_gr_walked(t, m);
+				under = has_floor ? clamp(low, terrain - 0.3, terrain + 0.1) : terrain;
+			}
+			else
+			{
+				cover = has_floor && da_gr_lvl.z < 0.5;
+				under = low;
+			}
+		}
+		// 1 an overhang (it shelters), 0.5 a solid object (it only takes the ground's snow under it, hidden)
+		gs_cover[k2] = cover ? (da_gr_overhang(t) ? 1.0 : 0.5) : 0.0;
+		gs_base[k2] = cover ? under : hg;
 	}
 	GroupMemoryBarrierWithGroupSync();
 
-	// cliffs: no surface, or a step to a neighbour above what a 50 degree slope gives over one texel
+	// cliffs: no surface, or a step to a neighbour above what a 50 degree slope gives over one texel; never
+	// into a cover's footprint (a raised floor behind a wall is no bank: the snow outside runs to the wall)
 	const float jump = max(0.35, 1.2 * da_gr_win.x);
 	[loop] for (uint k3 = gi; k3 < uint(DA_GR_S3 * DA_GR_S3); k3 += DA_GR_T * DA_GR_T)
 	{
 		const int2 c = int2(k3 % DA_GR_S3, k3 / DA_GR_S3) + 1;
-		const float h = gs_hg[c.y * DA_GR_S2 + c.x];
-		const float hl = gs_hg[c.y * DA_GR_S2 + c.x - 1];
-		const float hr = gs_hg[c.y * DA_GR_S2 + c.x + 1];
-		const float hd = gs_hg[(c.y - 1) * DA_GR_S2 + c.x];
-		const float hu = gs_hg[(c.y + 1) * DA_GR_S2 + c.x];
+		const int ci = c.y * DA_GR_S2 + c.x;
+		const float h = gs_base[ci];
+		const bool cov = gs_cover[ci] > 0.25;
+		const float hl = (cov || gs_cover[ci - 1] > 0.25) ? h : gs_base[ci - 1];
+		const float hr = (cov || gs_cover[ci + 1] > 0.25) ? h : gs_base[ci + 1];
+		const float hd = (cov || gs_cover[ci - DA_GR_S2] > 0.25) ? h : gs_base[ci - DA_GR_S2];
+		const float hu = (cov || gs_cover[ci + DA_GR_S2] > 0.25) ? h : gs_base[ci + DA_GR_S2];
 		const float lo = min(min(hl, hr), min(hd, hu));
 		const bool none = min(h, lo) < DA_GR_NONE * 0.5;
 		const float rise = max(max(abs(hl - h), abs(hr - h)), max(abs(hd - h), abs(hu - h)));
@@ -165,12 +264,23 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		}
 		const int2 c0 = int2(tid.xy) + DA_GR_AP;
 		const int c2 = (int(tid.y) + DA_GR_AP - 2) * DA_GR_S2 + int(tid.x) + DA_GR_AP - 2;
-		const float surface = gs_hg[c2];
+		float shelter = 0.0;
+		[unroll] for (int sj = -2; sj <= 2; ++sj)
+			[unroll] for (int si = -2; si <= 2; ++si)
+				shelter += step(0.75, gs_cover[c2 + sj * DA_GR_S2 + si]);
+		shelter = smoothstep(0.35, 0.9, shelter * (1.0 / 25.0));
+		// the opened solid surface (the dilation of the erosion, as above)
+		float open = DA_GR_NONE;
+		[unroll] for (int oj = -1; oj <= 1; ++oj)
+			[unroll] for (int oi = -1; oi <= 1; ++oi)
+				open = max(open, gs_ero[(c0.y - 1 + oj) * DA_GR_S1 + c0.x - 1 + oi]);
+		const float hg = gs_hg[c2];
+		const float surface = gs_base[c2];
 		const float top = gs_top[c0.y * DA_GR_S0 + c0.x];
 		const float water = gs_wat[c0.y * DA_GR_S0 + c0.x];
 		const float taper = saturate(dist / 0.5);
 		// a water texel: its surface stands above the solid one (da_gr_surface took it)
-		const bool wet = water > DA_GR_NONE * 0.5 && surface == water;
+		const bool wet = water > DA_GR_NONE * 0.5 && hg == water;
 		// the water level within the square of DA_GR_AP texels round the texel, and the Chebyshev distance to
 		// the nearest water texel in it: max over the rows of min(row's DA_GR_AP - |dx|, DA_GR_AP - |dz|)
 		float lvl = DA_GR_NONE;
@@ -184,7 +294,7 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		const float reach = (lvl > DA_GR_NONE * 0.5) ? saturate(near * (2.0 / DA_GR_AP)) : 0.0;
 		const int2 addr = da_gr_addr(t);
 		u_top[addr] = top;
-		u_base[addr] = float2(surface, wet ? -1.0 - taper : taper);
-		u_shore[addr] = float4(gs_open[c2], lvl, reach, 0.0);
+		u_base[addr] = float4(surface, wet ? -1.0 - taper : taper, shelter, hg);
+		u_shore[addr] = float4(open, lvl, reach, 0.0);
 	}
 }

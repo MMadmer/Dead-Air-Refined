@@ -24,6 +24,35 @@
 #include "da_sss.h"	// screen-space contact shadows, r__sss (off by default)
 #include "da_rt_consumer.h"	// ray traced sun shadow (DirectX 12, RTX)
 
+// The seam between this cascade and the next (r4_rendertarget_accum_direct.cpp da_set_sun_blend): over the outer band of
+// this map's square a share of the pixels - growing to all of them at its edge, by interleaved gradient noise that turns
+// with the frame under the temporal resolve - is left to the next cascade (it takes the pixels this pass does not mark
+// in the stencil). Each map holds its own casters (the vegetation's leaves near, its clusters in the middle, its blobs
+// far), so a hard seam showed the shadows round the player sharpening into detail at once as it swept over them.
+// x: the band (a share of the map's half-width), y: the frame (0 without the temporal resolve), z: 1 when a next
+// cascade takes the pixels; m_shadow_next: the next map's transform (its square, which must hold the pixel).
+uniform float4		da_sun_blend;
+uniform float4x4	m_shadow_next;
+
+void	da_sun_cascade_seam	(float4 P4, float4 PS, float2 pix)
+{
+	[branch] if (da_sun_blend.z > 0.5f)
+	{
+		const float2 uv = PS.xy / PS.w;
+		const float edge = max(abs(uv.x - 0.5f), abs(uv.y - 0.5f)) * 2.0f;
+		const float w = saturate((edge - (1.0f - da_sun_blend.x)) / max(da_sun_blend.x, 1e-4f));
+		[branch] if (w > 0.0f)
+		{
+			const float4 PN = mul(m_shadow_next, P4);
+			const float2 un = PN.xy / PN.w;
+			const float2 p = pix + 5.588238f * da_sun_blend.y;
+			const float ign = frac(52.9829189f * frac(dot(p, float2(0.06711056f, 0.00583715f))));
+			if (max(abs(un.x - 0.5f), abs(un.y - 0.5f)) < 0.49f && ign < w)
+				discard;
+		}
+	}
+}
+
 #ifdef USE_SUNFILTER
 #ifdef MSAA_OPTIMIZATION
 float4 main ( v2p_volume I, uint iSample : SV_SAMPLEINDEX  ) : SV_Target
@@ -48,6 +77,7 @@ float4 main ( v2p_volume I  ) : SV_Target
 	float4 _P = float4( gbd.P, 1.f);
 
 	float4 PS = mul( m_shadow,  _P );
+	da_sun_cascade_seam( _P, PS, I.hpos.xy );
 
 	float s	= shadowtest_sun( PS, I.tcJ ) * sunmask( _P );
 	[branch] if ( da_rt.y > 0.5f )
@@ -83,6 +113,7 @@ float4 main ( v2p_volume I ) : SV_Target
 	// ----- shadow
 	float4 	P4 	= float4( _P.x, _P.y, _P.z, 1.f);
 	float4 	PS	= mul( m_shadow, P4 );
+	da_sun_cascade_seam( P4, PS, I.hpos.xy );
 	float 	s 	= sunmask( P4 );
 	#if defined	(USE_SJITTER) || SUN_QUALITY==2 // Hight quality
 			s 	*= shadow_high(PS); //shadowtest_sun( PS, float4(0,0,0,0) );

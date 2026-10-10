@@ -1,0 +1,1280 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Procedural shrubs, the G-buffer pixel shader of the flowers, fruits and catkins (docs/dead-air/SHRUBS.md),
+// each cut out of its quad by its shape: a single flower's petals round a centre of stamens; the florets of a
+// flat-topped corymb or umbel, of a raceme or a panicle; a lacecap's ring of large flat sterile flowers round its
+// small fertile ones; a catkin's rows of scales, fluffy and yellow once open. A group of fruits is laid out in
+// three dimensions in the quad's own frame (da_shrub_bloom.vs passes its axis, its stalk's base and its sizes):
+// exactly the species' count of fruits - a corymb's flat-topped disc, an elder's dome on five rays, a raceme's or a
+// panicle's spiral round its axis (a false indigo's spike of small pods), a spindle's one to a few capsules forking
+// from the end of a long thin stalk, a single hip (its sepals bent back over its shoulders, the dark scar at its
+// tip), plum or raspberry, a pair, a hazel's one to four nuts deep in their frilly husks - each a lit ellipsoid of its own
+// size on its own thin dark stalk, the one in front covering the ones behind and shading their creases; a broom's
+// slender pods, one to a site on a short stalk, a cone's scales, a willow's cotton. A part's rim is cut at half its
+// cover once the part is about a pixel and a half across - a hard edge the jittered frames antialias - and a stalk
+// where it crosses the pixel's centre, against interleaved gradient noise only under that (a dithered rim was spread
+// into hair by the upscalers: the spindles' capsules read as moss, the drupes as pompoms, an elder's bunch had a
+// dithered rim). A fruit under a pixel grows to one, its cover cut by the area it gained, so a group keeps its
+// outline; where a flower's or a catkin's parts fall under about two pixels they give way to the shape's mean cover.
+// Flowers, catkins and fruits take the translucent foliage codes - a fruit sits in the crown's light as the leaves
+// round it do -, a fruit's skin a gloss of a few hundredths.
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_material_codes.h"
+
+struct p_shrub_bloom
+{
+	float4	hpos		: SV_Position;
+	float4	hpos_cur	: TEXCOORD0;
+	float4	hpos_prev	: TEXCOORD1;
+	float4	pv_u		: TEXCOORD2;
+	float4	n_v			: TEXCOORD3;
+	float4	t_h			: TEXCOORD4;
+	float4	c0			: TEXCOORD5;
+	float4	c1			: TEXCOORD6;
+	float4	misc		: TEXCOORD7;
+	float4	fa			: TEXCOORD8;
+	float4	fb			: TEXCOORD9;
+	float4	c2			: TEXCOORD10;
+};
+
+uniform float4	da_shrub_fwd;	// w frame & 63
+uniform float4	da_shrub_time;	// z 1 = motion vectors
+
+float	shrub_b_hash	(float2 c, float salt)	{ return frac(sin(dot(c, float2(12.9898f, 78.233f)) + salt * 17.13f) * 43758.5453f); }
+
+uint	shrub_b_ih	(uint x)
+{
+	x ^= x >> 16; x *= 0x7feb352du;
+	x ^= x >> 15; x *= 0x846ca68bu;
+	x ^= x >> 16;
+	return x;
+}
+
+// The pixel's footprint across a rim of normal n (quad units, n of unit length): the length of the gradient of the
+// distance to the rim. A flat flower or a catkin seen aslant is anisotropic, and fwidth's sum of the four absolutes
+// made every rim's ramp about twice as wide as a pixel on a quad facing the eye.
+float	shrub_b_width	(float2 n, float2 qdx, float2 qdy)
+{
+	return max(length(float2(dot(n, qdx), dot(n, qdy))), 1e-5f);
+}
+
+// How hard a part's rim is cut by its size across (pixels): against the pixel's noise under a pixel (0), at half its
+// cover from a pixel and a half (1).
+float	shrub_b_hard	(float across)	{ return saturate((across - 1.0f) * 2.0f); }
+
+// Whether a part of cover c passes the pixel's cut (ign: the pixel's interleaved gradient noise, h: its hardness).
+bool	shrub_b_pass	(float c, float ign, float h)	{ return c > lerp(ign, 0.5f, h); }
+
+// Small round parts (florets) on a jittered grid of `cells` across the unit disc inside `envelope` (> 0): the
+// distance into the nearest part (> 0 inside, in part radii), the part's centre offset and its hash.
+float	shrub_parts	(float2 p, float cells, float fill, float salt, out float2 rel, out float h)
+{
+	const float2 g = p * cells;
+	const float2 i = floor(g);
+	float best = -1e3f;
+	rel = 0.0f;
+	h = 0.0f;
+	[unroll] for (int y = -1; y <= 1; ++y)
+		[unroll] for (int x = -1; x <= 1; ++x)
+		{
+			const float2 c = i + float2(x, y);
+			const float hh = shrub_b_hash(c, salt);
+			if (hh > fill)
+				continue;
+			const float2 o = c + 0.5f + (float2(shrub_b_hash(c, salt + 1.0f), shrub_b_hash(c, salt + 2.0f)) - 0.5f) * 0.45f;
+			const float r = lerp(0.36f, 0.5f, frac(hh * 7.0f));
+			const float d = 1.0f - length(g - o) / r;
+			if (d > best)
+			{
+				best = d;
+				rel = (g - o) / r;
+				h = hh;
+			}
+		}
+	return best;
+}
+
+// ---- Fruit groups ------------------------------------------------------------------------------------------
+// Layouts (da_shrub_bloom.vs FL_*) and fruit shapes (da_shrubs.cpp fruit_shape).
+#define FL_SINGLE	0u
+#define FL_BUNCH	1u
+#define FL_FLAT		2u
+#define FL_UMBEL	3u
+#define FL_RACEME	4u
+#define FL_PANICLE	5u
+#define FL_CYME		6u
+#define FS_BERRY	1u
+#define FS_HIP		2u
+#define FS_DRUPE	3u
+#define FS_POME		4u
+#define FS_NUT		5u
+#define FS_CAPSULE	6u
+#define FS_CONE		7u
+#define FS_POD		8u
+#define FS_AGGREGATE	10u
+#define FRUITS_MAX	64.0f
+// A spindle's seeds hang out of the split capsule in orange arils; a hip's tip is the dark scar of its disc and
+// styles; a withered sepal is brown (G-buffer encoding).
+static const float3 kAril = float3(0.93f, 0.43f, 0.07f);
+static const float3 kScar = float3(0.22f, 0.18f, 0.14f);
+static const float3 kSepalDry = float3(0.28f, 0.23f, 0.19f);
+// The golden angle: Vogel's spiral of a disc, the phyllotaxis of a raceme and a panicle. The loop turns its
+// direction on by it (a rotation, not a sine a fruit).
+#define GOLDEN		2.3999632f
+static const float2 kGolden = float2(-0.7373688f, 0.6754903f);
+// An elder's five rays, a fifth of a turn apart.
+static const float2 kRay[5] = { float2(1.0f, 0.0f), float2(0.309017f, 0.9510565f), float2(-0.809017f, 0.5877853f),
+	float2(-0.809017f, -0.5877853f), float2(0.309017f, -0.9510565f) };
+
+// A group in the quad's frame, in quad units (x across, y along, z toward the eye; a long quad's half-length 1).
+struct fgroup
+{
+	uint	layout;
+	uint	shape;
+	float	n;			// fruits in it
+	float	inv_n;
+	float3	A, B1, B2;	// its axis (from its stalk out) and two directions across it
+	float3	anchor;		// where its stalk leaves the twig
+	float	reach;		// the anchor's distance behind the quad's centre
+	float	rg;			// its radius
+	float	rb;			// a fruit's radius (the longer of its half-axes)
+	float	elong;		// a fruit's length over its width
+	float	sr;			// a stalk's radius
+	float	shrink;		// a shrivelled fruit's size factor
+	float	ang0;		// the spiral's turn
+	float2	ray0;		// an elder's first ray's direction (cos, sin round the axis)
+	uint	seed;
+};
+
+fgroup	fruit_group	(float4 fa, float4 fb, float shape, float n, float hsh)
+{
+	fgroup G;
+	G.layout = uint(fa.w + 0.5f);
+	G.shape = uint(shape + 0.5f);
+	G.n = clamp(round(n), 1.0f, FRUITS_MAX);
+	// A spindle's cyme sets one capsule up to the species' count (five at most), a hazel one nut up to it.
+	if (G.layout == FL_CYME || (G.layout == FL_BUNCH && G.shape == FS_NUT))
+		G.n = clamp(floor(1.0f + frac(hsh * 113.7f) * G.n), 1.0f, min(G.n, 5.0f));
+	G.inv_n = 1.0f / G.n;
+	G.reach = length(fa.xyz);
+	G.A = G.reach > 1e-4f ? fa.xyz / G.reach : float3(0.0f, 1.0f, 0.0f);
+	G.B1 = abs(G.A.z) < 0.995f ? normalize(cross(G.A, float3(0.0f, 0.0f, 1.0f))) : float3(1.0f, 0.0f, 0.0f);
+	G.B2 = cross(G.A, G.B1);
+	G.anchor = -fa.xyz;
+	G.rg = fb.x;
+	G.sr = fb.y;
+	G.shrink = fb.z;
+	G.seed = uint(hsh * 16777216.0f);
+	G.ang0 = float(G.seed & 0xFFFu) * (6.2831853f / 4096.0f);
+	sincos(G.ang0 + 0.7f, G.ray0.y, G.ray0.x);
+	const bool caps = G.shape == FS_CAPSULE;
+	// A fruit's size by its group: a disc's fruits share its area (a corymb's touch, an elder's sub-umbels leave
+	// gaps), a raceme's its length, a dense panicle's its outline; a capsule of a lilac's panicle is its own size, a
+	// false indigo's pod a twelfth of its spike's length (8 mm on a spike of 10 cm, however crowded).
+	if (G.layout == FL_FLAT)
+		G.rb = 0.6f * G.rg * rsqrt(G.n);
+	else if (G.layout == FL_UMBEL)
+		G.rb = 0.5f * G.rg * rsqrt(G.n);
+	else if (G.layout == FL_BUNCH)
+		G.rb = G.shape == FS_NUT ? 0.45f * G.rg : clamp(1.85f * G.rg / G.n, 0.06f, 0.45f * G.rg);
+	else if (G.layout == FL_RACEME)
+		G.rb = G.shape == FS_POD ? 0.067f : clamp(0.67f / G.n, 0.035f, 0.14f);
+	else if (G.layout == FL_PANICLE)
+		G.rb = caps ? 0.12f : clamp(0.65f * rsqrt(G.n), 0.04f, 0.18f);
+	else if (G.layout == FL_CYME)
+		G.rb = 0.4f * G.rg;
+	else
+		G.rb = G.n < 1.5f ? G.rg : (G.n < 2.5f ? 0.5f : 0.45f) * G.rg;
+	// A fruit's length over its width: a hip's ovoid, a hazelnut's, a raspberry a little long, a false indigo's pod
+	// long; a spindle's capsule broader than long, a lilac's oblong and beaked, a mock orange's a short top.
+	G.elong = 1.0f;
+	if (G.shape == FS_HIP)
+		G.elong = 1.55f;
+	else if (G.shape == FS_DRUPE)
+		G.elong = 1.06f;
+	else if (G.shape == FS_POME)
+		G.elong = 0.9f;
+	else if (G.shape == FS_NUT)
+		G.elong = 1.22f;
+	else if (G.shape == FS_CONE)
+		G.elong = 1.5f;
+	else if (G.shape == FS_AGGREGATE)
+		G.elong = 1.12f;
+	else if (G.shape == FS_POD)
+		G.elong = 2.6f;
+	else if (caps)
+		G.elong = G.layout == FL_CYME ? 0.8f : (G.layout == FL_PANICLE ? 2.0f : 1.3f);
+	return G;
+}
+
+// One fruit of a group: its centre, its axis (from its stalk out), its half-length along the axis and half-width,
+// where its stalk starts (the stalk ends at the centre; none where they meet) and its own hash.
+struct fpart
+{
+	float3	c;
+	float3	e;
+	float	hl, hw;
+	float3	s0;
+	float	h;
+};
+
+// An elder's cyme: its five rays a fifth of a turn apart, each ending in a small dome of a fifth of the berries
+// (berry i on ray i mod 5) round the ray's node.
+#define UMBEL_H		0.45f
+float3	fruit_ray_dir	(fgroup G, uint k)
+{
+	const float2 r = kRay[k > 4u ? 0u : k];
+	const float2 d = float2(G.ray0.x * r.x - G.ray0.y * r.y, G.ray0.x * r.y + G.ray0.y * r.x);
+	return G.B1 * d.x + G.B2 * d.y;
+}
+float3	fruit_ray_node	(fgroup G, uint k)
+{
+	return G.anchor + G.A * (UMBEL_H * 0.68f) + fruit_ray_dir(G, k) * (0.46f * G.rg);
+}
+// Fruit i's direction round the axis (cos, sin): the golden angle on from the group's turn, an elder's round the
+// middle of its ray's dome.
+float2	fruit_turn	(uint i, fgroup G)
+{
+	float2 g;
+	[branch] if (G.layout == FL_UMBEL)
+		sincos(float(i / 5u) * GOLDEN + G.ang0 + 1.3f * float(i % 5u), g.y, g.x);
+	else
+		sincos(float(i) * GOLDEN + G.ang0, g.y, g.x);
+	return g;
+}
+
+// Fruit i of the group, g its direction round the axis (fruit_turn; the loop turns it on by the golden angle). Its
+// axis comes back unnormalized (only the fruits near the pixel need it).
+fpart	fruit_part	(uint i, fgroup G, float2 g)
+{
+	fpart P;
+	const uint hb = shrub_b_ih(G.seed + i * 0x9E3779B9u);
+	const float4 r4 = float4(uint4(hb, hb >> 8, hb >> 16, hb >> 24) & 0xFFu) * (1.0f / 255.0f);
+	P.h = r4.w;
+	const float fi = float(i);
+	// Round the axis by the golden angle (a fan and a bunch: evenly).
+	float3 rad = G.B1 * g.x + G.B2 * g.y;
+	float3 e = G.A, c = G.anchor, s0 = G.anchor;
+	float r = G.rb * lerp(0.8f, 1.2f, r4.x);
+	// The layout is one for the whole quad: real branches, not every layout's maths for every fruit.
+	[branch] if (G.layout == FL_FLAT || G.layout == FL_UMBEL)
+	{
+		// A flat-topped disc on Vogel's spiral, its middle higher (an elder's a broad dome), each fruit a little
+		// above or below its neighbours; a corymb's stalks branch lower the farther out their fruit, an elder's
+		// berries sit in its rays' small domes on stalks from the rays' nodes.
+		const bool umbel = G.layout == FL_UMBEL;
+		const float H = umbel ? UMBEL_H : 0.5f;
+		float3 p;
+		float rho;
+		[branch] if (umbel)
+		{
+			const uint k = i % 5u;
+			const float m = float((uint(G.n) + 4u - k) / 5u);
+			rho = sqrt((float(i / 5u) + 0.5f) / m) * (1.0f + (r4.y - 0.5f) * 0.3f * rsqrt(m));
+			p = fruit_ray_dir(G, k) * (0.52f * G.rg) + rad * (rho * (0.42f * G.rg - G.rb));
+			s0 = fruit_ray_node(G, k);
+			rho = length(p) / G.rg;
+		}
+		else
+		{
+			rho = sqrt((fi + 0.5f) * G.inv_n) * (1.0f + (r4.y - 0.5f) * 0.3f * sqrt(G.inv_n));
+			p = rad * (rho * (G.rg - G.rb));
+			s0 = G.anchor + G.A * (H * lerp(0.75f, 0.35f, saturate(rho))) + p * 0.25f;
+		}
+		const float lift = H + (umbel ? 0.32f : 0.14f) * G.rg * (1.0f - rho * rho) + (r4.z - 0.5f) * 0.5f * G.rb;
+		c = G.anchor + G.A * lift + p;
+		e = c - s0;
+	}
+	else [branch] if (G.layout == FL_RACEME)
+	{
+		// Along the rachis, the oldest and biggest at its base, each on a short stalk leaning toward the tip (a
+		// false indigo's pods nearly without one, crowding the spike).
+		const bool pods = G.shape == FS_POD;
+		const float t = saturate((fi + 0.35f + 0.3f * r4.z) * G.inv_n);
+		s0 = G.anchor + G.A * (0.08f + t * 1.52f);
+		e = normalize(rad + G.A * (G.shape == FS_CAPSULE ? 0.8f : (pods ? 0.5f : 0.35f)));
+		r *= lerp(1.08f, 0.85f, t);
+		c = s0 + e * ((pods ? 0.03f : 0.17f) * lerp(0.75f, 1.2f, r4.y) + r);
+	}
+	else [branch] if (G.layout == FL_PANICLE)
+	{
+		// Round the branched axis in an ovoid (a red elder's dense berries) or a pyramid (a lilac's loose capsules,
+		// standing out and up toward the tip on their branchlets).
+		const float t = saturate((fi + 0.5f + 0.4f * (r4.z - 0.5f)) * G.inv_n);
+		s0 = G.anchor + G.A * (0.12f + t * 1.5f);
+		const float w = G.shape == FS_CAPSULE ? 0.4f * (1.0f - 0.7f * t) * saturate(t * 5.0f + 0.3f)
+			: 0.42f * pow(max(sin(3.14159f * (0.08f + 0.88f * t)), 0.0f), 0.7f);
+		const float rho = w * lerp(0.5f, 1.0f, sqrt(r4.y));
+		if (G.shape == FS_CAPSULE)
+		{
+			e = normalize(rad + G.A * 0.8f);
+			r = G.rb * lerp(0.85f, 1.15f, r4.x);
+			c = s0 + rad * rho + e * r;
+		}
+		else
+		{
+			e = rad;
+			c = s0 + rad * rho;
+		}
+	}
+	else [branch] if (G.layout == FL_CYME)
+	{
+		// A spindle's capsules fork from the end of the long thin stalk (2.66 times the group's radius: 1.3 times its
+		// breadth) on short ones, spread apart: one hangs on, two lean to either side, three a middle one and two to
+		// the sides, more round the fork.
+		s0 = G.anchor + G.A * (2.66f * G.rg);
+		float beta = 0.0f, phi = G.ang0;
+		[flatten] if (G.n > 3.5f)
+		{
+			beta = 0.9f;
+			phi += 6.2831853f * fi * G.inv_n;
+		}
+		else if (G.n > 1.5f && !(G.n > 2.5f && i == 0u))
+		{
+			beta = 0.9f;
+			phi += 3.14159265f * fi;
+		}
+		beta += 0.15f * (r4.y - 0.5f);
+		float sb, cb;
+		sincos(phi, sb, cb);
+		rad = G.B1 * cb + G.B2 * sb;
+		e = G.A * cos(beta) + rad * sin(beta);
+		r = G.rb * lerp(0.9f, 1.1f, r4.x);
+		c = s0 + e * (0.6f * G.rg * lerp(0.85f, 1.15f, r4.z) + 0.8f * r);
+	}
+	else [branch] if (G.layout == FL_BUNCH)
+	{
+		const float ls = max(2.0f * G.reach - 2.0f * G.rg, 0.0f);
+		[branch] if (G.shape == FS_NUT)
+		{
+			// Nuts on the end of a short common stalk, pointing out, pressed together.
+			float sb, cb;
+			sincos(6.2831853f * fi / G.n + G.ang0, sb, cb);
+			rad = G.B1 * cb + G.B2 * sb;
+			s0 = G.anchor + G.A * ls;
+			e = normalize(G.A * 0.75f + rad * (G.n > 1.5f ? 0.66f : 0.0f));
+			r = G.rb * lerp(0.9f, 1.1f, r4.x);
+			c = s0 + e * (r * 1.02f);
+		}
+		else
+		{
+			// Berries crowding a spur without stalks, round it by the golden angle.
+			const float t = (fi + 0.5f) / G.n;
+			r = G.rb * lerp(0.85f, 1.15f, r4.x);
+			c = G.anchor + G.A * (0.06f + t * 2.0f * G.rg) + rad * (0.75f * r);
+			e = rad;
+			s0 = c;
+		}
+	}
+	else
+	{
+		// One fruit on its stalk; a pair joined at the base on one stalk (a fly honeysuckle's); a few fanned, each
+		// on its own.
+		const float ls = max(2.0f * G.reach - 2.0f * G.rg, 0.0f);
+		[branch] if (G.n < 1.5f)
+		{
+			r = G.rg;
+			c = G.anchor + G.A * (ls + G.rg);
+		}
+		else [branch] if (G.n < 2.5f)
+		{
+			const float side = i == 0u ? 1.0f : -1.0f;
+			r = G.rb * lerp(0.92f, 1.08f, r4.x);
+			s0 = G.anchor + G.A * ls;
+			c = s0 + G.A * (0.85f * r) + G.B1 * (side * 0.95f * r);
+			e = normalize(G.A + G.B1 * (side * 0.8f));
+		}
+		else
+		{
+			float sb, cb;
+			sincos(6.2831853f * (fi + 0.3f * r4.y) / G.n + G.ang0, sb, cb);
+			rad = G.B1 * cb + G.B2 * sb;
+			const float beta = 0.5f + 0.3f * (r4.z - 0.5f);
+			e = G.A * cos(beta) + rad * sin(beta);
+			r = G.rb * lerp(0.88f, 1.12f, r4.x);
+			c = G.anchor + e * (ls * lerp(0.8f, 1.2f, r4.y) + r);
+		}
+	}
+	r *= G.shrink;
+	P.c = c;
+	P.e = e;
+	P.s0 = s0;
+	P.hl = G.elong >= 1.0f ? r : r * G.elong;
+	P.hw = G.elong >= 1.0f ? r / G.elong : r;
+	return P;
+}
+
+// Whether pixel q may see any of the group's fruits, stalks or their shade: inside the hull of the stalk's base
+// and a corymb's or an elder's disc (projected, swept by its dome's height, grown by a fruit's reach), or within
+// reach of a raceme's or a berry panicle's axis. Most of a group's quad is empty; the rest is tested whole.
+float2	fruit_disc_slab	(fgroup G)
+{
+	const bool umbel = G.layout == FL_UMBEL;
+	const float H = umbel ? UMBEL_H : 0.5f;
+	return float2(H - 0.4f * G.rb, H + (umbel ? 0.32f : 0.14f) * G.rg + 0.4f * G.rb);
+}
+
+bool	fruit_bound	(float2 q, fgroup G, float px)
+{
+	const float m = 2.2f * G.rb + 2.0f * px;
+	bool inside = true;
+	[branch] if (G.layout == FL_FLAT || G.layout == FL_UMBEL)
+	{
+		const float2 t = fruit_disc_slab(G);
+		const float2 mid = (G.anchor + G.A * (0.5f * (t.x + t.y))).xy;
+		const float axy = length(G.A.xy);
+		const float2 v = axy > 1e-3f ? G.A.xy / axy : float2(0.0f, 1.0f), u = float2(-v.y, v.x);
+		const float R = G.rg + 0.25f * G.rb;
+		const float a = R + m, b = R * abs(G.A.z) + m, sweep = 0.5f * (t.y - t.x) * axy;
+		// The disc's ellipse swept along the axis as seen.
+		const float2 d = q - mid;
+		const float du = dot(d, u) / a, dv = max(abs(dot(d, v)) - sweep, 0.0f) / b;
+		// The peduncle.
+		const float2 pa = q - G.anchor.xy, pb = mid - G.anchor.xy;
+		const float pl = dot(pb, pb);
+		const float2 po = pa - pb * (pl > 1e-8f ? saturate(dot(pa, pb) / pl) : 0.0f);
+		const float pw = 4.0f * G.sr + 2.0f * px;
+		// The stalks' cone from the base to the ellipse (taken with its sweep, a little wider): in the ellipse's
+		// unit circle the base's tangent cone, short of the circle's far side.
+		const float bb = (b + sweep) * 1.1f, aa = a * 1.1f;
+		const float2 e = float2(dot(d, u) / aa, dot(d, v) / bb);
+		const float2 o = float2(dot(G.anchor.xy - mid, u) / aa, dot(G.anchor.xy - mid, v) / bb);
+		const float ol = max(length(o), 1e-4f);
+		const float2 oe = e - o;
+		const float along = dot(oe, -o / ol);
+		const bool cone = ol > 1.0f && along > 0.0f && along <= ol && dot(oe, oe) * (1.0f - 1.0f / (ol * ol)) <= along * along;
+		inside = du * du + dv * dv <= 1.0f || dot(po, po) < pw * pw || cone;
+	}
+	else [branch] if (G.layout == FL_RACEME || (G.layout == FL_PANICLE && G.shape != FS_CAPSULE))
+	{
+		// Within a fruit's stalk, the fruit and its shade of the axis.
+		const float len = G.layout == FL_RACEME ? 1.6f : 1.62f;
+		const float w = (G.layout == FL_RACEME ? 0.24f : 0.44f) + m;
+		const float2 pa = q - G.anchor.xy, pb = G.A.xy * len;
+		const float pl = dot(pb, pb);
+		const float2 po = pa - pb * (pl > 1e-8f ? saturate(dot(pa, pb) / pl) : 0.0f);
+		inside = dot(po, po) < w * w;
+	}
+	return inside;
+}
+
+// The stalks the fruits' own ones leave from: a common stalk, an elder's peduncle and its five rays, a rachis, a
+// panicle's axis.
+uint	fruit_axes	(fgroup G)
+{
+	if (G.layout == FL_UMBEL)
+		return 6u;
+	if (G.layout == FL_FLAT || G.layout == FL_RACEME || G.layout == FL_PANICLE || G.layout == FL_CYME)
+		return 1u;
+	if (G.layout == FL_BUNCH)
+		return G.shape == FS_NUT ? 1u : 0u;
+	return G.n > 1.5f && G.n < 2.5f ? 1u : 0u;
+}
+
+void	fruit_axis	(uint j, fgroup G, out float3 a0, out float3 a1, out float r)
+{
+	a0 = G.anchor;
+	r = G.sr * 1.5f;
+	const float ls = max(2.0f * G.reach - 2.0f * G.rg, 0.0f);
+	if (G.layout == FL_UMBEL)
+	{
+		// The peduncle, then the rays from its top to their nodes.
+		const float3 top = G.anchor + G.A * (UMBEL_H * 0.3f);
+		if (j == 0u)
+		{
+			a1 = top;
+			r = G.sr * 1.8f;
+		}
+		else
+		{
+			a0 = top;
+			a1 = fruit_ray_node(G, j - 1u);
+			r = G.sr * 1.3f;
+		}
+	}
+	else if (G.layout == FL_FLAT)
+		a1 = G.anchor + G.A * (0.5f * 0.75f);
+	else if (G.layout == FL_RACEME)
+		a1 = G.anchor + G.A * 1.6f;
+	else if (G.layout == FL_PANICLE)
+		a1 = G.anchor + G.A * 1.62f;
+	else if (G.layout == FL_CYME)
+	{
+		// The long thin stalk to the fork.
+		a1 = G.anchor + G.A * (2.66f * G.rg);
+		r = G.sr * 1.2f;
+	}
+	else
+	{
+		a1 = G.anchor + G.A * ls;
+		r = G.sr * 1.3f;
+	}
+}
+
+// A fruit's outline at its local coordinates (u along its axis as projected, v across, both in its radii; s how
+// side-on it is): the elliptic radius, shaped by its kind - a hip's neck, a lilac capsule's beak, a mock orange's
+// broad top, a spindle's four lobes (a notch at the far end side-on, a four-leafed outline end-on).
+float	fruit_rho	(float u, float v, float s, fgroup G, float h)
+{
+	float vv = v;
+	if (G.shape == FS_HIP)
+		vv = v / max(1.0f - 0.2f * s * saturate(u), 0.3f);
+	else if (G.shape == FS_CAPSULE && G.layout == FL_PANICLE)
+		vv = v / max(1.0f - 0.3f * s * saturate(u), 0.2f);
+	else if (G.shape == FS_CAPSULE && G.layout == FL_RACEME)
+		vv = v / max(1.0f - 0.3f * s * saturate(-u), 0.3f);
+	float rho = sqrt(u * u + vv * vv);
+	if (G.shape == FS_CAPSULE && G.layout == FL_CYME)
+	{
+		const float notch = s * saturate(u * 1.4f - 0.2f) * saturate(1.0f - abs(v) * 3.0f);
+		const float clover = (1.0f - s) * (0.5f - 0.5f * cos(4.0f * atan2(v, u) + h * 6.2831853f));
+		rho *= 1.0f + 0.35f * notch + 0.22f * clover;
+	}
+	return rho;
+}
+
+// The cover of fruit P at q and the height toward the eye of its surface there; l: its local u, v and radius, and
+// how much it grew. A fruit under a pixel across grows to it, its cover cut by the area it gained: the group keeps
+// its own outline at any distance, its fruits a faint grain TAA resolves (a group's mean cover over a disc in their
+// place read as a dotted slab).
+float	fruit_cover	(float2 q, fpart P, fgroup G, float px, out float4 l, out float z)
+{
+	const float grow = max(0.5f * px / P.hw, 1.0f);
+	const float hl = P.hl * grow, hw = P.hw * grow;
+	const float3 e = normalize(P.e);
+	const float2 d = q - P.c.xy;
+	const float s = saturate(length(e.xy));
+	const float2 m = s > 1e-3f ? e.xy / s : float2(1.0f, 0.0f);
+	const float am = sqrt(hl * hl * s * s + hw * hw * (1.0f - s * s));
+	const float u = dot(d, m) / am, v = (m.x * d.y - m.y * d.x) / hw;
+	const float rho = fruit_rho(u, v, s, G, P.h);
+	l = float4(u, v, rho, grow);
+	const float depth = sqrt(hl * hl * e.z * e.z + hw * hw * (1.0f - e.z * e.z));
+	z = P.c.z + depth * sqrt(saturate(1.0f - rho * rho));
+	return saturate((1.0f - rho) * hw / px + 0.5f) / (grow * grow);
+}
+
+// A blade from a to b of radius r0 at a and r1 at b (a stalk the same both ends, a sepal tapering) at q: its cover
+// at its true width (cut at a half, a stalk thinner than a pixel is kept where it crosses the pixel's centre and the
+// jittered frames make it a faint line), the height toward the eye of its surface, its round normal and its radius
+// there. The distance first: most stalks are nowhere near the pixel.
+float	fruit_blade	(float2 q, float3 a, float3 b, float r0, float r1, float px, out float z, out float3 n, out float rt)
+{
+	z = -1e3f;
+	n = float3(0.0f, 0.0f, 1.0f);
+	const float2 ab = b.xy - a.xy, aq = q - a.xy;
+	const float ll = dot(ab, ab);
+	const float t = saturate(dot(aq, ab) / max(ll, 1e-8f));
+	rt = lerp(r0, r1, t);
+	const float lim = rt + px;
+	const float2 off = aq - ab * t;
+	const float d2 = dot(off, off);
+	float cover = 0.0f;
+	[branch] if (d2 < lim * lim && ll > 1e-8f)
+	{
+		const float x = clamp(dot(off, float2(-ab.y, ab.x)) * rsqrt(ll) / max(rt, 1e-6f), -1.0f, 1.0f);
+		const float h = sqrt(saturate(1.0f - x * x));
+		z = lerp(a.z, b.z, t) + rt * h;
+		n = float3(float2(-ab.y, ab.x) * (rsqrt(ll) * x), h);
+		cover = saturate((rt - sqrt(d2)) / px + 0.5f);
+	}
+	return cover;
+}
+
+float	fruit_stalk	(float2 q, float3 a, float3 b, float r, float px, out float z, out float3 n)
+{
+	float rt;
+	return fruit_blade(q, a, b, r, r, px, z, n, rt);
+}
+
+// A hazelnut in its husk: the leafy involucre a deep cup round the nut, longer than it - its bottom hugging the nut's
+// lower half, its sides flaring from the nut's middle into seven ragged lobes that reach well past its tip -, so the
+// nut shows only as a pale tip in the cup's notches and inside its mouth (a shell round the nut's lower half, the nut
+// olive, read as smooth olive eggs). The nut's spheroid of fruit P: a little smaller than the fruit, set forward.
+fpart	fruit_kernel	(fpart P)
+{
+	fpart K = P;
+	K.c = P.c + normalize(P.e) * (0.05f * P.hl);
+	K.hl = P.hl * 0.85f;
+	K.hw = P.hw * 0.85f;
+	return K;
+}
+
+// Under three pixels across a husked nut is one soft spheroid round the whole of it, the husk's colour.
+fpart	fruit_husk_proxy	(fpart P)
+{
+	fpart S = P;
+	S.c = P.c + normalize(P.e) * (0.2f * P.hl);
+	S.hl = P.hl * 1.2f;
+	S.hw = P.hw * 1.25f;
+	return S;
+}
+
+// The husk's rim at azimuth phi round its axis: how far past the nut's middle the cup reaches there, in the fruit's
+// half-lengths - broad lobes to 1.4, past the nut's tip at 0.9, notched to 0.6 between them, ragged; each husk turned
+// its own way.
+float	fruit_husk_rim	(float phi, float h)
+{
+	const float t = abs(frac(phi * (7.0f / 6.2831853f) + h * 3.7f) * 2.0f - 1.0f);
+	return 0.6f + 0.8f * pow(t, 0.7f) + 0.08f * sin(phi * 23.0f + h * 31.0f);
+}
+
+// The front and the back of fruit E's spheroid on the eye's ray through q (heights toward the eye).
+void	fruit_spheroid_z	(float2 q, fpart E, out float zf, out float zb)
+{
+	const float3 e = normalize(E.e);
+	const float2 d = q - E.c.xy;
+	const float de = dot(d, e.xy);
+	const float iA = 1.0f / (E.hl * E.hl), iB = 1.0f / (E.hw * E.hw), k = iA - iB;
+	const float a = iB + k * e.z * e.z, b = 2.0f * k * e.z * de, c = dot(d, d) * iB + k * de * de - 1.0f;
+	const float sq = sqrt(max(b * b - 4.0f * a * c, 0.0f));
+	zf = E.c.z + (-b + sq) / (2.0f * a);
+	zb = E.c.z + (-b - sq) / (2.0f * a);
+}
+
+// The husk's cup on the eye's ray through q (fruit P), exactly: the lower half of a spheroid round the nut's lower
+// half (as long as the fruit, 1.05 times its width at the nut's middle) and over it a cone flaring from that equator a
+// third of the width a half-length, cut by the rim - the nearest of their surfaces, its height and its outward normal
+// (quad frame). Two quadratics and the rim: no texture, no loop.
+bool	fruit_husk_hit	(float2 q, fpart P, out float z, out float3 n)
+{
+	z = -1e3f;
+	n = float3(0.0f, 0.0f, 1.0f);
+	const float3 e = normalize(P.e);
+	const float B = 1.05f * P.hw, k = 0.35f * P.hw / P.hl;
+	const float2 d = q - P.c.xy;
+	const float de = dot(d, e.xy), dd = dot(d, d);
+	bool hit = false;
+	// The bottom: the spheroid's half under the nut's middle (its height along the axis s at most zero).
+	{
+		const float iA = 1.0f / (P.hl * P.hl), iB = 1.0f / (B * B), kk = iA - iB;
+		const float a = iB + kk * e.z * e.z, b = 2.0f * kk * e.z * de, c = dd * iB + kk * de * de - 1.0f;
+		const float disc = b * b - 4.0f * a * c;
+		[branch] if (disc >= 0.0f)
+		{
+			const float sq = sqrt(disc);
+			[unroll] for (int r = 0; r < 2; ++r)
+			{
+				const float zr = (-b + (r == 0 ? sq : -sq)) / (2.0f * a), s = de + e.z * zr;
+				if (s <= 0.0f && zr > z)
+				{
+					const float3 p = float3(d, zr);
+					z = zr;
+					n = normalize((p - e * s) * iB + e * (s * iA));
+					hit = true;
+				}
+			}
+		}
+	}
+	// The sides: a cone from the equator (radius B), up to the rim at the point's turn round the axis.
+	{
+		const float rd = B + k * de;
+		const float a = 1.0f - e.z * e.z * (1.0f + k * k), b = -2.0f * e.z * (de + k * rd), c = dd - de * de - rd * rd;
+		const float disc = b * b - 4.0f * a * c;
+		[branch] if (disc >= 0.0f && abs(a) > 1e-6f)
+		{
+			const float sq = sqrt(disc);
+			const float3 f1 = abs(e.z) < 0.995f ? normalize(cross(e, float3(0.0f, 0.0f, 1.0f))) : float3(1.0f, 0.0f, 0.0f);
+			const float3 f2 = cross(e, f1);
+			[unroll] for (int r = 0; r < 2; ++r)
+			{
+				const float zr = (-b + (r == 0 ? sq : -sq)) / (2.0f * a), s = de + e.z * zr;
+				const float3 lp = float3(d, zr) - e * s;
+				const float ll = dot(lp, lp);
+				if (s >= 0.0f && zr > z && B + k * s > 0.0f && ll > 1e-12f
+					&& s <= P.hl * fruit_husk_rim(atan2(dot(lp, f2), dot(lp, f1)), P.h))
+				{
+					z = zr;
+					n = normalize(lp * rsqrt(ll) - e * k);
+					hit = true;
+				}
+			}
+		}
+	}
+	z = hit ? z + P.c.z : -1e3f;
+	return hit;
+}
+
+// A hazelnut at q (fruit P): whether its husk or its nut passes the pixel's cut (cut: the cover a part must exceed;
+// the husk's cup is cut where it covers the pixel's centre), the height of the nearer and which it is: 0 the husk's
+// outside, 1 its inside (seen through the mouth or a notch), 2 the nut; n the husk's normal, turned to the eye.
+bool	fruit_nut_hit	(float2 q, fpart P, fgroup G, float px, float cut, out float z, out uint part, out float3 n)
+{
+	z = -1e3f;
+	part = 0u;
+	n = float3(0.0f, 0.0f, 1.0f);
+	float4 l;
+	bool hit = false;
+	[branch] if (2.0f * P.hw < 3.0f * px)
+		hit = fruit_cover(q, fruit_husk_proxy(P), G, px, l, z) > cut;
+	else
+	{
+		hit = fruit_husk_hit(q, P, z, n);
+		if (hit && n.z < 0.0f)
+		{
+			part = 1u;
+			n = -n;
+		}
+		const fpart K = fruit_kernel(P);
+		float zc;
+		[branch] if (fruit_cover(q, K, G, px, l, zc) > cut)
+		{
+			float zf, zb;
+			fruit_spheroid_z(q, K, zf, zb);
+			if (zf > z)
+			{
+				z = zf;
+				part = 2u;
+				hit = true;
+			}
+		}
+	}
+	return hit;
+}
+
+f_deffer	main	(p_shrub_bloom I)
+{
+	const float what = I.c0.w, shape = I.c1.w, count = I.misc.x, stage = I.misc.y, hsh = I.misc.z, aspect = I.misc.w;
+	// Unit coordinates: x across, y along, the quad's half-length 1 on its long side.
+	const float2 q = float2(I.pv_u.w / sqrt(aspect), I.n_v.w * sqrt(aspect)) / sqrt(aspect);
+	// The pixel's footprint in quad units, the root mean square of its two edges (a fruit group's quad faces the eye;
+	// the rims of the flat flowers and the catkins take their own, shrub_b_width).
+	const float2 qdx = ddx(q), qdy = ddy(q);
+	const float px = max(sqrt(0.5f * (dot(qdx, qdx) + dot(qdy, qdy))), 1e-5f);
+	// The pixel's interleaved gradient noise, a new pattern every frame while TAA runs, and how hard the part at the
+	// pixel is cut against it (shrub_b_hard).
+	const float frame = da_shrub_time.z > 0.5f ? da_shrub_fwd.w : 0.0f;
+	const float2 pix = I.hpos.xy + float2(29.0f, 7.0f) + 7.13f * frame;
+	const float ign = frac(52.9829189f * frac(dot(pix, float2(0.06711056f, 0.00583715f))));
+	float cover = 0.0f, mean_cover = 0.7f, hard = 0.0f;
+	float3 colour = I.c0.rgb, dome = float3(0.0f, 0.0f, 1.0f);
+	// Glosses of a few hundredths (the combine scales the sun's specular five times over): a berry's skin a
+	// hundredth or three, a hip's satin. The occlusion of the part's sky light beyond the crown's (the leaves' own):
+	// a crease between the berries of a bunch, a stalk among them.
+	float gloss = 0.015f, ao = 1.0f;
+	// Under two pixels a flower's or a catkin's part is its shape's mean cover (no dither inside); a fruit group and a
+	// pod keep their own.
+	float resolve = saturate((0.125f - px) / 0.075f);
+	if (what > 1.5f)
+	{
+		// A catkin: a tapered cylinder of scale rows; open, the anthers fluff out the outline.
+		const float y = I.n_v.w * 0.5f + 0.5f;
+		const float w = 0.95f * pow(saturate(sin(3.14159f * saturate(y * 1.05f))), 0.5f);
+		const float rows = frac(y * 14.0f + abs(I.pv_u.w) * 0.6f);
+		const float fluff = stage * 0.15f * shrub_b_hash(floor(float2(I.pv_u.w * 6.0f, y * 30.0f)), hsh);
+		// The footprint across it in its own x (the quad's corner coordinate, aspect times q.x).
+		const float wx = aspect * shrub_b_width(float2(1.0f, 0.0f), qdx, qdy);
+		cover = saturate(((w + fluff) - abs(I.pv_u.w)) / wx + 0.5f);
+		hard = shrub_b_hard(2.0f * w / wx);
+		colour *= lerp(0.85f, 1.1f, rows);
+		dome = float3(I.pv_u.w, 0.0f, sqrt(saturate(1.0f - I.pv_u.w * I.pv_u.w)));
+		mean_cover = 0.75f;
+	}
+	else if (what > 0.5f)
+	{
+		// Fruit: a group of the species' count (berries, hips, drupes, pomes, nuts, capsules, aggregates), pods or
+		// the cotton of a willow's or a poplar's split capsules.
+		gloss = 0.02f;
+		const float n = max(count, 1.0f);
+		const float ripe = saturate((stage - 0.7f) / 0.3f);
+		[branch] if (shape > 7.5f && shape < 8.5f && n < 2.5f)
+		{
+			// A broom's pod (a legume), one to a site, turned to the eye about its length from the site at the quad's
+			// end (q.y = -1): small, flat, six times as long as wide, a little curved, on a short stalk; green while it
+			// grows, darkening to brown-black - each pod on its own day (da_shrub_bloom.vs) -, as long as the fruit
+			// size (the quad 1.2 times it). Wider pods in pairs, their pale hairy margins, read as moths. (A false
+			// indigo's spike of pods is a raceme group.)
+			const float hp = shrub_b_hash(float2(0.0f, 3.0f), hsh);
+			float s, c;
+			sincos((hp - 0.5f) * 0.08f, s, c);
+			// The quad's stalk end is q.y = -1; the pod's own frame turned by its lean.
+			const float2 r = float2(q.x * c + (q.y + 1.0f) * s, (q.y + 1.0f) * c - q.x * s);
+			const float half_w = 0.14f, foot = 0.2f, len = lerp(1.6f, 1.75f, hp);
+			const float y = (r.y - foot) / len * 2.0f - 1.0f;
+			const float w = half_w * pow(saturate(1.0f - pow(abs(y), 2.5f)), 0.6f);
+			const float x = r.x - 0.12f * half_w * (1.0f - y * y) * (hp > 0.5f ? 1.0f : -1.0f);
+			// The footprint across the pod (its x turned by its lean). Under a pixel across it is a pixel wide at its
+			// cover over that; its stalk is kept where it crosses the pixel's centre.
+			const float wx = shrub_b_width(float2(c, s), qdx, qdy);
+			const float ww = max(w, 0.5f * wx);
+			const bool pass_pod = shrub_b_pass(saturate((ww - abs(x)) / wx + 0.5f) * (w / ww), ign, shrub_b_hard(2.0f * w / wx));
+			cover = pass_pod || (r.y > -wx && r.y < foot + 0.05f && abs(r.x) < I.fb.y) ? 1.0f : 0.0f;
+			hard = 1.0f;
+			resolve = 1.0f;
+			[branch] if (pass_pod)
+			{
+				// Flat faces and rounded margins; the seeds swell a ripe pod's faces in a row where they show (over
+				// about eight pixels across). Matte while green, a dull shine once ripe.
+				const float edge = saturate(abs(x) / max(w, 1e-4f));
+				const float detail = saturate(w / wx * 0.5f - 1.0f);
+				colour *= lerp(1.0f, 0.9f + 0.1f * abs(sin(y * 9.0f)), ripe * detail);
+				dome = float3((x >= 0.0f ? 0.8f : -0.8f) * smoothstep(0.45f, 1.0f, edge), 0.0f, 0.6f);
+				gloss = lerp(0.008f, 0.02f, ripe);
+			}
+			else
+			{
+				colour = I.c2.rgb;
+				gloss = 0.006f;
+			}
+			mean_cover = 0.5f;
+		}
+		else if (shape > 6.5f && shape < 7.5f && n < 1.5f)
+		{
+			// A cone: an egg of scales in crossing spirals, their lips darker; a resinous green when young, a dull
+			// grey-brown once open.
+			const float yy = q.y * 0.86f + 0.1f;
+			const float w = (0.94f / aspect) * pow(saturate(1.0f - yy * yy), 0.5f) * (1.0f - 0.12f * yy);
+			const float wx = shrub_b_width(float2(1.0f, 0.0f), qdx, qdy), wy = shrub_b_width(float2(0.0f, 1.0f), qdx, qdy);
+			cover = saturate((w - abs(q.x)) / wx + 0.5f) * saturate((0.97f - abs(q.y)) / wy + 0.5f);
+			hard = shrub_b_hard(2.0f * w / wx);
+			const float sa = frac(q.y * 4.5f + q.x * aspect * 2.2f), sb = frac(q.y * 4.5f - q.x * aspect * 2.2f);
+			colour *= lerp(0.62f, 1.0f, smoothstep(0.0f, 0.3f, min(sa, sb)));
+			const float xr = q.x / max(w, 1e-4f);
+			dome = float3(xr * 0.8f, 0.0f, sqrt(saturate(1.0f - xr * xr * 0.64f)));
+			gloss = 0.012f;
+			mean_cover = 0.66f;
+		}
+		else if (shape > 8.5f && shape < 9.5f)
+		{
+			// A willow's or a poplar's fruit: green capsules, then the split ones' cotton, a soft ragged tuft.
+			const float r = length(q);
+			const float phi = atan2(q.x, q.y);
+			const float rag = ripe * (0.16f * sin(phi * 7.0f + hsh * 6.2832f) + 0.1f * sin(phi * 13.0f + hsh * 3.1f));
+			const float wr = shrub_b_width(q / max(r, 1e-5f), qdx, qdy);
+			cover = saturate((0.8f + rag - r) / wr + 0.5f);
+			hard = shrub_b_hard(1.6f / wr);
+			dome = normalize(float3(q * 0.7f, 1.0f));
+			gloss = 0.0f;
+			mean_cover = 0.6f;
+		}
+		else
+		{
+			// A group laid out in the quad's frame: every fruit and stalk tested, each cut on its own (hard once it
+			// is about a pixel and a half across, a stalk at its true width), the nearest of those that pass kept; a
+			// fruit's surface is an ellipsoid round its axis (a hazelnut's its husk and its nut), a stalk a thin
+			// cylinder, a sepal a tapering one.
+			const fgroup G = fruit_group(I.fa, I.fb, shape, n, hsh);
+			// Its fruits and stalks keep their own sub-pixel cover (fruit_cover, fruit_stalk).
+			resolve = 1.0f;
+			hard = 1.0f;
+			[branch] if (fruit_bound(q, G, px))
+			{
+				const uint parts = uint(G.n);
+				float zb = -1e3f;
+				uint kind = 0u, top = 0u, top_part = 0u;
+				// (A hazelnut's husk keeps its normal from the hit: FXC fails on a second call of the husk's maths.)
+				float3 sn = float3(0.0f, 0.0f, 1.0f), top_n = float3(0.0f, 0.0f, 1.0f);
+				// The fruits near the pixel that do not cover it shade the one that does where they stand in front of
+				// it: of them, the one standing farthest out and the one nearest its outline (one pass, whichever
+				// fruit ends up in front).
+				float out_z = -1e3f, out_s = 0.0f, edge_z = -1e3f, edge_s = 0.0f;
+				float2 g;
+				sincos(G.ang0, g.y, g.x);
+				[loop] for (uint i = 0u; i < parts; ++i)
+				{
+					float2 gi = g;
+					[branch] if (G.layout == FL_UMBEL)
+						gi = fruit_turn(i, G);
+					const fpart P = fruit_part(i, G, gi);
+					g = float2(g.x * kGolden.x - g.y * kGolden.y, g.x * kGolden.y + g.y * kGolden.x);
+					float4 l = 0.0f;
+					float3 nn = float3(0.0f, 0.0f, 1.0f);
+					float z = -1e3f;
+					const float ro = max(P.hl, P.hw);
+					const float2 dq = q - P.c.xy;
+					// (A hazelnut's husk lobes reach two of its half-lengths from the fruit's centre: a tighter gate cut their tips flat.)
+					const float lim = (G.shape == FS_NUT ? 2.05f : 1.7f) * ro + 1.5f * px;
+					[branch] if (dot(dq, dq) < lim * lim)
+					{
+						// The cover's maths only within the fruit (grown to a pixel; a hazelnut's husk a little wider);
+						// round it, its shade. Cut at half its cover once it is about a pixel and a half across.
+						const float dd = length(dq);
+						const float cut = lerp(ign, 0.5f, shrub_b_hard(2.0f * min(P.hl, P.hw) / px));
+						bool hit = false;
+						uint part = 0u;
+						[branch] if (dd < max(G.shape == FS_NUT ? 2.05f * ro : ro, 1.3f * px) + px)
+						{
+							[branch] if (G.shape == FS_NUT)
+								hit = fruit_nut_hit(q, P, G, px, cut, z, part, nn);
+							else
+								hit = fruit_cover(q, P, G, px, l, z) > cut;
+						}
+						if (hit)
+						{
+							if (z > zb)
+							{
+								zb = z;
+								kind = 1u;
+								top = i;
+								top_part = part;
+								top_n = nn;
+							}
+						}
+						else
+						{
+							const float zf = P.c.z + 0.4f * ro, sh = saturate(1.0f - (dd - ro) / (0.7f * ro));
+							if (zf > out_z)
+							{
+								out_z = zf;
+								out_s = sh;
+							}
+							if (sh > edge_s)
+							{
+								edge_s = sh;
+								edge_z = zf;
+							}
+						}
+					}
+					const float cs = fruit_stalk(q, P.s0, P.c, G.sr, px, z, nn);
+					if (cs > 0.5f && z > zb)
+					{
+						zb = z;
+						kind = 2u;
+						sn = nn;
+					}
+				}
+				const uint axes = fruit_axes(G);
+				[loop] for (uint j = 0u; j < axes; ++j)
+				{
+					float3 a0, a1, nn;
+					float ar, z;
+					fruit_axis(j, G, a0, a1, ar);
+					const float cs = fruit_stalk(q, a0, a1, ar, px, z, nn);
+					if (cs > 0.5f && z > zb)
+					{
+						zb = z;
+						kind = 2u;
+						sn = nn;
+					}
+				}
+				// A hip's five sepals from its tip, lanceolate and bent back over its shoulders (a dog rose's): out
+				// over the rim of its tip, then back along its sides a little off them, broadest at the bend; withering
+				// to short brown stubs as it ripens. (Thin and straight, only the two seen side-on read, as needles.)
+				[branch] if (G.shape == FS_HIP && G.n < 1.5f)
+				{
+					const fpart P = fruit_part(0u, G, fruit_turn(0u, G));
+					const float3 e = normalize(P.e);
+					const float3 f1 = abs(e.z) < 0.995f ? normalize(cross(e, float3(0.0f, 0.0f, 1.0f))) : float3(1.0f, 0.0f, 0.0f);
+					const float3 f2 = cross(e, f1);
+					const float3 tip = P.c + e * (0.92f * P.hl);
+					const float l1 = 0.32f * P.hl, l2 = 0.62f * P.hl * lerp(1.0f, 0.5f, smoothstep(0.85f, 1.1f, stage));
+					[loop] for (uint k = 0u; k < 5u; ++k)
+					{
+						float sk, ck;
+						sincos(float(k) * 1.2566371f + P.h * 6.2831853f, sk, ck);
+						const float3 rad = f1 * ck + f2 * sk;
+						// Out at 69 degrees off the hip's axis, then back at 146.
+						const float3 bend = tip + (e * 0.358f + rad * 0.934f) * l1;
+						const float3 end = bend + (e * -0.829f + rad * 0.559f) * l2;
+						float3 nn;
+						float z, rt;
+						float cs = fruit_blade(q, tip, bend, 0.26f * P.hw, 0.36f * P.hw, px, z, nn, rt);
+						if (cs > 0.5f && z > zb)
+						{
+							zb = z;
+							kind = 3u;
+							sn = nn;
+						}
+						cs = fruit_blade(q, bend, end, 0.36f * P.hw, 0.04f * P.hw, px, z, nn, rt);
+						if (cs > 0.5f && z > zb)
+						{
+							zb = z;
+							kind = 3u;
+							sn = nn;
+						}
+					}
+				}
+				cover = kind > 0u ? 1.0f : 0.0f;
+				[branch] if (kind == 1u)
+				{
+					fpart P = fruit_part(top, G, fruit_turn(top, G));
+					// A hazelnut's nut or husk, as hit: the nut's spheroid, the husk's cup (its normal turned to the eye)
+					// or, under three pixels, the husked nut's one spheroid.
+					float3 cup_n = float3(0.0f, 0.0f, 1.0f);
+					bool cup = false;
+					[branch] if (G.shape == FS_NUT)
+					{
+						cup = top_part < 2u && 2.0f * P.hw >= 3.0f * px;
+						cup_n = top_n;
+						if (top_part == 2u)
+							P = fruit_kernel(P);
+						else if (!cup)
+							P = fruit_husk_proxy(P);
+					}
+					P.e = normalize(P.e);
+					float4 l;
+					float z;
+					fruit_cover(q, P, G, px, l, z);
+					// The ellipsoid's normal at the point (u, v, height) of its radii as projected (grown as covered).
+					const float hl = P.hl * l.w, hw = P.hw * l.w;
+					const float s = saturate(length(P.e.xy));
+					const float2 m2 = s > 1e-3f ? P.e.xy / s : float2(1.0f, 0.0f);
+					const float am = sqrt(hl * hl * s * s + hw * hw * (1.0f - s * s));
+					const float depth = sqrt(hl * hl * P.e.z * P.e.z + hw * hw * (1.0f - P.e.z * P.e.z));
+					const float rho = min(l.z, 1.0f);
+					const float zeta = sqrt(saturate(1.0f - rho * rho));
+					const float3 mx = float3(m2, 0.0f), my = float3(-m2.y, m2.x, 0.0f);
+					float3 nrm = cup ? cup_n : normalize(mx * (l.x / am) + my * (l.y / hw) + float3(0.0f, 0.0f, zeta / depth));
+					// The point on the fruit in its own frame: how far along its axis (-1 at the stalk, 1 at the far
+					// end) and its turn round it.
+					const float3 p = mx * (l.x * am) + my * (l.y * hw) + float3(0.0f, 0.0f, zeta * depth);
+					const float pe = dot(p, P.e);
+					const float ae = pe / max(hl, 1e-4f);
+					const float3 f1 = abs(P.e.z) < 0.995f ? normalize(cross(P.e, float3(0.0f, 0.0f, 1.0f))) : float3(1.0f, 0.0f, 0.0f);
+					const float3 f2 = cross(P.e, f1);
+					const float3 lp = p - P.e * pe;
+					// (On the axis itself the turn is undefined: a NaN would reach the G-buffer's normal.)
+					const float phi = (dot(lp, lp) > 1e-12f ? atan2(dot(lp, f2), dot(lp, f1)) : 0.0f) + P.h * 6.2831853f;
+					// Its surface detail (a capsule's lobes and arils, the drupelets, a pod's seeds) fades to its mean
+					// under about eight pixels across: smaller, it read as a mottle.
+					const float detail = saturate(P.hw / px * 0.5f - 1.0f);
+					// A bunch's fruits colour one by one through its last weeks; each its own shade.
+					colour = G.n > 1.5f && G.shape != FS_NUT ? lerp(I.c1.rgb, I.c0.rgb, saturate((stage - 0.7f) * 5.0f - 0.6f * P.h + 0.6f))
+						: I.c0.rgb;
+					colour *= lerp(0.92f, 1.08f, frac(P.h * 7.31f));
+					gloss = 0.025f;
+					[branch] if (G.shape == FS_AGGREGATE && detail > 0.0f)
+					{
+						// A raspberry's or a dewberry's drupelets: cells over the fruit's own sphere (about seventy round
+						// it), each a small dome leaning its normal out from its middle, darker and matte between them -
+						// the colour's mean kept (deep crevices made the berry a black cherry).
+						const float3 ls = normalize(float3(ae, dot(lp, f1) / hw, dot(lp, f2) / hw));
+						const float3 g = ls * 2.3f + P.h * 7.0f;
+						const float3 gi = floor(g), gf = g - gi;
+						float d1 = 8.0f, d2 = 8.0f;
+						float3 nearest = 0.0f;
+						[unroll] for (int cz = -1; cz <= 1; ++cz)
+							[unroll] for (int cy = -1; cy <= 1; ++cy)
+								[unroll] for (int cx = -1; cx <= 1; ++cx)
+								{
+									const float3 o = float3(cx, cy, cz);
+									const int3 cell = int3(gi + o);
+									const uint hc = shrub_b_ih(uint(cell.x) * 73856093u ^ uint(cell.y) * 19349663u ^ uint(cell.z) * 83492791u);
+									const float3 f = o + 0.1f + 0.8f * float3(uint3(hc, hc >> 8, hc >> 16) & 0xFFu) * (1.0f / 255.0f) - gf;
+									const float dd = dot(f, f);
+									if (dd < d1)
+									{
+										d2 = d1;
+										d1 = dd;
+										nearest = f;
+									}
+									else if (dd < d2)
+										d2 = dd;
+								}
+						const float crev = 1.0f - smoothstep(0.04f, 0.3f, sqrt(d2) - sqrt(d1));
+						const float3 lean = -(P.e * nearest.x + f1 * nearest.y + f2 * nearest.z);
+						nrm = normalize(nrm + (lean - nrm * dot(lean, nrm)) * (1.5f * detail));
+						colour *= lerp(1.0f, lerp(1.08f, 0.8f, crev), detail);
+						gloss = 0.02f * (1.0f - crev * detail);
+					}
+					else if (G.shape == FS_AGGREGATE)
+					{
+						// Its drupelets' mean: matte.
+						gloss = 0.015f;
+					}
+					else if (G.shape == FS_NUT)
+					{
+						// A hazelnut: its husk leafy and matte (da_shrub_bloom.vs: the leaves' fresh green, browning after
+						// the nut ripens), the veins along its lobes fine stripes round the cup where they show, its inside
+						// in its own shade; the nut pale while green, a glossy brown once ripe.
+						[flatten] if (top_part == 2u)
+							gloss = lerp(0.015f, 0.03f, ripe);
+						else
+						{
+							const float vein = 0.5f + 0.5f * cos(atan2(dot(cup_n, f2), dot(cup_n, f1)) * 42.0f + P.h * 17.0f);
+							colour = I.c1.rgb * (top_part == 1u ? 0.75f : lerp(0.95f, 1.05f, frac(P.h * 3.1f)))
+								* lerp(1.0f, lerp(0.92f, 1.05f, vein), cup ? detail : 0.0f);
+							gloss = 0.008f;
+						}
+					}
+					else if (G.shape == FS_CAPSULE)
+					{
+						if (G.layout == FL_CYME)
+						{
+							// A spindle's capsule: four lobes, furrows between them, its far end dimpled; split once ripe,
+							// the seeds' orange arils showing between the valves.
+							// (The lobes meet at the capsule's two ends, where their turn has no direction.)
+							const float lob = 0.5f + 0.5f * cos(4.0f * phi);
+							const float3 tang = normalize(cross(P.e, nrm) + float3(1e-5f, 0.0f, 0.0f));
+							nrm = normalize(nrm - tang * (0.45f * detail * sin(4.0f * phi) * saturate(2.0f * length(lp) / hw)));
+							colour *= lerp(0.9f, lerp(0.62f, 1.0f, smoothstep(0.0f, 0.4f, lob)), detail)
+								* lerp(1.0f, 0.6f, smoothstep(0.7f, 0.95f, ae));
+							const float split = saturate((stage - 1.02f) * 8.0f);
+							const float aril = split * lerp(0.2f,
+								smoothstep(0.55f, 0.85f, lob) * smoothstep(-0.5f, -0.15f, ae) * smoothstep(0.85f, 0.45f, ae), detail);
+							colour = lerp(colour, kAril, aril);
+							gloss = lerp(0.012f, 0.03f, aril);
+						}
+						else
+						{
+							// A lilac's beaked capsule splits in two from its tip, a mock orange's in four; dry, matte.
+							const float split = saturate((stage - 0.98f) * 6.0f);
+							const float slit = G.layout == FL_PANICLE ? smoothstep(0.2f, 0.05f, abs(sin(phi))) * saturate(ae * 3.0f)
+								: smoothstep(0.16f, 0.04f, abs(sin(2.0f * phi))) * saturate(ae * 2.0f - 0.4f);
+							colour *= 1.0f - 0.65f * split * slit;
+							gloss = 0.01f;
+						}
+					}
+					else if (G.shape == FS_HIP)
+					{
+						// A hip: satin (green ones too; at twice the glossiest leaf its highlight went near white, a
+						// plastic olive), the dark scar of its disc and styles a flat cap at its tip, inside the ring of
+						// its sepals.
+						const float scar = smoothstep(0.9f, 0.95f, ae);
+						colour = lerp(colour, kScar, scar);
+						nrm = normalize(lerp(nrm, P.e, 0.7f * scar));
+						gloss = lerp(0.03f, 0.01f, scar);
+					}
+					else if (G.shape == FS_DRUPE)
+					{
+						// A plum: the waxy bloom dulls its shine.
+						gloss = 0.015f;
+					}
+					else if (G.shape == FS_CONE)
+						gloss = 0.012f;
+					else if (G.shape == FS_POD)
+					{
+						// A false indigo's pod: dry, dotted with glands, matte.
+						gloss = 0.008f;
+					}
+					else
+					{
+						// A berry or a pome: the calyx's dark remains at its far end, a pome's sunk in a pit.
+						colour *= lerp(1.0f, G.shape == FS_POME ? 0.5f : 0.35f, smoothstep(G.shape == FS_POME ? 0.82f : 0.93f, 0.985f, ae));
+					}
+					// The fruits in front shade the crease of this one near their outline, as deep as they stand proud
+					// of it (its sky light only: the crown's light is the leaves'); a hazelnut's husk is dark inside.
+					const float ro = max(P.hl, P.hw);
+					const float shade = max(out_s * saturate((out_z - zb) / (0.6f * ro)), edge_s * saturate((edge_z - zb) / (0.6f * ro)));
+					ao = (1.0f - 0.35f * shade) * (top_part == 1u ? 0.7f : 1.0f);
+					dome = nrm;
+				}
+				else if (kind == 2u)
+				{
+					// A stalk: thin, dull, darker for the fruits round it.
+					colour = I.c2.rgb;
+					dome = sn;
+					gloss = 0.006f;
+					ao = 0.8f;
+				}
+				else if (kind == 3u)
+				{
+					// A hip's sepal: green as the green hip while it grows, withering brown as it ripens.
+					colour = lerp(I.c1.rgb * 0.9f, kSepalDry, smoothstep(0.8f, 1.05f, stage));
+					dome = sn;
+					gloss = 0.006f;
+					ao = 0.85f;
+				}
+			}
+		}
+		// The highlight's tint and the bloom of a sloe or a juniper berry are in the gloss and colour.
+	}
+	else
+	{
+		const float r = length(q);
+		if (shape < 1.5f || shape > 5.5f && shape < 6.5f)
+		{
+			// A single flower: petals round a centre; a bud is a closed round head.
+			const float petals = max(count, 4.0f);
+			const float phi = atan2(q.x, q.y) + hsh * 6.2832f;
+			const float open = saturate(stage);
+			const float edge = lerp(0.45f, 0.62f + 0.36f * pow(abs(cos(petals * phi * 0.5f)), 0.7f), open);
+			// The footprint across the rim (radial: a flat flower seen aslant is narrower one way).
+			const float wr = shrub_b_width(q / max(r, 1e-5f), qdx, qdy);
+			cover = saturate((edge - r) / wr + 0.5f);
+			hard = shrub_b_hard(2.0f * lerp(0.45f, 0.8f, open) / wr);
+			const float centre = saturate((0.2f - r) / wr + 0.5f) * open;
+			colour = lerp(colour, I.c1.rgb, centre);
+			dome = normalize(float3(q * 0.6f, 1.0f));
+			mean_cover = lerp(0.5f, 0.8f, open);
+		}
+		else if (shape > 7.5f && shape < 8.5f)
+		{
+			// A lacecap (a guelder rose's): a flat disc of small cream fertile florets ringed by large flat white
+			// sterile flowers of five broad lobes, which open first.
+			const float open = saturate(stage);
+			float2 rel;
+			float hf;
+			const float d_in = shrub_parts(q, 9.0f, lerp(0.5f, 0.9f, open), hsh, rel, hf);
+			// A fertile floret's rim (in its radii, about a ninth of the quad's half-length across) at the footprint
+			// across it.
+			const float w_in = shrub_b_width(normalize(rel + 1e-5f), qdx, qdy);
+			const float c_in = saturate(min(d_in, (0.62f - r) * 4.0f) * (0.5f / 9.0f) / w_in + 0.5f);
+			const float ring = 7.0f + floor(hsh * 3.0f);
+			float best = -1e3f;
+			float2 brel = 0.0f, bd = float2(0.0f, 1.0f);
+			[loop] for (float j = 0.0f; j < ring; j += 1.0f)
+			{
+				const float hj = shrub_b_hash(float2(j, 5.0f), hsh);
+				float s, c;
+				sincos((j + 0.25f * hj) * 6.2831853f / ring + hsh * 6.2831853f, s, c);
+				const float rj = 0.24f * lerp(0.85f, 1.1f, hj) * lerp(0.6f, 1.0f, saturate(stage * 1.5f));
+				const float2 d = q - float2(s, c) * 0.75f * lerp(0.95f, 1.05f, frac(hj * 5.3f));
+				const float phj = atan2(d.x, d.y) + hj * 6.2831853f;
+				const float e = (0.78f + 0.22f * pow(abs(cos(2.5f * phj)), 0.6f)) * rj - length(d);
+				if (e > best)
+				{
+					best = e;
+					brel = d / rj;
+					bd = d;
+				}
+			}
+			const float w_out = shrub_b_width(normalize(bd + 1e-5f), qdx, qdy);
+			const float c_out = saturate(best / w_out + 0.5f);
+			// Each cut on its own: the small florets against the noise, the big flowers hard.
+			const bool p_in = shrub_b_pass(c_in, ign, shrub_b_hard(0.86f / 9.0f / w_in));
+			const bool p_out = shrub_b_pass(c_out, ign, shrub_b_hard(0.44f / w_out));
+			cover = p_in || p_out ? 1.0f : 0.0f;
+			hard = 1.0f;
+			const bool sterile = p_out && (!p_in || c_out >= c_in);
+			colour = sterile ? colour : lerp(colour, I.c1.rgb, 0.3f);
+			dome = sterile ? normalize(float3(brel * 0.25f, 1.0f)) : normalize(float3(rel * 0.5f + q * 0.3f, 1.0f));
+			mean_cover = 0.6f;
+		}
+		else
+		{
+			// An inflorescence: florets in a disc (corymb, umbel) or a tapered head (raceme, panicle, cone).
+			const bool tall = shape > 3.5f;
+			const float env = tall ? (1.0f - abs(q.x) / max(0.55f * (1.0f - (q.y * 0.5f + 0.5f) * 0.6f), 0.05f)) : 1.0f - r;
+			float2 rel;
+			float hf;
+			const float cells = tall ? 5.0f : 6.0f;
+			const float d = shrub_parts(q, cells, lerp(0.6f, 0.92f, saturate(stage)), hsh, rel, hf);
+			// A floret's rim (in its radii, half a cell) at the footprint across it.
+			const float wf = shrub_b_width(normalize(rel + 1e-5f), qdx, qdy);
+			cover = saturate(min(d, env * 3.0f) * (0.5f / cells) / wf + 0.5f);
+			hard = shrub_b_hard(0.86f / cells / wf);
+			colour = lerp(colour, I.c1.rgb, saturate(1.0f - length(rel) * 3.0f) * 0.6f);
+			dome = normalize(float3(rel * 0.5f + q * 0.3f, 1.0f));
+			mean_cover = 0.6f;
+		}
+	}
+	// Under two pixels a flower's or a catkin's part is its shape's mean cover (no dither inside); the cut against the
+	// pixel's noise, at half the cover as far as the part is cut hard.
+	const float far_cover = mean_cover * saturate((1.0f - length(q)) / px + 0.5f);
+	cover = lerp(far_cover, cover, resolve);
+	clip(cover - lerp(ign, 0.5f, hard * resolve) - 1e-3f);
+
+	// The part's dome in the quad's frame to view space.
+	const float3 nz = normalize(I.n_v.xyz), nx = normalize(I.t_h.xyz);
+	const float3 ny = cross(nz, nx);
+	float3 N = normalize(nx * dome.x + ny * dome.y + nz * dome.z);
+	if (dot(N, -normalize(I.pv_u.xyz)) < 0.0f && what < 0.5f)
+		N = -N;
+	// Fruits sit in the crown's light as the leaves round them do: the leaves' occlusion (the crown's light at the site,
+	// I.t_h.w, with the creases above only) and the translucent foliage codes - the combine then takes a tenth of
+	// its screen-space occlusion over the crown's own, the sky and the sun come through a juicy berry, drupe, pome or
+	// drupelet as through a leaf's blade (a back-lit berry glows), less through a hip's flesh or a dry capsule, nut, pod
+	// or cone, and the sun's shadow is looked up as the leaves' is. On the stock material, its occlusion taken twice and
+	// cut again by the colour and an underside term, a fruit beside lit leaves went black (an elder's bunch, a
+	// raspberry at a quarter of its colour). A willow's cotton and the petals let the light through as blades do.
+	const bool solid = what > 0.5f && what < 1.5f && (shape < 8.5f || shape > 9.5f);
+	const bool juicy = shape < 1.5f || (shape > 2.5f && shape < 4.5f) || shape > 9.5f;
+	const float mtl = da_pack_foliage_mtl(solid ? (juicy ? 0.517f : 0.3f) : (what > 1.5f ? 0.5f : 0.75f), I.hpos.xy, uint(frame));
+	f_deffer O = pack_gbuffer(float4(N, I.t_h.w * ao), float4(I.pv_u.xyz, mtl), float4(saturate(colour), gloss));
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
+	return O;
+}

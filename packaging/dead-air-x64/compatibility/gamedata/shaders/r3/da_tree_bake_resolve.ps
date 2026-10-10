@@ -1,0 +1,86 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The billboards' bake (da_trees_bake.cpp): a view drawn at n x n samples a texel, resolved into the staging - its
+// coverage the share of the samples covered, its albedo, normal and hemisphere light the mean over the covered ones,
+// its foliage the share of the covered ones that are leaves and their mean translucency; a stock-path cell (mode 2)
+// its alpha by the level's quantile map from the coverage onto Dead Air's bake and its colour by the level's linear
+// gains (the offline bake's calibration, pipeline\seasons_lods.py).
+
+#include "common.h"
+#include "da_tree_bake.h"
+
+Texture2D<float4>	da_tree_bake_ss		: register(t0);
+Texture2D<float4>	da_tree_bake_ss_nm	: register(t1);
+ByteAddressBuffer	da_tree_bake_lut	: register(t2);	// the quantile map: its coverages, then its alphas
+Texture2D<float4>	da_tree_bake_ss_m	: register(t3);
+uniform float4		da_tree_bake_r;	// x samples a side, y mode (0 a tree, 1 a stock-path cell as drawn, 2 calibrated), z the
+									// map's points
+uniform float4		da_tree_bake_g;	// the stock path's linear gains (rgb)
+
+// np.interp over the map's points (both columns non-decreasing).
+float	tree_bake_lut	(float x)
+{
+	const uint n = uint(da_tree_bake_r.z + 0.5f);
+	if (n < 2u)
+		return x;
+	const float x0 = asfloat(da_tree_bake_lut.Load(0u)), x1 = asfloat(da_tree_bake_lut.Load((n - 1u) * 4u));
+	if (x <= x0)
+		return asfloat(da_tree_bake_lut.Load(n * 4u));
+	if (x >= x1)
+		return asfloat(da_tree_bake_lut.Load((2u * n - 1u) * 4u));
+	uint lo = 0u, hi = n - 1u;
+	[loop] while (hi - lo > 1u)
+	{
+		const uint mid = (lo + hi) / 2u;
+		if (asfloat(da_tree_bake_lut.Load(mid * 4u)) <= x)
+			lo = mid;
+		else
+			hi = mid;
+	}
+	const float a = asfloat(da_tree_bake_lut.Load(lo * 4u)), b = asfloat(da_tree_bake_lut.Load(hi * 4u));
+	const float ya = asfloat(da_tree_bake_lut.Load((n + lo) * 4u)), yb = asfloat(da_tree_bake_lut.Load((n + hi) * 4u));
+	return lerp(ya, yb, saturate((x - a) / max(b - a, 1e-6f)));
+}
+
+f_tree_bake	main	(v2p_tree_bake_quad I)
+{
+	const int ss = int(da_tree_bake_r.x + 0.5f);
+	// (The texel's centre interpolates to the middle of its block of samples.)
+	const int2 o = int2(floor(I.src - 0.5f * float(ss) + 0.5f));
+	float w = 0.0f, h = 0.0f, l = 0.0f, lt = 0.0f;
+	float3 c = float3(0.0f, 0.0f, 0.0f), n = float3(0.0f, 0.0f, 0.0f);
+	[loop] for (int y = 0; y < ss; ++y)
+		[loop] for (int x = 0; x < ss; ++x)
+		{
+			const float4 a = da_tree_bake_ss.Load(int3(o + int2(x, y), 0));
+			const float4 b = da_tree_bake_ss_nm.Load(int3(o + int2(x, y), 0));
+			const float2 m = da_tree_bake_ss_m.Load(int3(o + int2(x, y), 0)).rg;
+			w += a.a;
+			c += a.rgb * a.a;
+			n += tree_bake_n_in(b.rgb) * a.a;
+			h += b.a * a.a;
+			l += m.x * a.a;
+			lt += m.y * a.a;
+		}
+	f_tree_bake O;
+	O.albedo = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	O.normal = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	O.mtl = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	if (w <= 0.0f)
+		return O;
+	c /= w;
+	h /= w;
+	float alpha = w / float(ss * ss);
+	if (da_tree_bake_r.y > 1.5f)
+	{
+		alpha = saturate(tree_bake_lut(alpha));
+		c = tree_bake_srgb(tree_bake_lin(c) * da_tree_bake_g.rgb);
+	}
+	O.albedo = float4(saturate(c), alpha);
+	// (A sample's normal faces the bake's camera; the mean keeps a hair of it where the samples cancel.)
+	O.normal = float4(tree_bake_n_out(normalize(n + float3(0.0f, 0.0f, -1e-4f))), saturate(h));
+	// (A leaf sample's translucency is stored times its leaf: the mean over the leaves.)
+	O.mtl = float4(saturate(l / w), l > 0.0f ? saturate(lt / l) : 0.0f, 0.0f, 0.0f);
+	return O;
+}

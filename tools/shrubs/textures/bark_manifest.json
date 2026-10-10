@@ -1,0 +1,555 @@
+{
+ "size": 512,
+ "metres": 0.06,
+ "types": [
+  {
+   "name": "hazel",
+   "species": [
+    "cor_ave"
+   ]
+  },
+  {
+   "name": "alder_buckthorn",
+   "species": [
+    "fra_aln"
+   ]
+  },
+  {
+   "name": "bird_cherry",
+   "species": [
+    "pad_avi",
+    "amo_fru",
+    "vib_opu",
+    "ame_spi"
+   ]
+  },
+  {
+   "name": "cherry",
+   "species": [
+    "pru_cer"
+   ]
+  },
+  {
+   "name": "willow_grey",
+   "species": [
+    "sal_cin",
+    "sal_vim",
+    "sal_acu"
+   ]
+  },
+  {
+   "name": "willow_goat",
+   "species": [
+    "sal_cap"
+   ]
+  },
+  {
+   "name": "willow_smooth",
+   "species": [
+    "sal_aur",
+    "sal_ros",
+    "sal_pen",
+    "sal_tri"
+   ]
+  },
+  {
+   "name": "spindle",
+   "species": [
+    "euo_eur"
+   ]
+  },
+  {
+   "name": "warty_spindle",
+   "species": [
+    "euo_ver"
+   ]
+  },
+  {
+   "name": "hawthorn",
+   "species": [
+    "cra_mon",
+    "syr_vul",
+    "hip_rha"
+   ]
+  },
+  {
+   "name": "shreddy",
+   "species": [
+    "lon_xyl",
+    "phi_cor"
+   ]
+  },
+  {
+   "name": "currant",
+   "species": [
+    "rib_nig"
+   ]
+  },
+  {
+   "name": "gooseberry",
+   "species": [
+    "rib_uva"
+   ]
+  },
+  {
+   "name": "rose",
+   "species": [
+    "ros_can",
+    "ros_maj"
+   ]
+  },
+  {
+   "name": "raspberry",
+   "species": [
+    "rub_ida"
+   ]
+  },
+  {
+   "name": "dewberry",
+   "species": [
+    "rub_cae"
+   ]
+  },
+  {
+   "name": "elder",
+   "species": [
+    "sam_nig",
+    "sam_rac"
+   ]
+  },
+  {
+   "name": "broom",
+   "species": [
+    "cyt_sco",
+    "cha_rut"
+   ]
+  },
+  {
+   "name": "juniper",
+   "species": [
+    "jun_com"
+   ]
+  },
+  {
+   "name": "pine_plates",
+   "species": [
+    "pin_syl"
+   ],
+   "upper": [],
+   "scale": 8.0,
+   "tree": true
+  },
+  {
+   "name": "pine_mirror",
+   "species": [],
+   "upper": [
+    "pin_syl"
+   ],
+   "scale": 4.0,
+   "tree": true
+  },
+  {
+   "name": "spruce",
+   "species": [
+    "pic_abi"
+   ],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "birch_white",
+   "species": [],
+   "upper": [
+    "bet_pen",
+    "bet_pub"
+   ],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "birch_base",
+   "species": [
+    "bet_pen"
+   ],
+   "upper": [],
+   "scale": 4.0,
+   "tree": true
+  },
+  {
+   "name": "birch_downy_base",
+   "species": [
+    "bet_pub"
+   ],
+   "upper": [],
+   "scale": 5.0,
+   "tree": true
+  },
+  {
+   "name": "aspen_smooth",
+   "species": [],
+   "upper": [
+    "pop_tre"
+   ],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "aspen_base",
+   "species": [
+    "pop_tre",
+    "pop_alb"
+   ],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "poplar_white",
+   "species": [],
+   "upper": [
+    "pop_alb"
+   ],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "poplar_black",
+   "species": [
+    "pop_nig",
+    "pop_can"
+   ],
+   "upper": [],
+   "scale": 8.0,
+   "tree": true
+  },
+  {
+   "name": "oak",
+   "species": [
+    "que_rob"
+   ],
+   "upper": [],
+   "scale": 6.0,
+   "tree": true
+  },
+  {
+   "name": "oak_young",
+   "species": [],
+   "upper": [
+    "que_rob"
+   ],
+   "scale": 2.0,
+   "tree": true
+  },
+  {
+   "name": "red_oak",
+   "species": [
+    "que_rub"
+   ],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "hornbeam",
+   "species": [
+    "car_bet"
+   ],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "maple",
+   "species": [
+    "ace_pla"
+   ],
+   "upper": [],
+   "scale": 2.5,
+   "tree": true
+  },
+  {
+   "name": "sycamore",
+   "species": [
+    "ace_pse"
+   ],
+   "upper": [],
+   "scale": 4.0,
+   "tree": true
+  },
+  {
+   "name": "box_elder",
+   "species": [
+    "ace_neg"
+   ],
+   "upper": [],
+   "scale": 2.5,
+   "tree": true
+  },
+  {
+   "name": "lime",
+   "species": [
+    "til_cor"
+   ],
+   "upper": [],
+   "scale": 4.0,
+   "tree": true
+  },
+  {
+   "name": "ash",
+   "species": [
+    "fra_exc",
+    "fra_pen"
+   ],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "ash_young",
+   "species": [],
+   "upper": [
+    "fra_exc"
+   ],
+   "scale": 2.0,
+   "tree": true
+  },
+  {
+   "name": "elm",
+   "species": [
+    "ulm_lae",
+    "ulm_min"
+   ],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "rowan",
+   "species": [
+    "sor_auc"
+   ],
+   "upper": [],
+   "scale": 2.0,
+   "tree": true
+  },
+  {
+   "name": "alder",
+   "species": [
+    "aln_glu"
+   ],
+   "upper": [],
+   "scale": 4.5,
+   "tree": true
+  },
+  {
+   "name": "alder_young",
+   "species": [],
+   "upper": [
+    "aln_glu"
+   ],
+   "scale": 2.0,
+   "tree": true
+  },
+  {
+   "name": "willow_tree",
+   "species": [
+    "sal_alb",
+    "sal_fra"
+   ],
+   "upper": [],
+   "scale": 5.0,
+   "tree": true
+  },
+  {
+   "name": "robinia",
+   "species": [
+    "rob_pse"
+   ],
+   "upper": [],
+   "scale": 6.0,
+   "tree": true
+  },
+  {
+   "name": "horse_chestnut",
+   "species": [
+    "aes_hip"
+   ],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "apple",
+   "species": [
+    "mal_dom"
+   ],
+   "upper": [],
+   "scale": 2.5,
+   "tree": true
+  },
+  {
+   "name": "pear",
+   "species": [
+    "pyr_com"
+   ],
+   "upper": [],
+   "scale": 2.5,
+   "tree": true
+  },
+  {
+   "name": "cherry_trunk",
+   "species": [
+    "t_pru_cer"
+   ],
+   "upper": [],
+   "scale": 2.5,
+   "tree": true
+  },
+  {
+   "name": "plum",
+   "species": [
+    "pru_dom"
+   ],
+   "upper": [],
+   "scale": 2.5,
+   "tree": true
+  },
+  {
+   "name": "walnut",
+   "species": [
+    "jug_reg"
+   ],
+   "upper": [],
+   "scale": 3.5,
+   "tree": true
+  },
+  {
+   "name": "walnut_young",
+   "species": [],
+   "upper": [
+    "jug_reg"
+   ],
+   "scale": 2.0,
+   "tree": true
+  },
+  {
+   "name": "deadwood_bark",
+   "species": [],
+   "upper": [],
+   "scale": 4.0,
+   "tree": true
+  },
+  {
+   "name": "deadwood_bare",
+   "species": [],
+   "upper": [],
+   "scale": 3.0,
+   "tree": true
+  },
+  {
+   "name": "char",
+   "species": [],
+   "upper": [],
+   "scale": 4.0,
+   "tree": true
+  }
+ ],
+ "species": {
+  "ace_neg": 35,
+  "ace_pla": 33,
+  "ace_pse": 34,
+  "aes_hip": 45,
+  "aln_glu": 41,
+  "ame_spi": 2,
+  "amo_fru": 2,
+  "bet_pen": 23,
+  "bet_pub": 24,
+  "car_bet": 32,
+  "cha_rut": 17,
+  "cor_ave": 0,
+  "cra_mon": 9,
+  "cyt_sco": 17,
+  "euo_eur": 7,
+  "euo_ver": 8,
+  "fra_aln": 1,
+  "fra_exc": 37,
+  "fra_pen": 37,
+  "hip_rha": 9,
+  "jug_reg": 50,
+  "jun_com": 18,
+  "lon_xyl": 10,
+  "mal_dom": 46,
+  "pad_avi": 2,
+  "phi_cor": 10,
+  "pic_abi": 21,
+  "pin_syl": 19,
+  "pop_alb": 26,
+  "pop_can": 28,
+  "pop_nig": 28,
+  "pop_tre": 26,
+  "pru_cer": 3,
+  "pru_dom": 49,
+  "pyr_com": 47,
+  "que_rob": 29,
+  "que_rub": 31,
+  "rib_nig": 11,
+  "rib_uva": 12,
+  "rob_pse": 44,
+  "ros_can": 13,
+  "ros_maj": 13,
+  "rub_cae": 15,
+  "rub_ida": 14,
+  "sal_acu": 4,
+  "sal_alb": 43,
+  "sal_aur": 6,
+  "sal_cap": 5,
+  "sal_cin": 4,
+  "sal_fra": 43,
+  "sal_pen": 6,
+  "sal_ros": 6,
+  "sal_tri": 6,
+  "sal_vim": 4,
+  "sam_nig": 16,
+  "sam_rac": 16,
+  "sor_auc": 40,
+  "syr_vul": 9,
+  "t_pru_cer": 48,
+  "til_cor": 36,
+  "ulm_lae": 39,
+  "ulm_min": 39,
+  "vib_opu": 2
+ },
+ "species_upper": {
+  "ace_neg": 35,
+  "ace_pla": 33,
+  "ace_pse": 34,
+  "aes_hip": 45,
+  "aln_glu": 42,
+  "bet_pen": 22,
+  "bet_pub": 22,
+  "car_bet": 32,
+  "fra_exc": 38,
+  "fra_pen": 37,
+  "jug_reg": 51,
+  "mal_dom": 46,
+  "pic_abi": 21,
+  "pin_syl": 20,
+  "pop_alb": 27,
+  "pop_can": 28,
+  "pop_nig": 28,
+  "pop_tre": 25,
+  "pru_dom": 49,
+  "pyr_com": 47,
+  "que_rob": 30,
+  "que_rub": 31,
+  "rob_pse": 44,
+  "sal_alb": 43,
+  "sal_fra": 43,
+  "sor_auc": 40,
+  "t_pru_cer": 48,
+  "til_cor": 36,
+  "ulm_lae": 39,
+  "ulm_min": 39
+ }
+}

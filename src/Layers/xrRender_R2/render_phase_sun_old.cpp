@@ -1,4 +1,6 @@
 #include "stdafx.h"
+
+#include "Layers/xrRender/da_veg.h"
 #include "r2_R_sun_support.h"
 
 namespace xray::render::RENDER_NAMESPACE
@@ -448,7 +450,12 @@ void render_sun_old::render_sun()
             !dsgraph.mapSorted.empty();
         const bool renderDetails = ps_r_sun_details >= detail_shadow_high && RImplementation.Details &&
             RImplementation.Details->HasRenderableDetails();
-        if (bNormal || bSpecial || renderDetails)
+        // The procedural shrubs: their farthest cascade's draws (clusters or blobs) in the far map.
+        u32 shrubCascade = 2;
+        while (shrubCascade > 1 && !da_veg_casts(shrubCascade))
+            --shrubCascade;
+        const bool renderShrubs = da_veg_casts(shrubCascade);
+        if (bNormal || bSpecial || renderDetails || renderShrubs)
         {
             RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, SE_SUN_FAR);
             dsgraph.cmd_list.set_xform_world(Fidentity);
@@ -457,6 +464,8 @@ void render_sun_old::render_sun()
             dsgraph.render_graph(0);
             if (renderDetails)
                 RImplementation.Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
+            if (renderShrubs)
+                da_veg_render_cascade(dsgraph.cmd_list, shrubCascade);
             sun->X.D[SE_SUN_FAR].transluent = FALSE;
             if (bSpecial)
             {
@@ -676,7 +685,9 @@ void render_sun_old::render_sun_near()
             !dsgraph.mapSorted.empty();
         const bool renderDetails = ps_r_sun_details >= detail_shadow_medium && RImplementation.Details &&
             RImplementation.Details->HasRenderableDetails();
-        if (bNormal || bSpecial || renderDetails)
+        // The procedural shrubs: their near cascade's wood and leaves in the near map.
+        const bool renderShrubs = da_veg_casts(0);
+        if (bNormal || bSpecial || renderDetails || renderShrubs)
         {
             RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, SE_SUN_NEAR);
             dsgraph.cmd_list.set_xform_world(Fidentity);
@@ -685,6 +696,8 @@ void render_sun_old::render_sun_near()
             dsgraph.render_graph(0);
             if (renderDetails)
                 RImplementation.Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
+            if (renderShrubs)
+                da_veg_render_cascade(dsgraph.cmd_list, 0);
             sun->X.D[SE_SUN_NEAR].transluent = FALSE;
             if (bSpecial)
             {

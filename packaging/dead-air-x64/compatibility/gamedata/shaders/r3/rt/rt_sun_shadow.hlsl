@@ -75,8 +75,8 @@ void main( uint3 id : SV_DispatchThreadID )
 	while ( q.Proceed() )
 	{
 		if ( q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),
-				q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
+			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
 			q.CommitNonOpaqueTriangleHit();
 	}
 	const bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;

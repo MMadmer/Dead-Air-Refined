@@ -1,0 +1,2967 @@
+{
+ "note": "tools/shrubs/textures/build_arrays.py: the trees' layers in textures/da/shrub_leaf_d|n and shrub_bark_d|n (appended after the shrubs' layers); leaf_fit, card_fit and leaf_hull as make_shrubs.py writes them; bark tiles are 6 cm x the type's scale (bark_scale)",
+ "leaf_layers": 188,
+ "bark_layers": 55,
+ "tree_leaf_first": 94,
+ "tree_bark_first": 19,
+ "species": {
+  "pin_syl": {
+   "leaf_a": 94,
+   "leaf_b": 95,
+   "card": 96,
+   "leaflet": -1,
+   "needles": 94,
+   "bark": 19,
+   "bark_upper": 20,
+   "bark_scale": 8.0,
+   "bark_upper_scale": 4.0,
+   "leaf_kind": "needles",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.5801,
+    1.3395,
+    0.0095,
+    0.2126
+   ],
+   "card_fit": [
+    0.9306,
+    0.9856,
+    0.0056
+   ],
+   "element": {
+    "length": 0.11,
+    "width": 0.104
+   },
+   "card_element": {
+    "length": 0.32,
+    "width": 0.26
+   }
+  },
+  "pic_abi": {
+   "leaf_a": 97,
+   "leaf_b": 98,
+   "card": 99,
+   "leaflet": -1,
+   "needles": 97,
+   "bark": 21,
+   "bark_upper": 21,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "needles",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.0106,
+    1.113,
+    0.0061,
+    0.3302
+   ],
+   "card_fit": [
+    0.8732,
+    1.1256,
+    0.0052
+   ],
+   "element": {
+    "length": 0.077,
+    "width": 0.04
+   },
+   "card_element": {
+    "length": 0.3,
+    "width": 0.2
+   }
+  },
+  "bet_pen": {
+   "leaf_a": 100,
+   "leaf_b": 101,
+   "card": 102,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 23,
+   "bark_upper": 22,
+   "bark_scale": 4.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0585,
+    0.2812,
+    0.9761,
+    0.5,
+    0.9579,
+    0.0521
+   ],
+   "leaf_fit": [
+    1.475,
+    1.136,
+    0.4426,
+    0.2927
+   ],
+   "card_fit": [
+    1.0484,
+    1.0855,
+    0.0063
+   ],
+   "element": {
+    "length": 0.0525,
+    "width": 0.0375
+   },
+   "card_element": {
+    "length": 0.09,
+    "width": 0.1235
+   }
+  },
+  "bet_pub": {
+   "leaf_a": 103,
+   "leaf_b": 104,
+   "card": 105,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 24,
+   "bark_upper": 22,
+   "bark_scale": 5.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0988,
+    0.25,
+    0.9971,
+    0.625,
+    0.9296,
+    0.0352
+   ],
+   "leaf_fit": [
+    1.3907,
+    1.1274,
+    0.3556,
+    0.3996
+   ],
+   "card_fit": [
+    1.0506,
+    0.8282,
+    0.0063
+   ],
+   "element": {
+    "length": 0.045,
+    "width": 0.035
+   },
+   "card_element": {
+    "length": 0.09,
+    "width": 0.1087
+   }
+  },
+  "pop_tre": {
+   "leaf_a": 106,
+   "leaf_b": 107,
+   "card": 108,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 26,
+   "bark_upper": 25,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0974,
+    0.4062,
+    0.1081,
+    0.4688,
+    0.9376,
+    0.962
+   ],
+   "leaf_fit": [
+    1.9794,
+    1.1246,
+    0.9317,
+    0.3523
+   ],
+   "card_fit": [
+    1.5377,
+    1.3582,
+    0.0092
+   ],
+   "element": {
+    "length": 0.05,
+    "width": 0.05
+   },
+   "card_element": {
+    "length": 0.048,
+    "width": 0.1387
+   }
+  },
+  "que_rob": {
+   "leaf_a": 109,
+   "leaf_b": 110,
+   "card": 111,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 29,
+   "bark_upper": 30,
+   "bark_scale": 6.0,
+   "bark_upper_scale": 2.0,
+   "leaf_kind": "lobed",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.0808,
+    1.1013,
+    0.0591,
+    0.4896
+   ],
+   "card_fit": [
+    1.3789,
+    0.8185,
+    0.0083
+   ],
+   "element": {
+    "length": 0.095,
+    "width": 0.055
+   },
+   "card_element": {
+    "length": 0.072,
+    "width": 0.2106
+   }
+  },
+  "car_bet": {
+   "leaf_a": 112,
+   "leaf_b": 113,
+   "card": 114,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 32,
+   "bark_upper": 32,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0817,
+    0.0938,
+    0.9849,
+    0.6875,
+    0.9388,
+    0.0551
+   ],
+   "leaf_fit": [
+    1.1803,
+    1.149,
+    0.1522,
+    0.5454
+   ],
+   "card_fit": [
+    1.0379,
+    1.0248,
+    0.0062
+   ],
+   "element": {
+    "length": 0.075,
+    "width": 0.04
+   },
+   "card_element": {
+    "length": 0.15,
+    "width": 0.1699
+   }
+  },
+  "ace_pla": {
+   "leaf_a": 115,
+   "leaf_b": 116,
+   "card": 117,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 33,
+   "bark_upper": 33,
+   "bark_scale": 2.5,
+   "bark_upper_scale": 2.5,
+   "leaf_kind": "lobed",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.8017,
+    1.1385,
+    0.7727,
+    0.2206
+   ],
+   "card_fit": [
+    2.2734,
+    1.0181,
+    0.0136
+   ],
+   "element": {
+    "length": 0.105,
+    "width": 0.13
+   },
+   "card_element": {
+    "length": 0.08,
+    "width": 0.302
+   }
+  },
+  "til_cor": {
+   "leaf_a": 118,
+   "leaf_b": 119,
+   "card": 120,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 36,
+   "bark_upper": 36,
+   "bark_scale": 4.0,
+   "bark_upper_scale": 4.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.1047,
+    0.2812,
+    0.9976,
+    0.7188,
+    0.9241,
+    0.0391
+   ],
+   "leaf_fit": [
+    1.6095,
+    1.1362,
+    0.5712,
+    0.3595
+   ],
+   "card_fit": [
+    1.0393,
+    0.5041,
+    0.0062
+   ],
+   "element": {
+    "length": 0.055,
+    "width": 0.05
+   },
+   "card_element": {
+    "length": 0.15,
+    "width": 0.1453
+   }
+  },
+  "fra_exc": {
+   "leaf_a": 121,
+   "leaf_b": 122,
+   "card": 124,
+   "leaflet": 123,
+   "needles": -1,
+   "bark": 37,
+   "bark_upper": 38,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 2.0,
+   "leaf_kind": "compound",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.2507,
+    1.1181,
+    0.2036,
+    0.5176
+   ],
+   "card_fit": [
+    1.0163,
+    1.0638,
+    0.0061
+   ],
+   "element": {
+    "length": 0.255,
+    "width": 0.1299
+   },
+   "card_element": {
+    "length": 0.3234,
+    "width": 0.5628
+   }
+  },
+  "ulm_lae": {
+   "leaf_a": 125,
+   "leaf_b": 126,
+   "card": 127,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 39,
+   "bark_upper": 39,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0737,
+    0.0625,
+    0.9865,
+    0.7188,
+    0.9641,
+    0.0982
+   ],
+   "leaf_fit": [
+    1.1022,
+    1.1872,
+    0.0765,
+    0.5218
+   ],
+   "card_fit": [
+    1.0701,
+    0.4984,
+    0.0064
+   ],
+   "element": {
+    "length": 0.085,
+    "width": 0.0475
+   },
+   "card_element": {
+    "length": 0.132,
+    "width": 0.1947
+   }
+  },
+  "ulm_min": {
+   "leaf_a": 128,
+   "leaf_b": 129,
+   "card": 130,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 39,
+   "bark_upper": 39,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0856,
+    0.0938,
+    0.9896,
+    0.7188,
+    0.9534,
+    0.0924
+   ],
+   "leaf_fit": [
+    1.1463,
+    1.2284,
+    0.1183,
+    0.4995
+   ],
+   "card_fit": [
+    1.1057,
+    0.5858,
+    0.0066
+   ],
+   "element": {
+    "length": 0.06,
+    "width": 0.0335
+   },
+   "card_element": {
+    "length": 0.105,
+    "width": 0.1374
+   }
+  },
+  "sor_auc": {
+   "leaf_a": 131,
+   "leaf_b": 132,
+   "card": 134,
+   "leaflet": 133,
+   "needles": -1,
+   "bark": 40,
+   "bark_upper": 40,
+   "bark_scale": 2.0,
+   "bark_upper_scale": 2.0,
+   "leaf_kind": "compound",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.1999,
+    1.1001,
+    0.1918,
+    0.623
+   ],
+   "card_fit": [
+    1.0163,
+    1.0638,
+    0.0061
+   ],
+   "element": {
+    "length": 0.1625,
+    "width": 0.0799
+   },
+   "card_element": {
+    "length": 0.2368,
+    "width": 0.3363
+   }
+  },
+  "aln_glu": {
+   "leaf_a": 135,
+   "leaf_b": 136,
+   "card": 137,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 41,
+   "bark_upper": 42,
+   "bark_scale": 4.5,
+   "bark_upper_scale": 2.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0702,
+    0.1875,
+    0.425,
+    0.25,
+    0.9619,
+    0.9431
+   ],
+   "leaf_fit": [
+    1.2825,
+    1.1167,
+    0.2513,
+    0.5868
+   ],
+   "card_fit": [
+    1.1394,
+    0.8929,
+    0.0068
+   ],
+   "element": {
+    "length": 0.065,
+    "width": 0.055
+   },
+   "card_element": {
+    "length": 0.1,
+    "width": 0.1646
+   }
+  },
+  "sal_alb": {
+   "leaf_a": 138,
+   "leaf_b": 139,
+   "card": 140,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 43,
+   "bark_upper": 43,
+   "bark_scale": 5.0,
+   "bark_upper_scale": 5.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.1825,
+    0.0625,
+    0.3721,
+    0.125,
+    0.9945,
+    0.8986
+   ],
+   "leaf_fit": [
+    1.1173,
+    1.1271,
+    0.0929,
+    0.546
+   ],
+   "card_fit": [
+    1.2416,
+    1.1678,
+    0.0074
+   ],
+   "element": {
+    "length": 0.08,
+    "width": 0.014
+   },
+   "card_element": {
+    "length": 0.096,
+    "width": 0.1168
+   }
+  },
+  "sal_fra": {
+   "leaf_a": 141,
+   "leaf_b": 142,
+   "card": 143,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 43,
+   "bark_upper": 43,
+   "bark_scale": 5.0,
+   "bark_upper_scale": 5.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.1327,
+    0.0938,
+    0.9975,
+    0.75,
+    0.9194,
+    0.1719
+   ],
+   "leaf_fit": [
+    1.1246,
+    1.1462,
+    0.1013,
+    0.5331
+   ],
+   "card_fit": [
+    1.4362,
+    0.9798,
+    0.0086
+   ],
+   "element": {
+    "length": 0.12,
+    "width": 0.0225
+   },
+   "card_element": {
+    "length": 0.105,
+    "width": 0.1922
+   }
+  },
+  "pop_nig": {
+   "leaf_a": 144,
+   "leaf_b": 145,
+   "card": 146,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 28,
+   "bark_upper": 28,
+   "bark_scale": 8.0,
+   "bark_upper_scale": 8.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0831,
+    0.3438,
+    0.9925,
+    0.5312,
+    0.9367,
+    0.0391
+   ],
+   "leaf_fit": [
+    1.6344,
+    1.0874,
+    0.5976,
+    0.2544
+   ],
+   "card_fit": [
+    1.5825,
+    1.0066,
+    0.0095
+   ],
+   "element": {
+    "length": 0.07,
+    "width": 0.065
+   },
+   "card_element": {
+    "length": 0.06,
+    "width": 0.1831
+   }
+  },
+  "pop_alb": {
+   "leaf_a": 147,
+   "leaf_b": 148,
+   "card": 149,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 26,
+   "bark_upper": 27,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "lobed",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.5029,
+    1.2175,
+    0.4757,
+    0.4732
+   ],
+   "card_fit": [
+    1.4035,
+    0.9125,
+    0.0084
+   ],
+   "element": {
+    "length": 0.075,
+    "width": 0.0675
+   },
+   "card_element": {
+    "length": 0.072,
+    "width": 0.194
+   }
+  },
+  "pop_can": {
+   "leaf_a": 150,
+   "leaf_b": 151,
+   "card": 152,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 28,
+   "bark_upper": 28,
+   "bark_scale": 8.0,
+   "bark_upper_scale": 8.0,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.0917,
+    0.375,
+    0.9933,
+    0.5938,
+    0.9409,
+    0.0511
+   ],
+   "leaf_fit": [
+    1.6505,
+    1.106,
+    0.6146,
+    0.3219
+   ],
+   "card_fit": [
+    1.5983,
+    0.9472,
+    0.0096
+   ],
+   "element": {
+    "length": 0.085,
+    "width": 0.08
+   },
+   "card_element": {
+    "length": 0.072,
+    "width": 0.2234
+   }
+  },
+  "rob_pse": {
+   "leaf_a": 153,
+   "leaf_b": 154,
+   "card": 156,
+   "leaflet": 155,
+   "needles": -1,
+   "bark": 44,
+   "bark_upper": 44,
+   "bark_scale": 6.0,
+   "bark_upper_scale": 6.0,
+   "leaf_kind": "compound",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.1763,
+    1.2537,
+    0.1534,
+    0.7018
+   ],
+   "card_fit": [
+    1.0163,
+    1.0638,
+    0.0061
+   ],
+   "element": {
+    "length": 0.205,
+    "width": 0.0676
+   },
+   "card_element": {
+    "length": 0.3026,
+    "width": 0.4203
+   }
+  },
+  "ace_neg": {
+   "leaf_a": 157,
+   "leaf_b": 158,
+   "card": 160,
+   "leaflet": 159,
+   "needles": -1,
+   "bark": 35,
+   "bark_upper": 35,
+   "bark_scale": 2.5,
+   "bark_upper_scale": 2.5,
+   "leaf_kind": "compound",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.5973,
+    1.09,
+    0.3905,
+    0.561
+   ],
+   "card_fit": [
+    1.0163,
+    1.0638,
+    0.0061
+   ],
+   "element": {
+    "length": 0.1575,
+    "width": 0.127
+   },
+   "card_element": {
+    "length": 0.2719,
+    "width": 0.4442
+   }
+  },
+  "ace_pse": {
+   "leaf_a": 161,
+   "leaf_b": 162,
+   "card": 163,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 34,
+   "bark_upper": 34,
+   "bark_scale": 4.0,
+   "bark_upper_scale": 4.0,
+   "leaf_kind": "lobed",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.706,
+    1.1522,
+    0.6769,
+    0.3478
+   ],
+   "card_fit": [
+    1.9941,
+    1.0166,
+    0.012
+   ],
+   "element": {
+    "length": 0.105,
+    "width": 0.12
+   },
+   "card_element": {
+    "length": 0.09,
+    "width": 0.292
+   }
+  },
+  "aes_hip": {
+   "leaf_a": 164,
+   "leaf_b": 165,
+   "card": 167,
+   "leaflet": 166,
+   "needles": -1,
+   "bark": 45,
+   "bark_upper": 45,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "palmate",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.8536,
+    1.303,
+    0.8111,
+    0.5702
+   ],
+   "card_fit": [
+    1.0163,
+    1.0638,
+    0.0061
+   ],
+   "element": {
+    "length": 0.15,
+    "width": 0.1725
+   },
+   "card_element": {
+    "length": 0.33,
+    "width": 0.4834
+   }
+  },
+  "que_rub": {
+   "leaf_a": 168,
+   "leaf_b": 169,
+   "card": 170,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 31,
+   "bark_upper": 31,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "lobed",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.2451,
+    1.1257,
+    0.2262,
+    0.238
+   ],
+   "card_fit": [
+    1.8879,
+    0.9757,
+    0.0113
+   ],
+   "element": {
+    "length": 0.16,
+    "width": 0.105
+   },
+   "card_element": {
+    "length": 0.1,
+    "width": 0.3671
+   }
+  },
+  "fra_pen": {
+   "leaf_a": 171,
+   "leaf_b": 172,
+   "card": 174,
+   "leaflet": 173,
+   "needles": -1,
+   "bark": 37,
+   "bark_upper": 37,
+   "bark_scale": 3.0,
+   "bark_upper_scale": 3.0,
+   "leaf_kind": "compound",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.3052,
+    1.0635,
+    0.2171,
+    0.5488
+   ],
+   "card_fit": [
+    1.0163,
+    1.0638,
+    0.0061
+   ],
+   "element": {
+    "length": 0.215,
+    "width": 0.1393
+   },
+   "card_element": {
+    "length": 0.2574,
+    "width": 0.4443
+   }
+  },
+  "mal_dom": {
+   "leaf_a": 175,
+   "leaf_b": 176,
+   "card": 177,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 46,
+   "bark_upper": 46,
+   "bark_scale": 2.5,
+   "bark_upper_scale": 2.5,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.1104,
+    0.2188,
+    0.9976,
+    0.8438,
+    0.9223,
+    0.043
+   ],
+   "leaf_fit": [
+    1.3498,
+    1.1031,
+    0.3179,
+    0.4304
+   ],
+   "card_fit": [
+    1.962,
+    0.7833,
+    0.0118
+   ],
+   "element": {
+    "length": 0.0675,
+    "width": 0.0425
+   },
+   "card_element": {
+    "length": 0.04,
+    "width": 0.1496
+   }
+  },
+  "pyr_com": {
+   "leaf_a": 178,
+   "leaf_b": 179,
+   "card": 180,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 47,
+   "bark_upper": 47,
+   "bark_scale": 2.5,
+   "bark_upper_scale": 2.5,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.1464,
+    0.2812,
+    0.1876,
+    0.3438,
+    0.9635,
+    0.934
+   ],
+   "leaf_fit": [
+    1.6095,
+    1.0931,
+    0.5712,
+    0.4078
+   ],
+   "card_fit": [
+    2.0497,
+    0.9417,
+    0.0123
+   ],
+   "element": {
+    "length": 0.055,
+    "width": 0.0375
+   },
+   "card_element": {
+    "length": 0.04,
+    "width": 0.1248
+   }
+  },
+  "t_pru_cer": {
+   "leaf_a": 78,
+   "leaf_b": 79,
+   "card": 80,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 48,
+   "bark_upper": 48,
+   "bark_scale": 2.5,
+   "bark_upper_scale": 2.5,
+   "leaf_kind": "spray",
+   "shared_with": "pru_cer",
+   "leaf_hull": [
+    0.1102,
+    0.1875,
+    0.9978,
+    0.7188,
+    0.9266,
+    0.0664
+   ],
+   "leaf_fit": [
+    1.2715,
+    1.104,
+    0.2385,
+    0.488
+   ],
+   "card_fit": [
+    1.073,
+    0.9587,
+    0.0064
+   ],
+   "element": {
+    "length": 0.055,
+    "width": 0.0325
+   },
+   "card_element": {
+    "length": 0.09,
+    "width": 0.1253
+   }
+  },
+  "pru_dom": {
+   "leaf_a": 181,
+   "leaf_b": 182,
+   "card": 183,
+   "leaflet": -1,
+   "needles": -1,
+   "bark": 49,
+   "bark_upper": 49,
+   "bark_scale": 2.5,
+   "bark_upper_scale": 2.5,
+   "leaf_kind": "simple",
+   "shared_with": null,
+   "leaf_hull": [
+    0.1002,
+    0.1875,
+    0.9995,
+    0.8125,
+    0.9345,
+    0.043
+   ],
+   "leaf_fit": [
+    1.2646,
+    1.1176,
+    0.2345,
+    0.4332
+   ],
+   "card_fit": [
+    1.4453,
+    0.9016,
+    0.0087
+   ],
+   "element": {
+    "length": 0.07,
+    "width": 0.0375
+   },
+   "card_element": {
+    "length": 0.06,
+    "width": 0.1486
+   }
+  },
+  "jug_reg": {
+   "leaf_a": 184,
+   "leaf_b": 185,
+   "card": 187,
+   "leaflet": 186,
+   "needles": -1,
+   "bark": 50,
+   "bark_upper": 51,
+   "bark_scale": 3.5,
+   "bark_upper_scale": 2.0,
+   "leaf_kind": "compound",
+   "shared_with": null,
+   "leaf_hull": [
+    1.0,
+    0.3333,
+    1.0,
+    0.6667,
+    1.0,
+    1.0
+   ],
+   "leaf_fit": [
+    1.3499,
+    1.0757,
+    0.2186,
+    0.5531
+   ],
+   "card_fit": [
+    1.0163,
+    1.0638,
+    0.0061
+   ],
+   "element": {
+    "length": 0.285,
+    "width": 0.1903
+   },
+   "card_element": {
+    "length": 0.3604,
+    "width": 0.6405
+   }
+  }
+ },
+ "bark_types": {
+  "pine_plates": {
+   "index": 19,
+   "scale": 8.0,
+   "species": [
+    "pin_syl"
+   ],
+   "upper": []
+  },
+  "pine_mirror": {
+   "index": 20,
+   "scale": 4.0,
+   "species": [],
+   "upper": [
+    "pin_syl"
+   ]
+  },
+  "spruce": {
+   "index": 21,
+   "scale": 3.0,
+   "species": [
+    "pic_abi"
+   ],
+   "upper": []
+  },
+  "birch_white": {
+   "index": 22,
+   "scale": 3.0,
+   "species": [],
+   "upper": [
+    "bet_pen",
+    "bet_pub"
+   ]
+  },
+  "birch_base": {
+   "index": 23,
+   "scale": 4.0,
+   "species": [
+    "bet_pen"
+   ],
+   "upper": []
+  },
+  "birch_downy_base": {
+   "index": 24,
+   "scale": 5.0,
+   "species": [
+    "bet_pub"
+   ],
+   "upper": []
+  },
+  "aspen_smooth": {
+   "index": 25,
+   "scale": 3.0,
+   "species": [],
+   "upper": [
+    "pop_tre"
+   ]
+  },
+  "aspen_base": {
+   "index": 26,
+   "scale": 3.0,
+   "species": [
+    "pop_tre",
+    "pop_alb"
+   ],
+   "upper": []
+  },
+  "poplar_white": {
+   "index": 27,
+   "scale": 3.0,
+   "species": [],
+   "upper": [
+    "pop_alb"
+   ]
+  },
+  "poplar_black": {
+   "index": 28,
+   "scale": 8.0,
+   "species": [
+    "pop_nig",
+    "pop_can"
+   ],
+   "upper": []
+  },
+  "oak": {
+   "index": 29,
+   "scale": 6.0,
+   "species": [
+    "que_rob"
+   ],
+   "upper": []
+  },
+  "oak_young": {
+   "index": 30,
+   "scale": 2.0,
+   "species": [],
+   "upper": [
+    "que_rob"
+   ]
+  },
+  "red_oak": {
+   "index": 31,
+   "scale": 3.0,
+   "species": [
+    "que_rub"
+   ],
+   "upper": []
+  },
+  "hornbeam": {
+   "index": 32,
+   "scale": 3.0,
+   "species": [
+    "car_bet"
+   ],
+   "upper": []
+  },
+  "maple": {
+   "index": 33,
+   "scale": 2.5,
+   "species": [
+    "ace_pla"
+   ],
+   "upper": []
+  },
+  "sycamore": {
+   "index": 34,
+   "scale": 4.0,
+   "species": [
+    "ace_pse"
+   ],
+   "upper": []
+  },
+  "box_elder": {
+   "index": 35,
+   "scale": 2.5,
+   "species": [
+    "ace_neg"
+   ],
+   "upper": []
+  },
+  "lime": {
+   "index": 36,
+   "scale": 4.0,
+   "species": [
+    "til_cor"
+   ],
+   "upper": []
+  },
+  "ash": {
+   "index": 37,
+   "scale": 3.0,
+   "species": [
+    "fra_exc",
+    "fra_pen"
+   ],
+   "upper": []
+  },
+  "ash_young": {
+   "index": 38,
+   "scale": 2.0,
+   "species": [],
+   "upper": [
+    "fra_exc"
+   ]
+  },
+  "elm": {
+   "index": 39,
+   "scale": 3.0,
+   "species": [
+    "ulm_lae",
+    "ulm_min"
+   ],
+   "upper": []
+  },
+  "rowan": {
+   "index": 40,
+   "scale": 2.0,
+   "species": [
+    "sor_auc"
+   ],
+   "upper": []
+  },
+  "alder": {
+   "index": 41,
+   "scale": 4.5,
+   "species": [
+    "aln_glu"
+   ],
+   "upper": []
+  },
+  "alder_young": {
+   "index": 42,
+   "scale": 2.0,
+   "species": [],
+   "upper": [
+    "aln_glu"
+   ]
+  },
+  "willow_tree": {
+   "index": 43,
+   "scale": 5.0,
+   "species": [
+    "sal_alb",
+    "sal_fra"
+   ],
+   "upper": []
+  },
+  "robinia": {
+   "index": 44,
+   "scale": 6.0,
+   "species": [
+    "rob_pse"
+   ],
+   "upper": []
+  },
+  "horse_chestnut": {
+   "index": 45,
+   "scale": 3.0,
+   "species": [
+    "aes_hip"
+   ],
+   "upper": []
+  },
+  "apple": {
+   "index": 46,
+   "scale": 2.5,
+   "species": [
+    "mal_dom"
+   ],
+   "upper": []
+  },
+  "pear": {
+   "index": 47,
+   "scale": 2.5,
+   "species": [
+    "pyr_com"
+   ],
+   "upper": []
+  },
+  "cherry_trunk": {
+   "index": 48,
+   "scale": 2.5,
+   "species": [
+    "t_pru_cer"
+   ],
+   "upper": []
+  },
+  "plum": {
+   "index": 49,
+   "scale": 2.5,
+   "species": [
+    "pru_dom"
+   ],
+   "upper": []
+  },
+  "walnut": {
+   "index": 50,
+   "scale": 3.5,
+   "species": [
+    "jug_reg"
+   ],
+   "upper": []
+  },
+  "walnut_young": {
+   "index": 51,
+   "scale": 2.0,
+   "species": [],
+   "upper": [
+    "jug_reg"
+   ]
+  },
+  "deadwood_bark": {
+   "index": 52,
+   "scale": 4.0,
+   "species": [],
+   "upper": []
+  },
+  "deadwood_bare": {
+   "index": 53,
+   "scale": 3.0,
+   "species": [],
+   "upper": []
+  },
+  "char": {
+   "index": 54,
+   "scale": 4.0,
+   "species": [],
+   "upper": []
+  }
+ },
+ "special_bark": {
+  "deadwood_bark": 52,
+  "deadwood_bare": 53,
+  "char": 54
+ },
+ "leaf_layer_info": {
+  "pin_syl_a": {
+   "index": 94,
+   "kind": "needles",
+   "box_mm": [
+    173.81,
+    139.31
+   ],
+   "hull": null
+  },
+  "pin_syl_b": {
+   "index": 95,
+   "kind": "needles",
+   "box_mm": [
+    173.81,
+    139.31
+   ],
+   "hull": null
+  },
+  "pin_syl_card": {
+   "index": 96,
+   "kind": "card",
+   "box_mm": [
+    297.79,
+    256.26
+   ],
+   "hull": null
+  },
+  "pic_abi_a": {
+   "index": 97,
+   "kind": "needles",
+   "box_mm": [
+    77.82,
+    44.52
+   ],
+   "hull": null
+  },
+  "pic_abi_b": {
+   "index": 98,
+   "kind": "needles",
+   "box_mm": [
+    77.82,
+    44.52
+   ],
+   "hull": null
+  },
+  "pic_abi_card": {
+   "index": 99,
+   "kind": "card",
+   "box_mm": [
+    261.97,
+    225.13
+   ],
+   "hull": null
+  },
+  "bet_pen_a": {
+   "index": 100,
+   "kind": "simple",
+   "box_mm": [
+    77.44,
+    42.6
+   ],
+   "hull": [
+    [
+     0.46094,
+     0.93722
+    ],
+    [
+     0.50781,
+     0.95332
+    ],
+    [
+     0.99219,
+     0.02986
+    ]
+   ]
+  },
+  "bet_pen_b": {
+   "index": 101,
+   "kind": "simple",
+   "box_mm": [
+    77.44,
+    42.6
+   ],
+   "hull": [
+    [
+     0.34375,
+     0.64551
+    ],
+    [
+     0.46875,
+     0.99239
+    ],
+    [
+     0.99219,
+     0.02226
+    ]
+   ]
+  },
+  "bet_pen_card": {
+   "index": 102,
+   "kind": "card",
+   "box_mm": [
+    94.36,
+    134.07
+   ],
+   "hull": null
+  },
+  "bet_pub_a": {
+   "index": 103,
+   "kind": "simple",
+   "box_mm": [
+    62.58,
+    39.46
+   ],
+   "hull": [
+    [
+     0.41406,
+     0.88887
+    ],
+    [
+     0.55469,
+     0.97676
+    ],
+    [
+     0.99219,
+     0.0249
+    ]
+   ]
+  },
+  "bet_pub_b": {
+   "index": 104,
+   "kind": "simple",
+   "box_mm": [
+    62.58,
+    39.46
+   ],
+   "hull": [
+    [
+     0.375,
+     0.80377
+    ],
+    [
+     0.55469,
+     0.98457
+    ],
+    [
+     0.96875,
+     0.07833
+    ]
+   ]
+  },
+  "bet_pub_card": {
+   "index": 105,
+   "kind": "card",
+   "box_mm": [
+    94.55,
+    90.05
+   ],
+   "hull": null
+  },
+  "pop_tre_a": {
+   "index": 106,
+   "kind": "simple",
+   "box_mm": [
+    98.97,
+    56.23
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.02651
+    ],
+    [
+     0.70312,
+     0.98457
+    ],
+    [
+     0.89062,
+     0.79708
+    ]
+   ]
+  },
+  "pop_tre_b": {
+   "index": 107,
+   "kind": "simple",
+   "box_mm": [
+    98.97,
+    56.23
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.02687
+    ],
+    [
+     0.67969,
+     0.96895
+    ],
+    [
+     0.88281,
+     0.90254
+    ]
+   ]
+  },
+  "pop_tre_card": {
+   "index": 108,
+   "kind": "card",
+   "box_mm": [
+    73.81,
+    188.38
+   ],
+   "hull": null
+  },
+  "que_rob_a": {
+   "index": 109,
+   "kind": "lobed",
+   "box_mm": [
+    102.68,
+    60.57
+   ],
+   "hull": null
+  },
+  "que_rob_b": {
+   "index": 110,
+   "kind": "lobed",
+   "box_mm": [
+    102.68,
+    60.57
+   ],
+   "hull": null
+  },
+  "que_rob_card": {
+   "index": 111,
+   "kind": "card",
+   "box_mm": [
+    99.28,
+    172.41
+   ],
+   "hull": null
+  },
+  "car_bet_a": {
+   "index": 112,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    45.96
+   ],
+   "hull": [
+    [
+     0.32031,
+     0.87536
+    ],
+    [
+     0.67969,
+     1.0
+    ],
+    [
+     0.99219,
+     0.04286
+    ]
+   ]
+  },
+  "car_bet_b": {
+   "index": 113,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    45.96
+   ],
+   "hull": [
+    [
+     0.33594,
+     0.93638
+    ],
+    [
+     0.67969,
+     0.89082
+    ],
+    [
+     0.99219,
+     0.04233
+    ]
+   ]
+  },
+  "car_bet_card": {
+   "index": 114,
+   "kind": "card",
+   "box_mm": [
+    155.68,
+    174.11
+   ],
+   "hull": null
+  },
+  "ace_pla_a": {
+   "index": 115,
+   "kind": "lobed",
+   "box_mm": [
+    189.18,
+    148.0
+   ],
+   "hull": null
+  },
+  "ace_pla_b": {
+   "index": 116,
+   "kind": "lobed",
+   "box_mm": [
+    189.18,
+    148.0
+   ],
+   "hull": null
+  },
+  "ace_pla_card": {
+   "index": 117,
+   "kind": "card",
+   "box_mm": [
+    181.87,
+    307.49
+   ],
+   "hull": null
+  },
+  "til_cor_a": {
+   "index": 118,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    56.81
+   ],
+   "hull": [
+    [
+     0.42188,
+     0.90422
+    ],
+    [
+     0.57812,
+     0.9377
+    ],
+    [
+     0.99219,
+     0.03194
+    ]
+   ]
+  },
+  "til_cor_b": {
+   "index": 119,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    56.81
+   ],
+   "hull": [
+    [
+     0.40625,
+     0.87317
+    ],
+    [
+     0.58594,
+     0.98457
+    ],
+    [
+     0.71875,
+     0.51582
+    ]
+   ]
+  },
+  "til_cor_card": {
+   "index": 120,
+   "kind": "card",
+   "box_mm": [
+    155.9,
+    73.23
+   ],
+   "hull": null
+  },
+  "fra_exc_a": {
+   "index": 121,
+   "kind": "compound",
+   "box_mm": [
+    318.94,
+    145.25
+   ],
+   "hull": null
+  },
+  "fra_exc_b": {
+   "index": 122,
+   "kind": "compound",
+   "box_mm": [
+    318.94,
+    145.25
+   ],
+   "hull": null
+  },
+  "fra_exc_leaflet": {
+   "index": 123,
+   "kind": "simple",
+   "box_mm": [
+    80.81,
+    25.69
+   ],
+   "hull": [
+    [
+     0.28906,
+     0.91023
+    ],
+    [
+     0.57812,
+     0.96895
+    ],
+    [
+     0.99219,
+     0.07576
+    ]
+   ]
+  },
+  "fra_exc_card": {
+   "index": 124,
+   "kind": "card",
+   "box_mm": [
+    328.65,
+    598.77
+   ],
+   "hull": null
+  },
+  "ulm_lae_a": {
+   "index": 125,
+   "kind": "simple",
+   "box_mm": [
+    93.69,
+    56.39
+   ],
+   "hull": [
+    [
+     0.27344,
+     0.82105
+    ],
+    [
+     0.71875,
+     1.0
+    ],
+    [
+     0.98438,
+     0.11999
+    ]
+   ]
+  },
+  "ulm_lae_b": {
+   "index": 126,
+   "kind": "simple",
+   "box_mm": [
+    93.69,
+    56.39
+   ],
+   "hull": [
+    [
+     0.29688,
+     0.84268
+    ],
+    [
+     0.69531,
+     1.0
+    ],
+    [
+     0.96875,
+     0.15124
+    ]
+   ]
+  },
+  "ulm_lae_card": {
+   "index": 127,
+   "kind": "card",
+   "box_mm": [
+    141.25,
+    97.06
+   ],
+   "hull": null
+  },
+  "ulm_min_a": {
+   "index": 128,
+   "kind": "simple",
+   "box_mm": [
+    68.78,
+    41.15
+   ],
+   "hull": [
+    [
+     0.10938,
+     0.44867
+    ],
+    [
+     0.47656,
+     0.99239
+    ],
+    [
+     0.84375,
+     0.81153
+    ]
+   ]
+  },
+  "ulm_min_b": {
+   "index": 129,
+   "kind": "simple",
+   "box_mm": [
+    68.78,
+    41.15
+   ],
+   "hull": [
+    [
+     0.28125,
+     0.82701
+    ],
+    [
+     0.69531,
+     0.98457
+    ],
+    [
+     0.95312,
+     0.29127
+    ]
+   ]
+  },
+  "ulm_min_card": {
+   "index": 130,
+   "kind": "card",
+   "box_mm": [
+    116.1,
+    80.5
+   ],
+   "hull": null
+  },
+  "sor_auc_a": {
+   "index": 131,
+   "kind": "compound",
+   "box_mm": [
+    194.98,
+    87.87
+   ],
+   "hull": null
+  },
+  "sor_auc_b": {
+   "index": 132,
+   "kind": "compound",
+   "box_mm": [
+    194.98,
+    87.87
+   ],
+   "hull": null
+  },
+  "sor_auc_leaflet": {
+   "index": 133,
+   "kind": "simple",
+   "box_mm": [
+    45.85,
+    17.02
+   ],
+   "hull": [
+    [
+     0.0625,
+     0.50541
+    ],
+    [
+     0.4375,
+     0.96114
+    ],
+    [
+     0.88281,
+     0.93227
+    ]
+   ]
+  },
+  "sor_auc_card": {
+   "index": 134,
+   "kind": "card",
+   "box_mm": [
+    240.61,
+    357.75
+   ],
+   "hull": null
+  },
+  "aln_glu_a": {
+   "index": 135,
+   "kind": "simple",
+   "box_mm": [
+    83.36,
+    61.42
+   ],
+   "hull": [
+    [
+     0.45312,
+     0.87372
+    ],
+    [
+     0.75781,
+     0.96895
+    ],
+    [
+     0.96875,
+     0.81158
+    ]
+   ]
+  },
+  "aln_glu_b": {
+   "index": 136,
+   "kind": "simple",
+   "box_mm": [
+    83.36,
+    61.42
+   ],
+   "hull": [
+    [
+     0.45312,
+     0.89038
+    ],
+    [
+     0.78125,
+     0.96895
+    ],
+    [
+     0.96875,
+     0.82953
+    ]
+   ]
+  },
+  "aln_glu_card": {
+   "index": 137,
+   "kind": "card",
+   "box_mm": [
+    113.94,
+    147.01
+   ],
+   "hull": null
+  },
+  "sal_alb_a": {
+   "index": 138,
+   "kind": "simple",
+   "box_mm": [
+    89.38,
+    15.78
+   ],
+   "hull": [
+    [
+     0.01758,
+     0.08971
+    ],
+    [
+     0.39844,
+     1.0
+    ],
+    [
+     0.86719,
+     0.82548
+    ]
+   ]
+  },
+  "sal_alb_b": {
+   "index": 139,
+   "kind": "simple",
+   "box_mm": [
+    89.38,
+    15.78
+   ],
+   "hull": [
+    [
+     0.17188,
+     0.85957
+    ],
+    [
+     0.59375,
+     1.0
+    ],
+    [
+     0.97656,
+     0.32442
+    ]
+   ]
+  },
+  "sal_alb_card": {
+   "index": 140,
+   "kind": "card",
+   "box_mm": [
+    119.19,
+    136.45
+   ],
+   "hull": null
+  },
+  "sal_fra_a": {
+   "index": 141,
+   "kind": "simple",
+   "box_mm": [
+    134.95,
+    25.79
+   ],
+   "hull": [
+    [
+     0.21875,
+     0.84524
+    ],
+    [
+     0.625,
+     1.0
+    ],
+    [
+     0.99219,
+     0.1878
+    ]
+   ]
+  },
+  "sal_fra_b": {
+   "index": 142,
+   "kind": "simple",
+   "box_mm": [
+    134.95,
+    25.79
+   ],
+   "hull": [
+    [
+     0.21875,
+     0.85812
+    ],
+    [
+     0.5625,
+     1.0
+    ],
+    [
+     0.97656,
+     0.34676
+    ]
+   ]
+  },
+  "sal_fra_card": {
+   "index": 143,
+   "kind": "card",
+   "box_mm": [
+    150.8,
+    188.32
+   ],
+   "hull": null
+  },
+  "pop_nig_a": {
+   "index": 144,
+   "kind": "simple",
+   "box_mm": [
+    114.41,
+    70.68
+   ],
+   "hull": [
+    [
+     0.38281,
+     0.71895
+    ],
+    [
+     0.47656,
+     0.99239
+    ],
+    [
+     0.99219,
+     0.03002
+    ]
+   ]
+  },
+  "pop_nig_b": {
+   "index": 145,
+   "kind": "simple",
+   "box_mm": [
+    114.41,
+    70.68
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.0292
+    ],
+    [
+     0.21094,
+     0.03926
+    ],
+    [
+     0.46875,
+     0.99915
+    ]
+   ]
+  },
+  "pop_nig_card": {
+   "index": 146,
+   "kind": "card",
+   "box_mm": [
+    94.95,
+    184.29
+   ],
+   "hull": null
+  },
+  "pop_alb_a": {
+   "index": 147,
+   "kind": "lobed",
+   "box_mm": [
+    112.72,
+    82.18
+   ],
+   "hull": null
+  },
+  "pop_alb_b": {
+   "index": 148,
+   "kind": "lobed",
+   "box_mm": [
+    112.72,
+    82.18
+   ],
+   "hull": null
+  },
+  "pop_alb_card": {
+   "index": 149,
+   "kind": "card",
+   "box_mm": [
+    101.05,
+    177.03
+   ],
+   "hull": null
+  },
+  "pop_can_a": {
+   "index": 150,
+   "kind": "simple",
+   "box_mm": [
+    140.29,
+    88.48
+   ],
+   "hull": [
+    [
+     0.35938,
+     0.66761
+    ],
+    [
+     0.46094,
+     0.96114
+    ],
+    [
+     0.64062,
+     0.89864
+    ]
+   ]
+  },
+  "pop_can_b": {
+   "index": 151,
+   "kind": "simple",
+   "box_mm": [
+    140.29,
+    88.48
+   ],
+   "hull": [
+    [
+     0.47656,
+     0.95159
+    ],
+    [
+     0.60156,
+     0.9377
+    ],
+    [
+     0.99219,
+     0.02821
+    ]
+   ]
+  },
+  "pop_can_card": {
+   "index": 152,
+   "kind": "card",
+   "box_mm": [
+    115.08,
+    211.58
+   ],
+   "hull": null
+  },
+  "rob_pse_a": {
+   "index": 153,
+   "kind": "compound",
+   "box_mm": [
+    241.15,
+    84.77
+   ],
+   "hull": null
+  },
+  "rob_pse_b": {
+   "index": 154,
+   "kind": "compound",
+   "box_mm": [
+    241.15,
+    84.77
+   ],
+   "hull": null
+  },
+  "rob_pse_leaflet": {
+   "index": 155,
+   "kind": "simple",
+   "box_mm": [
+    37.79,
+    20.72
+   ],
+   "hull": [
+    [
+     0.14844,
+     0.75822
+    ],
+    [
+     0.5,
+     1.0
+    ],
+    [
+     0.9375,
+     0.81901
+    ]
+   ]
+  },
+  "rob_pse_card": {
+   "index": 156,
+   "kind": "card",
+   "box_mm": [
+    307.53,
+    447.13
+   ],
+   "hull": null
+  },
+  "ace_neg_a": {
+   "index": 157,
+   "kind": "compound",
+   "box_mm": [
+    251.57,
+    138.4
+   ],
+   "hull": null
+  },
+  "ace_neg_b": {
+   "index": 158,
+   "kind": "compound",
+   "box_mm": [
+    251.57,
+    138.4
+   ],
+   "hull": null
+  },
+  "ace_neg_leaflet": {
+   "index": 159,
+   "kind": "simple",
+   "box_mm": [
+    83.54,
+    49.17
+   ],
+   "hull": [
+    [
+     0.17969,
+     0.86597
+    ],
+    [
+     0.65625,
+     0.98457
+    ],
+    [
+     0.99219,
+     0.04285
+    ]
+   ]
+  },
+  "ace_neg_card": {
+   "index": 160,
+   "kind": "card",
+   "box_mm": [
+    276.3,
+    472.56
+   ],
+   "hull": null
+  },
+  "ace_pse_a": {
+   "index": 161,
+   "kind": "lobed",
+   "box_mm": [
+    179.13,
+    138.27
+   ],
+   "hull": null
+  },
+  "ace_pse_b": {
+   "index": 162,
+   "kind": "lobed",
+   "box_mm": [
+    179.13,
+    138.27
+   ],
+   "hull": null
+  },
+  "ace_pse_card": {
+   "index": 163,
+   "kind": "card",
+   "box_mm": [
+    179.47,
+    296.88
+   ],
+   "hull": null
+  },
+  "aes_hip_a": {
+   "index": 164,
+   "kind": "compound",
+   "box_mm": [
+    278.04,
+    224.77
+   ],
+   "hull": null
+  },
+  "aes_hip_b": {
+   "index": 165,
+   "kind": "compound",
+   "box_mm": [
+    278.04,
+    224.77
+   ],
+   "hull": null
+  },
+  "aes_hip_leaflet": {
+   "index": 166,
+   "kind": "simple",
+   "box_mm": [
+    161.81,
+    62.79
+   ],
+   "hull": [
+    [
+     0.04102,
+     0.08809
+    ],
+    [
+     0.51562,
+     0.9377
+    ],
+    [
+     0.88281,
+     0.96218
+    ]
+   ]
+  },
+  "aes_hip_card": {
+   "index": 167,
+   "kind": "card",
+   "box_mm": [
+    335.36,
+    514.25
+   ],
+   "hull": null
+  },
+  "que_rub_a": {
+   "index": 168,
+   "kind": "lobed",
+   "box_mm": [
+    199.22,
+    118.2
+   ],
+   "hull": null
+  },
+  "que_rub_b": {
+   "index": 169,
+   "kind": "lobed",
+   "box_mm": [
+    199.22,
+    118.2
+   ],
+   "hull": null
+  },
+  "que_rub_card": {
+   "index": 170,
+   "kind": "card",
+   "box_mm": [
+    188.79,
+    358.2
+   ],
+   "hull": null
+  },
+  "fra_pen_a": {
+   "index": 171,
+   "kind": "compound",
+   "box_mm": [
+    280.62,
+    148.1
+   ],
+   "hull": null
+  },
+  "fra_pen_b": {
+   "index": 172,
+   "kind": "compound",
+   "box_mm": [
+    280.62,
+    148.1
+   ],
+   "hull": null
+  },
+  "fra_pen_leaflet": {
+   "index": 173,
+   "kind": "simple",
+   "box_mm": [
+    91.55,
+    32.97
+   ],
+   "hull": [
+    [
+     0.28906,
+     0.89806
+    ],
+    [
+     0.59375,
+     0.98457
+    ],
+    [
+     0.99219,
+     0.07921
+    ]
+   ]
+  },
+  "fra_pen_card": {
+   "index": 174,
+   "kind": "card",
+   "box_mm": [
+    261.54,
+    472.68
+   ],
+   "hull": null
+  },
+  "mal_dom_a": {
+   "index": 175,
+   "kind": "simple",
+   "box_mm": [
+    91.11,
+    46.88
+   ],
+   "hull": [
+    [
+     0.33594,
+     0.81605
+    ],
+    [
+     0.61719,
+     1.0
+    ],
+    [
+     0.99219,
+     0.03112
+    ]
+   ]
+  },
+  "mal_dom_b": {
+   "index": 176,
+   "kind": "simple",
+   "box_mm": [
+    91.11,
+    46.88
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.02595
+    ],
+    [
+     0.49219,
+     0.96114
+    ],
+    [
+     0.70312,
+     0.9403
+    ]
+   ]
+  },
+  "mal_dom_card": {
+   "index": 177,
+   "kind": "card",
+   "box_mm": [
+    78.48,
+    117.19
+   ],
+   "hull": null
+  },
+  "pyr_com_a": {
+   "index": 178,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    40.99
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.03133
+    ],
+    [
+     0.54688,
+     0.9377
+    ],
+    [
+     0.72656,
+     0.96041
+    ]
+   ]
+  },
+  "pyr_com_b": {
+   "index": 179,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    40.99
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.03092
+    ],
+    [
+     0.53906,
+     0.96114
+    ],
+    [
+     0.75781,
+     0.92859
+    ]
+   ]
+  },
+  "pyr_com_card": {
+   "index": 180,
+   "kind": "card",
+   "box_mm": [
+    81.99,
+    117.49
+   ],
+   "hull": null
+  },
+  "pru_dom_a": {
+   "index": 181,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    41.91
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.02865
+    ],
+    [
+     0.57031,
+     0.92989
+    ],
+    [
+     0.72656,
+     0.96027
+    ]
+   ]
+  },
+  "pru_dom_b": {
+   "index": 182,
+   "kind": "simple",
+   "box_mm": [
+    88.52,
+    41.91
+   ],
+   "hull": [
+    [
+     0.00977,
+     0.02659
+    ],
+    [
+     0.49219,
+     0.92989
+    ],
+    [
+     0.72656,
+     0.95723
+    ]
+   ]
+  },
+  "pru_dom_card": {
+   "index": 183,
+   "kind": "card",
+   "box_mm": [
+    86.72,
+    133.95
+   ],
+   "hull": null
+  },
+  "jug_reg_a": {
+   "index": 184,
+   "kind": "compound",
+   "box_mm": [
+    384.71,
+    204.73
+   ],
+   "hull": null
+  },
+  "jug_reg_b": {
+   "index": 185,
+   "kind": "compound",
+   "box_mm": [
+    384.71,
+    204.73
+   ],
+   "hull": null
+  },
+  "jug_reg_leaflet": {
+   "index": 186,
+   "kind": "simple",
+   "box_mm": [
+    113.14,
+    54.48
+   ],
+   "hull": [
+    [
+     0.1875,
+     0.8236
+    ],
+    [
+     0.57812,
+     0.99239
+    ],
+    [
+     0.99219,
+     0.0361
+    ]
+   ]
+  },
+  "jug_reg_card": {
+   "index": 187,
+   "kind": "card",
+   "box_mm": [
+    366.26,
+    681.39
+   ],
+   "hull": null
+  }
+ },
+ "leaf_cover": {
+  "pin_syl_a": 0.2126,
+  "pin_syl_b": 0.1805,
+  "pin_syl_card": 0.2181,
+  "pic_abi_a": 0.3302,
+  "pic_abi_b": 0.3669,
+  "pic_abi_card": 0.2807,
+  "bet_pen_a": 0.2927,
+  "bet_pen_b": 0.2884,
+  "bet_pen_card": 0.2653,
+  "bet_pub_a": 0.3996,
+  "bet_pub_b": 0.4046,
+  "bet_pub_card": 0.3219,
+  "pop_tre_a": 0.3523,
+  "pop_tre_b": 0.3591,
+  "pop_tre_card": 0.3547,
+  "que_rob_a": 0.4896,
+  "que_rob_b": 0.4797,
+  "que_rob_card": 0.4923,
+  "car_bet_a": 0.5454,
+  "car_bet_b": 0.5321,
+  "car_bet_card": 0.3769,
+  "ace_pla_a": 0.2206,
+  "ace_pla_b": 0.2206,
+  "ace_pla_card": 0.2899,
+  "til_cor_a": 0.3595,
+  "til_cor_b": 0.3599,
+  "til_cor_card": 0.3648,
+  "fra_exc_a": 0.2044,
+  "fra_exc_b": 0.174,
+  "fra_exc_leaflet": 0.5176,
+  "fra_exc_card": 0.1476,
+  "ulm_lae_a": 0.5218,
+  "ulm_lae_b": 0.5254,
+  "ulm_lae_card": 0.5606,
+  "ulm_min_a": 0.4995,
+  "ulm_min_b": 0.5016,
+  "ulm_min_card": 0.5301,
+  "sor_auc_a": 0.3254,
+  "sor_auc_b": 0.3653,
+  "sor_auc_leaflet": 0.623,
+  "sor_auc_card": 0.2625,
+  "aln_glu_a": 0.5868,
+  "aln_glu_b": 0.59,
+  "aln_glu_card": 0.4638,
+  "sal_alb_a": 0.546,
+  "sal_alb_b": 0.5454,
+  "sal_alb_card": 0.2644,
+  "sal_fra_a": 0.5331,
+  "sal_fra_b": 0.5257,
+  "sal_fra_card": 0.2302,
+  "pop_nig_a": 0.2544,
+  "pop_nig_b": 0.252,
+  "pop_nig_card": 0.2745,
+  "pop_alb_a": 0.4732,
+  "pop_alb_b": 0.4783,
+  "pop_alb_card": 0.4462,
+  "pop_can_a": 0.3219,
+  "pop_can_b": 0.3209,
+  "pop_can_card": 0.3828,
+  "rob_pse_a": 0.3464,
+  "rob_pse_b": 0.2976,
+  "rob_pse_leaflet": 0.7018,
+  "rob_pse_card": 0.176,
+  "ace_neg_a": 0.3221,
+  "ace_neg_b": 0.2131,
+  "ace_neg_leaflet": 0.561,
+  "ace_neg_card": 0.2613,
+  "ace_pse_a": 0.3478,
+  "ace_pse_b": 0.3377,
+  "ace_pse_card": 0.3745,
+  "aes_hip_a": 0.3146,
+  "aes_hip_b": 0.2927,
+  "aes_hip_leaflet": 0.5702,
+  "aes_hip_card": 0.3573,
+  "que_rub_a": 0.238,
+  "que_rub_b": 0.2312,
+  "que_rub_card": 0.2114,
+  "fra_pen_a": 0.2573,
+  "fra_pen_b": 0.3136,
+  "fra_pen_leaflet": 0.5488,
+  "fra_pen_card": 0.3022,
+  "mal_dom_a": 0.4304,
+  "mal_dom_b": 0.429,
+  "mal_dom_card": 0.4464,
+  "pyr_com_a": 0.4078,
+  "pyr_com_b": 0.4147,
+  "pyr_com_card": 0.3888,
+  "pru_dom_a": 0.4332,
+  "pru_dom_b": 0.4705,
+  "pru_dom_card": 0.3843,
+  "jug_reg_a": 0.2441,
+  "jug_reg_b": 0.2964,
+  "jug_reg_leaflet": 0.5531,
+  "jug_reg_card": 0.217
+ },
+ "bark_mean": {
+  "pine_plates": "#5F5C62",
+  "pine_mirror": "#B66F57",
+  "spruce": "#716A69",
+  "birch_white": "#BFBFB9",
+  "birch_base": "#413D38",
+  "birch_downy_base": "#928F87",
+  "aspen_smooth": "#979B8D",
+  "aspen_base": "#3E3B35",
+  "poplar_white": "#B9BDB7",
+  "poplar_black": "#666D6A",
+  "oak": "#676F6E",
+  "oak_young": "#827F73",
+  "red_oak": "#75726A",
+  "hornbeam": "#838279",
+  "maple": "#6D6962",
+  "sycamore": "#857C71",
+  "box_elder": "#796F62",
+  "lime": "#706C64",
+  "ash": "#747169",
+  "ash_young": "#818172",
+  "elm": "#675E54",
+  "rowan": "#767369",
+  "alder": "#6C6D74",
+  "alder_young": "#676354",
+  "willow_tree": "#646056",
+  "robinia": "#6E6554",
+  "horse_chestnut": "#786E61",
+  "apple": "#6A5E51",
+  "pear": "#6A6258",
+  "cherry_trunk": "#654D45",
+  "plum": "#534A42",
+  "walnut": "#898277",
+  "walnut_young": "#9C978D",
+  "deadwood_bark": "#A0998D",
+  "deadwood_bare": "#A29A8F",
+  "char": "#2D2B28"
+ }
+}

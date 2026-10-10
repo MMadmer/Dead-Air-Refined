@@ -12,6 +12,10 @@ public:
         CreateUAV = 1 << 1, // Self descriptive. DX11-specific.
         CreateSurface = 1 << 2, // Creates depth-stencil or offscreen plain surface instead of texture. DX9-specific.
         CreateBase = 1 << 3, // Creates basic RTV from backbuffer or DSV (depending on format)
+        // A chain of mip levels, their count in the bits from MipsShift (the target view is level 0's; the trees'
+        // billboard atlas, whose levels the bake writes). DX11-specific.
+        CreateMips = 1 << 4,
+        MipsShift = 8,
     };
 
     CRT() = default;

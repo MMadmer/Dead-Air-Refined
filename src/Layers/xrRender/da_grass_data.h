@@ -159,9 +159,17 @@ struct DaSeasonData
     DaGrassProfile profiles[da_grass_species];
     shared_str species_names[da_grass_species];
     DaGrassCommunity communities[da_grass_communities];
+    shared_str community_names[da_grass_communities];
     DaGroundTintData tint;
     bool file{}; // the file was found
 };
+
+// The key syntax of the season files, shared with the shrubs (da_shrubs.cpp): "#RRGGBB" (sRGB) as linear rgb, a
+// "day:value, ..." curve, a "day:#RRGGBB, ..." colour curve, a key's value in a section (case-insensitive) or null.
+bool da_parse_colour(pcstr s, Fvector3& linear);
+void da_parse_curve(pcstr list, DaSeasonCurve& curve);
+void da_parse_colour_curve(pcstr list, DaColourCurve& curve);
+pcstr da_ini_value(const CInifile::Sect& sect, pcstr key);
 
 // The data of the current level (reloaded by CDetailManager::Load; default-constructed without a level).
 const DaSeasonData& da_season_data();
@@ -169,6 +177,16 @@ void da_season_data_reload();
 // The community (0..14) a model is grown as blades with, or -1 (a stock card: its class maps to no community,
 // or the community grows nothing).
 s32 da_grass_object_profile(const CDetail& object);
+// A community's name ("" for an unused one).
+inline pcstr da_grass_community_name(u32 c)
+{
+    const shared_str& n = da_season_data().community_names[c];
+    return n.size() ? n.c_str() : "";
+}
+// The community whose detail objects cover the most of the slot at world (x, z), 0..14, or -1 (no slot, no
+// community there).
+s32 da_grass_community_at(float x, float z);
+
 // The season class of a detail class: 0 generic grass for unknown keys and the blade classes, else 1..7.
 inline u32 da_season_class(u32 detail_class)
 {

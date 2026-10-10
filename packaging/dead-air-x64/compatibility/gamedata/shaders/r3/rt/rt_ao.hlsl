@@ -1,6 +1,8 @@
 // Ray traced ambient occlusion (dxr.md 3.6): one cosine-weighted ray around the G-buffer normal,
 // against the static world, tree trunks near their roots and the moving objects the scene tracks.
-// Grass and crowns are receivers only (they sway). Output (visibility, view z of the traced pixel)
+// Grass and crowns are receivers only (they sway). A trunk occludes from outside only: an upgraded
+// tree's wood lies a few centimetres inside its stock stand-in (docs/dead-air/TREES.md), and its own
+// rays leave the stand-in through its back faces. Output (visibility, view z of the traced pixel)
 // at the trace resolution; RT_AO_HALF traces per 2x2 block the pixel nearest the camera.
 
 #include "rt_geometry.hlsli"
@@ -76,13 +78,15 @@ void main( uint3 id : SV_DispatchThreadID )
 		bool solid;
 		[branch] if ( inst.flags & RT_INST_TRUNK )
 		{
-			// A trunk occludes only near its root, where the wind does not move it.
+			// A trunk occludes only near its root, where the wind does not move it, and only a ray that
+			// meets its outside (the facing is the stock model's, in its own space: a mirrored placement
+			// keeps it).
 			const float y = ray.Origin.y + ray.Direction.y * q.CandidateTriangleRayT();
-			solid = y < inst.root_y + ao_params.y;
+			solid = y < inst.root_y + ao_params.y && q.CandidateTriangleFrontFace();
 		}
 		else
-			solid = rt_alpha_solid( q.CandidateInstanceID(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),
-				q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view );
+			solid = rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view );
 		if ( solid )
 			q.CommitNonOpaqueTriangleHit();
 	}

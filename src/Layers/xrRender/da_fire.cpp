@@ -173,6 +173,8 @@ void clip_axis(xr_vector<Fvector>& poly, xr_vector<Fvector>& tmp, int axis, floa
 
 // The simulation runs at a fixed rate; every rate and length in a preset is converted with it.
 constexpr float g_fluid_step = 1.f / 60.f;
+// Simulated seconds a campfire's fresh grid runs unseen (CDaFireEffect update).
+constexpr float g_fluid_warmup = 3.5f;
 
 constexpr float g_gravity = 9.81f;
 // Wood burns at about 0.025 kg/m2s; the AGA tilt correlation measures the wind against the
@@ -681,10 +683,11 @@ void CDaFireEffect::fluid_destroy()
 #if defined(USE_DX11)
     m_fluid.reset();
     _RELEASE(m_fluid_obst);
+    m_fluid_time = 0.f;
 #endif
 }
 
-void CDaFireEffect::fluid_render(CBackend& cmd_list)
+void CDaFireEffect::fluid_render(CBackend& cmd_list, bool draw)
 {
 #if defined(USE_DX11)
     if (!m_fluid)
@@ -705,7 +708,8 @@ void CDaFireEffect::fluid_render(CBackend& cmd_list)
     }
     if (!steps)
         fluid_params();
-    FluidManager.RenderFluid(*m_fluid);
+    if (draw)
+        FluidManager.RenderFluid(*m_fluid);
 #endif
 }
 
@@ -1028,7 +1032,13 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
         m_fluid_fade = m_fluid_wanted ? clampr(left / m_preset->bl_fade, 0.f, 1.f) : 0.f;
     }
     else
-        m_fluid_fade = clampr(m_fluid_fade + (m_fluid_wanted ? dt : -dt) / 0.5f, 0.f, 1.f);
+    {
+        //  A fresh grid starts empty: its whole bed lights at once, and the expansion throws a glowing ball of gas
+        //  that leaves the box as a thermal. The grid runs unseen until that has cleared, the marched flame
+        //  standing in.
+        const bool shown = m_fluid_wanted && m_fluid_time >= g_fluid_warmup;
+        m_fluid_fade = clampr(m_fluid_fade + (shown ? dt : -dt) / 0.5f, 0.f, 1.f);
+    }
 
     // Tilt. The AGA correlation (cos theta = u*^-1/2) is for pool fires a metre and more
     // across and lays a campfire almost flat in a breeze; a saturating law reads true for a
@@ -1042,7 +1052,7 @@ void CDaFireEffect::OnFrame(u32 frame_dt)
 
     // While the grid is running it carries the flame and the first couple of metres of the
     // plume itself, so the billboards start where the box ends instead of at the flame's tip.
-    const Fvector tip = m_fluid ? fluid_plume_start() : flame_tip();
+    const Fvector tip = (m_fluid && m_fluid_fade > 0.f) ? fluid_plume_start() : flame_tip();
     if (!m_preset->blast)
         update_smoke(dt, tip);
 
@@ -1157,6 +1167,8 @@ void CDaFireEffect::render_flame(CBackend& cmd_list, float fade)
 
     // Puffing: 1.5/sqrt(D) Hz in calm air, up to four times that in wind.
     const float fpuff = 1.5f / _sqrt(d) * std::min(4.f, 1.f + uh);
+    //  Its own pass, not whatever is bound: the grid's simulation steps run just before and leave theirs behind.
+    cmd_list.set_Element(shader->E[0]);
     cmd_list.set_c("da_fire_a", base.x, base.y, base.z, m_time);
     cmd_list.set_c("da_fire_b", P.radius, L, P.intensity * fade, m_seed);
     cmd_list.set_c("da_fire_c", m_wdir.x * m_tilt, m_wdir.y * m_tilt, uh, m_gust);
@@ -1288,11 +1300,11 @@ void CDaFireEffect::Render(CBackend& cmd_list, float, bool)
     {
         //  Nothing to fall back to: a blast is the volume or it is nothing.
         if (m_fluid)
-            fluid_render(cmd_list);
+            fluid_render(cmd_list, true);
         return;
     }
-    if (m_fluid && m_fluid_fade > 0.f)
-        fluid_render(cmd_list);
+    if (m_fluid)
+        fluid_render(cmd_list, m_fluid_fade > 0.f);
     if (fade > 0.f && m_fluid_fade < 1.f)
         render_flame(cmd_list, fade * (1.f - m_fluid_fade));
     render_smoke(cmd_list);

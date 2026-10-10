@@ -7,7 +7,9 @@
 // over the texel square, clamped to the triangle, so bilinear reads never dip under the real surface.
 // Non-passable triangles go to the solid map, water (liquid and passable) to the water map; the other
 // passable materials (crowns, bushes, volumes) are skipped. Heights are stored order-preserving
-// (see da_ground_ord) and merged with InterlockedMax: the topmost surface wins.
+// (see da_ground_ord) and merged with InterlockedMax: the topmost surface wins. The low map keeps the
+// lowest surface facing up at each texel centre (the plane's value there, the complement of its order so
+// that InterlockedMax picks the least): the ground under a roof, a deck or a vehicle.
 
 ByteAddressBuffer s_gr_verts : register(t8); // float3 per vertex
 ByteAddressBuffer s_gr_tris : register(t9);  // uint4 per triangle: i0, i1, i2, flags (da_ground.h)
@@ -15,6 +17,7 @@ ByteAddressBuffer s_gr_work : register(t10); // uint2 per item: triangle, chunk 
 
 RWTexture2D<uint> u_solid : register(u0);
 RWTexture2D<uint> u_water : register(u1);
+RWTexture2D<uint> u_low : register(u2);
 
 uniform float4 da_gr_rect; // world texels x0, z0, x1, z1 (exclusive) being rebuilt
 uniform float4 da_gr_win;  // x texel (m), y texels per metre, z texels per side, w item count
@@ -92,6 +95,8 @@ void main(uint3 id : SV_DispatchThreadID)
 	const float2 g = float2((b.y - a.y) * ac.y - (c.y - a.y) * ab.y, (c.y - a.y) * ab.x - (b.y - a.y) * ac.x) * inv_area;
 	const float rise = (abs(g.x) + abs(g.y)) * texel * 0.5;
 	const uint top = da_ground_ord(ymax);
+	// A floor for the low map: facing up (under 72 degrees), solid. Walls and steep banks are no floor.
+	const bool floor_face = !water && !edge_on && dot(g, g) < 9.0;
 
 	[loop] for (int z = lo.y; z < hi.y; ++z)
 	{
@@ -112,6 +117,12 @@ void main(uint3 id : SV_DispatchThreadID)
 					continue;
 				const float y = a.y + dot(g, p - a.xz) + rise;
 				h = da_ground_ord(clamp(y, ymin, ymax));
+				// the centre inside the triangle (a quarter texel of slack): its plane there
+				[branch] if (floor_face && min(ed.x, min(ed.y, ed.z)) > -0.25 * texel)
+				{
+					const int2 la = int2(uint2(int2(x, z) + n * 256) % uint(n));
+					InterlockedMax(u_low[la], ~da_ground_ord(clamp(y - rise, ymin, ymax)));
+				}
 			}
 			const int2 addr = int2(uint2(int2(x, z) + n * 256) % uint(n));
 			[branch] if (water)

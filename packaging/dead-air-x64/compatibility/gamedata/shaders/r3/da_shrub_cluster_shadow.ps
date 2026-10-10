@@ -1,0 +1,32 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Procedural shrubs: clusters and blobs in the sun cascades - the same leaves (da_shrub_mass.h), no output.
+
+#include "common.h"
+#include "da_shrub_mass.h"
+
+struct p_shrub_mass_shadow
+{
+	float4	hpos	: SV_Position;
+	float4	part	: TEXCOORD5;
+	float4	dens	: TEXCOORD6;
+	float4	misc	: TEXCOORD7;
+	float4	xy_t	: TEXCOORD8;	// z: the share of the part's leaves on (da_shrub_cluster_vs.h)
+};
+
+void	main	(p_shrub_mass_shadow I)
+{
+	// Where a cell is under three texels its leaf is under one: the leaves gather into clumps three texels across, a
+	// dapple (the leaves' cells, their texture and their gradients were most of a cascade's cost for no texel of
+	// difference; the mean blot's solid shadow stepped from the near cascade's leaves at its seam round the player); a
+	// part under two clumps across its mean blot alone.
+	[branch] if (I.misc.w < 3.0f * I.dens.y)
+	{
+		shrub_mass_clip(I.misc.w >= 6.0f ? shrub_mass_dapple(I.xy_t.xy, I.part, I.dens, I.misc, I.misc.w / 3.0f, I.xy_t.z)
+			: shrub_mass_blot(I.xy_t.xy, I.part, I.dens, I.misc, I.xy_t.z), I.hpos.xy, 0.0f, 0.0f);
+		return;
+	}
+	const shrub_mass M = shrub_mass_at(I.xy_t.xy, I.part, I.dens, float4(I.misc.xyz, 64.0f), I.xy_t.w, 0.0f, float2(0.0f, 0.0f));
+	shrub_mass_clip(M.cover, I.hpos.xy, 0.0f, 0.0f); // a shadow map: always the plain alpha test (no temporal resolve)
+}

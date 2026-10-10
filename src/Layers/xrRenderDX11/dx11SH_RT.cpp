@@ -112,6 +112,12 @@ void CRT::create(LPCSTR Name, u32 w, u32 h, D3DFORMAT f, u32 SampleCount /*= 1*/
         desc.Width = dwWidth;
         desc.Height = dwHeight;
         desc.MipLevels = 1;
+        // A chain of levels: the count rides the flags (a reset makes it again with the same).
+        if (flags.test(CreateMips) && !useAsDepth && SampleCount <= 1)
+        {
+            desc.MipLevels = std::max((flags.get() >> MipsShift) & 31u, 1u);
+            dwFlags |= CreateMips | (desc.MipLevels << MipsShift);
+        }
         desc.ArraySize = n_slices;
         desc.Format = dx11FMT;
         desc.SampleDesc.Count = SampleCount;

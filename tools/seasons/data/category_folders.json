@@ -15,7 +15,7 @@
    ],
    [
     "20 Sep",
-    "autumn"
+    null
    ],
    [
     "01 Nov",
@@ -37,41 +37,11 @@
    ],
    [
     "20 Sep",
-    "autumn"
+    null
    ],
    [
     "01 Nov",
     "spring_early"
-   ]
-  ],
-  "level_lods": [
-   [
-    "16 Feb",
-    "spring_early"
-   ],
-   [
-    "10 Apr",
-    "spring_mid"
-   ],
-   [
-    "01 May",
-    "spring_late"
-   ],
-   [
-    "01 Jun",
-    "summer"
-   ],
-   [
-    "20 Sep",
-    "autumn"
-   ],
-   [
-    "01 Nov",
-    "spring_early"
-   ],
-   [
-    "15 Dec",
-    "winter"
    ]
   ],
   "trees": [
@@ -93,7 +63,7 @@
    ],
    [
     "20 Sep",
-    "autumn"
+    null
    ],
    [
     "01 Nov",
@@ -123,7 +93,7 @@
    ],
    [
     "20 Sep",
-    "autumn"
+    null
    ],
    [
     "01 Nov",
@@ -153,7 +123,7 @@
    ],
    [
     "20 Sep",
-    "autumn"
+    null
    ],
    [
     "01 Nov",
@@ -201,7 +171,7 @@
    ],
    [
     "20 Sep",
-    "autumn"
+    null
    ],
    [
     "01 Nov",
@@ -322,11 +292,6 @@
    "16 Feb",
    [
     [
-     "level_lods",
-     "winter",
-     "spring_early"
-    ],
-    [
      "trees",
      "winter",
      "spring_early"
@@ -359,11 +324,6 @@
     ],
     [
      "build_details",
-     "spring_early",
-     "spring_mid"
-    ],
-    [
-     "level_lods",
      "spring_early",
      "spring_mid"
     ],
@@ -409,11 +369,6 @@
      "spring_late"
     ],
     [
-     "level_lods",
-     "spring_mid",
-     "spring_late"
-    ],
-    [
      "trees",
      "spring_mid",
      "spring_late"
@@ -450,11 +405,6 @@
      "summer"
     ],
     [
-     "level_lods",
-     "spring_late",
-     "summer"
-    ],
-    [
      "trees",
      "spring_late",
      "summer"
@@ -483,37 +433,32 @@
     [
      "terrain",
      "summer",
-     "autumn"
+     null
     ],
     [
      "build_details",
      "summer",
-     "autumn"
-    ],
-    [
-     "level_lods",
-     "summer",
-     "autumn"
+     null
     ],
     [
      "trees",
      "summer",
-     "autumn"
+     null
     ],
     [
      "map",
      "summer",
-     "autumn"
+     null
     ],
     [
      "ui",
      "summer",
-     "autumn"
+     null
     ],
     [
      "decal",
      "summer",
-     "autumn"
+     null
     ]
    ],
    181
@@ -523,37 +468,32 @@
    [
     [
      "terrain",
-     "autumn",
+     null,
      "spring_early"
     ],
     [
      "build_details",
-     "autumn",
-     "spring_early"
-    ],
-    [
-     "level_lods",
-     "autumn",
+     null,
      "spring_early"
     ],
     [
      "trees",
-     "autumn",
+     null,
      "spring_early"
     ],
     [
      "map",
-     "autumn",
+     null,
      "spring_early"
     ],
     [
      "ui",
-     "autumn",
+     null,
      "spring_early"
     ],
     [
      "decal",
-     "autumn",
+     null,
      "spring_early"
     ],
     [
@@ -567,11 +507,6 @@
   [
    "15 Dec",
    [
-    [
-     "level_lods",
-     "spring_early",
-     "winter"
-    ],
     [
      "trees",
      "spring_early",

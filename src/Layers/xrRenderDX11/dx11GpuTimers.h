@@ -51,6 +51,12 @@ public:
         SnowPrep, // the ground window and the snow depth (stamps, refill, composite)
         SnowGrid, // the near snow grid in the G-buffer
         SnowLayer, // the full-screen snow layer over the G-buffer
+        Shrubs, // the procedural shrubs in the G-buffer
+        ShrubsBend, // the procedural shrubs' bends of the frame (compute)
+        Trees, // the upgraded trees in the G-buffer
+        TreesBend, // the upgraded trees' bends of the frame (compute)
+        TreesBb, // the upgraded trees' far billboards in the G-buffer
+        TreesBake, // the billboards' runtime bake (the trees' atlas, the stock path's level_lods)
         RtScene, // ray tracing: acceleration structure builds
         RtSun, // ray traced sun shadows
         RtAO, // ray traced ambient occlusion
@@ -65,6 +71,8 @@ public:
     void FrameBegin();
     void FrameEnd();
 
+    // A slot bracketed several times in a frame (a population's view and shadow bends, the lights' after them) sums
+    // its brackets, Pairs of them at the most.
     void Begin(Slot slot);
     void End(Slot slot);
 
@@ -86,14 +94,14 @@ public:
     void LogLine() const;
 
 private:
-    static constexpr u32 RingSize = 4;
+    static constexpr u32 RingSize = 4, Pairs = 4;
 
     struct FrameQueries
     {
         ID3D11Query* disjoint{};
-        ID3D11Query* begin[Count]{};
-        ID3D11Query* end[Count]{};
-        bool issued[Count]{};
+        ID3D11Query* begin[Count][Pairs]{};
+        ID3D11Query* end[Count][Pairs]{};
+        u8 issued[Count]{};
         bool pending{};
     };
 

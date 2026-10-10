@@ -3,17 +3,22 @@
 //
 // Everything that presses the snow (docs/dead-air/WINTER.md), as stamps for the renderer's trail maps
 // and the grass push map (da_snow_stamp_add, SSnowStamp):
-//   feet    - every creature in a 96 m window round the camera, every frame, wherever a planted sole is
-//             on the snow surface or under it (the contact gate; the step manager's 'disable' gate
-//             skipped every motion a creature has no step parameters for - all but walk and run for a
-//             tushkan, a rat, a burer or a chimera); a foot swinging through the snow leaves no
-//             furrow, so the prints read one by one (it still brushes the grass);
-//   body    - a disc under each body at its belly height: the low bodies (tushkans, dogs, boars) plough
-//             deep snow, every body pushes the grass;
-//   feet and bodies sink no deeper than the creature's weight packs the snow (sink: a rat 1.2 cm, a
-//   dog 4-5 cm, a man 6.5 cm, a boar or a flesh 8 cm, a pseudogiant 15 cm), whatever depth they reach;
+//   feet    - every creature in a 96 m window round the camera, every frame, wherever a sole is on the
+//             snow surface or under it (the contact gate; the step manager's 'disable' gate skipped every
+//             motion a creature has no step parameters for - all but walk and run for a tushkan, a rat, a
+//             burer or a chimera). A planted foot packs the loose snow under it to its creature's density
+//             (pack) and sinks until the packed column carries it: deep in fresh powder, a little in old
+//             snow. A swinging foot that stays in the snow ploughs through it, so in deep snow the prints
+//             join into a trail;
+//   body    - a capsule under each body at its belly height: the low bodies (tushkans, dogs, boars)
+//             plough deep snow and leave a trough (a tushkan in the deepest drift swims in it); every
+//             body pushes the grass;
+//   every stamp of a creature is the capsule its deformer swept since the last frame, so a fast leg
+//   leaves no gaps, and none reaches deeper than its creature's reach under the snow surface (sink);
 //   resting - a corpse, loot, an artefact or a prop that comes to rest leaves its footprint once, and
-//             again whenever it comes back into the window, so nothing lies buried under a drift;
+//             again whenever it comes back into the window, so nothing lies buried under a drift. A corpse
+//             presses the snow by its weight (its creature's pack) into an irregular hollow, and the snow
+//             round it is churned by the fall: lumps and scuffs, never a clean pit of its boxes;
 //   craters - an explosion near the ground blows an irregular hole.
 // Psy-dog phantoms (illusions) and poltergeists (they fly) press nothing. Radii, belly heights and sink
 // depths per creature class are data ([snow_deformers] of dead_air_x64_seasons.ltx) over built-in defaults.
@@ -32,6 +37,7 @@
 #include "ai/stalker/ai_stalker.h"
 #include "Actor.h"
 #include "actor_defs.h"
+#include "ZoneCampfire.h"
 
 namespace
 {
@@ -52,13 +58,23 @@ constexpr u32 leg_max = 4;
 constexpr u32 rest_stamps_max = 48;
 constexpr u32 rest_scan_budget = 1024;
 constexpr u32 creature_reserve = 512;
+// The physics in motion: looked for this often and this far from the camera, so many objects and elements of each
+// at most a frame.
+constexpr float moving_scan = 0.15f;
+constexpr float moving_window = 40.f;
+constexpr u32 moving_max = 8;
+constexpr u32 moving_elements = 16;
+// A campfire's melt: its pit's thin snow out to this radius, and the thaw round a lit one out to this.
+constexpr float fire_pit_r = 0.55f;
+constexpr float fire_thaw_r = 2.5f;
 
 struct SProfile
 {
     float foot_r = 0.f;  // m, 0 = no feet stamps
     float body_r = 0.f;  // m, 0 = no body disc
     float belly = 0.f;   // m above the body's position: the lowest point of the trunk
-    float sink = 0.f;    // m under the snow surface a foot or the body packs the snow down to
+    float sink = 0.f;    // m under the snow surface a foot or the body reaches at most
+    float pack = 0.f;    // kg/m3 a planted foot packs loose snow to (its weight over the paw's area)
     bool skip = false;
 };
 
@@ -69,32 +85,41 @@ struct SProfileDefault
 };
 
 // Radii from the brief's deformer table (foot spacing and body boxes of the shipped visuals); belly
-// heights from the models' bind poses. Humans' discs sit at the hip: they push grass, never snow. Sink
-// depths by weight over paw area: rats and tushkans 1-2 cm, dogs 3-6 cm, people 5-8 cm, boars and fleshes
-// 6-10 cm, the pseudogiant up to 15 cm.
+// heights from the models' bind poses. Humans' discs sit at the hip: they push grass, never snow. Reach:
+// about the knee. Pack: the density a planted foot packs loose snow to grows with its pressure - a rat
+// or a tushkan barely sinks into settled snow (it runs over it, and swims in a drift), a dog packs fresh
+// powder to a fifth of its depth and settled snow to half, a man settled snow to under half, a boar, a
+// flesh, a chimera or the pseudogiant to firn and ice.
 const SProfileDefault profile_defaults[] = {
-    {"S_ACTOR", {0.12f, 0.30f, 0.90f, 0.065f, false}},
-    {"AI_STL_S", {0.12f, 0.30f, 0.90f, 0.065f, false}},
-    {"SM_TUSHK", {0.06f, 0.12f, 0.10f, 0.015f, false}},
-    {"SM_RAT", {0.00f, 0.08f, 0.03f, 0.012f, false}},
-    {"SM_DOG_S", {0.07f, 0.20f, 0.42f, 0.04f, false}},
-    {"SM_P_DOG", {0.08f, 0.22f, 0.44f, 0.05f, false}},
-    {"SM_DOG_P", {0.08f, 0.22f, 0.44f, 0.05f, false}},
-    {"SM_DOG_F", {0.f, 0.f, 0.f, 0.f, true}},
-    {"SM_BOARW", {0.10f, 0.35f, 0.35f, 0.085f, false}},
-    {"SM_FLESH", {0.10f, 0.40f, 0.30f, 0.08f, false}},
-    {"SM_CAT_S", {0.06f, 0.15f, 0.30f, 0.025f, false}},
-    {"SM_SNORK", {0.10f, 0.30f, 0.20f, 0.06f, false}},
-    {"SM_BLOOD", {0.12f, 0.30f, 0.90f, 0.08f, false}},
-    {"SM_CONTR", {0.12f, 0.30f, 0.90f, 0.07f, false}},
-    {"SM_BURER", {0.14f, 0.35f, 0.45f, 0.07f, false}},
-    {"SM_CHIMS", {0.12f, 0.40f, 0.40f, 0.09f, false}},
-    {"SM_GIANT", {0.25f, 0.80f, 0.45f, 0.15f, false}},
-    {"SM_IZLOM", {0.12f, 0.30f, 0.90f, 0.065f, false}},
-    {"SM_ZOMBI", {0.12f, 0.30f, 0.90f, 0.065f, false}},
-    {"SM_POLTR", {0.f, 0.f, 0.f, 0.f, true}},
+    {"S_ACTOR", {0.12f, 0.30f, 0.90f, 0.50f, 520.f, false}},
+    {"AI_STL_S", {0.12f, 0.30f, 0.90f, 0.50f, 520.f, false}},
+    {"SM_TUSHK", {0.06f, 0.12f, 0.10f, 0.20f, 260.f, false}},
+    {"SM_RAT", {0.00f, 0.08f, 0.03f, 0.08f, 220.f, false}},
+    {"SM_DOG_S", {0.07f, 0.20f, 0.42f, 0.35f, 400.f, false}},
+    {"SM_P_DOG", {0.08f, 0.22f, 0.44f, 0.38f, 440.f, false}},
+    {"SM_DOG_P", {0.08f, 0.22f, 0.44f, 0.38f, 440.f, false}},
+    {"SM_DOG_F", {0.f, 0.f, 0.f, 0.f, 0.f, true}},
+    {"SM_BOARW", {0.10f, 0.35f, 0.35f, 0.40f, 580.f, false}},
+    {"SM_FLESH", {0.10f, 0.40f, 0.30f, 0.40f, 600.f, false}},
+    {"SM_CAT_S", {0.06f, 0.15f, 0.30f, 0.25f, 300.f, false}},
+    {"SM_SNORK", {0.10f, 0.30f, 0.20f, 0.45f, 480.f, false}},
+    {"SM_BLOOD", {0.12f, 0.30f, 0.90f, 0.50f, 560.f, false}},
+    {"SM_CONTR", {0.12f, 0.30f, 0.90f, 0.50f, 520.f, false}},
+    {"SM_BURER", {0.14f, 0.35f, 0.45f, 0.45f, 540.f, false}},
+    {"SM_CHIMS", {0.12f, 0.40f, 0.40f, 0.50f, 600.f, false}},
+    {"SM_GIANT", {0.25f, 0.80f, 0.45f, 0.60f, 700.f, false}},
+    {"SM_IZLOM", {0.12f, 0.30f, 0.90f, 0.50f, 520.f, false}},
+    {"SM_ZOMBI", {0.12f, 0.30f, 0.90f, 0.50f, 520.f, false}},
+    {"SM_POLTR", {0.f, 0.f, 0.f, 0.f, 0.f, true}},
 };
-constexpr SProfile profile_fallback{0.10f, 0.30f, 0.60f, 0.06f, false};
+constexpr SProfile profile_fallback{0.10f, 0.30f, 0.60f, 0.45f, 480.f, false};
+// Of the snow a deformer ploughs aside, the share that falls back into the furrow behind it: a leg's
+// narrow furrow keeps most of its walls; a low body's trough fills more, the smaller the body the more (a
+// tushkan in a drift leaves a shallow trough over its back, not an open trench).
+constexpr float fall_leg = 0.3f;
+constexpr float fall_leg_small = 0.45f;
+constexpr float fall_body = 0.35f;
+constexpr float fall_body_small = 0.7f;
 // A foot whose horizontal speed is under this share of the body's (plus a margin for the animation's own
 // sway, m/s) is planted; a swinging one is not.
 constexpr float planted_share = 0.35f;
@@ -117,28 +142,32 @@ void load_profiles()
     const CInifile ini(path, TRUE);
     if (!ini.section_exist("snow_deformers"))
         return;
-    // <class id> = foot radius, body radius, belly height [, sink]  |  none
+    // <class id> = foot radius, body radius, belly height [, reach [, pack]]  |  none
     for (const auto& item : ini.r_section("snow_deformers").Data)
     {
         if (!item.first.size() || !item.second.size())
             continue;
         const CLASS_ID id = TEXT2CLSID(item.first.c_str());
         SProfile p;
-        // a line without a sink keeps the built-in one of its class
+        // a line without a reach or a pack keeps the built-in ones of its class
         const auto known = g_profiles.find(id);
-        p.sink = known != g_profiles.end() ? known->second.sink : profile_fallback.sink;
+        const SProfile& base = known != g_profiles.end() ? known->second : profile_fallback;
+        p.sink = base.sink;
+        p.pack = base.pack;
         if (!xr_stricmp(item.second.c_str(), "none"))
             p.skip = true;
-        else if (sscanf(item.second.c_str(), "%f , %f , %f , %f", &p.foot_r, &p.body_r, &p.belly, &p.sink) < 3)
+        else if (sscanf(item.second.c_str(), "%f , %f , %f , %f , %f", &p.foot_r, &p.body_r, &p.belly, &p.sink, &p.pack) < 3)
         {
-            Msg("! [snow] [snow_deformers] %s: expected 'foot radius, body radius, belly height[, sink]' or 'none'",
+            Msg("! [snow] [snow_deformers] %s: expected 'foot radius, body radius, belly height[, reach[, pack]]' or "
+                "'none'",
                 item.first.c_str());
             continue;
         }
         p.foot_r = clampr(p.foot_r, 0.f, 1.f);
         p.body_r = clampr(p.body_r, 0.f, 2.f);
         p.belly = clampr(p.belly, 0.f, 3.f);
-        p.sink = clampr(p.sink, 0.f, 0.6f);
+        p.sink = clampr(p.sink, 0.f, 1.f);
+        p.pack = clampr(p.pack, 0.f, 917.f);
         g_profiles[id] = p;
     }
 }
@@ -162,6 +191,7 @@ struct SCreature
     u32 legs{};
     Fvector foot[leg_max]{};
     Fvector2 foot_vel[leg_max]{};
+    float body_y{}; // the belly's height on the last frame
     Fvector pos{};
     Fvector2 vel{};
     float time{-1.f};
@@ -181,6 +211,16 @@ float g_next_scan = 0.f;
 float g_next_prune = 0.f;
 bool g_was_active = false;
 
+// What moves: each element's box bottom last frame.
+struct SMoving
+{
+    Fvector bottom[moving_elements];
+    u32 count = 0;
+    bool fresh = true;
+};
+xr_unordered_map<u16, SMoving> g_moving;
+float g_next_moving = 0.f;
+
 // The topmost surface under a point, conservatively: the lowest of the four texels round it, so a foot
 // beside a wall reads the ground and not the wall top.
 float top_under(const SSnowField& f, float x, float z)
@@ -192,6 +232,25 @@ float top_under(const SSnowField& f, float x, float z)
     const size_t w = f.dim_x;
     return std::min(std::min(f.top[size_t(z0) * w + x0], f.top[size_t(z0) * w + x1]),
         std::min(f.top[size_t(z1) * w + x0], f.top[size_t(z1) * w + x1]));
+}
+
+// Is a deformer's bottom at y in the snow at xz: the ground's (under the lowest top round it, the depth over that) or
+// a cover's (a roof, a trailer: on its own top, under the snow the shells lay there - the gate by the ground's alone
+// let no foot on a sloping roof through, its lowest neighbour lying under it).
+bool in_snow(const SSnowField& f, float x, float z, float y)
+{
+    const float top = top_under(f, x, z);
+    if (y < top - under_roof)
+        return false;
+    if (y <= top + da_snow_depth_at(x, z) + contact_slack)
+        return true;
+    if (f.cover.size() != size_t(f.dim_x) * f.dim_z)
+        return false;
+    const int cx = clampr(iFloor((x - f.origin.x) / f.texel), 0, int(f.dim_x) - 1);
+    const int cz = clampr(iFloor((z - f.origin.y) / f.texel), 0, int(f.dim_z) - 1);
+    const size_t i = size_t(cz) * f.dim_x + cx;
+    // (under the metre's highest point by a slope's run over it and the beams a roof carries)
+    return f.cover[i] && y >= f.top[i] - 0.8f && y <= f.top[i] + da_snow_open_depth_at(x, z) + contact_slack;
 }
 
 bool in_window(const Fvector& p, float radius = stamp_window)
@@ -222,12 +281,27 @@ SSnowStamp make_stamp(
     s.push = push;
     s.kind = kind;
     s.sink = sink;
+    s.xz0 = s.xz;
+    s.foot_y0 = foot_y;
     return s;
 }
 
 void stamp(float x, float z, float foot_y, float radius, float sharp, const Fvector2& push, u32 kind, float sink = 0.f)
 {
     da_snow_stamp_add(make_stamp(x, z, foot_y, radius, sharp, push, kind, sink));
+}
+
+// A deformer of a living creature: the capsule swept since the last frame from `from` to `to` (their y the
+// deformer's bottom), packing (pack) or ploughing (fall) the snow.
+void stamp_swept(const Fvector& from, const Fvector& to, float radius, float sharp, const Fvector2& push, u32 kind,
+    float sink, float pack, float fall)
+{
+    SSnowStamp s = make_stamp(to.x, to.z, to.y, radius, sharp, push, kind, sink);
+    s.xz0.set(from.x, from.z);
+    s.foot_y0 = from.y;
+    s.pack = pack;
+    s.fall = fall;
+    da_snow_stamp_add(s);
 }
 
 // The footprint of a resting object, laid whole or not at all.
@@ -282,14 +356,33 @@ void resolve_feet(CEntityAlive& e, IKinematics& K, SCreature& c)
 }
 
 // The footprint of a resting physics object: each element's box projected on the ground, as discs
-// laid over its two most horizontal axes, carved down to the box's bottom.
+// laid over its two most horizontal axes, packing the snow under it by its weight: a dropped rifle dents
+// it, a crate sinks, a barrel or a wreck goes down to firm snow (carved to the box's bottom, a rifle cut two
+// clean trenches into a drift). Its physics lies on the ground under the snow: a loose object lies at the
+// bottom of its own hollow, a body no more than two fifths of each element's height under the snow (packed by
+// weight alone, a rifle went under a drift out of sight; a hollow narrower than the snow grid's cells closed
+// over it again). A corpse packs it by its creature's weight, each disc a little off its place
+// and size (a body is no set of boxes), and a ring of scuffs round the body churns the snow it fell into.
 void plan_resting(CPhysicsShellHolder& o, SRestPrint& out)
 {
     out.count = 0;
     CPhysicsShell* shell = o.PPhysicsShell();
     if (!shell)
         return;
-    u32 budget = rest_stamps_max;
+    const CEntityAlive* corpse = smart_cast<CEntityAlive*>(&o);
+    const float pack = corpse ? profile_of(corpse->CLS_ID).pack : clampr(220.f + 3.f * shell->getMass(), 230.f, 650.f);
+    // a corpse keeps room for its scuffs
+    constexpr u32 scuffs = 10;
+    u32 budget = corpse ? rest_stamps_max - scuffs : rest_stamps_max;
+    // the same irregularity every time the body is stamped again
+    u32 seed = u32(o.ID()) * 2654435761u + 0x9E3779B9u;
+    const auto rnd = [&seed](float lo, float hi) {
+        seed = seed * 1664525u + 1013904223u;
+        return lo + (hi - lo) * float(seed >> 8) * (1.f / 16777216.f);
+    };
+    Fbox2 area;
+    area.invalidate();
+    float lowest = flt_max;
     const u16 count = shell->get_ElementsNumber();
     const Fvector2 still{0.f, 0.f};
     for (u16 i = 0; i < count && budget; ++i)
@@ -316,18 +409,44 @@ void plan_resting(CPhysicsShellHolder& o, SRestPrint& out)
         for (int k = 0; k < 3; ++k)
             if (k != a && span[k] > span[b])
                 b = k;
-        const float step = clampr(std::min(span[a], span[b]), 0.12f, 0.6f);
+        // A loose object's discs lie dense enough that their flat floors (the stamp's dist^8 walls, flat out to 0.65 of
+        // the radius) join over its whole box: sparse, a standing barrel rolled away left a clover of four bare holes.
+        const float step = corpse ? clampr(std::min(span[a], span[b]), 0.12f, 0.6f) : clampr(0.5f * std::min(span[a], span[b]), 0.12f, 0.35f);
         const int na = clampr(iCeil(span[a] / step), 1, 8), nb = clampr(iCeil(span[b] / step), 1, 8);
-        const float r = std::max(0.75f * step, 0.08f);
+        const float cell = std::max(span[a] / float(na), span[b] / float(nb));
+        const float r = corpse ? std::max(0.75f * step, 0.08f) : std::max(1.1f * cell, 0.3f);
         for (int ia = 0; ia < na && budget; ++ia)
             for (int ib = 0; ib < nb && budget; ++ib, --budget)
             {
                 const float ta = ((float(ia) + 0.5f) / float(na) * 2.f - 1.f) * 0.5f * sz[a];
                 const float tb = ((float(ib) + 0.5f) / float(nb) * 2.f - 1.f) * 0.5f * sz[b];
-                const float x = c.x + axes[a].x * ta + axes[b].x * tb;
-                const float z = c.z + axes[a].z * ta + axes[b].z * tb;
-                out.s[out.count++] = make_stamp(x, z, bottom, r, 0.03f, still, 2);
+                float x = c.x + axes[a].x * ta + axes[b].x * tb;
+                float z = c.z + axes[a].z * ta + axes[b].z * tb;
+                SSnowStamp s = make_stamp(x, z, bottom, r, 0.f, still, 2, corpse ? 0.4f * 2.f * (c.y - bottom) : 0.f);
+                s.pack = pack;
+                if (corpse)
+                {
+                    s.xz.x += rnd(-0.3f, 0.3f) * step;
+                    s.xz.y += rnd(-0.3f, 0.3f) * step;
+                    s.xz0 = s.xz;
+                    s.radius = r * rnd(0.85f, 1.25f);
+                    s.sharp = rnd(0.03f, 0.1f);
+                    area.modify(Fvector2{s.xz.x, s.xz.y});
+                    lowest = std::min(lowest, bottom);
+                }
+                out.s[out.count++] = s;
             }
+    }
+    if (!corpse || out.count == 0)
+        return;
+    // the scuffs: shallow ploughed patches round the body, out to a third of a metre past it
+    area.grow(0.3f);
+    for (u32 i = 0; i < scuffs; ++i)
+    {
+        const float x = rnd(area.min.x, area.max.x), z = rnd(area.min.y, area.max.y);
+        SSnowStamp s = make_stamp(x, z, lowest + rnd(0.03f, 0.12f), rnd(0.1f, 0.24f), rnd(0.08f, 0.2f), still, 2);
+        s.fall = rnd(0.35f, 0.65f);
+        out.s[out.count++] = s;
     }
 }
 
@@ -415,6 +534,7 @@ void da_snow_deform_entity(CEntityAlive& e)
     }
     c.vel.x += (v.x - c.vel.x) * k;
     c.vel.y += (v.y - c.vel.y) * k;
+    const Fvector prev_pos = c.pos;
     c.pos = pos;
 
     const SProfile& p = *c.profile;
@@ -434,26 +554,37 @@ void da_snow_deform_entity(CEntityAlive& e)
         }
         c.foot_vel[l].x += (fv.x - c.foot_vel[l].x) * k;
         c.foot_vel[l].y += (fv.y - c.foot_vel[l].y) * k;
+        Fvector from{c.foot[l].x, c.foot[l].y - c.sole[l], c.foot[l].z};
         c.foot[l] = f;
         if (p.foot_r <= 0.f)
             continue;
 
         const float sole = f.y - c.sole[l];
-        const float top = top_under(*field, f.x, f.z);
-        if (sole < top - under_roof)
+        if (!in_snow(*field, f.x, f.z, sole))
             continue;
-        if (sole > top + da_snow_depth_at(f.x, f.z) + contact_slack)
-            continue;
-        // A swinging foot brushes the grass but passes through the snow without a print.
+        // A planted foot packs the snow under it and sinks; a swinging one still in the snow ploughs a furrow at
+        // its own height. Swept from the last frame (a fresh body or a jump of a metre: a disc).
         const bool planted = _sqrt(fv.square_magnitude()) <= planted_share * body_speed + planted_margin;
-        stamp(f.x, f.z, sole, p.foot_r, 0.06f, c.foot_vel[l], 0, planted ? p.sink : -1.f);
+        const Fvector to{f.x, sole, f.z};
+        if (fresh || from.distance_to_sqr(to) > 1.f)
+            from = to;
+        stamp_swept(from, to, p.foot_r, 0.06f, c.foot_vel[l], 0, p.sink, planted ? p.pack : 0.f,
+            planted ? 0.f : (p.body_r < 0.15f ? fall_leg_small : fall_leg));
     }
 
     if (p.body_r > 0.f)
     {
         const float top = top_under(*field, pos.x, pos.z);
+        const float belly = pos.y + belly_of(e, p);
         if (pos.y >= top - under_roof)
-            stamp(pos.x, pos.z, pos.y + belly_of(e, p), p.body_r, 0.12f, c.vel, 1, p.sink);
+        {
+            Fvector from{prev_pos.x, c.body_y, prev_pos.z};
+            const Fvector to{pos.x, belly, pos.z};
+            if (fresh || from.distance_to_sqr(to) > 4.f)
+                from = to;
+            stamp_swept(from, to, p.body_r, 0.12f, c.vel, 1, p.sink, 0.f, p.body_r < 0.15f ? fall_body_small : fall_body);
+        }
+        c.body_y = belly;
     }
 }
 
@@ -471,15 +602,165 @@ void da_snow_deform_crater(const Fvector& pos, float radius)
     if (pos.y > top + depth + 0.4f * r)
         return;
     const Fvector2 still{0.f, 0.f};
-    // An irregular hole (the RDR2 way): a core and seven lobes of random reach and size.
-    stamp(pos.x, pos.z, top, 0.75f * r, 0.25f * r, still, 3);
+    // An irregular hole (the RDR2 way): a core and seven lobes of random reach and size, each a flat bare floor in
+    // steep walls (a bowl from the centre read as a soft dimple, not a blast).
+    stamp(pos.x, pos.z, top, 0.75f * r, 0.03f, still, 3);
     constexpr int lobes = 7;
     for (int i = 0; i < lobes; ++i)
     {
         const float ang = float(i) * (PI_MUL_2 / float(lobes)) + ::Random.randF(-0.3f, 0.3f);
         const float d = r * ::Random.randF(0.35f, 0.6f);
-        stamp(pos.x + _sin(ang) * d, pos.z + _cos(ang) * d, top, r * ::Random.randF(0.3f, 0.5f), 0.2f * r, still, 3);
+        stamp(pos.x + _sin(ang) * d, pos.z + _cos(ang) * d, top, r * ::Random.randF(0.3f, 0.5f), 0.03f, still, 3);
     }
+}
+
+// A bullet's strike on the ground under the snow: the channel it bored from where it went in to where it struck, a
+// few centimetres wide, with a dent where it went in; a load of shot lands as a cluster of them.
+void da_snow_deform_bullet(const Fvector& point, const Fvector& dir, float wallmark)
+{
+    const SSnowField* field = da_snow_field();
+    if (!field || !da_snow_frame().active || !in_window(point, 60.f))
+        return;
+    const float top = top_under(*field, point.x, point.z);
+    const float depth = da_snow_depth_at(point.x, point.z);
+    if (depth < 0.02f || point.y < top - under_roof || point.y > top + depth + 0.05f)
+        return;
+    // where it went in: back along its flight to the snow's surface, a metre at most
+    const float t = std::min(std::max(top + depth - point.y, 0.f) / std::max(-dir.y, 0.05f), 1.f);
+    Fvector in;
+    in.mad(point, dir, -t);
+    const float r = clampr(0.5f * wallmark, 0.035f, 0.06f);
+    const Fvector2 still{0.f, 0.f};
+    SSnowStamp s = make_stamp(point.x, point.z, point.y, r, 0.05f, still, 3);
+    s.xz0.set(in.x, in.z);
+    s.foot_y0 = in.y;
+    da_snow_stamp_add(s);
+    da_snow_stamp_add(make_stamp(in.x, in.z, in.y - 0.04f, 1.6f * r, 0.05f, still, 3));
+}
+
+namespace
+{
+// The physics in motion (an enabled shell, no parent, no living creature) round the camera: each element's box
+// bottom swept from the last frame ploughs a furrow at its own height, a third of the snow over it falling back -
+// a barrel rolling, a crate pushed, a body dragged or kicked. At rest again, the settle callback lays its print.
+void moving_frame(const SSnowField& field)
+{
+    const float now = Device.fTimeGlobal;
+    if (now >= g_next_moving && g_pGamePersistent)
+    {
+        g_next_moving = now + moving_scan;
+        static xr_vector<ISpatial*> found;
+        found.clear();
+        g_pGamePersistent->SpatialSpace.q_box(found, 0, STYPE_COLLIDEABLE, Device.vCameraPosition,
+            Fvector{moving_window, 30.f, moving_window});
+        for (auto& [id, m] : g_moving)
+            m.count = u32(-1); // not seen yet in this scan
+        for (ISpatial* s : found)
+        {
+            IGameObject* go = s->dcast_GameObject();
+            CPhysicsShellHolder* h = go ? smart_cast<CPhysicsShellHolder*>(go) : nullptr;
+            if (!h || go->H_Parent() || go->getDestroy())
+                continue;
+            if (const CEntityAlive* alive = smart_cast<CEntityAlive*>(h); alive && alive->g_Alive())
+                continue;
+            CPhysicsShell* shell = h->PPhysicsShell();
+            if (!shell || !shell->isActive() || !shell->isEnabled())
+                continue;
+            if (g_moving.size() >= moving_max && !g_moving.count(h->ID()))
+                continue;
+            SMoving& m = g_moving[h->ID()];
+            if (m.count == u32(-1))
+                m.count = 0;
+        }
+        for (auto it = g_moving.begin(); it != g_moving.end();)
+            it = it->second.count == u32(-1) ? g_moving.erase(it) : std::next(it);
+    }
+    for (auto it = g_moving.begin(); it != g_moving.end();)
+    {
+        CPhysicsShellHolder* h = smart_cast<CPhysicsShellHolder*>(Level().Objects.net_Find(it->first));
+        CPhysicsShell* shell = h ? h->PPhysicsShell() : nullptr;
+        if (!shell || !shell->isActive() || !shell->isEnabled() || h->H_Parent())
+        {
+            it = g_moving.erase(it);
+            continue;
+        }
+        SMoving& m = it->second;
+        const u16 count = std::min<u16>(shell->get_ElementsNumber(), u16(moving_elements));
+        const bool fresh = m.fresh || m.count != count;
+        m.count = count;
+        m.fresh = false;
+        for (u16 i = 0; i < count && da_snow_stamps_room() > creature_reserve / 2; ++i)
+        {
+            CPhysicsElement* e = shell->get_ElementByStoreOrder(i);
+            if (!e)
+                continue;
+            Fvector sz, c;
+            e->get_Box(sz, c);
+            const Fmatrix& X = e->XFORM();
+            const Fvector axes[3] = {X.i, X.j, X.k};
+            float bottom = c.y, half = flt_max;
+            for (int k = 0; k < 3; ++k)
+            {
+                bottom -= _abs(axes[k].y) * sz[k] * 0.5f;
+                // the footprint's half width: the narrower of the flattest axes
+                if (_abs(axes[k].y) < 0.7f)
+                    half = std::min(half, 0.5f * _sqrt(_sqr(axes[k].x) + _sqr(axes[k].z)) * sz[k]);
+            }
+            const Fvector to{c.x, bottom, c.z};
+            Fvector from = fresh ? to : m.bottom[i];
+            m.bottom[i] = to;
+            if (from.distance_to_sqr(to) > 1.f)
+                from = to;
+            if (from.distance_to_sqr(to) < 1e-6f)
+                continue;
+            if (!in_snow(field, to.x, to.z, bottom))
+                continue;
+            const Fvector2 push{(to.x - from.x) / std::max(Device.fTimeDelta, 1e-3f), (to.z - from.z) / std::max(Device.fTimeDelta, 1e-3f)};
+            stamp_swept(from, to, clampr(half == flt_max ? 0.15f : half, 0.06f, 0.4f), 0.1f, push, 1, 0.f, 0.f, 0.35f);
+        }
+        ++it;
+    }
+}
+
+// The campfires: the pit itself never holds more than a dusting (the fire can be lit, its logs and stones show), and
+// a lit one thaws the snow round it over a minute and a half - bare in the pit, thinner and thinner out to two and a
+// half metres, a bowl of melt with no edge. What melted comes back only with fresh snow.
+void campfires_frame(const SSnowField& field)
+{
+    const Fvector2 still{0.f, 0.f};
+    for (CZoneCampfire* fire : CZoneCampfire::all())
+    {
+        const Fvector& p = fire->Position();
+        if (!in_window(p, 60.f))
+            continue;
+        const float top = top_under(field, p.x, p.z);
+        const float depth = da_snow_depth_at(p.x, p.z);
+        if (depth < 0.01f || p.y < top - under_roof)
+            continue;
+        const float melt = fire->snow_melt();
+        const float dust = std::min(depth, 0.03f);
+        // (sink 1: a bowl, the thaw's soft slope - not a crater's steep walls)
+        stamp(p.x, p.z, top + dust * (1.f - melt), fire_pit_r + 0.35f * melt, 0.05f, still, 3, 1.f);
+        if (melt > 0.f)
+            stamp(p.x, p.z, top + depth * (1.f - 0.7f * melt), fire_pit_r + (fire_thaw_r - fire_pit_r) * melt, 0.02f, still, 3, 1.f);
+    }
+}
+} // namespace
+
+void da_snow_probe(const Fvector& p)
+{
+    const SSnowField* f = da_snow_field();
+    if (!f)
+    {
+        Msg("* [qa] snow probe: no field");
+        return;
+    }
+    const int cx = clampr(iFloor((p.x - f->origin.x) / f->texel), 0, int(f->dim_x) - 1);
+    const int cz = clampr(iFloor((p.z - f->origin.y) / f->texel), 0, int(f->dim_z) - 1);
+    const size_t i = size_t(cz) * f->dim_x + cx;
+    Msg("* [qa] snow probe at %.2f %.2f %.2f: top under %.2f, texel top %.2f ground %.2f cover %u, depth %.3f open %.3f, in snow %s",
+        p.x, p.y, p.z, top_under(*f, p.x, p.z), f->top[i], f->ground[i], f->cover.empty() ? 0u : u32(f->cover[i]),
+        da_snow_depth_at(p.x, p.z), da_snow_open_depth_at(p.x, p.z), in_snow(*f, p.x, p.z, p.y) ? "yes" : "no");
 }
 
 void da_snow_deform_settled(CPhysicsShellHolder& object)
@@ -509,6 +790,11 @@ void da_snow_deform_frame()
     }
 
     const bool active = da_snow_field() && da_snow_frame().active;
+    if (active)
+    {
+        moving_frame(*da_snow_field());
+        campfires_frame(*da_snow_field());
+    }
     // The snow came (a new month, a QA sweep): whatever lies in the window is stamped afresh.
     if (active && !g_was_active)
     {
@@ -575,6 +861,8 @@ void da_snow_deform_reset()
 {
     g_creatures.clear();
     g_resting.clear();
+    g_moving.clear();
+    g_next_moving = 0.f;
     g_scan = 0;
     g_next_scan = 0.f;
     g_next_prune = 0.f;

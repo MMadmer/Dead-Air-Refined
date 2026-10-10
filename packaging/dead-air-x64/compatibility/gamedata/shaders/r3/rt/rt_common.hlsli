@@ -53,6 +53,9 @@ struct RtView
 	uint4				scene;			// x static instances, y static texture base, z RT_VIEW_*, w frame index
 	float4				frame;			// xy the projection jitter in render pixels (this frame's textures show a
 										// point that far from its unjittered projection), z the alpha-test reference
+	uint4				veg;			// the vegetation tables (da_veg_rt_tables): x bindless slot (~0 none), y the
+										// season block's first float4, z a species' season rows | its profile rows << 16,
+										// w the snow on the branches (float bits)
 };
 
 // ---- depth and positions ---------------------------------------------------------------------

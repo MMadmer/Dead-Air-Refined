@@ -23,6 +23,7 @@
 #include "ik/math3d.h"
 #include "Actor.h"
 #include "ai/monsters/basemonster/base_monster.h"
+#include "da_snow_deformers.h"
 #include "da_water_impact.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/IGame_Persistent.h"
@@ -286,6 +287,8 @@ void CBulletManager::StaticObjectHit(CBulletManager::_event& E)
 {
     //	Fvector hit_normal;
     FireShotmark(&E.bullet, E.bullet.dir, E.point, E.R, E.tgt_material, E.normal);
+    // the channel it bored through the snow over the ground it struck
+    da_snow_deform_bullet(E.point, E.bullet.dir, E.bullet.wallmark_size);
     //	ObjectHit	(&E.bullet,					E.point, E.R, E.tgt_material, hit_normal);
 }
 

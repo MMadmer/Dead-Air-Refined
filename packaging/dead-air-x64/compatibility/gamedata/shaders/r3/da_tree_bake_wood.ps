@@ -1,0 +1,45 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The billboards' bake, a tree's stock wood and its patches (da_trees_bake.cpp): the wood's G-buffer pixel shader
+// (da_shrub_wood.ps, included whole, so the bake follows it) with what it writes taken as the bake's targets - the
+// albedo, the pixel covered, the normal (the bake camera's view space), the hemisphere light and its material (wood).
+
+#include "common.h"
+#include "da_tree_bake.h"
+
+static float4	tree_bake_n = 0.0f, tree_bake_c = 0.0f;
+static float	tree_bake_m = 0.0f, tree_bake_tr = 0.0f;
+
+f_deffer	tree_bake_pack	(float4 norm, float4 pos, float4 col)
+{
+	tree_bake_n = norm;
+	tree_bake_m = pos.w;
+	tree_bake_c = col;
+	return (f_deffer)0;
+}
+
+// (As the clusters' bake takes a leaf's: should the wood ever code foliage.)
+float	tree_bake_foliage	(float tr)
+{
+	tree_bake_tr = tr;
+	return da_mtl_from_code(DA_MTL_FOLIAGE0);
+}
+
+#define pack_gbuffer tree_bake_pack
+#define da_pack_foliage_mtl(tr, pix, frame) tree_bake_foliage(tr)
+#define main tree_bake_wood_gbuffer
+#include "da_shrub_wood.ps"
+#undef main
+#undef da_pack_foliage_mtl
+#undef pack_gbuffer
+
+f_tree_bake	main	(p_shrub_wood I)
+{
+	tree_bake_wood_gbuffer(I);
+	f_tree_bake O;
+	O.albedo = float4(tree_bake_c.rgb, 1.0f);
+	O.normal = float4(tree_bake_n_out(normalize(tree_bake_n.xyz)), saturate(tree_bake_n.w));
+	O.mtl = tree_bake_mtl_out(tree_bake_m, tree_bake_tr);
+	return O;
+}

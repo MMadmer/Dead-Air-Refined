@@ -1,0 +1,30 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Trees, the billboard atlas's fill (da_tree_bb_copy.vs): the stock cell's albedo and alpha, its normal and
+// hemisphere light, as they are.
+
+#include "common.h"
+
+Texture2D	s_lod		: register(t0);
+Texture2D	s_lod_nm	: register(t1);
+
+struct v2p_bb_copy
+{
+	float2	uv		: TEXCOORD0;
+	float4	hpos	: SV_Position;
+};
+
+struct f_bb_copy
+{
+	float4	albedo	: SV_Target0;
+	float4	normal	: SV_Target1;
+};
+
+f_bb_copy	main	(v2p_bb_copy I)
+{
+	f_bb_copy O;
+	O.albedo = s_lod.SampleLevel(smp_rtlinear, I.uv, 0.0f);
+	O.normal = s_lod_nm.SampleLevel(smp_rtlinear, I.uv, 0.0f);
+	return O;
+}

@@ -1,0 +1,48 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Procedural shrubs and trees, the far wood's G-buffer pixel shader (da_shrub_wood_vs.h SHRUB_WOOD_FAR): the bark's mean
+// colour as the vertices worked it out - a zoned tree's two barks by the hem's tongues here (the near bark's boundary run
+// over the zone's share: a white poplar's dark foot kept its tongues, not a gradient between two rings) -, the tube's
+// normal; a twig the wire rule widened keeps its share of the pixels as the near wood's (da_shrub_wood.ps); the snow on
+// the upper side takes the snow code.
+
+#include "common.h"
+#include "da_velocity.h"
+#include "da_material_codes.h"
+#include "da_shrub_common.h"
+
+struct p_shrub_wood_far
+{
+	float4	hpos		: SV_Position;
+	float4	hpos_cur	: TEXCOORD0;
+	float4	hpos_prev	: TEXCOORD1;
+	float4	pv_g		: TEXCOORD2;
+	float4	n_a			: TEXCOORD3;
+	float4	alb_w		: TEXCOORD4;
+	float	snow		: TEXCOORD5;
+	float4	up_z		: TEXCOORD6;
+	float4	pr_k		: TEXCOORD7;
+};
+
+f_deffer	main	(p_shrub_wood_far I)
+{
+	[branch] if (I.alb_w.w < 0.999f)
+	{
+		const float2 q = I.hpos.xy + float2(29.0f, 7.0f) + 7.13f * (da_shrub_time.z > 0.5f ? da_shrub_fwd.w : 0.0f);
+		clip(sqrt(saturate(I.alb_w.w)) - frac(52.9829189f * frac(dot(q, float2(0.06711056f, 0.00583715f)))) - 1e-3f);
+	}
+	// The hem: the zone's share shifted by the boundary's run, the two barks by it (the near bark's far off, its lenses
+	// under a pixel).
+	float3 alb = I.alb_w.rgb;
+	[branch] if (I.up_z.w >= 0.0f)
+	{
+		const float zy = saturate(I.up_z.w);
+		const float zs = saturate(zy + (shrub_zone_run(I.pr_k.xyz, I.pr_k.w) - 0.5f) * 7.0f * zy * (1.0f - zy));
+		alb = lerp(alb, I.up_z.rgb, saturate((zs * 1.3f - 0.3f) / 0.7f));
+	}
+	const float mtl = I.snow > 0.55f ? da_mtl_from_code(DA_MTL_SNOW) : 0.125f;
+	f_deffer O = pack_gbuffer(float4(normalize(I.n_a.xyz), I.n_a.w), float4(I.pv_g.xyz, mtl), float4(saturate(alb), I.pv_g.w));
+	O.velocity = da_velocity(I.hpos_cur, I.hpos_prev);
+	return O;
+}

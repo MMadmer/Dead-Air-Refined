@@ -50,8 +50,8 @@ float4 plight_infinity( float m, float3 pnt, float3 normal, float3 light_directi
   	float3 H			= normalize	(L+V);						// float-angle-vector
 	float4 ret;
 	float4 light =  s_material.Sample( smp_material, float3( dot(L,N), dot(H,N), da_lut_z(m) ) ).xxxy;		// sample material
-	[branch] if (da_is_snow(m))
-		light = da_snow_light(light, N, V, L);
+	[branch] if (da_is_snowy(m))
+		light = da_snow_light(light, N, V, L, da_is_glint(m));
 	if (da_is_foliage(m))
 		light.w *= da_foliage_fresnel(V, H);
 	ret = (light*LIGHT_MUL1+float4(light.www*(Ldynamic_color.xyz*2),light.w)*Ldynamic_color.w/2*LIGHT_MUL2);
@@ -73,8 +73,8 @@ float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, 
 		rsqr	= dot		(L2P,L2P);					// distance 2 light (squared)
   	float  att 	= saturate	(1 - rsqr*light_range_rsq*L_RANGE)*L_BRIGHT;			// q-linear attenuate
 	float4 light	= s_material.Sample( smp_material, float3( dot(L,N), dot(H,N), da_lut_z(m) ) ).xxxy;		// sample material
-	[branch] if (da_is_snow(m))
-		light = da_snow_light(light, N, V, L);
+	[branch] if (da_is_snowy(m))
+		light = da_snow_light(light, N, V, L, da_is_glint(m));
 	if (da_is_foliage(m))
 		light.w *= da_foliage_fresnel(V, H);
   	float4 ret = (att*light*LIGHT_MUL1+att*float4(light.www*(Ldynamic_color.xyz*2),light.w)*Ldynamic_color.w/2*LIGHT_MUL2);

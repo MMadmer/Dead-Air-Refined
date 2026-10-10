@@ -1,0 +1,20 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// Procedural shrubs: the leaves in the sun cascades and the local lights' maps - the leaf texture's coverage cuts
+// the leaf out of its hull or quad (da_shrub_leaf_vs.h), no output.
+
+#include "common.h"
+#include "da_shrub_common.h"
+
+struct p_shrub_leaf_shadow
+{
+	float4	hpos	: SV_Position;
+	float4	tex		: TEXCOORD0;
+};
+
+void	main	(p_shrub_leaf_shadow I)
+{
+	clip(s_shrub_leaf_d.Sample(smp_base, I.tex.xyz).a - 0.5f);
+	shrub_leaf_bite(I.tex.xy, uint(I.tex.w + 0.5f), I.tex.z);
+}

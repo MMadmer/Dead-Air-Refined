@@ -5,7 +5,8 @@ on it. The season day `D` (`SEASONS.md`) and the world side (`WINTER.md`: the le
 of every frame, the deformer stamps, the snowfall, the ice) decide how much snow lies where; this page is how
 the renderer turns that into a picture. Data: `SEASON_DATA.md` (`configs/dead_air_x64_seasons.ltx`).
 
-Code: `src/Layers/xrRender/da_ground.{h,cpp}` (the collision mesh on the GPU, the near ground window),
+Code: `src/Layers/xrRender/da_ground.{h,cpp}` (the collision mesh on the GPU, the near ground window, the snow
+shells),
 `src/Layers/xrRender/da_snow.{h,cpp}` (everything else), `src/Layers/xrRender/da_snow_gpu.h` (their private
 GPU helpers). Shaders (`shaders/r3`): `da_ground_*`, `da_snow_*`; the public headers `da_snow_sample.h` (the
 current depth for any shader), `da_snow_light.h` (the lighting of snow pixels) and `da_snow_ice.h` (the ice
@@ -15,10 +16,11 @@ of the season, shared with `water.ps`).
 
 | Piece | Where | What |
 |---|---|---|
-| snow grid | G-buffer, after the grass | real geometry: a camera-centred clipmap raised by the snow depth, near (to 64-256 m by preset); over frozen water a sheet of ice and the snow on it |
-| snow layer | full screen, after the rain apply | every opaque pixel at every distance: coverage, the look of the month, thin-snow see-through, material code 31 |
-| trails | compute, every frame | every creature, corpse, prop and blast presses the snow; snowfall fills it back |
-| lighting | `lmodel.h` -> `da_snow_light.h` | subsurface wrap for code 31, the cool cast of shade, glints |
+| snow grid | G-buffer after the grass, and the near sun cascade | real geometry: a camera-centred clipmap of the ground's snow raised by the snow depth, near (to 64-256 m by preset), running on under a roof, a deck or a vehicle at the floor's level; over frozen water a sheet of ice and the snow on it |
+| snow shells | G-buffer, after the grid | the snow on roofs, decks, slabs and tanks: generated geometry on the collision's faces that look up, rounded off at their open edges |
+| snow layer | full screen, after the rain apply | every opaque pixel at every distance: coverage, the look of the month, thin-snow see-through, a cover on static surfaces past the shells, material code 31 (1 on a glint) |
+| trails | compute, every frame | every creature, corpse, prop and blast presses the snow - feet pack it, legs and low bodies plough trails, corpses lie in churned hollows; snowfall fills it back |
+| lighting | `lmodel.h` -> `da_snow_light.h` | subsurface wrap for codes 31 and 1, the cool cast of shade, the glints' sun lobe on code 1 alone |
 
 Every pass is skipped while the level-mean depth of the frame is 0 (May to October), the near ground window's
 raster included.
@@ -79,10 +81,14 @@ and pool passes read the same shaped depth (`da_sn_depth_smooth`), so a print si
 The first frame after the level's bake (`da_snow_field()`; again whenever its stamp changes) uploads it, so snow
 arriving later in the session costs no frame:
 the class weights and factors as baked (RGBA8, `$user$da_snow_weights`, `$user$da_snow_factors`), the
-level's snow base: the bake's topmost surface opened with a 3 x 3 square (`R16_UNORM`, `$user$da_snow_base`; 0
-is reserved for texels with no collision under them, `SSnowField::solid`: the backdrop beyond the playable
-area, whose height is only the hole-filled ground - the grid does not stand there, the layer paints that
-backdrop with the surface as its own base), and the road edges (`R8_UNORM`, `$user$da_snow_road`: the exact
+level's snow base: the bake's topmost surface opened with a 3 x 3 square, the terrain wherever that surface is a
+cover - more than 0.6 m over the bake's terrain (`R16_UNORM`, `$user$da_snow_base`; 0 is reserved for texels with
+no collision under them, `SSnowField::solid`: the backdrop beyond the playable area, whose height is only the
+hole-filled ground - the grid does not stand there, the layer paints that backdrop with the surface as its own
+base), the shelter of the covers (`R8_UNORM`, `$user$da_snow_shelter`: the cover mask eroded by one texel, so
+walls, fences and posts drop out and only a building's or a vehicle's inside is sheltered), the terrain and the
+topmost surface themselves (`R16_UNORM`, `$user$da_snow_ground`, `$user$da_snow_top`: the ground window's cover
+test, the layer's static surfaces past the window), and the road edges (`R8_UNORM`, `$user$da_snow_road`: the exact
 Euclidean distance from a road texel to the road's edge, 0..12.75 m, from the road weight; the wheel tracks
 run along its iso-lines). The depth of a texel is the bake's formula, evaluated on the GPU at `D`:
 
@@ -90,7 +96,9 @@ run along its iso-lines). The depth of a texel is the bake's formula, evaluated 
 D_c = clamp(S_c A_c - Mc_c M_c, 0, cap)    D = sum_c w_c D_c      (classes open, under trees, road, drift)
 ```
 
-`da_snow_level.cs` writes it over the whole level when what it reads of the season moved (and once more the
+The level texture's depth is multiplied by one minus the shelter texel, the fine texture's by one minus the
+window's shelter (below, blended into the level's at the window's edge): no snow lies under a roof, a deck or a
+bus, whatever the 1 m fields say. `da_snow_level.cs` writes it over the whole level when what it reads of the season moved (and once more the
 next frame, so the previous half settles), otherwise only around the coarse trail window when its trails
 changed. What it reads is compared at the precision the stored depth has: `S` and `Mc` to one u16 depth step at
 the largest class factor (`cap / 65535 / 2.7`), the compacted residual shares to 1/256, the cap. The
@@ -114,20 +122,44 @@ bilinear reads never dip under the real surface; water goes to its own map. `da_
 rebuilds the strip and an 8-texel apron (`k_apron`, `DA_GR_AP`: the reach of the water level below):
 
 - `Htop` (`$user$da_ground_top`, R32F): the topmost non-passable surface;
-- `Hg` (`$user$da_ground_base`, x): `Htop` opened with a 3 x 3 square - posts, rails and thin props drop
-  out, so snow passes under them and they stick out of it; roofs, walls and banks stay. Where a water
-  surface lies more than 5 cm over it, `Hg` is that surface: the grid crosses frozen water on it and the
-  shore is no step. The snow lies on `Hg`;
-- the cliff taper (y): 0 on a texel next to a jump of the surface (more than max(0.35 m, 50 degrees over a
-  texel)) or next to no surface, 1 half a metre away; under a water surface the texel stores `-1 - taper`, so
-  the snow knows the lake bed under it and the taper runs on across the waterline;
+- the low map (raster): the lowest surface facing up (under 72 degrees) at each texel centre, the floor under
+  whatever stands over it;
+- `Hg`: `Htop` opened with a 3 x 3 square - posts, rails, wires and thin props drop out, so snow passes under
+  them and they stick out of it; roofs, walls and banks stay. Where a water surface lies more than 5 cm over it,
+  `Hg` is that surface: the grid crosses frozen water on it and the shore is no step;
+- a cover: `Hg` more than 0.35 m over the texel's floor and more than 0.6 m over the level's terrain (a roof,
+  a bus, a block; the road over a culvert is terrain, no cover; where the collision has no floor under a cover
+  more than a metre over the terrain, the terrain stands in), and no node of the level's AI walks on it: a bridge's
+  deck, a platform or a flat roof with a ladder is ground, its snow the grid's with its trails (`s_gr_walk`, the
+  bake's highest node per metre in the texel's 3 x 3 metres, within -0.5..+0.3 m of the top). The bake decides
+  the same at 1 m (`SSnowField::cover`, `shelter`, `da_snow_cover_at` in `da_snow_field.h`), so the level base,
+  the CPU's depth (`da_snow_depth_at`: no snow of the sky under a cover; the stock grass under an eave is no longer
+  hidden as if snowed in) and the shells take one rule;
+- the snow base (`$user$da_ground_base`, RGBA32F, x): `Hg`, the floor under a cover - never lower than 0.3 m
+  under the terrain (a cellar's floor ran the grid down along the walls, a moat round the house) nor higher than
+  10 cm over it (a plinth's teeth in the doorway). The ground's snow runs on under the eaves and round a bus or a
+  wall up to its sides; it never climbs a roof (the old grid did, and hung curtains, torn shards and a ribbon
+  along a wire from every eave); the cover's own snow is a shell;
+- the shelter (z): from the share of the 5 x 5 texels round it under an **overhang** (`smoothstep(0.35, 0.9,
+  share)`): 1 deep under a roof (no snow on its floor, not along its walls either), a part under an eave (the wind
+  blows some under), none a texel out from the footprint - a soft drip line, no moat. Only an overhang shelters
+  (`s_gr_overhang`, the bake's `cover == 2` dilated by a metre): under a **solid object** - a concrete block, a
+  cart, a car, a stump - the ground's snow runs on at its full depth up to its sides and on under it, hidden
+  (sheltered like a roof, every block and stump stood in a ragged moat a texel or two wide, the 1 m squares of
+  the bake drawn into the snow);
+- the opened top itself (w): what the layer's exposure looks up at;
+- the cliff taper (y): 0 on a texel next to a jump of the base (more than max(0.35 m, 50 degrees over a
+  texel)) or next to no surface - never a jump into a cover's footprint (a raised floor behind a wall is no bank)
+  -, 1 half a metre away; under a water surface the texel stores `-1 - taper`, so the snow knows the lake bed
+  under it and the taper runs on across the waterline;
 - the shore (`$user$da_ground_shore`, RGBA32F): x the opened solid surface under the water too (the bed), y the
   highest water surface within 8 texels (a separable square max over the raw water map), z how far inside that
   reach the texel lies (1 up to half of it, 0 at its end, from the Chebyshev distance to the nearest water
   texel). These are the continuous quantities of the waterline: `da_sn_shore(xz)` takes the bilinear ground
   against the level, so a frozen pond's edge follows the ground's own contour, never the water texels' squares.
 
-`da_sn_base(xz)` reads it bilinear: x the height, y the taper, z the share of the four texels under water.
+`da_sn_base(xz)` reads it bilinear: x the height, y the taper, z the share of the four texels under water;
+`da_sn_shelter(xz)` the shelter, the level's past the window.
 Beyond the window (and in its last 4 m, blended) the level base stands in; it knows no water. The snow is the
 window's only reader: while it draws nothing (May to October) nothing is rasterised, and the first snowy frame
 rebuilds the whole window before the snow reads it.
@@ -144,26 +176,47 @@ Every frame, in this order:
 
 1. **Scroll.** L1 clears what it moves into; L0 takes what it moves into from L1 (`da_snow_scroll.cs`), so a
    path walked an hour ago is there again when the camera returns, softened to L1's resolution.
-2. **Stamps** (`da_snow_stamp.cs`, one group per stamp): the deformers of `da_snow_stamps()` reaching into L0
-   go into L0, the others inside L1's window into L1. The stamped surface is the deformer's bottom plus
-   `(dist / radius)^2 * sharp`, merged with `InterlockedMin` (RotTR packing: the deepest deformer wins, and
-   its sole height is kept for the resolve). **A foot or a body sinks no deeper than its creature's sink**
-   (`SSnowStamp::sink`, WINTER.md: a rat 1.2 cm, a dog 4-5 cm, a man 6.5 cm, a boar 8.5 cm, a pseudogiant
-   15 cm) under the snow surface, whatever depth its sole reaches: the snow carries the rest. **Partial
-   carving**: under feet and bodies (stamped every frame) a texel sinks at most 3 m/s from where it stands, so
-   nothing cuts through deep snow in one frame; a resting object or a crater (stamped once) carves at once. A
-   crater's floor is bare ground. A deformer more than half a metre under the snow base is under a roof or a
-   bridge and stamps nothing; nothing is stamped over water.
+2. **Stamps** (`da_snow_stamp.cs`, one group per stamp, three float4 each): the deformers of `da_snow_stamps()`
+   reaching into L0 go into L0, the others inside L1's window into L1. A stamp is the **capsule** its deformer
+   swept since the last frame (a disc when it stood still), so a fast leg or body leaves no gaps. Its floor
+   (WINTER.md, deformers): a planted foot or a lying body **packs** the loose snow under it to its density and
+   sinks until the packed column carries it (`D * rho / pack` over the ground: most of fresh powder, under half of
+   January's settled snow for a man, hardly any for a tushkan); a swinging leg or a low body **ploughs** a furrow
+   at its own height, `fall` of the snow above it falling back; a crater carves to the ground; never deeper than
+   the creature's reach (`sink`). The stamped surface rises from the floor to the snow surface at the radius - a
+   print's flat sole and steep walls (`dist^4`), a body's or a furrow's bowl (`dist^2`) -, merged with
+   `InterlockedMin` (RotTR packing: the deepest deformer wins, and its sole height is kept for the resolve);
+   walls that stopped short of the surface at the radius stood as a step there, a staircase of texels along
+   every trail. In deep snow the legs never lift out of it, so the prints join into a trench with the furrows of
+   the swinging legs between them. **Partial carving**: under feet and bodies (stamped every frame) a texel sinks
+   at most 10 m/s from where it stands; a resting object or a crater (stamped once) carves at once. A crater's
+   floor is bare ground, and so is a loose object's: its physics lies on the ground under the snow, so it lies on
+   the flat floor of its own hollow (discs of at least 0.3 m radius, dense enough that their floors join - `dist^8`
+   walls: sparse, a barrel rolled away left a clover of four bare holes -, the low half 0: no compacted residual) - packed by weight, a rifle went under a drift whole, and a bowl narrower than the grid's
+   cells closed over it again; a body packs its hollow but at most 0.4 of each element's height goes under. A
+   crater's and a bullet's walls are a print's (`dist^4`: a blast is a hole, not a dimple); a campfire's thaw
+   (`sink` > 0 on a crater) is a soft bowl. A deformer more than half a metre under the snow base is under a roof
+   or a bridge and stamps nothing; nothing is stamped over water. **On a cover** (its foot at the top of a shell's
+   cover in the level's 1 m fields, within 0.8 m under it: a roof, a trailer) a deformer presses the shells' snow
+   instead: the **roof map** (`$user$da_snow_roof`, R32_UINT the size of L0, cleared with L0's fresh strips)
+   holds how far under the shell's surface each texel is pressed, unorm over the cap, merged with
+   `InterlockedMax` - a planted foot three quarters of the roof's snow, a body or a plough half, anything resting
+   or a crater nearly all of it, with a print's walls. The level fields decide (the window's raw top read in the
+   compute shader was not reliable enough on a roof's slope).
 3. **Refill**: the snow that falls (`SSnowFrame::fall.y`, metres per real second) raises every carved surface,
-   in whole unorm steps; a texel back at the cap is untouched again.
+   in whole unorm steps; a texel back at the cap is untouched again. The roof map's depressions shrink by the
+   same steps.
 4. **Pool**: L0 tiles that were stamped hand their mean carved surface and lowest deformer down to L1.
 5. **Composite** (`da_snow_composite.cs`, 64 x 64 tiles: the stamped ones of this and the last frame, the
    strips L0 scrolled into, all of them when what it reads of the season moved, as for the level texture
    above): the smooth season depth, the L0 texel resolved against it - carved only where the deformer got
    below the surface, never below the compacted residual `max(2 cm, D * rho_open / 550)` (roads: their
-   compaction) - and the slight rim the displaced snow builds beside a print (most of a print is compacted,
-   not displaced: `0.2 *` the mean depression around it, at most a quarter of the depth and 3 cm). The share
-   of the snow a print compacted (`depression / 3 cm`) goes to the trod map.
+   compaction) - and the rim the displaced snow builds beside a print or a furrow (`0.25 *` the mean depression
+   around it, at most a quarter of the depth and 4 cm). On a print's walls the depression is half smoothed over
+   the 3 x 3 (1 2 1: the overlapping bowls left a staircase of texels and terraces down a trench's walls); at its
+   floor (no deeper neighbour) it keeps its depth, so a rat's or a tushkan's print a texel or two wide does not
+   lose a third of it. The share of the snow a print compacted (`depression / 3 cm`) goes to the trod map. The
+   season depth is multiplied by one minus the shelter first.
 
 When the season melts the snow the trail maps go; they start empty when it comes back. The stamps (step 2)
 and the pool (step 4) read the same smooth season depth as the composite, so a print's depth is the
@@ -199,7 +252,9 @@ A vertex stands on the snow base raised by the current depth, and only where geo
   cuts the triangle: so the clip line falls where the raise is zero, and a patch's edge meets the ground
   without a lip (the first in-game round showed a 1-3 cm vertical cut round every thaw patch). The layer draws
   the thinner snow.
-- **No curtains**: a vertex across a jump of the base (more than max(0.35 m, 50 degrees over the spacing),
+- **No curtains**: the base never climbs a cover (the floor under it stands in), so a house, a bus or a block
+  is no cliff; the snow runs to its walls and on under it, where the shelter takes it to nothing. A vertex across
+  a jump of the base that remains - a bank, a retaining wall - (more than max(0.35 m, 50 degrees over the spacing),
   slopes steeper than 60 degrees, no surface) is a cliff vertex; every triangle touching one is clipped
   away (`SV_ClipDistance` -1000 at that corner leaves a sliver), cells with three cliff corners are culled
   (`SV_CullDistance`); the height tapers to nothing within half a metre of a cliff. Tree trunks and branches
@@ -248,14 +303,73 @@ The grid writes position, the snow base's slope over 2 m as its normal (taps at 
 metre, its own cells beyond; one-sided at a roof edge as the layer takes it), its own sky term (lower under the
 crowns) and material code 31; the albedo
 target is masked off, so the albedo of what lies under it stays for the layer's see-through. Where the raised
-surface covers the sky at a crest, a pre-pass has put snow albedo under the sky pixels first. The grid is not
-drawn into the shadow cascades. Every pass with per-target write masks (the grid, the sky pre-fill, the layer's
+surface covers the sky at a crest, a pre-pass has put snow albedo under the sky pixels first. **The grid casts
+into the two near sun cascades** (`da_snow_grid_shadow.vs`, the same rings within 28 m round the camera, depth
+only, recorded on the cascades' worker threads, the tiles culled by each cascade's box): the walls of a trail, a
+crater's rim and a drift's lee cast their shadows - without it a trench in the sun read flat, lit as the open
+snow. The second cascade takes the tiles past 12 m only (nearer, every pixel is the first's) in cells of every
+other vertex: the band where the two blend reads both, where the trails' shadows broke into noise from 15 m with
+the first alone. Every pass with per-target write masks (the grid, the sky pre-fill, the layer's
 write-back) sets independent blend: without it D3D takes target 0's mask for all targets, the grid wrote its
 grey into the albedo and the write-back kept the ground's blue under white snow (yellow snow edges, roofs and
 far slopes in the first in-game round). The grid's vertex and pixel shaders read the same fields (the window,
 the level base, the water field): `CBlender_Compile::r_dx11Texture` binds a texture at the slot of every stage
 that declares it. The merged constant table keeps one slot per name, the last merged stage's (the vertex
 shader's), so before that the pixel shader read zeros - its shore and ice-front tests saw no water anywhere.
+
+## Snow shells
+
+The snow on everything standing over the terrain is generated geometry (`da_ground.cpp`, once per bake, after
+the level fields' upload), not the height field: a heightfield cannot end at an eave, and the old grid hung
+curtains, torn shards and stacked sheets there.
+
+- **Faces**: the collision's solid faces looking up (under 60 degrees), their middle 1.8 m over the bake's terrain
+  (a roof, a trailer, a bus; a block, a cart or a stump lower than that is a solid object, its snow the layer's
+  cover over the grid's running up to its sides - a shell on it tore into sheets over the grid's snow) and every
+  corner 0.3 m over it, not under another surface (the 1 m top field first, a ray up
+  through the collision to be sure: a floor under a roof); not a deck the AI walks (the bake's nodes, as the
+  window's cover), not a block under a metre with no floor under it (a ray down: the window keeps its top as the
+  base, and a shell there stood on the grid's own snow); welded at 1 cm, a face welded into a sliver dropped (its
+  zero-length edge counted as open, a pit in the middle of a roof).
+- **Islands**: the faces joined by their edges; an island carries a shell when it is broad and smooth - at least
+  1.5 m2, its area at least 0.15 m per metre of open edge, at most one metre of fold (over 20 degrees) per square
+  metre. Small, narrow and crumpled islands (sills, fence tops, crates, a wreck's roof panels) keep the layer's
+  cover on their own drawn surface: shells there showed the collision's simplifications - stacked sheets on a
+  bus, a triangle of snow in a fence's gap.
+- **Open edges**: edges of one face only - but a T-junction (a face's edge along two of its neighbour's, the
+  panels' seams the collision leaves unwelded: its middle on another open edge running the same way) is none; left
+  open, the snow sank to the roof along every seam. Hashed by 1 m cells sampled along each segment (a long
+  diagonal edge's bounding box held tens of thousands).
+- **Mesh**: faces near an open edge (within 0.6 m) are cut into triangles of at most 0.3 m (a lattice of up to 24
+  per side; a 20 m eave of 12 drew its rounding as a wedge two metres wide); an edge's points depend on the edge
+  alone (its count from its length and its distance to an open edge, its points from its two welded corners in
+  the edge's own order, to the last bit) and a row of the face's lattice snaps onto them, so faces sharing an edge
+  share its vertices - no cracks (degenerate faces are dropped, the panels' T-junction seams closed, the corners
+  and edges canonical - the jagged cracks in the shells of concrete blocks). A face far from every open edge stays whole. Chunks of up to 65536 vertices by
+  32 m cells, 16-bit indices from each chunk's first vertex; past 2 M vertices a face keeps the layer's cover (the
+  log says how many).
+- **Per vertex** (in parallel): the normal - a corner's or an edge point's summed over every face round it,
+  whichever chunk drew it (a chunk's seam kept two heights on a ridge) -, the distance to the nearest open edge
+  (capped at 0.6 m) and the way away from it; a vertex under another surface (an eave over a lower roof) counts as
+  an edge with no way away.
+- **Drawn** (`da_snow_shell.vs/.ps`, after the grid, chunks in the view within 120 / 160 / 200 / 260 / 320 m by
+  preset): a vertex stands on its face raised by the roof's snow - the open class's formula for the face's own
+  slope (all of it to 32 degrees, none past 60) with the level texel's noise and melt, 0.85 of it (the wind
+  sweeps an exposed roof) - rounded off toward the open edges by a quarter circle of about the depth's radius,
+  never steeper than 40 degrees from the edge (no fin of snow on a narrow support); the normal follows the
+  rounding. A centimetre over the face and pushed 8 depth units toward the camera, so it wins over the roof at its
+  edge. **Prints on a roof**: the pixel shader reads the roof map (trails, above) and marches the view ray on into
+  the shell's snow to the pressed surface (three steps against the map), taking its position, the print's slope
+  and its depth - only ever farther (`SV_DepthGreaterEqual`, the position `noperspective centroid`), so the early
+  depth test stays. Written like the grid (code 31, albedo kept) with a hemi of 1, the shell's mark (the grid's is 0.95 at
+  most); the layer shades a shell pixel as deep snow. A pixel whose view ray runs on well past its supporting face
+  before it meets the scene (the depth copied before the shells) has nothing under it and is dropped: the snow
+  lies on a ruin's rafters, not on a slab over them. Built again on the next frame if the bake came before the
+  collision mesh.
+
+Escape: 6437 of 95130 faces in 537 of 14698 islands, 370 k vertices, 703 k triangles, 15.3 MB, built in 0.4 s;
+the minimum preset draws no grid and no shells.
+Past the reach a roof keeps the layer's cover (a couple of pixels thinner).
 
 ## The snow layer
 
@@ -278,19 +392,30 @@ target cannot be read while written). Per pixel:
   eased in over 3 cm of that rise, and beside a frozen pond what its thin snow lets through is that ice: the
   albedo the G-buffer holds under the grid is whatever lies behind it along the view. The grid is never
   "something above the snow" that gets only a dusting: it is the snow surface.
-- **Exposure**: only what lies above the fall line shelters a pixel - a roof, an eave, a bridge deck; a bank,
-  a kerb or a wall foot beside it does not (the first round counted a bank as cover, which bared the inner
-  side of every road cut and hillside path: the brown streaks of January). The fall line climbs upwind by the
-  flakes' slant (at most 27 degrees); five taps of the snow base: straight over the pixel at 0.3 m (0.4 of the
-  weight) and a cross of four at 1.2 m, 0.35 m out (the soft edge of an eave). Only taken where snow can lie
-  at all.
+- **A shell pixel** (code 31 with the shell's mark, a hemi of 1; told by its height over the ground's snow, a
+  coarse ring's chord over a hollow and the snow on a pond's ice running onto the bank lost their trails and ice)
+  is deep snow: no trails, no pond, no ruts; its normal is the shell's plus the pack's own.
+- **Exposure**: only what lies above the fall line shelters a pixel - an eave, a bridge deck; a bank, a kerb or a
+  wall foot beside it does not (the first round counted a bank as cover, which bared the inner side of every road
+  cut and hillside path: the brown streaks of January). The fall line climbs upwind by the flakes' slant (at most
+  27 degrees); five taps of the window's opened topmost surface (wires and posts removed): straight over the pixel
+  at 0.3 m (0.4 of the weight) and a cross of four at 1.2 m, 0.35 m out (the soft edge of an eave). Past the window
+  the depth's shelter does it. Only taken where snow can lie at all.
 - **Coverage**: `smoothstep(0.5 cm, 3 cm, D) * exposure * slope` (full to 50 degrees, nothing past 70; a pixel
   on the snow base takes the slope of the ground over 2 m where its normal map is steeper, so the bumps of a
   ground texture strip no snow); thin snow goes first on dark ground (down to 0.65 of the cover under 4 cm on
   black asphalt); on onset and melt days the class cover keys over the same noise the depth uses, on a ragged
-  0.6 m margin; roads covered kerb to kerb from December to February (`cover.z` = 1, decision D5). Anything
-  standing above the snow surface - props, corpses, fences, tree crowns - gets at most a light up-facing
-  dusting (decision D8; winter tree cards carry their own snow).
+  0.6 m margin; roads covered kerb to kerb from December to February (`cover.z` = 1, decision D5). A static surface
+  standing above the snow surface and open to the sky - a roof past the shells' reach, a crate's or a slab's top,
+  a sill, a wreck's roof - carries the snow a roof keeps (the same formula as the shells) as a cover of its own:
+  the topmost static surface stands 0.3 m over the ground's snow there (a cover: not the ground a body or a boot
+  lies on, which the coat painted white), the pixel lies on it (at most 6 cm over the raster's highest point,
+  under it by the slope's run over a texel) and faces up, by its own normal as well. Anything else above the snow
+  surface - corpses, creatures, tree crowns - gets at most a light up-facing dusting (decision D8; winter trees
+  carry their own snow). The step from what lies under the snow to what stands in it is 4 cm (over 15, a rifle in
+  its hollow took the snow's cover). What stands over the snow facing sideways or down - a wall, a trunk, a fence,
+  a body's flank - leaves the pass before the season's, the slope's and the exposure's lookups (a good share of
+  the screen), and an up-facing top over the snow skips the slope's and the exposure's (neither changes it).
 - **See-through**: thin snow lets the ground through by the two-way diffuse transmission of a scattering slab,
   `T = 1 / (1 + 0.135 d_we / r_e)`, opacity `1 - T^2` (water equivalent `d_we` in mm, grain radius `r_e` in mm
   by age and wetness): a centimetre of old snow is about half see-through, 4 cm hide the ground, 17 cm of
@@ -318,14 +443,15 @@ target cannot be read while written). Per pixel:
   broken along the road, 8 % greyer, a little dirtier and glossier, 2 cm grooves. The snow's albedo carries a
   slight cool cast (`DA_SNOW_TINT`, luminance 1) that `da_snow_light.h` takes back off the sun and the lights:
   what only the sky lights - shade, overcast - stays blue-grey, sunlit snow stays neutral white. A subtle wet
-  dark ring of ground (x0.72) round melting patches, only where the snow itself has melted (not where a slope
-  or a shelter keeps the layer off deep snow); it keeps the ground's own gloss and halves its normal map's
+  dark ring of ground (x0.72) round melting patches, only on ground facing up and only where the snow itself has
+  melted (not where a slope or a shelter keeps the layer off deep snow); it keeps the ground's own gloss and halves its normal map's
   relief (more gloss lit every ridge and pebble of asphalt and gravel white). Gloss from the state roughness
-  (fresh 0.8, settled 0.7, old 0.55, wet 0.45, slush 0.4 - wet corn snow and slush are coarse and matte, not a
-  plastic sheen; compacted 0.5, ruts 0.3, only the meltwater in a hollow mirrors), times the sheen left on
-  melting snow (`da_sn_sheen`: 1 down to 0.5 over the wet and slush states; the meltwater pool keeps all of it):
-  the light model's sun specular is a broad lobe added on top of the albedo, and on the thaw's grey snow
-  (0.6-0.75) it lifted the result back to a fresh snow's white.
+  (fresh 0.8, settled 0.7, old 0.55, wet 0.45, slush 0.4; compacted 0.5) times 0.012 (`DA_SN_GLOSS`) and the
+  sheen left on melting snow (`da_sn_sheen`), only the meltwater in a hollow and the wet ruts mirroring (times
+  0.25). The light model's sun specular is a broad lobe, five times the gloss times the light twice over
+  (`combine_1.ps`): under a bright low sun the old 0.05-0.11 drew a smooth glossy streak along every swell toward
+  the sun and a white hot spot round its mirror point - the "plastic" snow. Snow's own specular is weak and rough;
+  what flashes on it is single grains (the glints).
 - **The pack's own texture** (`da_sn_pack_detail`, also on the snow on the ice): world-anchored value noise,
   each octave on its own turned lattice, no time term, every scale faded out between nine and three pixels
   per cell (`da_sn_fade`: no shimmer under TAA, no glitter), every octave skipped where it adds nothing.
@@ -346,14 +472,20 @@ target cannot be read while written). Per pixel:
   degrees), crust pits on old snow close up and the grooves of the wheel tracks. Even a thin film fills the
   ground's millimetre relief: the ground's normal map is gone once a quarter of the cover lies (it caught the
   snow's white as a crinkled web over asphalt).
-- **Glints**: rare (about one pixel in 300 toward the sun's mirror direction, one in 3000 elsewhere), about a
-  pixel wide at every distance (Bowles & Wang: discrete 1.3x cell steps, blended across a step), only while
-  the sun shines through (`da_sn_sun.w`, the sun colour's luminance: none under an overcast sky), none on wet,
-  trodden or dirty snow, no time term: a glint cell turns its normal to the sun's half vector and
-  `da_snow_light.h` lights it; the light pass shadows it. Its gloss stays the snow's (a glint with full gloss
-  mirrored the sky into the shade).
-- **Material**: code 31 where the snow dominates (`k > 0.5`); the puddle flag cleared under snow (the puddle
-  passes leave it alone). The packed material word is copied bit for bit, never re-packed from a float.
+- **Glints** (`da_sn_glint_cell`): the sun mirrored by single grains. A cell of about one and a half pixels at
+  any distance (Bowles & Wang: discrete 1.3x cell steps from 0.6 mm, two levels blended across a step) carries
+  the facet of its best placed grain, tilted at random about the snow's normal (a normal slope spread of 0.35);
+  it flashes while the sun's half vector falls within the cell's tolerance of it. With M grains in the cell (grain
+  0.4 mm on fresh snow to 1.3 mm on old) the chance grows M times and the grain's share of the cell shrinks M
+  times - capped at two cells in a hundred: grown on, the far cells flashed nearly all at once, faintly, and TAA
+  smoothed them into a glossy streak. So near, few bright sparks; far, as few, each as bright as its share of
+  the sun allows; most faint, a few bright (a heavy-tailed brightness). World-anchored, no time term: as the eye
+  moves other grains light up and the snow twinkles; standing still nothing changes. Only while the sun shines
+  through (`da_sn_sun.w`), on clean dry loose snow (none on wet, trodden or dirty snow), to 150 m. A flashing pixel
+  turns its normal to the sun's half vector, takes the glint code (1, `DA_MTL_GLINT`) and the flash as its gloss
+  (`DA_SNOW_GLINT_SCALE` = 100 times the snow's diffuse light at gloss 1); `r__snow_glint` scales it (QA).
+- **Material**: code 31 where the snow dominates (`k > 0.5`), 1 on a glint; the puddle flag cleared under snow
+  (the puddle passes leave it alone). The packed material word is copied bit for bit, never re-packed from a float.
 
 **The ice sheet.** A grid pixel over frozen water: bare ice (`da_ice_albedo`: black ice dark grey-green over the
 water column, linear 0.03-0.08, with a 0.3 m mottle, greyer blotches where air and snow froze into it, pale
@@ -366,11 +498,14 @@ is lit as a stock glossy material, the snow on it as code 31.
 
 ## Lighting
 
-`da_snow_light.h`, called by `lmodel.h` for code-31 pixels with the slice-0 LUT result: 35 % of the diffuse
+`da_snow_light.h`, called by `lmodel.h` for code-31 and code-1 pixels (`da_is_snowy`) with the slice-0 LUT result: 35 % of the diffuse
 light goes through UE's SubsurfaceBxDF (wrapped diffuse, back scatter, forward in-scatter; opacity 0.85,
 tinted (0.80, 0.90, 1.00)), the rest stays on the stock lobe; the sun's regular shadow covers both. The result
 is divided by `DA_SNOW_TINT`, so the cool cast of the albedo stays only in what the sky's hemisphere lights. A
-very narrow specular lobe (`N.H` within half a degree, 4x) lights the glint cells. `combine_1.ps` white-balances
+very narrow specular lobe (`N.H` within half a degree, 16x) lights the glint pixels (code 1) alone: on plain snow
+it drew the sun's mirror image as a glossy blotch wherever the surface ran smooth. The sky's mirror image
+(`hmodel`'s specular) keeps on snow only as much as its gloss over 0.15 says - the meltwater in a hollow keeps it,
+plain snow hardly any (the sun in the sky's cube drew a glossy streak toward a low sun), a glint 4 %. `combine_1.ps` white-balances
 a snow pixel (the sun and the lights by the sun's colour, the sky term by its own) and then gives the sky term
 a blue hemisphere's cast (`DA_SNOW_SKY_TINT`, luminance 1): overcast January snow lit at about #C8C9CB, shade
 bluish, sunlit snow neutral. Its specular takes the light without the albedo's division.
@@ -385,6 +520,8 @@ bluish, sunlit snow neutral. Its specular takes the light without the albedo's d
 | L0 | 1024 (48 m) | 1024 (48 m) | 1536 (72 m) | 2048 (96 m) | 2048 (96 m) |
 | L1 | 512 (192 m) | 512 (192 m) | 1024 (384 m) | 1024 (384 m) | 1024 (384 m) |
 | grid | - | 0.25-1 m, 64 m | 0.25-1 m, 128 m | 0.125-2 m, 192 m | 0.125-2 m, 256 m |
+| shells' reach | 120 m | 160 m | 200 m | 260 m | 320 m |
+| grid in the near sun cascade | - | 28 m | 28 m | 28 m | 28 m |
 
 GPU memory: ground window 9 / 9 / 9 / 36 / 36 MB (the shore texture 4 / 16 MB of it), trails (L0 + fine +
 trod + L1) 10 / 10 / 25 / 40 / 40 MB, the level fields 15 B per m^2 of the level box (39 MB on a 1.6 km level),
@@ -403,7 +540,25 @@ ms), 0.62 ms on DirectX 11 with DLSS Balanced. The pack's texture and the contin
 January at A looking down, native 2560x1440): DirectX 12 0.07 + 0.26 + 1.19-1.23 = 1.52-1.56 ms with the first,
 ungated variant of the texture; the final one on DirectX 11 0.08 + 0.25-0.26 + 0.93-0.95 = 1.27-1.29 ms.
 
+The 1.6.0 snow round (shells, covers, trails, glints; Extreme, January, the rookie village at noon, DirectX 12
+with DLSS on the QA rig): `snow_prep` 0.08 + `snow_grid` 0.20-0.22 (the shells 0.01-0.02 of it) + `snow_layer`
+0.52-0.56 ms, the grid in the near sun cascade 0.1-0.15 ms of `sun` (`r__snow_shadow 0` against 1). After the
+code review's round (the shells' lattice to 24, the second cascade at full detail): 0.07 + 0.25 (the shells 0.05,
+their depth copy included) + 0.44-0.51 ms, the grid's shadows 0.24-0.28 ms of `sun` - about 1.1 ms of snow.
+The optimisation round, the layer's stages measured by cutting it short (`r__dbg_snow 11..16`, the same views):
+the bare pass 0.15 (its two full-screen passes, the reads and the write-back), the water's gates +0.05, the
+season and the coverage +0.12, the pack's albedo +0.09, the normal's detail +0.05, the glints +0.03; the walls'
+early out takes the layer to 0.36-0.40 ms, the shadows' cascade boxes and the second cascade's ring to within the
+noise of `sun`: 0.07 + 0.22-0.25 + 0.36-0.40 = some 0.7 ms. The same frames without snow (July) cost 2.7 ms more
+(the grass 0.83 ms alone): a winter frame is cheaper than a summer one.
+
 ## Known limits
+
+- Shells come from the collision mesh: where it simplifies a roof (a single plane over corrugated sheets) the
+  shell follows the plane; crumpled or small covers keep only the layer's cover (no thickness).
+- The prints on a roof live in the near trail window alone: the roof map is not handed down to L1, so they go
+  when the camera moves 48-96 m away (L0's window by preset) and do not come back.
+- The shells are built on the render thread when the bake is uploaded (some 0.4 s at the level's first frame).
 
 - The deferred ice sheet reaches as far as the ground window (64-128 m by preset); beyond it `water.ps` draws
   the same ice, front, snow patches and cracks, but lit by the water's forward light: a slight change of
@@ -421,14 +576,22 @@ ungated variant of the texture; the final one on DirectX 11 0.08 + 0.25-0.26 + 0
 ## QA
 
 - `r__snow_stats`: the state of the passes (layer and depth on/off, the level fields, both trail windows,
-  the last frame's stamps near/far, composite tiles, level texels, grid tiles) and the frame's snow scalars.
+  the last frame's stamps near/far, composite tiles, level texels, grid tiles), the frame's snow scalars and
+  state (fresh, settled, old, wet), and the 16 stamps nearest the camera (`stamp <i>: x z y radius kind`).
+- `r__snow_glint <0..4>` (QA, not saved): the glints' strength, 1 as built (a glint's lobe held at 10, some sixty
+  times the snow's light: brighter flickered under the temporal resolve and bloom); `r__snow_shells 0|1`,
+  `r__snow_shadow 0|1` (QA): the shells and the grid in the near sun cascades (for an A/B).
 - `r__dbg_snow` (not saved): 1 paints every path of the layer in its own colour - the grid green (yellow-green
-  where it runs on as the ice's snow over a bank), the ice sheet blue (cyan where the baked field's pond decides
+  where it runs on as the ice's snow over a bank), the shells violet, the ice sheet blue (cyan where the baked field's pond decides
   it beyond the window's water), the
   layer's snow yellow, its thin snow and wet rings orange, the lake bed magenta; whatever stays in its own
-  colours is the ground the layer left alone or the water pass's ice. 2 does the same with the grid's
-  per-pixel cuts off, so a pair of frames shows what the cuts remove.
-- `qa_snow_state` (WINTER.md): the frame and the precipitation; `qa_season_pin january`, `qa_season_year 60`
+  colours is the ground the layer left alone or the water pass's ice; in every mode over 0 the prints the roof
+  map holds are red, on a shell or not. 2 does the same with the grid's
+  per-pixel cuts off, so a pair of frames shows what the cuts remove. 11..16 cut the layer short after its stage
+  (the reads, the base and depth, the water, the season and coverage, the albedo, the normal's detail), for their
+  costs in `r__gpu_log`.
+- `qa_snow_state`, `qa_snow_shot`, `qa_snow_fire_melt`, `qa_snow_probe` (WINTER.md): the frame and the
+  precipitation, bullets, campfires' thaw, the contact gate; `qa_season_pin january`, `qa_season_year 60`
   (SEASONS.md) sweep the snow through the year.
 
 To look at: January on escape at Extreme - the road covered kerb to kerb in white-grey compacted snow with
@@ -436,7 +599,9 @@ faint wheel tracks, no bare streak on any hillside path or road cut, a grid edge
 posts and rails sticking out of the snow, no snow under the bus stop roof, no stripy bands on a slope under a
 low sun, only rare pixel glints in the sun and none in the shade; a dog running through a drift (a row of 4-5 cm
 prints, not a trench), a stalker walking (6-7 cm prints one by one), a tushkan (barely a dent); a grenade
-crater (bare floor, a slight rim); a frozen pond in January (snow over the whole ice, the bank running on to it
+crater (bare floor in steep walls, lobed); bullet channels and a load of shot; a campfire's pit dusted, then a
+bare pit in a smooth thaw bowl when lit; prints on a roof's shell; a stump, a cart and concrete blocks standing
+in full snow with no ragged holes, their own snow on top; a frozen pond in January (snow over the whole ice, the bank running on to it
 without a step) and in March (dark grey-green ice with cracks and dust, snow patches, the bank's snow meeting the
 ice along a smooth meandering line at any distance, no notch); the snow's own texture - a gentle undulation in
 the sun, a granular surface up close, the thaw's snow greyer with a little dirt in its hollows; March and November

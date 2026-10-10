@@ -386,7 +386,8 @@ instance transform identity. Each visual gets `rt_static = true` (new `bool` in 
 `0x08 TRUNK`, `0x10 DYNAMIC` (phase 4), `0x20 SKINNED` (phase 5).
 Ray masks: shadow `0x03`; AO `0x03 | 0x08` with trunk candidates accepted only below 1.2 m above
 the tree root (instance table holds the root height; the wind bend `H = max(pos.y - base, 0)` is
-negligible there, so the static pose equals the drawn one); reflections `0x3F`.
+negligible there, so the static pose equals the drawn one) and only on their front faces (an upgraded
+tree's wood lies inside its stock stand-in, its own rays leave through the back faces); reflections `0x3F`.
 **TLAS**: static instances + MU instances, built once (8-10 k instances on Cordon ≈ 3 MB); rebuilt
 per frame only from phase 4 on (dynamic instances, `PREFER_FAST_BUILD`, ~0.1 ms).
 **Build scheduling**: `level_Load` end → `da_rt_level_load()` walks the visuals (CPU only) when an

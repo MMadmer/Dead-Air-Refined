@@ -7,9 +7,15 @@
 // for the window below, plus a CPU index of the triangles that can carry snow by 16 m cells.
 // Window: N x N texels around the camera, toroidal (a texel is the world texel modulo N), moved in steps
 // of 16 texels. A strip the camera moves into is cleared, rasterised from the triangles of its cells
-// (da_ground_raster.cs: conservative, the topmost surface wins) and resolved together with an apron
-// (da_ground_resolve.cs): Htop, the opened Hg the snow lies on, the cliff taper of the snow grid and the
-// continuous quantities of the waterline (the bed under the water, the level of the water within reach).
+// (da_ground_raster.cs: conservative, the topmost surface wins; the lowest floor besides) and resolved
+// together with an apron (da_ground_resolve.cs): Htop, the base the ground's snow lies on (the opened Hg, or
+// the floor under a roof, a deck or a vehicle), the shelter such a cover gives, the cliff taper of the snow
+// grid and the continuous quantities of the waterline (the bed under the water, the level of the water
+// within reach).
+// Snow shells, once per bake: the snow lying on everything standing over the terrain - roofs, decks,
+// vehicles, crates, slabs, fence tops - as real geometry built from the collision's faces that look up
+// (da_snow_shell.vs raises them by the roof's snow, rounded off toward their open edges), so a roof's snow
+// follows its own edges at every distance instead of a height field's cells.
 
 #include "stdafx.h"
 #include "da_ground.h"
@@ -17,6 +23,9 @@
 #include "da_snow_gpu.h"
 
 #include "xrMaterialSystem/GameMtlLib.h"
+#include "xrEngine/da_snow_field.h"
+#include "xrCDB/Frustum.h"
+#include "xrCore/Threading/ParallelFor.hpp"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -45,6 +54,10 @@ constexpr WindowSize k_sizes[5] = {{512, 0.5f}, {512, 0.25f}, {512, 0.25f}, {102
 
 constexpr pcstr k_name_raw_solid = "$user$da_ground_raw_solid";
 constexpr pcstr k_name_raw_water = "$user$da_ground_raw_water";
+constexpr pcstr k_name_raw_low = "$user$da_ground_raw_low";
+constexpr pcstr k_name_terrain = "$user$da_snow_ground"; // da_snow.cpp
+constexpr pcstr k_name_walk = "$user$da_snow_walk";      // da_snow.cpp
+constexpr pcstr k_name_overhang = "$user$da_snow_overhang"; // da_snow.cpp
 constexpr pcstr k_name_top = "$user$da_ground_top";
 constexpr pcstr k_name_base = "$user$da_ground_base";
 constexpr pcstr k_name_shore = "$user$da_ground_shore";
@@ -60,6 +73,7 @@ struct Ground
     Fbox bounds{};
     const Fvector* cpu_verts = nullptr;
     const CDB::TRI* cpu_tris = nullptr;
+    xr_vector<u32> tri_flags; // the flags word of each row (material, passable, water, road)
     // Triangles that can carry snow by 16 m cells (a triangle is listed in every cell it overlaps).
     u32 cells_x = 0, cells_z = 0;
     xr_vector<u32> cell_first;
@@ -74,13 +88,26 @@ struct Ground
     u32 preset = 4;
     u32 n = 0;
     float texel = 0.f;
-    Texture raw_solid, raw_water, top, base, shore;
+    Texture raw_solid, raw_water, raw_low, top, base, shore;
+    u32 terrain_version = 0; // da_snow_level_terrain's upload the window was built with
     int org_x = 0, org_z = 0;
     bool valid = false;
 
     Compute clear, raster, resolve;
     bool shaders_tried = false;
     bool shaders_ok = false;
+
+    // snow shells: chunks of up to 65536 vertices (16-bit indices from each chunk's first vertex)
+    struct ShellChunk
+    {
+        Fbox box;
+        u32 base_vertex, vcount, first_index, tris;
+    };
+    ID3D11Buffer* shell_vb = nullptr;
+    ID3D11Buffer* shell_ib = nullptr;
+    ref_geom shell_geom;
+    xr_vector<ShellChunk> shell_chunks;
+    u32 shell_field = u32(-1);
 };
 Ground g;
 
@@ -363,6 +390,8 @@ void release_cdb()
     g.cell_tris.shrink_to_fit();
     g.tri_mark.clear();
     g.tri_mark.shrink_to_fit();
+    g.tri_flags.clear();
+    g.tri_flags.shrink_to_fit();
     g.work_cpu.clear();
     g.work_cpu.shrink_to_fit();
     g.work.destroy();
@@ -372,8 +401,9 @@ void window_placeholders()
 {
     g.raw_solid.placeholder(k_name_raw_solid, DXGI_FORMAT_R32_UINT);
     g.raw_water.placeholder(k_name_raw_water, DXGI_FORMAT_R32_UINT);
+    g.raw_low.placeholder(k_name_raw_low, DXGI_FORMAT_R32_UINT);
     g.top.placeholder(k_name_top, DXGI_FORMAT_R32_FLOAT);
-    g.base.placeholder(k_name_base, DXGI_FORMAT_R32G32_FLOAT);
+    g.base.placeholder(k_name_base, DXGI_FORMAT_R32G32B32A32_FLOAT);
     g.shore.placeholder(k_name_shore, DXGI_FORMAT_R32G32B32A32_FLOAT);
     g.n = 0;
     g.texel = 0.f;
@@ -385,8 +415,9 @@ bool window_create()
     const WindowSize& ws = k_sizes[g.preset];
     const bool ok = g.raw_solid.create(k_name_raw_solid, ws.n, ws.n, DXGI_FORMAT_R32_UINT, true) &&
         g.raw_water.create(k_name_raw_water, ws.n, ws.n, DXGI_FORMAT_R32_UINT, true) &&
+        g.raw_low.create(k_name_raw_low, ws.n, ws.n, DXGI_FORMAT_R32_UINT, true) &&
         g.top.create(k_name_top, ws.n, ws.n, DXGI_FORMAT_R32_FLOAT, true) &&
-        g.base.create(k_name_base, ws.n, ws.n, DXGI_FORMAT_R32G32_FLOAT, true) &&
+        g.base.create(k_name_base, ws.n, ws.n, DXGI_FORMAT_R32G32B32A32_FLOAT, true) &&
         g.shore.create(k_name_shore, ws.n, ws.n, DXGI_FORMAT_R32G32B32A32_FLOAT, true);
     if (!ok)
     {
@@ -406,7 +437,9 @@ bool ensure_shaders()
         return g.shaders_ok;
     g.shaders_tried = true;
     g.shaders_ok = g.clear.create("da_snow_clear", {}) && g.raster.create("da_ground_raster", {}) &&
-        g.resolve.create("da_ground_resolve", {{"s_gr_solid", k_name_raw_solid}, {"s_gr_water", k_name_raw_water}});
+        g.resolve.create("da_ground_resolve", {{"s_gr_solid", k_name_raw_solid}, {"s_gr_water", k_name_raw_water},
+                                                  {"s_gr_low", k_name_raw_low}, {"s_gr_ground", k_name_terrain},
+                                                  {"s_gr_walk", k_name_walk}, {"s_gr_overhang", k_name_overhang}});
     if (!g.shaders_ok)
         Msg("! [ground] the ground window's compute shaders are missing from the content: no snow base");
     return g.shaders_ok;
@@ -489,7 +522,7 @@ void raster_rect(CBackend& cmd, const Rect& r)
     {
         const u32 groups = (std::min(items - first, per_dispatch) + 63) / 64;
         dispatch(cmd, g.raster, groups, 1, 1, {{8, g.verts_srv}, {9, g.tris_srv}, {10, g.work.srv}},
-            {g.raw_solid.uav, g.raw_water.uav}, [&] {
+            {g.raw_solid.uav, g.raw_water.uav, g.raw_low.uav}, [&] {
                 cmd.set_c(c_rect, float(r.x0), float(r.z0), float(r.x1), float(r.z1));
                 cmd.set_c(c_win, g.texel, 1.f / g.texel, float(g.n), float(items));
                 cmd.set_c(c_base, float(first), 0.f, 0.f, 0.f);
@@ -503,13 +536,544 @@ void resolve_rect(CBackend& cmd, const Rect& r, const Rect& window)
         std::min(r.x1 + k_apron, window.x1), std::min(r.z1 + k_apron, window.z1)};
     if (o.empty())
         return;
-    static const shared_str c_rect("da_gr_rect"), c_win("da_gr_win"), c_valid("da_gr_valid");
+    static const shared_str c_rect("da_gr_rect"), c_win("da_gr_win"), c_valid("da_gr_valid"), c_level("da_gr_level"),
+        c_lvl("da_gr_lvl");
     const float radius = g.texel <= 0.26f ? 2.f : 1.f;
+    // the level's terrain tells a roof from a hill (the floor under a cover is the low map's)
+    Fvector4 level_xf, level_y;
+    const bool terrain = da_snow_level_terrain(level_xf, level_y) != 0;
     dispatch(cmd, g.resolve, u32(o.width() + 15) / 16, u32(o.height() + 15) / 16, 1, {}, {g.top.uav, g.base.uav, g.shore.uav}, [&] {
         cmd.set_c(c_rect, float(o.x0), float(o.z0), float(o.x1), float(o.z1));
         cmd.set_c(c_win, g.texel, 1.f / g.texel, float(g.n), radius);
         cmd.set_c(c_valid, float(window.x0), float(window.z0), float(window.x1), float(window.z1));
+        cmd.set_c(c_level, level_xf);
+        cmd.set_c(c_lvl, level_y.x, level_y.y, terrain ? 1.f : 0.f, 0.f);
     });
+}
+
+// ---- snow shells ------------------------------------------------------------------------------------------
+
+constexpr float k_shell_step = 0.3f;   // longest edge of a shell triangle near an open edge (m)
+constexpr float k_shell_cell = 32.f;   // metres per side of a chunk's cell
+constexpr float k_shell_ny = 0.5f;     // the steepest face snow lies on (60 degrees)
+// A face this far over the terrain carries a shell: a roof, a bus, a trailer, a container. A lower cover's top (a
+// block, a car, a stump) keeps the layer's cover on its drawn surface: a collision box stood a sheet of snow off it,
+// crumpled and torn at the edges.
+constexpr float k_shell_over = 1.8f;
+constexpr float k_shell_reach = 0.6f;  // metres from an open edge the rounding reads (the deepest snow and change)
+constexpr u32 k_shell_max_verts = 2u << 20;
+constexpr int k_shell_max_segs = 24;    // segments an edge near an open edge is cut into at most
+// An island of faces carries a shell when it is a broad, smooth surface: a roof, a slab, a tank's top. Small or
+// narrow ones (sills, fence tops, crates) and crumpled ones (a wreck's roof panels) keep the snow layer's cover
+// on their own drawn surface: a shell there showed the collision's simplifications - stacked sheets on a bus,
+// a triangle of snow in a fence's gap.
+constexpr float k_island_area = 1.5f;   // m2
+constexpr float k_island_width = 0.15f; // area over open edge length (m): about half the width
+constexpr float k_island_crease = 1.0f; // creases (folds over 20 degrees) per square metre at most
+
+struct ShellVert
+{
+    Fvector4 p; // xyz on the face, w metres to the nearest open edge (0 under a cover above)
+    Fvector4 n; // the face's normal x, z (y up and positive), the direction away from that edge x, z
+};
+
+void shells_release()
+{
+    release(g.shell_vb);
+    release(g.shell_ib);
+    g.shell_geom = nullptr;
+    g.shell_chunks.clear();
+    g.shell_field = u32(-1);
+}
+
+// A field at a world position, bilinear over the texel centres; nothing outside.
+float field_at(const SSnowField& f, const xr_vector<float>& v, float x, float z)
+{
+    const float fx = (x - f.origin.x) / f.texel - 0.5f, fz = (z - f.origin.y) / f.texel - 0.5f;
+    const int x0 = iFloor(fx), z0 = iFloor(fz);
+    const float tx = fx - float(x0), tz = fz - float(z0);
+    const auto at = [&](int xi, int zi) {
+        xi = clampr(xi, 0, int(f.dim_x) - 1);
+        zi = clampr(zi, 0, int(f.dim_z) - 1);
+        return v[size_t(zi) * f.dim_x + xi];
+    };
+    return (at(x0, z0) * (1.f - tx) + at(x0 + 1, z0) * tx) * (1.f - tz) + (at(x0, z0 + 1) * (1.f - tx) + at(x0 + 1, z0 + 1) * tx) * tz;
+}
+
+// A solid surface over p (within 60 m): a floor under a roof, a lower roof under an eave.
+bool covered_at(CDB::MODEL* model, const Fvector& p)
+{
+    CDB::COLLIDER xrc;
+    xrc.ray_query(0, model, Fvector{p.x, p.y + 0.05f, p.z}, Fvector{0.f, 1.f, 0.f}, 60.f);
+    for (size_t r = 0; r < xrc.r_count(); ++r)
+    {
+        const u32 id = u32(xrc.r_begin()[r].id);
+        if (id < g.tri_count && !(g.tri_flags[id] & (k_flag_passable | k_flag_water)))
+            return true;
+    }
+    return false;
+}
+
+// A surface the level's AI walks on at about y round xz (the 3 x 3 texels of the bake's nodes): a deck, ground.
+bool walked_at(const SSnowField& f, float x, float z, float y)
+{
+    if (f.walk.size() != size_t(f.dim_x) * f.dim_z)
+        return false;
+    const int cx = iFloor((x - f.origin.x) / f.texel), cz = iFloor((z - f.origin.y) / f.texel);
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            const int sx = cx + dx, sz = cz + dz;
+            if (sx >= 0 && sz >= 0 && sx < int(f.dim_x) && sz < int(f.dim_z) && da_snow_walkable(y, f.walk[size_t(sz) * f.dim_x + sx]))
+                return true;
+        }
+    return false;
+}
+
+// Squared distance from p to the segment ab, and its nearest point.
+float seg_dist2(const Fvector& p, const Fvector& a, const Fvector& b, Fvector& q)
+{
+    Fvector ab;
+    ab.sub(b, a);
+    const float l2 = ab.square_magnitude();
+    const float t = l2 > 1e-12f ? clampr((p.x - a.x) * ab.x + (p.y - a.y) * ab.y + (p.z - a.z) * ab.z, 0.f, l2) / l2 : 0.f;
+    q.mad(a, ab, t);
+    return p.distance_to_sqr(q);
+}
+
+void shells_build(const SSnowField& f)
+{
+    shells_release();
+    const size_t cells = size_t(f.dim_x) * f.dim_z;
+    if (!g.cpu_tris || !g.cpu_verts || f.ground.size() != cells || f.top.size() != cells || g.tri_flags.size() != g.tri_count)
+        return;
+    CDB::MODEL* model = g_pGameLevel ? g_pGameLevel->ObjectSpace.GetStaticModel() : nullptr;
+    if (!model)
+        return;
+    CTimer timer;
+    timer.Start();
+
+    // 1. The faces snow lies on over the terrain: solid, facing up under 60 degrees, every corner over the
+    //    terrain and the face's middle a cover's height over it.
+    struct Face
+    {
+        u32 v[3]; // welded corners
+        u32 cell;
+        Fvector n;
+        float area;
+    };
+    xr_vector<Face> faces;
+    xr_vector<Fvector> wv; // welded positions
+    xr_unordered_map<u64, u32> weld;
+    const auto weld_of = [&](const Fvector& p) {
+        const auto q = [](float x) { return u64(s64(std::floor(x * 100.f + 0.5f)) + (s64(1) << 20)) & 0x1FFFFFu; };
+        const u64 key = q(p.x) | (q(p.y) << 21) | (q(p.z) << 42);
+        const auto [it, added] = weld.emplace(key, u32(wv.size()));
+        if (added)
+            wv.push_back(p);
+        return it->second;
+    };
+    const u32 cx = std::max(1u, u32(std::ceil((g.bounds.vMax.x - g.bounds.vMin.x) / k_shell_cell)));
+    for (u32 i = 0; i < g.tri_count; ++i)
+    {
+        if (g.tri_flags[i] & (k_flag_passable | k_flag_water))
+            continue;
+        const CDB::TRI& t = g.cpu_tris[i];
+        const Fvector& a = g.cpu_verts[t.verts[0]];
+        const Fvector& b = g.cpu_verts[t.verts[1]];
+        const Fvector& c = g.cpu_verts[t.verts[2]];
+        Fvector n;
+        n.mknormal(a, b, c);
+        if (!(n.y >= k_shell_ny))
+            continue;
+        const Fvector m = centroid(t, g.cpu_verts);
+        const float terrain = field_at(f, f.ground, m.x, m.z);
+        if (m.y - terrain < k_shell_over)
+            continue;
+        if (a.y - field_at(f, f.ground, a.x, a.z) < 0.3f || b.y - field_at(f, f.ground, b.x, b.z) < 0.3f ||
+            c.y - field_at(f, f.ground, c.x, c.z) < 0.3f)
+            continue;
+        // a deck the AI walks is ground (the grid's, with its trails); a low block with no floor under it too (the
+        // window's resolve keeps its top as the base: a shell there stood on the grid's own snow)
+        if (walked_at(f, m.x, m.z, m.y))
+            continue;
+        // a face under another surface (a floor under a roof): the 1 m top field first, a ray to be sure
+        if (field_at(f, f.top, m.x, m.z) > m.y + 1.f && covered_at(model, m))
+            continue;
+        const u32 ix = clampr(u32((m.x - g.bounds.vMin.x) / k_shell_cell), 0u, cx - 1);
+        const u32 iz = u32(std::max((m.z - g.bounds.vMin.z) / k_shell_cell, 0.f));
+        const float area = 0.5f * Fvector().crossproduct(Fvector().sub(b, a), Fvector().sub(c, a)).magnitude();
+        const u32 wa = weld_of(a), wb = weld_of(b), wc = weld_of(c);
+        // (welded into a sliver: its zero-length edge would count as open, a pit in the middle of a roof)
+        if (wa == wb || wb == wc || wc == wa)
+            continue;
+        faces.push_back({{wa, wb, wc}, iz * cx + ix, n, area});
+    }
+    if (faces.empty())
+        return;
+    const u32 faces_all = u32(faces.size());
+
+    // 2. Islands of faces joined by their edges; only the broad, smooth ones keep their faces.
+    const auto edge_key = [](u32 a, u32 b) { return a < b ? (u64(a) << 32) | b : (u64(b) << 32) | a; };
+    xr_unordered_map<u64, std::pair<u32, u32>> edge_faces; // first face, uses
+    xr_vector<u32> parent(faces.size());
+    for (u32 i = 0; i < parent.size(); ++i)
+        parent[i] = i;
+    const auto root = [&](u32 i) {
+        while (parent[i] != i)
+            i = parent[i] = parent[parent[i]];
+        return i;
+    };
+    xr_vector<float> crease(faces.size(), 0.f);
+    for (u32 i = 0; i < faces.size(); ++i)
+    {
+        for (int e = 0; e < 3; ++e)
+        {
+            const u32 a = faces[i].v[e], b = faces[i].v[(e + 1) % 3];
+            auto [it, added] = edge_faces.emplace(edge_key(a, b), std::pair<u32, u32>{i, 0u});
+            ++it->second.second;
+            if (added)
+                continue;
+            const u32 j = it->second.first;
+            parent[root(i)] = root(j);
+            if (faces[i].n.dotproduct(faces[j].n) < 0.94f)
+                crease[i] += wv[a].distance_to(wv[b]);
+        }
+    }
+    struct Island
+    {
+        float area = 0.f, open = 0.f, crease = 0.f;
+    };
+    xr_unordered_map<u32, Island> islands;
+    for (u32 i = 0; i < faces.size(); ++i)
+    {
+        Island& is = islands[root(i)];
+        is.area += faces[i].area;
+        is.crease += crease[i];
+        for (int e = 0; e < 3; ++e)
+            if (edge_faces[edge_key(faces[i].v[e], faces[i].v[(e + 1) % 3])].second == 1)
+                is.open += wv[faces[i].v[e]].distance_to(wv[faces[i].v[(e + 1) % 3]]);
+    }
+    u32 kept_islands = 0;
+    for (auto& [r, is] : islands)
+    {
+        const bool keep = is.area >= k_island_area && is.area >= k_island_width * is.open && is.crease <= k_island_crease * is.area;
+        is.area = keep ? 1.f : 0.f;
+        kept_islands += keep ? 1 : 0;
+    }
+    {
+        xr_vector<Face> kept;
+        for (u32 i = 0; i < faces.size(); ++i)
+            if (islands[root(i)].area > 0.f)
+                kept.push_back(faces[i]);
+        faces.swap(kept);
+    }
+    if (faces.empty())
+        return;
+
+    // Open edges: used by one face only. Their segments go to a 1 m hash for the distance below.
+    xr_unordered_map<u64, u32> edge_use;
+    for (const Face& fc : faces)
+        for (int e = 0; e < 3; ++e)
+            ++edge_use[edge_key(fc.v[e], fc.v[(e + 1) % 3])];
+    xr_vector<std::pair<u32, u32>> open;
+    for (const auto& [key, uses] : edge_use)
+        if (uses == 1)
+            open.emplace_back(u32(key >> 32), u32(key & 0xFFFFFFFFu));
+    // A segment's 1 m cells within `margin` of it: sampled every half metre along it (a long diagonal edge's
+    // bounding box held tens of thousands of cells, every query running through far segments).
+    const auto hkey = [](int x, int z) { return (u64(u32(x + (1 << 20))) << 32) | u32(z + (1 << 20)); };
+    const auto hash_segments = [&](float margin, xr_unordered_map<u64, xr_vector<u32>>& hash) {
+        xr_vector<u64> keys;
+        for (u32 s = 0; s < open.size(); ++s)
+        {
+            const Fvector& a = wv[open[s].first];
+            const Fvector& b = wv[open[s].second];
+            const int steps = std::max(1, iCeil(a.distance_to(b) / 0.5f));
+            const float r = margin + 0.25f;
+            keys.clear();
+            for (int k = 0; k <= steps; ++k)
+            {
+                const Fvector p = Fvector().lerp(a, b, float(k) / float(steps));
+                for (int z = iFloor(p.z - r); z <= iFloor(p.z + r); ++z)
+                    for (int x = iFloor(p.x - r); x <= iFloor(p.x + r); ++x)
+                        keys.push_back(hkey(x, z));
+            }
+            std::sort(keys.begin(), keys.end());
+            keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+            for (const u64 key : keys)
+                hash[key].push_back(s);
+        }
+    };
+    // A T-junction (a face's edge along two of its neighbour's, the panels' seams the collision left unwelded)
+    // is no open edge: its middle lies on another open edge running the same way. Left open, the snow sank to the
+    // roof along every such seam.
+    {
+        xr_unordered_map<u64, xr_vector<u32>> along;
+        hash_segments(0.f, along);
+        xr_vector<u8> seam(open.size(), 0);
+        for (u32 s = 0; s < open.size(); ++s)
+        {
+            const Fvector& a = wv[open[s].first];
+            const Fvector& b = wv[open[s].second];
+            const Fvector mid = Fvector().add(a, b).mul(0.5f);
+            const Fvector dir = Fvector().sub(b, a).normalize_safe();
+            const auto it = along.find(hkey(iFloor(mid.x), iFloor(mid.z)));
+            if (it == along.end())
+                continue;
+            for (const u32 t : it->second)
+            {
+                if (t == s)
+                    continue;
+                const Fvector& c = wv[open[t].first];
+                const Fvector& e = wv[open[t].second];
+                Fvector q;
+                if (seg_dist2(mid, c, e, q) < 1e-4f && _abs(dir.dotproduct(Fvector().sub(e, c).normalize_safe())) > 0.999f)
+                {
+                    seam[s] = 1;
+                    break;
+                }
+            }
+        }
+        u32 kept = 0;
+        for (u32 s = 0; s < open.size(); ++s)
+            if (!seam[s])
+                open[kept++] = open[s];
+        open.resize(kept);
+    }
+    xr_unordered_map<u64, xr_vector<u32>> seg_hash;
+    hash_segments(k_shell_reach, seg_hash);
+
+    // The distance from p to the nearest open edge (capped at the reach), and the way away from it.
+    const auto edge_dist = [&](const Fvector& p, Fvector* away) {
+        float best = k_shell_reach * k_shell_reach;
+        if (away)
+            away->set(0.f, 0.f, 0.f);
+        const auto it = seg_hash.find(hkey(iFloor(p.x), iFloor(p.z)));
+        if (it != seg_hash.end())
+        {
+            for (const u32 s : it->second)
+            {
+                Fvector q;
+                const float d2 = seg_dist2(p, wv[open[s].first], wv[open[s].second], q);
+                if (d2 < best)
+                {
+                    best = d2;
+                    if (away)
+                        away->set(p.x - q.x, 0.f, p.z - q.z);
+                }
+            }
+        }
+        return _sqrt(best);
+    };
+
+    // 3. Each face cut into triangles no longer than the step near its open edges (the rounding lives there;
+    //    a face far from every open edge stays whole: its snow is flat). An edge's points depend on the edge
+    //    alone (its count from its length and its distance to an open edge, its points from its two corners),
+    //    and a row of the face's own lattice snaps onto them, so faces sharing an edge share its vertices: no
+    //    cracks. By cells, in chunks.
+    std::sort(faces.begin(), faces.end(), [](const Face& a, const Face& b) { return a.cell < b.cell; });
+    xr_vector<ShellVert> verts;
+    xr_vector<u16> indices;
+    xr_vector<Fvector> nsum;
+    // A vertex's lattice key; corners' and edge points' normals sum over every face round them, whichever chunk
+    // drew it (a seam between chunks keeps one normal and one height: no crack along a ridge or a valley).
+    xr_vector<u64> vkey;
+    xr_unordered_map<u64, Fvector> shared_n;
+    xr_unordered_map<u64, u16> local;
+    Ground::ShellChunk chunk{};
+    const auto chunk_begin = [&] {
+        chunk = {};
+        chunk.box.invalidate();
+        chunk.base_vertex = u32(verts.size());
+        chunk.first_index = u32(indices.size());
+        local.clear();
+    };
+    const auto chunk_end = [&] {
+        chunk.vcount = u32(verts.size()) - chunk.base_vertex;
+        chunk.tris = (u32(indices.size()) - chunk.first_index) / 3;
+        if (chunk.tris)
+            g.shell_chunks.push_back(chunk);
+    };
+    chunk_begin();
+    u32 cell = faces.front().cell;
+    u64 interior = 0;
+    u32 dropped = 0, capped = 0;
+    for (const Face& fc : faces)
+    {
+        const Fvector& A = wv[fc.v[0]];
+        const Fvector& B = wv[fc.v[1]];
+        const Fvector& C = wv[fc.v[2]];
+        const auto count = [&](const Fvector& p, const Fvector& q) {
+            const Fvector mid = Fvector().add(p, q).mul(0.5f);
+            const bool close = std::min(edge_dist(p, nullptr), std::min(edge_dist(q, nullptr), edge_dist(mid, nullptr))) < k_shell_reach;
+            if (!close)
+                return 1;
+            const int want = iCeil(p.distance_to(q) / k_shell_step);
+            capped += want > k_shell_max_segs ? 1 : 0;
+            return clampr(want, 1, k_shell_max_segs);
+        };
+        const int nab = count(A, B), nbc = count(B, C), nca = count(C, A);
+        const int nn = std::max(nab, std::max(nbc, nca));
+        // the vertices this face may add: the whole lattice at most
+        if (fc.cell != cell || verts.size() - chunk.base_vertex + size_t((nn + 1) * (nn + 2) / 2) > 65535)
+        {
+            chunk_end();
+            chunk_begin();
+            cell = fc.cell;
+        }
+        if (verts.size() + size_t((nn + 1) * (nn + 2) / 2) > k_shell_max_verts)
+        {
+            ++dropped;
+            continue;
+        }
+        Fvector fn;
+        fn.mknormal(A, B, C);
+        const float area = Fvector().crossproduct(Fvector().sub(B, A), Fvector().sub(C, A)).magnitude();
+        // a lattice point's key and position: corners by their welded index, edge points by their edge's
+        // corners and step, inner points by the face
+        const auto edge_point = [&](u32 ia, u32 ib, const Fvector& pa, const Fvector& pb, int ne, float t, Fvector& p) {
+            int k = iFloor(t * float(ne) + 0.5f);
+            if (k == 0)
+            {
+                p = pa;
+                return (u64(1) << 62) | ia;
+            }
+            if (k == ne)
+            {
+                p = pb;
+                return (u64(1) << 62) | ib;
+            }
+            // in the edge's own order: both faces on it compute the same point to the last bit
+            const bool flip = ia > ib;
+            if (flip)
+            {
+                std::swap(ia, ib);
+                k = ne - k;
+            }
+            p.lerp(flip ? pb : pa, flip ? pa : pb, float(k) / float(ne));
+            return (u64(2) << 62) | (u64(ia & 0xFFFFFFu) << 32) | (u64(ib & 0xFFFFFFu) << 8) | u64(k);
+        };
+        const auto vertex = [&](int i, int j) -> u16 {
+            Fvector p;
+            u64 key;
+            if (i == 0 && j == 0)
+                p = A, key = (u64(1) << 62) | fc.v[0];
+            else if (j == 0)
+                key = edge_point(fc.v[0], fc.v[1], A, B, nab, float(i) / float(nn), p);
+            else if (i == 0)
+                key = edge_point(fc.v[2], fc.v[0], C, A, nca, 1.f - float(j) / float(nn), p);
+            else if (i + j == nn)
+                key = edge_point(fc.v[1], fc.v[2], B, C, nbc, float(j) / float(nn), p);
+            else
+            {
+                p.set(A).mad(Fvector().sub(B, A), float(i) / float(nn)).mad(Fvector().sub(C, A), float(j) / float(nn));
+                key = (u64(3) << 62) | ++interior;
+            }
+            const auto [it, added] = local.emplace(key, u16(verts.size() - chunk.base_vertex));
+            if (added)
+            {
+                verts.push_back({{p.x, p.y, p.z, 0.f}, {0.f, 0.f, 0.f, 0.f}});
+                nsum.push_back({0.f, 0.f, 0.f});
+                vkey.push_back(key);
+                chunk.box.modify(p);
+            }
+            nsum[chunk.base_vertex + it->second].mad(fn, area);
+            if ((key >> 62) != 3)
+                shared_n[key].mad(fn, area);
+            return it->second;
+        };
+        // the lattice rows, kept in the face's winding
+        xr_vector<u16> row0, row1;
+        for (int j = 0; j <= nn; ++j)
+        {
+            row1.clear();
+            for (int i = 0; i + j <= nn; ++i)
+                row1.push_back(vertex(i, j));
+            if (j)
+            {
+                for (int i = 0; i + j <= nn; ++i)
+                {
+                    const u16 t0[3] = {row0[i], row0[i + 1], row1[i]};
+                    if (t0[0] != t0[1] && t0[1] != t0[2] && t0[0] != t0[2])
+                        indices.insert(indices.end(), {t0[0], t0[1], t0[2]});
+                    if (i + 1 < int(row1.size()))
+                    {
+                        const u16 t1[3] = {row0[i + 1], row1[i + 1], row1[i]};
+                        if (t1[0] != t1[1] && t1[1] != t1[2] && t1[0] != t1[2])
+                            indices.insert(indices.end(), {t1[0], t1[1], t1[2]});
+                    }
+                }
+            }
+            row0.swap(row1);
+        }
+    }
+    chunk_end();
+
+    // 4. Per vertex: the normal, the distance to the nearest open edge and the way away from it; a vertex
+    //    under another surface (a lower roof under an eave, a balcony under the roof) is an edge itself.
+    std::atomic<u32> covered{0};
+    xr_parallel_for(TaskRange<size_t>(0, verts.size(), 1024), [&](const TaskRange<size_t>& range) {
+        for (size_t v = range.begin(); v != range.end(); ++v)
+        {
+            ShellVert& sv = verts[v];
+            const auto shared = (vkey[v] >> 62) != 3 ? shared_n.find(vkey[v]) : shared_n.end();
+            Fvector n = shared != shared_n.end() ? shared->second : nsum[v];
+            n.normalize_safe();
+            if (n.y < 0.2f)
+                n.set(0.f, 1.f, 0.f);
+            const Fvector p{sv.p.x, sv.p.y, sv.p.z};
+            Fvector away;
+            float dist = edge_dist(p, &away);
+            if (away.square_magnitude() > 1e-10f)
+                away.normalize();
+            // the 1 m top field first: a ray only where something may lie over the vertex; a covered vertex is an
+            // edge with no way away (its slope would lean toward a far edge)
+            if (field_at(f, f.top, p.x, p.z) > p.y + 1.f && covered_at(model, p))
+            {
+                dist = 0.f;
+                away.set(0.f, 0.f, 0.f);
+                ++covered;
+            }
+            sv.p.w = dist;
+            sv.n.set(n.x, n.z, away.x, away.z);
+        }
+    });
+
+    // 5. The buffers.
+    if (!verts.empty() && !indices.empty())
+    {
+        D3D11_BUFFER_DESC desc{};
+        desc.Usage = D3D11_USAGE_IMMUTABLE;
+        desc.ByteWidth = UINT(verts.size() * sizeof(ShellVert));
+        desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        const D3D11_SUBRESOURCE_DATA vdata{verts.data(), 0, 0};
+        D3D11_BUFFER_DESC idesc = desc;
+        idesc.ByteWidth = UINT(indices.size() * sizeof(u16));
+        idesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        const D3D11_SUBRESOURCE_DATA idata{indices.data(), 0, 0};
+        if (FAILED(HW.pDevice->CreateBuffer(&desc, &vdata, &g.shell_vb)) || FAILED(HW.pDevice->CreateBuffer(&idesc, &idata, &g.shell_ib)))
+        {
+            Msg("! [ground] the snow shells (%u vertices) could not be uploaded", u32(verts.size()));
+            shells_release();
+            return;
+        }
+        static const VertexElement decl[] = {
+            {0, 0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+            {0, 16, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+            D3DDECL_END()};
+        g.shell_geom.create(decl, g.shell_vb, g.shell_ib);
+    }
+    Msg("* [ground] snow shells: %u of %u faces in %u of %u islands, %u open edges, %u vertices (%u under a cover), %u "
+        "triangles in %u chunks, %.1f MB, %.0f ms",
+        u32(faces.size()), faces_all, kept_islands, u32(islands.size()), u32(open.size()), u32(verts.size()), covered.load(),
+        u32(indices.size() / 3), u32(g.shell_chunks.size()),
+        (verts.size() * sizeof(ShellVert) + indices.size() * 2) / (1024.f * 1024.f), timer.GetElapsed_sec() * 1000.f);
+    if (capped)
+        Msg("* [ground] snow shells: %u edges near an open edge cut at %d segments", capped, k_shell_max_segs);
+    if (dropped)
+        Msg("! [ground] snow shells: %u faces past the %u vertices' budget have no shell (the layer's cover there)", dropped,
+            k_shell_max_verts);
 }
 } // namespace
 
@@ -541,6 +1105,9 @@ void da_ground_level_load()
     g.tri_count = u32(model->get_tris_count());
     g.cpu_verts = verts;
     g.cpu_tris = model->get_tris();
+    g.tri_flags.resize(g.tri_count);
+    for (u32 i = 0; i < g.tri_count; ++i)
+        g.tri_flags[i] = rows[size_t(i) * 4 + 3];
     build_index(rows);
     window_create();
     Msg("* [ground] collision mesh: %u triangles, %u vertices, %.1f MB, index %u entries, %.0f ms", g.tri_count,
@@ -550,6 +1117,7 @@ void da_ground_level_load()
 
 void da_ground_level_unload()
 {
+    shells_release();
     release_cdb();
     window_placeholders();
 }
@@ -565,9 +1133,19 @@ void da_ground_frame_prepare(CBackend& cmd_list)
         g.valid = false;
         return;
     }
+    // (the bake may come before the collision mesh: the shells wait for both)
+    da_ground_shells_sync();
     const WindowSize& ws = k_sizes[g.preset];
     if ((ws.n != g.n || ws.texel != g.texel || !g.base.live()) && !window_create())
         return;
+    // A new terrain upload (a bake): every texel's cover test changes.
+    Fvector4 level_xf, level_y;
+    const u32 terrain = da_snow_level_terrain(level_xf, level_y);
+    if (terrain != g.terrain_version)
+    {
+        g.terrain_version = terrain;
+        g.valid = false;
+    }
 
     const Fvector& cam = Device.vCameraPosition;
     const int half = int(g.n) / 2;
@@ -587,10 +1165,50 @@ void da_ground_frame_prepare(CBackend& cmd_list)
     {
         clear_rect(cmd_list, g.raw_solid, strips[i]);
         clear_rect(cmd_list, g.raw_water, strips[i]);
+        clear_rect(cmd_list, g.raw_low, strips[i]);
         raster_rect(cmd_list, strips[i]);
     }
     for (u32 i = 0; i < count; ++i)
         resolve_rect(cmd_list, strips[i], window);
+}
+
+void da_ground_shells_sync()
+{
+    const u32 stamp = da_snow_field_stamp();
+    if (stamp == g.shell_field)
+        return;
+    const SSnowField* f = da_snow_field();
+    if (!f || !g.tris)
+        return;
+    shells_build(*f);
+    g.shell_field = stamp;
+}
+
+u32 da_ground_shells_render(CBackend& cmd_list, float reach)
+{
+    if (!g.shell_geom || g.shell_chunks.empty())
+        return 0;
+    const Fvector& cam = Device.vCameraPosition;
+    CFrustum frustum;
+    frustum.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB | FRUSTUM_P_FAR);
+    cmd_list.set_Geometry(g.shell_geom);
+    u32 drawn = 0;
+    for (const Ground::ShellChunk& c : g.shell_chunks)
+    {
+        // the roof's snow raises a chunk by half a metre at most
+        Fbox box = c.box;
+        box.vMax.y += 0.6f;
+        const float dx = std::max(std::max(box.vMin.x - cam.x, cam.x - box.vMax.x), 0.f);
+        const float dz = std::max(std::max(box.vMin.z - cam.z, cam.z - box.vMax.z), 0.f);
+        if (dx * dx + dz * dz > reach * reach)
+            continue;
+        u32 mask = FRUSTUM_P_LRTB | FRUSTUM_P_FAR;
+        if (frustum.testAABB(&box.vMin.x, mask) == fcvNone)
+            continue;
+        cmd_list.Render(D3DPT_TRIANGLELIST, c.base_vertex, 0, c.vcount, c.first_index, c.tris);
+        ++drawn;
+    }
+    return drawn;
 }
 
 bool da_ground_cdb(DaGroundCdb& out)
@@ -633,8 +1251,10 @@ void da_ground_apply_preset(u32 preset) { g.preset = std::min(preset, 4u); }
 void da_ground_destroy()
 {
     release_cdb();
+    shells_release();
     g.raw_solid.destroy();
     g.raw_water.destroy();
+    g.raw_low.destroy();
     g.top.destroy();
     g.base.destroy();
     g.shore.destroy();

@@ -81,7 +81,7 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 				row += wx[i] * gs_lv[(s0.y + j) * DA_SN_LV + s0.x + i];
 			D += wz[j] * row;
 		}
-		D = da_sn_shape(max(D, 0.0), xz, 1.0, patchy);
+		D = da_sn_shape(max(D, 0.0), xz, 1.0, patchy) * (1.0 - da_sn_shelter(xz));
 
 		// the road's share of the texel at the true point, bilinear (the compacted residual of a print there)
 		const float2 pr = da_sn_level_coord(xz);
@@ -94,15 +94,32 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		const int2 c = int2(tid.xy) + DA_SN_AP;
 		float surf = da_sn_resolve(D, gs_l0[c.y * DA_SN_GS + c.x], share);
 
-		// Rim: the little snow a print pushes aside (most of it is compacted, not displaced), from the
-		// mean depression of the 5 x 5 around; a few centimetres at most.
-		const float dep = D - surf;
+		// The depression half smoothed over the 3 x 3 (1 2 1) on a print's walls: the overlapping stamps' bowls left a
+		// staircase of texels along a trail's edge and terraces down its walls. Not at its floor (no neighbour deeper):
+		// a rat's or a tushkan's print a texel or two wide lost a third of its depth. Then the rim: the snow a print
+		// or a furrow pushes aside
+		// (most of a print is packed, a ploughed furrow displaces more), from the mean depression of the 5 x 5
+		// around; a quarter of the depth and 4 cm at most.
 		float sum = 0.0;
+		float dep = 0.0;
+		float deeper = 0.0;
 		[unroll] for (int jj = -DA_SN_AP; jj <= DA_SN_AP; ++jj)
+		{
 			[unroll] for (int ii = -DA_SN_AP; ii <= DA_SN_AP; ++ii)
-				sum += D - da_sn_resolve(D, gs_l0[(c.y + jj) * DA_SN_GS + c.x + ii], share);
-		const float rim = min(min(0.2 * max(sum * (1.0 / 25.0) - dep, 0.0), 0.25 * D), 0.03);
-		surf = min(surf + rim, da_snow_misc.x);
+			{
+				const float dj = D - da_sn_resolve(D, gs_l0[(c.y + jj) * DA_SN_GS + c.x + ii], share);
+				sum += dj;
+				[flatten] if (abs(jj) <= 1 && abs(ii) <= 1)
+				{
+					dep += dj * float((2 - abs(jj)) * (2 - abs(ii)));
+					deeper = max(deeper, dj);
+				}
+			}
+		}
+		const float raw = D - surf;
+		dep = (deeper > raw + 0.002) ? 0.5 * (dep * (1.0 / 16.0) + raw) : raw;
+		const float rim = min(min(0.25 * max(sum * (1.0 / 25.0) - dep, 0.0), 0.25 * D), 0.04);
+		surf = min(max(D - dep, 0.0) + rim, da_snow_misc.x);
 
 		const int2 addr = da_sn_wrap(t, n);
 		const bool fresh = da_sn_comp.z > 0.5 || da_sn_in_rect(t, da_sn_fresh0) || da_sn_in_rect(t, da_sn_fresh1);

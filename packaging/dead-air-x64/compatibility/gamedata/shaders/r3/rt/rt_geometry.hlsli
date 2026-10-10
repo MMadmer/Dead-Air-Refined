@@ -39,6 +39,8 @@ struct RtInstance
 
 #define RT_INST_TRUNK			0x1u		// accepted by occlusion rays only near the root
 #define RT_INST_TREE			0x2u		// hemisphere from c_scale / c_bias
+#define RT_INST_SEASON			0x4u		// a vegetation stand-in's crown: follows its species' day (bits 8..15 its
+											// tables row + 1)
 
 #define RT_TC_NONE				0u
 #define RT_TC_SHORT2_FRAC		1u			// level: ( s + T.w, B.w ) * 32 / 32768
@@ -187,13 +189,77 @@ float rt_cone_lod( RtTriangle t, float3x4 o2w, float cone_w, uint2 tex_size )
 	return max( log2( max( cone_w * texels_per_metre, 1e-6f ) ), 0.0f );
 }
 
+// ---- the vegetation's season ----------------------------------------------------------------
+// A stand-in crown (a replaced bush or tree in the scene for its procedural plant) follows its species' day: its
+// cards keep the share of their leaf clumps the day has on, in the species' mean leaf colour of the day over the
+// card's own detail (da_veg_rt_tables: the procedural plants' tables, r3\da_shrub_common.h shrub_prof, shrub_seas).
+
+bool rt_veg_on( RtInstance inst, RtView v )
+{
+	return ( inst.flags & RT_INST_SEASON ) != 0u && v.veg.x != 0xFFFFFFFFu;
+}
+
+float4 rt_veg_t4( RtView v, uint f4 )
+{
+	return asfloat( rt_buffers[ NonUniformResourceIndex( v.veg.x ) ].Load4( f4 * 16u ) );
+}
+
+float4 rt_veg_seas( RtInstance inst, RtView v, uint r )
+{
+	return rt_veg_t4( v, v.veg.y + ( ( ( inst.flags >> 8 ) & 0xFFu ) - 1u ) * ( v.veg.z & 0xFFFFu ) + r );
+}
+
+float4 rt_veg_prof( RtInstance inst, RtView v, uint r )
+{
+	return rt_veg_t4( v, ( ( ( inst.flags >> 8 ) & 0xFFu ) - 1u ) * ( v.veg.z >> 16 ) + r );
+}
+
+// The share of the crown's leaves on today: out, not fallen, grown.
+float rt_veg_leaves( RtInstance inst, RtView v )
+{
+	[branch] if ( !rt_veg_on( inst, v ) )
+		return 1.0f;
+	const float4 K0 = rt_veg_seas( inst, v, 0u );
+	return saturate( K0.x ) * ( 1.0f - saturate( K0.w ) ) * lerp( 0.4f, 1.0f, saturate( K0.y ) );
+}
+
+// The species' mean leaf colour today. Keep in sync with r3\da_shrub_common.h shrub_leaf_colour_mean (and its
+// shrub_live_green): the DirectX 11 shrub shaders must not change for this.
+float3 rt_veg_colour( RtInstance inst, RtView v )
+{
+	const float4 K0 = rt_veg_seas( inst, v, 0u ), K2 = rt_veg_seas( inst, v, 2u );
+	const float4 P6 = rt_veg_prof( inst, v, 6u );
+	const float3 summer = rt_veg_seas( inst, v, 4u ).rgb;
+	const float y = dot( summer, float3( 0.2126f, 0.7152f, 0.0722f ) );
+	const float3 live = max( y + ( summer - y ) * 1.08f, 0.0f );
+	const float3 c0 = lerp( rt_veg_seas( inst, v, 3u ).rgb, live, saturate( ( K0.x - 0.5f ) * 4.0f ) );
+	const float spread = max( K2.z, 0.02f );
+	const float a = saturate( ( K0.z - 0.5f * ( 1.0f - spread ) ) / spread );
+	const float3 autumn = lerp( rt_veg_seas( inst, v, 5u ).rgb, rt_veg_seas( inst, v, 6u ).rgb, saturate( P6.x ) );
+	const float3 c = lerp( c0, autumn, smoothstep( 0.0f, 0.6f, a ) );
+	return max( lerp( c, rt_veg_seas( inst, v, 7u ).rgb, smoothstep( 1.0f - 0.4f * P6.w, 1.0f, a ) * P6.w ), 0.0f );
+}
+
+// A hash of an instance, a triangle and a cell of the card (0..1): the same for every ray and frame.
+float rt_hash3( uint a, uint b, uint2 c )
+{
+	uint h = a * 0x9E3779B1u ^ b * 0x85EBCA77u ^ c.x * 0xC2B2AE3Du ^ c.y * 0x27D4EB2Fu;
+	h ^= h >> 15;
+	h *= 0x2C1B3C6Du;
+	h ^= h >> 12;
+	h *= 0x297A2D39u;
+	h ^= h >> 15;
+	return float( h >> 8 ) * ( 1.0f / 16777216.0f );
+}
+
 // ---- the alpha test --------------------------------------------------------------------------
 
 // A candidate on a non-opaque triangle: true when the texel there is solid against the reference the
 // G-buffer clips with (def_aref = da_aref_u, which the presets move). Opaque geometry that reaches the
 // loop (trunks, forced non-opaque for the occlusion rule) always is. A cut-out whose mask has no
 // texture here is not there at all: taken as solid it would be a whole card, a flat grey rectangle.
-bool rt_alpha_solid( uint instance_id, uint geometry_index, uint primitive, float2 bary, float3x4 o2w, float cone_w, RtView v )
+bool rt_alpha_solid( uint instance_id, uint instance_index, uint geometry_index, uint primitive, float2 bary, float3x4 o2w,
+	float cone_w, RtView v )
 {
 	const RtGeometry g = rt_geometry_of( instance_id, geometry_index );
 	[branch] if ( !( g.flags & RT_GEOM_ALPHA ) )
@@ -207,7 +273,13 @@ bool rt_alpha_solid( uint instance_id, uint geometry_index, uint primitive, floa
 	uint tw, th, levels;
 	rt_textures[ NonUniformResourceIndex( tex ) ].GetDimensions( 0, tw, th, levels );
 	const float lod = min( rt_cone_lod( t, o2w, cone_w, uint2( tw, th ) ), float( levels ) - 1.0f );
-	return rt_textures[ NonUniformResourceIndex( tex ) ].SampleLevel( rt_linear_wrap, tc, lod ).a >= v.frame.z;
+	[branch] if ( rt_textures[ NonUniformResourceIndex( tex ) ].SampleLevel( rt_linear_wrap, tc, lod ).a < v.frame.z )
+		return false;
+	// A stand-in crown's leaves off today: whole clumps of a 32nd of the card drop out together.
+	const RtInstance inst = rt_instance_of( instance_index, v );
+	[branch] if ( rt_veg_on( inst, v ) )
+		return rt_hash3( instance_index, primitive, uint2( frac( tc ) * 32.0f ) ) < rt_veg_leaves( inst, v );
+	return true;
 }
 
 #endif	//	rt_geometry_hlsli_included

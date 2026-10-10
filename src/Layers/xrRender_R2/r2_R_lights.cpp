@@ -1,5 +1,7 @@
 #include "stdafx.h"
 
+#include "Layers/xrRender/da_veg.h"
+
 namespace xray::render::RENDER_NAMESPACE
 {
 // One dynamic-object query for the whole light phase instead of one per shadowed light. Every
@@ -35,6 +37,16 @@ void CRender::render_lights(light_Package& LP)
             *output++ = L;
         }
         source.erase(output, source.end());
+    }
+
+    // The procedural shrubs and trees in the shadowed lights' reach build their chunks now, the lights' transforms known
+    // and none drawn yet (da_veg.h).
+    {
+        static xr_vector<DaVegLight> shrub_lights;
+        shrub_lights.clear();
+        for (light* L : LP.v_shadowed)
+            shrub_lights.push_back({L, L->position, L->direction, L->range, L->cone, L->X.S.size, L->X.S.combine});
+        da_veg_lights_prepare(get_imm_context().cmd_list, shrub_lights.data(), u32(shrub_lights.size()));
     }
 
     s_light_dynamic_casters.clear();
@@ -178,7 +190,9 @@ void CRender::render_lights(light_Package& LP)
             const bool light_near_enough = L->position.distance_to_sqr(Device.vCameraPosition) < (40.f * 40.f);
             const bool renderDetails = ps_r__light_details && ps_r_sun_details >= detail_shadow_high && Details &&
                 light_near_enough && Details->HasRenderableDetails();
-            if (bNormal || bSpecial || renderDetails)
+            // The procedural shrubs cast into the lights near the camera as the stock bushes did.
+            const bool renderShrubs = da_veg_light_casts(L);
+            if (bNormal || bSpecial || renderDetails || renderShrubs)
             {
                 PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
 
@@ -191,6 +205,8 @@ void CRender::render_lights(light_Package& LP)
                 dsgraph.render_graph(0);
                 if (renderDetails)
                     Details->Render(dsgraph.cmd_list, false, &dsgraph.o.view_frustum);
+                if (renderShrubs)
+                    da_veg_render_light(dsgraph.cmd_list, L);
                 L->X.S.transluent = FALSE;
                 if (bSpecial)
                 {

@@ -34,6 +34,7 @@
 #include "Layers/xrRender/SkeletonCustom.h"
 #pragma warning(pop)
 #include "Layers/xrRender/r__sector.h"
+#include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #include "xrCore/Animation/Bone.hpp"
 #include "xrCore/FMesh.hpp"
@@ -85,7 +86,8 @@ static_assert(sizeof(DaRtInstanceRecord) == 16);
 
 constexpr u32 kNone = ~0u;
 constexpr u32 kGeomAlpha = 0x1, kGeomEmissive = 0x2, kGeomAbsolute = 0x4;
-constexpr u32 kInstTrunk = 0x1, kInstTree = 0x2;
+// kInstSeason: a vegetation stand-in's crown following its species' day (bits 8..15 its tables row + 1).
+constexpr u32 kInstTrunk = 0x1, kInstTree = 0x2, kInstSeason = 0x4;
 constexpr u32 kInstanceDynamic = 0x800000u;
 enum : u8
 {
@@ -434,6 +436,7 @@ struct DaRtTreeItem
     DaRtMesh mesh;
     u8 mask{};
     bool trunk{};
+    u16 season_row{}; // a stand-in crown's vegetation tables row + 1 (0: none)
 };
 
 struct DaRtBlas
@@ -656,7 +659,10 @@ ID3D12Resource* da_rt_upload_buffer(DaRtSection& section, const void* data, u64 
 
 // ---- collection ---------------------------------------------------------------------------------
 
-void da_rt_collect_visual(dxRender_Visual* visual, std::unordered_set<dxRender_Visual*>& visited)
+// (stand_in: a replaced bush or tree standing in for its procedural plant - its swaying parts alone, never a shadow
+// ray's; veg: what it stands for, its crown's cards then follow the species' day.)
+void da_rt_collect_visual(dxRender_Visual* visual, std::unordered_set<dxRender_Visual*>& visited, bool stand_in = false,
+    const DaVegStandIn* veg = nullptr)
 {
     if (!visual || !visited.insert(visual).second)
         return;
@@ -665,11 +671,13 @@ void da_rt_collect_visual(dxRender_Visual* visual, std::unordered_set<dxRender_V
     case MT_HIERRARHY:
     case MT_LOD: // the billboard facets are the FLOD itself; its children are the models
         for (dxRender_Visual* child : static_cast<FHierrarhyVisual*>(visual)->children)
-            da_rt_collect_visual(child, visited);
+            da_rt_collect_visual(child, visited, stand_in, veg);
         return;
     case MT_NORMAL:
     case MT_PROGRESSIVE:
     {
+        if (stand_in)
+            return;
         ShaderElement* element = da_rt_scene_element(visual);
         auto* mesh_visual = dynamic_cast<Fvisual*>(visual);
         if (!element || !mesh_visual)
@@ -700,7 +708,7 @@ void da_rt_collect_visual(dxRender_Visual* visual, std::unordered_set<dxRender_V
         item.visual = tree;
         if (!da_rt_tree_mesh(tree, element, item.mesh) || !da_rt_mask_known(item.mesh))
             return;
-        if (tree->rigid())
+        if (tree->rigid() && !stand_in)
         {
             // Stumps, logs, props: the wind never moves them, so they are the static world.
             if (!da_rt_casts_sun_shadow(visual))
@@ -718,6 +726,10 @@ void da_rt_collect_visual(dxRender_Visual* visual, std::unordered_set<dxRender_V
             item.mask = kMaskTrunk;
             item.trunk = true;
         }
+        // A living plant's crown cards follow its species' day; its trunk, a dead plant's cards and a Red Forest
+        // pine's red ones keep their look.
+        if (stand_in && veg && !veg->dead && (item.mesh.flags & kGeomAlpha))
+            item.season_row = u16(veg->species + 1);
         g_scene.trees.push_back(std::move(item));
         return;
     }
@@ -750,6 +762,16 @@ void da_rt_collect()
         da_rt_collect_visual(sector->root(), visited);
         // The vegetation the GPU-driven path took out of the hierarchies (PLAN.md C16).
         da_gpu_trees_for_each_node(sector, [&](dxRender_Visual* node) { da_rt_collect_visual(node, visited); });
+    }
+    // The stock bushes the procedural shrubs replace stand in for them (docs/dead-air/SHRUBS.md): the shrubs live in
+    // the frame's buffers, in no acceleration structure, and the water and puddles reflected no bush. Their crowns are
+    // foliage, which the occlusion and shadow rays skip as they skip every swaying crown.
+    xr_vector<dxRender_Visual*> stand_ins;
+    da_veg_replaced_visuals(stand_ins);
+    for (dxRender_Visual* v : stand_ins)
+    {
+        DaVegStandIn info;
+        da_rt_collect_visual(v, visited, true, da_veg_stand_in(v, info) ? &info : nullptr);
     }
     g_scene.collected = true;
     // GD's shadow-map cull honours the flags of the static casters it draws.
@@ -1120,8 +1142,8 @@ bool da_rt_scene_build()
         // A trunk reaches the occlusion rays' candidate loop, which accepts it near the root only.
         da_rt_instance(d, item.visual->world(), blas.first_record, item.mask,
             cull_none | (item.trunk ? D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE : 0u), 0);
-        g_scene.instance_records.push_back(
-            {item.visual->world().c.y, colors.scale.w, colors.bias.w, kInstTree | (item.trunk ? kInstTrunk : 0u)});
+        g_scene.instance_records.push_back({item.visual->world().c.y, colors.scale.w, colors.bias.w,
+            kInstTree | (item.trunk ? kInstTrunk : 0u) | (item.season_row ? kInstSeason | (u32(item.season_row) << 8) : 0u)});
         instance_blas.push_back(tree_blas[i]);
     }
     // Only the structures an instance names are built (the budget may have left trees out).
@@ -1277,6 +1299,18 @@ bool da_rt_scene_build()
     g_scene.binding.tables[3] = 0;
     g_scene.binding.static_instances = u32(g_scene.instances.size());
     g_scene.binding.static_texture_base = g_scene.texture_base;
+    // The vegetation's species and season tables, read by the stand-ins' crowns (rt_geometry.hlsli rt_veg_*): its
+    // slot keeps the buffer in the tracked set, so every native pass requires its read state after the day's copy.
+    {
+        ID3D11Buffer* veg = nullptr;
+        u32 prof = 0, seas_first = 0, seas = 0;
+        float snow = 0.f;
+        const bool on = da_veg_rt_tables(veg, prof, seas_first, seas, snow);
+        g_scene.binding.veg_tables = on ? da_rt_bindless_buffer(veg) : kNone;
+        g_scene.binding.veg_prof = prof;
+        g_scene.binding.veg_seas = seas_first;
+        g_scene.binding.veg_rows = seas;
+    }
     u64 triangles = 0;
     for (const DaRtMesh& m : g_scene.meshes)
         triangles += m.index_count / 3;

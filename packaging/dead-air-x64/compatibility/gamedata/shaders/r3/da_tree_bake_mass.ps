@@ -1,0 +1,51 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The billboards' bake, a tree's clusters and blobs (da_trees_bake.cpp): the far tiers' G-buffer pixel shader
+// (da_shrub_cluster.ps, included whole, so the bake follows it) with what it writes taken as the bake's targets - the
+// albedo, the pixel covered, the normal (the bake camera's view space), the hemisphere light, and whether the cell is
+// a leaf and its translucency (the material's code taken before it is dithered). The part's sunlit side is not taken
+// back here: the billboard shader takes it under the frame's sun (da_tree_lod.ps; a mean over the sun's headings left
+// the billboards' lit side a fifth lighter and warmer than the blobs' at a low sun).
+
+#include "common.h"
+#include "da_tree_bake.h"
+
+static float4	tree_bake_n = 0.0f, tree_bake_c = 0.0f;
+static float	tree_bake_m = 0.0f, tree_bake_tr = 0.0f;
+
+f_deffer	tree_bake_pack	(float4 norm, float4 pos, float4 col)
+{
+	tree_bake_n = norm;
+	tree_bake_m = pos.w;
+	tree_bake_c = col;
+	return (f_deffer)0;
+}
+
+// A leaf's material: its translucency kept, a foliage code returned (the bake's camera looks into the sun: the near
+// tiers' full value, da_shrub_common.h shrub_translucency).
+float	tree_bake_foliage	(float tr)
+{
+	tree_bake_tr = tr;
+	return da_mtl_from_code(DA_MTL_FOLIAGE0);
+}
+
+#define pack_gbuffer tree_bake_pack
+#define SHRUB_SUNLIT(N) 0.0f
+#define da_pack_foliage_mtl(tr, pix, frame) tree_bake_foliage(tr)
+#define main tree_bake_mass_gbuffer
+#include "da_shrub_cluster.ps"
+#undef main
+#undef da_pack_foliage_mtl
+#undef SHRUB_SUNLIT
+#undef pack_gbuffer
+
+f_tree_bake	main	(p_shrub_mass I)
+{
+	tree_bake_mass_gbuffer(I);
+	f_tree_bake O;
+	O.albedo = float4(tree_bake_c.rgb, 1.0f);
+	O.normal = float4(tree_bake_n_out(normalize(tree_bake_n.xyz)), saturate(tree_bake_n.w));
+	O.mtl = tree_bake_mtl_out(tree_bake_m, tree_bake_tr);
+	return O;
+}

@@ -34,6 +34,9 @@ bool da_grass_blades_available();
 // Main thread, once per frame (CDetailManager::UpdateRenderState, before the calc task and the passes):
 // the season keys of the species at D and D_prev, the camera, the settings, the bin windows.
 void da_grass_frame_latch();
+// CRender::Calculate, main thread, before r_sun.run(): the latch of a frame the detail manager did not update
+// (a save's screenshot under the menu), taken before the sun task's cascades read it.
+void da_grass_frame_ensure_latch();
 // The detail calc task (CDetailManager::DispatchMTCalc): the tiles and compute groups of this frame.
 void da_grass_calc(const Fvector& eye);
 // Share 0..1 of blade grass around the camera this frame (wind_veg_green, the vegetation audio).

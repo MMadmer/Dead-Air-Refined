@@ -142,7 +142,7 @@ class CDaFireEffect final : public CParticleEffect
     std::unique_ptr<dx113DFluidData> m_fluid;
     bool m_fluid_wanted{};
     float m_fluid_fade{};       // 0 = the marched flame, 1 = the grid; they cross over
-    float m_fluid_time{};
+    float m_fluid_time{};       // simulated seconds since the grid was built, 0 without one
     float m_fluid_acc{};        // real seconds waiting to be stepped
     float m_fluid_retry{};      // seconds before another attempt to build the grid
     float m_blast_t{-1.f};      // seconds since the charge went off; < 0 = not a blast, or over
@@ -153,7 +153,7 @@ class CDaFireEffect final : public CParticleEffect
 #endif
     void fluid_create();
     void fluid_destroy();
-    void fluid_render(CBackend& cmd_list);
+    void fluid_render(CBackend& cmd_list, bool draw);
     void fluid_params();
     bool fluid_voxelize();
     bool fluid_ground();

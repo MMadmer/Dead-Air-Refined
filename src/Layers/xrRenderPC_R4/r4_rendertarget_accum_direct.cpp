@@ -3,6 +3,7 @@
 #include "xrEngine/Environment.h"
 
 #include "da_vrs.h"
+#include "Layers/xrRender/da_temporal.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -55,6 +56,26 @@ static Fmatrix da_cloud_shadow_xform(const Fvector& /*sun_direction*/)
 static void da_set_sun_shadow_consts(CBackend& cmd_list, u32 /*sub_phase*/)
 {
     cmd_list.set_c("da_sun_far_fade", 0.75f * ps_r__sun_shadow_fade, ps_r__sun_shadow_fade, 0.f, 0.f);
+}
+
+// The seam to the next cascade (accum_sun_near.ps da_sun_cascade_seam): the near and the middle pass leave a dithered
+// share of their map's outer band to the next map - every cascade is rendered before any is accumulated, so the next
+// pass takes the pixels this one leaves unmarked in the stencil -, the frame turning the noise under the temporal
+// resolve, the next map's transform (the pixel must lie in its square). The far pass has none.
+static void da_set_sun_blend(CBackend& cmd_list, u32 sub_phase, const Fmatrix& texel_adjust)
+{
+    const bool has_next = (sub_phase == SE_SUN_NEAR || sub_phase == SE_SUN_MIDDLE) && ps_r__sun_cascade_blend > 0.f &&
+        RImplementation.o.support_rt_arrays && !RImplementation.o.oldshadowcascades;
+    if (!has_next)
+    {
+        cmd_list.set_c("da_sun_blend", 0.f, 0.f, 0.f, 0.f);
+        return;
+    }
+    Fmatrix xf, m_next;
+    xf.mul(texel_adjust, RImplementation.r_sun.m_sun_cascades[sub_phase == SE_SUN_NEAR ? 1 : 2].xform);
+    m_next.mul(xf, Device.mInvView);
+    cmd_list.set_c("m_shadow_next", m_next);
+    cmd_list.set_c("da_sun_blend", ps_r__sun_cascade_blend, da_temporal_active() ? float(Device.dwFrame & 63u) : 0.f, 1.f, 0.f);
 }
 
 void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
@@ -626,6 +647,7 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
         }
         cmd_list.set_c("m_shadow", m_shadow);
         cmd_list.set_c("m_sunmask", m_clouds_shadow);
+        da_set_sun_blend(cmd_list, sub_phase, m_TexelAdjust);
 
         // Pass view vector projected in shadow space to far pixel shader
         // Needed for shadow fading.

@@ -1,0 +1,64 @@
+// Copyright (c) 2026 XFined-Ray
+// Released under the MIT licence, see License.txt
+//
+// The billboards' bake (da_trees_bake.cpp): the staging's chain of levels. Down (mode 0): a texel the mean of its four
+// below - the coverage plain, the albedo, normal and hemisphere light and the foliage's share weighted by it, the
+// foliage's translucency by the foliage (an empty block stays empty). Up (mode 1, from the top): the filled copy - a
+// covered texel as it is, an empty one the filled texel above it, so the far filtering of the billboards and of the
+// mips meets the colours of the leaves next to it, not black (the offline bake's push-pull fill). Mode 2: the top
+// level as it is.
+
+#include "common.h"
+#include "da_tree_bake.h"
+
+Texture2D<float4>	da_tree_bake_a		: register(t0);	// down: the level below; up: this level (albedo, coverage)
+Texture2D<float4>	da_tree_bake_a_nm	: register(t1);	// its normal and hemisphere light
+Texture2D<float4>	da_tree_bake_b		: register(t2);	// up: the filled level above
+Texture2D<float4>	da_tree_bake_b_nm	: register(t3);
+Texture2D<float4>	da_tree_bake_a_m	: register(t4);	// the foliage of a's level
+Texture2D<float4>	da_tree_bake_b_m	: register(t5);	// of b's
+uniform float4		da_tree_bake_m;	// y mode
+
+f_tree_bake	main	(v2p_tree_bake_quad I)
+{
+	const int2 p = int2(floor(I.src));
+	f_tree_bake O;
+	[branch] if (da_tree_bake_m.y < 0.5f)
+	{
+		float w = 0.0f, h = 0.0f, l = 0.0f, lt = 0.0f;
+		float3 c = float3(0.0f, 0.0f, 0.0f), n = float3(0.0f, 0.0f, 0.0f);
+		[unroll] for (int k = 0; k < 4; ++k)
+		{
+			const int2 q = p * 2 + int2(k & 1, k >> 1);
+			const float4 a = da_tree_bake_a.Load(int3(q, 0));
+			const float4 b = da_tree_bake_a_nm.Load(int3(q, 0));
+			const float2 m = da_tree_bake_a_m.Load(int3(q, 0)).rg;
+			w += a.a;
+			c += a.rgb * a.a;
+			n += tree_bake_n_in(b.rgb) * a.a;
+			h += b.a * a.a;
+			l += m.x * a.a;
+			lt += m.x * m.y * a.a;
+		}
+		O.albedo = float4(0.0f, 0.0f, 0.0f, 0.0f);
+		O.normal = float4(0.0f, 0.0f, 0.0f, 0.0f);
+		O.mtl = float4(0.0f, 0.0f, 0.0f, 0.0f);
+		if (w > 0.0f)
+		{
+			O.albedo = float4(c / w, 0.25f * w);
+			O.normal = float4(tree_bake_n_out(normalize(n + float3(0.0f, 0.0f, -1e-4f))), h / w);
+			O.mtl = float4(l / w, l > 0.0f ? lt / l : 0.0f, 0.0f, 0.0f);
+		}
+		return O;
+	}
+	O.albedo = da_tree_bake_a.Load(int3(p, 0));
+	O.normal = da_tree_bake_a_nm.Load(int3(p, 0));
+	O.mtl = da_tree_bake_a_m.Load(int3(p, 0));
+	[branch] if (da_tree_bake_m.y < 1.5f && O.albedo.a <= 0.0f)
+	{
+		O.albedo = float4(da_tree_bake_b.Load(int3(p / 2, 0)).rgb, 0.0f);
+		O.normal = da_tree_bake_b_nm.Load(int3(p / 2, 0));
+		O.mtl = da_tree_bake_b_m.Load(int3(p / 2, 0));
+	}
+	return O;
+}

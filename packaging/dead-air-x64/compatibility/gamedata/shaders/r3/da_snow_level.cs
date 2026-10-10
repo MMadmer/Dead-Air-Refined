@@ -24,7 +24,7 @@ void main(uint3 id : SV_DispatchThreadID)
 	// patchy snow: the season depth at the warped point, as the fine texture takes it (da_sn_warp)
 	const float patchy = da_sn_patchy();
 	float D = (patchy > 0.0) ? da_sn_depth_bilinear(da_sn_warp(xz, patchy)) : da_sn_texel_depth(t);
-	D = da_sn_shape(D, xz, 0.0, patchy);
+	D = da_sn_shape(D, xz, 0.0, patchy) * (1.0 - s_da_sn_shelter.Load(int3(t, 0)));
 	[branch] if (da_sn_comp.w > 0.5 && D > 0.0)
 	{
 		const float share = lerp(da_sn_comp.x, da_sn_comp.y, s_da_sn_weights.Load(int3(t, 0)).z);

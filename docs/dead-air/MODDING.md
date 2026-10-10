@@ -1204,8 +1204,17 @@ middle maps only: in the far map a texel is a third of a metre and a blade a few
 wind moves it by less than a texel, and its shadow there was a block switching on and off - a
 patch of ground at middle distance flickered in sun and wind from 1.4.2, when grass shadows first
 reached past a 40 m middle box. The fade ends at 7/8 of the far box, where the tuned 140/160 pair had it. The
-volumetric shafts are drawn over the far box, so they reach as far as the shadows now. Session
-overrides, never saved: `r__sun_cascade_mid`, `r__sun_cascade_far`, `r__sun_shadow_fade`. Water
+volumetric shafts are drawn over the far box, so they reach as far as the shadows now. The seam between
+two boxes is a band, not a line (1.6.0): over the outer fifth of the near and the middle map's square
+(`r__sun_cascade_blend`, a share of its half-width, 0.2) a share of the pixels growing to all of them
+at its edge - by interleaved gradient noise turning with the frame under TAA and the upscalers - is
+left to the next map (`accum_sun_near.ps` `da_sun_cascade_seam`: every map is rendered before any is
+accumulated, and the next pass takes the pixels this one leaves unmarked in the stencil; a pixel only
+where the next map's square holds it). Each map has its own casters - the vegetation draws its leaves
+into the near one, its clusters into the middle and its blobs into the far one - so at a hard seam
+the shadows round the player sharpened into detail at once as it swept over them. Session
+overrides, never saved: `r__sun_cascade_mid`, `r__sun_cascade_far`, `r__sun_shadow_fade`,
+`r__sun_cascade_blend` (0: the hard seam). Water
 reflection ranges are the `REFL_RANGE` tiers of `ogse_reflections.h` (100/140/180/220 m before,
 the sample count along the ray raised with them).
 
@@ -1361,7 +1370,10 @@ temperature through a four-band ramp (dull red tips, orange body, yellow, a whit
 only the soot that has cooled absorbs - so a flame is never hidden behind its own smoke - and
 where a ray ends on the wood the gas a step back from it lights the embers there. Beyond
 `r__fire_fluid_dist` the fire falls back to the marched flame, and the two cross over in half a
-second rather than swapping in a frame.
+second rather than swapping in a frame. A fresh grid starts empty: its whole fuel bed lights at
+once, and the expansion throws a glowing ball of gas that rises out of the box as a thermal. So a
+campfire's grid runs unseen for its first 3.5 simulated seconds, the marched flame standing in,
+and only then crosses over (a blast shows from its first step: the ball is the point).
 
 ```ini
 [shader_fire_campfire]

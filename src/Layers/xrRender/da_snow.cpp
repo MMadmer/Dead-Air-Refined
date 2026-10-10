@@ -47,12 +47,22 @@ constexpr int k_coarse_step = 8;                 // L1 texels per window move
 constexpr int k_tile = 64;                       // L0 texels per composite / pool tile
 constexpr int k_tile_l1 = k_tile / 8;            // the same tile in L1 texels
 constexpr u32 k_max_stamps = 8192;
-constexpr float k_carve_rate = 3.f;    // m/s a print sinks at (partial carving)
+constexpr float k_carve_rate = 10.f;   // m/s a print sinks at (partial carving): a leg plunges, nothing cuts at once
 constexpr float k_rim_reach = 0.12f;   // m around a print its rim reaches (2 L0 texels and change)
 constexpr float k_cap_default = 0.536f;
 constexpr float k_grid_min = 0.04f;    // the thinnest snow drawn as geometry (m)
 constexpr float k_grid_bias = 8.f / 16777216.f;
 constexpr u32 k_cells = 32;            // grid cells per tile side
+// The shells' reach by preset (m): past it a roof keeps the layer's cover of snow, a couple of pixels thinner. The
+// minimum preset draws no grid and no shells: the layer's cover is all the snow there is.
+constexpr float k_shell_reach[5] = {0.f, 160.f, 200.f, 260.f, 320.f};
+// The grid's reach in the two near sun cascades (m): the walls of a trail and a drift's lee cast their shadows
+// there; the first cascade is 20 m deep, its box a little more, and the second takes the same tiles - the band
+// where the two blend (dithered) reads both, and with no snow in the second the trails' shadows broke into noise
+// from 15 m.
+constexpr float k_shadow_reach = 28.f;
+// Within this far of the eye every pixel takes the first cascade (m): the second casts the grid from there out.
+constexpr float k_shadow_inner = 12.f;
 constexpr u32 k_max_tiles = 320;
 constexpr u32 k_max_rings = 6;
 
@@ -75,6 +85,7 @@ constexpr Preset k_presets[5] = {
 };
 
 constexpr pcstr k_name_fine = "$user$da_snow_fine";
+constexpr pcstr k_name_roof = "$user$da_snow_roof"; // the prints on the shells, the near window's (da_snow_stamp.cs)
 constexpr pcstr k_name_level = "$user$da_snow_level";
 constexpr pcstr k_name_l0 = "$user$da_snow_l0";
 constexpr pcstr k_name_l1 = "$user$da_snow_l1";
@@ -83,6 +94,12 @@ constexpr pcstr k_name_factors = "$user$da_snow_factors";
 constexpr pcstr k_name_base = "$user$da_snow_base";
 constexpr pcstr k_name_trod = "$user$da_snow_trod";
 constexpr pcstr k_name_road = "$user$da_snow_road";
+constexpr pcstr k_name_terrain = "$user$da_snow_ground";
+constexpr pcstr k_name_shelter = "$user$da_snow_shelter";
+constexpr pcstr k_name_top = "$user$da_snow_top";
+constexpr pcstr k_name_walk = "$user$da_snow_walk";
+constexpr pcstr k_name_overhang = "$user$da_snow_overhang";
+constexpr pcstr k_name_ground_top = "$user$da_ground_top"; // da_ground.cpp
 constexpr pcstr k_name_ground_base = "$user$da_ground_base"; // da_ground.cpp
 constexpr pcstr k_name_ground_shore = "$user$da_ground_shore"; // da_ground.cpp
 constexpr pcstr k_name_water_class = "$user$water_class";    // r4_water_field.cpp
@@ -163,6 +180,36 @@ public:
             C.RS.SetRS(D3DRS_COLORWRITEENABLE3, 0u);
             C.r_End();
             break;
+        case 2:
+            // The snow shells (da_ground.cpp): written like the grid, the albedo under them kept.
+            C.r_Pass("da_snow_shell", "da_snow_shell", false, TRUE, TRUE);
+            C.r_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE, D3DSTENCILOP_KEEP);
+            C.r_StencilRef(0x01);
+            C.r_CullMode(D3DCULL_NONE);
+            C.RS.SetRS(XRDX11RS_INDEPENDENTBLEND, TRUE);
+            C.RS.SetRS(D3DRS_COLORWRITEENABLE, all);
+            C.RS.SetRS(D3DRS_COLORWRITEENABLE1, packed ? 0u : all);
+            C.RS.SetRS(D3DRS_COLORWRITEENABLE2, packed ? all : 0u);
+            C.RS.SetRS(D3DRS_COLORWRITEENABLE3, 0u);
+            C.r_dx11Texture("s_da_sn_factors", k_name_factors);
+            C.r_dx11Texture("s_da_sn_roof", k_name_roof);
+            if (!RImplementation.o.msaa)
+                C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
+            C.r_End();
+            break;
+        case 3:
+            // The grid in the near sun cascade: depth only.
+            C.r_Pass("da_snow_grid_shadow", "null", FALSE, TRUE, TRUE, FALSE);
+            C.r_CullMode(D3DCULL_NONE);
+            C.r_dx11Texture("s_da_snow_fine", k_name_fine);
+            C.r_dx11Texture("s_da_snow_level", k_name_level);
+            C.r_dx11Texture("s_da_sn_base", k_name_base);
+            C.r_dx11Texture("s_da_ground_base", k_name_ground_base);
+            C.r_dx11Texture("s_da_ground_shore", k_name_ground_shore);
+            C.r_dx11Texture("s_water_field", r2_RT_water_field);
+            C.r_dx11Texture("s_water_class", k_name_water_class);
+            C.r_End();
+            break;
         default: break;
         }
     }
@@ -201,6 +248,9 @@ public:
             C.r_dx11Texture("s_da_ground_shore", k_name_ground_shore);
             C.r_dx11Texture("s_da_sn_trod", k_name_trod);
             C.r_dx11Texture("s_da_sn_road", k_name_road);
+            C.r_dx11Texture("s_da_ground_top", k_name_ground_top);
+            C.r_dx11Texture("s_da_sn_top", k_name_top);
+            C.r_dx11Texture("s_da_sn_roof", k_name_roof);
             C.r_dx11Texture("s_water_field", r2_RT_water_field);
             C.r_dx11Texture("s_water_class", k_name_water_class);
             // The hardware depth tells first-person pixels apart (no single-sampled copy under MSAA).
@@ -251,12 +301,13 @@ struct State
     float texel = 1.f;
     Fvector2 origin{};
     float ymin = 0.f, yrange = 1.f;
-    Texture weights, factors, base, level, road;
+    Texture weights, factors, base, level, road, terrain, shelter, top, walk, overhang;
+    u32 terrain_version = 0; // counts the terrain uploads (da_snow_level_terrain)
     bool level_fresh = true;
 
     // trails
     Map l0, l1;
-    Texture fine, trod;
+    Texture fine, trod, roof;
     bool fine_fresh = true;
     float refill_acc = 0.f;
     bool trails_live = false;
@@ -276,6 +327,7 @@ struct State
     const SSnowFrame* frame = nullptr;
     float cap = k_cap_default;
     float share_open = 0.5f, share_road = 0.9f;
+    float rho_open = 250.f; // kg/m3 of the open snow now: how far a planted foot sinks into it
     bool layer_on = false;
     bool depth_on = false;
     Fvector4 fine_xf{}, level_xf{}, misc{};
@@ -288,6 +340,7 @@ struct State
 
     // statistics of the last frame (r__snow_stats)
     u32 stat_stamps_near = 0, stat_stamps_far = 0, stat_tiles = 0, stat_level_texels = 0, stat_grid_tiles = 0;
+    u32 stat_shell_chunks = 0;
     bool stat_full = false;
 };
 State g;
@@ -299,21 +352,24 @@ bool ensure_shaders()
     g.shaders_tried = true;
     const std::pair<pcstr, pcstr> fields[] = {{"s_da_sn_weights", k_name_weights}, {"s_da_sn_factors", k_name_factors}};
     const std::pair<pcstr, pcstr> bases[] = {{"s_da_sn_base", k_name_base}, {"s_da_ground_base", k_name_ground_base}};
+    // the shelter of covers: the window's (in its base) and the level's
+    const std::pair<pcstr, pcstr> shelter = {"s_da_sn_shelter", k_name_shelter};
     bool ok = g.cs_clear.create("da_snow_clear", {});
-    ok = ok && g.cs_stamp.create("da_snow_stamp", {fields[0], fields[1], bases[0], bases[1]});
+    ok = ok && g.cs_stamp.create("da_snow_stamp", {fields[0], fields[1], bases[0], bases[1], shelter, {"s_da_sn_top", k_name_top}, {"s_da_sn_terrain", k_name_terrain}});
     ok = ok && g.cs_scroll.create("da_snow_scroll", {{"s_da_sn_l1", k_name_l1}});
     ok = ok && g.cs_refill.create("da_snow_refill", {});
-    ok = ok && g.cs_pool.create("da_snow_pool", {{"s_da_sn_l0", k_name_l0}, fields[0], fields[1]});
-    ok = ok && g.cs_composite.create("da_snow_composite", {{"s_da_sn_l0", k_name_l0}, fields[0], fields[1]});
-    ok = ok && g.cs_level.create("da_snow_level", {{"s_da_sn_l1", k_name_l1}, fields[0], fields[1]});
+    ok = ok && g.cs_pool.create("da_snow_pool", {{"s_da_sn_l0", k_name_l0}, fields[0], fields[1], bases[1], shelter});
+    ok = ok && g.cs_composite.create("da_snow_composite", {{"s_da_sn_l0", k_name_l0}, fields[0], fields[1], bases[1], shelter});
+    ok = ok && g.cs_level.create("da_snow_level", {{"s_da_sn_l1", k_name_l1}, fields[0], fields[1], shelter});
     for (pcstr file : {"da_snow_grid.vs", "da_snow_grid.ps", "da_snow_skyfill.ps", "da_snow_layer.ps", "da_snow_apply.ps",
-             "da_fullscreen.vs"})
+             "da_fullscreen.vs", "da_snow_shell.vs", "da_snow_shell.ps", "da_snow_grid_shadow.vs"})
         ok = ok && shader_exists(file);
     if (ok)
     {
         g.s_grid.create(&g.b_grid, "r2" DELIMITER "da_snow_grid");
         g.s_layer.create(&g.b_layer, "r2" DELIMITER "da_snow_layer");
-        ok = g.s_grid && g.s_grid->E[0] && g.s_grid->E[1] && g.s_layer && g.s_layer->E[0] && g.s_layer->E[1];
+        ok = g.s_grid && g.s_grid->E[0] && g.s_grid->E[1] && g.s_grid->E[2] && g.s_grid->E[3] && g.s_layer &&
+            g.s_layer->E[0] && g.s_layer->E[1];
     }
     if (!ok)
         Msg("! [snow] the snow shaders are missing from the content: no snow");
@@ -340,14 +396,27 @@ void placeholders()
         g.l1.tex.placeholder(k_name_l1, DXGI_FORMAT_R32_UINT);
     if (!g.trod.named)
         g.trod.placeholder(k_name_trod, DXGI_FORMAT_R8_UNORM);
+    if (!g.roof.named)
+        g.roof.placeholder(k_name_roof, DXGI_FORMAT_R32_UINT);
     if (!g.road.named)
         g.road.placeholder(k_name_road, DXGI_FORMAT_R8_UNORM);
+    if (!g.terrain.named)
+        g.terrain.placeholder(k_name_terrain, DXGI_FORMAT_R16_UNORM);
+    if (!g.shelter.named)
+        g.shelter.placeholder(k_name_shelter, DXGI_FORMAT_R8_UNORM);
+    if (!g.top.named)
+        g.top.placeholder(k_name_top, DXGI_FORMAT_R16_UNORM);
+    if (!g.walk.named)
+        g.walk.placeholder(k_name_walk, DXGI_FORMAT_R16_UNORM);
+    if (!g.overhang.named)
+        g.overhang.placeholder(k_name_overhang, DXGI_FORMAT_R8_UNORM);
 }
 
 void trails_release()
 {
     g.fine.placeholder(k_name_fine, DXGI_FORMAT_R32_UINT);
     g.trod.placeholder(k_name_trod, DXGI_FORMAT_R8_UNORM);
+    g.roof.placeholder(k_name_roof, DXGI_FORMAT_R32_UINT);
     g.l0.tex.placeholder(k_name_l0, DXGI_FORMAT_R32_UINT);
     g.l1.tex.placeholder(k_name_l1, DXGI_FORMAT_R32_UINT);
     g.l0.n = g.l1.n = 0;
@@ -366,6 +435,11 @@ void level_release()
     g.base.placeholder(k_name_base, DXGI_FORMAT_R16_UNORM);
     g.level.placeholder(k_name_level, DXGI_FORMAT_R32_UINT);
     g.road.placeholder(k_name_road, DXGI_FORMAT_R8_UNORM);
+    g.terrain.placeholder(k_name_terrain, DXGI_FORMAT_R16_UNORM);
+    g.shelter.placeholder(k_name_shelter, DXGI_FORMAT_R8_UNORM);
+    g.top.placeholder(k_name_top, DXGI_FORMAT_R16_UNORM);
+    g.walk.placeholder(k_name_walk, DXGI_FORMAT_R16_UNORM);
+    g.overhang.placeholder(k_name_overhang, DXGI_FORMAT_R8_UNORM);
     g.uploaded = false;
     g.level_fresh = true;
     g.season_moved_prev = true;
@@ -456,7 +530,9 @@ void road_edges(const SSnowField& f, xr_vector<u8>& out)
 }
 
 // The level's textures, once per bake: weights and factors as baked, the snow base (the topmost surface
-// opened with a 3 x 3 square at 1 m), the road edges, the depth texture the composite fills.
+// opened with a 3 x 3 square at 1 m, the terrain under a cover), the shelter of the covers (their mask
+// eroded by a texel: walls and posts drop out), the terrain and the topmost surface themselves, the road
+// edges, the depth texture the composite fills.
 bool upload_level()
 {
     const SSnowField* f = da_snow_field();
@@ -467,31 +543,48 @@ bool upload_level()
     const u32 w = g.dim_x, h = g.dim_z;
     const size_t cells = size_t(w) * h;
 
-    xr_vector<float> top(cells);
+    xr_vector<float> top(cells), ground(cells);
     float lo = flt_max, hi = -flt_max;
     const bool has_ground = f->ground.size() == cells;
+    const bool has_solid = f->solid.size() == cells;
+    const auto valid = [](float y) { return y > -1e4f && y < 1e5f; };
     for (size_t i = 0; i < cells; ++i)
     {
         float y = f->top[i];
-        if (!(y > -1e4f && y < 1e5f) && has_ground)
+        if (!valid(y) && has_ground)
             y = f->ground[i];
-        if (!(y > -1e4f && y < 1e5f))
+        if (!valid(y))
             y = flt_max;
         top[i] = y;
-        if (y != flt_max)
-        {
-            lo = std::min(lo, y);
-            hi = std::max(hi, y);
-        }
+        ground[i] = has_ground && valid(f->ground[i]) ? f->ground[i] : y;
+        for (const float v : {y, ground[i]})
+            if (v != flt_max)
+            {
+                lo = std::min(lo, v);
+                hi = std::max(hi, v);
+            }
     }
     if (lo > hi)
     {
         lo = 0.f;
         hi = 1.f;
     }
-    for (float& y : top)
-        if (y == flt_max)
-            y = lo;
+    for (size_t i = 0; i < cells; ++i)
+    {
+        if (top[i] == flt_max)
+            top[i] = lo;
+        if (ground[i] == flt_max)
+            ground[i] = top[i];
+    }
+    // Covers: the bake's (da_snow_cover_at: a solid top a cover's height over the terrain, no deck the AI walks), else
+    // the height alone. The ground's snow lies on the terrain there, and the cover keeps the sky's snow off it.
+    const bool baked = f->cover.size() == cells && f->shelter.size() == cells;
+    xr_vector<u8> cover(cells, 0);
+    for (size_t i = 0; i < cells; ++i)
+        cover[i] = baked ? f->cover[i] : ((!has_solid || f->solid[i]) && top[i] - ground[i] > da_snow_cover_over ? 1 : 0);
+    xr_vector<float> snow_base(cells);
+    for (size_t i = 0; i < cells; ++i)
+        snow_base[i] = cover[i] ? ground[i] : top[i];
     // opening: erosion then dilation, each separable over 3 texels
     xr_vector<float> tmp(cells);
     const auto pass = [&](const xr_vector<float>& src, xr_vector<float>& dst, bool horizontal, bool erode) {
@@ -510,21 +603,55 @@ bool upload_level()
                 dst[size_t(z) * w + x] = v;
             }
     };
-    pass(top, tmp, true, true);
-    pass(tmp, top, false, true);
-    pass(top, tmp, true, false);
-    pass(tmp, top, false, false);
+    pass(snow_base, tmp, true, true);
+    pass(tmp, snow_base, false, true);
+    pass(snow_base, tmp, true, false);
+    pass(tmp, snow_base, false, false);
+    // the shelter: the cover mask eroded by one texel (a 3 x 3 minimum)
+    xr_vector<u8> shelter = baked ? f->shelter : xr_vector<u8>(cells, 0);
+    for (u32 z = 1; !baked && z + 1 < h; ++z)
+        for (u32 x = 1; x + 1 < w; ++x)
+        {
+            u8 v = 255;
+            for (int dz = -1; dz <= 1 && v; ++dz)
+                for (int dx = -1; dx <= 1 && v; ++dx)
+                    if (!cover[size_t(z + dz) * w + x + dx])
+                        v = 0;
+            shelter[size_t(z) * w + x] = v;
+        }
 
     g.ymin = lo - 1.f;
     g.yrange = std::max(hi - lo + 2.f, 1.f);
-    xr_vector<u16> base(cells);
+    const auto encode = [](float y) { return u16(std::max(clampr((y - g.ymin) / g.yrange, 0.f, 1.f) * 65535.f + 0.5f, 1.f)); };
+    xr_vector<u16> base(cells), terrain(cells), top16(cells), walk(cells, 0);
+    // The overhangs (the covers that shelter the ground under them, da_snow_cover_at) for the window's resolve,
+    // dilated by a texel: an eave's texels at the 1 m cell's edge are the roof's.
+    xr_vector<u8> overhang(cells, 0);
+    for (u32 z = 0; z < h; ++z)
+        for (u32 x = 0; x < w; ++x)
+        {
+            u8 v = 0;
+            for (int dz = -1; dz <= 1 && !v; ++dz)
+                for (int dx = -1; dx <= 1 && !v; ++dx)
+                {
+                    const int sx = int(x) + dx, sz = int(z) + dz;
+                    if (sx < 0 || sz < 0 || sx >= int(w) || sz >= int(h))
+                        continue;
+                    const size_t j = size_t(sz) * w + sx;
+                    v = (baked ? f->cover[j] == 2 : cover[j] != 0) ? 255 : 0;
+                }
+            overhang[size_t(z) * w + x] = v;
+        }
     // 0 is reserved: no collision under the texel (the backdrop beyond the playable area, where top is
     // the hole-filled ground). The layer still paints snow there; the grid does not stand on it.
-    const bool has_solid = f->solid.size() == cells;
     for (size_t i = 0; i < cells; ++i)
     {
-        const float v = clampr((top[i] - g.ymin) / g.yrange, 0.f, 1.f) * 65535.f + 0.5f;
-        base[i] = (has_solid && !f->solid[i]) ? u16(0) : u16(std::max(v, 1.f));
+        base[i] = (has_solid && !f->solid[i]) ? u16(0) : encode(snow_base[i]);
+        terrain[i] = encode(ground[i]);
+        top16[i] = encode(top[i]);
+        // the highest surface the AI walks on (0: none), for the window's cover test (da_ground_resolve.cs)
+        if (f->walk.size() == cells && f->walk[i] > -1e4f)
+            walk[i] = encode(f->walk[i]);
     }
 
     xr_vector<u8> road;
@@ -534,6 +661,11 @@ bool upload_level()
         g.factors.create(k_name_factors, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, false, f->factors.data(), w * 4) &&
         g.base.create(k_name_base, w, h, DXGI_FORMAT_R16_UNORM, false, base.data(), w * 2) &&
         g.road.create(k_name_road, w, h, DXGI_FORMAT_R8_UNORM, false, road.data(), w) &&
+        g.terrain.create(k_name_terrain, w, h, DXGI_FORMAT_R16_UNORM, false, terrain.data(), w * 2) &&
+        g.shelter.create(k_name_shelter, w, h, DXGI_FORMAT_R8_UNORM, false, shelter.data(), w) &&
+        g.top.create(k_name_top, w, h, DXGI_FORMAT_R16_UNORM, false, top16.data(), w * 2) &&
+        g.walk.create(k_name_walk, w, h, DXGI_FORMAT_R16_UNORM, false, walk.data(), w * 2) &&
+        g.overhang.create(k_name_overhang, w, h, DXGI_FORMAT_R8_UNORM, false, overhang.data(), w) &&
         g.level.create(k_name_level, w, h, DXGI_FORMAT_R32_UINT, true);
     if (!ok)
     {
@@ -544,8 +676,11 @@ bool upload_level()
     }
     g.uploaded = true;
     g.level_fresh = true;
+    ++g.terrain_version;
     Msg("* [snow] level fields %ux%u at %.2f m, base %.1f..%.1f m, %.1f MB, %.0f ms", w, h, g.texel, g.ymin,
-        g.ymin + g.yrange, cells * 15.f / (1024.f * 1024.f), timer.GetElapsed_sec() * 1000.f);
+        g.ymin + g.yrange, cells * 23.f / (1024.f * 1024.f), timer.GetElapsed_sec() * 1000.f);
+    // the snow on the covers, from the same bake
+    da_ground_shells_sync();
     return true;
 }
 
@@ -555,7 +690,8 @@ bool trails_create()
     const bool ok = g.l0.tex.create(k_name_l0, p.l0, p.l0, DXGI_FORMAT_R32_UINT, true) &&
         g.l1.tex.create(k_name_l1, p.l1, p.l1, DXGI_FORMAT_R32_UINT, true) &&
         g.fine.create(k_name_fine, p.l0, p.l0, DXGI_FORMAT_R32_UINT, true) &&
-        g.trod.create(k_name_trod, p.l0, p.l0, DXGI_FORMAT_R8_UNORM, true);
+        g.trod.create(k_name_trod, p.l0, p.l0, DXGI_FORMAT_R8_UNORM, true) &&
+        g.roof.create(k_name_roof, p.l0, p.l0, DXGI_FORMAT_R32_UINT, true);
     if (!ok)
     {
         Msg("! [snow] the trail maps (%u / %u) could not be created", p.l0, p.l1);
@@ -582,17 +718,19 @@ void grid_create()
         for (u32 i = 0; i < side; ++i)
             verts[j * side + i].set(float(i), float(j));
     xr_vector<u16> indices;
-    indices.reserve(k_cells * k_cells * 6);
-    for (u32 j = 0; j < k_cells; ++j)
-        for (u32 i = 0; i < k_cells; ++i)
-        {
-            const u16 v00 = u16(j * side + i), v10 = u16(v00 + 1), v01 = u16(v00 + side), v11 = u16(v01 + 1);
-            // the diagonal alternates, so no slope gets a uniform grain
-            if ((i + j) & 1)
-                indices.insert(indices.end(), {v00, v01, v10, v10, v01, v11});
-            else
-                indices.insert(indices.end(), {v00, v01, v11, v00, v11, v10});
-        }
+    indices.reserve(k_cells * k_cells * 6 + (k_cells / 2) * (k_cells / 2) * 6);
+    // the full cells, then cells of every other vertex (the far shadow cascade's: its texels are coarser)
+    for (u32 step = 1; step <= 2; ++step)
+        for (u32 j = 0; j < k_cells; j += step)
+            for (u32 i = 0; i < k_cells; i += step)
+            {
+                const u16 v00 = u16(j * side + i), v10 = u16(v00 + step), v01 = u16(v00 + step * side), v11 = u16(v01 + step);
+                // the diagonal alternates, so no slope gets a uniform grain
+                if (((i + j) / step) & 1)
+                    indices.insert(indices.end(), {v00, v01, v10, v10, v01, v11});
+                else
+                    indices.insert(indices.end(), {v00, v01, v11, v00, v11, v10});
+            }
     D3D11_BUFFER_DESC desc{};
     desc.Usage = D3D11_USAGE_IMMUTABLE;
     desc.ByteWidth = UINT(verts.size() * sizeof(Fvector2));
@@ -745,6 +883,10 @@ void update_trails(CBackend& cmd, Rect fresh[2], u32& fresh_count, bool& l1_chan
     for (u32 i = 0; i < fresh_count; ++i)
     {
         const Rect& r = fresh[i];
+        dispatch(cmd, g.cs_clear, u32(r.width() + 7) / 8, u32(r.height() + 7) / 8, 1, {}, {g.roof.uav}, [&] {
+            cmd.set_c("da_sn_rect", float(r.x0), float(r.z0), float(r.width()), float(r.height()));
+            cmd.set_c("da_sn_clear", float(g.l0.n), 0.f, 0.f, 0.f);
+        });
         dispatch(cmd, g.cs_scroll, u32(r.width() + 7) / 8, u32(r.height() + 7) / 8, 1, {}, {g.l0.tex.uav}, [&] {
             set_common(cmd);
             cmd.set_c("da_sn_rect", float(r.x0), float(r.z0), float(r.width()), float(r.height()));
@@ -759,13 +901,15 @@ void update_trails(CBackend& cmd, Rect fresh[2], u32& fresh_count, bool& l1_chan
     g.stamps.clear();
     g.dirty.clear();
     const Rect w0 = g.l0.window(), w1 = g.l1.window();
+    // a stamp is the capsule from xz0 to xz
     const auto overlaps = [](const Rect& w, float texel, const SSnowStamp& s) {
-        return s.xz.x + s.radius >= w.x0 * texel && s.xz.x - s.radius < w.x1 * texel && s.xz.y + s.radius >= w.z0 * texel &&
-            s.xz.y - s.radius < w.z1 * texel;
+        return std::max(s.xz.x, s.xz0.x) + s.radius >= w.x0 * texel && std::min(s.xz.x, s.xz0.x) - s.radius < w.x1 * texel &&
+            std::max(s.xz.y, s.xz0.y) + s.radius >= w.z0 * texel && std::min(s.xz.y, s.xz0.y) - s.radius < w.z1 * texel;
     };
     const auto push = [](const SSnowStamp& s) {
         g.stamps.push_back({s.xz.x, s.xz.y, s.foot_y, s.radius});
-        g.stamps.push_back({s.sharp, float(s.kind), s.sink, 0.f});
+        g.stamps.push_back({s.sharp, float(s.kind), s.sink, s.pack});
+        g.stamps.push_back({s.xz0.x, s.xz0.y, s.foot_y0, s.fall});
     };
     u32 near_count = 0;
     for (const SSnowStamp& s : src)
@@ -778,7 +922,8 @@ void update_trails(CBackend& cmd, Rect fresh[2], u32& fresh_count, bool& l1_chan
         push(s);
         ++near_count;
         const float reach = s.radius + k_rim_reach;
-        add_tiles({s.xz.x - reach, s.xz.y - reach}, {s.xz.x + reach, s.xz.y + reach}, g.dirty);
+        add_tiles({std::min(s.xz.x, s.xz0.x) - reach, std::min(s.xz.y, s.xz0.y) - reach},
+            {std::max(s.xz.x, s.xz0.x) + reach, std::max(s.xz.y, s.xz0.y) + reach}, g.dirty);
     }
     u32 far_count = 0;
     for (const SSnowStamp& s : src)
@@ -794,15 +939,16 @@ void update_trails(CBackend& cmd, Rect fresh[2], u32& fresh_count, bool& l1_chan
     g.stat_stamps_near = near_count;
     g.stat_stamps_far = far_count;
     const u32 total = near_count + far_count;
-    if (total && g.stamp_buf.reserve(total * 2, sizeof(Fvector4), false))
+    if (total && g.stamp_buf.reserve(total * 3, sizeof(Fvector4), false))
     {
-        g.stamp_buf.upload(cmd, g.stamps.data(), total * 2);
+        g.stamp_buf.upload(cmd, g.stamps.data(), total * 3);
         const auto stamp = [&](const Map& m, u32 first, u32 count, float min_radius) {
-            dispatch(cmd, g.cs_stamp, std::min(count, 1024u), (count + 1023) / 1024, 1, {{8, g.stamp_buf.srv}}, {m.tex.uav}, [&] {
+            const bool in_l0 = &m == &g.l0;
+            dispatch(cmd, g.cs_stamp, std::min(count, 1024u), (count + 1023) / 1024, 1, {{8, g.stamp_buf.srv}}, {m.tex.uav, g.roof.uav}, [&] {
                 set_common(cmd);
                 set_map(cmd, "da_sn_map", m);
-                cmd.set_c("da_sn_map2", m.texel, k_carve_rate * dt, 0.f, min_radius);
-                cmd.set_c("da_sn_stamp", float(first), float(count), 0.f, 0.f);
+                cmd.set_c("da_sn_map2", m.texel, k_carve_rate * dt, g.rho_open, min_radius);
+                cmd.set_c("da_sn_stamp", float(first), float(count), in_l0 ? 1.f : 0.f, 0.f);
             });
         };
         if (near_count)
@@ -827,6 +973,8 @@ void update_trails(CBackend& cmd, Rect fresh[2], u32& fresh_count, bool& l1_chan
             dispatch(cmd, g.cs_refill, (m->n + 7) / 8, (m->n + 7) / 8, 1, {}, {m->tex.uav},
                 [&] { cmd.set_c("da_sn_refill", units, float(m->n), 0.f, 0.f); });
         }
+        dispatch(cmd, g.cs_refill, (g.l0.n + 7) / 8, (g.l0.n + 7) / 8, 1, {}, {g.roof.uav},
+            [&] { cmd.set_c("da_sn_refill", units, float(g.l0.n), 1.f, 0.f); });
         refilled = true;
         l1_changed = true;
     }
@@ -928,15 +1076,21 @@ struct GridFrame
     u32 count = 0;
 };
 
-bool grid_frame(GridFrame& out)
+// The grid's tiles of this frame: in the view and the reach, or (shadow) all round the camera within the near
+// sun cascade's reach, on the same rings, so the cascade holds the very surface the G-buffer draws.
+// The tiles of the grid: in the view (and the grid's reach), or for a shadow cascade within `shadow_reach` of the
+// eye and in the cascade's box (its sides: casters lie anywhere along the light), none wholly inside `inner`.
+bool grid_frame(GridFrame& out, float shadow_reach = 0.f, const Fmatrix* cascade = nullptr, float inner = 0.f)
 {
     const Preset& p = k_presets[g.preset];
     if (!p.grid_n || !p.rings)
         return false;
+    const bool shadow = shadow_reach > 0.f;
+    const float reach = shadow ? std::min(shadow_reach, p.reach) : p.reach;
     const Fvector& cam = Device.vCameraPosition;
-    Fmatrix vp = Device.mFullTransform;
     CFrustum frustum;
-    frustum.CreateFromMatrix(vp, FRUSTUM_P_LRTB | FRUSTUM_P_FAR);
+    Fmatrix vp = shadow ? *cascade : Device.mFullTransform;
+    frustum.CreateFromMatrix(vp, shadow ? FRUSTUM_P_LRTB : FRUSTUM_P_LRTB | FRUSTUM_P_FAR);
     const float y0 = g.ymin - 1.f, y1 = g.ymin + g.yrange + g.cap + 1.f;
     const u32 per_side = p.grid_n / k_cells;
     float prev_cx = 0.f, prev_cz = 0.f, prev_half = 0.f;
@@ -966,12 +1120,15 @@ bool grid_frame(GridFrame& out)
                 // beyond the reach
                 const float dx = std::max(std::max(ox - cam.x, cam.x - ex), 0.f);
                 const float dz = std::max(std::max(oz - cam.z, cam.z - ez), 0.f);
-                if (dx * dx + dz * dz > p.reach * p.reach)
+                if (dx * dx + dz * dz > reach * reach)
+                    continue;
+                const float fx = std::max(cam.x - ox, ex - cam.x), fz = std::max(cam.z - oz, ez - cam.z);
+                if (fx * fx + fz * fz < inner * inner)
                     continue;
                 Fbox box;
                 box.vMin.set(ox, y0, oz);
                 box.vMax.set(ex, y1, ez);
-                u32 mask = FRUSTUM_P_LRTB | FRUSTUM_P_FAR;
+                u32 mask = shadow ? FRUSTUM_P_LRTB : FRUSTUM_P_LRTB | FRUSTUM_P_FAR;
                 if (frustum.testAABB(&box.vMin.x, mask) == fcvNone)
                     continue;
                 out.tiles[out.count++].set(ox, oz, s, float(k));
@@ -984,6 +1141,19 @@ bool grid_frame(GridFrame& out)
     return out.count > 0;
 }
 } // namespace
+
+u32 da_snow_level_terrain(Fvector4& xf, Fvector4& lvl)
+{
+    if (!g.uploaded || !g.terrain.live())
+    {
+        xf.set(0.f, 0.f, 0.f, 0.f);
+        lvl.set(0.f, 1.f, 0.f, 0.f);
+        return 0;
+    }
+    xf.set(1.f / g.texel, 1.f / g.texel, -g.origin.x / g.texel, -g.origin.y / g.texel);
+    lvl.set(g.ymin, g.yrange, 0.f, 0.f);
+    return g.terrain_version;
+}
 
 void da_snow_level_load()
 {
@@ -1057,6 +1227,7 @@ void da_snow_frame_publish()
     const float slush = std::max(1.f - (fr.state.x + fr.state.y + fr.state.z + fr.state.w), 0.f);
     const float rho = 80.f * fr.state.x + 250.f * fr.state.y + 350.f * fr.state.z + 425.f * fr.state.w + 600.f * slush;
     g.share_open = clampr(rho / 550.f, 0.15f, 1.f);
+    g.rho_open = rho;
     g.share_road = clampr((rho + (500.f - rho) * clampr(fr.dirt.z, 0.f, 1.f)) / 550.f, 0.15f, 1.f);
     g.level_xf.set(1.f / g.texel, 1.f / g.texel, -g.origin.x / g.texel, -g.origin.y / g.texel);
 
@@ -1138,6 +1309,58 @@ void da_snow_render_grid(CBackend& cmd_list)
     cmd_list.set_Geometry(g.grid_geom);
     constexpr u32 side = k_cells + 1;
     cmd_list.RenderInstanced(D3DPT_TRIANGLELIST, 0, 0, side * side, 0, k_cells * k_cells * 2, grid.count);
+
+    // the snow on the covers: roofs, decks, vehicles, crates
+    g.stat_shell_chunks = 0;
+    if (!ps_r__snow_shells)
+        return;
+    // the scene so far, for the shells' test of what lies under them
+    const bool depth = RImplementation.Target && RImplementation.Target->copy_depth(cmd_list);
+    cmd_list.set_Element(g.s_grid->E[2]);
+    set_common(cmd_list);
+    cmd_list.set_c("da_sn_shell", k_shell_reach[g.preset], 0.f, k_grid_bias, 0.f);
+    cmd_list.set_c("da_sn_shell2", depth ? 1.f : 0.f, 0.f, Device.mProject._33, Device.mProject._43);
+    g.stat_shell_chunks = da_ground_shells_render(cmd_list, k_shell_reach[g.preset]);
+}
+
+bool da_snow_casts(u32 cascade)
+{
+    return cascade <= 1 && ps_r__snow_shadow && g.depth_on && g.shaders_ok && g.frame && g.grid_geom && k_presets[g.preset].grid_n;
+}
+
+void da_snow_render_cascade(CBackend& cmd_list, u32 cascade, const Fmatrix& vp)
+{
+    if (!da_snow_casts(cascade))
+        return;
+    // The second cascade only where the first one hands over (the eye's nearest metres are always the first's),
+    // in cells of every other vertex.
+    const bool outer = cascade > 0;
+    GridFrame grid;
+    if (!grid_frame(grid, k_shadow_reach, &vp, outer ? k_shadow_inner : 0.f))
+        return;
+    cmd_list.set_xform_world(Fidentity);
+    cmd_list.set_Element(g.s_grid->E[3]);
+    set_common(cmd_list);
+    const Preset& p = k_presets[g.preset];
+    cmd_list.set_c("da_sn_grid", p.reach, 0.1f * p.reach, k_grid_min, 0.f);
+    R_constant* rings = cmd_list.get_c("da_sn_rings")._get();
+    R_constant* holes = cmd_list.get_c("da_sn_holes")._get();
+    R_constant* tiles = cmd_list.get_c("da_sn_tiles")._get();
+    for (u32 k = 0; k < k_max_rings; ++k)
+    {
+        cmd_list.set_ca(rings, k, grid.rings[k]);
+        cmd_list.set_ca(holes, k, grid.holes[k]);
+    }
+    for (u32 i = 0; i < grid.count; ++i)
+        cmd_list.set_ca(tiles, i, grid.tiles[i]);
+    cmd_list.set_Geometry(g.grid_geom);
+    constexpr u32 side = k_cells + 1;
+    constexpr u32 half_cells = (k_cells / 2) * (k_cells / 2);
+    if (outer)
+        cmd_list.RenderInstanced(D3DPT_TRIANGLELIST, 0, 0, side * side, k_cells * k_cells * 6, half_cells * 2, grid.count);
+    else
+        cmd_list.RenderInstanced(D3DPT_TRIANGLELIST, 0, 0, side * side, 0, k_cells * k_cells * 2, grid.count);
+    cmd_list.set_CullMode(CULL_CCW);
 }
 
 void da_snow_apply_layer(CBackend& cmd_list)
@@ -1170,9 +1393,9 @@ void da_snow_apply_layer(CBackend& cmd_list)
         cmd_list.set_c("da_sn_sun", sun.x, sun.y, sun.z, sun_strength);
         cmd_list.set_c("da_sn_wind", std::sin(env.eff_wind_dir), std::cos(env.eff_wind_dir), clampr(0.3f * wind_speed, 0.f, 1.f), 0.f);
         // dusting from the cover keys only while the depth model has (almost) nothing to draw
-        // glint density: about one pixel in a few hundred toward the sun's mirror direction
-        cmd_list.set_c("da_sn_layer", covered > 0.f ? clampr(1.f - fr.mean_depth / 0.01f, 0.f, 1.f) : 0.f, 0.3f, 0.006f, metres_per_px);
-        cmd_list.set_c("da_sn_layer2", clampr(fr.fall.x / 0.005f, 0.f, 1.f), 30.f, 80.f, r2_hud_depth_limit);
+        // the glints' strength (r__snow_glint) and reach
+        cmd_list.set_c("da_sn_layer", covered > 0.f ? clampr(1.f - fr.mean_depth / 0.01f, 0.f, 1.f) : 0.f, 0.3f, ps_r__snow_glint, metres_per_px);
+        cmd_list.set_c("da_sn_layer2", clampr(fr.fall.x / 0.005f, 0.f, 1.f), 30.f, 150.f, r2_hud_depth_limit);
         cmd_list.set_c("da_snow_cover", fr.cover);
         cmd_list.set_c("da_snow_state", fr.state);
         cmd_list.set_c("da_snow_surf", fr.surf);
@@ -1225,6 +1448,12 @@ void da_snow_destroy()
 {
     g.fine.destroy();
     g.trod.destroy();
+    g.roof.destroy();
+    g.terrain.destroy();
+    g.shelter.destroy();
+    g.top.destroy();
+    g.walk.destroy();
+    g.overhang.destroy();
     g.level.destroy();
     g.road.destroy();
     g.weights.destroy();
@@ -1268,13 +1497,18 @@ void da_snow_stats()
         "reach %.0f m)",
         g.stat_stamps_near, g.stat_stamps_far, g.stat_tiles, g.stat_full ? "full" : "dirty", g.stat_level_texels,
         g.stat_grid_tiles, p.rings * (p.grid_n / k_cells) * (p.grid_n / k_cells), p.grid_n, p.grid_s0, p.reach);
+    Msg("* [snow] shells: %u chunks drawn (reach %.0f m)", g.stat_shell_chunks, k_shell_reach[g.preset]);
+    // (the last frame's near stamps as uploaded: where, how high, how big, of what kind)
+    for (u32 i = 0; i < g.stat_stamps_near && i < 16 && size_t(i) * 3 + 1 < g.stamps.size(); ++i)
+        Msg("* [snow]   stamp %u: %.2f %.2f y %.2f r %.2f kind %.0f", i, g.stamps[i * 3].x, g.stamps[i * 3].y, g.stamps[i * 3].z,
+            g.stamps[i * 3].w, g.stamps[i * 3 + 1].y);
     if (g.frame)
     {
         const SSnowFrame& fr = *g.frame;
         Msg("* [snow] frame: mean depth %.3f m, cover %.2f/%.2f/%.2f/%.2f, S %.3f/%.3f/%.3f/%.3f, Mc %.3f/%.3f/%.3f/%.3f, "
-            "fall %.4f m/h, refill %.2e m/s",
+            "fall %.4f m/h, refill %.2e m/s, state fresh %.2f settled %.2f old %.2f wet %.2f",
             fr.mean_depth, fr.cover.x, fr.cover.y, fr.cover.z, fr.cover.w, fr.S.x, fr.S.y, fr.S.z, fr.S.w, fr.Mc.x, fr.Mc.y,
-            fr.Mc.z, fr.Mc.w, fr.fall.x, fr.fall.y);
+            fr.Mc.z, fr.Mc.w, fr.fall.x, fr.fall.y, fr.state.x, fr.state.y, fr.state.z, fr.state.w);
     }
     Fvector4 win, win2;
     const bool window = da_ground_window(win, win2);

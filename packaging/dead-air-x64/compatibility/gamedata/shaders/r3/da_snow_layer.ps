@@ -8,12 +8,15 @@
 //   coverage  snow depth (season + trails, its thin margin ragged), slope, exposure (what lies over the
 //             fall line shelters, a bank beside it does not), dark ground losing thin snow first, the
 //             class cover keys on onset/melt days, roads covered whole from December to February (D5),
-//             and at most a light up-facing dusting on anything above the snow surface (D8)
+//             a static surface standing over the snow (a roof past the shells' reach, a crate, a sill) its
+//             own cover, anything else above the snow surface at most a light up-facing dusting (D8)
 //   look      the class albedo of the month, compacted prints and roads (tyre ruts, a little dirt),
 //             water-logged hollows, litter, thin snow letting the ground through (two-way diffuse
 //             transmission) and breaking into a mottle at its margin, a subtle wet dark ring around
 //             melting patches, the snow surface's own
-//             smooth normal with subtle wind ripples, and rare world-anchored glints for da_snow_light.h
+//             smooth normal with subtle wind ripples, and world-anchored glints of single grains for
+//             da_snow_light.h (they twinkle as the eye moves)
+//   shells    a shell pixel (da_snow_shell.vs: the snow on a roof, a deck, a vehicle) is deep snow
 //   ice       a grid pixel over frozen water is the sheet the grid draws there: bare ice or the snow on it
 //   material  code 31 where the snow dominates, the puddle flag cleared under snow; skipped: foliage
 //             codes (blades carry their own snow), the first-person view, the lake bed
@@ -33,7 +36,7 @@ uniform float4x4 da_sn_v2w;  // view -> world
 uniform float4x4 da_sn_w2v;  // world -> view
 uniform float4 da_sn_sun;    // xyz world direction to the sun, w its strength 0..1 (0 while it is down or hidden)
 uniform float4 da_sn_wind;   // xy direction the wind blows to (xz), z tan of the flakes' slant, w unused
-uniform float4 da_sn_layer;  // x onset/melt dusting weight, y dusting above the surface, z glint density, w metres per pixel at 1 m
+uniform float4 da_sn_layer;  // x onset/melt dusting weight, y dusting above the surface, z glint strength, w metres per pixel at 1 m
 uniform float4 da_sn_layer2; // x snowfall freshness 0..1, y detail normal range (m), z glint range (m), w depth of the first-person slice
 
 uniform float4 da_snow_cover;  // class cover keys (open, under trees, road, drift)
@@ -48,6 +51,12 @@ uniform float4 da_snow_albedo_trees;
 Texture2D<float> s_da_sn_trod;
 // Metres to the edge of the road inside a road (0..12.75 m as unorm, level texels; da_snow.cpp).
 Texture2D<float> s_da_sn_road;
+// The topmost static surface: the near window's raw raster (da_ground.cpp, R32F, toroidal) and the level's
+// at 1 m (R16_UNORM like the base).
+Texture2D<float> s_da_ground_top;
+Texture2D<float> s_da_sn_top;
+// the prints on the shells (da_snow_stamp.cs): r__dbg_snow paints them red on a shell
+Texture2D<uint> s_da_sn_roof;
 
 #ifndef USE_MSAA
 Texture2D s_depth_copy; // the hardware depth the G-buffer left (da_snow.cpp copies it)
@@ -55,9 +64,13 @@ Texture2D s_depth_copy; // the hardware depth the G-buffer left (da_snow.cpp cop
 
 // The material bare ice is lit as: the stock gloss slice (deffer shaders write (m + 0.5) / 4, m = 1).
 #define DA_SN_ICE_MTL 0.375
-// Gloss of smooth snow. The sun's specular is five times the gloss (combine_1.ps) and its lobe is broad:
-// more burns a white hot spot into the snow under a low sun.
-#define DA_SN_GLOSS 0.25
+// Gloss of smooth snow. The sun's specular is five times the gloss times the light twice over (combine_1.ps:
+// the accumulated specular times the light's colour) and its lobe is broad: under a bright low sun even a gloss
+// of 0.07 drew a smooth glossy streak along every swell toward the sun. Snow's own specular is weak and rough;
+// what flashes on it is single grains (the glints below).
+#define DA_SN_GLOSS 0.012
+// The gloss of the meltwater pooled in a hollow and of wet ruts: a real mirror.
+#define DA_SN_GLOSS_WATER 0.25
 
 // The first-person view: rasterised into the top slice of the depth range. MSAA has no single-sampled
 // copy of the depth: everything nearer than the longest first-person item stays as it is there.
@@ -117,6 +130,39 @@ float3 da_sn_noise(float2 p, uint salt)
 // cross of four at 1.2 m, 0.35 m out (the soft edge of an eave). The base is a conservative raster (each
 // texel holds its highest point), so on a slope it stands up to half a texel's rise above the surface:
 // not cover.
+// The opened topmost surface at xz in the near window (DA_SN_NONE beyond it: past the window the depth itself
+// carries the covers' shelter).
+float da_sn_cover_top(float2 xz)
+{
+	const float2 d = abs(xz - da_sn_win.xy);
+	[branch] if (max(d.x, d.y) > da_sn_win.z)
+		return DA_SN_NONE;
+	const int n = int(da_sn_win2.x);
+	const float2 p = xz * da_sn_win2.y - 0.5;
+	const float2 i = floor(p);
+	const float2 f = p - i;
+	const int2 t = int2(i);
+	const float4 h = float4(s_da_ground_base.Load(int3(da_sn_wrap(t, n), 0)).w, s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 0), n), 0)).w,
+		s_da_ground_base.Load(int3(da_sn_wrap(t + int2(0, 1), n), 0)).w, s_da_ground_base.Load(int3(da_sn_wrap(t + int2(1, 1), n), 0)).w);
+	[branch] if (min(min(h.x, h.y), min(h.z, h.w)) < DA_SN_NONE * 0.5)
+		return max(max(h.x, h.y), max(h.z, h.w));
+	return lerp(lerp(h.x, h.y, f.x), lerp(h.z, h.w, f.x), f.y);
+}
+
+// The topmost static surface at xz (x) and its texel (y, m): the near window's raw raster (each texel its highest
+// point), the level's 1 m field beyond it. DA_SN_NONE where nothing is.
+float2 da_sn_static_top(float2 xz)
+{
+	const float2 d = abs(xz - da_sn_win.xy);
+	[branch] if (max(d.x, d.y) < da_sn_win.z)
+	{
+		const int2 t = int2(floor(xz * da_sn_win2.y));
+		return float2(s_da_ground_top.Load(int3(da_sn_wrap(t, int(da_sn_win2.x)), 0)), 1.0 / da_sn_win2.y);
+	}
+	const float v = s_da_sn_top.Load(int3(int2(floor(xz * da_snow_level_xf.xy + da_snow_level_xf.zw)), 0));
+	return float2((v > 0.0) ? da_sn_lvl.x + v * da_sn_lvl.y : DA_SN_NONE, 1.0 / da_snow_level_xf.x);
+}
+
 float da_sn_exposure(float3 p, float3 n)
 {
 	const float2 grad = -n.xz / max(n.y, 0.25);
@@ -127,7 +173,7 @@ float da_sn_exposure(float3 p, float3 n)
 	{
 		const float h = (k == 0) ? 0.3 + lift : 1.2;
 		const float2 o = (k == 0) ? float2(0.0, 0.0) : float2((k == 1) ? 0.35 : ((k == 2) ? -0.35 : 0.0), (k == 3) ? 0.35 : ((k == 4) ? -0.35 : 0.0));
-		const float yT = da_sn_base(p.xz + o + slant * h).x;
+		const float yT = da_sn_cover_top(p.xz + o + slant * h);
 		const float c = (yT < DA_SN_NONE * 0.5) ? 1.0 : saturate((p.y + h - yT) / 0.15 + 0.5);
 		clear += c * ((k == 0) ? 0.4 : 0.15);
 	}
@@ -310,7 +356,7 @@ da_sn_pack da_sn_pack_detail(float2 xz, float footprint, float comp)
 		return r;
 	const float amp = (0.7 + 0.3 * settled + 0.3 * saturate(da_snow_surf.w)) * (1.0 - 0.7 * comp);
 	const float3 n1 = da_sn_pack_noise(xz, 3.4, float2(0.8, 0.6), 0x3A1u);
-	r.g = 0.25 * amp * f1 * n1.yz;
+	r.g = 0.15 * amp * f1 * n1.yz;
 	float h = 0.7 * n1.x + 0.15;
 	const float f2 = da_sn_fade(footprint, 1.15);
 	[branch] if (f2 > 0.0)
@@ -369,10 +415,38 @@ float da_sn_sheen()
 	return lerp(1.0, 0.5, saturate(da_snow_state.w + slush));
 }
 
-// One glint cell level: 1 = this pixel's cell carries a facet that mirrors the sun into the eye.
-float da_sn_glint(float3 pw, float cell, float chance)
+// Glints: the sun mirrored by single grains of the snow's surface. A cell carries the facet of its best placed
+// grain, tilted at random about the surface normal (slope spread DA_SN_GLINT_SPREAD); it flashes while the sun's
+// half vector falls within the cell's tolerance of it. With M grains in the cell the chance that one of them
+// mirrors the sun grows M times and its share of the cell shrinks M times - but never past a few cells in a
+// hundred (DA_SN_GLINT_CHANCE): grown on, the far cells flashed nearly all at once, faintly, and TAA smoothed
+// them into a glossy streak toward a low sun. So near, few bright sparks; far, as few, each as bright as the
+// cell's share of the sun allows. World-anchored, no time term: as the eye moves other grains light up and the
+// snow twinkles; standing still nothing changes (TAA keeps them).
+#define DA_SN_GLINT_SPREAD 0.35
+#define DA_SN_GLINT_TOL 0.012
+#define DA_SN_GLINT_K 400.0
+#define DA_SN_GLINT_CHANCE 0.02
+
+// One cell level: x the flash (its brightness against the snow's diffuse light), 0 off. hs = the half
+// vector's slope against the surface normal (tangent space), grain = grain size (m).
+float da_sn_glint_cell(float3 pw, float cell, float2 hs, float grain, uint salt)
 {
-	return (da_sn_hash(floor(pw / cell), 0x5A17u) < chance) ? 1.0 : 0.0;
+	const uint h = da_sn_hash_u(asuint(int3(floor(pw / cell))) + salt);
+	const float u1 = (float(h & 0xFFFu) + 0.5) * (1.0 / 4096.0);
+	const float u2 = float((h >> 12) & 0xFFFu) * (1.0 / 4096.0);
+	const float u3 = float(h >> 24) * (1.0 / 256.0);
+	// the facet's slope, normal with the spread (Box-Muller)
+	const float rad = DA_SN_GLINT_SPREAD * sqrt(-2.0 * log(u1));
+	const float2 fs = rad * float2(cos(6.2831853 * u2), sin(6.2831853 * u2));
+	const float m = max(cell * cell / (grain * grain), 1.0);
+	const float tol2 = min(DA_SN_GLINT_TOL * DA_SN_GLINT_TOL * m, DA_SN_GLINT_CHANCE * 2.0 * DA_SN_GLINT_SPREAD * DA_SN_GLINT_SPREAD);
+	const float e = dot(hs - fs, hs - fs) / tol2;
+	[branch] if (e >= 1.0)
+		return 0.0;
+	// brightness: the tolerance's share of the grains, spread over a heavy tail (most faint, a few bright)
+	const float b = DA_SN_GLINT_K * DA_SN_GLINT_TOL * DA_SN_GLINT_TOL / tol2 * (0.25 + 3.0 * u3 * u3 * u3);
+	return b * (1.0 - e) * (1.0 - e) * 3.0;
 }
 
 // The packed (or plain) G-buffer words of a changed pixel.
@@ -433,10 +507,13 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	const float3 Pv = float3(P.z * (pos2d.xy * pos_decompression_params.zw - pos_decompression_params.xy), P.z);
 	const float3 Nv = gbuf_unpack_normal(P.xy);
 	const float mtl = gbuf_unpack_mtl(P.w);
+	const float hemi_in = gbuf_unpack_hemi(P.w);
 	o.g0 = float4(P.xy, 0.0, P.w);
 #else
 	const float3 Pv = P.xyz;
-	const float3 Nv = DA_SN_LOAD(s_normal, pos2d.xy).xyz;
+	const float4 Ne = DA_SN_LOAD(s_normal, pos2d.xy);
+	const float3 Nv = Ne.xyz;
+	const float hemi_in = Ne.w;
 	const float mtl = abs(P.w);
 	o.g0 = float4(0.0, 0.0, 0.0, 0.0);
 #endif
@@ -444,6 +521,9 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	[branch] if (da_is_foliage(mtl) || da_sn_first_person(pos2d.xy, Pv.z))
 		return o;
 
+	const int cut = da_sn_cut();
+	[branch] if (cut == 1)
+		return o;
 	const bool grid = da_is_snow(mtl);
 	const float3 Pw = mul(da_sn_v2w, float4(Pv, 1.0)).xyz;
 	const float3 Nw = normalize(mul((float3x3)da_sn_v2w, Nv));
@@ -454,6 +534,17 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	float2 dgrad;
 	da_sn_depth_grad(Pw.xz, D, dgrad);
 	const int dbg = da_sn_debug();
+	[branch] if (cut == 2)
+		return o;
+	// A snow shell (da_snow_shell.ps marks it with a hemi of 1): the snow on a roof or a vehicle. It is deep snow;
+	// the ground's depth and trails are not its own. (Told by its height over the ground's snow, a grid pixel of
+	// a coarse ring over a hollow or of the snow over a pond's ice lost its ice and its trails.)
+	const bool shell = grid && hemi_in > 0.99;
+	[branch] if (shell)
+	{
+		D = 0.3;
+		dgrad = float2(0.0, 0.0);
+	}
 
 	// A grid pixel over a frozen pond is the sheet of its ice. The pond's share is per pixel and continuous
 	// (da_sn_pond: the bilinear ground against the pond's level, the baked field's pond beyond the window's
@@ -464,7 +555,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	// line's meander with a thin see-through rim, not a cut.
 	bool frozen_pond = false;
 	float3 waterline = float3(DA_SN_NONE, 0.0, 0.0);
-	[branch] if (grid && da_snow_ice.x > 0.02)
+	[branch] if (grid && !shell && da_snow_ice.x > 0.02)
 	{
 		waterline = da_sn_pond(Pw.xz, base);
 		[branch] if (waterline.x > DA_SN_NONE * 0.5)
@@ -484,7 +575,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	}
 	// Under the water surface of open water (base.x is that surface there): the lake bed stays as it is, the
 	// water pass draws over it; a grid pixel on it is the sheet of a closing ice front.
-	[branch] if (base.z > 0.5 && !frozen_pond)
+	[branch] if (base.z > 0.5 && !frozen_pond && !shell)
 	{
 		[branch] if (grid && Pw.y > base.x - 0.02)
 		{
@@ -505,10 +596,24 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 		}
 	}
 
+	[branch] if (cut == 3)
+		return o;
 	// No collision under the pixel (the backdrop beyond the playable area): the surface is its own snow base.
 	const bool backdrop = base.x < DA_SN_NONE * 0.5;
 	if (backdrop)
 		base.x = Pw.y - D;
+	// Anything standing above the snow surface gets at most a light up-facing dusting (D8) - but a static
+	// surface lying open to the sky (a roof past the shells' reach, a crate's or a slab's top, a sill: on the
+	// collision's topmost surface) carries the snow a roof keeps, as a cover of its own. The grid is the snow
+	// surface itself (at a shore it stands over the bank's thin snow where the snow on the ice runs on). The step
+	// from what lies under the snow to what stands in it is a few centimetres: over 15, a rifle lying in its dent
+	// took the snow's cover and went out of sight.
+	const float above = grid ? 0.0 : saturate((Pw.y - (base.x + D) - 0.005) / 0.04);
+	// What stands over the snow facing sideways or down - a wall, a trunk, a fence, a body's flank - takes none of
+	// the layer's snow: out before the season's, the slope's and the exposure's lookups (a good share of the screen;
+	// before, the ground's slope under a wall's foot gave it a strip of dust).
+	[branch] if (above >= 1.0 && Nw.y <= 0.35)
+		return o;
 	const da_sn_field fl = da_sn_season(Pw.xz);
 	// Texels the bake left without a class (its water) give their share to the open class: snow at a pond's edge is
 	// open snow, never without a colour (a black notch on a bank over the bake's water texels before).
@@ -522,6 +627,8 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	float2 gb = float2(0.0, 0.0);
 	[branch] if (grid)
 		gb = -Nw.xz / max(Nw.y, 0.2) * surf;
+	else if (above >= 1.0)
+		surf = 0.0;
 	else
 	{
 		const float eb = 1.0;
@@ -554,14 +661,29 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	const float road = saturate((da_snow_cover.z - 0.95) * 20.0) * step(0.004, w.z);
 	// the exposure (five base lookups) only where snow can lie at all, and not on the grid (its cover is 1)
 	float expo = 0.0;
-	[branch] if (!grid && max(lay, road * step(0.2, ny)) > 0.001)
+	[branch] if (!grid && above < 1.0 && max(lay, road * step(0.2, ny)) > 0.001)
 		expo = da_sn_exposure(Pw, Nw);
 	float cov = lay * expo * slope;
 	cov = lerp(cov, max(cov, expo * saturate((ny - 0.2) / 0.3)), road);
-	// anything standing above the snow surface gets at most a light up-facing dusting (D8); the grid is the
-	// snow surface itself (at a shore it stands over the bank's thin snow where the snow on the ice runs on)
-	const float above = grid ? 0.0 : saturate((Pw.y - (base.x + D) - 0.02) / 0.15);
-	cov = min(cov, lerp(1.0, da_sn_layer.y * slope, above));
+	// The roof's own cover on a static top over the snow (above).
+	float coat = 0.0;
+	float Dcoat = 0.0;
+	[branch] if (above > 0.0 && ny > 0.5 && Nw.y > 0.45)
+	{
+		// On a cover only (its top a cover's height over the snow base there: a roof, a slab, a vehicle, a stump - not
+		// the ground a body or a boot lies on), and on its very surface: a few centimetres over the raster's highest
+		// point at most, under it by the slope's run over a texel.
+		const float2 st = da_sn_static_top(Pw.xz);
+		const float dy = Pw.y - st.x;
+		const float run = st.y * sqrt(saturate(1.0 - ny * ny)) / ny;
+		[branch] if (st.x > DA_SN_NONE * 0.5 && st.x > base.x + 0.3 && dy < 0.06 && dy > -(0.06 + run))
+		{
+			Dcoat = da_sn_roof_depth(Pw.xz, ny).x;
+			coat = smoothstep(0.005, 0.03, Dcoat);
+		}
+	}
+	// the dusting (a corpse, a creature, a loose prop) grows while it snows: a fresh body is not white
+	cov = lerp(cov, max(da_sn_layer.y * slope * (0.4 + 0.6 * da_sn_layer2.x), coat), above);
 	[branch] if (grid)
 		cov = 1.0;
 
@@ -569,6 +691,8 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	const float2 g = gb + dgrad * surf;
 	const float3 Nm = normalize(float3(-g.x, 1.0, -g.y));
 
+	[branch] if (cut == 4)
+		return o;
 	// ---- local state -------------------------------------------------------------------------
 	const float3 sun_noon = float3(0.0, 0.36, -0.93); // +z north: the winter noon sun stands low in the south
 	const float south = saturate(dot(lerp(Nw, Nm, surf), sun_noon) * 0.5 + 0.5);
@@ -576,7 +700,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	const float wet = saturate(da_snow_surf.z * lerp(0.6, 1.4, south));
 
 	float ring = 0.0;
-	[branch] if (wet > 0.05 && cov < 0.99)
+	[branch] if (wet > 0.05 && cov < 0.99 && ny > 0.5)
 	{
 		const float r = 0.6;
 		const float near = max(max(da_snow_depth(Pw.xz + float2(r, 0.0)), da_snow_depth(Pw.xz - float2(r, 0.0))),
@@ -589,7 +713,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	[branch] if (cov <= 0.001 && ring <= 0.001)
 		return o;
 
-	const float trod = da_sn_trod(Pw.xz);
+	const float trod = shell ? 0.0 : da_sn_trod(Pw.xz);
 	const float comp = max(w.z * da_snow_dirt.z, trod);
 	const float dirt = saturate(w.z * da_snow_dirt.x + w.y * da_snow_dirt.y);
 
@@ -602,7 +726,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	// which drew lighter and darker slabs along the terrain's edges. Eased in over 3 cm of that rise, so nothing
 	// switches along a line.
 	float Dr = D;
-	const float lift = (grid && !backdrop) ? saturate((Pw.y - (base.x + D) - 0.02) / 0.03) : 0.0;
+	const float lift = (grid && !backdrop && !shell) ? saturate((Pw.y - (base.x + D) - 0.02) / 0.03) : 0.0;
 	[branch] if (lift > 0.0)
 	{
 		Dr = lerp(D, max(D, da_sn_ice_at(Pw.xz).y), lift);
@@ -628,7 +752,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	}
 	R = max(R, road);
 	R = max(R, 0.5 * saturate(dust * 4.0));
-	R = lerp(R, 0.55, above);
+	R = lerp(R, lerp(0.55, da_sn_opacity(Dcoat, rho, re), coat), above);
 	float k = R * cov;
 	// Up close (fully within a few metres, gone by about fifteen) the cover itself - the thin snow's opacity
 	// times its lay on the ground, which both ramp over the last centimetres - is cut on the same noise with a
@@ -648,7 +772,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	// ---- roads: compacted snow with the ruts of the wheels -------------------------------------------
 	float rut = 0.0;
 	float2 rut_g = float2(0.0, 0.0);
-	[branch] if (w.z > 0.05 && k > 0.05 && view_dist < 150.0)
+	[branch] if (!shell && w.z > 0.05 && k > 0.05 && view_dist < 150.0)
 	{
 		const float3 re3 = da_sn_road_edge(Pw.xz);
 		// a wheel track 1.0 m and 2.6 m in from either edge (one lane each way on a wide road), broken
@@ -686,6 +810,8 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	G *= lerp(1.0, 0.72, max(ring, wet * (1.0 - R) * cov));
 	const float3 albedo = lerp(G, A, k);
 
+	[branch] if (cut == 5)
+		return o;
 	// ---- gloss (the specular intensity the G-buffer carries) --------------------------------
 	// Wet and slushy snow is coarse-grained and matte, never a plastic sheen; only the meltwater in a hollow
 	// mirrors.
@@ -698,7 +824,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	// the wet ring is a damp, not a mirror: on a bumpy normal map (asphalt, gravel) more gloss lights every
 	// ridge and pebble white, so it keeps the ground's own; melting snow keeps a share of its sheen (da_sn_sheen),
 	// the meltwater pooled in a hollow all of it
-	const float gloss = lerp(C.a, saturate(1.0 - rough) * DA_SN_GLOSS * lerp(da_sn_sheen(), 1.0, pond), k);
+	const float gloss = lerp(C.a, lerp(saturate(1.0 - rough) * DA_SN_GLOSS * da_sn_sheen(), saturate(1.0 - rough) * DA_SN_GLOSS_WATER, max(pond, rut)), k);
 
 	// ---- normal ------------------------------------------------------------------------------
 	float2 gd = rut_g + pack.g;
@@ -724,36 +850,65 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	// meltwater of the wet ring softens it by half. A dusted object above the snow keeps its own.
 	float3 N = normalize(lerp(Nw, Ns, max(smoothstep(0.0, 0.25, k), 0.5 * ring) * surf * (1.0 - above)));
 
+	[branch] if (cut == 6)
+		return o;
 	// ---- glints ------------------------------------------------------------------------------
-	// Rare, a pixel wide, only on clean dry loose snow the sun shines on (the light pass shadows them),
-	// mostly toward the sun's mirror direction. World-anchored, no time term.
-	[branch] if (da_sn_sun.w > 0.05 && k > 0.6 && view_dist < da_sn_layer2.z && dot(N, da_sn_sun.xyz) > 0.1)
+	// Single grains mirroring the sun (da_sn_glint_cell): on clean dry snow the sun shines on (the light pass
+	// shadows them), cells of about one and a half pixels at any distance on discrete 1.3x steps (Bowles &
+	// Wang; across a step one level's cells drop out as the next one's come in). A flashing pixel's normal turns
+	// to the sun's half vector, so the narrow lobe of da_snow_light.h lights it alone, its gloss the flash.
+	float gloss_out = gloss;
+	bool glint = false;
+	[branch] if (da_sn_sun.w > 0.05 && k > 0.6 && view_dist < da_sn_layer2.z && dot(N, da_sn_sun.xyz) > 0.05)
 	{
-		const float amount = dot(da_snow_state, float4(1.0, 0.7, 0.4, 0.0)) * (1.0 - wet) * (1.0 - wet) * (1.0 - comp) * (1.0 - dirt);
-		const float3 V = normalize(eye_position - Pw);
-		const float3 H = normalize(da_sn_sun.xyz + V);
-		const float lobe = exp(-(1.0 - saturate(dot(N, H))) * 30.0);
-		const float chance = da_sn_layer.z * amount * da_sn_sun.w * (0.1 + 0.9 * lobe);
-		// cells of about a pixel at any distance, on discrete 1.3x steps (Bowles & Wang); across a step
-		// the cells of one level drop out one by one while the next level's come in, so nothing pops
-		const float cell = view_dist * da_sn_layer.w * lerp(1.0, 1.6, age);
-		const float lv = log2(max(cell, 1e-4) / 0.004) * (1.0 / log2(1.3));
-		const float l0 = floor(lv);
-		const float fl0 = lv - l0;
-		const float c0 = 0.004 * exp2(l0 * log2(1.3));
-		const float glint = max(da_sn_glint(Pw, c0, chance * (1.0 - fl0)), da_sn_glint(Pw, c0 * 1.3, chance * fl0));
-		[branch] if (glint > 0.5)
-			N = H;
+		const float amount = dot(da_snow_state, float4(1.0, 0.85, 0.6, 0.0)) * (1.0 - wet) * (1.0 - wet) * (1.0 - comp) * (1.0 - dirt);
+		[branch] if (amount > 0.02)
+		{
+			const float3 V = normalize(eye_position - Pw);
+			const float3 H = normalize(da_sn_sun.xyz + V);
+			// the half vector's slope in the surface's frame
+			const float3 Tn = normalize(abs(N.y) < 0.99 ? cross(float3(0.0, 1.0, 0.0), N) : float3(1.0, 0.0, 0.0));
+			const float3 Bn = cross(N, Tn);
+			const float hn = max(dot(H, N), 0.05);
+			const float2 hs = float2(dot(H, Tn), dot(H, Bn)) / hn;
+			// fresh powder: fine grains, many small sparks; old and corn snow: coarse grains, fewer, bigger ones
+			const float grain = lerp(0.0004, 0.0013, age);
+			// two pixels and more: a spark keeps its cell under the jitter, so TAA keeps it bright
+			const float cell = max(2.2 * footprint, grain);
+			const float lv = log2(cell / 0.0006) * (1.0 / log2(1.3));
+			const float l0 = floor(lv);
+			const float fl0 = lv - l0;
+			const float c0 = 0.0006 * exp2(l0 * log2(1.3));
+			const float g0 = da_sn_glint_cell(Pw, c0, hs, grain, 0x5A17u) * (1.0 - fl0);
+			const float g1 = da_sn_glint_cell(Pw, c0 * 1.3, hs, grain, 0x7B23u) * fl0;
+			const float flash = max(g0, g1) * amount * da_sn_sun.w * da_sn_layer.z;
+			[branch] if (flash > 0.02)
+			{
+				N = H;
+				gloss_out = saturate(flash * (1.0 / DA_SNOW_GLINT_SCALE));
+				glint = true;
+			}
+		}
 	}
 
 	// ---- material and write-out -----------------------------------------------------------------
 	const bool snow_code = grid || k > 0.5;
-	// r__dbg_snow: the grid green (yellow-green where it runs on as the ice's snow over the bank), the layer's
-	// snow yellow, its thin snow and wet rings orange
+	// r__dbg_snow: the grid green (yellow-green where it runs on as the ice's snow over the bank), the shells
+	// violet, the layer's snow yellow, its thin snow and wet rings orange
 	float3 alb_out = albedo;
 	[branch] if (dbg > 0)
 		alb_out = grid ? ((Dr > D + 0.005) ? float3(0.6, 0.9, 0.1) : float3(0.1, 0.9, 0.1)) : ((k > 0.5) ? float3(1.0, 0.9, 0.0) : float3(1.0, 0.45, 0.0));
-	da_sn_write(o, P, N, da_mtl_from_code(DA_MTL_SNOW), !snow_code, alb_out, gloss);
+	// (and the prints the roof map holds red, on a shell or not)
+	[branch] if (dbg > 0)
+	{
+		const float n0 = da_snow_fine_xf.y;
+		const float2 a0 = floor(Pw.xz * da_snow_fine_xf.x);
+		[branch] if (s_da_sn_roof.Load(int3(int2(a0 - n0 * floor(a0 / n0)), 0)) > 0u)
+			alb_out = float3(1.0, 0.1, 0.1);
+	}
+	[branch] if (dbg > 0 && shell && alb_out.g > 0.2)
+		alb_out = float3(0.65, 0.35, 1.0);
+	da_sn_write(o, P, N, da_mtl_from_code(glint ? DA_MTL_GLINT : DA_MTL_SNOW), !snow_code, alb_out, gloss_out);
 	// a stock material under little snow keeps its word bit for bit (the ground flag goes under snow)
 	[branch] if (!snow_code && k <= 0.1)
 		o.g0.w = P.w;

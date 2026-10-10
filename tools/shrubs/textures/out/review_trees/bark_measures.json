@@ -1,0 +1,1284 @@
+{
+ "pine_plates": {
+  "texture": "#5d5b5a  p20/p80 0.15  dark 0.27  aniso 1.31",
+  "photos": "#7e6b5e  p20/p80 0.20  dark 0.26  aniso 1.13  (24 photos)",
+  "research": null,
+  "packs": [
+   "pin_syl_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 53.0,
+   "texture_ambient": 44.0,
+   "pack": 72.0,
+   "lit_vs_pack": "-26%"
+  },
+  "fissure_mm": {
+   "texture_lit": 9.2,
+   "texture_ambient": 14.2,
+   "pack": 5.4,
+   "lit_vs_pack": "+71%"
+  },
+  "scaled_photos": [
+   {
+    "file": "pin_syl_bark/06.jpg",
+    "px_per_mm": 1.07,
+    "spacing_mm": 72.0,
+    "fissure_mm": 4.0
+   },
+   {
+    "file": "pin_syl_bark/07.jpg",
+    "px_per_mm": 2.26,
+    "spacing_mm": 40.0,
+    "fissure_mm": 4.6
+   },
+   {
+    "file": "pin_syl_bark/12.jpg",
+    "px_per_mm": 1.56,
+    "spacing_mm": 80.0,
+    "fissure_mm": 5.4
+   },
+   {
+    "file": "pin_syl_bark/18.jpg",
+    "px_per_mm": 1.98,
+    "spacing_mm": 66.0,
+    "fissure_mm": 6.1
+   },
+   {
+    "file": "pin_syl_bark/21.jpg",
+    "px_per_mm": 1.29,
+    "spacing_mm": 134.0,
+    "fissure_mm": 5.9
+   }
+  ]
+ },
+ "pine_mirror": {
+  "texture": "#b46f41  p20/p80 0.66  dark 0.04  aniso 1.40",
+  "photos": "#7e6b5e  p20/p80 0.20  dark 0.26  aniso 1.13  (24 photos)",
+  "research": "pin_syl #6c6558 p20/p80 0.23 dark 0.21 aniso 1.41 (3)",
+  "packs": [
+   "pin_syl_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 57.0,
+   "texture_ambient": 47.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "fissure_mm": {
+   "texture_lit": 2.6,
+   "texture_ambient": 2.7,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "scaled_photos": []
+ },
+ "spruce": {
+  "texture": "#6c655e  p20/p80 0.28  dark 0.23  aniso 1.06",
+  "photos": "#7d6b53  p20/p80 0.14  dark 0.29  aniso 1.04  (20 photos)",
+  "research": null,
+  "packs": [
+   "pic_abi_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 52.0,
+   "texture_ambient": 54.0,
+   "pack": 66.0,
+   "lit_vs_pack": "-21%"
+  },
+  "fissure_mm": {
+   "texture_lit": 4.0,
+   "texture_ambient": 4.0,
+   "pack": 4.7,
+   "lit_vs_pack": "-15%"
+  },
+  "scaled_photos": [
+   {
+    "file": "pic_abi_bark/00.jpg",
+    "px_per_mm": 1.79,
+    "spacing_mm": 106.0,
+    "fissure_mm": 4.7
+   },
+   {
+    "file": "pic_abi_bark/05.jpg",
+    "px_per_mm": 1.64,
+    "spacing_mm": 66.0,
+    "fissure_mm": 5.2
+   },
+   {
+    "file": "pic_abi_bark/18.jpg",
+    "px_per_mm": 1.98,
+    "spacing_mm": 36.0,
+    "fissure_mm": 4.2
+   }
+  ]
+ },
+ "birch_white": {
+  "texture": "#cac7be  p20/p80 0.74  dark 0.10  aniso 0.42",
+  "photos": "#85795c  p20/p80 0.15  dark 0.29  aniso 0.93  (44 photos)",
+  "research": null,
+  "packs": [
+   "bet_pen_bark",
+   "bet_pub_bark"
+  ],
+  "photo_count": 48,
+  "spacing_mm": {
+   "texture_lit": 74.0,
+   "texture_ambient": 104.0,
+   "pack": 148.0,
+   "lit_vs_pack": "-50%"
+  },
+  "fissure_mm": {
+   "texture_lit": 10.2,
+   "texture_ambient": 10.2,
+   "pack": 7.2,
+   "lit_vs_pack": "+41%"
+  },
+  "scaled_photos": [
+   {
+    "file": "bet_pen_bark/21.jpg",
+    "px_per_mm": 1.84,
+    "spacing_mm": 134.0,
+    "fissure_mm": 8.2
+   },
+   {
+    "file": "bet_pub_bark/10.jpg",
+    "px_per_mm": 2.36,
+    "spacing_mm": 162.0,
+    "fissure_mm": 6.2
+   }
+  ]
+ },
+ "birch_base": {
+  "texture": "#98958d  p20/p80 0.33  dark 0.21  aniso 1.35",
+  "photos": "#87795f  p20/p80 0.13  dark 0.31  aniso 0.93  (23 photos)",
+  "research": null,
+  "packs": [
+   "bet_pen_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 74.0,
+   "texture_ambient": 52.0,
+   "pack": 135.0,
+   "lit_vs_pack": "-45%"
+  },
+  "fissure_mm": {
+   "texture_lit": 10.1,
+   "texture_ambient": 10.4,
+   "pack": 7.7,
+   "lit_vs_pack": "+30%"
+  },
+  "scaled_photos": [
+   {
+    "file": "bet_pen_bark/07.jpg",
+    "px_per_mm": 1.06,
+    "spacing_mm": 120.0,
+    "fissure_mm": 8.4
+   },
+   {
+    "file": "bet_pen_bark/17.jpg",
+    "px_per_mm": 2.17,
+    "spacing_mm": 150.0,
+    "fissure_mm": 7.0
+   }
+  ]
+ },
+ "birch_downy_base": {
+  "texture": "#8e8b84  p20/p80 0.44  dark 0.13  aniso 1.36",
+  "photos": "#83755b  p20/p80 0.21  dark 0.21  aniso 0.94  (21 photos)",
+  "research": null,
+  "packs": [
+   "bet_pub_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 80.0,
+   "texture_ambient": 80.0,
+   "pack": 113.0,
+   "lit_vs_pack": "-29%"
+  },
+  "fissure_mm": {
+   "texture_lit": 6.1,
+   "texture_ambient": 5.5,
+   "pack": 5.0,
+   "lit_vs_pack": "+20%"
+  },
+  "scaled_photos": [
+   {
+    "file": "bet_pub_bark/09.jpg",
+    "px_per_mm": 1.83,
+    "spacing_mm": 78.0,
+    "fissure_mm": 4.5
+   },
+   {
+    "file": "bet_pub_bark/17.jpg",
+    "px_per_mm": 2.21,
+    "spacing_mm": 148.0,
+    "fissure_mm": 5.6
+   }
+  ]
+ },
+ "aspen_smooth": {
+  "texture": "#999c8f  p20/p80 0.85  dark 0.04  aniso 0.96",
+  "photos": "#908875  p20/p80 0.26  dark 0.24  aniso 1.07  (22 photos)",
+  "research": "pop_tre #787062 p20/p80 0.21 dark 0.26 aniso 1.07 (6)",
+  "packs": [
+   "pop_tre_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 50.0,
+   "texture_ambient": 54.0,
+   "pack": 154.0,
+   "lit_vs_pack": "-68%"
+  },
+  "fissure_mm": {
+   "texture_lit": 7.2,
+   "texture_ambient": 7.4,
+   "pack": 4.2,
+   "lit_vs_pack": "+71%"
+  },
+  "scaled_photos": [
+   {
+    "file": "pop_tre_bark/01.jpg",
+    "px_per_mm": 2.33,
+    "spacing_mm": 130.0,
+    "fissure_mm": 4.9
+   },
+   {
+    "file": "pop_tre_bark/12.jpg",
+    "px_per_mm": 2.07,
+    "spacing_mm": 178.0,
+    "fissure_mm": 3.5
+   }
+  ]
+ },
+ "aspen_base": {
+  "texture": "#46423e  p20/p80 0.23  dark 0.25  aniso 1.54",
+  "photos": "#908875  p20/p80 0.26  dark 0.24  aniso 1.07  (22 photos)",
+  "research": "pop_tre #787062 p20/p80 0.21 dark 0.26 aniso 1.07 (6); pop_alb #6c6b69 p20/p80 0.13 dark 0.30 aniso 1.05 (8)",
+  "packs": [
+   "pop_tre_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 42.0,
+   "texture_ambient": 47.0,
+   "pack": 56.0,
+   "lit_vs_pack": "-25%"
+  },
+  "fissure_mm": {
+   "texture_lit": 5.0,
+   "texture_ambient": 5.3,
+   "pack": 5.7,
+   "lit_vs_pack": "-12%"
+  },
+  "scaled_photos": [
+   {
+    "file": "pop_alb_bark/02.jpg",
+    "px_per_mm": 1.38,
+    "spacing_mm": 64.0,
+    "fissure_mm": 5.8
+   },
+   {
+    "file": "pop_alb_bark/04.jpg",
+    "px_per_mm": 0.88,
+    "spacing_mm": 48.0,
+    "fissure_mm": 5.6
+   }
+  ]
+ },
+ "poplar_white": {
+  "texture": "#b9baaf  p20/p80 0.83  dark 0.05  aniso 1.10",
+  "photos": "#7b7061  p20/p80 0.17  dark 0.28  aniso 1.03  (23 photos)",
+  "research": "pop_alb #6c6b69 p20/p80 0.13 dark 0.30 aniso 1.05 (8)",
+  "packs": [
+   "pop_alb_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 28.0,
+   "texture_ambient": 30.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "fissure_mm": {
+   "texture_lit": 8.0,
+   "texture_ambient": 7.9,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "scaled_photos": []
+ },
+ "poplar_black": {
+  "texture": "#49443e  p20/p80 0.26  dark 0.22  aniso 1.63",
+  "photos": "#7b6f5b  p20/p80 0.20  dark 0.27  aniso 1.16  (38 photos)",
+  "research": "pop_nig #635a4c p20/p80 0.27 dark 0.20 aniso 1.38 (5); pop_can #747060 p20/p80 0.14 dark 0.29 aniso 1.25 (8)",
+  "packs": [
+   "pop_nig_bark",
+   "pop_can_bark"
+  ],
+  "photo_count": 48,
+  "spacing_mm": {
+   "texture_lit": 62.0,
+   "texture_ambient": 80.0,
+   "pack": 73.0,
+   "lit_vs_pack": "-15%"
+  },
+  "fissure_mm": {
+   "texture_lit": 5.9,
+   "texture_ambient": 5.8,
+   "pack": 4.9,
+   "lit_vs_pack": "+20%"
+  },
+  "scaled_photos": [
+   {
+    "file": "pop_nig_bark/07.jpg",
+    "px_per_mm": 0.93,
+    "spacing_mm": 82.0,
+    "fissure_mm": 3.7
+   },
+   {
+    "file": "pop_nig_bark/09.jpg",
+    "px_per_mm": 0.8,
+    "spacing_mm": 90.0,
+    "fissure_mm": 6.4
+   },
+   {
+    "file": "pop_nig_bark/23.jpg",
+    "px_per_mm": 0.63,
+    "spacing_mm": 64.0,
+    "fissure_mm": 5.1
+   },
+   {
+    "file": "pop_can_bark/17.jpg",
+    "px_per_mm": 0.92,
+    "spacing_mm": 44.0,
+    "fissure_mm": 4.6
+   }
+  ]
+ },
+ "oak": {
+  "texture": "#5a5655  p20/p80 0.08  dark 0.38  aniso 1.95",
+  "photos": "#786654  p20/p80 0.10  dark 0.32  aniso 1.21  (23 photos)",
+  "research": null,
+  "packs": [
+   "que_rob_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 26.0,
+   "texture_ambient": 25.0,
+   "pack": 38.0,
+   "lit_vs_pack": "-32%"
+  },
+  "fissure_mm": {
+   "texture_lit": 7.5,
+   "texture_ambient": 8.0,
+   "pack": 6.0,
+   "lit_vs_pack": "+25%"
+  },
+  "scaled_photos": [
+   {
+    "file": "que_rob_bark/04.jpg",
+    "px_per_mm": 1.82,
+    "spacing_mm": 30.0,
+    "fissure_mm": 6.0
+   },
+   {
+    "file": "que_rob_bark/07.jpg",
+    "px_per_mm": 1.53,
+    "spacing_mm": 202.0,
+    "fissure_mm": 6.2
+   },
+   {
+    "file": "que_rob_bark/13.jpg",
+    "px_per_mm": 1.0,
+    "spacing_mm": 50.0,
+    "fissure_mm": 8.3
+   },
+   {
+    "file": "que_rob_bark/20.jpg",
+    "px_per_mm": 0.85,
+    "spacing_mm": 28.0,
+    "fissure_mm": 4.1
+   },
+   {
+    "file": "que_rob_bark/23.jpg",
+    "px_per_mm": 1.53,
+    "spacing_mm": 38.0,
+    "fissure_mm": 5.5
+   }
+  ]
+ },
+ "oak_young": {
+  "texture": "#827f73  p20/p80 0.78  dark 0.01  aniso 2.60",
+  "photos": "#786654  p20/p80 0.10  dark 0.32  aniso 1.21  (23 photos)",
+  "research": "que_rob #756f64 p20/p80 0.27 dark 0.18 aniso 1.18 (9)",
+  "packs": [
+   "que_rob_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 118.0,
+   "texture_ambient": 118.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "fissure_mm": {
+   "texture_lit": 0.0,
+   "texture_ambient": 0.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "scaled_photos": []
+ },
+ "red_oak": {
+  "texture": "#6e6b64  p20/p80 0.29  dark 0.21  aniso 1.43",
+  "photos": "#797060  p20/p80 0.13  dark 0.30  aniso 1.13  (24 photos)",
+  "research": "que_rub #a79877 p20/p80 0.12 dark 0.33 aniso 1.22 (1)",
+  "packs": [
+   "que_rub_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 32.0,
+   "texture_ambient": 32.0,
+   "pack": 40.0,
+   "lit_vs_pack": "-20%"
+  },
+  "fissure_mm": {
+   "texture_lit": 6.0,
+   "texture_ambient": 5.7,
+   "pack": 5.4,
+   "lit_vs_pack": "+11%"
+  },
+  "scaled_photos": [
+   {
+    "file": "que_rub_bark/02.jpg",
+    "px_per_mm": 2.02,
+    "spacing_mm": 68.0,
+    "fissure_mm": 5.5
+   },
+   {
+    "file": "que_rub_bark/03.jpg",
+    "px_per_mm": 1.78,
+    "spacing_mm": 40.0,
+    "fissure_mm": 5.4
+   },
+   {
+    "file": "que_rub_bark/14.jpg",
+    "px_per_mm": 1.89,
+    "spacing_mm": 34.0,
+    "fissure_mm": 4.7
+   },
+   {
+    "file": "que_rub_bark/17.jpg",
+    "px_per_mm": 2.16,
+    "spacing_mm": 108.0,
+    "fissure_mm": 7.0
+   },
+   {
+    "file": "que_rub_bark/18.jpg",
+    "px_per_mm": 0.92,
+    "spacing_mm": 18.0,
+    "fissure_mm": 2.6
+   }
+  ]
+ },
+ "hornbeam": {
+  "texture": "#84827a  p20/p80 0.70  dark 0.03  aniso 2.70",
+  "photos": "#7d7357  p20/p80 0.26  dark 0.22  aniso 1.19  (24 photos)",
+  "research": "car_bet #81745c p20/p80 0.36 dark 0.14 aniso 1.13 (8)",
+  "packs": [
+   "car_bet_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 24.0,
+   "texture_ambient": 32.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "fissure_mm": {
+   "texture_lit": 2.2,
+   "texture_ambient": 2.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "scaled_photos": []
+ },
+ "maple": {
+  "texture": "#76726b  p20/p80 0.18  dark 0.27  aniso 2.18",
+  "photos": "#796c50  p20/p80 0.13  dark 0.31  aniso 1.15  (22 photos)",
+  "research": null,
+  "packs": [
+   "ace_pla_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 12.0,
+   "texture_ambient": 14.0,
+   "pack": 24.0,
+   "lit_vs_pack": "-50%"
+  },
+  "fissure_mm": {
+   "texture_lit": 2.9,
+   "texture_ambient": 2.5,
+   "pack": 4.5,
+   "lit_vs_pack": "-36%"
+  },
+  "scaled_photos": [
+   {
+    "file": "ace_pla_bark/11.jpg",
+    "px_per_mm": 1.59,
+    "spacing_mm": 24.0,
+    "fissure_mm": 4.5
+   }
+  ]
+ },
+ "sycamore": {
+  "texture": "#7a7268  p20/p80 0.46  dark 0.12  aniso 1.28",
+  "photos": "#85826d  p20/p80 0.33  dark 0.19  aniso 1.12  (21 photos)",
+  "research": "ace_pse #60584b p20/p80 0.21 dark 0.25 aniso 1.10 (4)",
+  "packs": [
+   "ace_pse_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 72.0,
+   "texture_ambient": 70.0,
+   "pack": 95.0,
+   "lit_vs_pack": "-24%"
+  },
+  "fissure_mm": {
+   "texture_lit": 3.3,
+   "texture_ambient": 3.2,
+   "pack": 4.2,
+   "lit_vs_pack": "-21%"
+  },
+  "scaled_photos": [
+   {
+    "file": "ace_pse_bark/00.jpg",
+    "px_per_mm": 2.05,
+    "spacing_mm": 160.0,
+    "fissure_mm": 5.4
+   },
+   {
+    "file": "ace_pse_bark/02.jpg",
+    "px_per_mm": 2.24,
+    "spacing_mm": 108.0,
+    "fissure_mm": 4.2
+   },
+   {
+    "file": "ace_pse_bark/04.jpg",
+    "px_per_mm": 2.6,
+    "spacing_mm": 70.0,
+    "fissure_mm": 4.2
+   },
+   {
+    "file": "ace_pse_bark/23.jpg",
+    "px_per_mm": 2.3,
+    "spacing_mm": 82.0,
+    "fissure_mm": 3.8
+   }
+  ]
+ },
+ "box_elder": {
+  "texture": "#645b50  p20/p80 0.20  dark 0.25  aniso 1.43",
+  "photos": "#7d6d63  p20/p80 0.16  dark 0.28  aniso 1.19  (22 photos)",
+  "research": "ace_neg #615959 p20/p80 0.23 dark 0.23 aniso 1.02 (5)",
+  "packs": [
+   "ace_neg_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 20.0,
+   "texture_ambient": 20.0,
+   "pack": 22.0,
+   "lit_vs_pack": "-9%"
+  },
+  "fissure_mm": {
+   "texture_lit": 4.9,
+   "texture_ambient": 4.6,
+   "pack": 5.2,
+   "lit_vs_pack": "-5%"
+  },
+  "scaled_photos": [
+   {
+    "file": "ace_neg_bark/01.jpg",
+    "px_per_mm": 2.07,
+    "spacing_mm": 22.0,
+    "fissure_mm": 4.1
+   },
+   {
+    "file": "ace_neg_bark/03.jpg",
+    "px_per_mm": 1.7,
+    "spacing_mm": 20.0,
+    "fissure_mm": 5.2
+   },
+   {
+    "file": "ace_neg_bark/10.jpg",
+    "px_per_mm": 1.58,
+    "spacing_mm": 28.0,
+    "fissure_mm": 5.6
+   }
+  ]
+ },
+ "lime": {
+  "texture": "#66615a  p20/p80 0.29  dark 0.21  aniso 1.86",
+  "photos": "#6d6652  p20/p80 0.17  dark 0.28  aniso 1.23  (23 photos)",
+  "research": "til_cor #716465 p20/p80 0.27 dark 0.22 aniso 1.47 (3)",
+  "packs": [
+   "til_cor_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 63.0,
+   "texture_ambient": 63.0,
+   "pack": 80.0,
+   "lit_vs_pack": "-21%"
+  },
+  "fissure_mm": {
+   "texture_lit": 4.4,
+   "texture_ambient": 4.8,
+   "pack": 4.3,
+   "lit_vs_pack": "+2%"
+  },
+  "scaled_photos": [
+   {
+    "file": "til_cor_bark/03.jpg",
+    "px_per_mm": 1.58,
+    "spacing_mm": 96.0,
+    "fissure_mm": 4.2
+   },
+   {
+    "file": "til_cor_bark/07.jpg",
+    "px_per_mm": 1.55,
+    "spacing_mm": 64.0,
+    "fissure_mm": 4.4
+   }
+  ]
+ },
+ "ash": {
+  "texture": "#69665e  p20/p80 0.26  dark 0.23  aniso 1.43",
+  "photos": "#817362  p20/p80 0.19  dark 0.29  aniso 1.09  (39 photos)",
+  "research": "fra_exc #837c6f p20/p80 0.24 dark 0.23 aniso 1.26 (4); fra_pen #7c736d p20/p80 0.20 dark 0.29 aniso 1.17 (2)",
+  "packs": [
+   "fra_exc_bark",
+   "fra_pen_bark"
+  ],
+  "photo_count": 48,
+  "spacing_mm": {
+   "texture_lit": 24.0,
+   "texture_ambient": 24.0,
+   "pack": 30.0,
+   "lit_vs_pack": "-20%"
+  },
+  "fissure_mm": {
+   "texture_lit": 4.8,
+   "texture_ambient": 4.8,
+   "pack": 3.9,
+   "lit_vs_pack": "+22%"
+  },
+  "scaled_photos": [
+   {
+    "file": "fra_exc_bark/11.jpg",
+    "px_per_mm": 4.63,
+    "spacing_mm": 76.0,
+    "fissure_mm": 3.9
+   },
+   {
+    "file": "fra_pen_bark/04.jpg",
+    "px_per_mm": 2.2,
+    "spacing_mm": 30.0,
+    "fissure_mm": 5.1
+   },
+   {
+    "file": "fra_pen_bark/10.jpg",
+    "px_per_mm": 2.61,
+    "spacing_mm": 22.0,
+    "fissure_mm": 3.7
+   }
+  ]
+ },
+ "ash_young": {
+  "texture": "#818172  p20/p80 0.82  dark 0.01  aniso 2.55",
+  "photos": "#7a735f  p20/p80 0.20  dark 0.27  aniso 1.07  (21 photos)",
+  "research": "fra_exc #837c6f p20/p80 0.24 dark 0.23 aniso 1.26 (4)",
+  "packs": [
+   "fra_exc_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 70.0,
+   "texture_ambient": 66.0,
+   "pack": 118.0,
+   "lit_vs_pack": "-41%"
+  },
+  "fissure_mm": {
+   "texture_lit": 0.0,
+   "texture_ambient": 0.0,
+   "pack": 4.2,
+   "lit_vs_pack": "-100%"
+  },
+  "scaled_photos": [
+   {
+    "file": "fra_exc_bark/06.jpg",
+    "px_per_mm": 2.38,
+    "spacing_mm": 118.0,
+    "fissure_mm": 4.2
+   }
+  ]
+ },
+ "elm": {
+  "texture": "#6d6459  p20/p80 0.21  dark 0.29  aniso 1.25",
+  "photos": "#7e7355  p20/p80 0.16  dark 0.28  aniso 1.24  (42 photos)",
+  "research": "ulm_lae #685d56 p20/p80 0.20 dark 0.26 aniso 1.16 (12); ulm_min #524a3e p20/p80 0.10 dark 0.29 aniso 1.21 (2)",
+  "packs": [
+   "ulm_lae_bark",
+   "ulm_min_bark"
+  ],
+  "photo_count": 48,
+  "spacing_mm": {
+   "texture_lit": 16.0,
+   "texture_ambient": 16.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "fissure_mm": {
+   "texture_lit": 4.1,
+   "texture_ambient": 3.1,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "scaled_photos": []
+ },
+ "rowan": {
+  "texture": "#747268  p20/p80 0.80  dark 0.00  aniso 0.76",
+  "photos": "#7d6f53  p20/p80 0.19  dark 0.25  aniso 1.01  (22 photos)",
+  "research": "sor_auc #686150 p20/p80 0.15 dark 0.23 aniso 1.17 (1)",
+  "packs": [
+   "sor_auc_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 99.0,
+   "texture_ambient": 118.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "fissure_mm": {
+   "texture_lit": 0.0,
+   "texture_ambient": 0.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "scaled_photos": []
+ },
+ "alder": {
+  "texture": "#4c4841  p20/p80 0.24  dark 0.25  aniso 1.52",
+  "photos": "#8a7e59  p20/p80 0.21  dark 0.25  aniso 1.08  (21 photos)",
+  "research": "aln_glu #6f675e p20/p80 0.20 dark 0.25 aniso 1.26 (10)",
+  "packs": [
+   "aln_glu_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 39.0,
+   "texture_ambient": 35.0,
+   "pack": 48.0,
+   "lit_vs_pack": "-19%"
+  },
+  "fissure_mm": {
+   "texture_lit": 4.7,
+   "texture_ambient": 4.7,
+   "pack": 5.1,
+   "lit_vs_pack": "-9%"
+  },
+  "scaled_photos": [
+   {
+    "file": "aln_glu_bark/01.jpg",
+    "px_per_mm": 2.25,
+    "spacing_mm": 48.0,
+    "fissure_mm": 5.1
+   },
+   {
+    "file": "aln_glu_bark/10.jpg",
+    "px_per_mm": 2.14,
+    "spacing_mm": 30.0,
+    "fissure_mm": 4.5
+   },
+   {
+    "file": "aln_glu_bark/21.jpg",
+    "px_per_mm": 1.47,
+    "spacing_mm": 144.0,
+    "fissure_mm": 7.3
+   }
+  ]
+ },
+ "alder_young": {
+  "texture": "#656153  p20/p80 0.77  dark 0.00  aniso 0.77",
+  "photos": "#8a7e59  p20/p80 0.21  dark 0.25  aniso 1.08  (21 photos)",
+  "research": "aln_glu #6f675e p20/p80 0.20 dark 0.25 aniso 1.26 (10)",
+  "packs": [
+   "aln_glu_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 72.0,
+   "texture_ambient": 74.0,
+   "pack": 48.0,
+   "lit_vs_pack": "+50%"
+  },
+  "fissure_mm": {
+   "texture_lit": 0.0,
+   "texture_ambient": 0.0,
+   "pack": 5.0,
+   "lit_vs_pack": "-100%"
+  },
+  "scaled_photos": [
+   {
+    "file": "aln_glu_bark/20.jpg",
+    "px_per_mm": 2.88,
+    "spacing_mm": 48.0,
+    "fissure_mm": 5.0
+   }
+  ]
+ },
+ "willow_tree": {
+  "texture": "#545047  p20/p80 0.18  dark 0.28  aniso 1.63",
+  "photos": "#887457  p20/p80 0.13  dark 0.30  aniso 1.21  (35 photos)",
+  "research": "sal_alb #6c6456 p20/p80 0.24 dark 0.23 aniso 1.18 (12); sal_fra #5c585b p20/p80 0.18 dark 0.26 aniso 1.37 (2)",
+  "packs": [
+   "sal_alb_bark",
+   "sal_fra_bark"
+  ],
+  "photo_count": 48,
+  "spacing_mm": {
+   "texture_lit": 58.0,
+   "texture_ambient": 50.0,
+   "pack": 70.0,
+   "lit_vs_pack": "-17%"
+  },
+  "fissure_mm": {
+   "texture_lit": 6.5,
+   "texture_ambient": 7.0,
+   "pack": 7.1,
+   "lit_vs_pack": "-8%"
+  },
+  "scaled_photos": [
+   {
+    "file": "sal_alb_bark/05.jpg",
+    "px_per_mm": 0.94,
+    "spacing_mm": 124.0,
+    "fissure_mm": 4.7
+   },
+   {
+    "file": "sal_alb_bark/06.jpg",
+    "px_per_mm": 1.29,
+    "spacing_mm": 50.0,
+    "fissure_mm": 6.4
+   },
+   {
+    "file": "sal_alb_bark/14.jpg",
+    "px_per_mm": 1.15,
+    "spacing_mm": 56.0,
+    "fissure_mm": 7.8
+   },
+   {
+    "file": "sal_alb_bark/16.jpg",
+    "px_per_mm": 1.36,
+    "spacing_mm": 26.0,
+    "fissure_mm": 4.6
+   },
+   {
+    "file": "sal_fra_bark/10.jpg",
+    "px_per_mm": 1.93,
+    "spacing_mm": 84.0,
+    "fissure_mm": 11.4
+   },
+   {
+    "file": "sal_fra_bark/12.jpg",
+    "px_per_mm": 2.0,
+    "spacing_mm": 116.0,
+    "fissure_mm": 11.9
+   }
+  ]
+ },
+ "robinia": {
+  "texture": "#645b4b  p20/p80 0.27  dark 0.21  aniso 1.86",
+  "photos": "#7f7161  p20/p80 0.13  dark 0.31  aniso 1.15  (22 photos)",
+  "research": "rob_pse #786e56 p20/p80 0.18 dark 0.23 aniso 1.29 (6)",
+  "packs": [
+   "rob_pse_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 76.0,
+   "texture_ambient": 80.0,
+   "pack": 73.0,
+   "lit_vs_pack": "+4%"
+  },
+  "fissure_mm": {
+   "texture_lit": 5.6,
+   "texture_ambient": 6.3,
+   "pack": 5.9,
+   "lit_vs_pack": "-6%"
+  },
+  "scaled_photos": [
+   {
+    "file": "rob_pse_bark/03.jpg",
+    "px_per_mm": 1.54,
+    "spacing_mm": 60.0,
+    "fissure_mm": 6.0
+   },
+   {
+    "file": "rob_pse_bark/04.jpg",
+    "px_per_mm": 1.29,
+    "spacing_mm": 70.0,
+    "fissure_mm": 5.8
+   },
+   {
+    "file": "rob_pse_bark/06.jpg",
+    "px_per_mm": 1.01,
+    "spacing_mm": 76.0,
+    "fissure_mm": 4.6
+   },
+   {
+    "file": "rob_pse_bark/13.jpg",
+    "px_per_mm": 1.41,
+    "spacing_mm": 78.0,
+    "fissure_mm": 6.6
+   }
+  ]
+ },
+ "horse_chestnut": {
+  "texture": "#766b5f  p20/p80 0.35  dark 0.20  aniso 1.32",
+  "photos": "#786f50  p20/p80 0.16  dark 0.29  aniso 1.16  (19 photos)",
+  "research": "aes_hip #3b3023 p20/p80 0.11 dark 0.24 aniso 1.03 (3)",
+  "packs": [
+   "aes_hip_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 59.0,
+   "texture_ambient": 58.0,
+   "pack": 136.0,
+   "lit_vs_pack": "-57%"
+  },
+  "fissure_mm": {
+   "texture_lit": 5.3,
+   "texture_ambient": 5.6,
+   "pack": 6.6,
+   "lit_vs_pack": "-19%"
+  },
+  "scaled_photos": [
+   {
+    "file": "aes_hip_bark/03.jpg",
+    "px_per_mm": 1.1,
+    "spacing_mm": 136.0,
+    "fissure_mm": 4.1
+   },
+   {
+    "file": "aes_hip_bark/14.jpg",
+    "px_per_mm": 1.15,
+    "spacing_mm": 94.0,
+    "fissure_mm": 6.6
+   },
+   {
+    "file": "aes_hip_bark/20.jpg",
+    "px_per_mm": 1.04,
+    "spacing_mm": 154.0,
+    "fissure_mm": 7.0
+   }
+  ]
+ },
+ "apple": {
+  "texture": "#5a5046  p20/p80 0.30  dark 0.20  aniso 1.24",
+  "photos": "#80736b  p20/p80 0.18  dark 0.26  aniso 1.07  (22 photos)",
+  "research": "mal_dom #4b433c p20/p80 0.10 dark 0.31 aniso 1.24 (1)",
+  "packs": [
+   "mal_dom_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 39.0,
+   "texture_ambient": 56.0,
+   "pack": 52.0,
+   "lit_vs_pack": "-25%"
+  },
+  "fissure_mm": {
+   "texture_lit": 2.9,
+   "texture_ambient": 2.7,
+   "pack": 3.2,
+   "lit_vs_pack": "-8%"
+  },
+  "scaled_photos": [
+   {
+    "file": "mal_dom_bark/12.jpg",
+    "px_per_mm": 4.13,
+    "spacing_mm": 52.0,
+    "fissure_mm": 3.2
+   }
+  ]
+ },
+ "pear": {
+  "texture": "#6e685d  p20/p80 0.40  dark 0.21  aniso 1.25",
+  "photos": "#776859  p20/p80 0.11  dark 0.32  aniso 1.21  (23 photos)",
+  "research": "pyr_com #807668 p20/p80 0.23 dark 0.24 aniso 1.13 (6)",
+  "packs": [
+   "pyr_com_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 18.0,
+   "texture_ambient": 18.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "fissure_mm": {
+   "texture_lit": 3.9,
+   "texture_ambient": 3.0,
+   "pack": null,
+   "lit_vs_pack": null
+  },
+  "scaled_photos": []
+ },
+ "cherry_trunk": {
+  "texture": "#634740  p20/p80 0.55  dark 0.01  aniso 0.37",
+  "photos": "#847764  p20/p80 0.23  dark 0.24  aniso 0.91  (22 photos)",
+  "research": "t_pru_cer #7b6e53 p20/p80 0.16 dark 0.27 aniso 0.89 (4)",
+  "packs": [
+   "pru_cer_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 136.0,
+   "texture_ambient": 139.0,
+   "pack": 123.0,
+   "lit_vs_pack": "+11%"
+  },
+  "fissure_mm": {
+   "texture_lit": 2.9,
+   "texture_ambient": 0.0,
+   "pack": 4.3,
+   "lit_vs_pack": "-32%"
+  },
+  "scaled_photos": [
+   {
+    "file": "pru_cer_bark/00.jpg",
+    "px_per_mm": 1.51,
+    "spacing_mm": 92.0,
+    "fissure_mm": 3.7
+   },
+   {
+    "file": "pru_cer_bark/01.jpg",
+    "px_per_mm": 1.92,
+    "spacing_mm": 122.0,
+    "fissure_mm": 4.7
+   },
+   {
+    "file": "pru_cer_bark/12.jpg",
+    "px_per_mm": 1.92,
+    "spacing_mm": 148.0,
+    "fissure_mm": 4.1
+   },
+   {
+    "file": "pru_cer_bark/19.jpg",
+    "px_per_mm": 1.75,
+    "spacing_mm": 124.0,
+    "fissure_mm": 4.5
+   }
+  ]
+ },
+ "plum": {
+  "texture": "#483f37  p20/p80 0.21  dark 0.25  aniso 1.52",
+  "photos": "#7a6d5b  p20/p80 0.12  dark 0.30  aniso 1.04  (22 photos)",
+  "research": "pru_dom #5d4631 p20/p80 0.13 dark 0.32 aniso 1.24 (3)",
+  "packs": [
+   "pru_dom_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 22.0,
+   "texture_ambient": 22.0,
+   "pack": 102.0,
+   "lit_vs_pack": "-78%"
+  },
+  "fissure_mm": {
+   "texture_lit": 5.2,
+   "texture_ambient": 4.4,
+   "pack": 5.4,
+   "lit_vs_pack": "-3%"
+  },
+  "scaled_photos": [
+   {
+    "file": "pru_dom_bark/07.jpg",
+    "px_per_mm": 1.79,
+    "spacing_mm": 102.0,
+    "fissure_mm": 5.4
+   }
+  ]
+ },
+ "walnut": {
+  "texture": "#7c756c  p20/p80 0.25  dark 0.24  aniso 1.51",
+  "photos": "#858063  p20/p80 0.28  dark 0.21  aniso 1.08  (22 photos)",
+  "research": "jug_reg #8c7d6e p20/p80 0.23 dark 0.22 aniso 1.10 (5)",
+  "packs": [
+   "jug_reg_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 44.0,
+   "texture_ambient": 44.0,
+   "pack": 44.0,
+   "lit_vs_pack": "+0%"
+  },
+  "fissure_mm": {
+   "texture_lit": 5.2,
+   "texture_ambient": 5.9,
+   "pack": 4.6,
+   "lit_vs_pack": "+13%"
+  },
+  "scaled_photos": [
+   {
+    "file": "jug_reg_bark/07.jpg",
+    "px_per_mm": 1.25,
+    "spacing_mm": 44.0,
+    "fissure_mm": 5.6
+   },
+   {
+    "file": "jug_reg_bark/11.jpg",
+    "px_per_mm": 1.75,
+    "spacing_mm": 82.0,
+    "fissure_mm": 4.0
+   },
+   {
+    "file": "jug_reg_bark/17.jpg",
+    "px_per_mm": 0.97,
+    "spacing_mm": 42.0,
+    "fissure_mm": 4.6
+   }
+  ]
+ },
+ "walnut_young": {
+  "texture": "#9c978d  p20/p80 0.82  dark 0.00  aniso 2.24",
+  "photos": "#858063  p20/p80 0.28  dark 0.21  aniso 1.08  (22 photos)",
+  "research": "jug_reg #8c7d6e p20/p80 0.23 dark 0.22 aniso 1.10 (5)",
+  "packs": [
+   "jug_reg_bark"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 60.0,
+   "texture_ambient": 58.0,
+   "pack": 96.0,
+   "lit_vs_pack": "-38%"
+  },
+  "fissure_mm": {
+   "texture_lit": 0.0,
+   "texture_ambient": 0.0,
+   "pack": 3.9,
+   "lit_vs_pack": "-100%"
+  },
+  "scaled_photos": [
+   {
+    "file": "jug_reg_bark/02.jpg",
+    "px_per_mm": 2.3,
+    "spacing_mm": 96.0,
+    "fissure_mm": 3.9
+   }
+  ]
+ },
+ "deadwood_bark": {
+  "texture": "#a19a8e  p20/p80 0.65  dark 0.08  aniso 3.15",
+  "photos": "#6f6958  p20/p80 0.13  dark 0.28  aniso 1.03  (16 photos)",
+  "research": null,
+  "packs": [
+   "dead_wood"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 38.0,
+   "texture_ambient": 42.0,
+   "pack": 148.0,
+   "lit_vs_pack": "-74%"
+  },
+  "fissure_mm": {
+   "texture_lit": 4.0,
+   "texture_ambient": 3.5,
+   "pack": 5.3,
+   "lit_vs_pack": "-24%"
+  },
+  "scaled_photos": [
+   {
+    "file": "dead_wood/00.jpg",
+    "px_per_mm": 0.75,
+    "spacing_mm": 148.0,
+    "fissure_mm": 5.3
+   }
+  ]
+ },
+ "deadwood_bare": {
+  "texture": "#a49c91  p20/p80 0.66  dark 0.10  aniso 4.92",
+  "photos": "#6f6958  p20/p80 0.13  dark 0.28  aniso 1.03  (16 photos)",
+  "research": null,
+  "packs": [
+   "dead_wood"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 28.0,
+   "texture_ambient": 30.0,
+   "pack": 120.0,
+   "lit_vs_pack": "-77%"
+  },
+  "fissure_mm": {
+   "texture_lit": 3.7,
+   "texture_ambient": 3.2,
+   "pack": 7.9,
+   "lit_vs_pack": "-52%"
+  },
+  "scaled_photos": [
+   {
+    "file": "dead_wood/11.jpg",
+    "px_per_mm": 0.97,
+    "spacing_mm": 120.0,
+    "fissure_mm": 7.9
+   }
+  ]
+ },
+ "char": {
+  "texture": "#292724  p20/p80 0.24  dark 0.22  aniso 1.55",
+  "photos": "#675750  p20/p80 0.14  dark 0.29  aniso 1.05  (22 photos)",
+  "research": null,
+  "packs": [
+   "char"
+  ],
+  "photo_count": 24,
+  "spacing_mm": {
+   "texture_lit": 38.0,
+   "texture_ambient": 38.0,
+   "pack": 154.0,
+   "lit_vs_pack": "-75%"
+  },
+  "fissure_mm": {
+   "texture_lit": 6.3,
+   "texture_ambient": 5.1,
+   "pack": 5.6,
+   "lit_vs_pack": "+12%"
+  },
+  "scaled_photos": [
+   {
+    "file": "char/19.jpg",
+    "px_per_mm": 1.0,
+    "spacing_mm": 154.0,
+    "fissure_mm": 5.6
+   }
+  ]
+ }
+}

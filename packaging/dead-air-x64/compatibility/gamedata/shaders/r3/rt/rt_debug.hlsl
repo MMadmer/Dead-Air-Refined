@@ -32,8 +32,8 @@ float3 dbg_primary_albedo( uint2 pixel )
 	while ( q.Proceed() )
 	{
 		if ( q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),
-				q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone * q.CandidateTriangleRayT(), view ) )
+			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone * q.CandidateTriangleRayT(), view ) )
 			q.CommitNonOpaqueTriangleHit();
 	}
 	[branch] if ( q.CommittedStatus() != COMMITTED_TRIANGLE_HIT )
@@ -49,7 +49,15 @@ float3 dbg_primary_albedo( uint2 pixel )
 	rt_textures[ NonUniformResourceIndex( tex ) ].GetDimensions( 0, tw, th, levels );
 	const float lod = min( rt_cone_lod( t, q.CommittedObjectToWorld3x4(), cone * q.CommittedRayT(), uint2( tw, th ) ),
 		float( levels ) - 1.0f );
-	return rt_textures[ NonUniformResourceIndex( tex ) ].SampleLevel( rt_linear_wrap, tc, lod ).rgb;
+	const float3 albedo = rt_textures[ NonUniformResourceIndex( tex ) ].SampleLevel( rt_linear_wrap, tc, lod ).rgb;
+	// (A stand-in crown in its species' colour of the day, as the reflections draw it.)
+	const RtInstance inst = rt_instance_of( q.CommittedInstanceIndex(), view );
+	[branch] if ( rt_veg_on( inst, view ) )
+	{
+		const float3 mean = rt_textures[ NonUniformResourceIndex( tex ) ].SampleLevel( rt_linear_wrap, tc, float( levels ) - 1.0f ).rgb;
+		return rt_veg_colour( inst, view ) * albedo / max( mean, 0.02f );
+	}
+	return albedo;
 }
 
 [numthreads( 8, 8, 1 )]

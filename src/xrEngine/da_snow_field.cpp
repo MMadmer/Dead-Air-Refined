@@ -491,7 +491,8 @@ void da_snow_field_set(SSnowField&& field)
     const size_t n = size_t(field.dim_x) * size_t(field.dim_z);
     const bool ok = n && field.texel > 0.f && field.ground.size() == n && field.top.size() == n &&
         field.weights.size() == n && field.factors.size() == n && field.lut_S.size() == 365 &&
-        field.lut_Mc.size() == 365 && (field.solid.empty() || field.solid.size() == n);
+        field.lut_Mc.size() == 365 && (field.solid.empty() || field.solid.size() == n) &&
+        (field.cover.empty() || field.cover.size() == n) && (field.shelter.empty() || field.shelter.size() == n);
     if (!ok)
     {
         Msg("! [snow] the level's snow field is malformed (%u x %u) - no snow on this level", field.dim_x, field.dim_z);
@@ -719,6 +720,22 @@ float da_snow_depth_at(float x, float z)
     const STexelTap t = tap(*f, x, z);
     const Fvector4& S = s_frame.S;
     const Fvector4& Mc = s_frame.Mc;
+    // under a cover the sky's snow does not reach the ground (the renderer's shelter, da_snow_level.cs)
+    const bool sheltered = !f->shelter.empty();
+    const auto at = [&](size_t i) {
+        return da_snow_texel_depth(*f, i, S, Mc) * (sheltered ? 1.f - float(f->shelter[i]) * (1.f / 255.f) : 1.f);
+    };
+    return bilerp(t, at(t.i00), at(t.i10), at(t.i01), at(t.i11));
+}
+
+float da_snow_open_depth_at(float x, float z)
+{
+    const SSnowField* f = da_snow_field();
+    if (!f || !s_frame.active)
+        return 0.f;
+    const STexelTap t = tap(*f, x, z);
+    const Fvector4& S = s_frame.S;
+    const Fvector4& Mc = s_frame.Mc;
     return bilerp(t, da_snow_texel_depth(*f, t.i00, S, Mc), da_snow_texel_depth(*f, t.i10, S, Mc),
         da_snow_texel_depth(*f, t.i01, S, Mc), da_snow_texel_depth(*f, t.i11, S, Mc));
 }
@@ -729,7 +746,10 @@ float da_snow_surface_y(float x, float z)
     if (!f)
         return -flt_max;
     const STexelTap t = tap(*f, x, z);
-    return bilerp(t, f->top[t.i00], f->top[t.i10], f->top[t.i01], f->top[t.i11]) + da_snow_depth_at(x, z);
+    // the ground's snow lies on the terrain under a cover, on the top elsewhere
+    const bool covers = !f->cover.empty();
+    const auto base = [&](size_t i) { return covers && f->cover[i] ? f->ground[i] : f->top[i]; };
+    return bilerp(t, base(t.i00), base(t.i10), base(t.i01), base(t.i11)) + da_snow_depth_at(x, z);
 }
 
 // ---- Precipitation -------------------------------------------------------------------------------------

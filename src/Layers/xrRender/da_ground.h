@@ -36,10 +36,11 @@ ID3D11ShaderResourceView* da_ground_top_srv();
 Fvector4 da_ground_top_xf();
 
 // ---- additions of the snow stage (da_ground.cpp) ------------------------------------------------------
-// The same window's snow base, $user$da_ground_base (RG32F, toroidal): x = Hg, Htop opened with a 3 x 3
+// The same window's snow base, $user$da_ground_base (RGBA32F, toroidal): x = the base, Htop opened with a 3 x 3
 // square (posts, rails and thin props removed; world y, -10000 where there is no surface; the water surface
-// where one lies over it), y = cliff taper 0..1 (0 on a cliff texel, 1 half a metre from it; -1 - taper under
-// a water surface). Htop is $user$da_ground_top. The waterline's continuous quantities are $user$da_ground_shore
+// where one lies over it), or the floor under a cover (a roof, a deck, a vehicle: more than 0.35 m over the
+// texel's lowest floor and 0.6 m over the level's terrain); y = cliff taper 0..1 (0 on a cliff texel, 1 half a
+// metre from it; -1 - taper under a water surface); z = the shelter of a cover; w = the opened Htop itself. Htop is $user$da_ground_top. The waterline's continuous quantities are $user$da_ground_shore
 // (RGBA32F, toroidal): x the opened solid surface under the water too, y the highest water surface within 8 texels
 // (-10000: none), z how far inside that reach the texel lies (1 up to half of it, 0 at its end).
 ID3D11ShaderResourceView* da_ground_base_srv();
@@ -52,4 +53,9 @@ bool da_ground_window(Fvector4& win, Fvector4& win2);
 void da_ground_apply_preset(u32 preset);
 // Renderer shutdown (CRender::destroy): every GPU object and named texture goes. da_snow_destroy calls it.
 void da_ground_destroy();
+// The snow shells (the snow on roofs, decks, vehicles, crates): built from the collision's faces that look up
+// once per bake (da_snow.cpp calls it with the level's fields uploaded), drawn by chunks in the view and the
+// reach (the caller has set the shell pass and its constants). Returns the chunks drawn.
+void da_ground_shells_sync();
+u32 da_ground_shells_render(CBackend& cmd_list, float reach);
 } // namespace xray::render::RENDER_NAMESPACE

@@ -57,20 +57,21 @@ EXPECTED_CLASS_KEYS = {'KS_LITTER': 168, 'PG_BUNCH': 60, 'KS_SHRUB': 57, 'KS_FER
                        'PG_PLUME': 22, 'PG_LEAFY': 18, 'PG_TUFT': 12, 'PG_DRY': 11, 'KS_HORSETAIL': 9, 'PG_RUSH': 6,
                        'PG_FINE': 4, 'KS_DECAL': 2}
 
-# Texture overlay folders per category (brief 4.6): day (0-based, from that day on) : folder, '-' = base.
-CATEGORIES = [('terrain\\', 'default'), ('build_details', 'default'), ('level_lods', 'trees'), ('trees\\', 'trees'),
+# Texture overlay folders per category (brief 4.6): day (0-based, from that day on) : folder, '-' = base (autumn is
+# the base set). The level_lods atlases have no looks: the engine composes them (da_trees_bake.cpp).
+CATEGORIES = [('terrain\\', 'default'), ('build_details', 'default'), ('trees\\', 'trees'),
               ('map\\', 'trees'), ('ui\\', 'trees'), ('grnd\\', 'ground'), ('detail\\', 'ground'), ('roof\\', 'ground'),
               ('decal\\', 'decal'), ('vine\\', 'vine')]
 FOLDERS = OrderedDict([
-    ('default', [(99, 'spring_mid'), (120, 'spring_late'), (151, 'summer'), (262, 'autumn'), (304, 'spring_early')]),
-    ('trees', [(46, 'spring_early'), (99, 'spring_mid'), (120, 'spring_late'), (151, 'summer'), (262, 'autumn'),
+    ('default', [(99, 'spring_mid'), (120, 'spring_late'), (151, 'summer'), (262, '-'), (304, 'spring_early')]),
+    ('trees', [(46, 'spring_early'), (99, 'spring_mid'), (120, 'spring_late'), (151, 'summer'), (262, '-'),
                (304, 'spring_early'), (348, 'winter')]),
     ('ground', [(0, '-')]),
     ('decal', [(46, '-'), (348, 'winter')]),
     ('vine', [(99, '-'), (304, 'winter')]),
 ])
 # research category -> our category (category_folders.json cross-check)
-RESEARCH_CATEGORY = {'terrain': 'default', 'build_details': 'default', 'level_lods': 'trees', 'trees': 'trees',
+RESEARCH_CATEGORY = {'terrain': 'default', 'build_details': 'default', 'trees': 'trees',
                      'map': 'trees', 'ui': 'trees', 'grnd': 'ground', 'detail': 'ground', 'roof': 'ground',
                      'decal': 'decal', 'vine': 'vine'}
 # Reference day of each latched terrain folder for the ground tint ratio (followup_1 5.4)

@@ -41,14 +41,14 @@ float arc_days(float delta) { return delta - 365.f * std::ceil(delta / 365.f - 0
 // Texture categories and their folder bands ([season_categories], [season_folders])
 
 // Without the file or one of its sections: the design's tables. The ground sets never wear winter (the
-// snow layer whitens open ground, and painted snow would show under roofs and in trails); trees, their
-// LOD atlases and the maps wear it only while the open cover is complete (15 Dec .. 15 Feb).
+// snow layer whitens open ground, and painted snow would show under roofs and in trails); trees and the
+// maps wear it only while the open cover is complete (15 Dec .. 15 Feb). Autumn is the base set ("-").
 constexpr std::pair<pcstr, pcstr> builtin_categories[] = {{"terrain\\", "default"}, {"build_details", "default"},
-    {"trees\\", "trees"}, {"level_lods", "trees"}, {"map\\", "trees"}, {"ui\\", "trees"}, {"grnd\\", "ground"},
+    {"trees\\", "trees"}, {"map\\", "trees"}, {"ui\\", "trees"}, {"grnd\\", "ground"},
     {"detail\\", "ground"}, {"roof\\", "ground"}, {"decal\\", "decal"}, {"vine\\", "vine"}};
 constexpr std::pair<pcstr, pcstr> builtin_folders[] = {
-    {"default", "99:spring_mid, 120:spring_late, 151:summer, 262:autumn, 304:spring_early"},
-    {"trees", "46:spring_early, 99:spring_mid, 120:spring_late, 151:summer, 262:autumn, 304:spring_early, 348:winter"},
+    {"default", "99:spring_mid, 120:spring_late, 151:summer, 262:-, 304:spring_early"},
+    {"trees", "46:spring_early, 99:spring_mid, 120:spring_late, 151:summer, 262:-, 304:spring_early, 348:winter"},
     {"ground", "-"}, {"decal", "46:-, 348:winter"}, {"vine", "99:-, 304:winter"}};
 
 struct Band

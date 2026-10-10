@@ -24,6 +24,8 @@
 #include "xrEngine/Environment.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 #include "xrCore/Threading/ParallelFor.hpp"
+#include "ai_space.h"
+#include "xrAICore/Navigation/level_graph.h"
 
 namespace
 {
@@ -1145,6 +1147,109 @@ void da_snow_bake_level()
     {
         field.solid[i] = top[i] > none_y ? 1 : 0;
         field.top[i] = top[i] > none_y ? top[i] : ground[i];
+    }
+    // The highest node of the level's AI in each texel: the surfaces it walks on.
+    field.walk.assign(n, -flt_max);
+    if (ai().get_level_graph())
+    {
+        const CLevelGraph& graph = ai().level_graph();
+        for (u32 v = 0, nv = graph.header().vertex_count(); v < nv; ++v)
+        {
+            const Fvector p = graph.vertex_position(v);
+            const int x = iFloor((p.x - g.x0) / g.texel), z = iFloor((p.z - g.z0) / g.texel);
+            if (x >= 0 && z >= 0 && x < g.nx && z < g.nz)
+                field.walk[g.at(x, z)] = std::max(field.walk[g.at(x, z)], p.y);
+        }
+    }
+    // A cover's kind, along a ray down from over its top: the top entered, the next solid face met either leaves the
+    // solid (faces down) or is a floor (faces up). A slab left well over the ground under it (a roof's or a deck's
+    // underside, a ceiling) or a floor more than 1.2 m under a roof of one sheet with nothing between is an overhang;
+    // a solid left at the ground (a block's, a car's bottom) or a low object of one surface (a stump) is solid.
+    const auto overhang_at = [&](CDB::COLLIDER& xrc, float x, float z, float y_top, float y_ground) {
+        const float y0 = y_top + 0.1f, y1 = y_ground - 0.5f;
+        xrc.ray_query(0, model, Fvector{x, y0, z}, Fvector{0.f, -1.f, 0.f}, y0 - y1);
+        struct Hit
+        {
+            float y, ny;
+        };
+        Hit hits[16];
+        u32 k = 0;
+        for (size_t r = 0; r < xrc.r_count() && k < 16; ++r)
+        {
+            const CDB::RESULT& res = xrc.r_begin()[r];
+            const CDB::TRI& tri = tris[res.id];
+            if (mclass(tri.material) & mc_skip)
+                continue;
+            Fvector nrm;
+            nrm.mknormal_non_normalized(verts[tri.verts[0]], verts[tri.verts[1]], verts[tri.verts[2]]);
+            const float len = nrm.magnitude();
+            // (the walls along the ray say nothing)
+            if (len < 1e-8f || _abs(nrm.y / len) < 0.3f)
+                continue;
+            hits[k++] = {y0 - res.range, nrm.y / len};
+        }
+        std::sort(hits, hits + k, [](const Hit& a, const Hit& b) { return a.y > b.y; });
+        u32 i = 0;
+        while (i < k && hits[i].ny < 0.f)
+            ++i;
+        if (i >= k)
+            return false;
+        if (i + 1 >= k)
+            return hits[i].y - y_ground > 1.2f;
+        const Hit& next = hits[i + 1];
+        if (next.ny > 0.f)
+            return hits[i].y - next.y > 1.2f;
+        float below = y_ground;
+        for (u32 j = i + 2; j < k; ++j)
+            if (hits[j].ny > 0.f)
+            {
+                below = hits[j].y;
+                break;
+            }
+        return next.y - below > 0.6f;
+    };
+    // The covers (da_snow_cover_at): a solid top over the terrain no node of the 3 x 3 texels round it walks on (a
+    // deck's own nodes stop short of its edge), an overhang or a solid object; the shelter, the overhangs eroded by a
+    // texel.
+    field.cover.assign(n, 0);
+    parallel_rows(g.nz, [&](int z) {
+        CDB::COLLIDER xrc;
+        for (int x = 0; x < g.nx; ++x)
+        {
+            const size_t i = g.at(x, z);
+            if (!field.solid[i] || field.top[i] - field.ground[i] <= da_snow_cover_over)
+                continue;
+            bool walked = false;
+            for (int dz = -1; dz <= 1 && !walked; ++dz)
+                for (int dx = -1; dx <= 1 && !walked; ++dx)
+                {
+                    const int sx = x + dx, sz = z + dz;
+                    walked = sx >= 0 && sz >= 0 && sx < g.nx && sz < g.nz && da_snow_walkable(field.top[i], field.walk[g.at(sx, sz)]);
+                }
+            if (walked)
+                continue;
+            const float cx = g.x0 + (float(x) + 0.5f) * g.texel, cz = g.z0 + (float(z) + 0.5f) * g.texel;
+            field.cover[i] = overhang_at(xrc, cx, cz, field.top[i], field.ground[i]) ? 2 : 1;
+        }
+    });
+    field.shelter.assign(n, 0);
+    parallel_rows(g.nz, [&](int z) {
+        if (z == 0 || z + 1 >= g.nz)
+            return;
+        for (int x = 1; x + 1 < g.nx; ++x)
+        {
+            bool all = true;
+            for (int dz = -1; dz <= 1 && all; ++dz)
+                for (int dx = -1; dx <= 1 && all; ++dx)
+                    all = field.cover[g.at(x + dx, z + dz)] == 2;
+            field.shelter[g.at(x, z)] = all ? 255 : 0;
+        }
+    });
+    {
+        u32 kinds[3]{};
+        for (const u8 c : field.cover)
+            ++kinds[std::min<u32>(c, 2u)];
+        Msg("* [snow] covers: %u texels of overhangs, %u of solid objects", kinds[2], kinds[1]);
     }
 
     // Soft weights: one-hot classes over the class_blur neighbourhood, normalised; water stays at zero.

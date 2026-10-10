@@ -881,7 +881,7 @@ per sound per start.
 So every `.ogg` authored outside the SDK is stamped before it is packed:
 
 ```powershell
-python toolsudio\stamp_xray_ogg_comment.py <file.ogg> <minDist> <maxDist> <volume> <gameType> <maxAIDist>
+python tools\audio\stamp_xray_ogg_comment.py <file.ogg> <minDist> <maxDist> <volume> <gameType> <maxAIDist>
 ```
 
 It rebuilds only the page carrying the comment header, leaves the audio bytes untouched, keeps

@@ -5,8 +5,9 @@
 // Each instance is a 32 x 32 cell tile of one ring; ring k has twice the spacing of ring k-1 and a hole
 // where ring k-1 lies. Odd vertices slide onto even ones over the outer band of a ring (geomorph), so a
 // ring's border matches the next ring's vertices exactly.
-// A vertex sits on the snow base (the grey-opened topmost surface; the water surface over water) raised
-// by the current snow depth:
+// A vertex sits on the snow base (the grey-opened topmost surface, the floor under a roof, a deck or a
+// vehicle - their own snow is a shell, da_snow_shell.vs; the water surface over water) raised by the
+// current snow depth:
 //   - only where the snow is at least three depth-buffer steps thick at that distance (D24S8, near
 //     0.05 m: dz = z^2 / (0.05 * 2^24)) and at least the thinnest snow drawn as geometry. Over the next
 //     such thickness the raise ramps up from nothing; below it the ramp runs on under the base, so the
@@ -24,6 +25,8 @@
 //   - pushed a few depth units toward the camera, so it wins over the ground it meets at the fade;
 //   - its normal is the snow base's slope over 2 m: the snow layer adds the depth's own slope.
 // The previous position uses the previous depth and the previous camera's fade: exact motion vectors.
+// DA_SN_SHADOW (da_snow_grid_shadow.vs): the same surface in the near sun cascade, so a trail's walls and a
+// drift's lee cast their shadows.
 
 #include "common.h"
 #include "da_velocity.h"
@@ -45,7 +48,19 @@ float da_sn_raise(float D, float dmin)
 	return (D < 2.0 * dmin) ? 2.0 * (D - dmin) : D;
 }
 
-da_sn_grid_v2p main(float2 ij : POSITION, uint iid : SV_InstanceID)
+#ifdef DA_SN_SHADOW
+struct da_sn_grid_v2s
+{
+	float4 hpos : SV_Position;
+	float clip : SV_ClipDistance0;
+	float2 cull : SV_CullDistance0;
+};
+#define DA_SN_GRID_OUT da_sn_grid_v2s
+#else
+#define DA_SN_GRID_OUT da_sn_grid_v2p
+#endif
+
+DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 {
 	const float4 tile = da_sn_tiles[iid];
 	const uint ring = uint(tile.w);
@@ -108,8 +123,14 @@ da_sn_grid_v2p main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	const float2 D = da_snow_depth2(x);
 
 	const float3 P0 = float3(x.x, hb, x.y);
+#ifdef DA_SN_SHADOW
+	// the main view's depth steps at the vertex: the cascade keeps exactly what the G-buffer draws
+	const float4 h0 = float4(0.0, 0.0, 0.0, length(P0 - eye_position));
+	const float4 h0p = h0;
+#else
 	const float4 h0 = mul(m_VP, float4(P0, 1.0));
 	const float4 h0p = mul(m_VP_prev, float4(P0, 1.0));
+#endif
 	const float dz = da_sn_dz(max(h0.w, 0.0));
 	const float dmin = max(da_sn_grid.z, dz);
 	const float dmin_prev = max(da_sn_grid.z, da_sn_dz(max(h0p.w, 0.0)));
@@ -163,6 +184,13 @@ da_sn_grid_v2p main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	const float3 Nw = normalize(lerp(float3(-gb.x, 1.0, -gb.y), float3(0.0, 1.0, 0.0), wsh * wsh));
 
 	const float3 P = float3(x.x, max(hb + d, y_floor), x.y);
+#ifdef DA_SN_SHADOW
+	da_sn_grid_v2s so;
+	so.hpos = mul(m_VP, float4(P, 1.0));
+	so.clip = clip;
+	so.cull = float2(cliff ? -1.0 : 1.0, in_hole);
+	return so;
+#else
 	da_sn_grid_v2p o;
 	o.Nw = Nw;
 	o.Pw = P;
@@ -176,4 +204,5 @@ da_sn_grid_v2p main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	o.clip = clip;
 	o.cull = float2(cliff ? -1.0 : 1.0, in_hole);
 	return o;
+#endif
 }

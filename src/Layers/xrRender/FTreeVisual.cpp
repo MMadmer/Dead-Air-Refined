@@ -132,6 +132,7 @@ void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
     {
         // verts
         u32 ID = data->r_u32();
+        m_vb_id = ID;
         vBase = data->r_u32();
         vCount = data->r_u32();
         vFormat = RImplementation.getVB_Format(ID);
@@ -143,6 +144,7 @@ void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
         // indices
         dwPrimitives = 0;
         ID = data->r_u32();
+        m_ib_id = ID;
         iBase = data->r_u32();
         iCount = data->r_u32();
         dwPrimitives = iCount / 3;
@@ -298,6 +300,15 @@ void FTreeVisual::FrameSpeeds(float& now, float& previous)
     const FTreeVisual_frame& frame = GetTreeVisualFrame();
     now = frame.current.speed;
     previous = frame.previous.speed;
+}
+
+void FTreeVisual::FrameWind(Fvector4& wave, Fvector4& wind, Fvector4& wave_prev, Fvector4& wind_prev)
+{
+    const FTreeVisual_frame& frame = GetTreeVisualFrame();
+    wave = frame.current.wave;
+    wind = frame.current.wind;
+    wave_prev = frame.previous.wave;
+    wind_prev = frame.previous.wind;
 }
 
 Fvector4 FTreeVisual::tree_wind_row() const
@@ -530,6 +541,8 @@ void FTreeVisual::Copy(dxRender_Visual* pSrc)
     PCOPY(p_rm_Vertices);
     if (p_rm_Vertices)
         p_rm_Vertices->AddRef();
+    PCOPY(m_vb_id);
+    PCOPY(m_ib_id);
     PCOPY(vBase);
     PCOPY(vCount);
     PCOPY(vStride);

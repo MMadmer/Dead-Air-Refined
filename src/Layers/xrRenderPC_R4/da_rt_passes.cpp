@@ -15,6 +15,7 @@
 
 #if defined(XR_D3D12)
 #include "Layers/xrRender/da_temporal.h"
+#include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #endif
 
@@ -61,8 +62,9 @@ struct DaRtView
     Fvector4 pos_decompress, proj, size, camera, sun;
     u32 scene[4];
     Fvector4 frame;
+    u32 veg[4]; // the vegetation tables: slot, season block, rows | profile rows << 16, snow (float bits)
 };
-static_assert(sizeof(DaRtView) == 368);
+static_assert(sizeof(DaRtView) == 384);
 
 struct DaRtShade
 {
@@ -150,6 +152,16 @@ DaRtView da_rt_view(u32 flags)
     // The frame's textures are jittered; the alpha test clips where the G-buffer does (da_aref_u).
     const Fvector2 jitter = da_jitter_px();
     v.frame.set(jitter.x, jitter.y, float(ps_r__aref_quality) / 255.f, 0.f);
+    // The stand-ins' crowns by their species' day (rt_geometry.hlsli rt_veg_*), the snow on the branches.
+    ID3D11Buffer* veg = nullptr;
+    u32 prof = 0, seas_first = 0, seas = 0;
+    float snow = 0.f;
+    if (!da_veg_rt_tables(veg, prof, seas_first, seas, snow))
+        snow = 0.f;
+    v.veg[0] = scene.veg_tables;
+    v.veg[1] = scene.veg_seas;
+    v.veg[2] = scene.veg_rows | (scene.veg_prof << 16);
+    v.veg[3] = std::bit_cast<u32>(snow);
     return v;
 }
 

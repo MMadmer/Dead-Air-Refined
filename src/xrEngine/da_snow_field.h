@@ -19,6 +19,10 @@ struct SSnowField
     xr_vector<float> ground;  // world y of the ground (terrain, hole-filled)
     xr_vector<float> top;     // world y of the topmost non-passable surface (roofs, decks get snow)
     xr_vector<u8> solid;      // 1 where collision lies under the texel; 0: top is the hole-filled ground
+    xr_vector<float> walk;    // world y of the highest surface the level's AI walks on (its nodes), -flt_max: none
+    xr_vector<u8> cover;      // where top is a cover over the ground (da_snow_cover_at): 2 an overhang (a roof, an
+                              // eave, a deck over open space), 1 a solid object standing there (a block, a car), 0 none
+    xr_vector<u8> shelter;    // 255 deep under an overhang (the overhangs eroded by a texel): no snow of the sky there
     xr_vector<u32> weights;   // RGBA8 unorm soft class weights: r open, g under trees, b road, a drift (sum 1)
     xr_vector<u32> factors;   // RGBA8 unorm: r A/2 (accumulation, 0..2), g M/2 (melt, 0..2), b n*0.5+0.5 (noise -1..1), a N (neglect 0..1)
     // This level's season scalars per day (365 entries), per class x open, y trees, z road, w drift:
@@ -27,6 +31,16 @@ struct SSnowField
     // M_open = M_trees = M, M_road = 1, M_drift = 1 - 0.3 N; depth = sum_c w_c * depth_c.
     xr_vector<Fvector4> lut_S, lut_Mc;
 };
+
+// A cover (docs/dead-air/SNOW.md, covers): a solid top this far over the terrain which the level's AI does not walk
+// on - a roof, a vehicle, a block, a stump; the ground's snow lies on the terrain or the floor under it, and the snow
+// on top is the shells' (da_ground.cpp, the high ones) or the layer's cover. Only an overhang shelters the ground
+// under it: round a solid object the ground's snow runs on at its full depth up to its sides (sheltered, the snow
+// sank into a ragged moat a texel or two wide round every block and stump). A deck the AI walks (a bridge, a
+// platform, a flat roof with a ladder) is ground: its snow is the trodden ground's, with its trails. The bake (1 m),
+// the window's resolve (da_ground_resolve.cs, DA_GR_OVER_TERRAIN) and the shells take the same test.
+constexpr float da_snow_cover_over = 0.35f;
+inline bool da_snow_walkable(float top, float walk) { return walk > top - 0.5f && walk < top + 0.3f; }
 
 // Snow constants of this frame (season day D and D_prev of da_season.h).
 struct SSnowFrame
@@ -52,9 +66,21 @@ struct SSnowStamp
     float radius = 0.f; // m
     float sharp = 0.f;  // rim steepness: stamped height = foot + (dist / radius)^2 * sharp
     Fvector2 push{};    // horizontal velocity (m/s), the grass push map's direction and strength
-    u32 kind = 0;       // 0 foot, 1 body capsule, 2 settled object, 3 crater
+    u32 kind = 0;       // 0 foot, 1 body capsule (a creature's, a moving physics element's), 2 settled object,
+                        // 3 crater (steep walls; sink > 0: a soft bowl, a campfire's thaw)
     float sink = 0.f;   // deepest a foot or body sinks under the snow surface (m); 0 = down to foot_y, < 0 = the
-                        // snow ignores it (a swinging foot: the grass push only)
+                        // snow ignores it (the grass push only)
+    // Where the deformer was on the previous frame: the stamp is the capsule swept from there to xz, so a
+    // fast foot or body leaves a continuous furrow. Equal to xz / foot_y for a disc.
+    Fvector2 xz0{};
+    float foot_y0 = 0.f;
+    // How the snow under the deformer gives way (both 0: carved down to foot_y):
+    //   pack > 0  a planted foot packs the loose snow under it to this density (kg/m3): it sinks until the
+    //             compacted column carries it, deep in fresh powder, hardly in old snow;
+    //   fall > 0  a deformer ploughing through the snow (a swinging leg, a low body) pushes aside what lies
+    //             above it, and this share of it falls back into the furrow behind.
+    float pack = 0.f;
+    float fall = 0.f;
 };
 
 // The precipitation phase of this moment (weather decides how much falls, the season what falls).
@@ -85,6 +111,8 @@ ENGINE_API void da_snow_stamps_publish();                       // once per fram
 
 // CPU replica of the season snow (no trails): depth (m) and the snow surface y at a world position.
 ENGINE_API float da_snow_depth_at(float x, float z);
+// The same without the overhangs' shelter: the snow lying on a cover's top (a roof's, a trailer's) - the shells'.
+ENGINE_API float da_snow_open_depth_at(float x, float z);
 ENGINE_API float da_snow_surface_y(float x, float z);
 
 ENGINE_API const SPrecipState& da_precip();
@@ -124,7 +152,9 @@ struct SSnowTargets
         {
             if (c == da_snow_open)
                 v = std::max(v, 0.9f);
-            else if (c == da_snow_road)
+            // Under the crowns the snow lies thinner, never bare: a deciduous wood is snowed over whole in
+            // midwinter (bare tree wells drew brown discs round every trunk).
+            else if (c == da_snow_road || c == da_snow_trees)
                 v = 1.f;
         }
         return v;

@@ -1,0 +1,281 @@
+skel,kinds,class,species,header_flags,axes,level0,level1,level2_cards,rings,patch_tris,cards,bytes,patch_area_share,ring_fit_err_p99_m,gate_p99_m,gate_world_p99_m,collision_to_wood_p99_m,climbable_share,climb_tol_m,gate,crown_cell_m,crown_hulls,crown_clipped_share,second_opinion
+00cdb5d454071aef,5459ccc85ad328bb edc51a9e48a308f0,TREE ALIVE,birch,4,84,1,1,82,431,82,82,91330,0.1889,0.0664,0.0185,0.0203,0.0192,0.498,,pass,0.25,4,0.079,
+01e600cd1dec293d,b49b0991475d57a8,TREE DEAD,anomalous,2,23,1,22,0,234,2339,0,117324,0.9486,0.5657,0.0099,0.0252,0.0099,0.3,,pass,,,,0:contour
+0262afb63c3a38a3,5aede1e461da2ca9,TREE ALIVE,oak,0,123,1,32,90,1001,1094,90,377786,0.7577,0.449,0.0158,0.0242,0.01,0.927,,pass,0.256,4,0.091,0:contour
+031b3c47319cee54,cb9d76942e523dc5,TREE ALIVE,deciduous (generic cards),0,12,1,2,9,96,220,9,62304,0.3392,0.15,0.0146,0.0173,0.01,0.965,,pass,0.25,4,0.0,
+035701865711309c,8a33c1118a296a7a,TREE ALIVE,deciduous (generic cards),0,81,4,3,74,833,267,74,303520,0.5859,0.2404,0.0159,0.016,0.013,0.852,,pass,0.432,4,0.016,1:contour 2:contour 3:contour
+04b53c27d565ffef,3731ed3704650e3d,TREE ALIVE,birch,4,64,1,1,62,315,39,62,63792,0.0554,0.0595,0.0178,0.02,0.0146,0.673,,pass,0.25,3,0.021,
+05bebe62332cbf90,2ac403c9569d192c 8f94e57f09be495d,TREE ALIVE,pine,1,85,1,11,73,595,85,73,373680,0.6536,0.15,0.0192,0.0211,0.022,0.889,,pass,0.5,4,0.082,4:contour
+0601ac76620635a3,0601ac76620635a3,TREE DEAD,unknown (generic bark),2,22,1,21,0,779,1405,0,151544,0.5293,0.2292,0.0168,0.0163,0.0118,0.842,,pass,,,,0:contour
+081ab8e7cc1c6079,a3f58e21a2f616e3,TREE ALIVE,poplar,0,117,1,0,116,471,0,116,89226,0.0,0.0211,0.0163,0.0243,0.015,1.0,,pass,0.342,4,0.041,
+08e7ba05c02b0c73,e8d91a5278048774 6f24b070d008220f,TREE ALIVE,deciduous (generic cards),0,66,1,9,56,664,510,56,150080,0.5701,0.3074,0.0177,0.0187,0.0143,0.869,,pass,0.487,4,0.009,0:contour
+0acce4e9beaeaa40,e848dbf19b5d4dd6,TREE ALIVE,spruce,5,735,1,36,698,5183,1291,698,733924,0.8778,0.1559,0.0087,0.0087,0.0086,0.252,,pass,0.5,4,0.241,0:contour 1:contour 2:contour 3:contour 4:contour 7:contour 8:levelsets 9:levelsets 10:levelsets 13:contour 14:levelsets 16:contour 18:contour 19:contour 21:contour 23:levelsets
+0b955a5af90fc82a,65f2d968b62849e7 86d4cab4f57e300a,TREE ALIVE,deciduous (generic cards),0,69,1,9,59,705,511,59,151068,0.5716,0.2955,0.0178,0.0197,0.0139,0.873,,pass,0.469,4,0.011,0:contour
+0bd74c1f75d34be5,4221009eb8150a59,TREE ALIVE,pine,5,164,1,0,163,757,146,163,154012,0.6079,0.1564,0.016,0.0189,0.011,0.366,,pass,0.364,4,0.3,0:levelsets
+0c81efeabf027eb9,43eea370672c8701 36e390a80664b107,TREE ALIVE,pine,1,21,1,0,20,102,0,20,36528,0.0,0.0173,0.0151,0.0191,0.0147,1.0,,pass,0.25,4,0.0,
+0cb1f8b5cfe8602d,f2894831c62d25e7,TREE ALIVE,deciduous (generic cards),0,33,1,14,18,384,2224,18,228796,0.9056,0.6838,0.0117,0.0158,0.0174,0.284,,pass,0.271,0,0.0,0:contour
+0cd21a09e59e10e9,1a6a2a11b1d9e456 5598c8e77602f28f,TREE ALIVE,oak,4,30,1,1,28,161,45,28,44416,0.2364,0.061,0.0212,0.0218,0.0161,0.897,,pass,0.25,4,0.086,
+0d8bc66a4328eefa,b25f7d1ea168aeb0,TREE ALIVE,deciduous (generic cards),0,120,1,0,119,711,74,119,170252,0.9573,0.4069,0.0226,0.0206,0.005,1.0,,pass,0.287,4,0.015,0:contour
+0f558ee29d8b909a,01bb30c20cb46d72 e09b563b8baf727f,TREE ALIVE,deciduous (generic cards),0,14,1,1,12,91,142,12,43868,0.3499,0.15,0.0147,0.0197,0.0128,0.898,,pass,0.25,4,0.0,
+0fb48f550be4345a,96ddb36549cfe90f,TREE ALIVE,pine,1,133,1,32,100,707,25,100,179144,0.021,0.0237,0.016,0.0165,0.0137,0.673,,pass,0.406,0,0.0,
+11e72309854deaac,0cd114727dbe4f46,TREE ALIVE,deciduous (generic cards),0,59,1,21,37,836,407,37,304196,0.9725,0.4118,0.0118,0.0135,0.005,0.895,,pass,0.341,1,0.052,0:contour
+11ee8f622f196e64,085272e41e058d59,TREE ALIVE,spruce,5,546,1,41,504,5033,1460,504,803048,0.9136,0.161,0.0015,0.0009,0.0089,0.224,,pass,0.5,4,0.217,0:contour 1:contour 2:contour 4:contour 5:contour 6:contour 8:contour 9:contour 10:levelsets 11:levelsets 15:levelsets 16:contour 19:levelsets 20:contour 21:contour 22:contour 23:contour 24:levelsets 25:contour
+12cfe5dbaa19fca1,eed99a178ea89e7f 75667e93f3c8ddf1,TREE ALIVE,pine,1,189,1,28,160,1131,191,160,345208,0.3965,0.0322,0.0098,0.0111,0.0137,0.46,0.02,pass,0.5,4,0.027,
+13da9e6894467104,aa29a1af946141eb 8b90269efc7a2f9b f462e365262c9279 3d0978aae698013b,TREE ALIVE,deciduous (generic cards) oak walnut,0,140,1,31,108,1213,971,108,330170,0.7092,0.3638,0.0155,0.0181,0.011,0.941,,pass,0.26,4,0.09,0:contour
+140840d4860a680b,97eb0eb5c29f3d8d 4e34d74da0002499,TREE ALIVE,deciduous (generic cards),0,23,1,2,20,124,247,20,46074,0.3507,0.15,0.0147,0.0186,0.0106,0.903,,pass,0.25,4,0.003,
+160c306607bdf51c,a1283afcf0542d89 baac340f3ecc8e89,TREE ALIVE,deciduous (generic cards),0,22,1,1,20,130,137,20,52408,0.3681,0.2518,0.0128,0.0161,0.01,0.954,,pass,0.25,4,0.0,
+16123ba9c464f78e,8d7d659223bd89fc c96fae716b7de771,TREE ALIVE,oak,4,28,1,0,27,159,16,27,45684,0.0724,0.0339,0.0193,0.0219,0.0178,0.941,,pass,0.25,4,0.063,
+16b850870c00831f,8e876f47ee5b7ecb,TREE ALIVE,oak poplar,4,254,4,4,246,1386,1086,246,392158,0.9297,0.2764,0.0193,0.0217,0.0114,0.354,,pass,0.5,4,0.072,0:levelsets 1:contour 2:levelsets 3:levelsets
+170d239001c0b58f,15fe99fb231dfa1a,TREE ALIVE,poplar,4,104,1,1,102,500,257,102,95038,0.318,0.2557,0.0219,0.0222,0.0126,0.132,,pass,0.459,4,0.034,
+17d339fc737af90b,37a0a44a15d4b316,TREE ALIVE,deciduous (generic cards),0,101,1,21,79,1073,421,79,394200,0.9805,0.4536,0.0161,0.0204,0.0098,0.24,,pass,0.318,4,0.169,0:contour
+17e5128ef57969f7,5bafd852a79069ad,TREE ALIVE,poplar,4,401,1,31,369,3300,1253,369,449446,0.6082,0.15,0.0166,0.017,0.0143,0.367,,pass,0.464,4,0.055,0:contour 1:contour 2:contour 3:contour 4:contour 5:contour 6:contour 7:contour 9:contour 11:contour 12:contour 13:contour 14:contour 15:contour 16:contour
+17eb3fe2833963db,537e2aad6a5f94d3,TREE ALIVE,birch,4,23,1,0,22,126,16,22,21568,0.0532,0.0311,0.0154,0.0181,0.0121,1.0,,pass,0.25,4,0.023,
+182c51db666ee65b,182c51db666ee65b,TREE DEAD,unknown (generic bark),2,19,1,18,0,719,1156,0,128540,0.5517,0.2018,0.0167,0.0167,0.0124,0.842,,pass,,,,0:contour
+1897206596ed74e1,2c7fa4ecc2cd8bf2,TREE ALIVE,spruce,1,152,1,24,127,813,31,127,109224,0.0719,0.0479,0.0134,0.0134,0.0146,0.461,,pass,0.25,1,0.009,9:voxel
+18a14747a7365d2b,f1fa4a65adcaba46,TREE ALIVE,alder,0,1172,1,76,1095,8175,2844,1095,1149788,0.8098,0.15,0.0123,0.0251,0.0094,1.0,0.015,pass,0.287,4,0.101,0:contour 2:contour 6:contour 9:contour 10:contour 11:contour 12:levelsets 13:contour 15:contour 16:contour 17:contour 18:levelsets 19:levelsets 23:contour 25:contour 28:contour 29:levelsets 30:contour 31:levelsets 32:contour 33:contour 35:levelsets 36:contour 38:contour
+191b8de81de23d88,996210c98653dd58,TREE ALIVE,spruce,5,186,1,0,185,840,191,185,160894,0.6856,0.1721,0.0149,0.0178,0.0132,0.353,,pass,0.397,4,0.097,0:levelsets
+1a75b3be30fef9b3,f39403847bd59f4e a731e9252300dcbb,TREE ALIVE,pine,1,152,1,24,127,746,47,127,119068,0.0804,0.1301,0.0141,0.0201,0.0147,0.491,,pass,0.25,4,0.006,
+1b5d4788f5c90068,f7f09cde9fa25c15 3c70ad27aa8f2056,TREE ALIVE,deciduous (generic cards),0,9,1,2,6,82,161,6,77108,0.3463,0.15,0.0163,0.018,0.0107,0.941,,pass,0.25,4,0.001,
+1d34c4dffb352a40,3ffab4ce11f19274 afe060d6d548cbaa,TREE ALIVE,oak,0,1172,1,76,1095,8209,2211,1095,1133456,0.6237,0.15,0.0167,0.0192,0.0138,1.0,,pass,0.294,4,0.086,0:contour 2:contour 4:contour 6:contour 10:contour 11:contour 12:levelsets 13:contour 14:contour 15:contour 16:contour 17:contour 18:levelsets 19:levelsets 23:contour 25:contour 28:contour 29:levelsets 30:contour 31:levelsets 32:contour 33:contour 35:levelsets 36:contour 38:contour
+1e06cad05ad674ac,426cb0765b2599f4,TREE ALIVE,pine,1,412,1,57,354,3406,680,354,420858,0.3012,0.15,0.0201,0.0262,0.0162,0.378,,pass,0.463,4,0.15,1:contour 3:contour 7:contour 8:contour 10:contour 15:contour 16:contour 20:contour 30:contour 38:contour 40:contour 41:contour 44:contour
+1f8772ccfd9a1d40,6f2bdb931dd59d1a,TREE DEAD,pine,3,152,1,24,127,746,48,127,104080,0.0914,0.132,0.0143,0.0143,0.0157,0.457,,pass,0.25,1,0.007,
+2066173693790498,2bdc517d4a29c128,TREE DEAD,anomalous,2,22,1,21,0,419,2242,0,134788,0.9029,0.487,0.0184,0.0261,0.0099,0.23,,pass,,,,0:contour
+208aaf84bbcebdfb,abd1538032f4e502 d27ae79d4d7aff38,TREE ALIVE,deciduous (generic cards) oak,0,26,1,2,23,153,149,23,54116,0.3302,0.1824,0.0152,0.0195,0.0104,1.0,,pass,0.25,4,0.001,
+22258a82ffe35694,cc758e2221b9bf2a,TREE DEAD,spruce,7,201,1,0,200,1031,170,200,151136,0.5159,0.1513,0.0221,0.0225,0.016,0.429,,pass,0.448,4,0.207,0:contour
+23061358807f3ed0,33ac8422ceb7385d 05f4e5aa84905c2b,TREE ALIVE,poplar,4,389,1,31,357,3239,1234,357,453562,0.5007,0.15,0.0185,0.0174,0.0133,0.417,,pass,0.445,4,0.081,0:contour 1:contour 2:levelsets 3:contour 4:contour 5:contour 6:contour 8:contour 11:contour 12:contour 13:contour 14:contour 15:contour 16:contour 17:contour 20:contour
+257795dc975c52a5,2fa871f4386c694a e325ae16d491465f,TREE ALIVE,spruce,5,109,1,0,108,460,282,108,65902,0.8929,0.0431,0.0099,0.027,0.0089,0.753,0.005,pass,0.25,4,0.0,
+2601edb0c9156504,3c6d501d18ffbc5a,TREE ALIVE,walnut,0,123,1,32,90,1091,1098,90,357084,0.7601,0.4507,0.0155,0.0155,0.01,0.927,,pass,0.25,4,0.079,0:contour
+26e19fde49ab1f83,f78086ed926a7f93 f9b6e55c2bce611c,TREE ALIVE,deciduous (generic cards),0,9,1,2,6,189,88,6,36692,0.244,0.1757,0.0124,0.0134,0.0106,0.989,,pass,0.25,4,0.003,0:contour
+26e7a0b9e272e52a,3fd36299512d0525 d84c0f625d0bcf42,TREE ALIVE,deciduous (generic cards),0,124,1,30,93,1096,952,93,356808,0.7508,0.3713,0.0163,0.0219,0.0136,0.871,,pass,0.25,4,0.175,0:contour
+2764af60deeab13f,cdcd7edfc6ad5b57,TREE ALIVE,deciduous (generic cards),0,52,1,21,30,859,377,30,152487,0.9637,0.282,0.014,0.0143,0.0073,1.0,,pass,0.411,4,0.053,0:contour
+299c9e2bb9531a1e,1b8627d3cab77264 dc15a5087a5bf5f1,TREE ALIVE,willow,0,502,1,31,470,4119,1671,470,597472,0.68,0.1676,0.0181,0.023,0.0142,1.0,,pass,0.384,4,0.27,0:contour 1:contour 2:contour 3:contour 4:contour 5:contour 6:contour 7:levelsets 8:contour 9:contour 10:levelsets 11:contour 12:levelsets 13:contour 14:contour 15:levelsets 16:contour 17:contour 18:contour
+2bf11fa0301883c3,6119f7109b6d5e34,TREE ALIVE,spruce,5,190,1,0,189,982,176,189,144942,0.5189,0.1508,0.0215,0.0226,0.0165,0.43,,pass,0.447,4,0.087,0:contour
+2c114d9382643fc3,835f8d51619a295c,TREE ALIVE,deciduous (generic cards),0,33,1,14,18,384,2223,18,327340,0.906,0.703,0.0158,0.0227,0.016,1.0,,pass,0.274,0,0.0,0:contour
+2ccd74e083da6c71,55a3e4846f2991f4,TREE ALIVE,cherry,4,244,1,21,222,1604,296,222,198161,0.2604,0.1156,0.0152,0.0185,0.0115,0.477,,pass,0.25,4,0.057,2:contour 4:contour 8:levelsets 9:contour
+2d39dd5e08ce2d62,8d9d69298efe62d5,TREE ALIVE,spruce,1,60,1,0,59,294,0,59,82632,0.0,0.0156,0.0119,0.0171,0.0106,1.0,,pass,0.25,4,0.001,
+2dfe1bddc1744448,6ae2cd100b2716af 9c6d8e979d0188a4 55c526d28f7775f7,TREE ALIVE,deciduous (generic cards) oak walnut,0,133,1,30,102,1141,948,102,320284,0.7536,0.3759,0.0165,0.027,0.0128,0.83,,pass,0.32,4,0.21,0:contour
+2e02da40fd007e37,7498ab900131d868 4d514b641741f7e9,TREE ALIVE,oak,4,24,1,0,23,137,7,23,45504,0.0195,0.0263,0.0185,0.02,0.0151,0.965,,pass,0.25,4,0.008,
+2e24c60317bf9ac3,c4247f032dea647b,TREE ALIVE,oak,0,9,1,2,6,189,84,6,44972,0.2331,0.1669,0.0126,0.0149,0.0103,0.989,,pass,0.25,4,0.013,0:contour
+3126b0d09a607df1,507479d3d54b74e9 6a358c347c1b5713 73db96a2175a14d8 5f6ea3873ff38203,TREE ALIVE,deciduous (generic cards),0,114,1,38,75,1183,1767,75,373970,0.6713,0.3831,0.0144,0.0192,0.01,0.979,,pass,0.445,4,0.076,0:contour
+313e1dac2b9ceae5,2157af7213fb281c,TREE ALIVE,deciduous (generic cards),0,14,1,1,12,91,142,12,29435,0.3445,0.15,0.0148,0.0177,0.0129,0.899,,pass,0.25,4,0.0,
+32b98a4f5f7db2d8,46b0e5182f7c2e38 8e0ecd16c1a0ff8b,TREE ALIVE,willow,0,470,2,42,426,2857,3297,426,635376,0.5978,0.2465,0.0178,0.0221,0.2748,0.853,,pass,0.347,4,0.393,0:contour 1:contour 3:contour 4:contour 5:contour 6:levelsets 7:levelsets 8:contour 9:levelsets 10:contour 11:contour 12:voxel 13:contour 14:levelsets 15:contour 16:levelsets 17:contour 18:contour 19:voxel
+33427d31bf811b33,4bc8b4f489fc1fe8 df160760cd122f7b,TREE ALIVE,pine,1,32,1,0,31,155,0,31,49668,0.0,0.0173,0.0151,0.0175,0.0146,1.0,,pass,0.25,4,0.0,
+33ab7b6f133a878f,33ab7b6f133a878f,TREE DEAD,unknown (generic bark),2,55,1,54,0,1674,2894,0,303568,0.5678,0.2437,0.0168,0.0174,0.0118,0.89,,pass,,,,0:contour
+33e079ed7da1549d,bd12852f4134068e,TREE ALIVE,pine,5,202,1,0,201,963,208,201,176562,0.6319,0.1771,0.0168,0.0215,0.0135,0.335,,pass,0.38,4,0.219,0:levelsets
+3455e093ccce6fb0,630b27d73f32297e,TREE ALIVE,deciduous (generic cards),0,88,1,21,66,900,420,66,273473,0.9657,0.2791,0.0116,0.0247,0.0072,1.0,0.015,pass,0.269,4,0.014,0:contour
+34aedc443931f926,dcac1bc46a6a58fc,TREE ALIVE,alder,4,32,1,1,30,170,12,30,34314,0.0115,0.0298,0.0183,0.0225,0.0164,0.915,,pass,0.25,4,0.04,
+3623be70481fbcb1,d2d4f0379fc81f7a a1f71b15a7233757,TREE ALIVE,alder,0,881,1,62,818,6117,1855,818,871296,0.5944,0.1697,0.0165,0.0171,0.0133,1.0,,pass,0.347,4,0.23,1:contour 3:contour 4:levelsets 5:contour 7:contour 14:levelsets 15:contour 17:contour 18:contour 19:contour 20:contour 21:contour 22:levelsets 24:levelsets 25:contour 26:levelsets 28:contour 31:contour 32:contour 35:levelsets 36:contour
+36cda128055b9122,97a734c4554055aa,TREE ALIVE,deciduous (generic cards),0,106,1,21,84,1097,424,84,359554,0.9841,0.4532,0.0113,0.0185,0.0099,0.076,,pass,0.328,4,0.145,0:contour
+36e0b94418d87ef9,dedf62965a0ce826 b692a6a290905cd8,TREE ALIVE,spruce,5,119,1,0,118,482,120,118,63666,0.4191,0.0265,0.0154,0.0296,0.0096,0.717,0.01,pass,0.25,4,0.0,
+3826e6ce328e00b6,68b9cd36bb6b40c7,TREE ALIVE,poplar,4,90,1,1,88,446,239,88,101484,0.27,0.2473,0.0204,0.0206,0.0139,0.115,,pass,0.462,4,0.041,
+38641950817a6798,5409ea86beac7558,TREE ALIVE,oak,0,140,1,31,108,1105,966,108,339112,0.7074,0.3595,0.0155,0.0239,0.011,0.942,,pass,0.279,4,0.096,0:contour
+39e71db200df1942,2e265ae405b0e4ef,TREE ALIVE,deciduous (generic cards),0,52,1,21,30,766,382,30,283584,0.9518,0.3397,0.0099,0.0236,0.0098,0.475,0.015,pass,0.25,4,0.012,0:contour
+3b05cca7fbda0022,5275ab030c14ecab,TREE ALIVE,deciduous (generic cards),0,57,3,2,52,453,247,52,277824,0.455,0.15,0.0153,0.0209,0.0127,0.82,,pass,0.272,4,0.0,0:levelsets 2:contour
+3b88d5fe40ccd0ea,97223a9b5eadaa50 9472b8dc075eef0e,TREE ALIVE,birch,4,29,1,1,27,151,41,27,42032,0.2101,0.0602,0.0162,0.0199,0.0147,1.0,,pass,0.25,4,0.05,
+3f19a28f226262f5,a555e37770a7138f,TREE DEAD,anomalous,2,23,1,22,0,721,586,0,99300,0.8964,0.3193,0.0159,0.0206,0.0092,0.89,,pass,,,,0:contour
+401532008ec73991,908143f4c3d4b16e 78d37766359367cd,TREE ALIVE,pine,1,72,1,10,61,514,68,61,331856,0.6543,0.0653,0.0192,0.0243,0.0218,0.888,,pass,0.5,4,0.097,4:contour
+411ac7e14d53fef8,3b974a3b5d8343be,TREE ALIVE,deciduous (generic cards),0,123,1,29,93,1101,991,93,350600,0.7433,0.409,0.0154,0.0241,0.0115,0.871,,pass,0.267,0,0.0,0:contour
+41fe2935e6696ee8,41fe2935e6696ee8,TREE DEAD,unknown (generic bark),2,38,1,37,0,774,3620,0,257296,0.8393,0.5615,0.0155,0.0153,0.0172,0.887,,pass,,,,0:contour
+42bf2331d3c5f6c7,00edc2f0fdfe2fd4,TREE ALIVE,deciduous (generic cards),0,82,1,21,60,913,371,60,273922,0.9434,0.3601,0.0148,0.0198,0.0075,0.779,,pass,0.265,3,0.06,0:contour
+42c22c2e24edbc80,869c60ef5f7ecf4b f8b1b64e3719fe70,TREE ALIVE,deciduous (generic cards),0,56,1,21,34,867,392,34,166074,0.9726,0.2967,0.0129,0.0157,0.0077,0.898,,pass,0.417,4,0.035,0:contour
+44453b658cc5f2a6,407ad2ca2bc16c54,TREE ALIVE,spruce,1,60,1,0,59,295,0,59,92704,0.0,0.0156,0.0126,0.0163,0.0108,1.0,,pass,0.25,4,0.0,
+4455723aa7c8d614,b7dd9abcb067b7f8,TREE ALIVE,birch,4,84,1,1,82,431,82,82,91330,0.1889,0.0664,0.0186,0.0214,0.0191,0.498,,pass,0.25,4,0.082,
+44a406e7f152a9cf,f341a63a2468a376,TREE ALIVE,pine,5,366,1,77,288,4095,1384,288,523800,0.4976,0.15,0.0255,0.0189,0.0212,0.453,,pass,0.5,4,0.208,0:contour 1:contour 2:contour 4:contour 5:contour 7:contour 8:contour 10:contour 11:contour 14:contour 17:contour 18:levelsets 19:contour 23:contour 25:contour 26:levelsets 27:contour 29:contour 32:contour 33:contour 36:contour 37:contour 40:contour 41:contour 48:contour 52:contour 53:contour
+467d7a85b29a360b,57b62b479cb6a02c,TREE ALIVE,birch,4,19,1,0,18,106,21,18,21163,0.1147,0.0384,0.017,0.0215,0.0149,1.0,,pass,0.25,4,0.041,
+48f9200dc29483c1,97a2462ed794dd3d,TREE ALIVE,alder,4,625,1,26,598,3832,596,598,588345,0.3477,0.0966,0.0167,0.0282,0.0143,1.0,,pass,0.25,4,0.036,0:contour 2:contour 5:contour 6:contour 10:levelsets 13:levelsets
+499a0b13088b6927,41512b7d2494fcc5,TREE ALIVE,oak,0,133,1,30,102,1039,949,102,309166,0.7512,0.3675,0.0163,0.0233,0.0132,0.871,,pass,0.341,4,0.185,0:contour
+4b229f0c0d7d9911,dce4d0f9a1ea6d49,TREE ALIVE,oak,4,104,1,7,96,720,1310,96,331116,0.8849,0.321,0.0176,0.0186,0.0129,0.067,,pass,0.445,0,0.0,0:levelsets 1:levelsets 2:levelsets 3:levelsets 4:levelsets 5:levelsets
+4b26a46371b4ed3c,2c34d503891f61a3,TREE ALIVE,spruce,1,61,1,0,60,296,0,60,45295,0.0,0.0158,0.0137,0.0141,0.012,1.0,,pass,0.25,2,0.001,
+4befbb24d7e46c18,8ba68c8284917b66 f8e5de605f3a3e9a,TREE ALIVE,birch,4,64,1,1,62,315,38,62,63780,0.0553,0.0619,0.0179,0.0193,0.0148,0.673,,pass,0.25,4,0.021,
+4eb6fdad80613aff,78d27264102bd8aa,TREE ALIVE,alder,4,486,1,29,456,3350,533,456,558107,0.2577,0.1071,0.0166,0.0289,0.0139,1.0,,pass,0.26,4,0.027,2:contour 5:contour 6:contour 7:contour 10:contour 11:contour 14:contour
+4ec498ed2506842d,c0e5764047865c9b,TREE ALIVE,oak,0,21,1,2,18,111,212,18,31540,0.3232,0.15,0.0142,0.0137,0.0099,0.917,,pass,0.25,4,0.0,
+4eef138ed224527d,565bfad8561f2c79 381872fe9d7cbe73,TREE ALIVE,deciduous (generic cards),0,11,1,4,6,199,123,6,94156,0.2709,0.1586,0.0125,0.0143,0.0107,0.988,,pass,0.25,4,0.148,0:contour
+50c26eaa8198e694,8f113463bec37f92 bf97845064fd7155,TREE ALIVE,pine,5,234,1,46,187,953,329,187,133688,0.1757,0.0876,0.0183,0.0188,0.0117,0.523,,pass,0.25,4,0.001,
+52094abbd564c21b,bd1f5f21bd1b9d1b,TREE ALIVE,alder,4,111,4,2,105,611,86,105,230332,0.0969,0.0562,0.0191,0.0186,0.0172,0.92,,pass,0.25,3,0.034,
+520b611ae15852bb,a07e90556ab4cd10 94ea730d54e0e319,TREE ALIVE,deciduous (generic cards),0,58,1,14,43,474,1058,43,126914,0.8548,0.7671,0.0167,0.0167,0.011,0.445,,pass,0.25,0,0.0,0:contour
+56ed4881b3d9d857,45bf877b3ebf54f6,TREE ALIVE,spruce,5,427,1,64,362,2817,1176,362,508790,0.6127,0.15,0.0146,0.0155,0.0082,0.492,,pass,0.25,4,0.245,1:contour 2:contour 4:contour 8:contour 12:contour 13:contour 17:levelsets 18:levelsets 26:levelsets 36:contour 37:contour 38:contour 40:levelsets 44:contour
+577b480f48b92614,b87fd92f47311ded,TREE ALIVE,poplar,4,21,1,0,20,116,16,20,27528,0.0724,0.0339,0.0193,0.0216,0.019,0.941,,pass,0.25,4,0.047,
+5a7cde44058e37b2,78a917f69839d366,TREE ALIVE,deciduous (generic cards),0,95,1,22,72,1024,514,72,224584,0.8376,0.2683,0.0153,0.0169,0.0108,1.0,,pass,0.25,1,0.138,0:contour
+5ab016cde076d29f,246e059eb9a49756,TREE ALIVE,oak,0,14,1,1,12,91,143,12,25472,0.3452,0.15,0.0144,0.0144,0.0109,0.898,,pass,0.25,2,0.0,
+5cda3e08aefefd5a,c8c12379993c5761,TREE ALIVE,deciduous (generic cards),0,10,1,3,6,197,121,6,45348,0.2841,0.1746,0.0118,0.0127,0.0098,0.994,,pass,0.25,1,0.003,0:contour
+60933439fd97dc22,d3cf7936353c5b66 809ba7e7c67dba34,TREE ALIVE,pine,5,119,1,0,118,578,213,118,86732,0.8758,0.0266,0.0094,0.0265,0.0082,0.734,0.005,pass,0.25,4,0.0,
+60dbb30c3209a59b,04ec0cf5de281af7,TREE ALIVE,pine,1,412,1,57,354,3435,676,354,414686,0.3003,0.0928,0.0205,0.0245,0.0174,0.377,,pass,0.375,4,0.211,3:contour 7:contour 8:contour 10:contour 15:contour 16:contour 20:contour 30:contour 38:contour 40:contour 41:contour 42:contour 44:contour
+610fd4bec8fe2a61,e9d2f31b587882da a8d0e4fc09adea97,TREE ALIVE,alder birch,4,24,1,1,22,132,45,22,29239,0.2364,0.061,0.0213,0.0291,0.0162,0.894,,pass,0.25,4,0.042,
+6394b374e8d032b5,6394b374e8d032b5,TREE DEAD,unknown (generic bark),2,30,1,29,0,938,2113,0,196380,0.6495,0.3426,0.0166,0.0167,0.011,0.914,,pass,,,,0:contour
+63dcc1c3cc4b3261,b056fe20c2bf9e57,TREE ALIVE,pine,5,183,1,37,145,753,448,145,116960,0.3269,0.0773,0.0129,0.0231,0.0122,0.536,0.015,pass,0.25,4,0.0,
+63e87b204a5050f8,97b9a8bf3e8cb5fc,TREE ALIVE,deciduous (generic cards),0,37,1,9,27,511,503,27,108080,0.5691,0.375,0.0175,0.0188,0.0142,0.884,,pass,0.483,0,0.0,0:contour
+640c7124f5399c90,2c2c4250df70e0dd,TREE ALIVE,pine,1,171,1,28,142,1045,192,142,274833,0.3918,0.0357,0.0096,0.0065,0.014,0.658,0.02,pass,0.5,1,0.363,
+649d3c48959a302c,54d90e3616acb2be,TREE ALIVE,poplar,0,117,1,0,116,528,20,116,77980,0.0513,0.0507,0.0118,0.0153,0.0114,1.0,,pass,0.344,3,0.032,
+64e4da54a5662195,9c35678d2cc7f548,TREE ALIVE,birch,4,64,1,1,62,322,30,62,80304,0.0485,0.0884,0.0171,0.0204,0.0132,0.641,,pass,0.25,4,0.024,
+6527012d0e1d70be,606ebffb6c4f4ae8,TREE ALIVE,spruce,1,152,1,24,127,776,38,127,106936,0.0527,0.0652,0.0114,0.016,0.0034,0.466,,pass,0.25,0,0.0,
+65ebc6c19abb0c86,65ebc6c19abb0c86,TREE DEAD,unknown (generic bark),2,22,1,21,0,779,1415,0,151024,0.5355,0.2291,0.0166,0.0166,0.0116,0.842,,pass,,,,0:contour
+65fa6dab1332ede9,65fa6dab1332ede9,TREE DEAD,unknown (generic bark),2,50,1,49,0,1689,2798,0,301316,0.5621,0.247,0.0169,0.0169,0.0122,0.89,,pass,,,,0:contour
+660a645728ad5105,6cd055c710e76ca8 8a912821a8b0f977,TREE ALIVE,birch,4,54,1,1,52,270,26,52,58906,0.0356,0.0853,0.0169,0.0173,0.0141,0.554,,pass,0.25,4,0.019,
+66ede1d81dbc3b4d,4422dc5c396627f1,TREE ALIVE,cherry,0,881,1,62,818,6332,1840,818,886304,0.5899,0.15,0.0163,0.0228,0.0132,1.0,,pass,0.292,1,0.203,1:contour 2:contour 3:contour 4:levelsets 5:contour 7:contour 14:levelsets 15:contour 17:contour 18:contour 19:contour 20:contour 21:contour 22:levelsets 24:levelsets 25:contour 26:levelsets 28:contour 31:contour 32:contour 33:levelsets 35:contour 36:contour
+67c6b5c936a85206,b7a73b29931f1d66 4d119183932f18ad,TREE ALIVE,cherry,0,1171,1,75,1095,8140,2204,1095,1083986,0.6335,0.15,0.0165,0.0194,0.0136,1.0,,pass,0.305,4,0.212,0:contour 2:contour 6:contour 9:contour 10:contour 11:contour 12:levelsets 13:contour 15:contour 16:contour 17:contour 18:levelsets 19:levelsets 23:contour 25:contour 28:contour 29:levelsets 30:contour 31:levelsets 32:contour 35:contour 36:contour 38:contour
+68e5933994d8c7c8,ca39a4380e797238 fe1555073a566f93,TREE ALIVE,pine,5,109,1,0,108,536,288,108,71360,0.9142,0.0403,0.0098,0.0276,0.0089,0.751,0.005,pass,0.25,4,0.0,
+697ec1b63879d6ac,de27991506fc0ea8,TREE ALIVE,deciduous (generic cards),0,111,1,0,110,555,40,110,190708,0.1414,0.5986,0.0189,0.0257,0.0156,1.0,,pass,0.25,3,0.026,
+6a62dbd5821e8ba1,f4faadbea41b68aa,TREE ALIVE,oak,0,125,1,29,95,1078,1268,95,340118,0.6797,0.4556,0.0146,0.0232,0.01,0.883,,pass,0.37,4,0.046,0:contour
+6e8c7b1f5bcdd528,0b76f69046562aee,TREE ALIVE,oak,0,130,1,42,87,1227,3764,87,536936,0.8806,0.5625,0.0139,0.0139,0.0094,0.833,,pass,0.281,0,0.0,0:contour
+6fd5c21d7c7befa9,6e9092823f25b4b2,TREE ALIVE,poplar,4,103,4,2,97,533,76,97,187462,0.0876,0.0419,0.0192,0.0192,0.017,0.923,,pass,0.264,1,0.026,
+70424286fba31e31,b0b43f7ce2cd36cb,TREE ALIVE,spruce,5,226,1,44,181,847,562,181,151436,0.4663,0.0705,0.0096,0.0279,0.0087,0.512,0.01,pass,0.25,4,0.0,
+70b2acb7db3689d9,5f1e67d14e265a78,TREE ALIVE,alder oak,4,254,4,4,246,1424,1087,246,360138,0.9302,0.2669,0.0195,0.0178,0.0117,0.353,,pass,0.496,4,0.065,0:levelsets 1:contour 2:levelsets 3:levelsets
+7158e9c08d6ba823,7158e9c08d6ba823,TREE DEAD,unknown (generic bark),2,49,1,48,0,1686,2789,0,300668,0.5573,0.2481,0.0171,0.0165,0.0123,0.89,,pass,,,,0:contour
+73dacc85dac32b66,0e49dbd41d7ea030,TREE ALIVE,deciduous (generic cards),0,31,1,22,8,276,2383,8,203830,0.9603,0.8013,0.0142,0.0168,0.0095,1.0,,pass,0.25,0,0.0,0:contour
+748b8b083db2356e,19e3c0cc30795fea,TREE DEAD,deciduous (generic cards),2,24,1,7,16,297,235,16,41954,0.5065,0.15,0.0117,0.0145,0.0096,0.995,,pass,0.25,0,0.0,0:contour
+773fad2b431843bf,a02995f961ea22bb,TREE ALIVE,oak,4,93,1,6,86,644,841,86,349092,0.8446,0.252,0.0216,0.0245,0.0112,0.094,,pass,0.296,4,0.328,0:levelsets 1:contour 2:levelsets 3:levelsets 4:levelsets 5:levelsets
+7780163c3cdc983e,87f69a932d0ac8cc,TREE ALIVE,deciduous (generic cards),0,45,1,13,31,626,288,31,183828,0.9689,0.2815,0.0134,0.0257,0.0088,0.825,,pass,0.271,2,0.011,0:contour
+78b36a97fe99e04b,713219ebfdb5db27 60857f4cd5b2b878,TREE ALIVE,oak,0,881,1,62,818,5890,1861,818,868164,0.5959,0.158,0.0161,0.0226,0.0132,1.0,,pass,0.342,4,0.273,1:contour 3:contour 4:levelsets 5:contour 7:levelsets 14:levelsets 15:contour 17:contour 18:contour 19:contour 20:contour 21:contour 22:levelsets 24:levelsets 25:contour 26:levelsets 28:contour 30:contour 31:levelsets 32:contour 33:levelsets 35:contour 36:contour
+7a07ed4beb6df00c,e3638f29ae557d0e c99c804480dd5034 6c853daf759be218,TREE ALIVE,pine,1,134,1,32,101,711,25,101,131400,0.019,0.0241,0.0161,0.0176,0.0132,0.672,,pass,0.374,4,0.085,
+7a3431cbeb85e2cd,38b8a8d3f4391ab8 d103167d42d73429,TREE ALIVE,oak,4,32,1,1,30,175,12,30,28532,0.0115,0.0298,0.0183,0.0199,0.0169,0.914,,pass,0.25,4,0.073,
+7acdafc826448b6f,ae63fa5405d28a07,TREE ALIVE,alder poplar,4,266,4,10,252,1512,1548,252,475692,0.8962,0.1925,0.0185,0.0187,0.01,0.325,,pass,0.5,4,0.073,0:levelsets 1:levelsets 2:levelsets 3:contour 4:levelsets 5:levelsets 6:levelsets 7:levelsets 8:levelsets
+7df4a1024553dbe8,4efe49eb4c7b2cb7,TREE ALIVE,deciduous (generic cards),0,95,1,22,72,1063,566,72,325512,0.878,0.3025,0.0161,0.0293,0.0107,1.0,,pass,0.252,4,0.094,0:contour
+805d7cc48989f543,805d7cc48989f543,TREE DEAD,unknown (generic bark),2,24,1,23,0,946,1352,0,160224,0.5043,0.1889,0.0167,0.0172,0.0122,0.854,,pass,,,,0:contour
+81219f324cb6cde0,db309892fb49159a c4d1a9e148ff6da7,TREE ALIVE,deciduous (generic cards),0,26,1,2,23,153,149,23,72938,0.3302,0.1824,0.0144,0.0169,0.012,0.962,,pass,0.25,4,0.006,
+81e80fc06f179eb2,6a6888e66a055df6 279a4386e723a039,TREE ALIVE,deciduous (generic cards),0,21,1,2,18,111,212,18,43812,0.3232,0.15,0.0142,0.0175,0.0102,0.917,,pass,0.25,4,0.0,
+84223d6b843d4980,256a182101b0d56b 4c45254f4af84205,TREE ALIVE,deciduous (generic cards),0,53,1,32,20,838,1235,20,199748,0.6006,0.343,0.0172,0.0182,0.0115,0.66,,pass,0.399,0,0.0,0:contour
+843829d7ffaf153f,843829d7ffaf153f,TREE DEAD,unknown (generic bark),2,24,1,23,0,946,1351,0,160012,0.5008,0.1954,0.0167,0.0167,0.0126,0.854,,pass,,,,0:contour
+8499a46441599be0,b957ffc71796bda4,TREE DEAD,pine,7,161,1,0,160,757,156,160,183516,0.6497,0.1938,0.0144,0.0152,0.0122,0.272,,pass,0.337,4,0.345,0:levelsets
+86995a63c82981e2,e9ed4ca0770a0c44 272d4b25e3eff3db 25c851668e8e63fe,TREE ALIVE,alder poplar,4,23,1,0,22,133,16,22,29508,0.0724,0.0339,0.0191,0.0206,0.0184,0.941,,pass,0.25,4,0.046,
+8994feabba6934c7,e93d543cf2a1115e,TREE ALIVE,birch,4,54,1,1,52,270,26,52,61324,0.0356,0.0853,0.0169,0.0191,0.0133,0.554,,pass,0.25,3,0.017,
+8ac4120a2b718dec,f7a7875e55043b29,TREE ALIVE,poplar,4,24,1,1,22,121,45,22,34392,0.2364,0.061,0.0213,0.0223,0.016,0.894,,pass,0.25,4,0.049,
+8c66ef90c4b1b444,d943c19ce2e1d72f,TREE ALIVE,deciduous (generic cards),0,130,1,42,87,1219,3714,87,520068,0.8917,0.5451,0.0138,0.0131,0.0095,0.815,,pass,0.274,0,0.0,0:contour
+8d2f4d5c9c97881e,8722f0c3e8ae4432 32b8064301c6cb6b,TREE ALIVE,poplar,4,463,1,27,435,3134,1225,435,423244,0.6026,0.1557,0.0183,0.0159,0.013,0.32,,pass,0.478,4,0.033,0:contour 1:contour 2:contour 3:contour 5:contour 6:levelsets 8:contour 10:contour 13:contour 14:levelsets 15:contour
+8f7bcb1b8316fc28,c45efb8484c7e04a,TREE DEAD,unknown (generic bark),2,22,1,21,0,609,384,0,75332,0.9565,0.3231,0.0133,0.0222,0.0085,0.617,0.015,pass,,,,0:contour
+914edba24df1ff8f,b4eb722c30b477be,TREE ALIVE,spruce,5,494,1,55,438,2776,989,438,443036,0.6965,0.15,0.0137,0.0145,0.0032,0.474,,pass,0.32,4,0.042,0:contour 1:contour 7:contour 10:contour 11:levelsets 13:levelsets 14:levelsets 21:contour 27:contour 31:contour 35:voxel 40:levelsets 41:levelsets
+9289c23533d11a0e,1692038cd3634079,TREE DEAD,unknown (generic bark),2,20,1,19,0,406,2202,0,144056,0.8943,0.5788,0.0189,0.0189,0.0106,0.249,,pass,,,,0:contour
+932d631a528af248,898762c378325940 f7e2b25d9c2b95b1,TREE ALIVE,oak,0,125,1,29,95,1077,1234,95,331053,0.6636,0.4661,0.0148,0.022,0.0102,0.887,,pass,0.445,4,0.023,0:contour
+9456676a41836fb1,e6bcaaa65cc2d1ab,TREE ALIVE,birch,4,34,1,1,32,178,17,32,37508,0.0359,0.0287,0.0164,0.0219,0.0137,1.0,,pass,0.25,4,0.042,
+9786e6c059ccd786,e01c35d4b70b0004,TREE DEAD,anomalous,2,23,1,22,0,239,2266,0,130108,0.924,0.9179,0.0099,0.0099,0.0098,0.309,,pass,,,,0:contour
+98c3de6cb82372a3,7fc58ab64f0facec,TREE ALIVE,birch,4,20,1,0,19,111,21,19,26939,0.1123,0.0384,0.017,0.018,0.0152,1.0,,pass,0.25,4,0.042,
+98e8c07d99814001,1ee35a025231971b 13bc9a30af2b06e4 8d519455f8d1fa6d,TREE ALIVE,deciduous (generic cards),0,66,1,14,51,614,1737,51,215068,0.8444,0.4932,0.0157,0.0174,0.0098,0.453,,pass,0.25,0,0.0,0:contour
+9ff8399546ee6448,45a59bb5a3b7342d,TREE ALIVE,cherry,0,881,1,62,818,6206,1838,818,892160,0.5895,0.164,0.0162,0.0186,0.0133,1.0,,pass,0.31,4,0.224,1:contour 3:contour 4:levelsets 5:contour 7:levelsets 14:levelsets 15:contour 16:contour 17:contour 18:contour 19:contour 20:contour 21:contour 22:levelsets 24:levelsets 25:contour 26:levelsets 28:contour 31:contour 32:contour 33:levelsets 35:contour 36:contour
+a1383eb0e625e9c8,fca073589035ca23,TREE ALIVE,alder poplar,4,254,4,4,246,1375,1082,246,378196,0.9289,0.2669,0.0193,0.0198,0.0117,0.353,,pass,0.5,4,0.056,0:levelsets 1:contour 2:levelsets 3:levelsets
+a1db208cf7615425,c82c84cb4a58341d 43a786607a95f286 841442b703a8b618,TREE ALIVE,pine,1,65,1,19,45,338,52,45,96754,0.5758,0.15,0.01,0.0116,0.0109,0.821,,pass,0.348,4,0.076,8:levelsets
+a27ce4135dbfb557,cbc4fdd0dfd433fb,TREE ALIVE,poplar,4,503,1,27,475,3517,1133,475,458148,0.5674,0.15,0.0191,0.0189,0.0145,0.373,,pass,0.495,4,0.021,0:contour 1:contour 2:contour 4:contour 5:contour 6:contour 7:contour 9:levelsets 10:contour 11:contour 12:contour 13:contour 14:contour 16:contour
+a3061a8e9e4320fa,f8a54eee5d6780d7,TREE ALIVE,poplar,4,86,1,1,84,411,266,84,89048,0.421,0.3147,0.0237,0.0257,0.0168,0.064,,pass,0.453,4,0.027,
+a3d54a4bc9cc7620,613476605635b438 928f5003529d86c0,TREE ALIVE,cherry,4,1184,1,83,1100,8530,2865,1100,1150488,0.7001,0.15,0.0168,0.0175,0.0133,1.0,,pass,0.295,4,0.132,0:contour 1:contour 2:contour 3:contour 4:contour 5:levelsets 6:contour 8:contour 9:levelsets 10:contour 11:levelsets 12:levelsets 13:contour 14:levelsets 16:contour 17:contour 18:contour 20:contour 21:contour 23:contour 24:levelsets 26:contour 27:contour 28:contour 30:contour 31:levelsets 32:levelsets 33:contour 34:levelsets 37:contour 38:contour 39:contour 41:levelsets 42:levelsets 43:levelsets 45:contour 47:contour 48:levelsets 49:contour 50:levelsets
+a7f33c709be36ac2,dcab730fc4d4523d de734a9b2b557307,TREE ALIVE,pine,1,73,1,9,63,531,82,63,304660,0.659,0.15,0.0191,0.0178,0.0221,0.892,,pass,0.5,4,0.059,3:contour
+a8498b4158342451,cd65f38a4a6634a6,TREE ALIVE,poplar,4,98,1,1,96,587,203,96,134012,0.3131,0.2314,0.0216,0.0208,0.013,0.13,,pass,0.478,4,0.034,0:contour
+aa3ec60d13232889,0cd718ca209c8125,TREE DEAD,unknown (generic bark),2,40,1,39,0,869,1239,0,143448,0.7485,0.3644,0.016,0.0208,0.0115,0.921,,pass,,,,0:contour
+aa88ee81ed6b2c27,d67db40eeabbe2f6,TREE ALIVE,deciduous (generic cards),0,12,1,2,9,98,217,9,44734,0.3492,0.15,0.0155,0.017,0.0104,0.965,,pass,0.25,4,0.0,
+ab112ec85a44282b,ecbd252e2ccae901,TREE ALIVE,deciduous (generic cards),0,10,1,3,6,192,121,6,93858,0.2694,0.1731,0.0114,0.0141,0.0099,0.988,,pass,0.25,0,0.0,0:contour
+ac2373ae0cdbc6aa,30b84da0758fcb81,TREE ALIVE,pine,5,237,1,49,187,975,699,187,160604,0.5154,0.076,0.0108,0.0219,0.0088,0.519,0.01,pass,0.25,4,0.001,
+acc9178d16b7a43f,45000dc874017ff5 da402073f2e8bf0c,TREE ALIVE,spruce,1,152,1,24,127,761,48,127,115292,0.0819,0.0812,0.0141,0.0177,0.014,0.492,,pass,0.25,4,0.007,
+ad74042d8c73d9b7,36665e6a67cee078,TREE ALIVE,alder,4,24,1,0,23,133,7,23,23220,0.0195,0.0263,0.0186,0.0197,0.0145,0.965,,pass,0.25,4,0.005,
+afb8951d4cc46498,b8714e353fa29d94,TREE ALIVE,cherry,4,331,1,14,316,1943,308,316,282180,0.3622,0.15,0.0158,0.0265,0.0131,0.64,,pass,0.25,4,0.027,5:contour 6:contour
+b0e06d0449b3d874,1f970d0ad2fa23cc 0608cd13dad2814f,TREE ALIVE,deciduous (generic cards),0,10,1,3,6,197,100,6,64884,0.2588,0.1736,0.0123,0.0144,0.0104,0.994,,pass,0.25,4,0.003,0:contour
+b42bd4d9550aa5d4,a3e851a6683fe9a6,TREE ALIVE,poplar,4,401,1,31,369,3231,1264,369,466492,0.6108,0.15,0.0168,0.0219,0.0141,0.366,,pass,0.489,4,0.018,0:contour 1:contour 2:contour 3:contour 4:contour 5:contour 6:contour 7:contour 9:contour 11:contour 12:contour 13:contour 15:contour 16:contour
+b4866b3cf80f1b21,ca29671c2b3e545c 9bb58bf319136d67 2633347645b60d52,TREE ALIVE,oak walnut,0,127,1,29,97,1080,1242,97,324854,0.6685,0.479,0.0144,0.0209,0.01,0.886,,pass,0.444,4,0.036,0:contour
+b64bb2f034555eab,b64bb2f034555eab,TREE DEAD,unknown (generic bark),2,39,1,38,0,745,3742,0,261748,0.8525,0.5082,0.0148,0.0168,0.0125,0.895,,pass,,,,0:contour
+b8790de559241057,8ce0c0a4fc122607 ff16dc97d2abf62b,TREE ALIVE,willow,0,509,1,30,478,3561,1367,478,624888,0.5219,0.1754,0.0179,0.0294,0.0147,1.0,,pass,0.25,4,0.193,0:contour 2:contour 4:contour 5:contour 6:contour 7:levelsets 8:contour 9:contour 10:levelsets 12:levelsets 14:contour 16:contour 17:contour 18:contour
+b8d71f4f568bd35b,d4ecc884439221f9,TREE DEAD,pine,7,169,1,0,168,893,145,168,172976,0.6397,0.15,0.0198,0.0218,0.0163,0.698,,pass,0.452,4,0.241,0:contour
+bbd0705c2e5b7640,ea7dc7b4427ceb62,TREE ALIVE,spruce,5,249,1,49,199,906,347,199,136046,0.2653,0.0695,0.0152,0.0254,0.0117,0.527,0.015,pass,0.25,4,0.0,
+bcf9202198600ea3,abe8569b931b14d5,TREE ALIVE,deciduous (generic cards),0,117,1,10,106,838,145,106,152022,0.8539,0.1992,0.0154,0.0205,0.0098,1.0,,pass,0.25,4,0.01,0:contour
+bd08cabf43c4e750,c3c5c5be07450ed6,TREE ALIVE,deciduous (generic cards),0,26,1,13,12,398,2259,12,192596,0.9143,0.6018,0.0115,0.023,0.0097,0.545,0.015,pass,0.25,1,0.473,0:contour
+bf1fc5cf4c2b3491,fe56847ab8517432 cf80a00796c37a20,TREE ALIVE,deciduous (generic cards),0,19,1,1,17,119,165,17,44968,0.3697,0.2226,0.0149,0.0176,0.01,0.953,,pass,0.25,4,0.0,
+bf772d83c78350c8,c887bb30e915ac99,TREE DEAD,spruce,3,114,1,0,113,558,0,113,91176,0.0,0.0153,0.0127,0.0194,0.0122,1.0,,pass,0.25,0,0.0,
+c11fdbbab63ae320,2a59ca23711c20f2,TREE ALIVE,spruce,5,249,1,49,199,906,297,199,130197,0.1511,0.0746,0.0184,0.0227,0.0153,0.552,,pass,0.25,4,0.0,
+c18c5d88cda5662b,871b3ec4a53d0a72,TREE DEAD,unknown (generic bark),2,30,1,29,0,477,2278,0,153924,0.7904,0.7934,0.0099,0.0099,0.0098,0.355,,pass,,,,3:contour 8:contour
+c3d7ef2012d77c64,900aa23fbd7fca80,TREE ALIVE,pine,5,183,1,37,145,751,343,145,111228,0.1767,0.0864,0.0183,0.024,0.0156,0.539,,pass,0.25,4,0.0,
+c4430eab9878bb27,02ab6220f3ce94dd,TREE ALIVE,pine,5,403,1,68,334,2582,815,334,352460,0.3807,0.073,0.0121,0.0175,0.011,0.478,0.015,pass,0.377,4,0.087,0:contour 1:contour 2:contour 9:contour 13:contour 27:contour 39:contour 43:contour 49:contour
+c658c3b6baf1c637,19b506aef023479d,TREE ALIVE,cherry,4,243,1,20,222,1490,379,222,185260,0.405,0.15,0.0148,0.0125,0.0111,0.479,,pass,0.25,3,0.053,2:contour 4:contour
+ccd31e148f9e8a6f,63989f619adcadca,TREE ALIVE,spruce,5,546,1,41,504,5091,1467,504,733988,0.9144,0.1599,0.0063,0.0037,0.01,0.223,,pass,0.5,4,0.237,0:contour 1:contour 2:contour 4:contour 5:contour 6:contour 8:contour 9:contour 10:levelsets 11:levelsets 15:levelsets 16:contour 19:levelsets 20:contour 21:contour 22:contour 23:contour 24:levelsets 25:contour
+cf3ae71a52a61fe6,eb948ef4c709caf9,TREE ALIVE,pine,5,237,1,49,187,975,350,187,139796,0.1948,0.0726,0.0177,0.0181,0.0135,0.519,,pass,0.25,4,0.001,
+d26575ff974fac89,81d952742159355e 6f36fc72dffa5515,TREE ALIVE,spruce,5,226,1,44,181,847,368,181,123674,0.1771,0.0705,0.0203,0.0225,0.0108,0.47,,pass,0.25,4,0.0,
+d2c49ae1a5cfb0ef,a4ae6c10511834e0,TREE ALIVE,birch,4,266,4,4,258,1337,170,258,366094,0.1006,0.081,0.0179,0.0222,0.0165,0.584,,pass,0.26,4,0.038,
+d411607a3920e77a,80ce188ed5044c3b f237ca904cdd1146,TREE ALIVE,birch,4,64,1,1,62,322,29,62,58140,0.0429,0.0909,0.0172,0.0174,0.0152,0.641,,pass,0.25,4,0.021,
+d4155fa0f9e0f0a1,eb738cea688643a1,TREE ALIVE,birch,4,24,1,0,23,132,15,23,24332,0.0472,0.0311,0.0155,0.0164,0.0119,1.0,,pass,0.25,4,0.02,
+d5090b65e689f720,d5090b65e689f720,TREE DEAD,unknown (generic bark),2,25,1,24,0,910,1470,0,162416,0.522,0.1697,0.0163,0.0198,0.0113,0.854,,pass,,,,0:contour
+d73fabf368e378ca,b2bffa5fd124302e,TREE ALIVE,cherry,4,396,1,17,378,2709,418,378,408202,0.3259,0.0787,0.0171,0.0242,0.0135,0.581,,pass,0.25,4,0.084,1:contour 2:contour 3:contour 4:contour 7:contour 8:contour 9:levelsets 11:contour
+d80cac596ad4e409,ea03d207e223cef6,TREE ALIVE,deciduous (generic cards),0,111,1,0,110,560,28,110,138038,0.1402,0.15,0.0208,0.0179,0.0212,1.0,,pass,0.25,4,0.016,
+d8c5d1af28b94c61,27e4db70db191bb1 bff8ce067d269f33 9fe48d589b0d45d4,TREE ALIVE,pine,5,183,1,37,145,746,526,145,135402,0.4892,0.079,0.0099,0.0235,0.0085,0.533,0.01,pass,0.25,4,0.0,
+d942ac3e7c4648a7,e5da66ce6ba7a2b5,TREE ALIVE,birch,4,26,1,1,24,140,36,24,39900,0.1747,0.0602,0.0166,0.0173,0.0154,1.0,,pass,0.25,4,0.034,
+d9d15ad269c2932a,9a2cb64ea687a890,TREE ALIVE,deciduous (generic cards),0,119,1,0,118,607,80,118,161308,0.6594,0.2284,0.0119,0.0176,0.0112,0.512,0.02,pass,0.381,3,0.002,
+dabc1cae63641b20,81ae90adbc4dcf05,TREE BROKEN,unknown (generic bark),6,22,1,21,0,616,309,0,71844,0.9434,0.2782,0.0147,0.0232,0.0076,0.824,,pass,,,,0:contour
+de28863e4e3464f5,de28863e4e3464f5,TREE DEAD,unknown (generic bark),2,42,1,41,0,833,1363,0,149304,0.7637,0.4,0.0153,0.0153,0.0098,0.862,,pass,,,,0:contour
+dfa3653fef21d5cb,c7bfd245c1f4305a 097dee071d192780,TREE ALIVE,oak,4,1184,1,83,1100,8251,2868,1100,1160688,0.7013,0.15,0.0164,0.018,0.013,1.0,,pass,0.303,4,0.188,0:contour 1:contour 2:contour 3:contour 4:contour 5:levelsets 6:contour 8:contour 9:levelsets 10:contour 11:levelsets 12:levelsets 13:contour 14:levelsets 16:contour 17:contour 18:contour 20:contour 21:contour 23:contour 24:levelsets 26:contour 27:contour 28:contour 30:contour 31:levelsets 32:contour 33:contour 34:levelsets 37:contour 38:contour 39:contour 41:levelsets 43:levelsets 45:contour 46:contour 47:contour 48:levelsets 49:contour 50:levelsets
+dfe9cc46dca494e5,e917f3e5b53bce12 edd39545b0c9e2d9,TREE ALIVE,willow,0,480,1,44,435,2615,3851,435,683928,0.7127,0.218,0.0138,0.0261,0.0086,0.874,0.015,pass,0.25,4,0.3,0:contour 4:contour 5:contour 7:levelsets 8:voxel 9:levelsets 10:contour 11:contour 12:voxel 13:contour 14:levelsets 15:contour 19:voxel
+e31f7068770ca405,97d7dcaad2268175,TREE ALIVE,deciduous (generic cards),0,120,1,0,119,611,61,119,204256,0.4203,0.2289,0.0257,0.0254,0.0195,0.526,,pass,0.312,4,0.005,
+e32b527f2343a4bc,735a9391dd9694d4,TREE ALIVE,poplar,0,88,1,21,66,917,386,66,251374,0.9432,0.3182,0.0147,0.025,0.0092,0.863,,pass,0.328,4,0.047,0:contour
+e34672281ba1d202,19096065d675c667,TREE ALIVE,walnut,0,107,1,30,76,1004,1390,76,265576,0.8535,0.3874,0.0146,0.0146,0.0094,0.522,,pass,0.25,0,0.0,0:contour
+e4dee90158a5f503,6237125a8b93a2b3,TREE ALIVE,alder oak,4,266,4,10,252,1567,1554,252,438684,0.8965,0.1843,0.0183,0.02,0.01,0.325,,pass,0.5,4,0.098,0:levelsets 1:levelsets 2:levelsets 3:contour 4:levelsets 5:levelsets 6:levelsets 7:levelsets 8:levelsets
+e566e8104c7116c7,e566e8104c7116c7,TREE DEAD,unknown (generic bark),2,42,1,41,0,833,1354,0,147396,0.7598,0.4207,0.0151,0.0173,0.01,0.818,,pass,,,,0:contour
+e621ef1859261c84,83c1b2edb13f61ef,TREE DEAD,spruce,7,196,1,0,195,1028,146,195,155920,0.5372,0.1502,0.0172,0.0185,0.0158,0.808,,pass,0.392,4,0.082,0:contour
+e6dc331e467d1281,af2d7bb1cf02db07 f30acca07eed6106 9a696e9d67fa2598 8c83fe30ff25ea53,TREE ALIVE,deciduous (generic cards) oak walnut,0,123,1,32,90,1091,1089,90,384876,0.7579,0.4432,0.0156,0.022,0.0101,0.927,,pass,0.252,4,0.075,0:contour
+e78f6b6e3d7deb11,e78f6b6e3d7deb11,TREE DEAD,unknown (generic bark),2,40,1,39,0,869,1233,0,144616,0.7448,0.3799,0.0162,0.0162,0.0118,0.922,,pass,,,,0:contour
+e98959123da636c0,94a2ad732339d4b5,TREE ALIVE,deciduous (generic cards),0,52,1,21,30,724,404,30,167432,0.9614,0.3094,0.0169,0.0299,0.0099,0.539,0.015,pass,0.25,4,0.006,0:contour
+e9b69081930e3bf8,b48ad14cc0525707,TREE ALIVE,pine,1,450,1,61,388,5478,1229,388,642416,0.494,0.15,0.0288,0.027,0.0216,0.404,,pass,0.5,4,0.233,2:contour 3:contour 4:contour 5:contour 6:contour 7:contour 8:contour 9:contour 11:contour 12:contour 13:contour 15:contour 18:contour 19:contour 21:contour 22:levelsets 24:contour 25:contour 26:levelsets 27:contour 29:contour 31:contour 32:contour 33:contour 34:contour 38:contour 39:contour 40:contour 41:contour 42:contour 45:contour 46:contour 50:contour
+ea59b25ff69f8800,13f6cc437d3f6908 b03cd3ce50df804a,TREE ALIVE,poplar,4,25,1,0,24,128,7,24,18750,0.0195,0.0263,0.0181,0.0279,0.0152,0.965,,pass,0.25,4,0.041,
+ea67aa4bd5ecbd69,a1afc977eb228563,TREE ALIVE,birch,4,34,1,1,32,178,15,32,28581,0.0257,0.0287,0.0166,0.0177,0.0147,1.0,,pass,0.25,4,0.042,
+eafc8e861323ce67,d4e46feb70870386,TREE ALIVE,oak,0,12,1,2,9,98,219,9,41916,0.3441,0.15,0.016,0.015,0.01,0.965,,pass,0.25,4,0.0,
+eb67aad45aff2b6b,4161834685be4abd,TREE ALIVE,cherry,4,396,1,17,378,2673,413,378,359346,0.3196,0.0776,0.0165,0.0179,0.0136,0.581,,pass,0.25,4,0.101,1:contour 2:contour 3:levelsets 4:contour 7:contour 8:levelsets 9:levelsets 11:contour
+eb7dcdac78893845,e6477c65aeb5e0d5,TREE ALIVE,deciduous (generic cards),0,15,1,2,12,218,20,12,34640,0.0891,0.0342,0.0095,0.0107,0.0102,0.898,,pass,0.25,4,0.0,0:contour
+ec1fa64189a682fa,5306ea840ed5411b,TREE ALIVE,pine,1,151,1,32,118,785,8,118,154072,0.0027,0.0206,0.0123,0.0208,0.0096,0.643,,pass,0.289,4,0.041,
+ecb240f8eb76d797,0a3a7769a745d1a7,TREE ALIVE,deciduous (generic cards),0,26,1,13,12,407,2027,12,161810,0.8121,0.4227,0.0168,0.0189,0.0124,1.0,,pass,0.25,0,0.0,0:contour
+ee7dec14adfb631a,ee7dec14adfb631a,TREE DEAD,unknown (generic bark),2,38,1,37,0,773,3610,0,257740,0.8365,0.5789,0.016,0.017,0.0174,0.894,,pass,,,,0:contour
+eee0e4f6771b45a1,eee0e4f6771b45a1,TREE DEAD,unknown (generic bark),2,19,1,18,0,719,1145,0,127808,0.5488,0.2137,0.0169,0.0173,0.0126,0.842,,pass,,,,0:contour
+f13200cd8e1ae6a6,f13200cd8e1ae6a6,TREE DEAD,unknown (generic bark),2,29,1,28,0,935,1966,0,190276,0.6391,0.4228,0.0167,0.0167,0.0114,0.914,,pass,,,,0:contour
+f2182e6b52f25d6d,936d79c735d48e27 9eced16a8a55c9e8,TREE ALIVE,deciduous (generic cards),0,21,1,2,18,111,211,18,44780,0.3223,0.15,0.0142,0.0167,0.0129,0.919,,pass,0.25,4,0.0,
+f2960fabb0e5e55e,44358d8d51d679ed,TREE ALIVE,walnut,0,133,1,30,102,1140,960,102,406868,0.7539,0.3729,0.0164,0.0164,0.0127,0.871,,pass,0.25,4,0.179,0:contour
+f34c05de6fbdac53,b2f9da14108882ac 6099a6ce1ea9e910,TREE ALIVE,alder,4,1184,1,83,1100,8661,2869,1100,1178704,0.7034,0.15,0.0165,0.0208,0.0131,1.0,,pass,0.32,4,0.162,0:contour 1:contour 2:contour 3:contour 4:contour 5:levelsets 6:contour 8:contour 9:levelsets 10:contour 11:levelsets 12:levelsets 13:contour 14:levelsets 16:contour 17:contour 18:levelsets 20:contour 21:contour 23:contour 24:levelsets 26:contour 27:contour 28:contour 30:contour 31:levelsets 32:levelsets 33:contour 34:levelsets 37:levelsets 38:contour 39:contour 42:levelsets 43:levelsets 45:contour 46:contour 47:contour 48:levelsets 49:contour 50:contour
+f557de9ffabc3a40,d8173f2a42cfb885 a83e0e0ab4e5e056,TREE ALIVE,birch poplar,4,32,1,1,30,165,12,30,37474,0.0115,0.0298,0.0182,0.0236,0.0164,0.909,,pass,0.25,4,0.021,
+f5930cfbc59096c9,040cec385eba9557,TREE ALIVE,deciduous (generic cards),0,52,2,44,6,1358,687,6,173346,0.967,0.3736,0.0121,0.0159,0.0006,0.856,,pass,0.25,4,0.032,0:contour 1:contour
+f7434240a4c83ea5,e3e12950c5b30f49,TREE BROKEN,deciduous (generic cards),6,15,1,4,10,214,133,10,25976,0.5142,0.15,0.0103,0.0125,0.0099,0.998,,pass,0.25,0,0.0,0:contour
+f752404667559bdf,dcc888cd83081429,TREE ALIVE,spruce,1,113,1,0,112,553,0,112,70226,0.0,0.0153,0.0119,0.0167,0.0105,1.0,,pass,0.25,4,0.0,
+f798529efa9040cd,6fdf973e3bd9941f,TREE BROKEN,unknown (generic bark),6,32,1,31,0,320,342,0,52584,0.4369,0.15,0.0177,0.0165,0.0162,0.999,,pass,,,,2:contour 25:contour
+f909c799dbf79724,a8fe9a99fa22283c,TREE BROKEN,unknown (generic bark),6,42,1,41,0,472,416,0,72064,0.3867,0.15,0.0176,0.0169,0.0162,1.0,,pass,,,,3:contour 4:contour
+f9a7c56e73f91680,dc84c265f66be09c,TREE DEAD,pine,3,21,1,0,20,102,0,20,28884,0.0,0.0186,0.0157,0.0151,0.0153,1.0,,pass,0.25,4,0.0,
+fbc2a939fa246beb,1aaf9e0ed9848864,TREE ALIVE,cherry,4,335,1,18,316,2356,327,316,315573,0.3255,0.15,0.0166,0.0262,0.0153,0.586,,pass,0.25,4,0.221,0:contour 1:contour 2:contour 3:contour 5:contour 8:contour
+fc4c53ac446e6bb8,76a1bc7aaa157194,TREE ALIVE,deciduous (generic cards),0,29,1,22,6,266,2377,6,215160,0.9578,0.7778,0.0099,0.0207,0.0099,0.29,,pass,0.25,0,0.0,0:contour
+fc5b3d52b0a4d0a7,dd85d884fcafd18c,TREE BROKEN,unknown (generic bark),6,6,1,5,0,239,347,0,37736,0.8433,0.1982,0.0165,0.0146,0.01,1.0,,pass,,,,0:contour
+fe78a4619c7e0780,d6bd025de3125609,TREE ALIVE,deciduous (generic cards),0,28,1,21,6,734,404,6,103261,0.9595,0.3498,0.0117,0.0187,0.0043,0.919,,pass,0.25,4,0.061,0:contour
+ff60e46fda6d1484,c7e61c73abcb6d51,TREE ALIVE,spruce,1,113,1,0,112,552,0,112,85690,0.0,0.0155,0.0122,0.0155,0.0102,1.0,,pass,0.25,4,0.0,
+p02803b87204d6049,02803b87204d6049,BUSH_KEPT_STOCK,spruce,19,120,5,0,115,600,0,115,112740,,,,,,,,n/a,0.361,0,0.0,
+p0819e8f8987fd1c0,0819e8f8987fd1c0,BUSH_KEPT_STOCK,deciduous (generic cards),16,68,3,0,65,340,0,65,83258,,,,,,,,n/a,0.25,4,0.0,
+p0a4e533cc5baeded,0a4e533cc5baeded,BUSH_KEPT_STOCK,deciduous (generic cards),16,35,1,0,34,175,0,34,44192,,,,,,,,n/a,0.25,4,0.001,
+p14b859cdf2c4daa2,14b859cdf2c4daa2,BUSH_KEPT_STOCK,spruce,17,28,1,0,27,140,0,27,25528,,,,,,,,n/a,0.25,4,0.005,
+p3137a084bf7c6790,3137a084bf7c6790,BUSH_KEPT_STOCK,deciduous (generic cards),16,55,7,0,48,275,0,48,113764,,,,,,,,n/a,0.278,4,0.011,
+p4412c94c65775d3d,4412c94c65775d3d,BUSH_KEPT_STOCK,deciduous (generic cards),16,13,1,0,12,64,0,12,14862,,,,,,,,n/a,0.25,4,0.01,
+p47290ee32f2d2fa0,47290ee32f2d2fa0,BUSH_KEPT_STOCK,spruce,19,31,1,0,30,153,0,30,23506,,,,,,,,n/a,0.25,4,0.0,
+p478f9901b3c02300,478f9901b3c02300,BUSH_KEPT_STOCK,deciduous (generic cards),16,35,1,0,34,175,0,34,48980,,,,,,,,n/a,0.25,4,0.001,
+p50035ab6de98cd6a,50035ab6de98cd6a,BUSH_KEPT_STOCK,deciduous (generic cards),16,13,1,0,12,64,0,12,21627,,,,,,,,n/a,0.25,4,0.0,
+p517dbd1862705301,517dbd1862705301,BUSH_KEPT_STOCK,spruce,17,28,1,0,27,140,0,27,19426,,,,,,,,n/a,0.25,4,0.005,
+p5c4bc3c2cced130c,5c4bc3c2cced130c,BUSH_KEPT_STOCK,deciduous (generic cards),16,136,3,0,133,679,0,133,121968,,,,,,,,n/a,0.259,4,0.0,
+p6bf06ebcdb8d0d13,6bf06ebcdb8d0d13,BUSH_KEPT_STOCK,spruce,19,31,1,0,30,155,0,30,19748,,,,,,,,n/a,0.25,4,0.0,
+p6f57de4126f149d1,6f57de4126f149d1,BUSH_KEPT_STOCK,spruce,19,31,1,0,30,153,0,30,25288,,,,,,,,n/a,0.25,4,0.0,
+p711a95140e3c86a9,711a95140e3c86a9,BUSH_KEPT_STOCK,spruce,19,28,1,0,27,140,0,27,22808,,,,,,,,n/a,0.25,4,0.005,
+p7859d56de32adcce,7859d56de32adcce,BUSH_KEPT_STOCK,spruce,19,28,1,0,27,140,0,27,19426,,,,,,,,n/a,0.25,3,0.009,
+p7922839705116cd8,7922839705116cd8,BUSH_KEPT_STOCK,spruce,19,31,1,0,30,155,0,30,20122,,,,,,,,n/a,0.25,2,0.001,
+p7930af55aae474ec,7930af55aae474ec,BUSH_KEPT_STOCK,spruce,19,110,9,0,101,550,0,101,121214,,,,,,,,n/a,0.325,4,0.25,
+p84238c7e180e91aa,84238c7e180e91aa,BUSH_KEPT_STOCK,deciduous (generic cards),16,97,5,0,92,485,0,92,114172,,,,,,,,n/a,0.299,4,0.0,
+p87cab991a231b99f,87cab991a231b99f,BUSH_KEPT_STOCK,deciduous (generic cards),16,119,4,0,115,595,0,115,140444,,,,,,,,n/a,0.322,0,0.0,
+p89a7801dcf9e38bb,89a7801dcf9e38bb,BUSH_KEPT_STOCK,deciduous (generic cards),16,117,4,0,113,584,0,113,122288,,,,,,,,n/a,0.401,4,0.278,
+p8f19b829c3ce5745,8f19b829c3ce5745,BUSH_KEPT_STOCK,spruce,17,31,1,0,30,153,0,30,19788,,,,,,,,n/a,0.25,4,0.0,
+p932a693eb7cb2476,932a693eb7cb2476,BUSH_KEPT_STOCK,deciduous (generic cards),16,18,1,0,17,86,0,17,12717,,,,,,,,n/a,0.25,4,0.0,
+p947a5daf23f8eb93,947a5daf23f8eb93,BUSH_KEPT_STOCK,spruce,17,31,1,0,30,153,0,30,25376,,,,,,,,n/a,0.25,4,0.0,
+p9a7154d1be97ee4f,9a7154d1be97ee4f,BUSH_KEPT_STOCK,deciduous (generic cards),16,28,1,0,27,140,0,27,27328,,,,,,,,n/a,0.25,4,0.003,
+p9ff0d3ed1ebd92c6,9ff0d3ed1ebd92c6,BUSH_KEPT_STOCK,deciduous (generic cards),16,31,1,0,30,155,0,30,20008,,,,,,,,n/a,0.25,4,0.0,
+pa024ede0c628900d,a024ede0c628900d,BUSH_KEPT_STOCK,deciduous (generic cards),16,136,3,0,133,680,0,133,142459,,,,,,,,n/a,0.25,4,0.0,
+pa2ff7ec5d5fe1e69,a2ff7ec5d5fe1e69,BUSH_KEPT_STOCK,deciduous (generic cards),16,136,3,0,133,680,0,133,129304,,,,,,,,n/a,0.268,4,0.0,
+pa689fb6f87325391,a689fb6f87325391,BUSH_KEPT_STOCK,deciduous (generic cards),16,97,5,0,92,485,0,92,104668,,,,,,,,n/a,0.342,4,0.0,
+pa7b0dd7d4220a400,a7b0dd7d4220a400,BUSH_KEPT_STOCK,deciduous (generic cards),16,97,5,0,92,485,0,92,121432,,,,,,,,n/a,0.281,4,0.0,
+pad7db13b95bd10fe,ad7db13b95bd10fe,BUSH_KEPT_STOCK,deciduous (generic cards),16,61,3,0,58,305,0,58,64460,,,,,,,,n/a,0.278,0,0.0,
+pb28e6cb63bf501cc,b28e6cb63bf501cc,BUSH_KEPT_STOCK,deciduous (generic cards),16,31,1,0,30,155,0,30,35692,,,,,,,,n/a,0.25,4,0.0,
+pb3477a913b355f8f,b3477a913b355f8f,BUSH_KEPT_STOCK,deciduous (generic cards),16,13,1,0,12,64,0,12,22976,,,,,,,,n/a,0.25,4,0.001,
+pb53eae997d4b8af9,b53eae997d4b8af9,BUSH_KEPT_STOCK,deciduous (generic cards),16,31,1,0,30,155,0,30,20122,,,,,,,,n/a,0.25,4,0.0,
+pb6e02cdfce561c6f,b6e02cdfce561c6f,BUSH_KEPT_STOCK,deciduous (generic cards),16,31,1,0,30,155,0,30,29752,,,,,,,,n/a,0.25,4,0.0,
+pb723d22576ee54d8,b723d22576ee54d8,BUSH_KEPT_STOCK,deciduous (generic cards),16,28,1,0,27,140,0,27,31198,,,,,,,,n/a,0.25,4,0.001,
+pbac0f21610b78cfc,bac0f21610b78cfc,BUSH_KEPT_STOCK,deciduous (generic cards),16,111,10,0,101,555,0,101,110208,,,,,,,,n/a,0.408,4,0.212,
+pc245b8effcfda7d0,c245b8effcfda7d0,BUSH_KEPT_STOCK,deciduous (generic cards),16,68,3,0,65,340,0,65,98882,,,,,,,,n/a,0.264,4,0.0,
+pc98ce64ce0310d67,c98ce64ce0310d67,BUSH_KEPT_STOCK,deciduous (generic cards),16,28,1,0,27,139,0,27,27672,,,,,,,,n/a,0.25,4,0.002,
+pd070561948527bc4,d070561948527bc4,BUSH_KEPT_STOCK,oak,16,110,5,0,105,550,0,105,115664,,,,,,,,n/a,0.347,4,0.476,
+pd9e49b6e069a2457,d9e49b6e069a2457,BUSH_KEPT_STOCK,deciduous (generic cards),16,117,4,0,113,585,0,113,118580,,,,,,,,n/a,0.372,4,0.348,
+pdcfcbf2fecc1931a,dcfcbf2fecc1931a,BUSH_KEPT_STOCK,deciduous (generic cards),16,119,4,0,115,595,0,115,121568,,,,,,,,n/a,0.312,0,0.0,
+pe2c5cb228d6f1ead,e2c5cb228d6f1ead,BUSH_KEPT_STOCK,deciduous (generic cards),16,31,1,0,30,155,0,30,21348,,,,,,,,n/a,0.25,4,0.0,
+pe6d49501956e586c,e6d49501956e586c,BUSH_KEPT_STOCK,spruce,17,31,1,0,30,155,0,30,26008,,,,,,,,n/a,0.25,4,0.0,
+pe768dcf61a17a152,e768dcf61a17a152,BUSH_KEPT_STOCK,deciduous (generic cards),16,68,3,0,65,336,0,65,98578,,,,,,,,n/a,0.28,4,0.0,
+pe8048e2bdb87f330,e8048e2bdb87f330,BUSH_KEPT_STOCK,deciduous (generic cards),16,136,3,0,133,680,0,133,115312,,,,,,,,n/a,0.268,4,0.0,
+pe87fcaaf251b280c,e87fcaaf251b280c,BUSH_KEPT_STOCK,oak,16,110,5,0,105,526,0,105,130472,,,,,,,,n/a,0.361,4,0.244,
+peaee468f552e4122,eaee468f552e4122,BUSH_KEPT_STOCK,spruce,19,25,1,0,24,125,0,24,18046,,,,,,,,n/a,0.25,4,0.001,
+pf1cffd953c6c9e36,f1cffd953c6c9e36,BUSH_KEPT_STOCK,deciduous (generic cards),16,111,10,0,101,555,0,101,94236,,,,,,,,n/a,0.417,4,0.188,

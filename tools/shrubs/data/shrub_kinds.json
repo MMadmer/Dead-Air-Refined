@@ -1,0 +1,6533 @@
+{
+ "key_definition": "BUSHES_ENGINE.md \"Content key\"; tools/survey_mu.py part_key/kind_key (exact, order-independent, triangles only, uv modulo 1); family = canonical key of the kinds whose signature matches (shader strings and triangle counts exact, local box +-2 mm, triangle area +-0.2 %)",
+ "hide_policy": {
+  "max_height_above_root_m": {
+   "BUSH": 8.5,
+   "CONIFER_BUSH": 8.5,
+   "BUSH_GROUP": 8.5,
+   "THICKET": 10.5
+  },
+  "note": "taller placements are stock models scaled 3-8x into crowns or forest-edge mass: kept stock (instances/*.csv oversize = 1); a placement with scale < 0.05 is skipped"
+ },
+ "kinds": {
+  "b723d22576ee54d8": {
+   "class": "BUSH",
+   "family": "b723d22576ee54d8",
+   "family_members": [
+    "72e87b6701dc4ed7",
+    "b723d22576ee54d8"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 1539,
+   "height_m": {
+    "min": 1.29,
+    "p50": 3.94,
+    "max": 17.63
+   },
+   "width_m": {
+    "min": 1.52,
+    "p50": 5.05,
+    "max": 20.82
+   }
+  },
+  "b6e02cdfce561c6f": {
+   "class": "BUSH",
+   "family": "b6e02cdfce561c6f",
+   "family_members": [
+    "473a3234048c4092",
+    "b6e02cdfce561c6f"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 1195,
+   "height_m": {
+    "min": 1.22,
+    "p50": 3.15,
+    "max": 17.89
+   },
+   "width_m": {
+    "min": 1.55,
+    "p50": 4.39,
+    "max": 24.27
+   }
+  },
+  "b28e6cb63bf501cc": {
+   "class": "BUSH",
+   "family": "b28e6cb63bf501cc",
+   "family_members": [
+    "365b34648a460029",
+    "b28e6cb63bf501cc"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 1012,
+   "height_m": {
+    "min": 1.13,
+    "p50": 3.62,
+    "max": 13.43
+   },
+   "width_m": {
+    "min": 1.56,
+    "p50": 5.02,
+    "max": 18.79
+   }
+  },
+  "e2c5cb228d6f1ead": {
+   "class": "BUSH",
+   "family": "e2c5cb228d6f1ead",
+   "family_members": [
+    "e2c5cb228d6f1ead"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 917,
+   "height_m": {
+    "min": 1.09,
+    "p50": 3.53,
+    "max": 8.74
+   },
+   "width_m": {
+    "min": 1.58,
+    "p50": 4.91,
+    "max": 12.82
+   }
+  },
+  "b53eae997d4b8af9": {
+   "class": "BUSH",
+   "family": "b53eae997d4b8af9",
+   "family_members": [
+    "26c89718a4e0b30d",
+    "b53eae997d4b8af9"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 890,
+   "height_m": {
+    "min": 1.94,
+    "p50": 4.61,
+    "max": 11.41
+   },
+   "width_m": {
+    "min": 2.42,
+    "p50": 6.26,
+    "max": 15.79
+   }
+  },
+  "4412c94c65775d3d": {
+   "class": "BUSH",
+   "family": "4412c94c65775d3d",
+   "family_members": [
+    "4412c94c65775d3d"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 192,
+     "box_min_mm": [
+      -2307,
+      -76,
+      -1961
+     ],
+     "box_max_mm": [
+      2180,
+      2120,
+      2293
+     ],
+     "area_m2": 76.2996
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.01,
+     -0.03,
+     1.68,
+     2.12
+    ]
+   ],
+   "local": {
+    "height": 2.12,
+    "min_y": -0.08,
+    "extent_x": 4.49,
+    "extent_z": 4.25,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.812
+   },
+   "instances": 740,
+   "height_m": {
+    "min": 1.21,
+    "p50": 2.16,
+    "max": 10.59
+   },
+   "width_m": {
+    "min": 3.14,
+    "p50": 4.48,
+    "max": 22.74
+   }
+  },
+  "9a7154d1be97ee4f": {
+   "class": "BUSH",
+   "family": "9a7154d1be97ee4f",
+   "family_members": [
+    "9a7154d1be97ee4f"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2442
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.19,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.41,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 595,
+   "height_m": {
+    "min": 1.84,
+    "p50": 3.89,
+    "max": 16.72
+   },
+   "width_m": {
+    "min": 2.35,
+    "p50": 5.03,
+    "max": 20.65
+   }
+  },
+  "9ff0d3ed1ebd92c6": {
+   "class": "BUSH",
+   "family": "9ff0d3ed1ebd92c6",
+   "family_members": [
+    "955c34327d082584",
+    "9ff0d3ed1ebd92c6"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 563,
+   "height_m": {
+    "min": 1.44,
+    "p50": 3.2,
+    "max": 8.87
+   },
+   "width_m": {
+    "min": 1.95,
+    "p50": 4.51,
+    "max": 11.79
+   }
+  },
+  "c98ce64ce0310d67": {
+   "class": "BUSH",
+   "family": "c98ce64ce0310d67",
+   "family_members": [
+    "c98ce64ce0310d67"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 547,
+   "height_m": {
+    "min": 1.11,
+    "p50": 3.93,
+    "max": 11.17
+   },
+   "width_m": {
+    "min": 1.42,
+    "p50": 5.08,
+    "max": 14.99
+   }
+  },
+  "955c34327d082584": {
+   "class": "BUSH",
+   "family": "9ff0d3ed1ebd92c6",
+   "family_members": [
+    "955c34327d082584",
+    "9ff0d3ed1ebd92c6"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 547,
+   "height_m": {
+    "min": 2.58,
+    "p50": 5.07,
+    "max": 9.28
+   },
+   "width_m": {
+    "min": 3.81,
+    "p50": 7.0,
+    "max": 13.07
+   }
+  },
+  "92aaa334f54f268e": {
+   "class": "BUSH",
+   "family": "92aaa334f54f268e",
+   "family_members": [
+    "92aaa334f54f268e"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 488,
+   "height_m": {
+    "min": 2.03,
+    "p50": 3.49,
+    "max": 7.03
+   },
+   "width_m": {
+    "min": 2.71,
+    "p50": 4.78,
+    "max": 9.89
+   }
+  },
+  "f201288caccce3c9": {
+   "class": "BUSH",
+   "family": "f201288caccce3c9",
+   "family_members": [
+    "f201288caccce3c9"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 128,
+     "box_min_mm": [
+      -2365,
+      -208,
+      -2448
+     ],
+     "box_max_mm": [
+      1950,
+      2555,
+      1826
+     ],
+     "area_m2": 115.9066
+    }
+   ],
+   "clumps_local": [
+    [
+     0.13,
+     -0.37,
+     1.81,
+     2.55
+    ]
+   ],
+   "local": {
+    "height": 2.55,
+    "min_y": -0.21,
+    "extent_x": 4.31,
+    "extent_z": 4.27,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.297
+   },
+   "instances": 402,
+   "height_m": {
+    "min": 1.96,
+    "p50": 2.64,
+    "max": 8.1
+   },
+   "width_m": {
+    "min": 3.3,
+    "p50": 4.38,
+    "max": 13.05
+   }
+  },
+  "0524ffd0b7d2985d": {
+   "class": "BUSH",
+   "family": "0524ffd0b7d2985d",
+   "family_members": [
+    "0524ffd0b7d2985d"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_a_bush"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_a_bush",
+     "tris": 96,
+     "box_min_mm": [
+      -1244,
+      0,
+      -1280
+     ],
+     "box_max_mm": [
+      1244,
+      1301,
+      1296
+     ],
+     "area_m2": 31.9817
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.0,
+     -0.0,
+     1.11,
+     1.3
+    ]
+   ],
+   "local": {
+    "height": 1.3,
+    "min_y": 0.0,
+    "extent_x": 2.49,
+    "extent_z": 2.58,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.889
+   },
+   "instances": 376,
+   "height_m": {
+    "min": 0.0,
+    "p50": 1.34,
+    "max": 3.44
+   },
+   "width_m": {
+    "min": 0.0,
+    "p50": 2.6,
+    "max": 6.41
+   }
+  },
+  "bca57ae41c32ca39": {
+   "class": "BUSH",
+   "family": "bca57ae41c32ca39",
+   "family_members": [
+    "bca57ae41c32ca39"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkabig"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 343,
+   "height_m": {
+    "min": 1.89,
+    "p50": 3.47,
+    "max": 7.43
+   },
+   "width_m": {
+    "min": 2.61,
+    "p50": 4.76,
+    "max": 10.45
+   }
+  },
+  "dcc6108fefa2dbd6": {
+   "class": "BUSH",
+   "family": "dcc6108fefa2dbd6",
+   "family_members": [
+    "dcc6108fefa2dbd6"
+   ],
+   "dry": true,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkasux2_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2_red",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 167,
+   "height_m": {
+    "min": 1.4,
+    "p50": 3.26,
+    "max": 7.73
+   },
+   "width_m": {
+    "min": 1.96,
+    "p50": 4.16,
+    "max": 10.3
+   }
+  },
+  "fcc432a48a048de0": {
+   "class": "BUSH",
+   "family": "fcc432a48a048de0",
+   "family_members": [
+    "fcc432a48a048de0"
+   ],
+   "dry": true,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkasux2_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2_red",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 159,
+   "height_m": {
+    "min": 1.17,
+    "p50": 3.34,
+    "max": 5.88
+   },
+   "width_m": {
+    "min": 1.65,
+    "p50": 4.6,
+    "max": 8.16
+   }
+  },
+  "b3477a913b355f8f": {
+   "class": "BUSH",
+   "family": "b3477a913b355f8f",
+   "family_members": [
+    "b3477a913b355f8f"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 192,
+     "box_min_mm": [
+      -2368,
+      -76,
+      -2396
+     ],
+     "box_max_mm": [
+      2181,
+      2120,
+      2021
+     ],
+     "area_m2": 76.3595
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.03,
+     -0.03,
+     1.7,
+     2.12
+    ]
+   ],
+   "local": {
+    "height": 2.12,
+    "min_y": -0.08,
+    "extent_x": 4.55,
+    "extent_z": 4.42,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.812
+   },
+   "instances": 141,
+   "height_m": {
+    "min": 2.1,
+    "p50": 6.78,
+    "max": 16.9
+   },
+   "width_m": {
+    "min": 4.44,
+    "p50": 13.77,
+    "max": 36.35
+   }
+  },
+  "8ddb3ce4d4190d4a": {
+   "class": "BUSH",
+   "family": "8ddb3ce4d4190d4a",
+   "family_members": [
+    "8ddb3ce4d4190d4a"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 128,
+     "box_min_mm": [
+      -2365,
+      -208,
+      -2448
+     ],
+     "box_max_mm": [
+      1950,
+      2555,
+      1826
+     ],
+     "area_m2": 115.9066
+    }
+   ],
+   "clumps_local": [
+    [
+     0.13,
+     -0.37,
+     1.81,
+     2.55
+    ]
+   ],
+   "local": {
+    "height": 2.55,
+    "min_y": -0.21,
+    "extent_x": 4.31,
+    "extent_z": 4.27,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.297
+   },
+   "instances": 126,
+   "height_m": {
+    "min": 1.72,
+    "p50": 2.58,
+    "max": 4.69
+   },
+   "width_m": {
+    "min": 3.02,
+    "p50": 4.33,
+    "max": 7.93
+   }
+  },
+  "5e38906717f9d77f": {
+   "class": "BUSH",
+   "family": "5e38906717f9d77f",
+   "family_members": [
+    "5e38906717f9d77f",
+    "6e3ca50aae76b415"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 107,
+   "height_m": {
+    "min": 2.34,
+    "p50": 3.85,
+    "max": 7.01
+   },
+   "width_m": {
+    "min": 3.4,
+    "p50": 5.06,
+    "max": 10.44
+   }
+  },
+  "50035ab6de98cd6a": {
+   "class": "BUSH",
+   "family": "50035ab6de98cd6a",
+   "family_members": [
+    "50035ab6de98cd6a"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 192,
+     "box_min_mm": [
+      -2368,
+      -76,
+      -2396
+     ],
+     "box_max_mm": [
+      2181,
+      2120,
+      2021
+     ],
+     "area_m2": 76.3595
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.03,
+     -0.03,
+     1.7,
+     2.12
+    ]
+   ],
+   "local": {
+    "height": 2.12,
+    "min_y": -0.08,
+    "extent_x": 4.55,
+    "extent_z": 4.42,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.812
+   },
+   "instances": 98,
+   "height_m": {
+    "min": 2.1,
+    "p50": 6.66,
+    "max": 17.03
+   },
+   "width_m": {
+    "min": 4.34,
+    "p50": 13.6,
+    "max": 32.8
+   }
+  },
+  "7d2030fd495443c2": {
+   "class": "BUSH",
+   "family": "7d2030fd495443c2",
+   "family_members": [
+    "7d2030fd495443c2"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 128,
+     "box_min_mm": [
+      -2365,
+      -208,
+      -2448
+     ],
+     "box_max_mm": [
+      1950,
+      2555,
+      1826
+     ],
+     "area_m2": 115.9066
+    }
+   ],
+   "clumps_local": [
+    [
+     0.13,
+     -0.37,
+     1.81,
+     2.55
+    ]
+   ],
+   "local": {
+    "height": 2.55,
+    "min_y": -0.21,
+    "extent_x": 4.31,
+    "extent_z": 4.27,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.297
+   },
+   "instances": 85,
+   "height_m": {
+    "min": 1.8,
+    "p50": 2.62,
+    "max": 3.89
+   },
+   "width_m": {
+    "min": 3.31,
+    "p50": 4.38,
+    "max": 6.46
+   }
+  },
+  "55685964240b30a6": {
+   "class": "BUSH",
+   "family": "55685964240b30a6",
+   "family_members": [
+    "55685964240b30a6"
+   ],
+   "dry": true,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkasux2_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2_red",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 81,
+   "height_m": {
+    "min": 1.51,
+    "p50": 2.91,
+    "max": 4.29
+   },
+   "width_m": {
+    "min": 2.16,
+    "p50": 4.01,
+    "max": 6.08
+   }
+  },
+  "dd556b540a71415f": {
+   "class": "BUSH",
+   "family": "dd556b540a71415f",
+   "family_members": [
+    "c30b90c62d4a2a5e",
+    "dd556b540a71415f"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 68,
+   "height_m": {
+    "min": 3.16,
+    "p50": 3.81,
+    "max": 6.94
+   },
+   "width_m": {
+    "min": 3.53,
+    "p50": 4.95,
+    "max": 9.01
+   }
+  },
+  "c30b90c62d4a2a5e": {
+   "class": "BUSH",
+   "family": "dd556b540a71415f",
+   "family_members": [
+    "c30b90c62d4a2a5e",
+    "dd556b540a71415f"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 58,
+   "height_m": {
+    "min": 2.62,
+    "p50": 3.9,
+    "max": 5.59
+   },
+   "width_m": {
+    "min": 3.59,
+    "p50": 4.95,
+    "max": 7.47
+   }
+  },
+  "932a693eb7cb2476": {
+   "class": "BUSH",
+   "family": "932a693eb7cb2476",
+   "family_members": [
+    "932a693eb7cb2476"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 100,
+     "box_min_mm": [
+      -1792,
+      -243,
+      -2168
+     ],
+     "box_max_mm": [
+      2218,
+      2794,
+      2035
+     ],
+     "area_m2": 152.4759
+    }
+   ],
+   "clumps_local": [
+    [
+     0.26,
+     -0.09,
+     1.64,
+     2.79
+    ]
+   ],
+   "local": {
+    "height": 2.79,
+    "min_y": -0.24,
+    "extent_x": 4.01,
+    "extent_z": 4.2,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.487
+   },
+   "instances": 44,
+   "height_m": {
+    "min": 2.08,
+    "p50": 4.69,
+    "max": 27.94
+   },
+   "width_m": {
+    "min": 2.95,
+    "p50": 5.86,
+    "max": 10.97
+   }
+  },
+  "7234f52763db1938": {
+   "class": "BUSH",
+   "family": "7234f52763db1938",
+   "family_members": [
+    "7234f52763db1938"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_dub_dry"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub_dry",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 30,
+   "height_m": {
+    "min": 3.16,
+    "p50": 3.96,
+    "max": 6.14
+   },
+   "width_m": {
+    "min": 4.12,
+    "p50": 4.93,
+    "max": 8.88
+   }
+  },
+  "473a3234048c4092": {
+   "class": "BUSH",
+   "family": "b6e02cdfce561c6f",
+   "family_members": [
+    "473a3234048c4092",
+    "b6e02cdfce561c6f"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7755
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.835
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 28,
+   "height_m": {
+    "min": 3.57,
+    "p50": 6.85,
+    "max": 12.39
+   },
+   "width_m": {
+    "min": 4.63,
+    "p50": 9.26,
+    "max": 15.9
+   }
+  },
+  "b616473442944888": {
+   "class": "BUSH",
+   "family": "b616473442944888",
+   "family_members": [
+    "b616473442944888"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 36,
+     "box_min_mm": [
+      -1600,
+      -331,
+      -2098
+     ],
+     "box_max_mm": [
+      2277,
+      2060,
+      1796
+     ],
+     "area_m2": 59.6357
+    }
+   ],
+   "clumps_local": [
+    [
+     0.07,
+     -0.1,
+     1.37,
+     2.06
+    ]
+   ],
+   "local": {
+    "height": 2.06,
+    "min_y": -0.33,
+    "extent_x": 3.88,
+    "extent_z": 3.89,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.412
+   },
+   "instances": 26,
+   "height_m": {
+    "min": 1.66,
+    "p50": 2.45,
+    "max": 7.3
+   },
+   "width_m": {
+    "min": 3.14,
+    "p50": 4.05,
+    "max": 11.39
+   }
+  },
+  "72e87b6701dc4ed7": {
+   "class": "BUSH",
+   "family": "b723d22576ee54d8",
+   "family_members": [
+    "72e87b6701dc4ed7",
+    "b723d22576ee54d8"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.835
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 20,
+   "height_m": {
+    "min": 3.67,
+    "p50": 10.04,
+    "max": 13.12
+   },
+   "width_m": {
+    "min": 4.99,
+    "p50": 12.69,
+    "max": 15.47
+   }
+  },
+  "365b34648a460029": {
+   "class": "BUSH",
+   "family": "b28e6cb63bf501cc",
+   "family_members": [
+    "365b34648a460029",
+    "b28e6cb63bf501cc"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4262
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.311
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 16,
+   "height_m": {
+    "min": 3.36,
+    "p50": 9.53,
+    "max": 13.59
+   },
+   "width_m": {
+    "min": 4.63,
+    "p50": 12.8,
+    "max": 18.04
+   }
+  },
+  "d4b46516c4e02a99": {
+   "class": "BUSH",
+   "family": "d4b46516c4e02a99",
+   "family_members": [
+    "d4b46516c4e02a99"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_dub"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 11,
+   "height_m": {
+    "min": 3.31,
+    "p50": 3.51,
+    "max": 4.04
+   },
+   "width_m": {
+    "min": 4.46,
+    "p50": 4.78,
+    "max": 5.58
+   }
+  },
+  "e82bd44601374fa5": {
+   "class": "BUSH",
+   "family": "e82bd44601374fa5",
+   "family_members": [
+    "e82bd44601374fa5"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 11,
+   "height_m": {
+    "min": 2.89,
+    "p50": 3.17,
+    "max": 4.14
+   },
+   "width_m": {
+    "min": 3.94,
+    "p50": 4.57,
+    "max": 5.44
+   }
+  },
+  "1115f6ba2aee28cc": {
+   "class": "BUSH",
+   "family": "1115f6ba2aee28cc",
+   "family_members": [
+    "1115f6ba2aee28cc"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 192,
+     "box_min_mm": [
+      -2368,
+      -76,
+      -2396
+     ],
+     "box_max_mm": [
+      2181,
+      2120,
+      2021
+     ],
+     "area_m2": 76.3595
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.03,
+     -0.03,
+     1.7,
+     2.12
+    ]
+   ],
+   "local": {
+    "height": 2.12,
+    "min_y": -0.08,
+    "extent_x": 4.55,
+    "extent_z": 4.42,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.812
+   },
+   "instances": 8,
+   "height_m": {
+    "min": 1.27,
+    "p50": 1.93,
+    "max": 2.22
+   },
+   "width_m": {
+    "min": 2.72,
+    "p50": 4.05,
+    "max": 4.55
+   }
+  },
+  "dcd5190c38d1ca42": {
+   "class": "BUSH",
+   "family": "dcd5190c38d1ca42",
+   "family_members": [
+    "dcd5190c38d1ca42"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen3_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3_red",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 7,
+   "height_m": {
+    "min": 3.35,
+    "p50": 3.35,
+    "max": 3.35
+   },
+   "width_m": {
+    "min": 4.63,
+    "p50": 4.63,
+    "max": 4.63
+   }
+  },
+  "4c9325e38de35cb7": {
+   "class": "BUSH",
+   "family": "4c9325e38de35cb7",
+   "family_members": [
+    "4c9325e38de35cb7"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 7,
+   "height_m": {
+    "min": 3.41,
+    "p50": 3.91,
+    "max": 4.68
+   },
+   "width_m": {
+    "min": 4.52,
+    "p50": 5.59,
+    "max": 6.02
+   }
+  },
+  "26c89718a4e0b30d": {
+   "class": "BUSH",
+   "family": "b53eae997d4b8af9",
+   "family_members": [
+    "26c89718a4e0b30d",
+    "b53eae997d4b8af9"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 6,
+   "height_m": {
+    "min": 3.34,
+    "p50": 3.5,
+    "max": 3.85
+   },
+   "width_m": {
+    "min": 4.47,
+    "p50": 4.69,
+    "max": 5.31
+   }
+  },
+  "dc2bf42036a6ba3a": {
+   "class": "BUSH",
+   "family": "dc2bf42036a6ba3a",
+   "family_members": [
+    "dc2bf42036a6ba3a"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen1_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1_red",
+     "tris": 128,
+     "box_min_mm": [
+      -2365,
+      -208,
+      -2448
+     ],
+     "box_max_mm": [
+      1950,
+      2555,
+      1826
+     ],
+     "area_m2": 115.9066
+    }
+   ],
+   "clumps_local": [
+    [
+     0.13,
+     -0.37,
+     1.81,
+     2.55
+    ]
+   ],
+   "local": {
+    "height": 2.55,
+    "min_y": -0.21,
+    "extent_x": 4.31,
+    "extent_z": 4.27,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.297
+   },
+   "instances": 5,
+   "height_m": {
+    "min": 3.84,
+    "p50": 5.55,
+    "max": 5.79
+   },
+   "width_m": {
+    "min": 6.43,
+    "p50": 9.34,
+    "max": 9.41
+   }
+  },
+  "6e3ca50aae76b415": {
+   "class": "BUSH",
+   "family": "5e38906717f9d77f",
+   "family_members": [
+    "5e38906717f9d77f",
+    "6e3ca50aae76b415"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7868
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.835
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 2,
+   "height_m": {
+    "min": 3.63,
+    "p50": 4.45,
+    "max": 5.28
+   },
+   "width_m": {
+    "min": 4.64,
+    "p50": 5.47,
+    "max": 6.31
+   }
+  },
+  "05fe0db591e4896d": {
+   "class": "BUSH",
+   "family": "05fe0db591e4896d",
+   "family_members": [
+    "05fe0db591e4896d"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen5_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5_red",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2442
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.19,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.41,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 2,
+   "height_m": {
+    "min": 3.2,
+    "p50": 3.41,
+    "max": 3.63
+   },
+   "width_m": {
+    "min": 4.34,
+    "p50": 4.51,
+    "max": 4.67
+   }
+  },
+  "b63feceadacf0e40": {
+   "class": "BUSH",
+   "family": "b63feceadacf0e40",
+   "family_members": [
+    "b63feceadacf0e40"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_dub_dry"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub_dry",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 2,
+   "height_m": {
+    "min": 2.6,
+    "p50": 2.7,
+    "max": 2.8
+   },
+   "width_m": {
+    "min": 3.53,
+    "p50": 3.57,
+    "max": 3.61
+   }
+  },
+  "38bc34c791d55852": {
+   "class": "BUSH",
+   "family": "38bc34c791d55852",
+   "family_members": [
+    "38bc34c791d55852"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen5_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5_red",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 1,
+   "height_m": {
+    "min": 3.02,
+    "p50": 3.02,
+    "max": 3.02
+   },
+   "width_m": {
+    "min": 4.15,
+    "p50": 4.15,
+    "max": 4.15
+   }
+  },
+  "2591ce1a41b06722": {
+   "class": "BUSH",
+   "family": "2591ce1a41b06722",
+   "family_members": [
+    "2591ce1a41b06722"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen3_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3_red",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_01",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 1,
+   "height_m": {
+    "min": 3.81,
+    "p50": 3.81,
+    "max": 3.81
+   },
+   "width_m": {
+    "min": 4.61,
+    "p50": 4.61,
+    "max": 4.61
+   }
+  },
+  "e05d288e16e431aa": {
+   "class": "BUSH",
+   "family": "e05d288e16e431aa",
+   "family_members": [
+    "e05d288e16e431aa"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetka_green_1v"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetka_green_1v",
+     "tris": 224,
+     "box_min_mm": [
+      -1424,
+      -150,
+      -1834
+     ],
+     "box_max_mm": [
+      1645,
+      2643,
+      1551
+     ],
+     "area_m2": 53.0217
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_sux2",
+     "tris": 243,
+     "box_min_mm": [
+      -972,
+      -41,
+      -1053
+     ],
+     "box_max_mm": [
+      959,
+      1487,
+      842
+     ],
+     "area_m2": 1.1479
+    }
+   ],
+   "clumps_local": [
+    [
+     0.03,
+     -0.09,
+     1.58,
+     2.64
+    ]
+   ],
+   "local": {
+    "height": 2.64,
+    "min_y": -0.15,
+    "extent_x": 3.07,
+    "extent_z": 3.39,
+    "stem_top": 1.49,
+    "leaf_low_share": 0.583
+   },
+   "instances": 1,
+   "height_m": {
+    "min": 4.63,
+    "p50": 4.63,
+    "max": 4.63
+   },
+   "width_m": {
+    "min": 5.75,
+    "p50": 5.75,
+    "max": 5.75
+   }
+  },
+  "5c4bc3c2cced130c": {
+   "class": "BUSH_GROUP",
+   "family": "5c4bc3c2cced130c",
+   "family_members": [
+    "5c4bc3c2cced130c"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 640,
+     "box_min_mm": [
+      -6693,
+      -702,
+      -4196
+     ],
+     "box_max_mm": [
+      7231,
+      2954,
+      3938
+     ],
+     "area_m2": 1007.275
+    }
+   ],
+   "clumps_local": [
+    [
+     3.46,
+     -0.13,
+     3.76,
+     2.89
+    ],
+    [
+     -3.33,
+     -0.32,
+     3.38,
+     2.95
+    ]
+   ],
+   "local": {
+    "height": 2.95,
+    "min_y": -0.7,
+    "extent_x": 13.92,
+    "extent_z": 8.13,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.542
+   },
+   "instances": 844,
+   "height_m": {
+    "min": 1.57,
+    "p50": 3.24,
+    "max": 12.26
+   },
+   "width_m": {
+    "min": 5.5,
+    "p50": 13.62,
+    "max": 49.94
+   }
+  },
+  "ad7db13b95bd10fe": {
+   "class": "BUSH_GROUP",
+   "family": "ad7db13b95bd10fe",
+   "family_members": [
+    "ad7db13b95bd10fe"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 276,
+     "box_min_mm": [
+      -6749,
+      -404,
+      -4056
+     ],
+     "box_max_mm": [
+      7306,
+      3602,
+      4165
+     ],
+     "area_m2": 688.299
+    }
+   ],
+   "clumps_local": [
+    [
+     3.52,
+     -0.13,
+     3.51,
+     3.6
+    ],
+    [
+     -3.37,
+     0.01,
+     2.83,
+     3.57
+    ]
+   ],
+   "local": {
+    "height": 3.6,
+    "min_y": -0.4,
+    "extent_x": 14.05,
+    "extent_z": 8.22,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.397
+   },
+   "instances": 717,
+   "height_m": {
+    "min": 2.33,
+    "p50": 3.69,
+    "max": 9.97
+   },
+   "width_m": {
+    "min": 8.05,
+    "p50": 12.75,
+    "max": 32.2
+   }
+  },
+  "e768dcf61a17a152": {
+   "class": "BUSH_GROUP",
+   "family": "e768dcf61a17a152",
+   "family_members": [
+    "e768dcf61a17a152"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 332,
+     "box_min_mm": [
+      -7403,
+      -399,
+      -5477
+     ],
+     "box_max_mm": [
+      6992,
+      3928,
+      4165
+     ],
+     "area_m2": 946.8032
+    }
+   ],
+   "clumps_local": [
+    [
+     2.92,
+     -1.24,
+     4.74,
+     3.7
+    ],
+    [
+     -3.77,
+     -0.16,
+     2.98,
+     3.93
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 14.39,
+    "extent_z": 9.64,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.342
+   },
+   "instances": 304,
+   "height_m": {
+    "min": 2.77,
+    "p50": 3.98,
+    "max": 19.64
+   },
+   "width_m": {
+    "min": 8.84,
+    "p50": 13.63,
+    "max": 41.56
+   }
+  },
+  "0a4e533cc5baeded": {
+   "class": "BUSH_GROUP",
+   "family": "0a4e533cc5baeded",
+   "family_members": [
+    "0a4e533cc5baeded"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 164,
+     "box_min_mm": [
+      -4220,
+      -388,
+      -3579
+     ],
+     "box_max_mm": [
+      3844,
+      3681,
+      3368
+     ],
+     "area_m2": 542.7066
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.37,
+     0.06,
+     3.24,
+     3.68
+    ]
+   ],
+   "local": {
+    "height": 3.68,
+    "min_y": -0.39,
+    "extent_x": 8.06,
+    "extent_z": 6.95,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.336
+   },
+   "instances": 267,
+   "height_m": {
+    "min": 2.15,
+    "p50": 3.68,
+    "max": 22.08
+   },
+   "width_m": {
+    "min": 4.66,
+    "p50": 7.98,
+    "max": 19.86
+   }
+  },
+  "3137a084bf7c6790": {
+   "class": "BUSH_GROUP",
+   "family": "3137a084bf7c6790",
+   "family_members": [
+    "3137a084bf7c6790"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkasux1_v",
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux1_v",
+     "tris": 94,
+     "box_min_mm": [
+      -6493,
+      -717,
+      -5458
+     ],
+     "box_max_mm": [
+      4113,
+      3633,
+      5292
+     ],
+     "area_m2": 823.3353
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 116,
+     "box_min_mm": [
+      -6478,
+      -271,
+      -6069
+     ],
+     "box_max_mm": [
+      6460,
+      3064,
+      6143
+     ],
+     "area_m2": 344.8285
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.63,
+     -0.02,
+     6.12,
+     3.63
+    ]
+   ],
+   "local": {
+    "height": 3.63,
+    "min_y": -0.72,
+    "extent_x": 12.95,
+    "extent_z": 12.21,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.443
+   },
+   "instances": 188,
+   "height_m": {
+    "min": 2.54,
+    "p50": 4.57,
+    "max": 11.88
+   },
+   "width_m": {
+    "min": 7.45,
+    "p50": 14.55,
+    "max": 39.27
+   }
+  },
+  "cd50e3af2443237f": {
+   "class": "BUSH_GROUP",
+   "family": "cd50e3af2443237f",
+   "family_members": [
+    "cd50e3af2443237f"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 276,
+     "box_min_mm": [
+      -6749,
+      -404,
+      -4056
+     ],
+     "box_max_mm": [
+      7306,
+      3602,
+      4165
+     ],
+     "area_m2": 688.299
+    }
+   ],
+   "clumps_local": [
+    [
+     3.52,
+     -0.13,
+     3.51,
+     3.6
+    ],
+    [
+     -3.37,
+     0.01,
+     2.83,
+     3.57
+    ]
+   ],
+   "local": {
+    "height": 3.6,
+    "min_y": -0.4,
+    "extent_x": 14.05,
+    "extent_z": 8.22,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.401
+   },
+   "instances": 144,
+   "height_m": {
+    "min": 2.64,
+    "p50": 3.8,
+    "max": 5.99
+   },
+   "width_m": {
+    "min": 9.39,
+    "p50": 13.05,
+    "max": 19.94
+   }
+  },
+  "84238c7e180e91aa": {
+   "class": "BUSH_GROUP",
+   "family": "84238c7e180e91aa",
+   "family_members": [
+    "84238c7e180e91aa"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 456,
+     "box_min_mm": [
+      -9587,
+      -399,
+      -5604
+     ],
+     "box_max_mm": [
+      9126,
+      3928,
+      6470
+     ],
+     "area_m2": 1238.3575
+    }
+   ],
+   "clumps_local": [
+    [
+     -3.93,
+     2.8,
+     4.91,
+     3.93
+    ],
+    [
+     5.78,
+     2.54,
+     2.87,
+     3.68
+    ],
+    [
+     -4.03,
+     -3.38,
+     2.2,
+     3.46
+    ],
+    [
+     2.38,
+     -2.44,
+     1.42,
+     2.37
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 18.71,
+    "extent_z": 12.07,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.377
+   },
+   "instances": 128,
+   "height_m": {
+    "min": 3.48,
+    "p50": 5.09,
+    "max": 11.95
+   },
+   "width_m": {
+    "min": 14.5,
+    "p50": 20.12,
+    "max": 55.26
+   }
+  },
+  "fd45193e1c292272": {
+   "class": "BUSH_GROUP",
+   "family": "fd45193e1c292272",
+   "family_members": [
+    "fd45193e1c292272"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 640,
+     "box_min_mm": [
+      -6693,
+      -702,
+      -4196
+     ],
+     "box_max_mm": [
+      7231,
+      2954,
+      3938
+     ],
+     "area_m2": 1007.275
+    }
+   ],
+   "clumps_local": [
+    [
+     3.46,
+     -0.13,
+     3.76,
+     2.89
+    ],
+    [
+     -3.33,
+     -0.32,
+     3.38,
+     2.95
+    ]
+   ],
+   "local": {
+    "height": 2.95,
+    "min_y": -0.7,
+    "extent_x": 13.92,
+    "extent_z": 8.13,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.542
+   },
+   "instances": 128,
+   "height_m": {
+    "min": 1.87,
+    "p50": 3.54,
+    "max": 8.02
+   },
+   "width_m": {
+    "min": 8.37,
+    "p50": 13.97,
+    "max": 28.02
+   }
+  },
+  "a2ff7ec5d5fe1e69": {
+   "class": "BUSH_GROUP",
+   "family": "a2ff7ec5d5fe1e69",
+   "family_members": [
+    "a2ff7ec5d5fe1e69"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 640,
+     "box_min_mm": [
+      -6693,
+      -702,
+      -4196
+     ],
+     "box_max_mm": [
+      7231,
+      2954,
+      3938
+     ],
+     "area_m2": 1007.275
+    }
+   ],
+   "clumps_local": [
+    [
+     3.46,
+     -0.13,
+     3.76,
+     2.89
+    ],
+    [
+     -3.33,
+     -0.32,
+     3.38,
+     2.95
+    ]
+   ],
+   "local": {
+    "height": 2.95,
+    "min_y": -0.7,
+    "extent_x": 13.92,
+    "extent_z": 8.13,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.542
+   },
+   "instances": 110,
+   "height_m": {
+    "min": 2.17,
+    "p50": 3.51,
+    "max": 9.55
+   },
+   "width_m": {
+    "min": 8.67,
+    "p50": 13.95,
+    "max": 38.55
+   }
+  },
+  "20f6b9c98e5abff0": {
+   "class": "BUSH_GROUP",
+   "family": "20f6b9c98e5abff0",
+   "family_members": [
+    "20f6b9c98e5abff0"
+   ],
+   "dry": true,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkasux2_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2_red",
+     "tris": 640,
+     "box_min_mm": [
+      -6693,
+      -702,
+      -4196
+     ],
+     "box_max_mm": [
+      7231,
+      2954,
+      3938
+     ],
+     "area_m2": 1007.275
+    }
+   ],
+   "clumps_local": [
+    [
+     3.46,
+     -0.13,
+     3.76,
+     2.89
+    ],
+    [
+     -3.33,
+     -0.32,
+     3.38,
+     2.95
+    ]
+   ],
+   "local": {
+    "height": 2.95,
+    "min_y": -0.7,
+    "extent_x": 13.92,
+    "extent_z": 8.13,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.542
+   },
+   "instances": 106,
+   "height_m": {
+    "min": 1.38,
+    "p50": 3.02,
+    "max": 5.03
+   },
+   "width_m": {
+    "min": 5.87,
+    "p50": 13.36,
+    "max": 18.16
+   }
+  },
+  "a024ede0c628900d": {
+   "class": "BUSH_GROUP",
+   "family": "a024ede0c628900d",
+   "family_members": [
+    "a024ede0c628900d"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkabig"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig",
+     "tris": 640,
+     "box_min_mm": [
+      -6693,
+      -702,
+      -4196
+     ],
+     "box_max_mm": [
+      7231,
+      2954,
+      3938
+     ],
+     "area_m2": 1007.275
+    }
+   ],
+   "clumps_local": [
+    [
+     3.46,
+     -0.13,
+     3.76,
+     2.89
+    ],
+    [
+     -3.33,
+     -0.32,
+     3.38,
+     2.95
+    ]
+   ],
+   "local": {
+    "height": 2.95,
+    "min_y": -0.7,
+    "extent_x": 13.92,
+    "extent_z": 8.13,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.542
+   },
+   "instances": 104,
+   "height_m": {
+    "min": 2.18,
+    "p50": 3.6,
+    "max": 10.19
+   },
+   "width_m": {
+    "min": 8.77,
+    "p50": 14.03,
+    "max": 36.1
+   }
+  },
+  "6ffd33024e6e3fb3": {
+   "class": "BUSH_GROUP",
+   "family": "6ffd33024e6e3fb3",
+   "family_members": [
+    "6ffd33024e6e3fb3"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen1"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1",
+     "tris": 276,
+     "box_min_mm": [
+      -6749,
+      -404,
+      -4056
+     ],
+     "box_max_mm": [
+      7306,
+      3602,
+      4165
+     ],
+     "area_m2": 688.299
+    }
+   ],
+   "clumps_local": [
+    [
+     3.52,
+     -0.13,
+     3.51,
+     3.6
+    ],
+    [
+     -3.37,
+     0.01,
+     2.83,
+     3.57
+    ]
+   ],
+   "local": {
+    "height": 3.6,
+    "min_y": -0.4,
+    "extent_x": 14.05,
+    "extent_z": 8.22,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.401
+   },
+   "instances": 83,
+   "height_m": {
+    "min": 2.88,
+    "p50": 3.87,
+    "max": 7.52
+   },
+   "width_m": {
+    "min": 10.04,
+    "p50": 13.5,
+    "max": 24.33
+   }
+  },
+  "478f9901b3c02300": {
+   "class": "BUSH_GROUP",
+   "family": "478f9901b3c02300",
+   "family_members": [
+    "478f9901b3c02300"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 164,
+     "box_min_mm": [
+      -4220,
+      -388,
+      -3579
+     ],
+     "box_max_mm": [
+      3844,
+      3681,
+      3368
+     ],
+     "area_m2": 542.7066
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.37,
+     0.06,
+     3.24,
+     3.68
+    ]
+   ],
+   "local": {
+    "height": 3.68,
+    "min_y": -0.39,
+    "extent_x": 8.06,
+    "extent_z": 6.95,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.336
+   },
+   "instances": 81,
+   "height_m": {
+    "min": 2.77,
+    "p50": 3.58,
+    "max": 11.52
+   },
+   "width_m": {
+    "min": 5.92,
+    "p50": 7.91,
+    "max": 25.7
+   }
+  },
+  "a7b0dd7d4220a400": {
+   "class": "BUSH_GROUP",
+   "family": "a7b0dd7d4220a400",
+   "family_members": [
+    "a7b0dd7d4220a400"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 456,
+     "box_min_mm": [
+      -9587,
+      -399,
+      -5604
+     ],
+     "box_max_mm": [
+      9126,
+      3928,
+      6470
+     ],
+     "area_m2": 1238.3575
+    }
+   ],
+   "clumps_local": [
+    [
+     -3.93,
+     2.8,
+     4.91,
+     3.93
+    ],
+    [
+     5.78,
+     2.54,
+     2.87,
+     3.68
+    ],
+    [
+     -4.03,
+     -3.38,
+     2.2,
+     3.46
+    ],
+    [
+     2.38,
+     -2.44,
+     1.42,
+     2.37
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 18.71,
+    "extent_z": 12.07,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.377
+   },
+   "instances": 73,
+   "height_m": {
+    "min": 3.77,
+    "p50": 5.61,
+    "max": 14.68
+   },
+   "width_m": {
+    "min": 12.82,
+    "p50": 20.7,
+    "max": 52.32
+   }
+  },
+  "e8048e2bdb87f330": {
+   "class": "BUSH_GROUP",
+   "family": "e8048e2bdb87f330",
+   "family_members": [
+    "e8048e2bdb87f330"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 640,
+     "box_min_mm": [
+      -6693,
+      -702,
+      -4196
+     ],
+     "box_max_mm": [
+      7231,
+      2954,
+      3938
+     ],
+     "area_m2": 1007.275
+    }
+   ],
+   "clumps_local": [
+    [
+     3.46,
+     -0.13,
+     3.76,
+     2.89
+    ],
+    [
+     -3.33,
+     -0.32,
+     3.38,
+     2.95
+    ]
+   ],
+   "local": {
+    "height": 2.95,
+    "min_y": -0.7,
+    "extent_x": 13.92,
+    "extent_z": 8.13,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.542
+   },
+   "instances": 65,
+   "height_m": {
+    "min": 2.32,
+    "p50": 3.6,
+    "max": 10.06
+   },
+   "width_m": {
+    "min": 10.02,
+    "p50": 13.98,
+    "max": 36.85
+   }
+  },
+  "c245b8effcfda7d0": {
+   "class": "BUSH_GROUP",
+   "family": "c245b8effcfda7d0",
+   "family_members": [
+    "c245b8effcfda7d0"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 332,
+     "box_min_mm": [
+      -7403,
+      -399,
+      -5477
+     ],
+     "box_max_mm": [
+      6992,
+      3928,
+      4165
+     ],
+     "area_m2": 946.8032
+    }
+   ],
+   "clumps_local": [
+    [
+     2.92,
+     -1.24,
+     4.74,
+     3.7
+    ],
+    [
+     -3.77,
+     -0.16,
+     2.98,
+     3.93
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 14.39,
+    "extent_z": 9.64,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.342
+   },
+   "instances": 62,
+   "height_m": {
+    "min": 3.06,
+    "p50": 3.96,
+    "max": 12.0
+   },
+   "width_m": {
+    "min": 10.26,
+    "p50": 13.2,
+    "max": 35.21
+   }
+  },
+  "77ede8361489e1aa": {
+   "class": "BUSH_GROUP",
+   "family": "77ede8361489e1aa",
+   "family_members": [
+    "77ede8361489e1aa"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 164,
+     "box_min_mm": [
+      -4220,
+      -388,
+      -3579
+     ],
+     "box_max_mm": [
+      3844,
+      3681,
+      3368
+     ],
+     "area_m2": 542.7066
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.37,
+     0.06,
+     3.24,
+     3.68
+    ]
+   ],
+   "local": {
+    "height": 3.68,
+    "min_y": -0.39,
+    "extent_x": 8.06,
+    "extent_z": 6.95,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.336
+   },
+   "instances": 56,
+   "height_m": {
+    "min": 2.61,
+    "p50": 3.69,
+    "max": 6.56
+   },
+   "width_m": {
+    "min": 6.05,
+    "p50": 7.98,
+    "max": 14.9
+   }
+  },
+  "f352769de8e76bef": {
+   "class": "BUSH_GROUP",
+   "family": "f352769de8e76bef",
+   "family_members": [
+    "f352769de8e76bef"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_dub"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub",
+     "tris": 276,
+     "box_min_mm": [
+      -6749,
+      -404,
+      -4056
+     ],
+     "box_max_mm": [
+      7306,
+      3602,
+      4165
+     ],
+     "area_m2": 688.299
+    }
+   ],
+   "clumps_local": [
+    [
+     3.52,
+     -0.13,
+     3.51,
+     3.6
+    ],
+    [
+     -3.37,
+     0.01,
+     2.83,
+     3.57
+    ]
+   ],
+   "local": {
+    "height": 3.6,
+    "min_y": -0.4,
+    "extent_x": 14.05,
+    "extent_z": 8.22,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.401
+   },
+   "instances": 49,
+   "height_m": {
+    "min": 3.0,
+    "p50": 3.81,
+    "max": 6.53
+   },
+   "width_m": {
+    "min": 9.82,
+    "p50": 13.31,
+    "max": 19.75
+   }
+  },
+  "a689fb6f87325391": {
+   "class": "BUSH_GROUP",
+   "family": "a689fb6f87325391",
+   "family_members": [
+    "a689fb6f87325391"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 456,
+     "box_min_mm": [
+      -9587,
+      -399,
+      -5604
+     ],
+     "box_max_mm": [
+      9126,
+      3928,
+      6470
+     ],
+     "area_m2": 1238.3575
+    }
+   ],
+   "clumps_local": [
+    [
+     -3.93,
+     2.8,
+     4.91,
+     3.93
+    ],
+    [
+     5.78,
+     2.54,
+     2.87,
+     3.68
+    ],
+    [
+     -4.03,
+     -3.38,
+     2.2,
+     3.46
+    ],
+    [
+     2.38,
+     -2.44,
+     1.42,
+     2.37
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 18.71,
+    "extent_z": 12.07,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.377
+   },
+   "instances": 49,
+   "height_m": {
+    "min": 3.44,
+    "p50": 5.32,
+    "max": 13.0
+   },
+   "width_m": {
+    "min": 14.07,
+    "p50": 20.39,
+    "max": 51.57
+   }
+  },
+  "07c86644033905ce": {
+   "class": "BUSH_GROUP",
+   "family": "07c86644033905ce",
+   "family_members": [
+    "07c86644033905ce"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_dub_dry"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub_dry",
+     "tris": 640,
+     "box_min_mm": [
+      -6693,
+      -702,
+      -4196
+     ],
+     "box_max_mm": [
+      7231,
+      2954,
+      3938
+     ],
+     "area_m2": 1007.275
+    }
+   ],
+   "clumps_local": [
+    [
+     3.46,
+     -0.13,
+     3.76,
+     2.89
+    ],
+    [
+     -3.33,
+     -0.32,
+     3.38,
+     2.95
+    ]
+   ],
+   "local": {
+    "height": 2.95,
+    "min_y": -0.7,
+    "extent_x": 13.92,
+    "extent_z": 8.13,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.542
+   },
+   "instances": 45,
+   "height_m": {
+    "min": 2.39,
+    "p50": 3.34,
+    "max": 5.36
+   },
+   "width_m": {
+    "min": 10.91,
+    "p50": 14.13,
+    "max": 17.88
+   }
+  },
+  "0819e8f8987fd1c0": {
+   "class": "BUSH_GROUP",
+   "family": "0819e8f8987fd1c0",
+   "family_members": [
+    "0819e8f8987fd1c0"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 332,
+     "box_min_mm": [
+      -7403,
+      -399,
+      -5477
+     ],
+     "box_max_mm": [
+      6992,
+      3928,
+      4165
+     ],
+     "area_m2": 946.8032
+    }
+   ],
+   "clumps_local": [
+    [
+     2.92,
+     -1.24,
+     4.74,
+     3.7
+    ],
+    [
+     -3.77,
+     -0.16,
+     2.98,
+     3.93
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 14.39,
+    "extent_z": 9.64,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.342
+   },
+   "instances": 41,
+   "height_m": {
+    "min": 3.21,
+    "p50": 4.03,
+    "max": 12.85
+   },
+   "width_m": {
+    "min": 10.23,
+    "p50": 13.7,
+    "max": 39.57
+   }
+  },
+  "df7ab3f3c5432ca2": {
+   "class": "BUSH_GROUP",
+   "family": "df7ab3f3c5432ca2",
+   "family_members": [
+    "df7ab3f3c5432ca2"
+   ],
+   "dry": true,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkasux1_v_red",
+    "trees_vetkasux2_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux1_v_red",
+     "tris": 94,
+     "box_min_mm": [
+      -6493,
+      -717,
+      -5458
+     ],
+     "box_max_mm": [
+      4113,
+      3633,
+      5292
+     ],
+     "area_m2": 823.3353
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2_red",
+     "tris": 116,
+     "box_min_mm": [
+      -6478,
+      -271,
+      -6069
+     ],
+     "box_max_mm": [
+      6460,
+      3064,
+      6143
+     ],
+     "area_m2": 344.8285
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.63,
+     -0.02,
+     6.12,
+     3.63
+    ]
+   ],
+   "local": {
+    "height": 3.63,
+    "min_y": -0.72,
+    "extent_x": 12.95,
+    "extent_z": 12.21,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.443
+   },
+   "instances": 26,
+   "height_m": {
+    "min": 1.82,
+    "p50": 3.68,
+    "max": 4.95
+   },
+   "width_m": {
+    "min": 8.08,
+    "p50": 11.81,
+    "max": 13.15
+   }
+  },
+  "3745f3575518bfe3": {
+   "class": "BUSH_GROUP",
+   "family": "3745f3575518bfe3",
+   "family_members": [
+    "3745f3575518bfe3"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 364,
+     "box_min_mm": [
+      -3485,
+      -147,
+      -1610
+     ],
+     "box_max_mm": [
+      3402,
+      3529,
+      1531
+     ],
+     "area_m2": 247.042
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.05,
+     -0.0,
+     2.92,
+     3.53
+    ]
+   ],
+   "local": {
+    "height": 3.53,
+    "min_y": -0.15,
+    "extent_x": 6.89,
+    "extent_z": 3.14,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.425
+   },
+   "instances": 11,
+   "height_m": {
+    "min": 3.14,
+    "p50": 3.53,
+    "max": 5.29
+   },
+   "width_m": {
+    "min": 6.01,
+    "p50": 6.89,
+    "max": 10.71
+   }
+  },
+  "86de754826923add": {
+   "class": "BUSH_GROUP",
+   "family": "86de754826923add",
+   "family_members": [
+    "86de754826923add"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkagreen3"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3",
+     "tris": 364,
+     "box_min_mm": [
+      -3485,
+      -147,
+      -1610
+     ],
+     "box_max_mm": [
+      3402,
+      3529,
+      1531
+     ],
+     "area_m2": 246.4606
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.05,
+     -0.01,
+     2.92,
+     3.53
+    ]
+   ],
+   "local": {
+    "height": 3.53,
+    "min_y": -0.15,
+    "extent_x": 6.89,
+    "extent_z": 3.14,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.425
+   },
+   "instances": 5,
+   "height_m": {
+    "min": 3.53,
+    "p50": 4.1,
+    "max": 4.97
+   },
+   "width_m": {
+    "min": 6.89,
+    "p50": 8.03,
+    "max": 8.48
+   }
+  },
+  "6fa682821a7ab661": {
+   "class": "BUSH_GROUP",
+   "family": "6fa682821a7ab661",
+   "family_members": [
+    "6fa682821a7ab661"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen3_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen3_red",
+     "tris": 276,
+     "box_min_mm": [
+      -6749,
+      -404,
+      -4056
+     ],
+     "box_max_mm": [
+      7306,
+      3602,
+      4165
+     ],
+     "area_m2": 688.299
+    }
+   ],
+   "clumps_local": [
+    [
+     3.52,
+     -0.13,
+     3.51,
+     3.6
+    ],
+    [
+     -3.37,
+     0.01,
+     2.83,
+     3.57
+    ]
+   ],
+   "local": {
+    "height": 3.6,
+    "min_y": -0.4,
+    "extent_x": 14.05,
+    "extent_z": 8.22,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.397
+   },
+   "instances": 3,
+   "height_m": {
+    "min": 3.6,
+    "p50": 3.75,
+    "max": 3.86
+   },
+   "width_m": {
+    "min": 12.51,
+    "p50": 13.53,
+    "max": 13.62
+   }
+  },
+  "e1f151dd6a635562": {
+   "class": "BUSH_GROUP",
+   "family": "e1f151dd6a635562",
+   "family_members": [
+    "e1f151dd6a635562"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen1_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1_red",
+     "tris": 332,
+     "box_min_mm": [
+      -7403,
+      -399,
+      -5477
+     ],
+     "box_max_mm": [
+      6992,
+      3928,
+      4165
+     ],
+     "area_m2": 946.8032
+    }
+   ],
+   "clumps_local": [
+    [
+     2.92,
+     -1.24,
+     4.74,
+     3.7
+    ],
+    [
+     -3.77,
+     -0.16,
+     2.98,
+     3.93
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 14.39,
+    "extent_z": 9.64,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.342
+   },
+   "instances": 3,
+   "height_m": {
+    "min": 3.53,
+    "p50": 5.17,
+    "max": 5.51
+   },
+   "width_m": {
+    "min": 10.52,
+    "p50": 16.99,
+    "max": 19.35
+   }
+  },
+  "ee875989f80ec7a2": {
+   "class": "BUSH_GROUP",
+   "family": "ee875989f80ec7a2",
+   "family_members": [
+    "ee875989f80ec7a2"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkagreen1_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen1_red",
+     "tris": 456,
+     "box_min_mm": [
+      -9587,
+      -399,
+      -5604
+     ],
+     "box_max_mm": [
+      9126,
+      3928,
+      6470
+     ],
+     "area_m2": 1238.3575
+    }
+   ],
+   "clumps_local": [
+    [
+     -3.93,
+     2.8,
+     4.91,
+     3.93
+    ],
+    [
+     5.78,
+     2.54,
+     2.87,
+     3.68
+    ],
+    [
+     -4.03,
+     -3.38,
+     2.2,
+     3.46
+    ],
+    [
+     2.38,
+     -2.44,
+     1.42,
+     2.37
+    ]
+   ],
+   "local": {
+    "height": 3.93,
+    "min_y": -0.4,
+    "extent_x": 18.71,
+    "extent_z": 12.07,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.377
+   },
+   "instances": 1,
+   "height_m": {
+    "min": 3.96,
+    "p50": 3.96,
+    "max": 3.96
+   },
+   "width_m": {
+    "min": 17.79,
+    "p50": 17.79,
+    "max": 17.79
+   }
+  },
+  "eaee468f552e4122": {
+   "class": "CONIFER_BUSH",
+   "family": "eaee468f552e4122",
+   "family_members": [
+    "eaee468f552e4122"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 192,
+     "box_min_mm": [
+      -2164,
+      -28,
+      -1968
+     ],
+     "box_max_mm": [
+      2174,
+      3642,
+      2514
+     ],
+     "area_m2": 180.1991
+    }
+   ],
+   "clumps_local": [
+    [
+     0.16,
+     0.16,
+     2.24,
+     3.64
+    ]
+   ],
+   "local": {
+    "height": 3.64,
+    "min_y": -0.03,
+    "extent_x": 4.34,
+    "extent_z": 4.48,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.442
+   },
+   "instances": 489,
+   "height_m": {
+    "min": 2.17,
+    "p50": 3.88,
+    "max": 10.87
+   },
+   "width_m": {
+    "min": 2.8,
+    "p50": 5.2,
+    "max": 14.91
+   }
+  },
+  "8f19b829c3ce5745": {
+   "class": "CONIFER_BUSH",
+   "family": "8f19b829c3ce5745",
+   "family_members": [
+    "8f19b829c3ce5745"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 168,
+   "height_m": {
+    "min": 1.08,
+    "p50": 3.93,
+    "max": 6.04
+   },
+   "width_m": {
+    "min": 1.47,
+    "p50": 5.32,
+    "max": 8.37
+   }
+  },
+  "14b859cdf2c4daa2": {
+   "class": "CONIFER_BUSH",
+   "family": "14b859cdf2c4daa2",
+   "family_members": [
+    "14b859cdf2c4daa2"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 118,
+   "height_m": {
+    "min": 2.7,
+    "p50": 4.6,
+    "max": 7.99
+   },
+   "width_m": {
+    "min": 3.22,
+    "p50": 5.95,
+    "max": 10.42
+   }
+  },
+  "6f57de4126f149d1": {
+   "class": "CONIFER_BUSH",
+   "family": "6f57de4126f149d1",
+   "family_members": [
+    "6f57de4126f149d1"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 93,
+   "height_m": {
+    "min": 2.34,
+    "p50": 3.75,
+    "max": 6.04
+   },
+   "width_m": {
+    "min": 3.35,
+    "p50": 5.03,
+    "max": 9.62
+   }
+  },
+  "947a5daf23f8eb93": {
+   "class": "CONIFER_BUSH",
+   "family": "947a5daf23f8eb93",
+   "family_members": [
+    "947a5daf23f8eb93"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 90,
+   "height_m": {
+    "min": 2.65,
+    "p50": 4.4,
+    "max": 7.2
+   },
+   "width_m": {
+    "min": 3.56,
+    "p50": 6.05,
+    "max": 9.9
+   }
+  },
+  "517dbd1862705301": {
+   "class": "CONIFER_BUSH",
+   "family": "517dbd1862705301",
+   "family_members": [
+    "517dbd1862705301"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_elka_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_red",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 90,
+   "height_m": {
+    "min": 2.24,
+    "p50": 3.59,
+    "max": 4.96
+   },
+   "width_m": {
+    "min": 2.93,
+    "p50": 4.55,
+    "max": 6.75
+   }
+  },
+  "d9e7db84f694e956": {
+   "class": "CONIFER_BUSH",
+   "family": "d9e7db84f694e956",
+   "family_members": [
+    "d9e7db84f694e956"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_elka_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_red",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 85,
+   "height_m": {
+    "min": 2.56,
+    "p50": 3.16,
+    "max": 4.68
+   },
+   "width_m": {
+    "min": 3.4,
+    "p50": 4.34,
+    "max": 6.5
+   }
+  },
+  "711a95140e3c86a9": {
+   "class": "CONIFER_BUSH",
+   "family": "711a95140e3c86a9",
+   "family_members": [
+    "711a95140e3c86a9"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.7871
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.8349
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 77,
+   "height_m": {
+    "min": 2.87,
+    "p50": 4.75,
+    "max": 6.56
+   },
+   "width_m": {
+    "min": 3.37,
+    "p50": 5.81,
+    "max": 7.2
+   }
+  },
+  "47290ee32f2d2fa0": {
+   "class": "CONIFER_BUSH",
+   "family": "47290ee32f2d2fa0",
+   "family_members": [
+    "47290ee32f2d2fa0"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 76,
+   "height_m": {
+    "min": 2.93,
+    "p50": 4.53,
+    "max": 5.93
+   },
+   "width_m": {
+    "min": 3.95,
+    "p50": 6.24,
+    "max": 8.93
+   }
+  },
+  "e6d49501956e586c": {
+   "class": "CONIFER_BUSH",
+   "family": "e6d49501956e586c",
+   "family_members": [
+    "e6d49501956e586c"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_elka_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_red",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4261
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_a_02",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3108
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 76,
+   "height_m": {
+    "min": 2.35,
+    "p50": 3.36,
+    "max": 4.87
+   },
+   "width_m": {
+    "min": 3.19,
+    "p50": 4.65,
+    "max": 6.6
+   }
+  },
+  "6bf06ebcdb8d0d13": {
+   "class": "CONIFER_BUSH",
+   "family": "6bf06ebcdb8d0d13",
+   "family_members": [
+    "6bf06ebcdb8d0d13"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 240,
+     "box_min_mm": [
+      -2004,
+      -98,
+      -1782
+     ],
+     "box_max_mm": [
+      1896,
+      2875,
+      1827
+     ],
+     "area_m2": 197.7752
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_sosna_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.835
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.12,
+     0.14,
+     1.73,
+     2.87
+    ]
+   ],
+   "local": {
+    "height": 2.87,
+    "min_y": -0.1,
+    "extent_x": 3.9,
+    "extent_z": 3.61,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.507
+   },
+   "instances": 8,
+   "height_m": {
+    "min": 3.43,
+    "p50": 6.06,
+    "max": 9.69
+   },
+   "width_m": {
+    "min": 4.8,
+    "p50": 9.15,
+    "max": 12.4
+   }
+  },
+  "7859d56de32adcce": {
+   "class": "CONIFER_BUSH",
+   "family": "7859d56de32adcce",
+   "family_members": [
+    "7859d56de32adcce"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 216,
+     "box_min_mm": [
+      -2207,
+      -220,
+      -1966
+     ],
+     "box_max_mm": [
+      2301,
+      3816,
+      2514
+     ],
+     "area_m2": 200.787
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_sosna_02",
+     "tris": 217,
+     "box_min_mm": [
+      -941,
+      -55,
+      -897
+     ],
+     "box_max_mm": [
+      1184,
+      1979,
+      1173
+     ],
+     "area_m2": 1.835
+    }
+   ],
+   "clumps_local": [
+    [
+     0.2,
+     0.18,
+     2.24,
+     3.82
+    ]
+   ],
+   "local": {
+    "height": 3.82,
+    "min_y": -0.22,
+    "extent_x": 4.51,
+    "extent_z": 4.48,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.363
+   },
+   "instances": 3,
+   "height_m": {
+    "min": 5.45,
+    "p50": 7.14,
+    "max": 8.93
+   },
+   "width_m": {
+    "min": 8.14,
+    "p50": 9.52,
+    "max": 12.22
+   }
+  },
+  "7922839705116cd8": {
+   "class": "CONIFER_BUSH",
+   "family": "7922839705116cd8",
+   "family_members": [
+    "7922839705116cd8"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 240,
+     "box_min_mm": [
+      -2279,
+      -103,
+      -2134
+     ],
+     "box_max_mm": [
+      2051,
+      3352,
+      2490
+     ],
+     "area_m2": 239.4262
+    },
+    {
+     "shader": "flora\\trunk_wave/trees\\trees_bark_sosna_02",
+     "tris": 248,
+     "box_min_mm": [
+      -1267,
+      -59,
+      -1324
+     ],
+     "box_max_mm": [
+      1342,
+      1982,
+      1377
+     ],
+     "area_m2": 2.3109
+    }
+   ],
+   "clumps_local": [
+    [
+     0.12,
+     0.2,
+     1.97,
+     3.35
+    ]
+   ],
+   "local": {
+    "height": 3.35,
+    "min_y": -0.1,
+    "extent_x": 4.33,
+    "extent_z": 4.62,
+    "stem_top": 1.98,
+    "leaf_low_share": 0.487
+   },
+   "instances": 2,
+   "height_m": {
+    "min": 7.96,
+    "p50": 8.03,
+    "max": 8.09
+   },
+   "width_m": {
+    "min": 10.71,
+    "p50": 10.96,
+    "max": 11.21
+   }
+  },
+  "bac0f21610b78cfc": {
+   "class": "THICKET",
+   "family": "bac0f21610b78cfc",
+   "family_members": [
+    "bac0f21610b78cfc"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkabig",
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig",
+     "tris": 200,
+     "box_min_mm": [
+      -9615,
+      -909,
+      -5277
+     ],
+     "box_max_mm": [
+      11345,
+      6719,
+      5609
+     ],
+     "area_m2": 1153.158
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 208,
+     "box_min_mm": [
+      -10142,
+      -586,
+      -5749
+     ],
+     "box_max_mm": [
+      10640,
+      4927,
+      5755
+     ],
+     "area_m2": 1254.8396
+    }
+   ],
+   "clumps_local": [
+    [
+     0.9,
+     0.03,
+     9.81,
+     6.72
+    ]
+   ],
+   "local": {
+    "height": 6.72,
+    "min_y": -0.91,
+    "extent_x": 21.49,
+    "extent_z": 11.5,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.277
+   },
+   "instances": 395,
+   "height_m": {
+    "min": 2.76,
+    "p50": 6.85,
+    "max": 40.32
+   },
+   "width_m": {
+    "min": 8.37,
+    "p50": 21.19,
+    "max": 80.56
+   }
+  },
+  "87cab991a231b99f": {
+   "class": "THICKET",
+   "family": "87cab991a231b99f",
+   "family_members": [
+    "87cab991a231b99f"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkabig",
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig",
+     "tris": 184,
+     "box_min_mm": [
+      -10247,
+      -877,
+      -5116
+     ],
+     "box_max_mm": [
+      9522,
+      5246,
+      4783
+     ],
+     "area_m2": 1122.1605
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 276,
+     "box_min_mm": [
+      -11077,
+      -609,
+      -5504
+     ],
+     "box_max_mm": [
+      10184,
+      7118,
+      6841
+     ],
+     "area_m2": 1584.0699
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.04,
+     0.2,
+     9.83,
+     7.12
+    ]
+   ],
+   "local": {
+    "height": 7.12,
+    "min_y": -0.88,
+    "extent_x": 21.26,
+    "extent_z": 12.35,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.278
+   },
+   "instances": 221,
+   "height_m": {
+    "min": 3.27,
+    "p50": 7.12,
+    "max": 17.04
+   },
+   "width_m": {
+    "min": 10.7,
+    "p50": 19.93,
+    "max": 44.49
+   }
+  },
+  "e87fcaaf251b280c": {
+   "class": "THICKET",
+   "family": "e87fcaaf251b280c",
+   "family_members": [
+    "e55bd543a9b2c3a6",
+    "e87fcaaf251b280c"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_dub",
+    "trees_vetkabig",
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub",
+     "tris": 96,
+     "box_min_mm": [
+      -4396,
+      -362,
+      -3740
+     ],
+     "box_max_mm": [
+      5648,
+      6096,
+      3264
+     ],
+     "area_m2": 507.2462
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig",
+     "tris": 228,
+     "box_min_mm": [
+      -10247,
+      -2038,
+      -5116
+     ],
+     "box_max_mm": [
+      9586,
+      6408,
+      4708
+     ],
+     "area_m2": 1451.0035
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 96,
+     "box_min_mm": [
+      -11142,
+      -565,
+      -5749
+     ],
+     "box_max_mm": [
+      10640,
+      4413,
+      6230
+     ],
+     "area_m2": 422.0486
+    }
+   ],
+   "clumps_local": [
+    [
+     0.42,
+     0.28,
+     10.43,
+     6.41
+    ]
+   ],
+   "local": {
+    "height": 6.41,
+    "min_y": -2.04,
+    "extent_x": 21.78,
+    "extent_z": 11.98,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.367
+   },
+   "instances": 136,
+   "height_m": {
+    "min": 3.59,
+    "p50": 6.45,
+    "max": 19.23
+   },
+   "width_m": {
+    "min": 11.01,
+    "p50": 21.76,
+    "max": 42.16
+   }
+  },
+  "d9e49b6e069a2457": {
+   "class": "THICKET",
+   "family": "d9e49b6e069a2457",
+   "family_members": [
+    "d9e49b6e069a2457"
+   ],
+   "dry": false,
+   "red": false,
+   "leaf_textures": [
+    "trees_vetkabig",
+    "trees_vetkagreen5"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig",
+     "tris": 264,
+     "box_min_mm": [
+      -10247,
+      -2222,
+      -5116
+     ],
+     "box_max_mm": [
+      9586,
+      6213,
+      4783
+     ],
+     "area_m2": 1769.1288
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5",
+     "tris": 188,
+     "box_min_mm": [
+      -11077,
+      -559,
+      -6104
+     ],
+     "box_max_mm": [
+      10679,
+      4596,
+      6841
+     ],
+     "area_m2": 846.3962
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.03,
+     0.16,
+     9.84,
+     6.21
+    ]
+   ],
+   "local": {
+    "height": 6.21,
+    "min_y": -2.22,
+    "extent_x": 21.76,
+    "extent_z": 12.95,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.369
+   },
+   "instances": 135,
+   "height_m": {
+    "min": 3.84,
+    "p50": 6.67,
+    "max": 34.17
+   },
+   "width_m": {
+    "min": 13.08,
+    "p50": 21.68,
+    "max": 79.7
+   }
+  },
+  "f1cffd953c6c9e36": {
+   "class": "THICKET",
+   "family": "f1cffd953c6c9e36",
+   "family_members": [
+    "f1cffd953c6c9e36"
+   ],
+   "dry": true,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkabig_red",
+    "trees_vetkasux2_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig_red",
+     "tris": 200,
+     "box_min_mm": [
+      -9615,
+      -909,
+      -5277
+     ],
+     "box_max_mm": [
+      11345,
+      6719,
+      5609
+     ],
+     "area_m2": 1153.158
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2_red",
+     "tris": 208,
+     "box_min_mm": [
+      -10142,
+      -586,
+      -5749
+     ],
+     "box_max_mm": [
+      10640,
+      4927,
+      5755
+     ],
+     "area_m2": 1254.8396
+    }
+   ],
+   "clumps_local": [
+    [
+     0.9,
+     0.03,
+     9.81,
+     6.72
+    ]
+   ],
+   "local": {
+    "height": 6.72,
+    "min_y": -0.91,
+    "extent_x": 21.49,
+    "extent_z": 11.5,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.277
+   },
+   "instances": 94,
+   "height_m": {
+    "min": 3.86,
+    "p50": 7.08,
+    "max": 33.6
+   },
+   "width_m": {
+    "min": 10.57,
+    "p50": 20.47,
+    "max": 58.88
+   }
+  },
+  "e55bd543a9b2c3a6": {
+   "class": "THICKET",
+   "family": "e87fcaaf251b280c",
+   "family_members": [
+    "e55bd543a9b2c3a6",
+    "e87fcaaf251b280c"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_dub",
+    "trees_vetkabig",
+    "trees_vetkasux2"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub",
+     "tris": 96,
+     "box_min_mm": [
+      -4396,
+      -362,
+      -3740
+     ],
+     "box_max_mm": [
+      5648,
+      6096,
+      3264
+     ],
+     "area_m2": 507.2463
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig",
+     "tris": 228,
+     "box_min_mm": [
+      -10247,
+      -2038,
+      -5116
+     ],
+     "box_max_mm": [
+      9586,
+      6408,
+      4708
+     ],
+     "area_m2": 1451.0036
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2",
+     "tris": 96,
+     "box_min_mm": [
+      -11142,
+      -565,
+      -5749
+     ],
+     "box_max_mm": [
+      10640,
+      4413,
+      6230
+     ],
+     "area_m2": 422.0487
+    }
+   ],
+   "clumps_local": [
+    [
+     0.42,
+     0.28,
+     10.43,
+     6.41
+    ]
+   ],
+   "local": {
+    "height": 6.41,
+    "min_y": -2.04,
+    "extent_x": 21.78,
+    "extent_z": 11.98,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.367
+   },
+   "instances": 27,
+   "height_m": {
+    "min": 6.06,
+    "p50": 6.61,
+    "max": 8.1
+   },
+   "width_m": {
+    "min": 18.64,
+    "p50": 21.55,
+    "max": 22.23
+   }
+  },
+  "7930af55aae474ec": {
+   "class": "THICKET",
+   "family": "7930af55aae474ec",
+   "family_members": [
+    "7930af55aae474ec"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 200,
+     "box_min_mm": [
+      -9615,
+      -909,
+      -5277
+     ],
+     "box_max_mm": [
+      11345,
+      6719,
+      5609
+     ],
+     "area_m2": 1153.158
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 208,
+     "box_min_mm": [
+      -10142,
+      -586,
+      -5749
+     ],
+     "box_max_mm": [
+      10640,
+      4927,
+      5755
+     ],
+     "area_m2": 1254.8396
+    }
+   ],
+   "clumps_local": [
+    [
+     0.9,
+     0.03,
+     9.81,
+     6.72
+    ]
+   ],
+   "local": {
+    "height": 6.72,
+    "min_y": -0.91,
+    "extent_x": 21.49,
+    "extent_z": 11.5,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.277
+   },
+   "instances": 17,
+   "height_m": {
+    "min": 6.3,
+    "p50": 7.26,
+    "max": 11.26
+   },
+   "width_m": {
+    "min": 18.91,
+    "p50": 21.34,
+    "max": 32.48
+   }
+  },
+  "dcfcbf2fecc1931a": {
+   "class": "THICKET",
+   "family": "dcfcbf2fecc1931a",
+   "family_members": [
+    "dcfcbf2fecc1931a"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkabig_red",
+    "trees_vetkagreen5_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig_red",
+     "tris": 184,
+     "box_min_mm": [
+      -10247,
+      -877,
+      -5116
+     ],
+     "box_max_mm": [
+      9522,
+      5246,
+      4783
+     ],
+     "area_m2": 1122.1605
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5_red",
+     "tris": 276,
+     "box_min_mm": [
+      -11077,
+      -609,
+      -5504
+     ],
+     "box_max_mm": [
+      10184,
+      7118,
+      6841
+     ],
+     "area_m2": 1584.0699
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.04,
+     0.2,
+     9.83,
+     7.12
+    ]
+   ],
+   "local": {
+    "height": 7.12,
+    "min_y": -0.88,
+    "extent_x": 21.26,
+    "extent_z": 12.35,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.278
+   },
+   "instances": 15,
+   "height_m": {
+    "min": 5.64,
+    "p50": 7.24,
+    "max": 21.6
+   },
+   "width_m": {
+    "min": 17.63,
+    "p50": 20.42,
+    "max": 56.81
+   }
+  },
+  "c018405c2c9e8058": {
+   "class": "THICKET",
+   "family": "c018405c2c9e8058",
+   "family_members": [
+    "c018405c2c9e8058"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 96,
+     "box_min_mm": [
+      -4396,
+      -362,
+      -3740
+     ],
+     "box_max_mm": [
+      5648,
+      6096,
+      3264
+     ],
+     "area_m2": 507.2462
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 228,
+     "box_min_mm": [
+      -10247,
+      -2038,
+      -5116
+     ],
+     "box_max_mm": [
+      9586,
+      6408,
+      4708
+     ],
+     "area_m2": 1451.0035
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 96,
+     "box_min_mm": [
+      -11142,
+      -565,
+      -5749
+     ],
+     "box_max_mm": [
+      10640,
+      4413,
+      6230
+     ],
+     "area_m2": 422.0486
+    }
+   ],
+   "clumps_local": [
+    [
+     0.42,
+     0.28,
+     10.43,
+     6.41
+    ]
+   ],
+   "local": {
+    "height": 6.41,
+    "min_y": -2.04,
+    "extent_x": 21.78,
+    "extent_z": 11.98,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.367
+   },
+   "instances": 13,
+   "height_m": {
+    "min": 6.26,
+    "p50": 6.98,
+    "max": 10.41
+   },
+   "width_m": {
+    "min": 19.37,
+    "p50": 21.63,
+    "max": 33.57
+   }
+  },
+  "89a7801dcf9e38bb": {
+   "class": "THICKET",
+   "family": "89a7801dcf9e38bb",
+   "family_members": [
+    "89a7801dcf9e38bb"
+   ],
+   "dry": false,
+   "red": true,
+   "leaf_textures": [
+    "trees_vetkabig_red",
+    "trees_vetkagreen5_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig_red",
+     "tris": 264,
+     "box_min_mm": [
+      -10247,
+      -2222,
+      -5116
+     ],
+     "box_max_mm": [
+      9586,
+      6213,
+      4783
+     ],
+     "area_m2": 1769.1288
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkagreen5_red",
+     "tris": 188,
+     "box_min_mm": [
+      -11077,
+      -559,
+      -6104
+     ],
+     "box_max_mm": [
+      10679,
+      4596,
+      6841
+     ],
+     "area_m2": 846.3962
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.03,
+     0.16,
+     9.84,
+     6.21
+    ]
+   ],
+   "local": {
+    "height": 6.21,
+    "min_y": -2.22,
+    "extent_x": 21.76,
+    "extent_z": 12.95,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.369
+   },
+   "instances": 10,
+   "height_m": {
+    "min": 6.0,
+    "p50": 6.74,
+    "max": 12.43
+   },
+   "width_m": {
+    "min": 17.82,
+    "p50": 21.61,
+    "max": 26.08
+   }
+  },
+  "0331e1b460a9a0c6": {
+   "class": "THICKET",
+   "family": "0331e1b460a9a0c6",
+   "family_members": [
+    "0331e1b460a9a0c6"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 188,
+     "box_min_mm": [
+      -11077,
+      -559,
+      -6104
+     ],
+     "box_max_mm": [
+      10679,
+      4596,
+      6841
+     ],
+     "area_m2": 846.3962
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 264,
+     "box_min_mm": [
+      -10247,
+      -2222,
+      -5116
+     ],
+     "box_max_mm": [
+      9586,
+      6213,
+      4783
+     ],
+     "area_m2": 1769.1288
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.03,
+     0.16,
+     9.84,
+     6.21
+    ]
+   ],
+   "local": {
+    "height": 6.21,
+    "min_y": -2.22,
+    "extent_x": 21.76,
+    "extent_z": 12.95,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.369
+   },
+   "instances": 8,
+   "height_m": {
+    "min": 6.93,
+    "p50": 8.14,
+    "max": 9.44
+   },
+   "width_m": {
+    "min": 18.1,
+    "p50": 22.68,
+    "max": 31.78
+   }
+  },
+  "d070561948527bc4": {
+   "class": "THICKET",
+   "family": "d070561948527bc4",
+   "family_members": [
+    "d070561948527bc4"
+   ],
+   "dry": true,
+   "red": true,
+   "leaf_textures": [
+    "trees_dub_red",
+    "trees_vetkabig_red",
+    "trees_vetkasux2_red"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_dub_red",
+     "tris": 96,
+     "box_min_mm": [
+      -4396,
+      -362,
+      -3740
+     ],
+     "box_max_mm": [
+      5648,
+      6096,
+      3264
+     ],
+     "area_m2": 507.2462
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkabig_red",
+     "tris": 228,
+     "box_min_mm": [
+      -10247,
+      -2038,
+      -5116
+     ],
+     "box_max_mm": [
+      9586,
+      6408,
+      4708
+     ],
+     "area_m2": 1451.0035
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_vetkasux2_red",
+     "tris": 96,
+     "box_min_mm": [
+      -11142,
+      -565,
+      -5749
+     ],
+     "box_max_mm": [
+      10640,
+      4413,
+      6230
+     ],
+     "area_m2": 422.0486
+    }
+   ],
+   "clumps_local": [
+    [
+     0.42,
+     0.28,
+     10.43,
+     6.41
+    ]
+   ],
+   "local": {
+    "height": 6.41,
+    "min_y": -2.04,
+    "extent_x": 21.78,
+    "extent_z": 11.98,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.367
+   },
+   "instances": 7,
+   "height_m": {
+    "min": 6.0,
+    "p50": 6.92,
+    "max": 18.5
+   },
+   "width_m": {
+    "min": 19.34,
+    "p50": 22.19,
+    "max": 44.26
+   }
+  },
+  "02803b87204d6049": {
+   "class": "THICKET",
+   "family": "02803b87204d6049",
+   "family_members": [
+    "02803b87204d6049"
+   ],
+   "dry": true,
+   "red": false,
+   "leaf_textures": [
+    "trees_elka_sux"
+   ],
+   "signature": [
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 276,
+     "box_min_mm": [
+      -11077,
+      -609,
+      -5504
+     ],
+     "box_max_mm": [
+      10184,
+      7118,
+      6841
+     ],
+     "area_m2": 1584.0699
+    },
+    {
+     "shader": "flora\\leaf_wave/trees\\trees_elka_sux",
+     "tris": 184,
+     "box_min_mm": [
+      -10247,
+      -877,
+      -5116
+     ],
+     "box_max_mm": [
+      9522,
+      5246,
+      4783
+     ],
+     "area_m2": 1122.1605
+    }
+   ],
+   "clumps_local": [
+    [
+     -0.04,
+     0.2,
+     9.83,
+     7.12
+    ]
+   ],
+   "local": {
+    "height": 7.12,
+    "min_y": -0.88,
+    "extent_x": 21.26,
+    "extent_z": 12.35,
+    "stem_top": 0.0,
+    "leaf_low_share": 0.278
+   },
+   "instances": 7,
+   "height_m": {
+    "min": 7.09,
+    "p50": 7.19,
+    "max": 10.72
+   },
+   "width_m": {
+    "min": 18.03,
+    "p50": 20.11,
+    "max": 28.57
+   }
+  }
+ }
+}

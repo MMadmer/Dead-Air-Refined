@@ -8,8 +8,8 @@ picks. Two layers make up the look of a day:
   details, the ground tint, the precipitation and the ice evaluate their keyframe curves at `D` every
   frame: no rebuild, no reload, no step between months. Their keys sit on the 15th of each month and
   live in `configs/dead_air_x64_seasons.ltx` (field reference: `SEASON_DATA.md`).
-- **Texture overlay folders**, discrete sets of textures (tree cards, LOD atlases, terrain, maps, ...)
-  that the renderer prefers over the base textures. They are latched per texture category and change
+- **Texture overlay folders**, discrete sets of textures (the cards of the vegetation that still stands
+  as stock models, terrain, the grass atlas, maps, ...) that the renderer prefers over the base textures. They are latched per texture category and change
   only at safe points, because a switch reloads textures.
 
 The legacy DA 1.0 season float (`environment_season`, Lua `level.get_season_k`/`set_season_k`, the
@@ -60,12 +60,12 @@ Layout:
 - `textures/seasons/<folder>/<logical name>.dds` overrides the texture of that name, bump maps
   included.
 - `textures/seasons/<folder>/levels/<level folder>/<name>.dds` overrides a texture the level folder
-  provides (terrain colour, `build_details` grass atlas, `level_lods`); it is checked first, and only
+  provides (terrain colour, the `build_details` grass atlas); it is checked first, and only
   for names the level folder itself has.
 - `.thm` descriptions are keyed by logical name, so an overlay uses the base texture's bump, detail
   and material.
-- Folders: `winter`, `spring_early`, `spring_mid`, `spring_late`, `summer`, `autumn` (LOD atlases only:
-  the base set is autumn).
+- Folders: `winter`, `spring_early`, `spring_mid`, `spring_late`, `summer`. Autumn is the base set itself
+  (`-`): Dead Air's look and the 1.6.0 base textures. `level_lods` has no look, the engine draws it (below).
 
 Every texture belongs to a category: the longest `[season_categories]` prefix of its logical name
 (either slash, any case), `default` when none matches. Each category has its own bands in
@@ -74,15 +74,15 @@ one, the last into the first. The shipped table:
 
 | Category (prefixes) | 1 Nov - 14 Dec | 15 Dec - 15 Feb | 16 Feb - 9 Apr | 10 - 30 Apr | May | 1 Jun - 19 Sep | 20 Sep - 31 Oct |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| default (`terrain\`, `build_details`, the rest) | spring_early | spring_early | spring_early | spring_mid | spring_late | summer | autumn |
-| trees (`trees\`, `level_lods`, `map\`, `ui\`) | spring_early | winter | spring_early | spring_mid | spring_late | summer | autumn |
+| default (`terrain\`, `build_details`, the rest) | spring_early | spring_early | spring_early | spring_mid | spring_late | summer | base |
+| trees (`trees\`, `map\`, `ui\`) | spring_early | winter | spring_early | spring_mid | spring_late | summer | base |
 | ground (`grnd\`, `detail\`, `roof\`) | base | base | base | base | base | base | base |
 | decal (`decal\`) | base | winter | base | base | base | base | base |
 | vine (`vine\`) | winter | winter | winter | base | base | base | base |
 
 The ground never wears the painted winter set: the snow layer whitens open ground continuously, and
-painted snow would show under roofs, indoors and in every trail. Trees, their LOD atlases and the maps
-wear winter only while the open snow cover is complete; ivy stays leafless from November to early April.
+painted snow would show under roofs, indoors and in every trail. The tree cards and the maps wear winter
+only while the open snow cover is complete; ivy stays leafless from November to early April.
 Without the data file or one of its sections the engine uses this same table.
 
 **Latching.** The folders follow the latch day: the choice's day (a month's 15th, or the calendar's
@@ -108,8 +108,15 @@ builder takes the longest assigned prefix of a path.
 
 ## What each folder contains
 
-- Tree cards (`trees/`): every card family of Dead Air is the project's own (see ASSET_CREDITS.md),
-  one grown structure per family so a tree keeps its silhouette through the year. The grown tree is
+- Tree cards (`trees/`): only for what still stands as a stock model. The level trees and bushes are the
+  procedural ones and take their year from the species tables, leaf by leaf (`TREES.md`, `SHRUBS.md`), so
+  the looks of their old cards are gone (WP7, 08.10.2026). Twenty cards keep them: the reeds and sedge
+  (`trees_kamish_big_01`, `_big_02`, `trees_kamish_sux`, `trees_kamysh`, `trees_osoka_sux`), the duckweed
+  (`trees_tina`), the forest walls (`trees_forestwall1`, `_2`), the stock fallen trees and debris
+  (`trees_vetkasux2`, `_red`, `trees_new_vetka`, `trees_atp_sosnodub_branch`), a static pine (`trees_sosna_sux`)
+  and the cards of props and DAR2 models (`trees_elka`, `trees_fake`, `trees_new_vetka_green1`, `trees_sosna`,
+  `trees_vetkabig`, `trees_vetkagreen1`, `trees_vetkagreen5`). Every card family of Dead Air is the project's own
+  (see ASSET_CREDITS.md), one grown structure per family so a tree keeps its silhouette through the year. The grown tree is
   fitted into its card (shrunk towards the attachment point, a spray past the border shortened), so no
   foliage runs into the card's edge - a plane cut off by a straight line in the game. Conifers carry
   their needles in tufts at the ends of the boughs. Dead wood (`*_dead`, `*_rotten`, dry conifers
@@ -120,21 +127,29 @@ builder takes the longest assigned prefix of a path.
   - spring: young small leaves (birch's green haze, alder, poplar, willow), cherry in blossom,
     oak still bare;
   - late spring: nearly full fresh foliage, oak's young bronze leaves, new light shoots on conifers.
-  Reeds, sedge, sprouts, forest walls and the bush follow the same looks from GSC's own pictures.
+  The reeds, the sedge and the forest walls follow the same looks from GSC's own pictures.
 - Per level:
   - terrain colour recoloured (summer towards the summer pack, spring stages from wet bare ground to
-    fresh green; the winter terrain set is not worn, see above);
+    fresh green; no winter set: the snow layer whitens the ground);
   - grass atlas (`build_details`) sprite by sprite for the stock details the procedural grass does not
     replace;
-  - tree LOD atlas (`level_lods`) rendered from the cards of the look itself, autumn included, so a
-    far tree is bare, budding or green exactly like the near one. Each LOD visual lists its tree's
-    meshes and eight view quads with their cells in the atlas; colour and alpha follow Dead Air's own
-    bake (fitted through a render of the same trees with Dead Air's original textures). Cells of cars,
-    ruins and rocks keep Dead Air's pictures in every look.
+  - tree LOD atlas (`level_lods`): no look of it is worn any more, the engine draws it (`TREES.md`, "The
+    billboards"). At the level's first frame and whenever the texture latch moves, a runtime copy of the
+    level's own atlas gets the cells of every stock-path vegetation FLOD - reeds, sedge, duckweed, the
+    stock fallen trees and debris, a mod's vegetation: whatever wears a `trees\` card and neither the
+    shrubs nor the trees replace, theirs too while their stock models stand - drawn again from its own parts in the latched cards, eight views along
+    the FLOD's own facets, one cell set a model, so a far reed bed is bare, budding or green exactly like
+    the near one. Colour and alpha follow Dead Air's own bake: the alpha's quantile map from the coverage
+    and the colour's linear gains, measured once a level by drawing the same cells with the base cards
+    against Dead Air's pixels (the offline bake fitted them the same way through Dead Air's original
+    textures). Cells of cars, ruins and rocks keep Dead Air's pictures; `level_lods_nm` is the base. The
+    upgraded trees draw their own far billboards from their own atlas, baked from the trees for the day.
 - PDA maps: Dead Air's maps are already summer renders; winter and spring stages are recoloured.
-- Winter only: frost and snow in the cracks of every bark, snow on the cut faces of stumps and trunk
-  caps; the fallen-leaf decals gone under the snow; ivy without its leaves. The winter folder also
-  carries snowy ground materials (`grnd/`, `detail/`) and roofs, which the category table keeps unworn.
+- Winter only: frost and snow in the cracks of the barks stock models still wear (`trees_bark`,
+  `_a_01`, `_a_02`, `_mox`, `_sosna_01`, `_sosna_02`, `_sux`, `_sux2`, `_sux3`, `_sux_mox`, `_topol`,
+  `trees_dub_bark`), snow on the cut faces (`trees_spil`); the fallen-leaf decals gone under the snow; ivy
+  without its leaves. No winter set of the ground materials, roofs or grass atlas: the category table never
+  wore them, and they are gone.
 
 ## Grass, snow and the rest
 
@@ -171,6 +186,9 @@ The generator lives outside the repository, in `D:\Games\Dead-Air-AssetCompare\p
 (`trees\seasons.py`, `trees\seasons_gsc.py`, `seasons_levels.py`, `seasons_details.py`,
 `seasons_lods.py` with `lod_render.py` and `xr_level.py`, `seasons_ground.py`, `seasons_winter_extra.py`,
 `encode_seasons.py`, `assign_seasons.py`); it writes into `Dead-Air-Refined_Assets\source\gamedata-1.6.0`.
+Since the WP7 cleanup its `install()` refuses every file `pipeline\retired_season_looks.json` lists, and the stages
+that only made retired sets end at once (`seasons_lods.py`, `seasons_ground.py`, `gen_shrubs.py`); the files that left
+are in the cleanup's journaled backup (`DeadAir-x64\artifacts\_wp7_season_backup_20261008`).
 The keyframe data is regenerated by `tools/seasons/gen_season_data.py` (`SEASON_DATA.md`).
 
 ## Known limits

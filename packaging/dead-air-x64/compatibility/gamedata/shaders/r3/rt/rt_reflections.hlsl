@@ -44,8 +44,8 @@ float rf_sun_visibility( float3 p, float3 n, float cone )
 	while ( q.Proceed() )
 	{
 		if ( q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),
-				q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
+			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
 			q.CommitNonOpaqueTriangleHit();
 	}
 	return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
@@ -74,8 +74,8 @@ RfHit rf_trace( RayDesc ray, float cone0 )
 		if ( q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE )
 			continue;
 		const float cone = cone0 + refl.y * q.CandidateTriangleRayT();
-		if ( rt_alpha_solid( q.CandidateInstanceID(), q.CandidateGeometryIndex(), q.CandidatePrimitiveIndex(),
-			q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
+		if ( rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+			q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
 			q.CommitNonOpaqueTriangleHit();
 	}
 	RfHit h = (RfHit)0;

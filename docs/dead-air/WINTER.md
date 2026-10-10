@@ -22,6 +22,9 @@ collision mesh at 1 m over the level's box and hands the result to `da_snow_fiel
 | `weights` | soft class weights (open, under trees, road, drift), RGBA8 summing to 255; zero on water |
 | `factors` | RGBA8: A/2 (accumulation), M/2 (melt), noise n, neglect N |
 | `lut_S`, `lut_Mc` | 365 days of this level's per-class season scalars |
+| `walk` | the highest node of the level's AI in the texel: the surfaces it walks on |
+| `cover` | where `top` is a cover over the ground (more than `da_snow_cover_over` = 0.35 m over it, and no AI node of the 3 x 3 texels round it on it - a deck the AI walks, a bridge, a porch, is ground): 2 an overhang, 1 a solid object |
+| `shelter` | 255 deep under an overhang (the overhangs eroded by a texel): no snow from the sky reaches the ground there |
 
 Classes (road over drift over trees over open; ground receivers only, everything else - roofs, steep faces -
 is open with its slope taking the snow off):
@@ -52,7 +55,9 @@ form (a weighted quantile), `S` is bisected until the covered mean - the 90th pe
 the depth key. It runs on histograms (`lut_bins` along A by 16 along M) of the hard-class ground receivers,
 from the very quantised factors the renderer reads; checked against the full per-texel evaluation of
 followup_4's escape bake, every key is hit to rounding. Inside calendar winter (1 Dec - 28 Feb, decision D1)
-the targets are pinned: open cover at least 0.9 (not a single grass blade), roads covered (`cover.z = 1`).
+the targets are pinned: open cover at least 0.9 (not a single grass blade), roads covered (`cover.z = 1`), the
+snow under the crowns whole (`cover.y = 1`: thinner than the open snow, never bare - the bare tree wells drew
+brown discs round every trunk of a deciduous wood).
 
 The log says what came out:
 
@@ -63,6 +68,19 @@ The log says what came out:
 
 (one line per month with snow; the class shares are those of the hard-class ground receivers, escape's
 reference values are in followup_4: open 0.825, trees 0.045, road 0.017, drift 0.113).
+
+**Covers.** A ray down from over a cover's top tells its kind: the top entered, the next solid face met either
+leaves the solid (faces down) or is a floor (faces up). A slab left well over the ground under it (a roof's or a
+deck's underside, a ceiling), or a floor more than 1.2 m under a roof of one sheet with nothing between, is an
+**overhang** (2): it shelters the ground under it, the snow there thins out to nothing a texel inside its edge. A
+solid left at the ground (a concrete block's, a car's bottom) or a low object of one surface (a stump) is a
+**solid object** (1): the ground's snow runs on at its full depth up to its sides and its own snow lies on its
+top. (Sheltering every cover sank a ragged moat a texel or two wide round every block, cart and stump, the 1 m
+squares of the field drawn into the snow.) The log says how much of each:
+
+```
+* [snow] covers: <n> texels of overhangs, <n> of solid objects
+```
 
 A level without `level.details` (underground, interiors) gets no field: no snow, no stamps.
 
@@ -161,17 +179,30 @@ water" on ice, wading wakes stop, a blast throws no fountain off ice.
 
 ## Deformers
 
-Stamps (`SSnowStamp`: xz, foot_y, radius, sharp, push, kind, sink) are added from any thread during the frame
-and published at the next frame start (`da_snow_stamps()`): the renderer's trail maps carve down to `foot_y`,
-but never more than `sink` under the snow surface (0 = no limit; a negative sink leaves the snow alone), and
-the grass push map uses `radius` and `push` of every stamp.
+Stamps (`SSnowStamp`: xz, foot_y, radius, sharp, push, kind, sink, xz0, foot_y0, pack, fall) are added from any
+thread during the frame and published at the next frame start (`da_snow_stamps()`). A stamp is the capsule its
+deformer swept since the last frame (from `xz0` / `foot_y0` to `xz` / `foot_y`; a disc when they are equal), so a
+fast leg or body leaves a continuous furrow. How the snow under it gives way (SNOW.md, trails):
+
+- `pack` > 0 - a planted foot or a body lying on the snow packs the loose snow under it to this density (kg/m3)
+  and sinks until the packed column carries it: the floor stands at `D * rho / pack` over the ground (`rho` the
+  open snow's density of the day: fresh powder about 80, January's settled snow about 220, old snow 350);
+- `fall` > 0 - a swinging leg or a low body ploughs through the snow: what lies above it is pushed aside and this
+  share falls back into the furrow behind;
+- both 0 - carved down to `foot_y` (a crater);
+
+and never deeper than `sink` under the snow surface (the creature's reach; 0 = no limit; a negative sink leaves the
+snow alone). The grass push map uses `radius` and `push` of every stamp.
 
 | kind | Who | Rule |
 |---|---|---|
-| 0 foot | every creature within 96 m of the camera, every frame | the foot bones the step manager reads (`[foot_bones]` of the visual, else the section's `foot_bones`), the bone's world position (`get_foot_position`'s transform), the sole = bone y - its bind-pose height; stamped while the sole is on or under the snow surface (the contact gate, so a tushkan's jump or a chimera's leap stamps too) and not under a roof; a planted foot (its horizontal speed under 0.35 of the body's plus 0.25 m/s) sinks by the creature's `sink`, a swinging one carries `sink = -1`: it brushes the grass but leaves no furrow in the snow, so the prints read one by one; push = the foot's smoothed velocity |
-| 1 body | the same creatures | a disc under the body at its belly height (a wounded stalker lies, a crouching actor kneels): the low bodies plough deep snow (no deeper than the creature's `sink`), every body pushes the grass |
-| 2 resting | corpses, loot, artefacts, props | each physics element's box laid on the ground as discs, carved to its bottom: when it comes to rest (`on_physics_disable`) and whenever it comes into the window (scans every 0.5 s; again on crossing 44 m and 22 m) |
-| 3 crater | explosions near the ground | an irregular hole of seven lobes, 0.3 x the blast radius (0.6-3 m), down to the ground |
+| 0 foot | every creature within 96 m of the camera, every frame | the foot bones the step manager reads (`[foot_bones]` of the visual, else the section's `foot_bones`), the bone's world position (`get_foot_position`'s transform), the sole = bone y - its bind-pose height; stamped while the sole is on or under the snow surface (the contact gate, so a tushkan's jump or a chimera's leap stamps too) and not under a roof; a planted foot (its horizontal speed under 0.35 of the body's plus 0.25 m/s) packs the snow by its creature's `pack`, a swinging one ploughs a furrow at its own height (`fall` 0.3): where the snow is deeper than the legs lift, the prints join into a trail; push = the foot's smoothed velocity |
+| 1 body | the same creatures | a capsule under the body at its belly height (a wounded stalker lies, a crouching actor kneels): the low bodies plough deep snow (`fall` 0.35, 0.6 for a body under 0.15 m: a tushkan in the deepest drift swims in a shallow trough over its back, not an open trench), every body pushes the grass |
+| 1 moving | physics in motion within 40 m of the camera (an enabled shell, no parent, no living creature; up to 8 objects of up to 16 elements, rescanned every 0.15 s) | each element's box bottom swept since the last frame ploughs a furrow at its own height, the narrower of its flattest axes wide (0.06-0.4 m), `fall` 0.35: a barrel rolling, a crate pushed, a body dragged or kicked; at rest again the settle callback lays its print |
+| 2 resting | corpses, loot, artefacts, props | each physics element's box laid on the ground as discs. Its physics lies on the ground under the snow, so a loose object lies on the bare, flat floor of its own hollow (discs of at least 0.3 m radius, laid dense enough that their flat floors - `dist^8` walls - join into one over the box, no compacted residual - packed by its weight, a rifle went under a drift whole, and a hollow narrower than the snow grid's 12.5 cm cells closed over it again); a corpse packs it by its creature's `pack`, at most 0.4 of each element's height under the snow (`sink`), each disc a little off its place and size, with ten shallow ploughed scuffs round the body (the snow it fell into churned); when it comes to rest (`on_physics_disable`) and whenever it comes into the window (scans every 0.5 s; again on crossing 44 m and 22 m) |
+| 3 crater | explosions near the ground (not an air burst more than 0.4 of the hole's radius over the snow) | an irregular hole, 0.3 x the blast radius (0.6-3 m): a core and seven lobes of random reach and size, each a flat bare floor in steep walls (`r^4`; a bowl from the centre read as a soft dimple, not a blast) |
+| 3 bullet | every bullet striking the static world under the snow within 60 m (`Level_bullet_manager_firetrace`) | the channel it bored from where it went into the snow (back along its flight, a metre at most) to where it struck, 7-12 cm wide by the wallmark, with a dent where it went in; a load of shot lands as a cluster of them |
+| 3 campfire | every campfire within 60 m, every frame | the pit never holds more than a 3 cm dusting (the fire can be lit, its logs and stones show); a lit fire thaws the snow round it over 90 s (`CZoneCampfire::snow_melt`, back over 30 min once out): bare in the pit, thinner and thinner out to 2.5 m - `sink` 1, a soft bowl with no edge. What melted comes back only with fresh snow |
 
 A frame keeps at most 4096 stamps (`da_snow_stamp_add` returns false past it, `da_snow_stamps_room` says how many
 more fit). A resting object's print (up to 48 stamps) is laid whole or not at all and recorded only when laid:
@@ -180,37 +211,45 @@ so a scan lays them nearest first within 1024 stamps, and neither the scan nor t
 the last 512 places of the list, which the creatures updating after the actor need for their feet and bodies.
 What did not fit is laid by the next scan, half a second later.
 
-Psy-dog phantoms and poltergeists press nothing (explicit casts). Radii, belly heights and sink depths per
-creature class are built in from the deformer audit and can be set per class id in `[snow_deformers]` (the
-sink is optional; a line without it keeps the class's built-in one):
+Psy-dog phantoms and poltergeists press nothing (explicit casts). Radii, belly heights, reach and pack per
+creature class are built in from the deformer audit and can be set per class id in `[snow_deformers]` (reach
+and pack are optional; a line without them keeps the class's built-in ones):
 
 ```ini
-[snow_deformers]          ; <class id> = foot radius, body radius, belly height [, sink] (m) | none
-SM_DOG_S = 0.07, 0.20, 0.42, 0.04
+[snow_deformers]          ; <class id> = foot radius, body radius, belly height [, reach [, pack]] (m, kg/m3) | none
+SM_DOG_S = 0.07, 0.20, 0.42, 0.35, 400
 SM_POLTR = none
 ```
 
-The sink is how far the creature's weight packs the snow under its feet or belly, whatever depth its sole
-reaches (the snow carries the rest): in January's 15-20 cm a man leaves 6-7 cm prints, a dog 4-5 cm, a
-tushkan barely a dent, and the snow under every print stays at least 10 cm deep.
+Pack grows with the foot's pressure: in January's settled snow (about 220 kg/m3) a man sinks to a little under
+half its depth (6-7 cm prints in 15 cm, 15 cm in a 0.3 m drift), a dog to about two fifths, a tushkan or a rat
+hardly at all - it runs over settled snow and swims in a drift; in fresh powder (about 80 kg/m3) everyone sinks
+most of the way.
 
-| Class | Feet | Body | Belly | Sink |
-|---|---|---|---|---|
-| actor, stalkers | 0.12 | 0.30 | 0.90 (grass only) | 0.065 |
-| tushkano / rats | 0.06 / - | 0.12 / 0.08 | 0.10 / 0.03 | 0.015 / 0.012 |
-| blind dogs, pseudodogs, psy-dogs | 0.07, 0.08 | 0.20, 0.22 | 0.42, 0.44 | 0.04, 0.05 |
-| boars, flesh, cats | 0.10, 0.10, 0.06 | 0.35, 0.40, 0.15 | 0.35, 0.30, 0.30 | 0.085, 0.08, 0.025 |
-| snorks (crawl) | 0.10 | 0.30 | 0.20 | 0.06 |
-| bloodsuckers, controllers, izlom, zombies | 0.12 | 0.30 | 0.90 | 0.08, 0.07, 0.065, 0.065 |
-| burers, chimeras, pseudogiants | 0.14, 0.12, 0.25 | 0.35, 0.40, 0.80 | 0.45, 0.40, 0.45 | 0.07, 0.09, 0.15 |
-| any other class | 0.10 | 0.30 | 0.60 | 0.06 |
+| Class | Feet | Body | Belly | Reach | Pack |
+|---|---|---|---|---|---|
+| actor, stalkers | 0.12 | 0.30 | 0.90 (grass only) | 0.50 | 520 |
+| tushkano / rats | 0.06 / - | 0.12 / 0.08 | 0.10 / 0.03 | 0.20 / 0.08 | 260 / 220 |
+| blind dogs, pseudodogs, psy-dogs | 0.07, 0.08 | 0.20, 0.22 | 0.42, 0.44 | 0.35, 0.38 | 400, 440 |
+| boars, flesh, cats | 0.10, 0.10, 0.06 | 0.35, 0.40, 0.15 | 0.35, 0.30, 0.30 | 0.40, 0.40, 0.25 | 580, 600, 300 |
+| snorks (crawl) | 0.10 | 0.30 | 0.20 | 0.45 | 480 |
+| bloodsuckers, controllers, izlom, zombies | 0.12 | 0.30 | 0.90 | 0.50 | 560, 520, 520, 520 |
+| burers, chimeras, pseudogiants | 0.14, 0.12, 0.25 | 0.35, 0.40, 0.80 | 0.45, 0.40, 0.45 | 0.45, 0.50, 0.60 | 540, 600, 700 |
+| any other class | 0.10 | 0.30 | 0.60 | 0.45 | 480 |
 
-Resting objects and craters have no sink: a corpse or a crate presses the snow down to its bottom (never
-below the compacted residual), a crater's floor is bare ground.
+Craters have no pack: their floor is bare ground.
+
+**On covers.** The contact gate (`in_snow`) takes a deformer's bottom on the ground's snow or on a cover's top
+(a roof, a trailer, a block: within 0.8 m under the texel's top - a slope's run and the beams a roof carries -
+up to the snow lying there, `da_snow_open_depth_at`), so the actor, the NPCs and the monsters leave their prints
+on the snow the shells lay on the roofs as well (SNOW.md, the roof map).
 
 ## Other code
 
-- `da_snow_depth_at(x, z)`, `da_snow_surface_y(x, z)`: the season snow (no trails) bilinear at a point.
+- `da_snow_depth_at(x, z)`, `da_snow_surface_y(x, z)`: the season snow (no trails) bilinear at a point, x (1 -
+  shelter); under a cover the surface is the ground's.
+- `da_snow_open_depth_at(x, z)`: the same without the shelter: the snow on a cover's top.
+- `da_snow_walkable(top, walk)`: whether the AI walks a top (the cover rule).
 - `da_snow_texel_depth(field, i, S, Mc)`: the depth formula of one texel.
 - `da_snow_targets()`: the class targets with the winter pins (what the bake calibrates against).
 - `CEnvironment::ice_at(p)`, `CEnvironment::water_class`.
@@ -224,6 +263,9 @@ Console (never saved):
 | `qa_snow_state` | prints the frame (S, Mc, covers, state, surface, fall, ice, mean depth), the precipitation (phase, liquid, snow rate, air, frost, dew, thunder) and the field (size, class shares, stamps, depth and surface under the camera) |
 | `qa_precip auto\|snow\|sleet\|rain` | forces what falls (the weather still says how much) |
 | `qa_air_temp <C>\|off` | pins the air temperature |
+| `qa_snow_shot <n> [spread]` | n strikes along the view (spread in degrees round it) on the static world through the bullets' snow path: a burst or a load of shot without a weapon; a negative spread presses a boot where the ray strikes instead (a roof's print without a walk) and probes there |
+| `qa_snow_fire_melt [0..1]` | sets every campfire's thaw at once (a lit fire takes 90 s to get there) and lists their places, states and thaw |
+| `qa_snow_probe` | the contact gate at the actor's feet: top, ground, cover, depth, open depth, in snow or not |
 
 With `qa_season_year` / `qa_season_pin` (SEASONS.md) the phase is redrawn every half second from the
 climatological shares of the day, the synoptic noise and the snow surface dynamics stand still and the hour is
@@ -233,4 +275,9 @@ To look at: a winter month with a rainy weather (flakes, no rain bed, no lightni
 weather in July (rain and thunder), a frozen pond in January (snowed over, the bank running on to it, no rings
 from steps or bullets) and in March (dark ice with cracks and dust under snow patches), an open lane on a wide
 river in December, `qa_snow_state` next to a road (cover road 1, depth under the camera), a dog running
-through a drift (a row of shallow prints), a stalker walking (prints one by one) and a corpse falling into snow.
+through a drift (a trail of joined prints and furrows), a stalker walking (prints with drag marks in the open,
+a trench in a drift), a corpse falling into snow (half sunk in a packed hollow, the snow round it churned) and
+dragged (a broad furrow with ridges), an explosive barrel blown in a yard (a crater of steep walls), single shots
+and a load of shot (`qa_snow_shot 4 1.5`, `qa_snow_shot 12 3`), a campfire out and at full thaw
+(`qa_snow_fire_melt 1`), the actor walking a roof (prints in the shell) and a stump, a cart, concrete blocks
+(full snow up to their sides, their own snow on top, no ragged holes round them).

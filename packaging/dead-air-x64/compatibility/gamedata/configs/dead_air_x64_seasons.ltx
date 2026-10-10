@@ -16,7 +16,6 @@ default = calendar
 [season_categories]
 terrain\      = default
 build_details = default
-level_lods    = trees
 trees\        = trees
 map\          = trees
 ui\           = trees
@@ -29,8 +28,8 @@ vine\         = vine
 ; Overlay folder per category: day:folder from that day (0-based, 00:00) to the next entry, wrapping; "-" = base.
 ; Latched at safe points. Ground sets are never winter; trees/decals wear winter only under full snow cover.
 [season_folders]
-default = 99:spring_mid, 120:spring_late, 151:summer, 262:autumn, 304:spring_early
-trees   = 46:spring_early, 99:spring_mid, 120:spring_late, 151:summer, 262:autumn, 304:spring_early, 348:winter
+default = 99:spring_mid, 120:spring_late, 151:summer, 262:-, 304:spring_early
+trees   = 46:spring_early, 99:spring_mid, 120:spring_late, 151:summer, 262:-, 304:spring_early, 348:winter
 ground  = 0:-
 decal   = 46:-, 348:winter
 vine    = 99:-, 304:winter

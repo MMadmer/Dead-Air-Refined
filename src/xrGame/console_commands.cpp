@@ -1,6 +1,9 @@
 #include "pch_script.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "da_ai.h"
+#include "da_snow_deformers.h"
+#include "ZoneCampfire.h"
+#include "xrEngine/da_snow_field.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xms_world.h"
 #include "xrMaterialSystem/GameMtlLib.h"
@@ -1004,6 +1007,93 @@ public:
             return;
 
         F->w_printf("%s %s\r\n", cName, g_last_saved_game);
+    }
+};
+
+// QA: `qa_snow_shot <n> [spread]` - n strikes along the view (the spread in degrees round it) on the static world,
+// through the bullets' snow path (da_snow_deform_bullet): a burst or a load of shot without a weapon; a negative
+// spread presses a boot there instead (one frame's stamp).
+class CCC_QaSnowShot : public IConsole_Command
+{
+public:
+    CCC_QaSnowShot(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR args)
+    {
+        if (!g_pGameLevel)
+            return;
+        int n = 1;
+        float spread = 0.f;
+        sscanf(args, "%d %f", &n, &spread);
+        const Fvector& eye = Device.vCameraPosition;
+        u32 hits = 0;
+        for (int i = 0; i < clampr(n, 1, 64); ++i)
+        {
+            Fvector dir = Device.vCameraDirection;
+            if (spread > 0.f)
+            {
+                const float a = ::Random.randF(0.f, PI_MUL_2), r = deg2rad(spread) * _sqrt(::Random.randF(0.f, 1.f));
+                Fvector side, up;
+                side.crossproduct(dir, Fvector{0.f, 1.f, 0.f}).normalize_safe();
+                up.crossproduct(side, dir).normalize_safe();
+                dir.mad(side, r * _cos(a)).mad(up, r * _sin(a)).normalize_safe();
+            }
+            collide::rq_result R;
+            if (!Level().ObjectSpace.RayPick(eye, dir, 200.f, collide::rqtStatic, R, nullptr))
+                continue;
+            Fvector point;
+            point.mad(eye, dir, R.range);
+            // (a spread under zero: a boot pressed where the ray strikes, the roofs' prints without a walk)
+            if (spread < 0.f)
+            {
+                da_snow_probe(point);
+                SSnowStamp s;
+                s.xz.set(point.x, point.z);
+                s.xz0 = s.xz;
+                s.foot_y = s.foot_y0 = point.y;
+                s.radius = 0.12f;
+                s.sharp = 0.06f;
+                s.kind = 0;
+                s.sink = 0.5f;
+                s.pack = 520.f;
+                da_snow_stamp_add(s);
+            }
+            else
+                da_snow_deform_bullet(point, dir, spread > 0.f ? 0.06f : 0.1f);
+            ++hits;
+        }
+        Msg("* [qa] snow shot: %u of %d strikes on the static world", hits, n);
+    }
+};
+
+// QA: `qa_snow_fire_melt <0..1>` - every campfire's thaw of the snow round it at once (a lit fire takes a minute and a
+// half to get there), with their places and states in the log.
+class CCC_QaSnowFireMelt : public IConsole_Command
+{
+public:
+    CCC_QaSnowFireMelt(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR args)
+    {
+        float melt = -1.f;
+        sscanf(args, "%f", &melt);
+        for (CZoneCampfire* fire : CZoneCampfire::all())
+        {
+            if (melt >= 0.f)
+                fire->set_snow_melt(melt);
+            const Fvector& p = fire->Position();
+            Msg("* [qa] campfire at %.1f %.1f %.1f: %s, melt %.2f", p.x, p.y, p.z, fire->is_on() ? "lit" : "out", fire->snow_melt());
+        }
+    }
+};
+
+// QA: `qa_snow_probe` - the snow's contact gates at the actor's feet (da_snow_probe).
+class CCC_QaSnowProbe : public IConsole_Command
+{
+public:
+    CCC_QaSnowProbe(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    virtual void Execute(LPCSTR)
+    {
+        if (CActor* a = Actor())
+            da_snow_probe(a->Position());
     }
 };
 
@@ -3740,6 +3830,9 @@ void CCC_RegisterCommands()
     CMD1(CCC_ContentState, "dar_content_state");
 
     CMD1(CCC_FlushLog, "flush"); // flush log
+    CMD1(CCC_QaSnowShot, "qa_snow_shot");
+    CMD1(CCC_QaSnowFireMelt, "qa_snow_fire_melt");
+    CMD1(CCC_QaSnowProbe, "qa_snow_probe");
     CMD1(CCC_ClearLog, "clear_log");
 
     // XMS module system

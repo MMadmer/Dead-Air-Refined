@@ -152,7 +152,17 @@ RtHitSurface rt_hit_surface( RtGeometry g, RtInstance inst, RtTriangle t, float2
 		rt_textures[ NonUniformResourceIndex( tex ) ].GetDimensions( 0, tw, th, levels );
 		const float lod = min( rt_cone_lod( t, o2w, cone_w, uint2( tw, th ) ), float( levels ) - 1.0f );
 		h.albedo = rt_textures[ NonUniformResourceIndex( tex ) ].SampleLevel( rt_linear_wrap, tc, lod ).rgb;
+		// A stand-in crown: its species' leaf colour of the day over the card's own detail (the card over its mean).
+		[branch] if ( rt_veg_on( inst, v ) )
+		{
+			const float3 mean = rt_textures[ NonUniformResourceIndex( tex ) ].SampleLevel( rt_linear_wrap, tc, float( levels ) - 1.0f ).rgb;
+			h.albedo = rt_veg_colour( inst, v ) * h.albedo / max( mean, 0.02f );
+		}
 	}
+	// The snow on the trees' upper faces, as the procedural crowns hold it.
+	const float snow = asfloat( v.veg.w );
+	[branch] if ( ( inst.flags & RT_INST_TREE ) != 0u && snow > 0.0f )
+		h.albedo = lerp( h.albedo, 0.85f, snow * saturate( h.normal.y ) );
 	h.emissive = ( g.flags & RT_GEOM_EMISSIVE ) != 0u;
 	return h;
 }

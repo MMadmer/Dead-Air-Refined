@@ -322,6 +322,11 @@ void parse_community(const CInifile::Sect& s, DaGrassCommunity& c)
 }
 } // namespace
 
+bool da_parse_colour(pcstr s, Fvector3& linear) { return parse_colour(s, linear); }
+void da_parse_curve(pcstr list, DaSeasonCurve& curve) { parse_curve(list, curve); }
+void da_parse_colour_curve(pcstr list, DaColourCurve& curve) { parse_colour_curve(list, curve); }
+pcstr da_ini_value(const CInifile::Sect& sect, pcstr key) { return find_value(sect, key); }
+
 const DaSeasonData& da_season_data() { return g_data; }
 
 void da_season_data_reload()
@@ -429,7 +434,7 @@ void da_season_data_reload()
     }
 
     // The communities (by the species names read above), and which detail class grows which of them.
-    shared_str community_names[da_grass_communities];
+    shared_str (&community_names)[da_grass_communities] = g_data.community_names;
     for (u32 c = 0; c < da_grass_communities; ++c)
     {
         string64 name;
@@ -476,6 +481,35 @@ void da_season_data_reload()
         communities += c.used ? 1 : 0;
     Msg("* [grass] season data: %u detail keys, %u species in %u communities", u32(g_data.detail_types.size()), species,
         communities);
+}
+
+s32 da_grass_community_at(float x, float z)
+{
+    CDetailManager* dm = RImplementation.Details;
+    if (!dm || !dm->dtSlots)
+        return -1;
+    const int sx = iFloor(x / DETAIL_SLOT_SIZE) + int(dm->dtH.x_offs()), sz = iFloor(z / DETAIL_SLOT_SIZE) + int(dm->dtH.z_offs());
+    if (sx < 0 || sz < 0 || sx >= int(dm->dtH.x_size()) || sz >= int(dm->dtH.z_size()))
+        return -1;
+    // The slot's four objects by the mean alpha of their palette.
+    const DetailSlot& s = dm->dtSlots[size_t(sz) * dm->dtH.x_size() + size_t(sx)];
+    const u32 ids[4] = {s.id0, s.id1, s.id2, s.id3};
+    float best = 0.f;
+    s32 out = -1;
+    for (u32 k = 0; k < 4; ++k)
+    {
+        if (ids[k] == DetailSlot::ID_Empty || ids[k] >= dm->objects.size())
+            continue;
+        const s32 c = da_grass_object_profile(*dm->objects[ids[k]]);
+        const DetailPalette& pal = s.palette[k];
+        const float a = float(pal.a0 + pal.a1 + pal.a2 + pal.a3);
+        if (c >= 0 && a > best)
+        {
+            best = a;
+            out = c;
+        }
+    }
+    return out;
 }
 
 s32 da_grass_object_profile(const CDetail& object)
@@ -1362,13 +1396,14 @@ void fill_tint(float day, float R, float grass_visible, float height)
     const float d1 = std::min(preset.d1, R);
     const float d2 = std::clamp(preset.d2, d1 + 1.f, std::max(R, d1 + 1.f));
     g.tint2.set(d1, d1 + 0.35f * (d2 - d1), 0.f, 0.f);
+    // Autumn is the base set (no folder): ref[0].
     float ref = t.ref[0];
     if (pcstr folder = da_season_folder())
     {
-        static constexpr pcstr names[5] = {"autumn", "spring_early", "spring_mid", "spring_late", "summer"};
-        for (u32 i = 0; i < 5; ++i)
+        static constexpr pcstr names[4] = {"spring_early", "spring_mid", "spring_late", "summer"};
+        for (u32 i = 0; i < 4; ++i)
             if (!xr_strcmp(folder, names[i]))
-                ref = t.ref[i];
+                ref = t.ref[i + 1];
     }
     // The mix moves with the day: a few hundredths of a day are not worth the curves of every species.
     const bool same = std::abs(da_season_wrap(day - g.tint_day + 182.5f) - 182.5f) < 0.02f && ref == g.tint_ref_day &&
@@ -2149,6 +2184,17 @@ bool da_grass_brushes(const Fvector& feet, float, float min_height, float below_
     if (g.latch.snow && da_snow_depth_at(feet.x, feet.z) >= height * 0.8f)
         return false;
     return true;
+}
+
+void da_grass_frame_ensure_latch()
+{
+    if (!da_grass_active() || g.latch.frame == Device.dwFrame)
+        return;
+    CDetailManager* dm = RImplementation.Details;
+    if (!dm || !dm->m_blades)
+        return;
+    dm->WaitForCalc();
+    da_grass_frame_latch();
 }
 
 void da_grass_frame_prepare(CBackend& cmd)

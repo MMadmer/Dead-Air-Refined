@@ -180,6 +180,11 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 	occ = calc_ssao( CS_P(P, N, I.tc0, I.tcJ, I.pos2d, ISAMPLE ) );
 #endif
 #endif // USE_HDAO
+		// The procedural foliage (the blade grass, the shrubs) bakes its own occlusion into the G-buffer's hemi term
+		// and the ray traced occlusion has no copy of it: screen-space occlusion takes a tenth of its share
+		// there, or a crown's inside reads up to a third darker than with the traced occlusion (and twice occluded).
+		if ( da_is_foliage( mtl ) )
+			occ = lerp( 1.0f, occ, 0.1f );
 	}
 	
 	hmodel	(hdiffuse, hspecular, mtl, N.w, D.w, P.xyz, N.xyz);
@@ -195,12 +200,16 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 	// sky term by its own. Its lights came divided by the albedo's cool cast (DA_SNOW_TINT) so the sunlit
 	// diffuse stays neutral; the specular, which no albedo multiplies, takes the light without that division.
 	float3 L_spec = L.rgb;
-	[branch] if ( da_is_snow( mtl ) )
+	[branch] if ( da_is_snowy( mtl ) )
 	{
 		const float wb = da_snow_wb_weight( gbd.C, L_sun_color.rgb );
 		L.rgb    *= lerp( 1.0h, da_snow_wb_gain( L_sun_color.rgb ), wb );
 		hdiffuse *= lerp( 1.0h, da_snow_wb_gain( hdiffuse ) * DA_SNOW_SKY_TINT, wb );
 		L_spec    = L.rgb * DA_SNOW_TINT;
+		// The sky's mirror image on snow: its grains scatter it, so only the meltwater in a hollow (its gloss)
+		// keeps it - on plain snow the sun in the sky's cube drew a glossy streak toward a low sun. A glint
+		// mirrors the sun alone: the sky makes no spark of it (in the shade its gloss lit every glint cell white).
+		hspecular *= da_is_glint( mtl ) ? 0.04h : saturate( D.w * ( 1.0h / 0.15h ) );
 	}
 
         float4         light       = float4         (L.rgb + hdiffuse, L.w)        ;
