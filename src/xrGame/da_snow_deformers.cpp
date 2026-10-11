@@ -629,15 +629,30 @@ bool da_snow_deform_bullet(const Fvector& point, const Fvector& dir, float wallm
         return false;
     // (the surface bilinear at the very point: the lowest of the texels round it lay well under a slope's ground, and
     // every strike into shallow snow on a slope read as over the snow and left nothing)
-    const float depth = da_snow_depth_at(point.x, point.z);
-    const float surface = da_snow_surface_y(point.x, point.z);
+    float depth = da_snow_depth_at(point.x, point.z);
+    float surface = da_snow_surface_y(point.x, point.z);
+    bool roof = false;
     if (depth < 0.02f || point.y < surface - depth - under_roof || point.y > surface + 0.08f)
-        return false;
+    {
+        // A cover's top - a roof, a trailer: the shells' snow, pressed into the roof map (da_snow_stamp.cs) as the
+        // boots are; judged against the ground's snow alone, every strike there was over the snow and left nothing.
+        if (field->cover.size() != size_t(field->dim_x) * field->dim_z)
+            return false;
+        const int cx = clampr(iFloor((point.x - field->origin.x) / field->texel), 0, int(field->dim_x) - 1);
+        const int cz = clampr(iFloor((point.z - field->origin.y) / field->texel), 0, int(field->dim_z) - 1);
+        const size_t i = size_t(cz) * field->dim_x + cx;
+        depth = da_snow_open_depth_at(point.x, point.z);
+        if (!field->cover[i] || depth < 0.02f || point.y < field->top[i] - 0.8f || point.y > field->top[i] + depth + 0.08f)
+            return false;
+        surface = point.y + depth;
+        roof = true;
+    }
     // where it went in: back along its flight to the snow's surface, a metre at most
     const float t = std::min(std::max(surface - point.y, 0.f) / std::max(-dir.y, 0.05f), 1.f);
     Fvector in;
     in.mad(point, dir, -t);
-    const float r = clampr(0.5f * wallmark, 0.035f, 0.06f);
+    // (on a roof a third wider: the roof map's texels are the near trail window's 4.7 cm)
+    const float r = clampr(0.5f * wallmark, 0.035f, 0.06f) * (roof ? 1.35f : 1.f);
     const Fvector2 still{0.f, 0.f};
     SSnowStamp s = make_stamp(point.x, point.z, point.y, r, 0.05f, still, 3);
     s.xz0.set(in.x, in.z);

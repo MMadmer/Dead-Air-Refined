@@ -22,10 +22,11 @@
 // stamped every frame (feet, bodies) a texel goes down by at most the frame's carve step from where it
 // stands; a resting object or a crater (stamped once) carves at once. A crater's floor is bare ground (the
 // word 0); every other deformer keeps the low half above 0. A deformer far below the snow base is under a
-// roof or a bridge. A deformer standing on a shell's cover (a roof, a trailer: its foot at the top the level's 1 m
-// field holds, 1.8 m over its terrain) presses the shells' snow instead: the roof map holds how far under the shell's surface
-// each texel is pressed (da_snow_shell.ps carves it in), the deepest deformer winning - a planted foot three
-// quarters of the roof's snow, a body or a plough half, anything resting or a crater nearly all of it.
+// roof or a bridge. A deformer standing on a cover (a roof, a trailer, a car: its foot at the top the level's 1 m
+// field holds, 0.6 m over its terrain and more) presses the cover's snow instead, a shell's or the layer's coat:
+// the roof map holds how far under that surface each texel is pressed (da_snow_shell.ps carves it in, the coat
+// thins over it), the deepest deformer winning - a planted foot three quarters of the roof's snow, a body or a
+// plough half, anything resting, a crater or a bullet nearly all of it.
 
 #include "da_snow_common.h"
 
@@ -75,15 +76,18 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 				continue;
 			const float foot = lerp(c.z, a.z, t);
 			const int2 addr = da_sn_wrap(int2(x, z), n);
-			// On a shell's cover (the level's top 1.8 m over its terrain, as da_ground.cpp builds them), the foot on it
-			// (under the metre's highest point by a slope's run over it and the beams a roof carries): the shell's snow.
+			// On a cover (the level's top over its terrain), the foot on it (under the metre's highest point by a slope's run
+			// over it and the beams a roof carries): the snow a shell or the layer's coat lays there.
 			[branch] if (da_sn_stamp.z > 0.5)
 			{
 				const int3 tl = int3(int2(floor(p * da_snow_level_xf.xy + da_snow_level_xf.zw)), 0);
 				const float vt = s_da_sn_top.Load(tl), vg = s_da_sn_terrain.Load(tl);
 				const float top = da_sn_lvl.x + vt * da_sn_lvl.y, terrain = da_sn_lvl.x + vg * da_sn_lvl.y;
 				const float Dr = da_sn_roof_depth(p, 1.0).x;
-				[branch] if (vt > 0.0 && vg > 0.0 && top > terrain + 1.8 && foot > top - 0.8 && foot < top + Dr + 0.1)
+				// (any cover a stride's height up - a trailer, a car, a crate pile - where the coat takes the prints; the foot
+				// in the cover's upper half, so a boot beside a low one in the same metre still prints the ground)
+				[branch] if (vt > 0.0 && vg > 0.0 && top > terrain + 0.6 && foot > top - min(0.8, 0.5 * (top - terrain)) &&
+					foot < top + Dr + 0.1)
 				{
 					[branch] if (Dr > 0.01)
 					{

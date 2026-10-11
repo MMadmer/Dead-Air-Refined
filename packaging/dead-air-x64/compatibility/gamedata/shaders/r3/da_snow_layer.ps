@@ -55,8 +55,6 @@ Texture2D<float> s_da_sn_road;
 // at 1 m (R16_UNORM like the base).
 Texture2D<float> s_da_ground_top;
 Texture2D<float> s_da_sn_top;
-// the prints on the shells (da_snow_stamp.cs): r__dbg_snow paints them red on a shell
-Texture2D<uint> s_da_sn_roof;
 
 #ifndef USE_MSAA
 Texture2D s_depth_copy; // the hardware depth the G-buffer left (da_snow.cpp copies it)
@@ -683,22 +681,35 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	// The roof's own cover on a static top over the snow (above).
 	float coat = 0.0;
 	float Dcoat = 0.0;
+	float2 coat_g = float2(0.0, 0.0);
 	[branch] if (above > 0.0 && ny > 0.5 && Nw.y > 0.45)
 	{
 		// On a cover only - the pixel itself standing a cover's height over the snow (a roof, a slab, a vehicle, a
-		// stump; not the ground a body or a boot lies on), eased in over its lowest 15 cm - and open to the sky: a few
-		// centimetres over the raster's highest point at most, under it by no more than a rim's or a rail's height and
-		// the slope's run over a texel. (Gated by its texel's top over the texel's base instead, a stump's flaring
+		// stump; not the ground a body or a boot lies on), eased in over its lowest 15 cm - and open to the sky: 15 cm
+		// over the raster's highest point at most, under it by no more than a rim's or a rail's height (60 cm: a truck's
+		// bed lies that far under its collision box, and its coat came out in diagonal teeth) and the slope's run over a
+		// texel. (Gated by its texel's top over the texel's base instead, a stump's flaring
 		// roots, a crate's slats and a trailer's bed beside its rails turned white in squares of the 0.25 m window:
 		// sheets with toothed edges.)
 		const float2 st = da_sn_static_top(Pw.xz);
 		const float dy = Pw.y - st.x;
 		const float run = st.y * sqrt(saturate(1.0 - ny * ny)) / ny;
 		const float over = Pw.y - (base.x + D);
-		[branch] if (st.x > DA_SN_NONE * 0.5 && over > 0.15 && dy < 0.06 && dy > -(0.3 + run))
+		[branch] if (st.x > DA_SN_NONE * 0.5 && over > 0.15 && dy < 0.15 && dy > -(0.6 + run))
 		{
 			Dcoat = da_sn_roof_depth(Pw.xz, ny).x;
 			coat = smoothstep(0.005, 0.03, Dcoat) * smoothstep(0.15, 0.3, over);
+			// Pressed by a boot or a bullet (the roof map, as on the shells): the coat thins where it was pressed - the
+			// cover under it shows through a print's floor - and its slope shades the print's walls.
+			const float dep = da_sn_roof_dep(Pw.xz);
+			[branch] if (dep > 0.002 && coat > 0.0)
+			{
+				const float e = 0.03;
+				coat_g = -float2(da_sn_roof_dep(Pw.xz + float2(e, 0.0)) - da_sn_roof_dep(Pw.xz - float2(e, 0.0)),
+					da_sn_roof_dep(Pw.xz + float2(0.0, e)) - da_sn_roof_dep(Pw.xz - float2(0.0, e))) * (0.5 / e);
+				// (a press most of the way down bares the cover, as a print's or a bullet's floor on the ground)
+				coat *= 1.0 - smoothstep(0.2, 0.7, dep / max(Dcoat, 1e-3));
+			}
 		}
 	}
 	// the dusting (a corpse, a creature, a loose prop) grows while it snows: a fresh body is not white
@@ -707,7 +718,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 		cov = 1.0;
 
 	// the snow surface: the base's slope and the depth's own
-	const float2 g = gb + dgrad * surf;
+	const float2 g = gb + dgrad * surf + coat_g * above;
 	const float3 Nm = normalize(float3(-g.x, 1.0, -g.y));
 
 	[branch] if (cut == 4)

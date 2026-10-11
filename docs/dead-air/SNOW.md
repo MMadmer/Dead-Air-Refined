@@ -210,7 +210,10 @@ Every frame, in this order:
    holds how far under the shell's surface each texel is pressed, unorm over the cap, merged with
    `InterlockedMax` - a planted foot three quarters of the roof's snow, a body or a plough half, anything resting
    or a crater nearly all of it, with a print's walls. The level fields decide (the window's raw top read in the
-   compute shader was not reliable enough on a roof's slope).
+   compute shader was not reliable enough on a roof's slope). Any cover 0.6 m up and more takes them (a trailer, a
+   car, a crate pile, a wall top), the foot in the cover's upper half (a boot beside a low cover in the same metre
+   still prints the ground); where no shell lies the layer's coat thins over a print and bares the cover under a press
+   most of the way down (`1 - smoothstep(0.2, 0.7, depth share)`): bullets and boots mark a wall's or a car's snow too.
 3. **Refill**: the snow that falls (`SSnowFrame::fall.y`, metres per real second) raises every carved surface,
    in whole unorm steps; a texel back at the cap is untouched again. The roof map's depressions shrink by the
    same steps.
@@ -420,7 +423,8 @@ target cannot be read while written). Per pixel:
   a sill, a wreck's roof - carries the snow a roof keeps (the same formula as the shells) as a cover of its own:
   the pixel itself stands a cover's height over the snow (eased in from 15 to 30 cm: not the ground a body or a
   boot lies on), lies open to the sky (at most 6 cm over the raster's highest point, under it by no more than a
-  rim's or a rail's 30 cm and the slope's run over a texel) and faces up, by its own normal as well. (Gated by its
+  rim's or a rail's 60 cm - a truck's bed lies that far under its collision box -, 15 cm over it, and the slope's run
+  over a texel) and faces up, by its own normal as well. (Gated by its
   texel's top over the texel's base instead, a stump's roots, a crate's slats and a trailer's bed beside its rails
   turned white in the window's 0.25 m squares: sheets with toothed edges.) Anything else above the snow
   surface - corpses, creatures, tree crowns - gets at most a light up-facing dusting (decision D8; winter trees
