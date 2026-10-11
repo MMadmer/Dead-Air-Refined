@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The save indicator (CUISaveIndicator): a gas mask drawn per pixel by the xms_ui_shape shader at
+     the right edge of the screen, just above the ammo counter. It blinks while a game is being saved,
+     then rises to its full alpha with a tick (or a cross, if the save failed) and fades out.
+     right, y and size are 768-line units: the gap to the screen's right edge, the icon's centre,
+     its height. fill is the mask at its full alpha; line and border are a faint glow round it that
+     keeps it readable on a dark scene. pulse_low is the share of the full alpha a blink dips to;
+     the times are seconds. -->
+<w>
+    <save_indicator right="12" y="698" size="34" fill="#000000bf" line="#ffffff1a" border="4"
+        fade_in="0.3" pulse_period="1.4" pulse_low="0.25" rise="0.2" badge_in="0.3" hold="1.2" fade_out="0.6"/>
+</w>

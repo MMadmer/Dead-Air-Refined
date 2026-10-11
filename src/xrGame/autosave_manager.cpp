@@ -12,9 +12,9 @@
 #include "ai_space.h"
 #include "Level.h"
 #include "xrMessages.h"
-#include "UIGameCustom.h"
 #include "Actor.h"
 #include "MainMenu.h"
+#include "ui/UISaveIndicator.h"
 #include "xrNetServer/NET_Messages.h"
 
 extern LPCSTR alife_section;
@@ -75,8 +75,7 @@ void CAutosaveManager::shedule_Update(u32 dt)
     // Not hidden: the file system scanner drops hidden entries, so a hidden preview never
     // reaches the registry and the load menu can never show it. Manual saves never hid theirs.
     MainMenu()->Screenshot(IRender::SM_FOR_GAMESAVE, S1);
-    const bool compat = ClearSkyMode || ShadowOfChernobylMode;
-    CurrentGameUI()->AddCustomStatic("autosave", true, compat ? 3.0f : -1.0f);
+    MainMenu()->SaveIndicator().Request();
 }
 
 void CAutosaveManager::on_game_loaded() { m_last_autosave_time = Device.dwTimeGlobal; }

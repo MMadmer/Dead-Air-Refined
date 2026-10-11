@@ -20,7 +20,7 @@ SUIShapeStyle::Kind shape_kind(pcstr text, SUIShapeStyle::Kind fallback)
 {
     using Kind = SUIShapeStyle::Kind;
     static constexpr std::pair<pcstr, Kind> kinds[] = {{"box", Kind::Box}, {"star", Kind::Star}, {"search", Kind::Search},
-        {"check", Kind::Check}, {"cross", Kind::Cross}, {"chevron", Kind::Chevron}};
+        {"check", Kind::Check}, {"cross", Kind::Cross}, {"chevron", Kind::Chevron}, {"gasmask", Kind::GasMask}};
     for (const auto& [name, kind] : kinds)
         if (text && 0 == xr_stricmp(text, name))
             return kind;
@@ -76,12 +76,14 @@ void UIShape::Draw(ui_shader& shader, const Frect& rect, const SUIShapeStyle& st
     const float soft = std::max(1.f, style.soft * unit);
     const float cx = (x0 + x1) * 0.5f;
     const float cy = (y0 + y1) * 0.5f;
-    // the fade of a soft edge lies outside the rectangle
-    const float margin = std::ceil(soft) + 1.f;
+    const bool gasMask = style.kind == SUIShapeStyle::Kind::GasMask;
+    // the fade of a soft edge lies outside the rectangle, and so does a gas mask's glow
+    const float margin = std::ceil(soft) + 1.f + (gasMask ? border : 0.f);
 
     GEnv.UIRender->SetShader(*shader);
     GEnv.UIRender->SetShapeParams(Fvector4().set((x1 - x0) * 0.5f, (y1 - y0) * 0.5f, radius, border),
-        shape_color(style.line), Fvector4().set(static_cast<float>(style.kind), style.fraction, soft, 0.f));
+        shape_color(style.line), Fvector4().set(static_cast<float>(style.kind),
+            gasMask ? static_cast<float>(style.badge) : style.fraction, soft, gasMask ? style.badgeScale : 0.f));
     GEnv.UIRender->StartPrimitive(6, IUIRender::ptTriList, IUIRender::pttTL);
     // Positions go in half a pixel back, which stub_notransform_t adds again; the texture
     // coordinate is the position relative to the centre, so a pixel's centre reads x + 0.5.

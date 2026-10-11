@@ -21,6 +21,7 @@ struct XRUICORE_API SUIShapeStyle
         Check,
         Cross,
         Chevron,
+        GasMask,
     };
 
     Kind kind{Kind::Box};
@@ -30,6 +31,15 @@ struct XRUICORE_API SUIShapeStyle
     float radius{};      // a box's corner radius
     float soft{};        // how far the edge fades: 0 is crisp, more makes a shadow
     float fraction{1.f}; // the filled part of a star, from the left
+    // a gas mask's badge on its cheek and the badge's scale (a pop-in overshoots 1)
+    enum class Badge : u8
+    {
+        None,
+        Done,
+        Failed,
+    };
+    Badge badge{Badge::None};
+    float badgeScale{1.f};
 
     bool Visible() const { return (fill >> 24) || ((line >> 24) && (border > 0.f || kind == Kind::Star)); }
 };
@@ -39,7 +49,7 @@ namespace UIShape
 // `rect` is absolute, in layout units. The shader is created on first use.
 XRUICORE_API void Draw(ui_shader& shader, const Frect& rect, const SUIShapeStyle& style);
 // fill="#rrggbb[aa]" line="#rrggbb[aa]" border radius soft fraction kind="box|star|search|check|
-// cross|chevron" of the node; what the node leaves out keeps its value.
+// cross|chevron|gasmask" of the node; what the node leaves out keeps its value.
 XRUICORE_API void Read(const CUIXml& xml, pcstr path, size_t index, SUIShapeStyle& style);
 XRUICORE_API u32 ParseColor(pcstr text, u32 fallback);
 

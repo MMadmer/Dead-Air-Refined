@@ -9,6 +9,7 @@
 #include "ui/UIContentWnd.h"
 #include "ui/ContentService.h"
 #include "ui/UIModsWnd.h"
+#include "ui/UISaveIndicator.h"
 #include "ui/ModUpdateService.h"
 #include "ui/ModCatalog.h"
 #include "xrEngine/XR_IOConsole.h"
@@ -96,6 +97,7 @@ CMainMenu::CMainMenu()
     // Config-declared opt-outs are read before anything can query them: the update check
     // starts on menu activation and the menu buttons are built on the first page load.
     ModOptOut::LoadFromConfig();
+    m_saveIndicator = std::make_unique<CUISaveIndicator>();
 
     CUIWindow::SetPPModeHandler(&SetWindowPPMode);
 
@@ -525,6 +527,7 @@ void CMainMenu::OnRender()
         DoRenderDialogs();
         DrawProductVersion();
         UI().RenderFont();
+        m_saveIndicator->Render();
     }
 }
 
@@ -543,6 +546,7 @@ void CMainMenu::OnRenderPPUI_main()
         DoRenderDialogs();
         DrawProductVersion();
         UI().RenderFont();
+        m_saveIndicator->Render();
     }
 
     UI().pp_stop();

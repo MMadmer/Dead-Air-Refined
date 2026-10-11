@@ -9,6 +9,7 @@ class CUIModsWnd;
 class CUIUpdateWnd;
 class CUIMajorUpdateWnd;
 class CUIContentWnd;
+class CUISaveIndicator;
 class CGameSpy_HTTP;
 class CGameSpy_Full;
 
@@ -112,6 +113,9 @@ public:
 
     CGameSpy_Full* GetGS();
 
+    // the gas mask at the right edge while a save is in flight; it lives as long as the menu
+    CUISaveIndicator& SaveIndicator() { return *m_saveIndicator; }
+
 protected:
     EErrorDlg m_NeedErrDialog;
     u32 m_start_time;
@@ -126,6 +130,7 @@ protected:
     CUIUpdateWnd* m_updateDialog{};
     CUIMajorUpdateWnd* m_majorUpdateDialog{};
     CUIContentWnd* m_contentDialog{};
+    std::unique_ptr<CUISaveIndicator> m_saveIndicator;
     bool m_contentDialogFailed{};
     bool m_crashReportChecked{};
     bool ReloadUI();

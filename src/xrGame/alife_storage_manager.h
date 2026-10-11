@@ -43,6 +43,8 @@ public:
     static bool wait_for_pending_saves();
     static bool save_capture_active();
     static bool save_capture_reentrant();
+    // a save is still being captured, written or waits for its completion to be handled
+    static bool save_in_flight();
     static bool validate_load_companions(LPCSTR save_name);
     bool load(LPCSTR save_name = 0);
     bool save(LPCSTR save_name = 0, bool update_name = true, bool show_status = true);

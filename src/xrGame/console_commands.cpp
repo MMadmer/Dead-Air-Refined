@@ -58,6 +58,7 @@
 #include "zone_effector.h"
 #include "GameTask.h"
 #include "MainMenu.h"
+#include "ui/UISaveIndicator.h"
 #include "saved_game_wrapper.h"
 #include "xrAICore/Navigation/level_graph.h"
 #include "xrNetServer/NET_Messages.h"
@@ -838,15 +839,8 @@ public:
 #ifdef DEBUG
         Msg("Game save overhead  : %f milliseconds", timer.GetElapsed_sec() * 1000.f);
 #endif
-        const bool compat = ClearSkyMode || ShadowOfChernobylMode;
-        CUIGameCustom* gameUi = CurrentGameUI();
-        if (m_showStatus && gameUi)
-        {
-            gameUi->RemoveCustomStatic("game_saved");
-            StaticDrawableWrapper* message = gameUi->AddCustomStatic("game_saved", true, compat ? 3.0f : -1.0f);
-            if (message)
-                message->wnd()->TextItemControl()->SetText(StringTable().translate("st_game_saving").c_str());
-        }
+        if (m_showStatus)
+            MainMenu()->SaveIndicator().Request();
 
         xr_strcat(S, ".dds");
         FS.update_path(S1, "$game_saves$", S);

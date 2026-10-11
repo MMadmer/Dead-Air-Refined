@@ -6,6 +6,7 @@
 #include "xrEngine/xr_input.h"
 #include "GamePersistent.h"
 #include "MainMenu.h"
+#include "ui/UISaveIndicator.h"
 #include "Grenade.h"
 #include "Spectator.h"
 #include "Car.h"
@@ -291,6 +292,8 @@ void CHUDManager::RenderUI()
         HitMarker.Render();
         if (pUIGame)
             pUIGame->Render();
+        if (MainMenu())
+            MainMenu()->SaveIndicator().Render();
 
         // pda3d_dbg 2: blit $user$ui fullscreen over the frame - a pixel-for-pixel view of
         // what the PDA screen material will sample. Lazy static widget, debug-only cost.

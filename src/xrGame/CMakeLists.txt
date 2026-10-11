@@ -2365,6 +2365,8 @@ target_sources(xrGame PRIVATE
     ui/UIRankingsCoC.h
     ui/UIRankingWnd.cpp
     ui/UIRankingWnd.h
+    ui/UISaveIndicator.cpp
+    ui/UISaveIndicator.h
     ui/UIScriptWnd.cpp
     ui/UIScriptWnd.h
     ui/UIScriptWnd_script.cpp

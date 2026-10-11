@@ -10,8 +10,9 @@
 uniform float4 xms_shape_box;
 // the border colour; the empty part of a star
 uniform float4 xms_shape_line;
-// kind (0 box, 1 star, 2 search, 3 check, 4 cross, 5 chevron), a star's filled fraction,
-// the width of the edge's fade in pixels (1 = crisp), unused
+// kind (0 box, 1 star, 2 search, 3 check, 4 cross, 5 chevron, 6 gas mask), a star's filled fraction
+// or a gas mask's badge (0 none, 1 done, 2 failed), the width of the edge's fade in pixels (1 = crisp),
+// the badge's scale
 uniform float4 xms_shape_mode;
 
 float sd_box(float2 p, float2 b, float r)
@@ -43,6 +44,44 @@ float sd_star5(float2 p, float r, float rf)
 	return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
 
+float sd_ellipse(float2 p, float2 r)
+{
+	float k0 = length(p / r);
+	float k1 = length(p / (r * r));
+	return k0 * (k0 - 1.0) / max(k1, 1e-5);
+}
+
+float smin(float a, float b, float k)
+{
+	float h = saturate(0.5 + 0.5 * (b - a) / k);
+	return lerp(b, a, h) - k * h * (1.0 - h);
+}
+
+// A gas mask seen from the front in units of its half size, y up: a dome over a narrower jaw,
+// two lenses cut through, a round filter at the mouth set off by a thin gap, one groove round it.
+// A badge on the right cheek, set off the same way, carries a tick (1) or a cross (2) cut through.
+float sd_gas_mask(float2 q, float badge, float badge_scale)
+{
+	float face = smin(sd_ellipse(q - float2(0.0, 0.24), float2(0.62, 0.60)),
+		sd_box(q - float2(0.0, -0.20), float2(0.38, 0.34), 0.28), 0.2);
+	float can_r = length(q - float2(0.0, -0.58));
+	float can = can_r - 0.28;
+	float d = min(max(face, 0.06 - can), can);
+	d = max(d, 0.03 - abs(can_r - 0.16));
+	d = max(d, 0.18 - length(float2(abs(q.x), q.y) - float2(0.27, 0.20)));
+	if (badge < 0.5 || badge_scale <= 0.0)
+		return d;
+
+	float2 c = q - float2(0.68, -0.30);
+	float disc = length(c) - 0.33 * badge_scale;
+	d = min(max(d, 0.07 * badge_scale - disc), disc);
+	float2 b = c / badge_scale;
+	float mark = badge < 1.5 ?
+		min(sd_segment(b, float2(-0.15, 0.01), float2(-0.045, -0.10)), sd_segment(b, float2(-0.045, -0.10), float2(0.15, 0.11))) :
+		min(sd_segment(b, float2(-0.11, -0.11), float2(0.11, 0.11)), sd_segment(b, float2(-0.11, 0.11), float2(0.11, -0.11)));
+	return max(d, (0.06 - mark) * badge_scale);
+}
+
 float4 premultiplied(float4 c) { return float4(c.rgb * c.a, c.a); }
 
 float4 main(p_TL I) : SV_Target
@@ -72,6 +111,16 @@ float4 main(p_TL I) : SV_Target
 		float coverage = saturate(0.5 - d);
 		float filled = saturate(xms_shape_mode.y * 2.0 * half_size.x - (p.x + half_size.x) + 0.5);
 		return lerp(edge, fill, filled) * coverage;
+	}
+
+	if (kind > 5.5)
+	{
+		// the gas mask, solid; the border colour glows round it over the border width
+		float scale = size * 0.92;
+		float d = sd_gas_mask(float2(p.x, -p.y) / scale, xms_shape_mode.y, xms_shape_mode.w) * scale;
+		float coverage = saturate(0.5 - d / soft);
+		float glow = xms_shape_box.w > 0.0 ? saturate(1.0 - max(d, 0.0) / xms_shape_box.w) : 0.0;
+		return fill * coverage + edge * (glow * glow * (1.0 - coverage));
 	}
 
 	// strokes of the border width

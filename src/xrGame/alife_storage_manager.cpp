@@ -27,8 +27,8 @@
 #include "xrCore/Threading/ThreadUtil.h"
 #include "xrCore/Debug/CrashReport.h"
 #include "autosave_manager.h"
-#include "UIGameCustom.h"
-#include "xrUICore/Static/UIStatic.h"
+#include "MainMenu.h"
+#include "ui/UISaveIndicator.h"
 
 #include <array>
 #include <condition_variable>
@@ -1039,6 +1039,12 @@ public:
         idle.wait(lock, [this] { return jobs.empty() && !active; });
     }
 
+    bool busy()
+    {
+        std::lock_guard lock(mutex);
+        return !jobs.empty() || active || !completions.empty();
+    }
+
     std::deque<AsyncSaveCompletion> take_completions()
     {
         std::lock_guard lock(mutex);
@@ -1103,18 +1109,11 @@ public:
     ~SaveCaptureScope() { saveCaptureScopeActive = false; }
 };
 
-void show_save_status(pcstr text)
+// the save indicator shows how a save the player was meant to see went
+void show_save_status(bool succeeded)
 {
-    CUIGameCustom* gameUi = CurrentGameUI();
-    if (!gameUi)
-        return;
-
-    const bool compatibilityMode = ClearSkyMode || ShadowOfChernobylMode;
-    gameUi->RemoveCustomStatic("game_saved");
-    StaticDrawableWrapper* message =
-        gameUi->AddCustomStatic("game_saved", true, compatibilityMode ? 3.f : -1.f);
-    if (message)
-        message->wnd()->TextItemControl()->SetText(text);
+    if (g_pGamePersistent && MainMenu())
+        MainMenu()->SaveIndicator().Finish(succeeded);
 }
 
 bool client_save_snapshot_step(const xr_vector<u16>& objectIds, u32& start, u32 objectBudget)
@@ -1268,7 +1267,7 @@ bool CALifeStorageManager::process_async_save_completions()
                 "the previous save set was preserved", completion.saveName.c_str(),
                 completion.errorStage.empty() ? "unknown stage" : completion.errorStage.c_str(), completion.errorCode);
             if (completion.showStatus)
-                show_save_status(StringTable().translate("st_game_save_failed").c_str());
+                show_save_status(false);
             continue;
         }
 
@@ -1276,17 +1275,8 @@ bool CALifeStorageManager::process_async_save_completions()
             completion.saveName.c_str(), completion.finalName.c_str(),
             completion.captureMilliseconds, completion.backgroundMilliseconds);
         CrashReporter::SetSavePath(completion.finalName.c_str());
-
-        std::string displayName = completion.saveName;
-        const size_t extension = displayName.rfind('.');
-        if (extension != std::string::npos)
-            displayName.erase(extension);
         if (completion.showStatus)
-        {
-            const std::string message =
-                StringTable().translate("st_game_saved").c_str() + std::string(": ") + displayName;
-            show_save_status(message.c_str());
-        }
+            show_save_status(true);
 
         if (GEnv.ScriptEngine)
         {
@@ -1392,6 +1382,11 @@ bool CALifeStorageManager::save_capture_reentrant()
     return saveCaptureScopeActive;
 }
 
+bool CALifeStorageManager::save_in_flight()
+{
+    return save_capture_active() || async_save_coordinator().busy();
+}
+
 void CALifeStorageManager::process_save_captures(float budgetMilliseconds)
 {
     if (!m_save_captures || saveCaptureScopeActive)
@@ -1428,7 +1423,7 @@ void CALifeStorageManager::process_save_captures(float budgetMilliseconds)
                 capture.job.saveName.c_str(), stage);
             native_remove_file(capture.job.customTempName.c_str());
             if (capture.job.showStatus)
-                show_save_status(StringTable().translate("st_game_save_failed").c_str());
+                show_save_status(false);
             m_save_captures->failed = true;
             m_save_captures->pending.pop_front();
         };
@@ -1790,7 +1785,7 @@ void CALifeStorageManager::process_save_captures(float budgetMilliseconds)
                 capture.job.saveName.c_str());
             native_remove_file(capture.job.customTempName.c_str());
             if (capture.job.showStatus)
-                show_save_status(StringTable().translate("st_game_save_failed").c_str());
+                show_save_status(false);
             m_save_captures->failed = true;
             m_save_captures->pending.pop_front();
             if (budgetExhausted())
@@ -1862,7 +1857,7 @@ bool CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name, boo
         const u32 errorCode = directoryError ? directoryError.value() : ERROR_DIRECTORY;
         Msg("! Cannot prepare the save directory (system error %u)", errorCode);
         if (show_status)
-            show_save_status(StringTable().translate("st_game_save_failed").c_str());
+            show_save_status(false);
         return false;
     }
 
@@ -2017,7 +2012,7 @@ bool CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name, boo
                     native_remove_file(captureMarkerName.c_str());
                     xr_strcpy(m_save_name, saveBackup);
                     if (show_status)
-                        show_save_status(StringTable().translate("st_game_save_failed").c_str());
+                        show_save_status(false);
                     return false;
                 }
 
@@ -2055,7 +2050,7 @@ bool CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name, boo
                     native_remove_file(customTempName.c_str());
                     xr_strcpy(m_save_name, saveBackup);
                     if (show_status)
-                        show_save_status(StringTable().translate("st_game_save_failed").c_str());
+                        show_save_status(false);
                     return false;
                 }
 
@@ -2069,7 +2064,7 @@ bool CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name, boo
                         native_remove_file(customTempName.c_str());
                         xr_strcpy(m_save_name, saveBackup);
                         if (show_status)
-                            show_save_status(StringTable().translate("st_game_save_failed").c_str());
+                            show_save_status(false);
                         return false;
                     }
                     else
@@ -2084,7 +2079,7 @@ bool CALifeStorageManager::save(LPCSTR save_name_no_check, bool update_name, boo
         native_remove_file(customTempName.c_str());
         xr_strcpy(m_save_name, saveBackup);
         if (show_status)
-            show_save_status(StringTable().translate("st_game_save_failed").c_str());
+            show_save_status(false);
         return false;
     }
     const float scriptMilliseconds = stageTimer.GetElapsed_sec() * 1000.f;
