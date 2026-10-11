@@ -425,6 +425,61 @@ float da_sn_sheen()
 #define DA_SN_GLINT_TOL 0.012
 #define DA_SN_GLINT_K 400.0
 #define DA_SN_GLINT_CHANCE 0.02
+// ---- yellow snow -------------------------------------------------------------------------------------
+// The stains of da_snow.cpp (stains_build): x, z, the core's radius, a seed; by 8 m cells (first << 12 | count).
+Texture2D<uint> s_da_sn_stain_cells;
+Texture2D<float4> s_da_sn_stains;
+uniform float4 da_sn_stain; // xy the grid's origin (m), z its cell (m), w cells per row (0: none)
+
+// x the halo (pale lemon), y the core (amber, melted in), z the melt hole (dark), w the drops, at xz. After the photo
+// pack: an irregular core a little longer than wide, its edge ragged, a pale halo fading round it, a scatter of drops
+// on one side, and in a share of them a small dark hole where the stream melted down.
+float4 da_sn_stain_at(float2 xz)
+{
+	float4 r = float4(0.0, 0.0, 0.0, 0.0);
+	[branch] if (da_sn_stain.w < 0.5)
+		return r;
+	const float2 gp = (xz - da_sn_stain.xy) / da_sn_stain.z;
+	const int2 c0 = int2(floor(gp - 0.5));
+	[unroll] for (int j = 0; j < 2; ++j)
+	{
+		[unroll] for (int i = 0; i < 2; ++i)
+		{
+			const int2 c = c0 + int2(i, j);
+			[branch] if (c.x < 0 || c.y < 0 || c.x >= int(da_sn_stain.w))
+				continue;
+			const uint e = s_da_sn_stain_cells.Load(int3(c, 0));
+			const uint first = e >> 12, count = e & 0xFFFu;
+			[loop] for (uint k = 0; k < count; ++k)
+			{
+				const float4 s = s_da_sn_stains.Load(int3(int(first + k), 0, 0));
+				const float2 d = xz - s.xy;
+				[branch] if (dot(d, d) > 4.0 * s.z * s.z)
+					continue;
+				// the core's frame: turned by the seed, stretched 1.2..1.9 along it
+				const float a = s.w * 6.2832;
+				const float2 q = float2(dot(d, float2(cos(a), sin(a))), dot(d, float2(-sin(a), cos(a))));
+				const float stretch = 1.3 + 1.3 * frac(s.w * 13.7);
+				// a ragged edge: three octaves, the finest a couple of centimetres (soaked into the grains unevenly)
+				const float n = da_sn_vnoise(xz * 7.0 + s.w * 37.0, 0xA1u) + 0.6 * da_sn_vnoise(xz * 19.0 + s.w * 11.0, 0xA2u) +
+					0.35 * da_sn_vnoise(xz * 45.0 + s.w * 5.0, 0xA3u);
+				const float dist = length(float2(q.x / stretch, q.y)) / s.z + 0.55 * (n - 0.98);
+				// the core darker toward where the stream struck
+				const float core = (1.0 - smoothstep(0.4, 0.75, dist)) * lerp(0.75, 1.0, 1.0 - smoothstep(0.0, 0.5, dist));
+				const float halo = 1.0 - smoothstep(0.65, 1.5, dist);
+				// the drops: a 2 cm lattice, a drop in some, splashed to one side of it
+				const float2 dc = floor(xz / 0.02);
+				const float h1 = frac(sin(dot(dc + s.w * 17.0, float2(12.9898, 78.233))) * 43758.5453);
+				const float side = saturate(0.3 + 0.7 * dot(normalize(q + 1e-4), float2(1.0, 0.0)));
+				const float drops = step(0.9, h1) * side * (1.0 - smoothstep(1.0, 2.2, dist)) * step(0.85, dist);
+				const float hole = (frac(s.w * 7.3) < 0.45) ? 1.0 - smoothstep(0.0, 0.2, length(float2(q.x / (0.6 * stretch), q.y)) / s.z + 0.3 * (n - 0.98)) : 0.0;
+				r = max(r, float4(halo, core, hole, drops));
+			}
+		}
+	}
+	return r;
+}
+
 
 // One cell level: x the flash (its brightness against the snow's diffuse light), 0 off. hs = the half
 // vector's slope against the surface normal (tangent space), grain = grain size (m).
@@ -844,6 +899,17 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	A *= lerp(1.0, 0.92, rut);
 	A = lerp(A, float3(0.89, 0.90, 0.92), 0.5 * da_sn_layer2.x * (1.0 - pond) * (1.0 - comp));
 	A = min(A, 0.9) * DA_SNOW_TINT;
+	// yellow snow, near (a fresh fall covers it over)
+	float stain = 0.0;
+	[branch] if (!shell && k > 0.3 && view_dist < 80.0)
+	{
+		const float4 st = da_sn_stain_at(Pw.xz) * (1.0 - 0.75 * da_sn_layer2.x);
+		// (the pack: a pale lemon halo, an ochre core, a brown hole; the core's hue saturated, not mustard grey)
+		A *= lerp(float3(1.0, 1.0, 1.0), float3(0.98, 0.91, 0.58), max(0.5 * st.x, 0.85 * st.w));
+		A *= lerp(float3(1.0, 1.0, 1.0), float3(0.88, 0.66, 0.26), st.y);
+		A *= lerp(float3(1.0, 1.0, 1.0), float3(0.40, 0.27, 0.10), st.z);
+		stain = max(st.y, st.w);
+	}
 
 	G *= lerp(1.0, 0.72, max(ring, wet * (1.0 - R) * cov));
 	const float3 albedo = lerp(G, A, k);
@@ -897,7 +963,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	// to the sun's half vector, so the narrow lobe of da_snow_light.h lights it alone, its gloss the flash.
 	float gloss_out = gloss;
 	bool glint = false;
-	[branch] if (da_sn_sun.w > 0.05 && k > 0.6 && view_dist < da_sn_layer2.z && dot(N, da_sn_sun.xyz) > 0.05)
+	[branch] if (da_sn_sun.w > 0.05 && k > 0.6 && stain < 0.3 && view_dist < da_sn_layer2.z && dot(N, da_sn_sun.xyz) > 0.05)
 	{
 		const float amount = dot(da_snow_state, float4(1.0, 0.85, 0.6, 0.0)) * (1.0 - wet) * (1.0 - wet) * (1.0 - comp) * (1.0 - dirt);
 		[branch] if (amount > 0.02)

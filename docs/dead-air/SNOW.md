@@ -517,6 +517,19 @@ the season's snow on the ice (`da_ice_snow`: its depth key where the cover key r
 tapering at a patch's margin) with the same see-through as on the ground and the pack's own texture. Bare ice
 is lit as a stock glossy material, the snow on it as code 31.
 
+## Yellow snow
+
+Where a man or a dog relieved himself: rarely, and never amid the houses. At level load (`stains_build`, da_snow.cpp)
+one tree or stump in twenty in the open (`Environment::wind_veg_trees`, fewer than 60 overhang texels in the 41 x 41 m
+round it) gets a stain 0.35-0.9 m off its root; one in a hundred of the 4 m cells along a static object's foot and one
+in two hundred along a building's (on the outskirts: fewer than 250 overhang texels round it) get one 0.25-0.65 m off
+it; stains stand at least 6 m apart (escape: about 150). They go to the GPU by 8 m cells (`$user$da_snow_stain_cells`,
+first << 12 | count; `$user$da_snow_stains`, x z radius seed) and the layer paints them within 80 m
+(`da_sn_stain_at`), after the reference photos: a core 12-35 cm, 1.3-2.6 times longer than wide, its edge ragged by
+three octaves of noise down to a couple of centimetres, ochre and darker toward where the stream struck; a pale lemon
+halo round it; a scatter of 2 cm drops to one side; a small brown melt hole in about half of them. Fresh snowfall
+covers them (`da_sn_layer2.x`), no glint on them. `r__snow_stats` lists the eight nearest.
+
 ## Lighting
 
 `da_snow_light.h`, called by `lmodel.h` for code-31 and code-1 pixels (`da_is_snowy`) with the slice-0 LUT result: 35 % of the diffuse

@@ -33,6 +33,7 @@
 #include "xrEngine/da_snow_field.h"
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
+#include <unordered_set>
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -99,6 +100,11 @@ constexpr pcstr k_name_shelter = "$user$da_snow_shelter";
 constexpr pcstr k_name_top = "$user$da_snow_top";
 constexpr pcstr k_name_walk = "$user$da_snow_walk";
 constexpr pcstr k_name_overhang = "$user$da_snow_overhang";
+// Yellow snow (stains_build): the stains by 8 m cells (R32_UINT: first << 12 | count) and the stains themselves
+// (RGBA32F: x, z, radius, seed).
+constexpr pcstr k_name_stain_cells = "$user$da_snow_stain_cells";
+constexpr pcstr k_name_stains = "$user$da_snow_stains";
+constexpr float k_stain_cell = 8.f;
 constexpr pcstr k_name_ground_top = "$user$da_ground_top"; // da_ground.cpp
 constexpr pcstr k_name_ground_base = "$user$da_ground_base"; // da_ground.cpp
 constexpr pcstr k_name_ground_shore = "$user$da_ground_shore"; // da_ground.cpp
@@ -251,6 +257,8 @@ public:
             C.r_dx11Texture("s_da_ground_top", k_name_ground_top);
             C.r_dx11Texture("s_da_sn_top", k_name_top);
             C.r_dx11Texture("s_da_sn_roof", k_name_roof);
+            C.r_dx11Texture("s_da_sn_stain_cells", k_name_stain_cells);
+            C.r_dx11Texture("s_da_sn_stains", k_name_stains);
             C.r_dx11Texture("s_water_field", r2_RT_water_field);
             C.r_dx11Texture("s_water_class", k_name_water_class);
             // The hardware depth tells first-person pixels apart (no single-sampled copy under MSAA).
@@ -302,6 +310,9 @@ struct State
     Fvector2 origin{};
     float ymin = 0.f, yrange = 1.f;
     Texture weights, factors, base, level, road, terrain, shelter, top, walk, overhang;
+    Texture stain_cells, stains;
+    xr_vector<Fvector4> stain_list; // for r__snow_stats
+    Fvector4 stain_xf{}; // xy the stain grid's origin, z its cell (m), w cells per row (0: none)
     u32 terrain_version = 0; // counts the terrain uploads (da_snow_level_terrain)
     bool level_fresh = true;
 
@@ -410,6 +421,10 @@ void placeholders()
         g.walk.placeholder(k_name_walk, DXGI_FORMAT_R16_UNORM);
     if (!g.overhang.named)
         g.overhang.placeholder(k_name_overhang, DXGI_FORMAT_R8_UNORM);
+    if (!g.stain_cells.named)
+        g.stain_cells.placeholder(k_name_stain_cells, DXGI_FORMAT_R32_UINT);
+    if (!g.stains.named)
+        g.stains.placeholder(k_name_stains, DXGI_FORMAT_R32G32B32A32_FLOAT);
 }
 
 void trails_release()
@@ -440,6 +455,9 @@ void level_release()
     g.top.placeholder(k_name_top, DXGI_FORMAT_R16_UNORM);
     g.walk.placeholder(k_name_walk, DXGI_FORMAT_R16_UNORM);
     g.overhang.placeholder(k_name_overhang, DXGI_FORMAT_R8_UNORM);
+    g.stain_cells.placeholder(k_name_stain_cells, DXGI_FORMAT_R32_UINT);
+    g.stains.placeholder(k_name_stains, DXGI_FORMAT_R32G32B32A32_FLOAT);
+    g.stain_xf.set(0.f, 0.f, 0.f, 0.f);
     g.uploaded = false;
     g.level_fresh = true;
     g.season_moved_prev = true;
@@ -533,6 +551,114 @@ void road_edges(const SSnowField& f, xr_vector<u8>& out)
 // opened with a 3 x 3 square at 1 m, the terrain under a cover), the shelter of the covers (their mask
 // eroded by a texel: walls and posts drop out), the terrain and the topmost surface themselves, the road
 // edges, the depth texture the composite fills.
+// Yellow snow: where a man or a dog relieved himself - rarely, at the foot of a tree or a stump in the open, more
+// rarely at a static object's or a wall's foot, never amid the houses (by the overhangs' density round it). A stain
+// stands a little off what it was made against, 12 to 35 cm across its core (the photo pack: a darker amber core
+// melted into the snow, a pale lemon halo, a scatter of drops; at a tree's foot, a bench's leg, a path's edge).
+void stains_build(const SSnowField& f)
+{
+    const u32 w = f.dim_x, h = f.dim_z;
+    const size_t cells = size_t(w) * h;
+    if (f.cover.size() != cells)
+        return;
+    // the overhangs' summed-area table: how built-up the 41 x 41 m round a point is
+    xr_vector<u32> sat((size_t(w) + 1) * (h + 1), 0);
+    for (u32 z = 0; z < h; ++z)
+        for (u32 x = 0; x < w; ++x)
+            sat[size_t(z + 1) * (w + 1) + x + 1] = (f.cover[size_t(z) * w + x] == 2 ? 1u : 0u) +
+                sat[size_t(z) * (w + 1) + x + 1] + sat[size_t(z + 1) * (w + 1) + x] - sat[size_t(z) * (w + 1) + x];
+    const auto built = [&](float wx, float wz) {
+        const int cx = int((wx - f.origin.x) / f.texel), cz = int((wz - f.origin.y) / f.texel);
+        const int x0 = clampr(cx - 20, 0, int(w)), x1 = clampr(cx + 21, 0, int(w));
+        const int z0 = clampr(cz - 20, 0, int(h)), z1 = clampr(cz + 21, 0, int(h));
+        return sat[size_t(z1) * (w + 1) + x1] - sat[size_t(z0) * (w + 1) + x1] - sat[size_t(z1) * (w + 1) + x0] +
+            sat[size_t(z0) * (w + 1) + x0];
+    };
+    const auto hash = [](float a, float b, u32 salt) {
+        u32 v = u32(int(std::floor(a * 4.f))) * 73856093u ^ u32(int(std::floor(b * 4.f))) * 19349663u ^ salt * 83492791u;
+        v ^= v >> 13;
+        v *= 0x5bd1e995u;
+        v ^= v >> 15;
+        return float(v & 0xFFFFFFu) / 16777216.f;
+    };
+    xr_vector<Fvector4> list;
+    // at least 6 m apart (a tree's several visuals share a root; a group of blocks gave a cluster of stains)
+    std::unordered_set<u64> taken;
+    const auto add = [&](float x, float z, u32 salt) {
+        const int kx = int(std::floor(x / 6.f)), kz = int(std::floor(z / 6.f));
+        for (int dz = -1; dz <= 1; ++dz)
+            for (int dx = -1; dx <= 1; ++dx)
+                if (taken.count((u64(u32(kx + dx)) << 32) | u32(kz + dz)))
+                    return;
+        taken.insert((u64(u32(kx)) << 32) | u32(kz));
+        const float r = 0.12f + 0.23f * hash(x, z, salt + 7u);
+        list.push_back({x, z, r, hash(x, z, salt + 11u)});
+    };
+    // trees and stumps: one in twenty, in the open
+    if (g_pGamePersistent)
+        for (const Fvector& p : g_pGamePersistent->Environment().wind_veg_trees)
+        {
+            if (hash(p.x, p.z, 1u) > 0.05f || built(p.x, p.z) > 60u)
+                continue;
+            const float a = hash(p.x, p.z, 2u) * PI_MUL_2, d = 0.35f + 0.55f * hash(p.x, p.z, 3u);
+            add(p.x + std::sin(a) * d, p.z + std::cos(a) * d, 4u);
+        }
+    // the foot of a static object or a wall: an edge texel of a cover, one in fifty (an object) or a hundred and fifty
+    // (a building) of the 4 m cells along it, away from the built-up middle
+    static const int nb[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    for (u32 z = 1; z + 1 < h; ++z)
+        for (u32 x = 1; x + 1 < w; ++x)
+        {
+            const u8 c = f.cover[size_t(z) * w + x];
+            if (!c)
+                continue;
+            for (const auto& d : nb)
+            {
+                if (f.cover[size_t(int(z) + d[1]) * w + size_t(int(x) + d[0])])
+                    continue;
+                const float cx = f.origin.x + (float(x) + 0.5f) * f.texel, cz = f.origin.y + (float(z) + 0.5f) * f.texel;
+                const u32 side = u32(d[0] + 2) * 3u + u32(d[1] + 2);
+                if (hash(std::floor(cx / 4.f), std::floor(cz / 4.f), 5u + side) > (c == 1 ? 0.01f : 0.005f))
+                    continue;
+                if (built(cx, cz) > (c == 1 ? 60u : 250u))
+                    continue;
+                const float off = 0.5f * f.texel + 0.25f + 0.4f * hash(cx, cz, 6u);
+                const float along = (hash(cx, cz, 8u) - 0.5f) * f.texel;
+                add(cx + float(d[0]) * off + float(d[1]) * along, cz + float(d[1]) * off + float(d[0]) * along, 9u);
+            }
+        }
+    // by 8 m cells
+    const u32 gw = u32(std::ceil(float(w) * f.texel / k_stain_cell)) + 1;
+    const u32 gh = u32(std::ceil(float(h) * f.texel / k_stain_cell)) + 1;
+    xr_vector<xr_vector<u32>> bins(size_t(gw) * gh);
+    for (u32 i = 0; i < u32(list.size()); ++i)
+    {
+        const int bx = int((list[i].x - f.origin.x) / k_stain_cell), bz = int((list[i].y - f.origin.y) / k_stain_cell);
+        if (bx >= 0 && bz >= 0 && bx < int(gw) && bz < int(gh))
+            bins[size_t(bz) * gw + bx].push_back(i);
+    }
+    xr_vector<u32> grid(size_t(gw) * gh, 0);
+    xr_vector<Fvector4> sorted;
+    for (size_t b = 0; b < bins.size(); ++b)
+    {
+        const u32 n = std::min<u32>(u32(bins[b].size()), 8u);
+        if (sorted.size() + n > 16384u)
+            break;
+        grid[b] = (u32(sorted.size()) << 12) | n;
+        for (u32 k = 0; k < n; ++k)
+            sorted.push_back(list[bins[b][k]]);
+    }
+    if (sorted.empty())
+        sorted.push_back({0.f, 0.f, 0.f, 0.f});
+    const u32 sw = u32(sorted.size());
+    g.stain_list = list;
+    if (g.stain_cells.create(k_name_stain_cells, gw, gh, DXGI_FORMAT_R32_UINT, false, grid.data(), gw * 4) &&
+        g.stains.create(k_name_stains, sw, 1, DXGI_FORMAT_R32G32B32A32_FLOAT, false, sorted.data(), sw * 16))
+        g.stain_xf.set(f.origin.x, f.origin.y, k_stain_cell, float(gw));
+    Msg("* [snow] yellow snow: %u stain(s) (%u tree positions)", u32(list.size()),
+        g_pGamePersistent ? u32(g_pGamePersistent->Environment().wind_veg_trees.size()) : 0u);
+}
+
 bool upload_level()
 {
     const SSnowField* f = da_snow_field();
@@ -678,6 +804,7 @@ bool upload_level()
     g.uploaded = true;
     g.level_fresh = true;
     ++g.terrain_version;
+    stains_build(*f);
     Msg("* [snow] level fields %ux%u at %.2f m, base %.1f..%.1f m, %.1f MB, %.0f ms", w, h, g.texel, g.ymin,
         g.ymin + g.yrange, cells * 23.f / (1024.f * 1024.f), timer.GetElapsed_sec() * 1000.f);
     // the snow on the covers, from the same bake
@@ -1397,6 +1524,7 @@ void da_snow_apply_layer(CBackend& cmd_list)
         // the glints' strength (r__snow_glint) and reach
         cmd_list.set_c("da_sn_layer", covered > 0.f ? clampr(1.f - fr.mean_depth / 0.01f, 0.f, 1.f) : 0.f, 0.3f, ps_r__snow_glint, metres_per_px);
         cmd_list.set_c("da_sn_layer2", clampr(fr.fall.x / 0.005f, 0.f, 1.f), 30.f, 150.f, r2_hud_depth_limit);
+        cmd_list.set_c("da_sn_stain", g.stain_xf);
         cmd_list.set_c("da_snow_cover", fr.cover);
         cmd_list.set_c("da_snow_state", fr.state);
         cmd_list.set_c("da_snow_surf", fr.surf);
@@ -1457,6 +1585,8 @@ void da_snow_destroy()
     g.top.destroy();
     g.walk.destroy();
     g.overhang.destroy();
+    g.stain_cells.destroy();
+    g.stains.destroy();
     g.level.destroy();
     g.road.destroy();
     g.weights.destroy();
@@ -1517,5 +1647,16 @@ void da_snow_stats()
     const bool window = da_ground_window(win, win2);
     Msg("* [snow] ground window: %s, centre (%.1f, %.1f), half %.1f m, %u texels @ %.3f m", window ? "valid" : "none", win.x,
         win.y, win.z, u32(win2.x), win2.y > 0.f ? 1.f / win2.y : 0.f);
+    // the yellow snow nearest the camera
+    {
+        const Fvector& eye = Device.vCameraPosition;
+        xr_vector<std::pair<float, Fvector4>> near_st;
+        for (const Fvector4& st : g.stain_list)
+            near_st.emplace_back(_sqr(st.x - eye.x) + _sqr(st.y - eye.z), st);
+        std::sort(near_st.begin(), near_st.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        for (size_t k = 0; k < std::min<size_t>(near_st.size(), 8); ++k)
+            Msg("* [snow]   stain %u: %.2f %.2f r %.2f, %.0f m", u32(k), near_st[k].second.x, near_st[k].second.y,
+                near_st[k].second.z, std::sqrt(near_st[k].first));
+    }
 }
 } // namespace xray::render::RENDER_NAMESPACE
