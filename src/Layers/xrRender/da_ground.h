@@ -44,6 +44,8 @@ Fvector4 da_ground_top_xf();
 // (RGBA32F, toroidal): x the opened solid surface under the water too, y the highest water surface within 8 texels
 // (-10000: none), z how far inside that reach the texel lies (1 up to half of it, 0 at its end).
 ID3D11ShaderResourceView* da_ground_base_srv();
+// QA: the window's texels along a line, read back on the next frame (r__snow_window_probe x z dx dz count).
+void da_ground_window_probe(pcstr args);
 // Constants of the window for the snow shaders: win = (centre x, centre z, half-size the window holds
 // valid data for, blend band to the level base), win2 = (texels per side, texels per metre, 0, 0).
 // False while there is no window.

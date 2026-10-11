@@ -147,7 +147,9 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	// under the edge of the bank's snow. The grid keeps that shore (no clip, no per-pixel cut) at least at the
 	// top of the ice.
 	const float ice_top = (frozen && pond.x > DA_SN_NONE * 0.5) ? da_sn_ice_top(pond.x, h0.w) : DA_SN_NONE;
-	const bool low_bank = !none && wsh <= 0.0 && hb < ice_top + da_sn_bank_slack(slope);
+	// (no lower than a bank lies: ground half a metre under the ice lies past a wall or a rim - by a house whose floor
+	// carries a liquid face it was lifted to that level in a flat sheet, torn at its edges)
+	const bool low_bank = !none && wsh <= 0.0 && hb < ice_top + da_sn_bank_slack(slope) && hb > ice_top - 0.2;
 
 	// On land: the season's snow over the base. A cliff vertex (and one with no surface) clips every
 	// triangle that touches it down to a sliver: the cull below only drops triangles with three cliff

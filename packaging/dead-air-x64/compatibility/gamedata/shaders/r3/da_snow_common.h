@@ -491,7 +491,7 @@ float2 da_sn_ice_at(float2 xz)
 // x the level (DA_SN_NONE: no water within reach, or outside the window), y the share of xz under it (0.5 on
 // the line, 0 at 1 cm and 1 at 5 cm under the level), z how much the window's water decides there: its reach
 // (1 near the water, 0 at its end) faded out over the band at the window's edge.
-float3 da_sn_shore(float2 xz)
+float3 da_sn_shore(float2 xz, float wet)
 {
 	const float2 d = abs(xz - da_sn_win.xy);
 	const float lw = saturate((max(d.x, d.y) - (da_sn_win.z - da_sn_win.w)) / max(da_sn_win.w, 1e-3));
@@ -516,7 +516,11 @@ float3 da_sn_shore(float2 xz)
 	const float relief = 0.016 * da_sn_vnoise(xz * (1.0 / 1.3), 0x93u) + 0.008 * da_sn_vnoise(xz * (1.0 / 0.4), 0x94u) - 0.012;
 	const float u = dot(under, bw) + relief;
 	const float reach = dot(float4(v00.z, v10.z, v01.z, v11.z), bw) * (1.0 - lw);
-	return float3(lvl, saturate((u - 0.03) * 25.0 + 0.5), reach);
+	// Off the water (wet: the share of xz the window's water lies over), a bank lies centimetres under the water's
+	// surface; ground lower than that lies past a wall or a rim (a liquid face on a house's floor made the path by
+	// the house a pond's bank: a sheet of ice and snow raised over it, torn at its edges)
+	const float bank = lerp(saturate((0.2 - u) / 0.05), 1.0, saturate(wet * 2.0));
+	return float3(lvl, saturate((u - 0.03) * 25.0 + 0.5) * bank, reach);
 }
 
 // A frozen pond's waterline at xz for the passes that draw its ice (the snow grid and the layer): the window's
@@ -525,7 +529,7 @@ float3 da_sn_shore(float2 xz)
 // a seam. b = da_sn_base(xz). x the level (DA_SN_NONE: none), y the share of xz under it, z the window's weight.
 float3 da_sn_pond(float2 xz, float3 b)
 {
-	const float3 s = da_sn_shore(xz);
+	const float3 s = da_sn_shore(xz, b.z);
 	[branch] if (s.z >= 0.999)
 		return float3(s.x, s.y, 1.0);
 	const float2 f = da_sn_flood(xz, b.x);

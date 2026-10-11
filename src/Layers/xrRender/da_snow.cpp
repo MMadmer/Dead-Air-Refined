@@ -1438,6 +1438,8 @@ void da_snow_apply_preset(u32 preset)
 }
 
 Fvector4 da_snow_fine_xf() { return g.fine_xf; }
+// QA: the fine depth texture (r__snow_window_probe).
+ID3D11Texture2D* da_snow_fine_surface() { return g.fine.surface; }
 
 Fvector4 da_snow_level_xf() { return g.level_xf; }
 

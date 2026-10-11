@@ -296,7 +296,10 @@ A vertex stands on the snow base raised by the current depth, and only where geo
   its snow never raised below the ground) and a vertex at the water's edge never sinks under the top of the
   pond's ice (`da_sn_ice_top`: `level + 0.04 m + 3 depth steps`): clipped per vertex, the sheet ended on
   straight cuts through the grid's cells, a row of teeth along the shore, and sunken bank vertices pulled it
-  under the water mesh's ice in a dark band. **The flat shore** just above the waterline keeps its triangles and
+  under the water mesh's ice in a dark band. **The flat shore** just above the waterline (no more than 0.2 m under the top of
+  the ice - lower ground lies past a wall or a rim; by a house whose floor carries a liquid face the snow was lifted to
+  that level in a flat sheet torn at its edges, and the window's waterline gives no bank there either) keeps its
+  triangles and
   the same floor: dry ground that may lie under the top of the ice - the bank's snow base (a conservative raster,
   half a window texel's rise over the surface on a slope) up to `da_sn_bank_slack` (that rise plus 2 cm for the
   render mesh) over it. The water mesh bobs by 1/30 m and draws its ice over anything lower; in the thaw, with a
@@ -604,7 +607,9 @@ noise of `sun`: 0.07 + 0.22-0.25 + 0.36-0.40 = some 0.7 ms. The same frames with
   it beyond the window's water), the
   layer's snow yellow, its thin snow and wet rings orange, the lake bed magenta; whatever stays in its own
   colours is the ground the layer left alone or the water pass's ice; in every mode over 0 the prints the roof
-  map holds are red, on a shell or not. 3 paints the window's texels over everything: red where the snow tapers to
+  map holds are red, on a shell or not. 4 paints the snow base's height in bands of 5 cm, 5 the snow's depth.
+- `r__snow_window_probe x z dx dz count` (QA): the ground window's texels along a line read back from the GPU next
+  frame - the raw top, the snow base, its taper, shelter, opened top and the fine depth there. 3 paints the window's texels over everything: red where the snow tapers to
   a cliff, green a cover (its base dropped under its opened top), blue a texel standing over its lowest neighbour
   by a cliff's step - where a ragged hole beside an object comes from. 2 does the same with the grid's
   per-pixel cuts off, so a pair of frames shows what the cuts remove. 11..16 cut the layer short after its stage

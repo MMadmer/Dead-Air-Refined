@@ -37,6 +37,7 @@
 #include "Layers/xrRender/da_shrubs.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_trees.h"
+#include "Layers/xrRender/da_ground.h"
 #include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRender/da_snow.h"
 #endif
@@ -2221,6 +2222,7 @@ void xrRender_initconsole()
     CMD2(CCC_DaCallArg, "r__trees_species_pin", &da_trees_pin_species);
     CMD2(CCC_DaCallArg, "r__trees_kind_pin", &da_trees_pin_kind);
     CMD2(CCC_DaCallArg, "r__trees_probe", &da_trees_probe);
+    CMD2(CCC_DaCallArg, "r__snow_window_probe", &da_ground_window_probe);
     CMD4(CCC_RuntimeInteger, "r__dbg_trees", &ps_r__dbg_trees, 0, 262143);
     CMD4(CCC_RuntimeInteger, "r__trees_cut", &ps_r__trees_cut, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__veg_soft", &ps_r__veg_soft, 0, 7);

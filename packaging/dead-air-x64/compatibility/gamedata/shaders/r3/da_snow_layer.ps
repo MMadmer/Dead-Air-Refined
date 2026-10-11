@@ -534,6 +534,14 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	const int dbg = da_sn_debug();
 	[branch] if (cut == 2)
 		return o;
+	// r__dbg_snow 4: the snow base's height in bands of 5 cm; 5: the snow's depth in bands of 5 cm.
+	[branch] if (dbg == 4 || dbg == 5)
+	{
+		const float v4 = frac(((dbg == 4) ? base.x : D) / 0.05);
+		const float3 c4 = float3(v4, v4, v4);
+		da_sn_write(o, P, Nw, 0.0, true, c4, 0.0);
+		return o;
+	}
 	// r__dbg_snow 3: the window's texels over everything - red where the snow tapers to a cliff, green a cover (its
 	// base dropped under its opened top), blue a texel standing over its lowest neighbour by a cliff's step.
 	[branch] if (dbg == 3)

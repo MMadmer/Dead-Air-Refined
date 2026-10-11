@@ -1124,8 +1124,97 @@ void da_ground_level_unload()
     window_placeholders();
 }
 
+// QA (r__snow_window_probe x z dx dz count): the window's texels along a line read back next frame - the raw top, the
+// snow base, its taper, shelter and opened top.
+ID3D11Texture2D* da_snow_fine_surface();
+float da_snow_cap();
+Fvector4 da_snow_fine_xf();
+
+namespace
+{
+struct SProbeReq
+{
+    float x, z, dx, dz;
+    int count;
+} g_probe_req{};
+bool g_probe_pending = false;
+
+float read_texel(ID3D11Texture2D* src, DXGI_FORMAT fmt, int ax, int az, u32 comp)
+{
+    D3D11_TEXTURE2D_DESC d{};
+    d.Width = 1;
+    d.Height = 1;
+    d.MipLevels = 1;
+    d.ArraySize = 1;
+    d.Format = fmt;
+    d.SampleDesc.Count = 1;
+    d.Usage = D3D11_USAGE_STAGING;
+    d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    ID3D11Texture2D* st = nullptr;
+    if (FAILED(HW.pDevice->CreateTexture2D(&d, nullptr, &st)) || !st)
+        return -99999.f;
+    ID3D11DeviceContext* ctx = HW.get_context(HW.IMM_CTX_ID);
+    D3D11_BOX box{u32(ax), u32(az), 0, u32(ax) + 1, u32(az) + 1, 1};
+    ctx->CopySubresourceRegion(st, 0, 0, 0, 0, src, 0, &box);
+    float v = -99999.f;
+    D3D11_MAPPED_SUBRESOURCE m{};
+    if (SUCCEEDED(ctx->Map(st, 0, D3D11_MAP_READ, 0, &m)))
+    {
+        v = static_cast<const float*>(m.pData)[comp];
+        ctx->Unmap(st, 0);
+    }
+    st->Release();
+    return v;
+}
+
+void window_probe()
+{
+    g_probe_pending = false;
+    if (!g.valid || !g.n || !g.base.surface || !g.top.surface)
+    {
+        Msg("! [qa] window probe: no window");
+        return;
+    }
+    for (int i = 0; i < g_probe_req.count; ++i)
+    {
+        const float x = g_probe_req.x + g_probe_req.dx * float(i), z = g_probe_req.z + g_probe_req.dz * float(i);
+        const int tx = iFloor(x / g.texel), tz = iFloor(z / g.texel), n = int(g.n);
+        const int ax = ((tx % n) + n) % n, az = ((tz % n) + n) % n;
+        const float top = read_texel(g.top.surface, DXGI_FORMAT_R32_FLOAT, ax, az, 0);
+        float b[4];
+        for (u32 c = 0; c < 4; ++c)
+            b[c] = read_texel(g.base.surface, DXGI_FORMAT_R32G32B32A32_FLOAT, ax, az, c);
+        // the fine depth there (low 16 bits, unorm over the cap)
+        float fine = -1.f;
+        const Fvector4 fx = da_snow_fine_xf();
+        if (ID3D11Texture2D* fs = da_snow_fine_surface(); fs && fx.y > 1.f)
+        {
+            const int fn = int(fx.y), fxi = iFloor(x * fx.x), fzi = iFloor(z * fx.x);
+            const float raw = read_texel(fs, DXGI_FORMAT_R32_UINT, ((fxi % fn) + fn) % fn, ((fzi % fn) + fn) % fn, 0);
+            u32 bits;
+            std::memcpy(&bits, &raw, 4);
+            fine = float(bits & 0xFFFFu) * da_snow_cap() / 65535.f;
+        }
+        Msg("* [qa] window %.2f %.2f: top %.2f base %.2f taper %.2f shelter %.2f opened %.2f fine depth %.3f", x, z, top, b[0],
+            b[1], b[2], b[3], fine);
+    }
+}
+} // namespace
+
+void da_ground_window_probe(pcstr args)
+{
+    SProbeReq r{0.f, 0.f, 0.25f, 0.f, 8};
+    if (args)
+        sscanf(args, "%f %f %f %f %d", &r.x, &r.z, &r.dx, &r.dz, &r.count);
+    r.count = clampr(r.count, 1, 64);
+    g_probe_req = r;
+    g_probe_pending = true;
+}
+
 void da_ground_frame_prepare(CBackend& cmd_list)
 {
+    if (g_probe_pending)
+        window_probe();
     if (!g.tris || !ensure_shaders())
         return;
     // The snow is the window's only reader: nothing is rasterised while it has nothing to draw, and the
