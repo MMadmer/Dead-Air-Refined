@@ -1085,7 +1085,7 @@ public:
     }
 };
 
-// QA: `qa_snow_objects [radius]` - the small raised things of the snow bake round the actor (a stump, a block, a cart):
+// QA: `qa_snow_objects [radius] [pits]` - the small raised things of the snow bake round the actor (a stump, a block, a cart):
 // connected texels whose top stands over the ground, under 40 of them, nearest first, with their cover kinds.
 class CCC_QaSnowObjects : public IConsole_Command
 {
@@ -1098,13 +1098,18 @@ public:
         if (!f || !a || f->cover.size() != f->top.size())
             return;
         float radius = 40.f;
-        sscanf(args, "%f", &radius);
+        string32 mode{};
+        sscanf(args, "%f %31s", &radius, mode);
+        // `pits`: where the AI walks a metre under the ground (a cellar's stairs)
+        const bool pits = 0 == xr_strcmp(mode, "pits");
         const Fvector& p = a->Position();
         const int w = int(f->dim_x), h = int(f->dim_z);
         const int cx = iFloor((p.x - f->origin.x) / f->texel), cz = iFloor((p.z - f->origin.y) / f->texel);
         const int r = iCeil(radius / f->texel);
         const auto raised = [&](int x, int z) {
             const size_t i = size_t(z) * w + x;
+            if (pits)
+                return f->walk[i] > -flt_max * 0.5f && f->walk[i] < f->ground[i] - 1.f;
             return f->solid[i] && f->top[i] - f->ground[i] > 0.2f;
         };
         xr_vector<u8> seen(size_t(w) * h, 0);

@@ -303,6 +303,20 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 			[unroll] for (int si = -2; si <= 2; ++si)
 				shelter += step(0.75, gs_cover[c2 + sj * DA_GR_S2 + si]);
 		shelter = smoothstep(0.35, 0.9, shelter * (1.0 / 25.0));
+		// A pit - a cellar's stairwell, a trench - walled on most sides within a metre keeps most of the sky's snow off its
+		// floor: filled to the ground's level, the stairs lay under a flat sheet torn at its walls.
+		{
+			const float b0 = gs_base[c2];
+			float walls = 0.0, all = 0.0;
+			[unroll] for (int pj = -4; pj <= 4; pj += 2)
+				[unroll] for (int pi = -4; pi <= 4; pi += 2)
+				{
+					const float bn = gs_base[c2 + pj * DA_GR_S2 + pi];
+					walls += (bn > DA_GR_NONE * 0.5 && bn > b0 + 0.8) ? 1.0 : 0.0;
+					all += 1.0;
+				}
+			shelter = max(shelter, 0.85 * smoothstep(0.35, 0.7, walls / all));
+		}
 		// the opened solid surface (the dilation of the erosion, as above)
 		float open = DA_GR_NONE;
 		[unroll] for (int oj = -1; oj <= 1; ++oj)
