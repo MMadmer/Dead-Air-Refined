@@ -461,7 +461,11 @@ float2 da_sn_flood(float2 xz, float hg)
 	[branch] if (level < DA_SN_NONE * 0.5)
 		return float2(DA_SN_NONE, 0.0);
 	const float reach = (wf.y > 0.5) ? 1.0 : saturate((2.5 * texel - wf.w) / (0.5 * texel));
-	return float2(level, saturate((level - hg) / 0.05) * reach);
+	// Beside the field, a shore the collision's liquid faces miss lies centimetres under the water's surface; ground
+	// lower than that lies past a wall or a rim - water standing in a house or a tank, the path outside no pond's bank
+	// (it froze into a raised sheet that took no prints).
+	const float bank = (wf.y > 0.5) ? 1.0 : saturate((0.2 - (level - hg)) / 0.05);
+	return float2(level, saturate((level - hg) / 0.05) * reach * bank);
 }
 
 // Ice and the snow on it at xz, where the ground window has a water surface: x ice cover, y snow depth on

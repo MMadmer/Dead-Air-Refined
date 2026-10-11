@@ -284,7 +284,9 @@ A vertex stands on the snow base raised by the current depth, and only where geo
   under it, ramping over 4 cm of height, plus a micro-relief noise of +-1.2 cm (lobes of 1.3 m and 0.4 m) that
   lets the line meander on a flat shore and keeps it nearly straight along a steep bank; beyond that reach, or
   where the window holds no liquid face at all, the baked field's pond takes over (`da_sn_flood`: ground below
-  a frozen pond's surface within two field texels of it, one field texel deciding first), the share blending
+  a frozen pond's surface within two field texels of it, one field texel deciding first - and no more than 0.2 m
+  under it: lower ground lies past a wall or a rim, water standing in a house; the path outside it froze into a raised
+  sheet that took no prints), the share blending
   from one to the other by the window's reach, so they meet without a seam. The window's own water share - the
   bilinear of its 0.25 m water texels - drew the edge of the ice as a staircase of 1 m runs and 0.25 m risers,
   seen at a grazing angle as rectangular notches (the March church pond, three rounds); it now decides only
