@@ -237,6 +237,10 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 				const bool ring = lo_e > DA_GR_NONE * 0.5 && lo_e < m - DA_GR_OVER_TERRAIN && lo_e < terrain + 0.5;
 				const float ref = ring ? max(terrain, lo_e) : terrain;
 				under = has_floor ? clamp(low, ref - (ring ? 0.05 : 0.3), ref + 0.1) : ref;
+				// A floor level with the ground round the cover is a passage's - under a bridge's arch -, not a cellar's: the
+				// floor itself (held to the terrain, the snow's base hung over it and crossed the bridge's face in a band)
+				[branch] if (has_floor && lo_e > DA_GR_NONE * 0.5 && abs(low - lo_e) < 0.2)
+					under = low;
 			}
 			else
 			{
@@ -247,7 +251,12 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		// 1 an overhang (it shelters), 0.5 a solid object (it only takes the ground's snow under it, hidden). The bake's
 		// kind is a metre wide and dilated by one: only a cover standing an overhang's clearance (1.5 m, da_snow_bake.cpp)
 		// over the terrain takes it - crates a metre from a house's eave took the eave's and stood in a bare patch.
-		gs_cover[k2] = cover ? ((bake > 0.75 && m - terrain_t > 1.5) ? 1.0 : 0.5) : 0.0;
+		// (negative: a cover whose base the terrain clamp holds well over its own floor - a bridge's side, ramping from
+		// the ground to the deck: its steps are no cover's footprint the cliff test forgives, or the grid hung a curtain
+		// under the arch; nor does it shelter)
+		const float kind = (bake > 0.75 && m - terrain_t > 1.5) ? 1.0 : 0.5;
+		const bool hanging = cover && has_floor && under > low + DA_GR_OVER_TERRAIN;
+		gs_cover[k2] = cover ? (hanging ? -kind : kind) : 0.0;
 		gs_base[k2] = cover ? under : hg;
 	}
 	GroupMemoryBarrierWithGroupSync();
