@@ -262,7 +262,8 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 	GroupMemoryBarrierWithGroupSync();
 
 	// cliffs: no surface, or a step to a neighbour above what a 50 degree slope gives over one texel; never
-	// into a cover's footprint (a raised floor behind a wall is no bank: the snow outside runs to the wall)
+	// into a cover's footprint (a raised floor behind a wall is no bank: the snow outside runs to the wall) unless
+	// the texel stands well over the cover's base - a walked bridge deck over the ground: the grid hung from it in curtains
 	const float jump = max(0.35, 1.2 * da_gr_win.x);
 	[loop] for (uint k3 = gi; k3 < uint(DA_GR_S3 * DA_GR_S3); k3 += DA_GR_T * DA_GR_T)
 	{
@@ -270,10 +271,12 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 		const int ci = c.y * DA_GR_S2 + c.x;
 		const float h = gs_base[ci];
 		const bool cov = gs_cover[ci] > 0.25;
-		const float hl = (cov || gs_cover[ci - 1] > 0.25) ? h : gs_base[ci - 1];
-		const float hr = (cov || gs_cover[ci + 1] > 0.25) ? h : gs_base[ci + 1];
-		const float hd = (cov || gs_cover[ci - DA_GR_S2] > 0.25) ? h : gs_base[ci - DA_GR_S2];
-		const float hu = (cov || gs_cover[ci + DA_GR_S2] > 0.25) ? h : gs_base[ci + DA_GR_S2];
+		const float bl = gs_base[ci - 1], br = gs_base[ci + 1];
+		const float bd = gs_base[ci - DA_GR_S2], bu = gs_base[ci + DA_GR_S2];
+		const float hl = (cov || (gs_cover[ci - 1] > 0.25 && h < bl + 1.2)) ? h : bl;
+		const float hr = (cov || (gs_cover[ci + 1] > 0.25 && h < br + 1.2)) ? h : br;
+		const float hd = (cov || (gs_cover[ci - DA_GR_S2] > 0.25 && h < bd + 1.2)) ? h : bd;
+		const float hu = (cov || (gs_cover[ci + DA_GR_S2] > 0.25 && h < bu + 1.2)) ? h : bu;
 		const float lo = min(min(hl, hr), min(hd, hu));
 		const bool none = min(h, lo) < DA_GR_NONE * 0.5;
 		const float rise = max(max(abs(hl - h), abs(hr - h)), max(abs(hd - h), abs(hu - h)));

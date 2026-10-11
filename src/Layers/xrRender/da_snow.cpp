@@ -553,7 +553,7 @@ void road_edges(const SSnowField& f, xr_vector<u8>& out)
 // edges, the depth texture the composite fills.
 // Yellow snow: where a man or a dog relieved himself - rarely, at the foot of a tree or a stump in the open, more
 // rarely at a static object's or a wall's foot, never amid the houses (by the overhangs' density round it). A stain
-// stands a little off what it was made against, 12 to 35 cm across its core (the photo pack: a darker amber core
+// stands a little off what it was made against, some 20 to 60 cm across its core (the photo pack: a darker amber core
 // melted into the snow, a pale lemon halo, a scatter of drops; at a tree's foot, a bench's leg, a path's edge).
 void stains_build(const SSnowField& f)
 {
@@ -582,28 +582,28 @@ void stains_build(const SSnowField& f)
         return float(v & 0xFFFFFFu) / 16777216.f;
     };
     xr_vector<Fvector4> list;
-    // at least 6 m apart (a tree's several visuals share a root; a group of blocks gave a cluster of stains)
+    // some 3 m apart (a tree's several visuals share a root; a group of blocks gave a cluster of stains)
     std::unordered_set<u64> taken;
     const auto add = [&](float x, float z, u32 salt) {
-        const int kx = int(std::floor(x / 6.f)), kz = int(std::floor(z / 6.f));
+        const int kx = int(std::floor(x / 3.f)), kz = int(std::floor(z / 3.f));
         for (int dz = -1; dz <= 1; ++dz)
             for (int dx = -1; dx <= 1; ++dx)
                 if (taken.count((u64(u32(kx + dx)) << 32) | u32(kz + dz)))
                     return;
         taken.insert((u64(u32(kx)) << 32) | u32(kz));
-        const float r = 0.12f + 0.23f * hash(x, z, salt + 7u);
+        const float r = 0.16f + 0.32f * hash(x, z, salt + 7u);
         list.push_back({x, z, r, hash(x, z, salt + 11u)});
     };
-    // trees and stumps: one in twenty, in the open
+    // trees and stumps: one in seven, in the open
     if (g_pGamePersistent)
         for (const Fvector& p : g_pGamePersistent->Environment().wind_veg_trees)
         {
-            if (hash(p.x, p.z, 1u) > 0.05f || built(p.x, p.z) > 60u)
+            if (hash(p.x, p.z, 1u) > 0.15f || built(p.x, p.z) > 60u)
                 continue;
             const float a = hash(p.x, p.z, 2u) * PI_MUL_2, d = 0.35f + 0.55f * hash(p.x, p.z, 3u);
             add(p.x + std::sin(a) * d, p.z + std::cos(a) * d, 4u);
         }
-    // the foot of a static object or a wall: an edge texel of a cover, one in fifty (an object) or a hundred and fifty
+    // the foot of a static object or a wall: an edge texel of a cover, one in thirty (an object) or seventy
     // (a building) of the 4 m cells along it, away from the built-up middle
     static const int nb[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
     for (u32 z = 1; z + 1 < h; ++z)
@@ -618,7 +618,7 @@ void stains_build(const SSnowField& f)
                     continue;
                 const float cx = f.origin.x + (float(x) + 0.5f) * f.texel, cz = f.origin.y + (float(z) + 0.5f) * f.texel;
                 const u32 side = u32(d[0] + 2) * 3u + u32(d[1] + 2);
-                if (hash(std::floor(cx / 4.f), std::floor(cz / 4.f), 5u + side) > (c == 1 ? 0.01f : 0.005f))
+                if (hash(std::floor(cx / 4.f), std::floor(cz / 4.f), 5u + side) > (c == 1 ? 0.03f : 0.015f))
                     continue;
                 if (built(cx, cz) > (c == 1 ? 60u : 250u))
                     continue;
