@@ -520,10 +520,10 @@ is lit as a stock glossy material, the snow on it as code 31.
 ## Yellow snow
 
 Where a man or a dog relieved himself: rarely, and never amid the houses. At level load (`stains_build`, da_snow.cpp)
-one tree or stump in ten in the open (`Environment::wind_veg_trees`, fewer than 60 overhang texels in the 41 x 41 m
-round it) gets a stain 0.35-0.9 m off its root; one in fifty of the 4 m cells along a static object's foot and one
-in a hundred along a building's (on the outskirts: fewer than 250 overhang texels round it) get one 0.25-0.65 m off
-it; stains stand some 4 m apart (escape: about 320). They go to the GPU by 8 m cells (`$user$da_snow_stain_cells`,
+one tree or stump in twenty in the open (`Environment::wind_veg_trees`, fewer than 60 overhang texels in the 41 x 41 m
+round it) gets a stain 0.35-0.9 m off its root; one in a hundred of the 4 m cells along a static object's foot and one
+in two hundred along a building's (on the outskirts: fewer than 250 overhang texels round it) get one 0.25-0.65 m off
+it; stains stand at least 6 m apart (escape: about 150). They go to the GPU by 8 m cells (`$user$da_snow_stain_cells`,
 first << 12 | count; `$user$da_snow_stains`, x z radius seed) and the layer paints them within 80 m
 (`da_sn_stain_at`), after the reference photos: a core some 20-60 cm, 1.3-2.6 times longer than wide, its edge ragged by
 three octaves of noise down to a couple of centimetres, ochre and darker toward where the stream struck; a pale lemon
