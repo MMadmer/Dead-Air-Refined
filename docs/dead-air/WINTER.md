@@ -17,7 +17,7 @@ collision mesh at 1 m over the level's box and hands the result to `da_snow_fiel
 
 | Field | What it is |
 |---|---|
-| `ground` | the terrain under everything: the collision surface where it lies inside the `level.details` slot's ground span, the span's middle under roofs and decks, hole-filled (pyramid) where no slot was written |
+| `ground` | the terrain under everything: the collision surface where it lies inside the `level.details` slot's ground span, under roofs and decks the highest solid face up within that span (the floor under them; the span's middle stood up to 0.8 m over a path between a house and its fence, and the snow lay raised along it out of the boots' reach), the span's middle where there is none, hole-filled (pyramid) where no slot was written |
 | `top` | the topmost non-passable surface facing up: snow lies on roofs and decks, nothing under them. Passable materials (crowns, bushes, water, occluders: `[snow_bake] skip`) and tree trunks (`[snow_bake] trunk`: the snow lies round a trunk, not on its branches) are skipped; `solid` = 1 where any collision gave a top, 0 where `top` is the hole-filled ground |
 | `weights` | soft class weights (open, under trees, road, drift), RGBA8 summing to 255; zero on water |
 | `factors` | RGBA8: A/2 (accumulation), M/2 (melt), noise n, neglect N |

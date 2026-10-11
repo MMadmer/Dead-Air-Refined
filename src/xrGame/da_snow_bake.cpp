@@ -938,20 +938,53 @@ void da_snow_bake_level()
     {
         xr_vector<float> g0(n, 0.f);
         xr_vector<u8> g0_ok(n, 0);
+        xr_vector<float> slo(n, flt_max), shi(n, -flt_max);
         for (int z = 0; z < g.nz; ++z)
             for (int x = 0; x < g.nx; ++x)
             {
-                const size_t i = g.at(x, z);
                 float lo, hi;
-                if (!details.span(g.cx(x), g.cz(z), lo, hi))
-                    continue;
-                slot_ok[i] = 1;
-                g0_ok[i] = 1;
-                // The collision wherever it lies within the slot's ground span: 1 m sharper than the
-                // 2 m slot. A roof or a pit takes the span's middle.
-                g0[i] = (top[i] > none_y && top[i] >= lo - 0.5f && top[i] <= hi + 0.5f) ? top[i] : 0.5f * (lo + hi);
+                if (details.span(g.cx(x), g.cz(z), lo, hi))
+                {
+                    slo[g.at(x, z)] = lo;
+                    shi[g.at(x, z)] = hi;
+                }
             }
         details.close();
+        // The highest solid face up within the slot's span under each texel: the floor under a roof, an eave, a deck.
+        // (The span's middle stood in there before: up to 0.8 m over the path between a house and its fence, and the
+        // snow lay raised along it, out of reach of the boots in it.)
+        xr_vector<float> floor_in(n, none_y);
+        for (u32 t = 0; t < tcount; ++t)
+        {
+            const CDB::TRI& tri = tris[t];
+            if (mclass(tri.material) & (mc_crown | mc_water | mc_skip | mc_trunk))
+                continue;
+            const Fvector& a = verts[tri.verts[0]];
+            const Fvector& b = verts[tri.verts[1]];
+            const Fvector& c = verts[tri.verts[2]];
+            Fvector nrm;
+            nrm.mknormal_non_normalized(a, b, c);
+            const float len = nrm.magnitude();
+            if (len < 1e-8f || nrm.y / len <= 0.3f)
+                continue;
+            raster_centres(g, a, b, c, [&](size_t i, float y) {
+                if (slo[i] != flt_max && y >= slo[i] - 0.5f && y <= shi[i] + 0.5f && y > floor_in[i])
+                    floor_in[i] = y;
+            });
+        }
+        for (size_t i = 0; i < n; ++i)
+        {
+            if (slo[i] == flt_max)
+                continue;
+            slot_ok[i] = 1;
+            g0_ok[i] = 1;
+            // The collision wherever it lies within the slot's ground span: 1 m sharper than the 2 m slot. A roof
+            // takes the floor under it in the span, a pit or no floor the span's middle.
+            if (top[i] > none_y && top[i] >= slo[i] - 0.5f && top[i] <= shi[i] + 0.5f)
+                g0[i] = top[i];
+            else
+                g0[i] = floor_in[i] > none_y ? floor_in[i] : 0.5f * (slo[i] + shi[i]);
+        }
         xr_vector<float> filled = g0;
         fill_holes(g.nx, g.nz, filled, g0_ok);
         for (size_t i = 0; i < n; ++i)
