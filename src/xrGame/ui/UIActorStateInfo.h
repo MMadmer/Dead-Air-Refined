@@ -22,6 +22,15 @@ class CActor;
 
 class ui_actor_state_item;
 
+// The last dose a dosimeter measured, the actor's radiation (0..1) then, and when; below zero when
+// none was. Dead Air tells the player his dose only when he measures it: the actor menu's radiation
+// sign shows this, never the live value (dead_air_x64_dosimeter.script keeps it in the save).
+namespace measured_dose
+{
+void set(float radiation, pcstr when);
+float value();
+}
+
 class ui_actor_state_wnd final : public CUIWindow
 {
 private:
@@ -47,6 +56,11 @@ private:
     };
     ui_actor_state_item* m_state[stt_count]{};
     UIHint* m_hint_wnd{};
+    // the sticks the health and satiety bars show (see steady_sticks)
+    float m_health_sticks{ -1.0f };
+    float m_satiety_sticks{ -1.0f };
+    // the dose the radiation sign's hint was made for
+    float m_hint_dose{ -2.0f };
 
 public:
     ui_actor_state_wnd() : CUIWindow(ui_actor_state_wnd::GetDebugType()) {}

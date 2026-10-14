@@ -3294,6 +3294,21 @@ A click marks a part or takes the mark off (the row tinted, a bar at its edge; `
 marked, as a double click always does. The sprint key takes every part at once, as Take All does -
 the same key takes everything in a search.
 
+## The radiation sign of the actor menu
+
+Dead Air tells the player his dose only when he measures it, so the radiation sign of the inventory's
+state panel is the dose measured last, never the live one: hidden before any measurement, green,
+yellow or red by the measured dose after it, its hint the dose in mSv, in the sign's colour, and the
+game time it was taken (`st_da_measured_dose_hint` takes the colour's opening tag, the dose, the
+closing tag and the time: `%s%d mSv%s (%s)`).
+`dead_air_x64_dosimeter.script` takes the measurement where the dosimeter shows it (`st_rad_level`)
+and keeps it in the save. A mod with a way of its own to measure reports it with
+`ActorMenu.set_measured_radiation(radiation, when)` (the actor's radiation then, 0..1, and the time
+as text; below zero clears it); `ActorMenu.get_measured_radiation()` reads it. The hints of the panel
+are short game descriptions (`st_da_state_*`, `st_da_measured_dose_hint`). The health and satiety
+bars change by whole sticks and only once the value has moved most of a stick, so the last stick no
+longer blinks at full health under a little radiation.
+
 ## NPC AI: what scripts and configs see now
 
 Human NPCs perceive, remember and talk on their own (`NPC_AI.md`); mutants are unchanged. Every public name and call

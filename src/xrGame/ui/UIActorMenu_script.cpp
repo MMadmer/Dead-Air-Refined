@@ -7,6 +7,7 @@
 
 #include "pch_script.h"
 #include "UIActorMenu.h"
+#include "UIActorStateInfo.h"
 #include "UIPdaWnd.h"
 #include "Actor.h"
 #include "inventory_item.h"
@@ -240,6 +241,9 @@ void CUIActorMenu::script_register(lua_State* luaState)
     [
         def("get_pda_menu", +[](){ return &CurrentGameUI()->GetPdaMenu(); }),
         def("get_actor_menu", +[](){ return &CurrentGameUI()->GetActorMenu(); }),
+        // the dose a dosimeter measured last (the actor's radiation, 0..1; below zero: none) and when
+        def("set_measured_radiation", +[](float radiation, pcstr when) { measured_dose::set(radiation, when); }),
+        def("get_measured_radiation", +[]() { return measured_dose::value(); }),
         def("get_menu_mode", +[](){ return CurrentGameUI()->GetActorMenu().GetMenuMode(); }),
         def("get_maingame", +[](){ return CurrentGameUI()->UIMainIngameWnd; })
     ];

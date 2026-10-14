@@ -369,24 +369,27 @@ class Layout:
         # health: the heart, the bar, bleeding and radiation lighting up at its end
         self.w('        <auto_static %s><shape kind="heart" fill="$health"/></auto_static>' % self.rect(10, 9, 14, 14))
         self.w('        <health_state %s>' % self.rect(30, 10, w - 80, 12))
-        self.w('            <hint_text delay="800">st_ui_health_sensor_inv</hint_text>')
+        self.w('            <hint_text delay="800">st_da_state_health</hint_text>')
         self.w('            <state_progress %s horz="1" min="0" max="1" pos="0">' % self.rect(0, 0, w - 80, 12))
         self.w('                <progress shape="bar_fill"><shape fill="$health"/></progress>')
         self.w('                <background shape="bar_track"/>')
         self.w('            </state_progress>')
         self.w('        </health_state>')
-        for node, kind, hint, x in (('bleeding_state', 'drop', 'st_ui_bleeding_sensor', w - 44), ('radiation_state', 'trefoil', 'st_ui_main_sensor', w - 24)):
+        # Bleeding blinks while it lasts; the radiation sign is the dose a dosimeter measured last,
+        # its hint written by the engine (st_da_measured_dose_hint).
+        for node, kind, hint, x, blink in (('bleeding_state', 'drop', 'st_da_state_bleeding', w - 44, True),
+                                           ('radiation_state', 'trefoil', 'st_da_measured_dose_hint', w - 24, False)):
             self.w('        <%s %s>' % (node, self.rect(x, 8, 16, 16)))
             self.w('            <hint_text delay="800">%s</hint_text>' % hint)
+            anim = ' light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"' if blink else ''
             for icon, color in (('icon', '$good'), ('icon2', '$warn'), ('icon3', '$bad')):
-                self.w('            <%s x="0" y="0" width="%s" height="16" light_anim="ui_slow_blinking" la_cyclic="1"'
-                       ' la_texture="1" la_text="0" la_alpha="1"><shape kind="%s" fill="%s"/></%s>'
-                       % (icon, num(16 * self.kx), kind, color, icon))
+                self.w('            <%s x="0" y="0" width="%s" height="16"%s><shape kind="%s" fill="%s"/></%s>'
+                       % (icon, num(16 * self.kx), anim, kind, color, icon))
             self.w('        </%s>' % node)
         # what the second bar shows is satiety
         self.w('        <auto_static %s><shape kind="cutlery" fill="$satiety"/></auto_static>' % self.rect(10, 29, 14, 14))
         self.w('        <stamina_state %s>' % self.rect(30, 33, w - 80, 6))
-        self.w('            <hint_text delay="800">st_ui_stamina_sensor_inv</hint_text>')
+        self.w('            <hint_text delay="800">st_da_state_satiety</hint_text>')
         self.w('            <state_progress %s horz="1" min="0" max="1" pos="0">' % self.rect(0, 0, w - 80, 6))
         self.w('                <progress shape="bar_thin_fill"><shape fill="$satiety"/></progress>')
         self.w('                <background shape="bar_thin_track"/>')
@@ -394,14 +397,15 @@ class Layout:
         self.w('        </stamina_state>')
         self.w('        <auto_static %s shape="rule"/>' % self.rect(10, 48, w - 20, 1))
         # the protection of what is worn: four rows of two
-        sensors = [('radia_sensor', 'trefoil', 'ui_inv_radiation_protection'),
-                   ('psi_sensor', 'psi', 'ui_inv_telepatic_protection'),
-                   ('acid_sensor', 'biohazard', 'ui_inv_chemical_burn_protection'),
-                   ('wound_sensor', 'claw', 'ui_inv_wound_protection'),
-                   ('shock_sensor', 'bolt', 'ui_inv_shock_protection'),
-                   ('fire_wound_sensor', 'bullet', 'ui_inv_fire_wound_protection'),
-                   ('fire_sensor', 'flame', 'ui_inv_burn_protection'),
-                   ('power_sensor', 'runner', 'ui_inv_power_restore')]
+        # short hints of what each protection does in the game (st_da_state_*)
+        sensors = [('radia_sensor', 'trefoil', 'st_da_state_radiation'),
+                   ('psi_sensor', 'psi', 'st_da_state_psi'),
+                   ('acid_sensor', 'biohazard', 'st_da_state_chemical'),
+                   ('wound_sensor', 'claw', 'st_da_state_wound'),
+                   ('shock_sensor', 'bolt', 'st_da_state_shock'),
+                   ('fire_wound_sensor', 'bullet', 'st_da_state_fire_wound'),
+                   ('fire_sensor', 'flame', 'st_da_state_burn'),
+                   ('power_sensor', 'runner', 'st_da_state_power')]
         col_w = (w - 30) / 2
         for i, (node, kind, hint) in enumerate(sensors):
             x = 10 + (i % 2) * (col_w + 10)

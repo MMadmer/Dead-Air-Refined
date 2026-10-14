@@ -353,27 +353,27 @@
         </hint_wnd>
         <auto_static x="7.5" y="9" width="10.5" height="14"><shape kind="heart" fill="$health"/></auto_static>
         <health_state x="22.5" y="10" width="184.5" height="12">
-            <hint_text delay="800">st_ui_health_sensor_inv</hint_text>
+            <hint_text delay="800">st_da_state_health</hint_text>
             <state_progress x="0" y="0" width="184.5" height="12" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$health"/></progress>
                 <background shape="bar_track"/>
             </state_progress>
         </health_state>
         <bleeding_state x="211.5" y="8" width="12" height="16">
-            <hint_text delay="800">st_ui_bleeding_sensor</hint_text>
+            <hint_text delay="800">st_da_state_bleeding</hint_text>
             <icon x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$good"/></icon>
             <icon2 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$warn"/></icon2>
             <icon3 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$bad"/></icon3>
         </bleeding_state>
         <radiation_state x="226.5" y="8" width="12" height="16">
-            <hint_text delay="800">st_ui_main_sensor</hint_text>
-            <icon x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="trefoil" fill="$good"/></icon>
-            <icon2 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="trefoil" fill="$warn"/></icon2>
-            <icon3 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="trefoil" fill="$bad"/></icon3>
+            <hint_text delay="800">st_da_measured_dose_hint</hint_text>
+            <icon x="0" y="0" width="12" height="16"><shape kind="trefoil" fill="$good"/></icon>
+            <icon2 x="0" y="0" width="12" height="16"><shape kind="trefoil" fill="$warn"/></icon2>
+            <icon3 x="0" y="0" width="12" height="16"><shape kind="trefoil" fill="$bad"/></icon3>
         </radiation_state>
         <auto_static x="7.5" y="29" width="10.5" height="14"><shape kind="cutlery" fill="$satiety"/></auto_static>
         <stamina_state x="22.5" y="33" width="184.5" height="6">
-            <hint_text delay="800">st_ui_stamina_sensor_inv</hint_text>
+            <hint_text delay="800">st_da_state_satiety</hint_text>
             <state_progress x="0" y="0" width="184.5" height="6" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_thin_fill"><shape fill="$satiety"/></progress>
                 <background shape="bar_thin_track"/>
@@ -381,7 +381,7 @@
         </stamina_state>
         <auto_static x="7.5" y="48" width="229.5" height="1" shape="rule"/>
         <radia_sensor x="7.5" y="58" width="111" height="14">
-            <hint_text delay="800">ui_inv_radiation_protection</hint_text>
+            <hint_text delay="800">st_da_state_radiation</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="trefoil" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>
@@ -389,7 +389,7 @@
             </state_progress>
         </radia_sensor>
         <psi_sensor x="126" y="58" width="111" height="14">
-            <hint_text delay="800">ui_inv_telepatic_protection</hint_text>
+            <hint_text delay="800">st_da_state_psi</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="psi" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>
@@ -397,7 +397,7 @@
             </state_progress>
         </psi_sensor>
         <acid_sensor x="7.5" y="77" width="111" height="14">
-            <hint_text delay="800">ui_inv_chemical_burn_protection</hint_text>
+            <hint_text delay="800">st_da_state_chemical</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="biohazard" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>
@@ -405,7 +405,7 @@
             </state_progress>
         </acid_sensor>
         <wound_sensor x="126" y="77" width="111" height="14">
-            <hint_text delay="800">ui_inv_wound_protection</hint_text>
+            <hint_text delay="800">st_da_state_wound</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="claw" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>
@@ -413,7 +413,7 @@
             </state_progress>
         </wound_sensor>
         <shock_sensor x="7.5" y="96" width="111" height="14">
-            <hint_text delay="800">ui_inv_shock_protection</hint_text>
+            <hint_text delay="800">st_da_state_shock</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="bolt" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>
@@ -421,7 +421,7 @@
             </state_progress>
         </shock_sensor>
         <fire_wound_sensor x="126" y="96" width="111" height="14">
-            <hint_text delay="800">ui_inv_fire_wound_protection</hint_text>
+            <hint_text delay="800">st_da_state_fire_wound</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="bullet" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>
@@ -429,7 +429,7 @@
             </state_progress>
         </fire_wound_sensor>
         <fire_sensor x="7.5" y="115" width="111" height="14">
-            <hint_text delay="800">ui_inv_burn_protection</hint_text>
+            <hint_text delay="800">st_da_state_burn</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="flame" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>
@@ -437,7 +437,7 @@
             </state_progress>
         </fire_sensor>
         <power_sensor x="126" y="115" width="111" height="14">
-            <hint_text delay="800">ui_inv_power_restore</hint_text>
+            <hint_text delay="800">st_da_state_power</hint_text>
             <icon x="0" y="0" width="10.5" height="14"><shape kind="runner" fill="$text_dim"/></icon>
             <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
                 <progress shape="bar_fill"><shape fill="$protection"/></progress>

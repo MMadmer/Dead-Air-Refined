@@ -1,0 +1,51 @@
+-- The last dose a dosimeter measured, for the radiation sign of the actor menu.
+--
+-- Dead Air tells the player his dose only when he uses the dosimeter (itms_manager shows it as
+-- st_rad_level with the battery the UPD has left); nothing reads it passively. So the sign of the
+-- inventory shows that measurement, not the live value, and the save keeps it: the dose and the game
+-- time it was taken. The measurement is caught where it is shown, so whatever decides that it worked
+-- (the battery option, a mod's own rules) decides it for the sign too.
+--
+-- A mod with a way of its own to measure the dose reports it the same way:
+-- ActorMenu.set_measured_radiation(<the actor's radiation then, 0..1>, <when, as text>).
+
+local measured, when
+
+local function publish()
+	ActorMenu.set_measured_radiation(measured or -1, when or "")
+end
+
+local function on_measure()
+	measured = db.actor.radiation
+	local _, month, day, hour, minute = game.get_game_time():get(0, 0, 0, 0, 0, 0, 0)
+	when = string.format("%02d.%02d %02d:%02d", day, month, hour, minute)
+	utils.save_var(db.actor, "dar_measured_dose", measured)
+	utils.save_var(db.actor, "dar_measured_dose_time", when)
+	publish()
+end
+
+-- the dosimeter's message is the measurement
+local set_hud_msg
+local function hud_msg(text, ...)
+	if type(text) == "string" and db.actor then
+		local prefix = game.translate_string("st_rad_level")
+		if prefix ~= "" and text:sub(1, #prefix) == prefix then
+			on_measure()
+		end
+	end
+	return set_hud_msg(text, ...)
+end
+
+local function actor_on_first_update()
+	measured = utils.load_var(db.actor, "dar_measured_dose", nil)
+	when = utils.load_var(db.actor, "dar_measured_dose_time", nil)
+	publish()
+end
+
+function on_game_start()
+	if not set_hud_msg and _G.SetHudMsg then
+		set_hud_msg = _G.SetHudMsg
+		_G.SetHudMsg = hud_msg
+	end
+	RegisterScriptCallback("actor_on_first_update", actor_on_first_update)
+end

@@ -13,6 +13,7 @@
 #include "xrUICore/Windows/UIFrameWindow.h"
 #include "xrUICore/Static/UIStatic.h"
 #include "UIXmlInit.h"
+#include "xrUICore/Static/UIShape.h"
 #include "Common/object_broker.h"
 #include "UIHelper.h"
 #include "xrUICore/arrow/ui_arrow.h"
@@ -31,6 +32,32 @@
 #include "Artefact.h"
 
 ui_actor_state_wnd::~ui_actor_state_wnd() { delete_data(m_hint_wnd); }
+
+namespace
+{
+float g_measured_dose = -1.0f;
+shared_str g_measured_when;
+
+// Whole sticks of a bar, one let go only once the value has moved a good part of a stick past it.
+// At full health a little radiation took a sliver every frame and the regeneration gave it back
+// every few: floored, the last stick blinked for as long as the player stood there.
+float steady_sticks(float value, float& shown)
+{
+    constexpr float sticks = 55.0f;
+    const float target = value * sticks;
+    if (shown < 0.0f || std::abs(target - shown) > 0.75f)
+        shown = std::round(target);
+    return shown / sticks;
+}
+} // namespace
+
+void measured_dose::set(float radiation, pcstr when)
+{
+    g_measured_dose = radiation;
+    g_measured_when = when ? when : "";
+}
+
+float measured_dose::value() { return g_measured_dose; }
 
 void ui_actor_state_wnd::init_from_xml(CUIXml& xml)
 {
@@ -93,14 +120,10 @@ void ui_actor_state_wnd::UpdateActorInfo(CInventoryOwner* owner)
     const auto& conditions = actor->conditions();
 
     // show satiety icon
-    value = conditions.GetSatiety();
-    value = floor(value * 55) / 55; // number of sticks in progress bar
-    m_state[stt_stamina]->set_progress(value);
+    m_state[stt_stamina]->set_progress(steady_sticks(conditions.GetSatiety(), m_satiety_sticks));
 
     // show health icon
-    value = conditions.GetHealth();
-    value = floor(value * 55) / 55; // number of sticks in progress bar
-    m_state[stt_health]->set_progress(value);
+    m_state[stt_health]->set_progress(steady_sticks(conditions.GetHealth(), m_health_sticks));
 
     // show bleeding icon
     value = conditions.BleedingSpeed();
@@ -120,13 +143,25 @@ void ui_actor_state_wnd::UpdateActorInfo(CInventoryOwner* owner)
             m_state[stt_bleeding]->show_static(true, 3);
     }
 
-    // show radiation icon
-    value = conditions.GetRadiation();
+    // The radiation sign: the dose measured last, its hint the dose - in the colour of the sign - and when.
+    value = measured_dose::value();
+    if (!fsimilar(value, m_hint_dose))
+    {
+        m_hint_dose = value;
+        u32 color = 0xFFFFFFFF;
+        UITheme::Color(value < 0.35f ? "good" : (value < 0.7f ? "warn" : "bad"), color);
+        string64 open;
+        xr_sprintf(open, "%%c[255,%u,%u,%u]", color_get_R(color), color_get_G(color), color_get_B(color));
+        string512 hint;
+        xr_sprintf(hint, StringTable().translate("st_da_measured_dose_hint").c_str(), open,
+            iFloor(std::max(value, 0.0f) * 10000.0f), "%c[default]", g_measured_when.c_str());
+        m_state[stt_radiation]->set_hint_text(hint);
+    }
     m_state[stt_radiation]->show_static(false, 1);
     m_state[stt_radiation]->show_static(false, 2);
     m_state[stt_radiation]->show_static(false, 3);
 
-    if (!fis_zero(value, EPS))
+    if (value > EPS)
     {
         if (value < 0.35f)
             m_state[stt_radiation]->show_static(true, 1);

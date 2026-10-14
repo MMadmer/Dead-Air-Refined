@@ -123,6 +123,42 @@
 	<string id="st_da_weight_hint">
 		<text>Current weight: %.1f kg\nUp to %.1f kg - no overload.\nUp to %.1f kg - overload: stamina is spent faster.\nA full bar is a full overload: movement slows down.</text>
 	</string>
+	<string id="st_da_state_health">
+		<text>Health\nAt zero the character dies. It comes back slowly while the character is fed, and quickly with medicine.</text>
+	</string>
+	<string id="st_da_state_bleeding">
+		<text>Bleeding\nTakes health until it is stopped, the faster the worse the wound. Bandages and medkits stop it.</text>
+	</string>
+	<string id="st_da_state_satiety">
+		<text>Satiety\nHungry, the character recovers health and stamina worse; starving, the character loses health.</text>
+	</string>
+	<string id="st_da_measured_dose_hint">
+		<text>Last measured dose: %s%d mSv%s (%s)\nRadiation slowly takes health until antiradiation means remove it.</text>
+	</string>
+	<string id="st_da_state_radiation">
+		<text>Radiation protection\nLowers the dose taken in contaminated places and from radioactive items.</text>
+	</string>
+	<string id="st_da_state_psi">
+		<text>Psi protection\nLowers the damage of psi emissions and of mutants' psi attacks.</text>
+	</string>
+	<string id="st_da_state_chemical">
+		<text>Chemical protection\nLowers the damage of acid anomalies and chemical attacks.</text>
+	</string>
+	<string id="st_da_state_wound">
+		<text>Rupture protection\nLowers the damage of mutants' claws and teeth, of knives and of tearing anomalies.</text>
+	</string>
+	<string id="st_da_state_shock">
+		<text>Shock protection\nLowers the damage of electric anomalies.</text>
+	</string>
+	<string id="st_da_state_fire_wound">
+		<text>Bullet protection\nLowers the damage of bullets and fragments.</text>
+	</string>
+	<string id="st_da_state_burn">
+		<text>Burn protection\nLowers the damage of fire anomalies and flames.</text>
+	</string>
+	<string id="st_da_state_power">
+		<text>Stamina\nHow the equipment affects the recovery of stamina.</text>
+	</string>
 	<string id="st_cmp_title">
 		<text>Comparison: %s (%u)</text>
 	</string>

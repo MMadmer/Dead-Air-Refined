@@ -1,6 +1,6 @@
 # Writes configs\text\{rus,eng}\dead_air_x64_compare.xml of the compatibility overlay: the strings of the
-# inventory hotkeys, their panel, the item comparison and the hint of an item as new. Russian goes out
-# in windows-1251 like the rest of the game's text.
+# inventory hotkeys, their panel, the item comparison, the hint of an item as new and the hints of the
+# actor menu's state panel. Russian goes out in windows-1251 like the rest of the game's text.
 #
 #   python tools\ui\compare_strings.py
 import os
@@ -63,6 +63,32 @@ S = [
     ('st_da_pristine_suffix', '(100%)', '(100%)'),
     ('st_da_weight_hint', 'Текущий вес: %.1f кг\\nДо %.1f кг - без перегрузки.\\nДо %.1f кг - перегрузка: выносливость расходуется быстрее.\\nПри заполненной шкале - полная перегрузка: скорость передвижения снижается.',
      'Current weight: %.1f kg\\nUp to %.1f kg - no overload.\\nUp to %.1f kg - overload: stamina is spent faster.\\nA full bar is a full overload: movement slows down.'),
+
+    # the state panel of the actor menu: what each bar and sign does in the game, briefly
+    ('st_da_state_health', 'Здоровье\\nПри нуле персонаж погибает. Восстанавливается медленно, если персонаж сыт, и быстро - медикаментами.',
+     'Health\\nAt zero the character dies. It comes back slowly while the character is fed, and quickly with medicine.'),
+    ('st_da_state_bleeding', 'Кровотечение\\nОтнимает здоровье, пока не остановлено: чем сильнее рана, тем быстрее. Останавливается бинтами и аптечками.',
+     'Bleeding\\nTakes health until it is stopped, the faster the worse the wound. Bandages and medkits stop it.'),
+    ('st_da_state_satiety', 'Сытость\\nПри голоде здоровье и силы восстанавливаются хуже, при полном голоде здоровье убывает.',
+     'Satiety\\nHungry, the character recovers health and stamina worse; starving, the character loses health.'),
+    ('st_da_measured_dose_hint', 'Последняя измеренная доза: %s%d мЗв%s (%s)\\nРадиация постепенно отнимает здоровье, пока её не выведут антирадиационные средства.',
+     'Last measured dose: %s%d mSv%s (%s)\\nRadiation slowly takes health until antiradiation means remove it.'),
+    ('st_da_state_radiation', 'Защита от радиации\\nСнижает дозу, получаемую в заражённых местах и от радиоактивных предметов.',
+     'Radiation protection\\nLowers the dose taken in contaminated places and from radioactive items.'),
+    ('st_da_state_psi', 'Пси-защита\\nСнижает урон от пси-излучения и пси-атак мутантов.',
+     'Psi protection\\nLowers the damage of psi emissions and of mutants\' psi attacks.'),
+    ('st_da_state_chemical', 'Защита от химических ожогов\\nСнижает урон кислотных аномалий и химических атак.',
+     'Chemical protection\\nLowers the damage of acid anomalies and chemical attacks.'),
+    ('st_da_state_wound', 'Защита от разрывов\\nСнижает урон когтей и зубов мутантов, ножей и разрывающих аномалий.',
+     'Rupture protection\\nLowers the damage of mutants\' claws and teeth, of knives and of tearing anomalies.'),
+    ('st_da_state_shock', 'Защита от электричества\\nСнижает урон электрических аномалий.',
+     'Shock protection\\nLowers the damage of electric anomalies.'),
+    ('st_da_state_fire_wound', 'Пулестойкость\\nСнижает урон от пуль и осколков.',
+     'Bullet protection\\nLowers the damage of bullets and fragments.'),
+    ('st_da_state_burn', 'Защита от огня\\nСнижает урон огненных аномалий и пламени.',
+     'Burn protection\\nLowers the damage of fire anomalies and flames.'),
+    ('st_da_state_power', 'Выносливость\\nВлияние экипировки на восстановление сил.',
+     'Stamina\\nHow the equipment affects the recovery of stamina.'),
 
     # the comparison
     ('st_cmp_title', 'Сравнение: %s (%u)', 'Comparison: %s (%u)'),
