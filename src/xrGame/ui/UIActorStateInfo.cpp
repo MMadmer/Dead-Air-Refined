@@ -148,14 +148,19 @@ void ui_actor_state_wnd::UpdateActorInfo(CInventoryOwner* owner)
     if (!fsimilar(value, m_hint_dose))
     {
         m_hint_dose = value;
-        u32 color = 0xFFFFFFFF;
-        UITheme::Color(value < 0.35f ? "good" : (value < 0.7f ? "warn" : "bad"), color);
-        string64 open;
-        xr_sprintf(open, "%%c[255,%u,%u,%u]", color_get_R(color), color_get_G(color), color_get_B(color));
-        string512 hint;
-        xr_sprintf(hint, StringTable().translate("st_da_measured_dose_hint").c_str(), open,
-            iFloor(std::max(value, 0.0f) * 10000.0f), "%c[default]", g_measured_when.c_str());
-        m_state[stt_radiation]->set_hint_text(hint);
+        if (value < 0.0f)
+            m_state[stt_radiation]->set_hint_text(StringTable().translate("st_da_measured_dose_none"));
+        else
+        {
+            u32 color = 0xFFFFFFFF;
+            UITheme::Color(value < 0.35f ? "good" : (value < 0.7f ? "warn" : "bad"), color);
+            string64 open;
+            xr_sprintf(open, "%%c[255,%u,%u,%u]", color_get_R(color), color_get_G(color), color_get_B(color));
+            string512 hint;
+            xr_sprintf(hint, StringTable().translate("st_da_measured_dose_hint").c_str(), open,
+                iFloor(value * 10000.0f), "%c[default]", g_measured_when.c_str());
+            m_state[stt_radiation]->set_hint_text(hint);
+        }
     }
     m_state[stt_radiation]->show_static(false, 1);
     m_state[stt_radiation]->show_static(false, 2);

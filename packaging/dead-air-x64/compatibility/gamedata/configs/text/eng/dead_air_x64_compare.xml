@@ -135,6 +135,9 @@
 	<string id="st_da_measured_dose_hint">
 		<text>Last measured dose: %s%d mSv%s (%s)\nRadiation slowly takes health until antiradiation means remove it.</text>
 	</string>
+	<string id="st_da_measured_dose_none">
+		<text>The dose has not been measured yet\nA dosimeter shows the dose taken; the last measured one stays here.</text>
+	</string>
 	<string id="st_da_state_radiation">
 		<text>Radiation protection\nLowers the dose taken in contaminated places and from radioactive items.</text>
 	</string>

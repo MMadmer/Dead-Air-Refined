@@ -376,9 +376,12 @@ class Layout:
         self.w('            </state_progress>')
         self.w('        </health_state>')
         # Bleeding blinks while it lasts; the radiation sign is the dose a dosimeter measured last,
-        # its hint written by the engine (st_da_measured_dose_hint).
+        # its hint written by the engine (st_da_measured_dose_hint). Both stay on the panel muted
+        # while there is nothing to show, the lit sign drawn over the muted one.
         for node, kind, hint, x, blink in (('bleeding_state', 'drop', 'st_da_state_bleeding', w - 44, True),
                                            ('radiation_state', 'trefoil', 'st_da_measured_dose_hint', w - 24, False)):
+            self.w('        <auto_static %s><shape kind="%s" fill="$text_muted"/></auto_static>'
+                   % (self.rect(x, 8, 16, 16), kind))
             self.w('        <%s %s>' % (node, self.rect(x, 8, 16, 16)))
             self.w('            <hint_text delay="800">%s</hint_text>' % hint)
             anim = ' light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"' if blink else ''

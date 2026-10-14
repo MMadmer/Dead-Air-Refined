@@ -73,6 +73,8 @@ S = [
      'Satiety\\nHungry, the character recovers health and stamina worse; starving, the character loses health.'),
     ('st_da_measured_dose_hint', 'Последняя измеренная доза: %s%d мЗв%s (%s)\\nРадиация постепенно отнимает здоровье, пока её не выведут антирадиационные средства.',
      'Last measured dose: %s%d mSv%s (%s)\\nRadiation slowly takes health until antiradiation means remove it.'),
+    ('st_da_measured_dose_none', 'Доза ещё не измерялась\\nДозиметр показывает накопленную дозу; последняя измеренная остаётся здесь.',
+     'The dose has not been measured yet\\nA dosimeter shows the dose taken; the last measured one stays here.'),
     ('st_da_state_radiation', 'Защита от радиации\\nСнижает дозу, получаемую в заражённых местах и от радиоактивных предметов.',
      'Radiation protection\\nLowers the dose taken in contaminated places and from radioactive items.'),
     ('st_da_state_psi', 'Пси-защита\\nСнижает урон от пси-излучения и пси-атак мутантов.',

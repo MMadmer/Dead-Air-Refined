@@ -359,12 +359,14 @@
                 <background shape="bar_track"/>
             </state_progress>
         </health_state>
+        <auto_static x="211.5" y="8" width="12" height="16"><shape kind="drop" fill="$text_muted"/></auto_static>
         <bleeding_state x="211.5" y="8" width="12" height="16">
             <hint_text delay="800">st_da_state_bleeding</hint_text>
             <icon x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$good"/></icon>
             <icon2 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$warn"/></icon2>
             <icon3 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$bad"/></icon3>
         </bleeding_state>
+        <auto_static x="226.5" y="8" width="12" height="16"><shape kind="trefoil" fill="$text_muted"/></auto_static>
         <radiation_state x="226.5" y="8" width="12" height="16">
             <hint_text delay="800">st_da_measured_dose_hint</hint_text>
             <icon x="0" y="0" width="12" height="16"><shape kind="trefoil" fill="$good"/></icon>
