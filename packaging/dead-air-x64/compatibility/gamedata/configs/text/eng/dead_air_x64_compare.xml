@@ -127,10 +127,10 @@
 		<text>Health\nAt zero the character dies. It comes back slowly while the character is fed, and quickly with medicine.</text>
 	</string>
 	<string id="st_da_state_bleeding">
-		<text>Bleeding\nTakes health until it is stopped, the faster the worse the wound. Bandages and medkits stop it.</text>
+		<text>Bleeding\nTakes health until it is stopped, the faster the worse the wound.</text>
 	</string>
 	<string id="st_da_state_satiety">
-		<text>Satiety\nHungry, the character recovers health and stamina worse; starving, the character loses health.</text>
+		<text>Satiety\nThe lower it is, the worse health and stamina recover; at zero, health drains.</text>
 	</string>
 	<string id="st_da_measured_dose_hint">
 		<text>Last measured dose: %s%d mSv%s (%s)\nRadiation slowly takes health until antiradiation means remove it.</text>
