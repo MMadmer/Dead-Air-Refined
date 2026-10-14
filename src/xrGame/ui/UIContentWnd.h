@@ -4,6 +4,7 @@
 #pragma once
 
 #include "UIDialogWnd.h"
+#include "ContentService.h"
 #include "xrUICore/Callbacks/UIWndCallback.h"
 
 class CUIStatic;
@@ -32,11 +33,15 @@ public:
     void Update() override;
     void SendMessage(CUIWindow* window, s16 message, void* data) override;
     bool OnKeyboardAction(int dik, EUIMessages keyboardAction) override;
+    // The window over a made-up repair instead of the content service's (dar_ui_dialog): for its
+    // layout. Its buttons only close it.
+    void Preview(const ContentService::Snapshot& snapshot);
 
     pcstr GetDebugType() override { return "CUIContentWnd"; }
 
 private:
     void Refresh();
+    void Refresh(const ContentService::Snapshot& snapshot);
     void OnAction(CUIWindow*, void*);
     void OnExit(CUIWindow*, void*);
 
@@ -49,4 +54,5 @@ private:
     CUI3tButton* m_action{};
     CUI3tButton* m_exit{};
     bool m_repairFinished{};
+    std::optional<ContentService::Snapshot> m_preview;
 };

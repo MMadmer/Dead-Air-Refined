@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The repair of the mod's content (UIContentWnd). Written by tools\ui\system_windows_layout.py
+     for 4:3 and 16:9 in the palette of the Mods window (sys_* of ui_theme.xml). -->
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <auto_static x="0" y="0" width="1024" height="768" shape="sys_shade"/>
+        <auto_static x="296" y="143" width="432" height="486" shape="sys_shadow"/>
+        <auto_static x="302" y="149" width="420" height="470" shape="sys_panel"/>
+        <background x="302" y="149" width="420" height="470"/>
+        <caption x="320" y="163" width="384" height="34">
+            <text font="graffiti22" align="l" vert_align="c" color="$sys_text">st_content_caption</text>
+        </caption>
+        <auto_static x="320" y="203" width="384" height="1" shape="sys_rule"/>
+        <message x="320" y="211" width="384" height="92">
+            <text font="letterica16" align="l" vert_align="t" color="$sys_text" complex_mode="1"></text>
+        </message>
+        <problems x="320" y="309" width="384" height="150" shape="sys_inset" always_show_scroll="0" scroll_profile="sys" vert_interval="4" right_ident="8" left_ident="10" top_indent="8" bottom_indent="8"/>
+        <problems_text x="0" y="0" width="364.5" height="16">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" color="$sys_muted"/>
+        </problems_text>
+        <progress_text x="320" y="467" width="384" height="30">
+            <text font="letterica16" align="c" vert_align="c" color="$sys_muted" complex_mode="1"></text>
+        </progress_text>
+        <progress x="347" y="501" width="330" height="4" horz="1" min="0" max="100" pos="0">
+            <progress shape="sys_bar_fill"/>
+            <background shape="sys_bar_track"/>
+        </progress>
+        <auto_static x="320" y="549" width="384" height="1" shape="sys_rule"/>
+        <exit x="569" y="565" width="135" height="32">
+            <shape style="sys_button"/>
+            <text font="letterica16" align="c" vert_align="c">st_content_exit</text>
+        </exit>
+        <action x="395" y="565" width="165" height="32">
+            <shape style="sys_button_primary"/>
+            <text font="letterica16" align="c" vert_align="c">st_content_repair</text>
+        </action>
+    </main>
+</w>

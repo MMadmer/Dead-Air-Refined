@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The thin scroll bar of the game's own windows over the menus (scroll_profile="sys"): the light
+     track and thumb of the Mods window, drawn by the xms_ui_shape shader, no arrows. -->
+<w>
+    <sys height="3" height_v="3" hold_delay="50">
+        <left_arrow x="0" y="0" width="0" height="0"/>
+        <right_arrow x="0" y="0" width="0" height="0"/>
+        <box x="0" y="0" width="3" height="3" shape="sys_scroll_thumb"/>
+        <back shape="sys_scroll_track"/>
+        <up_arrow x="0" y="0" width="0" height="0"/>
+        <down_arrow x="0" y="0" width="0" height="0"/>
+        <box_v x="0" y="0" width="3" height="3" shape="sys_scroll_thumb"/>
+        <back_v shape="sys_scroll_track"/>
+    </sys>
+</w>

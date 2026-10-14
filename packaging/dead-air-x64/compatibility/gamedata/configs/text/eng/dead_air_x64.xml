@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+    <string id="ui_mm_window_mode">
+        <text>Display mode</text>
+    </string>
+    <string id="st_opt_windowed">
+        <text>Windowed</text>
+    </string>
+    <string id="st_opt_fullscreen_borderless">
+        <text>Borderless window</text>
+    </string>
+    <string id="st_opt_fullscreen">
+        <text>Fullscreen</text>
+    </string>
+    <string id="st_opt_renderer_rgl">
+        <text>OpenGL</text>
+    </string>
+    <string id="ui_mm_level_texture_unload">
+        <text>Unload level textures</text>
+    </string>
+    <string id="ui_mm_level_texture_unload_hint">
+        <text>Frees video and system memory after leaving a level. The next loading may take a little longer.</text>
+    </string>
+    <string id="ui_mm_auto_continue_on_load">
+        <text>Start after loading</text>
+    </string>
+    <string id="ui_mm_auto_continue_on_load_hint">
+        <text>Continues the game as soon as loading is complete, without waiting for a key press.</text>
+    </string>
+    <string id="ui_mm_auto_update_disabled">
+        <text>Automatic updates disabled by mods:</text>
+    </string>
+    <string id="ui_mm_bug_report">
+        <text>Report a bug</text>
+    </string>
+    <string id="st_bug_report_caption">
+        <text>Bug report</text>
+    </string>
+    <string id="st_crash_report_caption">
+        <text>Crash report</text>
+    </string>
+    <string id="st_crash_report_detected_prompt">
+        <text>The game closed unexpectedly last time. Send a report about it?</text>
+    </string>
+    <string id="st_bug_report_title">
+        <text>Title (at least 5 characters)</text>
+    </string>
+    <string id="st_bug_report_description">
+        <text>Description (at least 20 characters)</text>
+    </string>
+    <string id="st_bug_report_attach_dump">
+        <text>Attach an anonymous dump</text>
+    </string>
+    <string id="st_bug_report_crash_dump_attached">
+        <text>An anonymous crash dump is attached</text>
+    </string>
+    <string id="st_bug_report_server_status">
+        <text>Server status:</text>
+    </string>
+    <string id="st_bug_report_server_checking">
+        <text>waiting for a reply</text>
+    </string>
+    <string id="st_bug_report_server_available">
+        <text>online</text>
+    </string>
+    <string id="st_bug_report_server_unavailable">
+        <text>unavailable</text>
+    </string>
+    <string id="st_bug_report_submit">
+        <text>Send report</text>
+    </string>
+    <string id="st_bug_report_collecting">
+        <text>Collecting an anonymous dump...</text>
+    </string>
+    <string id="st_bug_report_sending">
+        <text>Sending the report...</text>
+    </string>
+    <string id="st_bug_report_success">
+        <text>The bug report has been sent.</text>
+    </string>
+    <string id="st_bug_report_failed">
+        <text>The bug report could not be sent.</text>
+    </string>
+    <string id="st_update_available_caption">
+        <text>Update available</text>
+    </string>
+    <string id="st_update_available_message">
+        <text>Current version: %s\nNew version: %s</text>
+    </string>
+    <string id="st_update_size">
+        <text>Download size: %.1f MB</text>
+    </string>
+    <string id="st_update_download">
+        <text>Update</text>
+    </string>
+    <string id="st_update_progress_caption">
+        <text>Update</text>
+    </string>
+    <string id="st_update_progress">
+        <text>Downloaded %.1f of %.1f MB</text>
+    </string>
+    <string id="st_update_ready">
+        <text>The update has been downloaded and is ready to install.</text>
+    </string>
+    <string id="st_update_restart">
+        <text>Restart and update</text>
+    </string>
+    <string id="st_update_retry">
+        <text>Retry</text>
+    </string>
+    <string id="st_update_failed">
+        <text>The update could not be completed. Please try again.</text>
+    </string>
+    <string id="st_update_major_caption">
+        <text>A new version of the game is available</text>
+    </string>
+    <string id="st_update_major_message">
+        <text>Installed version: %s\nAvailable version: %s</text>
+    </string>
+    <string id="st_update_major_folder">
+        <text>This is a major release. It is not compatible with the installed version:\nsaves and mods made for it will not work.\n\nFor this reason it cannot be installed from the game. Download it from\nthe release page and install it into a separate folder, keeping the current one.</text>
+    </string>
+    <string id="st_update_major_open">
+        <text>Open the download page</text>
+    </string>
+    <string id="st_update_major_close">
+        <text>Close</text>
+    </string>
+    <string id="st_update_major_disable">
+        <text>Do not notify about new major versions</text>
+    </string>
+    <string id="ui_mm_instant_inventory">
+        <text>Instant inventory</text>
+    </string>
+    <string id="ui_mm_major_update_notice">
+        <text>Notify about major versions</text>
+    </string>
+    <string id="ui_mm_fps_limit">
+        <text>FPS limit</text>
+    </string>
+    <string id="st_opt_fps_unlimited">
+        <text>Unlimited</text>
+    </string>
+    <string id="ui_mm_cursor_sens">
+        <text>Cursor speed</text>
+    </string>
+    <string id="ui_mm_cursor_sens_hint">
+        <text>Cursor speed in the menus and the inventory. 1.00 is the speed of the system cursor.</text>
+    </string>
+    <string id="st_content_caption">
+        <text>The mod's content is incomplete</text>
+    </string>
+    <string id="st_content_message">
+        <text>Some of the game content is missing or damaged, so the game cannot be started.\nReinstall the mod or wait for the built-in content repair.\n\nDetails are below and in the log file.</text>
+    </string>
+    <string id="st_content_message_recovery">
+        <text>The installation cannot tell which content it needs: the manifest file is missing\nor damaged. Reinstall the mod over the current folder.\n\nDetails are below and in the log file.</text>
+    </string>
+    <string id="st_content_message_repairing">
+        <text>The content is being repaired. Do not close the game.\n\nThe game will have to be restarted afterwards.</text>
+    </string>
+    <string id="st_content_message_repaired">
+        <text>The content has been repaired.\n\nThe file system reads the archives once at start-up, so restart the game for the downloaded content to take effect.</text>
+    </string>
+    <string id="st_content_repair">
+        <text>Repair content</text>
+    </string>
+    <string id="st_content_repairing">
+        <text>Repairing...</text>
+    </string>
+    <string id="st_content_restart">
+        <text>Restart the game</text>
+    </string>
+    <string id="st_content_exit">
+        <text>Exit the game</text>
+    </string>
+    <string id="st_content_activity_verify">
+        <text>Checking the installed content...</text>
+    </string>
+    <string id="st_content_activity_download">
+        <text>Downloading content...</text>
+    </string>
+    <string id="st_content_activity_install">
+        <text>Installing content...</text>
+    </string>
+    <string id="st_content_activity_repaired">
+        <text>The content has been repaired. The game needs a restart.</text>
+    </string>
+    <string id="st_content_fail_verify">
+        <text>The content could not be checked: %s</text>
+    </string>
+    <string id="st_content_fail_space">
+        <text>Not enough disk space: %llu MB needed, %llu MB available</text>
+    </string>
+    <string id="st_content_fail_download">
+        <text>The content could not be downloaded: %s</text>
+    </string>
+    <string id="st_content_fail_install">
+        <text>The content could not be installed: %s</text>
+    </string>
+    <string id="ui_mm_content_incomplete">
+        <text>The mod's content is incomplete: the game cannot be played</text>
+    </string>
+    <string id="ui_mm_gtao">
+        <text>GTAO</text>
+    </string>
+</string_table>

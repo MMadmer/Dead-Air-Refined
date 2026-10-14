@@ -25,6 +25,9 @@ public:
     void SendMessage(CUIWindow* window, s16 message, void* data) override;
     bool OnKeyboardAction(int dik, EUIMessages keyboardAction) override;
     pcstr GetDebugType() override { return "CUIUpdateWnd"; }
+    // The window over a made-up release instead of the update service's own (dar_ui_dialog): for
+    // working on its layout. Its buttons only close it.
+    void Preview(const UpdateService::Snapshot& snapshot);
 
 private:
     void OnAction(CUIWindow*, void*);
@@ -48,4 +51,7 @@ private:
     UpdateService::State m_lastState{UpdateService::State::Idle};
     xr_string m_lastVersion;
     xr_string m_lastChanges;
+    std::optional<UpdateService::Snapshot> m_preview;
+
+    UpdateService::Snapshot Current() const { return m_preview ? *m_preview : UpdateService::GetSnapshot(); }
 };

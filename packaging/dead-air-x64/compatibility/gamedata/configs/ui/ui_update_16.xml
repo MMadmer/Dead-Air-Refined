@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The update of the game (UIUpdateWnd). Written by tools\ui\system_windows_layout.py
+     for 4:3 and 16:9 in the palette of the Mods window (sys_* of ui_theme.xml). -->
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <auto_static x="0" y="0" width="1024" height="768" shape="sys_shade"/>
+        <auto_static x="296" y="138" width="432" height="496" shape="sys_shadow"/>
+        <auto_static x="302" y="144" width="420" height="480" shape="sys_panel"/>
+        <background x="302" y="144" width="420" height="480"/>
+        <caption x="320" y="158" width="384" height="34">
+            <text font="graffiti22" align="l" vert_align="c" color="$sys_text">st_update_available_caption</text>
+        </caption>
+        <auto_static x="320" y="198" width="384" height="1" shape="sys_rule"/>
+        <message x="320" y="206" width="384" height="46">
+            <text font="letterica16" align="l" vert_align="c" color="$sys_text" complex_mode="1"></text>
+        </message>
+        <size x="320" y="254" width="384" height="22">
+            <text font="letterica16" align="l" vert_align="c" color="$sys_muted"></text>
+        </size>
+        <theme x="320" y="278" width="384" height="26">
+            <text font="graffiti19" align="l" vert_align="c" color="$sys_accent" complex_mode="1"></text>
+        </theme>
+        <changes x="320" y="310" width="384" height="230" shape="sys_inset" always_show_scroll="0" scroll_profile="sys" vert_interval="4" right_ident="8" left_ident="10" top_indent="8" bottom_indent="8"/>
+        <changes_text x="0" y="0" width="364.5" height="16">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" color="$sys_muted"/>
+        </changes_text>
+        <progress_text x="320" y="366" width="384" height="24">
+            <text font="letterica16" align="c" vert_align="c" color="$sys_muted"></text>
+        </progress_text>
+        <progress x="347" y="400" width="330" height="4" horz="1" min="0" max="100" pos="0">
+            <progress shape="sys_bar_fill"/>
+            <background shape="sys_bar_track"/>
+        </progress>
+        <error x="320" y="416" width="384" height="70">
+            <text font="letterica16" align="c" vert_align="c" color="$sys_bad" complex_mode="1"></text>
+        </error>
+        <auto_static x="320" y="554" width="384" height="1" shape="sys_rule"/>
+        <cancel x="591.5" y="570" width="112.5" height="32">
+            <shape style="sys_button"/>
+            <text font="letterica16" align="c" vert_align="c">ui_mm_cancel</text>
+        </cancel>
+        <action x="410" y="570" width="172.5" height="32">
+            <shape style="sys_button_primary"/>
+            <text font="letterica16" align="c" vert_align="c">st_update_download</text>
+        </action>
+    </main>
+</w>

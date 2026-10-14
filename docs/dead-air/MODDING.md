@@ -3091,7 +3091,10 @@ profile's parts, a hint's `<background>`, the context menu (`<properties_box sha
 replaces the texture; the texture's colour still tints it, so a light animation, a condition colour or
 `SetTextureColor` from a script colour the shape the way they coloured the texture. A list box gives
 its rows a skin with `<item shape="..."/>` under the list node: normal, highlight under the cursor,
-checked when selected, and the row's text takes each state's `text` colour.
+checked when selected, and the row's text takes each state's `text` colour. A check box with a skin
+draws no texture; its tick is a look of its own, `<mark shape="..."/>` under the node, drawn in a
+square at its left end while it is on. A text field's skin is highlighted under the cursor and
+`checked` while it takes the keys.
 
 Attributes of a look: `kind` (`box`, the default, or a pictogram), `fill`, `line` (the border; a
 pictogram's glow), `border`, `radius`, `soft` (a soft edge, a shadow), `segment` and `gap` (a box cut
@@ -3308,6 +3311,36 @@ as text; below zero clears it); `ActorMenu.get_measured_radiation()` reads it. T
 are short game descriptions (`st_da_state_*`, `st_da_measured_dose_hint`). The health and satiety
 bars change by whole sticks and only once the value has moved most of a stick, so the last stick no
 longer blinks at full health under a little radiation.
+
+## The game's own windows over the menus
+
+The update (`ui_update.xml`), the new major version (`ui_update_major.xml`), the bug report
+(`ui_bug_report.xml`), the content repair (`ui_content.xml`) and the question about a crash are drawn
+in the palette of the Mods window, not the warm one of the inventory: the theme's `$sys_*` colours
+(`sys_text`, `sys_muted`, `sys_dim`, `sys_dark`, `sys_accent`, `sys_good`, `sys_warn`, `sys_bad`) and
+`sys_*` looks (`sys_shade`, `sys_shadow`, `sys_panel`, `sys_rule`, `sys_inset`, `sys_button`,
+`sys_button_primary`, `sys_field`, `sys_check`, `sys_check_mark`, `sys_bar_track`, `sys_bar_fill`), the
+lists with the scroll profile `sys` (`scroll_bar_sys.xml`). The layouts, 4:3 and `_16` for 16:9, are
+written by `tools\ui\system_windows_layout.py`; the plates, shades and separators of a window are
+`auto_static` nodes under its `main` node, drawn under everything else.
+
+**A message box from a file of its own**: `CUIMessageBox` looks a template up in `message_box.xml`
+and, where that file lacks it, in `<template>.xml`. The crash question uses `message_box_sys_yes_no`
+and the report's result `message_box_sys_ok` this way, so the game's `message_box.xml`, which mods
+replace, stays the one they ship; where neither is there, the window falls back to the stock
+`message_box_yes_no` and `message_box_ok`. A mod adds a box template the same way.
+
+The windows' strings are in `text\rus` and `text\eng` (`dead_air_x64.xml`). For working on them,
+`dar_ui_dialog` opens each; the update and the content repair come over a made-up state instead of
+the services', and their buttons only close them:
+
+| Command | What it opens |
+| --- | --- |
+| `dar_ui_dialog update available\|downloading\|ready\|failed` | the update in that state |
+| `dar_ui_dialog update_major` | the new major version |
+| `dar_ui_dialog bug_report` | the bug report |
+| `dar_ui_dialog content [repairing]` | the content repair: the problems, or a repair under way |
+| `dar_ui_dialog crash_prompt` | the question about the last crash |
 
 ## NPC AI: what scripts and configs see now
 

@@ -2,6 +2,7 @@
 
 #include "xrUICore/Buttons/UI3tButton.h"
 #include "xrUICore/Options/UIOptionsItem.h"
+#include "xrUICore/Static/UIShapeStyle.h"
 
 class UIHint;
 
@@ -30,6 +31,9 @@ public:
     IC bool GetCheck() const { return GetButtonState() == BUTTON_PUSHED; }
     IC void SetCheck(bool ch) { SetButtonState(ch ? BUTTON_PUSHED : BUTTON_NORMAL); }
     void SetDependControl(CUIWindow* pWnd);
+    // the tick a skinned check box shows while it is on (the <mark> node of its layout)
+    void SetCheckMark(const SUIShapeStyle& mark) { m_mark = mark; m_has_mark = true; }
+    void Draw() override;
 
     pcstr GetDebugType() override { return "CUICheckButton"; }
 
@@ -37,4 +41,6 @@ private:
     bool m_opt_backup_value{};
     void InitTexture2(LPCSTR texture_name);
     CUIWindow* m_pDependControl;
+    SUIShapeStyle m_mark;
+    bool m_has_mark{};
 };

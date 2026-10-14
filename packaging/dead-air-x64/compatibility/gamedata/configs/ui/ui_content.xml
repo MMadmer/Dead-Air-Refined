@@ -1,38 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The repair of the mod's content (UIContentWnd). Written by tools\ui\system_windows_layout.py
+     for 4:3 and 16:9 in the palette of the Mods window (sys_* of ui_theme.xml). -->
 <w>
     <main x="0" y="0" width="1024" height="768">
-        <background x="242" y="189" width="540" height="390" stretch="1">
-            <texture>ui_frame_error</texture>
-        </background>
-        <caption x="268" y="208" width="488" height="32">
-            <text font="graffiti22" align="c" vert_align="c">st_content_caption</text>
+        <auto_static x="0" y="0" width="1024" height="768" shape="sys_shade"/>
+        <auto_static x="224" y="143" width="576" height="486" shape="sys_shadow"/>
+        <auto_static x="232" y="149" width="560" height="470" shape="sys_panel"/>
+        <background x="232" y="149" width="560" height="470"/>
+        <caption x="256" y="163" width="512" height="34">
+            <text font="graffiti22" align="l" vert_align="c" color="$sys_text">st_content_caption</text>
         </caption>
-        <message x="274" y="246" width="476" height="70">
-            <text font="letterica16" align="c" vert_align="t" complex_mode="1"/>
+        <auto_static x="256" y="203" width="512" height="1" shape="sys_rule"/>
+        <message x="256" y="211" width="512" height="92">
+            <text font="letterica16" align="l" vert_align="t" color="$sys_text" complex_mode="1"></text>
         </message>
-        <problems x="274" y="318" width="476" height="130" always_show_scroll="1" vert_interval="4"
-                  right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
-        <problems_text x="0" y="0" width="448" height="16">
-            <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
+        <problems x="256" y="309" width="512" height="150" shape="sys_inset" always_show_scroll="0" scroll_profile="sys" vert_interval="4" right_ident="8" left_ident="10" top_indent="8" bottom_indent="8"/>
+        <problems_text x="0" y="0" width="486" height="16">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" color="$sys_muted"/>
         </problems_text>
-        <progress_text x="274" y="452" width="476" height="30">
-            <text font="letterica16" align="c" vert_align="c" complex_mode="1"/>
+        <progress_text x="256" y="467" width="512" height="30">
+            <text font="letterica16" align="c" vert_align="c" color="$sys_muted" complex_mode="1"></text>
         </progress_text>
-        <progress x="306" y="488" width="412" height="9" horz="1" min="0" max="100" pos="0">
-            <progress stretch="1">
-                <texture a="255" r="210" g="190" b="115">ui_inGame2_hint_wnd_bar_alfa_line</texture>
-            </progress>
-            <background stretch="1">
-                <texture a="220">ui_inGame2_hint_wnd_bar</texture>
-            </background>
+        <progress x="292" y="501" width="440" height="4" horz="1" min="0" max="100" pos="0">
+            <progress shape="sys_bar_fill"/>
+            <background shape="sys_bar_track"/>
         </progress>
-        <action x="274" y="520" width="230" height="30" stretch="1">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
-            <text font="letterica16" align="c" vert_align="c">st_content_repair</text>
-        </action>
-        <exit x="520" y="520" width="230" height="30" stretch="1">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
+        <auto_static x="256" y="549" width="512" height="1" shape="sys_rule"/>
+        <exit x="588" y="565" width="180" height="32">
+            <shape style="sys_button"/>
             <text font="letterica16" align="c" vert_align="c">st_content_exit</text>
         </exit>
+        <action x="356" y="565" width="220" height="32">
+            <shape style="sys_button_primary"/>
+            <text font="letterica16" align="c" vert_align="c">st_content_repair</text>
+        </action>
     </main>
 </w>

@@ -26,6 +26,8 @@ public:
 
     bool Init();
     void Show(bool status) override;
+    // the window over a made-up release (dar_ui_dialog), for working on its layout
+    void Preview(const UpdateService::Snapshot& snapshot);
     void SendMessage(CUIWindow* window, s16 message, void* data) override;
     bool OnKeyboardAction(int dik, EUIMessages keyboardAction) override;
 

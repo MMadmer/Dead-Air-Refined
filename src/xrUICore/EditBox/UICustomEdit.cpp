@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "xrUICore/Static/UIShapeStyle.h"
 #include "UICustomEdit.h"
 #include "Lines/UILines.h"
 #include "xrEngine/line_edit_control.h"
@@ -349,4 +350,13 @@ void CUICustomEdit::CaptureFocus(bool bCapture)
     }
 
     m_bInputFocus = bCapture;
+}
+
+u8 CUICustomEdit::ShapeLook() const
+{
+    if (!m_bIsEnabled)
+        return SUIShapeSkin::Disabled;
+    if (m_bInputFocus)
+        return SUIShapeSkin::Checked;
+    return m_bCursorOverWindow ? SUIShapeSkin::Highlight : SUIShapeSkin::Normal;
 }

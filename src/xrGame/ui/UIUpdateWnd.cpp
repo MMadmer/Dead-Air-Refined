@@ -39,6 +39,8 @@ bool CUIUpdateWnd::Init()
         return false;
 
     CUIXmlInit::InitWindow(xml, "main", 0, this);
+    // the layout's own plates, shades and separators (auto_static), under everything else
+    CUIXmlInit::InitAutoStaticGroup(xml, "main", 0, this);
     UIHelper::CreateStatic(xml, "main:background", this);
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     m_message = UIHelper::CreateStatic(xml, "main:message", this);
@@ -73,14 +75,25 @@ void CUIUpdateWnd::Show(bool status)
         m_lastState = UpdateService::State::Idle;
         m_lastVersion.clear();
         m_lastChanges.clear();
-        Refresh(UpdateService::GetSnapshot());
+        Refresh(Current());
     }
+    else
+        m_preview.reset();
 }
 
 void CUIUpdateWnd::Update()
 {
     inherited::Update();
-    Refresh(UpdateService::GetSnapshot());
+    Refresh(Current());
+}
+
+void CUIUpdateWnd::Preview(const UpdateService::Snapshot& snapshot)
+{
+    m_preview = snapshot;
+    m_lastState = UpdateService::State::Idle;
+    m_lastVersion.clear();
+    m_lastChanges.clear();
+    Refresh(snapshot);
 }
 
 void CUIUpdateWnd::SendMessage(CUIWindow* window, s16 message, void* data)
@@ -91,7 +104,7 @@ void CUIUpdateWnd::SendMessage(CUIWindow* window, s16 message, void* data)
 
 bool CUIUpdateWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
 {
-    const UpdateService::State state = UpdateService::GetSnapshot().state;
+    const UpdateService::State state = Current().state;
     if (keyboardAction == WINDOW_KEY_PRESSED && IsBinded(kQUIT, dik) && CanDismiss(state))
     {
         OnCancel(nullptr, nullptr);
@@ -102,6 +115,11 @@ bool CUIUpdateWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
 
 void CUIUpdateWnd::OnAction(CUIWindow*, void*)
 {
+    if (m_preview)
+    {
+        HideDialog();
+        return;
+    }
     const UpdateService::State state = UpdateService::GetSnapshot().state;
     if (state == UpdateService::State::Available || state == UpdateService::State::DownloadFailed)
         UpdateService::StartDownload();
@@ -111,6 +129,11 @@ void CUIUpdateWnd::OnAction(CUIWindow*, void*)
 
 void CUIUpdateWnd::OnCancel(CUIWindow*, void*)
 {
+    if (m_preview)
+    {
+        HideDialog();
+        return;
+    }
     const UpdateService::State state = UpdateService::GetSnapshot().state;
     if (!CanDismiss(state))
         return;

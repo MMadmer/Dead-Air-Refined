@@ -33,6 +33,8 @@ bool CUIMajorUpdateWnd::Init()
         return false;
 
     CUIXmlInit::InitWindow(xml, "main", 0, this);
+    // the layout's own plates, shades and separators (auto_static), under everything else
+    CUIXmlInit::InitAutoStaticGroup(xml, "main", 0, this);
     UIHelper::CreateStatic(xml, "main:background", this);
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     m_message = UIHelper::CreateStatic(xml, "main:message", this);
@@ -63,10 +65,12 @@ bool CUIMajorUpdateWnd::Init()
 void CUIMajorUpdateWnd::Show(bool status)
 {
     inherited::Show(status);
-    if (!status)
-        return;
+    if (status)
+        Preview(UpdateService::GetSnapshot());
+}
 
-    const UpdateService::Snapshot snapshot = UpdateService::GetSnapshot();
+void CUIMajorUpdateWnd::Preview(const UpdateService::Snapshot& snapshot)
+{
     const bool russian = is_russian_language();
     const xr_string& changes = russian ? snapshot.majorChangesRu : snapshot.majorChangesEn;
     const xr_string& theme = russian ? snapshot.majorThemeRu : snapshot.majorThemeEn;

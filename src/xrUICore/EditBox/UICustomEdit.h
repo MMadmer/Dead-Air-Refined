@@ -10,6 +10,9 @@ enum init_mode : u32;
 class XRUICORE_API CUICustomEdit : public CUIStatic
 {
 protected:
+    u8 ShapeLook() const override;
+
+protected:
     using inherited = CUIStatic;
 
 public:

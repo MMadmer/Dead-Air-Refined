@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A question of the game's own windows over the menus, in the palette of the Mods window. Written by
+     tools\ui\system_windows_layout.py; CUIMessageBox reads a template message_box.xml lacks from the
+     file of its name. -->
+<w>
+    <message_box_sys_ok type="ok" x="292" y="284" width="440" height="200" shape="sys_panel">
+        <message_text x="20" y="18" width="400" height="112" complex_mode="1">
+            <text align="c" vert_align="c" font="letterica18" color="$sys_text">a</text>
+        </message_text>
+        <button_ok x="150" y="148" width="140" height="32" check_mode="0">
+            <window_name>button_ok</window_name>
+            <shape style="sys_button_primary"/>
+            <text font="letterica16" align="c" vert_align="c">Btn_OK</text>
+        </button_ok>
+    </message_box_sys_ok>
+</w>

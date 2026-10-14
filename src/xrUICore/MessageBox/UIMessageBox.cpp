@@ -51,11 +51,23 @@ bool CUIMessageBox::OnMouseAction(float x, float y, EUIMessages mouse_action)
 bool CUIMessageBox::InitMessageBox(LPCSTR box_template)
 {
     Clear();
-    CUIXml uiXml;
-    uiXml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "message_box.xml");
+    CUIXml common;
+    common.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "message_box.xml");
 
-    if (!uiXml.NavigateToNode(box_template))
-        return false;
+    // A template message_box.xml does not have is looked for in a file of its own name
+    // (message_box_<name>.xml with the <message_box_<name>> node): a mod adds a box, or the game
+    // its own, without replacing the whole set every other mod may also replace.
+    CUIXml own;
+    CUIXml* source = &common;
+    if (!common.NavigateToNode(box_template))
+    {
+        string_path file;
+        xr_sprintf(file, "%s.xml", box_template);
+        if (!own.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, file, false) || !own.NavigateToNode(box_template))
+            return false;
+        source = &own;
+    }
+    CUIXml& uiXml = *source;
 
     string512 str;
     strconcat(sizeof(str), str, box_template, ":picture");

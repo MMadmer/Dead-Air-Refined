@@ -31,13 +31,13 @@
         <text>Автообновление отключено модами:</text>
     </string>
     <string id="ui_mm_bug_report">
-        <text>Отправить bug report</text>
+        <text>Сообщить об ошибке</text>
     </string>
     <string id="st_bug_report_caption">
-        <text>Отправка bug report</text>
+        <text>Отчёт об ошибке</text>
     </string>
     <string id="st_crash_report_caption">
-        <text>Отправка crash report</text>
+        <text>Отправка отчёта о сбое</text>
     </string>
     <string id="st_crash_report_detected_prompt">
         <text>Обнаружен аварийный выход из игры. Отправить отчёт об этом?</text>
@@ -67,7 +67,7 @@
         <text>недоступен</text>
     </string>
     <string id="st_bug_report_submit">
-        <text>Отправить bug report</text>
+        <text>Отправить отчёт</text>
     </string>
     <string id="st_bug_report_collecting">
         <text>Сбор анонимного дампа...</text>
@@ -76,17 +76,16 @@
         <text>Отправка отчёта...</text>
     </string>
     <string id="st_bug_report_success">
-        <text>Bug report успешно отправлен.</text>
+        <text>Отчёт об ошибке отправлен.</text>
     </string>
     <string id="st_bug_report_failed">
-        <text>Не удалось отправить bug report.</text>
+        <text>Не удалось отправить отчёт об ошибке.</text>
     </string>
     <string id="st_update_available_caption">
         <text>Доступно обновление</text>
     </string>
     <string id="st_update_available_message">
-        <text>Текущая версия: %s
-Новая версия: %s</text>
+        <text>Текущая версия: %s\nНовая версия: %s</text>
     </string>
     <string id="st_update_size">
         <text>Размер загрузки: %.1f МБ</text>

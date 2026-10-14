@@ -72,6 +72,51 @@
     </style>
     <style name="tool_glyph" fill="#FFFFFFFF"/>
 
+    <!-- The game's own windows over the menus - the updates, the bug and crash reports, the content
+         repair, the Mods window - are black panels and light lines with a gold accent, apart from
+         the in-game palette above: sys_* -->
+    <color name="sys_text" value="#ECE9E2FF"/>
+    <color name="sys_muted" value="#9A968CFF"/>
+    <color name="sys_dim" value="#7C786FFF"/>
+    <color name="sys_dark" value="#0B0B0BFF"/>
+    <color name="sys_accent" value="#D2BE73FF"/>
+    <color name="sys_good" value="#7FB069FF"/>
+    <color name="sys_warn" value="#D9A441FF"/>
+    <color name="sys_bad" value="#DC645AFF"/>
+    <style name="sys_shade" fill="#00000073"/>
+    <style name="sys_shadow" fill="#000000B3" soft="18" radius="8"/>
+    <style name="sys_panel" fill="#000000F5" line="#E8E6E0CC" border="1" radius="3"/>
+    <style name="sys_rule" fill="#E8E6E033"/>
+    <style name="sys_inset" fill="#FFFFFF0A" line="#E8E6E040" border="1" radius="2"/>
+    <style name="sys_button" fill="#00000000" line="#E8E6E099" border="1" radius="2" text="$sys_text">
+        <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="$sys_dark"/>
+        <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="$sys_dark"/>
+        <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="$sys_dark"/>
+        <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+    </style>
+    <style name="sys_button_primary" base="sys_button" line="$sys_accent" text="$sys_accent">
+        <highlight fill="$sys_accent" line="$sys_accent" text="$sys_dark"/>
+        <pushed fill="#B8A45EFF" line="#B8A45EFF" text="$sys_dark"/>
+        <checked fill="$sys_accent" line="$sys_accent" text="$sys_dark"/>
+    </style>
+    <style name="sys_field" fill="#FFFFFF0A" line="#E8E6E066" border="1" radius="2">
+        <highlight line="#E8E6E0B3"/>
+        <checked line="#E8E6E0FF"/>
+        <disabled line="#E8E6E02E"/>
+    </style>
+    <style name="sys_check" fill="#FFFFFF0A" line="#E8E6E099" border="1" radius="2">
+        <highlight line="#E8E6E0FF"/>
+        <checked fill="#E8E6E026" line="#E8E6E0FF"/>
+        <disabled line="#E8E6E02E"/>
+    </style>
+    <style name="sys_check_mark" kind="check" fill="$sys_text" border="2"/>
+    <style name="sys_bar_track" fill="#E8E6E014" radius="1"/>
+    <style name="sys_bar_fill" fill="$sys_accent" radius="1"/>
+    <style name="sys_scroll_track" fill="#E8E6E014" radius="1"/>
+    <style name="sys_scroll_thumb" fill="#E8E6E080" radius="1">
+        <highlight fill="#E8E6E0CC"/>
+    </style>
+
     <!-- a drop-down and a context menu -->
     <style name="menu" fill="#14110EFA" line="$panel_edge" border="1" radius="3" soft="1"/>
     <style name="menu_row" fill="#00000000" radius="2" text="$text_dim">

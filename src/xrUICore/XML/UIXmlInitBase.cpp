@@ -223,6 +223,14 @@ bool CUIXmlInitBase::InitCheck(CUIXml& xml_doc, pcstr path, int index, CUICheckB
 
     pWnd->InitCheckButton(pWnd->GetWndPos(), pWnd->GetWndSize(), texture);
 
+    // <mark shape="..."/>: the tick a skinned box shows while it is on
+    strconcat(buf, path, ":mark");
+    if (xml_doc.NavigateToNode(buf, index))
+    {
+        if (const auto mark = UIShape::ReadSkin(xml_doc, buf, index))
+            pWnd->SetCheckMark(mark->looks[SUIShapeSkin::Normal]);
+    }
+
     u32 color;
     strconcat(buf, path, ":text_color:e");
     if (xml_doc.NavigateToNode(buf, index))

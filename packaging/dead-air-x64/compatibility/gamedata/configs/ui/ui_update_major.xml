@@ -1,39 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The release that needs a new installer (UIMajorUpdateWnd). Written by tools\ui\system_windows_layout.py
+     for 4:3 and 16:9 in the palette of the Mods window (sys_* of ui_theme.xml). -->
 <w>
     <main x="0" y="0" width="1024" height="768">
-        <background x="242" y="159" width="540" height="450" stretch="1">
-            <texture>ui_frame_error</texture>
-        </background>
-        <caption x="268" y="178" width="488" height="32">
-            <text font="graffiti22" align="c" vert_align="c">st_update_major_caption</text>
+        <auto_static x="0" y="0" width="1024" height="768" shape="sys_shade"/>
+        <auto_static x="224" y="128" width="576" height="516" shape="sys_shadow"/>
+        <auto_static x="232" y="134" width="560" height="500" shape="sys_panel"/>
+        <background x="232" y="134" width="560" height="500"/>
+        <caption x="256" y="148" width="512" height="34">
+            <text font="graffiti22" align="l" vert_align="c" color="$sys_text">st_update_major_caption</text>
         </caption>
-        <message x="274" y="214" width="476" height="44">
-            <text font="letterica16" align="c" vert_align="c" complex_mode="1"/>
+        <auto_static x="256" y="188" width="512" height="1" shape="sys_rule"/>
+        <message x="256" y="196" width="512" height="44">
+            <text font="letterica16" align="l" vert_align="c" color="$sys_text" complex_mode="1"></text>
         </message>
-        <folder_hint x="274" y="262" width="476" height="96">
-            <text font="letterica16" align="c" vert_align="t" complex_mode="1">st_update_major_folder</text>
+        <folder_hint x="256" y="242" width="512" height="88">
+            <text font="letterica16" align="l" vert_align="t" color="$sys_muted" complex_mode="1">st_update_major_folder</text>
         </folder_hint>
-        <theme x="274" y="362" width="476" height="26">
-            <text font="graffiti19" align="c" vert_align="c" complex_mode="1"/>
+        <theme x="256" y="332" width="512" height="26">
+            <text font="graffiti19" align="l" vert_align="c" color="$sys_accent" complex_mode="1"></text>
         </theme>
-        <changes x="274" y="394" width="476" height="102" always_show_scroll="1" vert_interval="4"
-                 right_ident="4" left_ident="4" top_indent="4" bottom_indent="4"/>
-        <changes_text x="0" y="0" width="448" height="16">
-            <text font="letterica16" align="l" vert_align="t" complex_mode="1"/>
+        <changes x="256" y="362" width="512" height="150" shape="sys_inset" always_show_scroll="0" scroll_profile="sys" vert_interval="4" right_ident="8" left_ident="10" top_indent="8" bottom_indent="8"/>
+        <changes_text x="0" y="0" width="486" height="16">
+            <text font="letterica16" align="l" vert_align="t" complex_mode="1" color="$sys_muted"/>
         </changes_text>
-        <disable_checks x="274" y="508" width="25" height="19" stretch="1">
-            <texture>ui_inGame2_checkbox</texture>
+        <disable_checks x="256" y="526" width="18" height="18">
+            <shape style="sys_check"/>
+            <mark shape="sys_check_mark"/>
         </disable_checks>
-        <disable_checks_label x="304" y="506" width="446" height="23">
-            <text font="letterica16" align="l" vert_align="c">st_update_major_disable</text>
+        <disable_checks_label x="284" y="523" width="484" height="24">
+            <text font="letterica16" align="l" vert_align="c" color="$sys_muted">st_update_major_disable</text>
         </disable_checks_label>
-        <action x="292" y="550" width="270" height="30" stretch="1">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
-            <text font="letterica16" align="c" vert_align="c">st_update_major_open</text>
-        </action>
-        <cancel x="582" y="550" width="150" height="30" stretch="1">
-            <texture>ui_inGame2_Mp_bigbuttone</texture>
+        <auto_static x="256" y="564" width="512" height="1" shape="sys_rule"/>
+        <cancel x="618" y="580" width="150" height="32">
+            <shape style="sys_button"/>
             <text font="letterica16" align="c" vert_align="c">st_update_major_close</text>
         </cancel>
+        <action x="376" y="580" width="230" height="32">
+            <shape style="sys_button_primary"/>
+            <text font="letterica16" align="c" vert_align="c">st_update_major_open</text>
+        </action>
     </main>
 </w>

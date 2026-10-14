@@ -6,6 +6,7 @@
 #include "UICheckButton.h"
 #include "Hint/UIHint.h"
 #include "xrEngine/xr_input.h"
+#include "Static/UIShape.h"
 
 CUICheckButton::CUICheckButton()
 {
@@ -15,6 +16,22 @@ CUICheckButton::CUICheckButton()
 }
 
 void CUICheckButton::SetDependControl(CUIWindow* pWnd) { m_pDependControl = pWnd; }
+
+void CUICheckButton::Draw()
+{
+    inherited::Draw();
+    if (!m_has_mark || !GetCheck() || !IsShown())
+        return;
+    // the tick in the box at the left of the button, square on screen
+    Frect rect;
+    GetAbsoluteRect(rect);
+    const float side = rect.height() * 0.62f;
+    const float w = side * UI().get_current_kx();
+    const float box = std::min(rect.width(), rect.height() * UI().get_current_kx());
+    const float x = rect.x1 + (box - w) * 0.5f;
+    const float y = rect.y1 + (rect.height() - side) * 0.5f;
+    UIShape::Draw(Frect().set(x, y, x + w, y + side), m_mark);
+}
 void CUICheckButton::Update()
 {
     CUI3tButton::Update();
@@ -48,6 +65,13 @@ void CUICheckButton::UndoOptValue()
 void CUICheckButton::InitCheckButton(Fvector2 pos, Fvector2 size, LPCSTR texture_name)
 {
     InitButton(pos, size);
+    // a skinned box draws its own frame and tick: the old texture would lie beside them
+    if (GetShapeSkin())
+    {
+        TextItemControl()->m_wndPos.set(pos);
+        TextItemControl()->m_wndSize.set(size);
+        return;
+    }
     InitTexture2(texture_name);
     TextItemControl()->m_wndPos.set(pos);
     TextItemControl()->m_wndSize.set(

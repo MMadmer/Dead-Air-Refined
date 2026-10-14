@@ -29,6 +29,8 @@ bool CUIContentWnd::Init()
         return false;
 
     CUIXmlInit::InitWindow(xml, "main", 0, this);
+    // the layout's own plates, shades and separators (auto_static), under everything else
+    CUIXmlInit::InitAutoStaticGroup(xml, "main", 0, this);
     UIHelper::CreateStatic(xml, "main:background", this);
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     m_message = UIHelper::CreateStatic(xml, "main:message", this);
@@ -56,11 +58,21 @@ void CUIContentWnd::Show(bool status)
     inherited::Show(status);
     if (status)
         Refresh();
+    else
+        m_preview.reset();
+}
+
+void CUIContentWnd::Preview(const ContentService::Snapshot& snapshot)
+{
+    m_preview = snapshot;
+    Refresh(snapshot);
 }
 
 void CUIContentWnd::Update()
 {
     inherited::Update();
+    if (m_preview)
+        return;
 
     // A repair moves; the dialog has to move with it, or the player is left staring at a frozen
     // window through a download that can take an hour.
@@ -71,9 +83,10 @@ void CUIContentWnd::Update()
     }
 }
 
-void CUIContentWnd::Refresh()
+void CUIContentWnd::Refresh() { Refresh(m_preview ? *m_preview : ContentService::GetSnapshot()); }
+
+void CUIContentWnd::Refresh(const ContentService::Snapshot& snapshot)
 {
-    const ContentService::Snapshot snapshot = ContentService::GetSnapshot();
     m_repairFinished = snapshot.state == ContentService::State::Repaired;
 
     pcstr message = "st_content_message";
@@ -155,12 +168,21 @@ bool CUIContentWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
     // Escape does not dismiss this one. The dialog has exactly two ways out and both of them
     // leave the installation in a state the game can explain.
     if (keyboardAction == WINDOW_KEY_PRESSED && IsBinded(kQUIT, dik))
+    {
+        if (m_preview)
+            HideDialog();
         return true;
+    }
     return inherited::OnKeyboardAction(dik, keyboardAction);
 }
 
 void CUIContentWnd::OnAction(CUIWindow*, void*)
 {
+    if (m_preview)
+    {
+        HideDialog();
+        return;
+    }
     if (m_repairFinished)
     {
         // The filesystem indexed its archives at startup, so bundles that arrived since are not
@@ -178,4 +200,13 @@ void CUIContentWnd::OnAction(CUIWindow*, void*)
     }
 }
 
-void CUIContentWnd::OnExit(CUIWindow*, void*) { Console->Execute("quit"); }
+void CUIContentWnd::OnExit(CUIWindow*, void*)
+{
+    // a preview only closes
+    if (m_preview)
+    {
+        HideDialog();
+        return;
+    }
+    Console->Execute("quit");
+}

@@ -3,6 +3,7 @@
 
 #include "StdAfx.h"
 #include "UIBugReportWnd.h"
+#include "xrUICore/Static/UIShape.h"
 #include "BugReportConfig.h"
 #include "BugReportService.h"
 #include "UIHelper.h"
@@ -33,6 +34,17 @@ size_t trimmed_length(pcstr value)
 }
 }
 
+namespace
+{
+// a colour of ui_theme.xml, or the old one where the theme has none
+u32 theme_color(pcstr name, u32 fallback)
+{
+    u32 color = fallback;
+    UITheme::Color(name, color);
+    return color;
+}
+} // namespace
+
 CUIBugReportWnd::CUIBugReportWnd() : CUIDialogWnd(CUIBugReportWnd::GetDebugType())
 {
     m_bWorkInPause = true;
@@ -55,6 +67,8 @@ bool CUIBugReportWnd::Init()
         return false;
 
     CUIXmlInit::InitWindow(xml, "main", 0, this);
+    // the layout's own plates, shades and separators (auto_static), under everything else
+    CUIXmlInit::InitAutoStaticGroup(xml, "main", 0, this);
     UIHelper::CreateStatic(xml, "main:background", this);
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     UIHelper::CreateStatic(xml, "main:title_label", this);
@@ -100,7 +114,8 @@ void CUIBugReportWnd::ShowCrashReport(pcstr reportPath)
 {
     m_crashReportMode = true;
     m_crashReportPath = reportPath ? reportPath : "";
-    if (!m_crashPrompt->InitMessageBox("message_box_yes_no"))
+    // the question in the palette of these windows, the game's own box where a mod took it away
+    if (!m_crashPrompt->InitMessageBox("message_box_sys_yes_no") && !m_crashPrompt->InitMessageBox("message_box_yes_no"))
     {
         Msg("! Failed to initialize the crash report confirmation");
         ShowDialog(true);
@@ -145,17 +160,17 @@ void CUIBugReportWnd::Update()
     if (availability == BugReportService::Availability::Checking)
     {
         m_serverStatus->SetText(StringTable().translate("st_bug_report_server_checking").c_str());
-        m_serverStatus->SetTextColor(color_rgba(230, 200, 80, 255));
+        m_serverStatus->SetTextColor(theme_color("sys_warn", color_rgba(230, 200, 80, 255)));
     }
     else if (availability == BugReportService::Availability::Available)
     {
         m_serverStatus->SetText(StringTable().translate("st_bug_report_server_available").c_str());
-        m_serverStatus->SetTextColor(color_rgba(100, 220, 100, 255));
+        m_serverStatus->SetTextColor(theme_color("sys_good", color_rgba(100, 220, 100, 255)));
     }
     else
     {
         m_serverStatus->SetText(StringTable().translate("st_bug_report_server_unavailable").c_str());
-        m_serverStatus->SetTextColor(color_rgba(230, 80, 80, 255));
+        m_serverStatus->SetTextColor(theme_color("sys_bad", color_rgba(230, 80, 80, 255)));
     }
 
     const BugReportService::State state = BugReportService::GetState();
@@ -256,7 +271,7 @@ void CUIBugReportWnd::OnMessageOk(CUIWindow*, void*)
 void CUIBugReportWnd::ShowResult(bool success, pcstr detail)
 {
     m_closeAfterMessage = success;
-    if (!m_messageBox->InitMessageBox("message_box_ok"))
+    if (!m_messageBox->InitMessageBox("message_box_sys_ok") && !m_messageBox->InitMessageBox("message_box_ok"))
         return;
 
     xr_string text = StringTable().translate(success ? "st_bug_report_success" : "st_bug_report_failed").c_str();

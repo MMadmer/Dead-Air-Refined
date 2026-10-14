@@ -13,6 +13,11 @@
 #include "UIGameSP.h"
 #include "ui/UIActorMenu.h"
 #include "ui/UIActorMenuHotkeys.h"
+#include "ui/UIUpdateWnd.h"
+#include "ui/UIMajorUpdateWnd.h"
+#include "ui/UIContentWnd.h"
+#include "ui/UIMessageBoxEx.h"
+#include "MainMenu.h"
 #include "ui/UIDialogWnd.h"
 #include "xrUICore/Cursor/UICursor.h"
 #include "ai/monsters/basemonster/base_monster.h"
@@ -245,6 +250,115 @@ public:
     void Save(IWriter*) override {}
 };
 
+// dar_ui_dialog update [available|downloading|ready|failed] | update_major | bug_report: one of the game's
+// dialogs over whatever is on screen, the update windows over a made-up release - for their layouts.
+class CCC_DarUiDialog final : public IConsole_Command
+{
+public:
+    CCC_DarUiDialog(pcstr name) : IConsole_Command(name) {}
+
+    void Execute(pcstr args) override
+    {
+        string64 what{}, state{};
+        sscanf(args, "%63s %63s", what, state);
+
+        UpdateService::Snapshot snapshot;
+        snapshot.version = "1.6.1";
+        snapshot.message = "";
+        snapshot.themeEn = snapshot.themeRu = snapshot.majorThemeEn = snapshot.majorThemeRu = "%c[ui_clr_1]Seasons";
+        xr_string changes;
+        for (int i = 1; i <= 24; ++i)
+        {
+            string256 line;
+            xr_sprintf(line, "- Change %d of the release, a line long enough to wrap in the list of the window.\\n", i);
+            changes += line;
+        }
+        snapshot.changesEn = snapshot.changesRu = snapshot.majorChangesEn = snapshot.majorChangesRu = changes;
+        snapshot.totalBytes = 734003200;
+        snapshot.downloadedBytes = 293601280;
+        snapshot.majorVersion = "2.0.0";
+
+        if (0 == xr_stricmp(what, "update"))
+        {
+            snapshot.state = UpdateService::State::Available;
+            if (0 == xr_stricmp(state, "downloading"))
+                snapshot.state = UpdateService::State::Downloading;
+            else if (0 == xr_stricmp(state, "ready"))
+                snapshot.state = UpdateService::State::Ready;
+            else if (0 == xr_stricmp(state, "failed"))
+                snapshot.state = UpdateService::State::DownloadFailed;
+            static std::unique_ptr<CUIUpdateWnd> window;
+            if (!window)
+            {
+                window = std::make_unique<CUIUpdateWnd>();
+                if (!window->Init())
+                {
+                    window.reset();
+                    return;
+                }
+            }
+            if (!window->IsShown())
+                window->ShowDialog(true);
+            window->Preview(snapshot);
+        }
+        else if (0 == xr_stricmp(what, "update_major"))
+        {
+            static std::unique_ptr<CUIMajorUpdateWnd> window;
+            if (!window)
+            {
+                window = std::make_unique<CUIMajorUpdateWnd>();
+                if (!window->Init())
+                {
+                    window.reset();
+                    return;
+                }
+            }
+            if (!window->IsShown())
+                window->ShowDialog(true);
+            window->Preview(snapshot);
+        }
+        else if (0 == xr_stricmp(what, "bug_report"))
+            MainMenu()->ShowBugReportDialog();
+        else if (0 == xr_stricmp(what, "content"))
+        {
+            ContentService::Snapshot content;
+            content.state = 0 == xr_stricmp(state, "repairing") ? ContentService::State::Repairing : ContentService::State::Incomplete;
+            content.problems = { "textures_03: missing", "sounds_00: damaged (sha mismatch)", "meshes_00: missing" };
+            content.repairTotal = 734003200;
+            content.repairDone = 293601280;
+            static std::unique_ptr<CUIContentWnd> window;
+            if (!window)
+            {
+                window = std::make_unique<CUIContentWnd>();
+                if (!window->Init())
+                {
+                    window.reset();
+                    return;
+                }
+            }
+            if (!window->IsShown())
+                window->ShowDialog(true);
+            window->Preview(content);
+        }
+        else if (0 == xr_stricmp(what, "crash_prompt"))
+        {
+            // the bug report's question after a crash, in its own box
+            static std::unique_ptr<CUIMessageBoxEx> box;
+            if (!box)
+                box = std::make_unique<CUIMessageBoxEx>();
+            if (box->InitMessageBox("message_box_sys_yes_no") || box->InitMessageBox("message_box_yes_no"))
+            {
+                box->SetText(StringTable().translate("st_crash_report_detected_prompt").c_str());
+                box->ShowDialog(true);
+            }
+        }
+        else
+            Msg("! dar_ui_dialog update [available|downloading|ready|failed] | update_major | bug_report | content [repairing] | crash_prompt");
+    }
+
+    void Save(IWriter*) override {}
+};
+
 // dar_ui_hold [alt] [ctrl] [shift] [<key>] | none: the keys the inventory hotkeys read as held
 // down until the next call, for a scenario that has no hands.
 class CCC_DarUiHold final : public IConsole_Command
@@ -313,6 +427,7 @@ void register_ui_console_commands()
     CMD1(CCC_DarUiClick, "dar_ui_click");
     CMD3(CCC_Token, "ui_inv_sort", &g_inventory_sort, inventory_sort_tokens);
     CMD1(CCC_DarUiHold, "dar_ui_hold");
+    CMD1(CCC_DarUiDialog, "dar_ui_dialog");
     CMD1(CCC_DarUiCursorItem, "dar_ui_cursor_item");
     CMD1(CCC_DarUiKey, "dar_ui_key");
     CMD4(CCC_Integer, "ui_inv_hotkeys", (int*)&g_inventory_hotkeys_panel, 0, 1);
