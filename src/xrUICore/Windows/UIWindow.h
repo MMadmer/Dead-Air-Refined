@@ -367,6 +367,12 @@ public:
     void SetShapeSkin(std::unique_ptr<SUIShapeSkin> skin);
     [[nodiscard]]
     SUIShapeSkin* GetShapeSkin() const { return m_shapeSkin.get(); }
+    // The skin alone, outside Draw, its next Draw untouched (the loading screen's pictures: UILoadingScreen).
+    void DrawShapeSkinAlone()
+    {
+        if (DrawShapeSkin())
+            m_shapeSkinDrawn = false;
+    }
 
 protected:
     // The look of the skin that shows now: a button answers by its state.

@@ -1,6 +1,8 @@
 #include "pch.hpp"
 #include "UIStaticItem.h"
 
+#include "xrEngine/da_media.h"
+
 CUIStaticItem::CUIStaticItem()
 {
     uFlags.zero();
@@ -61,6 +63,10 @@ void CUIStaticItem::RenderInternal(const Fvector2& in_pos)
         std::swap(LTt.x, RBt.x);
     if (EUIMirroring::Vertical == eMirrorMode || EUIMirroring::Both == eMirrorMode)
         std::swap(LTt.y, RBt.y);
+
+    // the window as a shader of its own sees it (xms_ui_rect, xms_ui_uv)
+    g_da_ui_shader.rect.set(LTp.x, LTp.y, RBp.x, RBp.y);
+    g_da_ui_shader.uv.set(LTt.x, LTt.y, RBt.x, RBt.y);
 
     float offset = -0.5f;
     if (UI().m_currentPointType == IUIRender::pttLIT)
@@ -207,6 +213,8 @@ void CUIStaticItem::Render(float angle)
 
 void CUIStaticItem::CreateShader(LPCSTR tex, LPCSTR sh)
 {
+    m_texture = tex;
+    m_shader = sh;
     hShader->create(sh, tex);
     uFlags.set(flValidSize, FALSE);
     uFlags.set(flValidTextureRect, FALSE);

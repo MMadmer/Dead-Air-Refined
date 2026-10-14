@@ -5,6 +5,9 @@
 
 #include "xrEngine/tntQAVI.h"
 #include "xrEngine/xrTheora_Surface.h"
+#include "xrEngine/da_media.h"
+
+#include <mutex>
 #include "StateManager/dx11ShaderResourceStateCache.h"
 #include "Layers/xrRenderPC_R4/da_dstorage.h"
 
@@ -200,6 +203,8 @@ void CTexture::PostLoad()
 {
     if (pTheora)
         bind = fastdelegate::FastDelegate2<CBackend&,u32>(this, &CTexture::apply_theora);
+    else if (pMedia)
+        bind = fastdelegate::FastDelegate2<CBackend&,u32>(this, &CTexture::apply_media);
     else if (pAVI)
         bind = fastdelegate::FastDelegate2<CBackend&,u32>(this, &CTexture::apply_avi);
     else if (!seqDATA.empty())
@@ -280,7 +285,8 @@ void CTexture::Apply(CBackend& cmd_list, u32 dwStage) const
 
 void CTexture::apply_theora(CBackend& cmd_list, u32 dwStage)
 {
-    if (pTheora->Update(m_play_time != 0xFFFFFFFF ? m_play_time : Device.dwTimeContinual))
+    // the media clock runs between frames too: a video on the loading screen plays while a level loads
+    if (pTheora->Update(m_play_time != 0xFFFFFFFF ? m_play_time : da_media_time()))
     {
         D3D_RESOURCE_DIMENSION type;
         pSurface->GetType(&type);
@@ -299,6 +305,25 @@ void CTexture::apply_theora(CBackend& cmd_list, u32 dwStage)
         VERIFY(u32(_pos) == rect.bottom * _w);
 
         HW.get_context(cmd_list.context_id)->Unmap(T2D, 0);
+    }
+    Apply(cmd_list, dwStage);
+}
+
+void CTexture::apply_media(CBackend& cmd_list, u32 dwStage)
+{
+    if (pMedia->Update(da_media_time()))
+    {
+        ID3DTexture2D* T2D = (ID3DTexture2D*)pSurface;
+        D3D_MAPPED_TEXTURE2D mapData;
+        if (SUCCEEDED(HW.get_context(cmd_list.context_id)->Map(T2D, 0, D3D_MAP_WRITE_DISCARD, 0, &mapData)))
+        {
+            const size_t row = size_t(pMedia->Width()) * 4;
+            const u8* src = pMedia->Pixels();
+            u8* dst = static_cast<u8*>(mapData.pData);
+            for (u32 y = 0; y < pMedia->Height(); ++y, src += row, dst += mapData.RowPitch)
+                CopyMemory(dst, src, row);
+            HW.get_context(cmd_list.context_id)->Unmap(T2D, 0);
+        }
     }
     Apply(cmd_list, dwStage);
 }
@@ -382,6 +407,44 @@ void CTexture::Preload()
     m_material = RImplementation.Resources->m_textures_description.GetMaterial(cName);
 }
 
+bool CTexture::load_media(DaMediaKind kind, pcstr fn)
+{
+    // Two threads may load one texture at once (a batch worker and a frame): the second takes the first's
+    // video rather than leave it running behind.
+    static std::mutex guard;
+    std::lock_guard lock(guard);
+    if (pMedia)
+        return true;
+    pMedia = CDaMediaSource::Open(kind, fn);
+    if (!pMedia)
+        return false;
+
+    // a dynamic surface the frames are written into, the first one from the start
+    D3D_TEXTURE2D_DESC desc{};
+    desc.Width = pMedia->Width();
+    desc.Height = pMedia->Height();
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D_USAGE_DYNAMIC;
+    desc.BindFlags = D3D_BIND_SHADER_RESOURCE;
+    desc.CPUAccessFlags = D3D_CPU_ACCESS_WRITE;
+    D3D_SUBRESOURCE_DATA first{ pMedia->Pixels(), desc.Width * 4, 0 };
+    ID3DTexture2D* texture = nullptr;
+    if (FAILED(HW.pDevice->CreateTexture2D(&desc, &first, &texture)))
+    {
+        Msg("! [media] %s: no %ux%u texture for it", fn, desc.Width, desc.Height);
+        xr_delete(pMedia);
+        return false;
+    }
+    pSurface = texture;
+    flags.MemoryUsage = desc.Width * desc.Height * 4;
+    CHK_DX(HW.pDevice->CreateShaderResourceView(pSurface, nullptr, &m_pSRView));
+    Msg("* [media] %s: %ux%u, %s", fn, desc.Width, desc.Height, kind == DaMediaKind::Gif ? "GIF" : "video");
+    return true;
+}
+
 void CTexture::Load()
 {
     if (ds_finish())
@@ -409,9 +472,14 @@ void CTexture::Load()
 
     bool bCreateView = true;
 
-    // Check for OGM
+    // A video, a GIF or a sequence before a picture; a mod's loose file before the game's archived one.
     string_path fn;
-    if (FS.exist(fn, "$game_textures$", cName.c_str(), ".ogm"))
+    const DaMediaKind media = da_media_resolve(cName.c_str(), fn);
+    if ((media == DaMediaKind::Gif || media == DaMediaKind::Video) && load_media(media, fn))
+    {
+        // the frames go into a surface of its own (apply_media)
+    }
+    else if (media == DaMediaKind::Theora)
     {
         // AVI
         pTheora = xr_new<CTheoraSurface>();
@@ -425,7 +493,7 @@ void CTexture::Load()
         else
         {
             flags.MemoryUsage = pTheora->Width(true) * pTheora->Height(true) * 4;
-            pTheora->Play(TRUE, Device.dwTimeContinual);
+            pTheora->Play(TRUE, da_media_time());
 
             // Now create texture
             ID3DTexture2D* pTexture = 0;
@@ -461,7 +529,7 @@ void CTexture::Load()
             }
         }
     }
-    else if (FS.exist(fn, "$game_textures$", cName.c_str(), ".avi"))
+    else if (media == DaMediaKind::Avi)
     {
         // AVI
         pAVI = xr_new<CAviPlayerCustom>();
@@ -506,7 +574,7 @@ void CTexture::Load()
             }
         }
     }
-    else if (FS.exist(fn, "$game_textures$", cName.c_str(), ".seq"))
+    else if (media == DaMediaKind::Sequence)
     {
         // Sequence
         string256 buffer;
@@ -610,6 +678,7 @@ void CTexture::Unload()
 
     xr_delete(pAVI);
     xr_delete(pTheora);
+    xr_delete(pMedia);
 
     bind = fastdelegate::FastDelegate2<CBackend&,u32>(this, &CTexture::apply_load);
 }
@@ -678,7 +747,7 @@ D3D_USAGE CTexture::GetUsage()
 void CTexture::video_Play(BOOL looped, u32 _time)
 {
     if (pTheora)
-        pTheora->Play(looped, (_time != 0xFFFFFFFF) ? (m_play_time = _time) : Device.dwTimeContinual);
+        pTheora->Play(looped, (_time != 0xFFFFFFFF) ? (m_play_time = _time) : da_media_time());
 }
 
 void CTexture::video_Pause(BOOL state) const

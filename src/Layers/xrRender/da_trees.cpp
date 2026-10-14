@@ -1656,14 +1656,16 @@ public:
         constexpr double kBudgetShare[] = {0.35, 0.5, 0.7, 0.85, 1.0};
         const double budget = kLeafBudget * kBudgetShare[std::min(preset, 4u)];
         xr_vector<u32> need(jobs.size());
-        xr_parallel_for(TaskRange<size_t>(0, jobs.size(), 1), [&jobs, &need](const TaskRange<size_t>& range) {
-            for (size_t i = range.begin(); i != range.end(); ++i)
-            {
-                const Species& S = g_data.species[jobs[i].species];
-                const bool leafless = S.name.size() > 5 && (strstr(S.name.c_str(), "_dead") || strstr(S.name.c_str(), "_char"));
-                const u32 n = da_shrub::tree_leaf_need(S.arch, jobs[i].skel->S, jobs[i].up);
-                need[i] = leafless ? std::min(n, 16000u) : n;
-            }
+        g_pGamePersistent->LoadInBackground([&jobs, &need] {
+            xr_parallel_for(TaskRange<size_t>(0, jobs.size(), 1), [&jobs, &need](const TaskRange<size_t>& range) {
+                for (size_t i = range.begin(); i != range.end(); ++i)
+                {
+                    const Species& S = g_data.species[jobs[i].species];
+                    const bool leafless = S.name.size() > 5 && (strstr(S.name.c_str(), "_dead") || strstr(S.name.c_str(), "_char"));
+                    const u32 n = da_shrub::tree_leaf_need(S.arch, jobs[i].skel->S, jobs[i].up);
+                    need[i] = leafless ? std::min(n, 16000u) : n;
+                }
+            });
         });
         {
             xr_vector<u32> order(jobs.size());
@@ -1715,26 +1717,29 @@ public:
             j.hash = fnv(parts, sizeof(parts));
             cache_path(j.path, j.kind, g_data.species[j.species].name.c_str(), j.hash);
         }
-        xr_parallel_for(TaskRange<size_t>(0, jobs.size(), 1), [&jobs](const TaskRange<size_t>& range) {
-            for (size_t i = range.begin(); i != range.end(); ++i)
-            {
-                Job& j = jobs[i];
-                if ((j.cached = cache_read(j.path, j.hash, j.meta, j.elems, j.axes, j.aux, j.leaves)))
+        // (Files and arithmetic only: the loading screen keeps being drawn meanwhile.)
+        g_pGamePersistent->LoadInBackground([&jobs] {
+            xr_parallel_for(TaskRange<size_t>(0, jobs.size(), 1), [&jobs](const TaskRange<size_t>& range) {
+                for (size_t i = range.begin(); i != range.end(); ++i)
                 {
+                    Job& j = jobs[i];
+                    if ((j.cached = cache_read(j.path, j.hash, j.meta, j.elems, j.axes, j.aux, j.leaves)))
+                    {
+                        j.ok = true;
+                        continue;
+                    }
+                    // (A torn or stale file may have filled part of them.)
+                    j.elems.clear();
+                    j.axes.clear();
+                    j.aux.clear();
+                    da_shrub::Template T;
+                    da_shrub::generate_on_skeleton(g_data.species[j.species].arch, j.skel->S, j.seed, j.up, j.leaf_cap, T);
+                    pack_tree(T, j.meta, j.elems, j.axes, j.aux, j.seed);
+                    j.leaves = u32(T.leaves.size());
                     j.ok = true;
-                    continue;
+                    cache_write(j.path, j.hash, j.meta, j.elems, j.axes, j.aux, j.leaves);
                 }
-                // (A torn or stale file may have filled part of them.)
-                j.elems.clear();
-                j.axes.clear();
-                j.aux.clear();
-                da_shrub::Template T;
-                da_shrub::generate_on_skeleton(g_data.species[j.species].arch, j.skel->S, j.seed, j.up, j.leaf_cap, T);
-                pack_tree(T, j.meta, j.elems, j.axes, j.aux, j.seed);
-                j.leaves = u32(T.leaves.size());
-                j.ok = true;
-                cache_write(j.path, j.hash, j.meta, j.elems, j.axes, j.aux, j.leaves);
-            }
+            });
         });
         // One element, axis and aux buffer for the level's trees.
         xr_vector<u32> elems, axes, aux;
@@ -1863,6 +1868,7 @@ public:
             return false;
         Msg("* [trees] %u templates (%u from the disk cache), %u KB of elements, %u KB of axes, %u KB of rings and patches",
             u32(templates.size()), cached, u32(elems.size() * 4) >> 10, u32(axes.size() * 4) >> 10, u32(aux.size() * 4) >> 10);
+        g_pGamePersistent->LoadPump();
         // The instances: the stock placement's transform as it is.
         instances.clear();
         max_height = 0.f;

@@ -25,6 +25,12 @@ public:
     virtual void SetLevelLogo(const char* name) = 0;
     virtual void SetStageTitle(const char* title) = 0;
     virtual void SetStageTip(const char* header, const char* tipNumber, const char* tip) = 0;
+
+    // The loading screen's own presenter (da_loading_presenter.h): the screen's layers go to it, from a frame of
+    // the game's - true when it took them. NeedsPublish: something it shows changed since.
+    virtual bool Publish() { return false; }
+    [[nodiscard]]
+    virtual bool NeedsPublish() const { return false; }
 };
 
 inline ILoadingScreen::~ILoadingScreen() = default;

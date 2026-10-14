@@ -124,7 +124,10 @@ bool IGame_Level::Load(u32 dwNum)
     // CForms
     g_pGamePersistent->LoadTitle("st_loading_cform");
 
-    ObjectSpace.Load(build_callback, serialize_callback, deserialize_callback, remapping_materials_callback);
+    // (the collision's build or its cache: files and arithmetic, the loading screen keeps being drawn)
+    g_pGamePersistent->LoadInBackground([this] {
+        ObjectSpace.Load(build_callback, serialize_callback, deserialize_callback, remapping_materials_callback);
+    });
     g_pGamePersistent->SpatialSpace.initialize(ObjectSpace.GetBoundingVolume());
     g_pGamePersistent->SpatialSpacePhysic.initialize(ObjectSpace.GetBoundingVolume());
 

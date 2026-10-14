@@ -17,6 +17,8 @@
 #include "UITextureMaster.h"
 #include "Lines/UILines.h"
 
+#include "xrEngine/IGame_Level.h"
+
 constexpr pcstr ARIAL_FONT_NAME       = "arial";
 
 constexpr pcstr MEDIUM_FONT_NAME      = "medium";
@@ -152,6 +154,10 @@ bool CUIXmlInitBase::InitStatic(CUIXml& xml_doc, pcstr path, int index, CUIStati
         pWnd->TextItemControl()->SetTextColor(skin->text[SUIShapeSkin::Normal]);
     InitTexture(xml_doc, path, index, pWnd);
     InitTextureOffset(xml_doc, path, index, pWnd);
+    // in_game="1": the texture (or the skin) shows only over a loaded level - the pause menu -, in_game="0"
+    // only without one; the static and its children stay either way
+    if (const int in_game = xml_doc.ReadAttribInt(path, index, "in_game", -1); in_game >= 0 && (in_game != 0) != !!g_pGameLevel)
+        pWnd->TextureOff();
 
     cpcstr mirroring = xml_doc.ReadAttrib(path, index, "mirror", "");
     if (0 == xr_strcmp(mirroring, "h"))

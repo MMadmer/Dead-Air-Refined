@@ -113,6 +113,7 @@ public:
 
 #include "xr_object.h"
 #include "xr_object_list.h"
+#include "da_loading_presenter.h"
 
 xr_vector<xr_token> VidQualityToken;
 
@@ -1047,6 +1048,9 @@ void CCC_Register()
     CMD4(CCC_Integer, "rs_fps_limit", &ps_fps_limit, 0, 501); // 0 = unlimited
     CMD4(CCC_Integer, "rs_fps_limit_in_menu", &ps_fps_limit_in_menu, 30, 501);
     CMD4(CCC_Integer, "g_pause_in_background", &g_pause_in_background, 0, 1);
+    // the loading screen drawn by a presenter of its own, a thread, a device and a window (da_loading_presenter.h)
+    CMD4(CCC_Integer, "loading_screen_async", &psLoadingScreenAsync, 0, 1);
+    CMD4(CCC_Integer, "loading_screen_capture", &psLoadingScreenCapture, 0, 400);
     CMD1(CCC_VidFpsLimit, "vid_fps_limit");
     CMD3(CCC_Mask, "rs_always_active", &psDeviceFlags, rsAlwaysActive);
     CMD3(CCC_Mask, "rs_v_sync", &psDeviceFlags, rsVSync);

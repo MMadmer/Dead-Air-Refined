@@ -38,6 +38,9 @@ public:
     ui_shader hShader;
 
     void CreateShader(LPCSTR tex, LPCSTR sh = "hud" DELIMITER "default");
+    // what CreateShader made it of (empty for a shader set as it is)
+    const shared_str& TextureName() const { return m_texture; }
+    const shared_str& ShaderName() const { return m_shader; }
     void SetShader(const ui_shader& sh) { hShader = sh; };
     void Init(LPCSTR tex, LPCSTR sh, float left, float top);
     void Render();
@@ -74,4 +77,7 @@ public:
 private:
     void RenderInternal(const Fvector2& pos);
     void RenderInternal(float angle);
+
+    shared_str m_texture;
+    shared_str m_shader;
 };

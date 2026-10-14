@@ -15,6 +15,9 @@
 #include "Render.h"
 #include "PS_instance.h"
 #include "CustomHUD.h"
+#include "da_media.h"
+#include "da_loading_presenter.h"
+#include "xrCore/Threading/TaskManager.hpp"
 #endif
 
 ENGINE_API IGame_Persistent* g_pGamePersistent = nullptr;
@@ -370,6 +373,18 @@ void IGame_Persistent::OnGameEnd()
 #endif
 }
 
+namespace
+{
+// how the loading screen kept up, for the log at the loading's end: frames drawn, the longest wait between two
+struct LoadFrames
+{
+    u32 count{};
+    u32 last{};
+    u32 longest{};
+    int longest_at{}; // the step it came after
+} load_frames;
+} // namespace
+
 void IGame_Persistent::LoadBegin()
 {
     ll_dwReference++;
@@ -378,6 +393,7 @@ void IGame_Persistent::LoadBegin()
         loaded = false;
         phase_timer.Start();
         load_stage = 0;
+        m_load_thread = std::this_thread::get_id();
     }
 }
 
@@ -388,6 +404,11 @@ void IGame_Persistent::LoadEnd()
     {
         Msg("* phase time: %d ms", phase_timer.GetElapsed_ms());
         Msg("* phase cmem: %d K", Memory.mem_usage() / 1024);
+        if (load_frames.count)
+            Msg("* [loading] the game drew %u frame(s) of the loading screen, %u between the steps (%u ms); the longest wait %u ms, at step %d",
+                load_frames.count, m_load_pumps, m_load_pump_ms, load_frames.longest, load_frames.longest_at);
+        m_load_pumps = m_load_pump_ms = 0;
+        load_frames = {};
         Console->Execute("stat_memory");
         loaded = true;
     }
@@ -478,8 +499,13 @@ void IGame_Persistent::LoadDraw() const
 {
     if (loaded)
         return;
+    m_load_drawn = da_media_time();
 
     Device.dwFrame += 1;
+
+    // The loading screen's own presenter shows it: a frame of the game's only to hand it what changed.
+    if (da_loading_presenter_shown() && m_pLoadingScreen->IsShown() && !m_pLoadingScreen->NeedsPublish())
+        return;
 
     if (!Device.RenderBegin())
         return;
@@ -493,8 +519,59 @@ void IGame_Persistent::LoadDraw() const
     Device.RenderEnd();
 }
 
+void IGame_Persistent::LoadPump() const
+{
+    // A frame of the loading screen takes its share of the loading: at most a tenth, at most 30 a second.
+    static bool inside = false;
+    static u32 cost = 0;
+    if (inside || loaded || !ll_dwReference || load_screen_renderer.IsActive() || !m_pLoadingScreen->IsShown() || da_loading_presenter_shown() ||
+        std::this_thread::get_id() != m_load_thread || da_media_time() - m_load_drawn < std::max(33u, 9 * cost))
+        return;
+    inside = true;
+    const u32 began = da_media_time();
+    LoadDraw();
+    cost = da_media_time() - began;
+    ++m_load_pumps;
+    m_load_pump_ms += cost;
+    inside = false;
+}
+
+void IGame_Persistent::LoadInBackground(const std::function<void()>& work) const
+{
+    if (loaded || !ll_dwReference || load_screen_renderer.IsActive() || std::this_thread::get_id() != m_load_thread)
+    {
+        work();
+        return;
+    }
+    // The loading screen's own presenter draws it meanwhile; without it, a worker does the step and this
+    // thread draws the screen.
+    if (da_loading_presenter_shown())
+    {
+        work();
+        return;
+    }
+    // (A task of the scheduler's: a parallel_for inside it spreads over the workers.)
+    Task& task = TaskScheduler->AddTask([&work] { work(); });
+    while (!task.IsFinished())
+    {
+        LoadPump();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    TaskScheduler->Wait(task);
+}
+
 void IGame_Persistent::load_draw_internal() const
 {
+    const u32 now = da_media_time();
+    if (load_frames.count++ && now - load_frames.last > load_frames.longest)
+    {
+        load_frames.longest = now - load_frames.last;
+        load_frames.longest_at = load_stage;
+    }
+    load_frames.last = now;
+
+    if (m_pLoadingScreen->IsShown() && m_pLoadingScreen->NeedsPublish() && da_loading_presenter_usable())
+        m_pLoadingScreen->Publish();
     m_pLoadingScreen->Draw();
 }
 

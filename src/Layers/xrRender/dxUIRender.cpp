@@ -2,6 +2,7 @@
 #include "dxUIRender.h"
 
 #include "dxUIShader.h"
+#include "xrEngine/da_media.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -151,11 +152,12 @@ void dxUIRender::SetScissor(Irect* rect)
 
 LPCSTR dxUIRender::UpdateShaderName(LPCSTR tex_name, LPCSTR sh_name)
 {
+    // A Theora frame arrives as YUV and the movie shader turns it to colour; a GIF or another video a
+    // mod put in its place under the same name arrives as colour already.
     string_path buff;
     u32 v_dev = CAP_VERSION(HW.Caps.raster_major, HW.Caps.raster_minor);
     u32 v_need = CAP_VERSION(2, 0);
-    // strstr(Core.Params,"-ps_movie") &&
-    if ((v_dev >= v_need) && FS.exist(buff, "$game_textures$", tex_name, ".ogm"))
+    if ((v_dev >= v_need) && da_media_resolve(tex_name, buff) == DaMediaKind::Theora)
         return "hud" DELIMITER "movie";
     else
         return sh_name;
@@ -262,6 +264,12 @@ void dxUIRender::FlushPrimitive()
         break;
     default: NODEFAULT;
     }
+
+    // The window a shader of the interface's own draws (da_media.h): set for each draw, as a binder
+    // runs only when the shader changes, before the static has said where it is.
+    static const shared_str rect_name("xms_ui_rect"), uv_name("xms_ui_uv");
+    RCache.set_c(rect_name, g_da_ui_shader.rect);
+    RCache.set_c(uv_name, g_da_ui_shader.uv);
 
     if (m_shapePending)
     {

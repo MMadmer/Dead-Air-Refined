@@ -68,10 +68,14 @@ class CMainMenu : public IMainMenu,
         flGameSaveScreenshot = (1 << 6),
         flNeedVidRestart = (1 << 7),
         flNeedUIRestart = (1 << 8),
+        // the menu opened over a level: the level draws once more, without the menu, for the render
+        // target of the game's frame ($user$game_frame)
+        flFrameCapture = (1 << 9),
     };
     Flags16 m_Flags;
     string_path m_screenshot_name;
     u32 m_screenshotFrame;
+    u32 m_frameCaptureFrame{};
 
     xr_vector<CUIWindow*> m_pp_draw_wnds;
 

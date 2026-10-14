@@ -3341,6 +3341,128 @@ the services', and their buttons only close them:
 | `dar_ui_dialog bug_report` | the bug report |
 | `dar_ui_dialog content [repairing]` | the content repair: the problems, or a repair under way |
 | `dar_ui_dialog crash_prompt` | the question about the last crash |
+| `dar_ui_dialog loading [<per cent>]` | the loading screen: its bar walking 0..100 % every 8 s, or standing at the given per cent |
+
+## Backgrounds: video, GIF, shaders and render targets; the loading screen
+
+The menus, the pause menu and the loading screen look as in Dead Air; what follows is what a mod can put
+into them.
+
+**A texture that moves.** Any texture name the game draws - a menu's background, the loading screen, a
+static in any window, even a surface of the world - may stand for one of these files of `textures\`:
+
+| File | What it is |
+| --- | --- |
+| `<name>.ogm` | a Theora video, as before (the main menu's own `ui\ui_static_mm_back_00.ogm`) |
+| `<name>.gif` | an animated GIF: its own delays, its transparency, endless loop |
+| `<name>.mp4`, `.webm`, `.wmv` | a video through Windows' Media Foundation: H.264 MP4 plays everywhere, WebM (VP9) where Windows has its web media extensions; endless loop; silent in the menus and the world, with its sound on the loading screen |
+| `<name>.seq` | a sequence of textures at a fixed rate, as before |
+| `<name>.dds` | a picture |
+
+The first of them that exists is taken, in this order, except that a loose file - a mod's, in `gamedata` or
+in an XMS module - wins over one in an archive: a mod that ships `textures\ui\ui_static_mm_back_00.mp4`
+plays its video in place of the game's `.ogm`, and a loose `.dds` of the same name stops it.
+`dar_ui_media <texture>` says in the console which file a name stands for. A video decodes on a thread of
+its own a few frames ahead and waits while nobody draws it; a GIF keeps up to 96 MB of composed frames and
+composes a larger one as it plays. An `.ogm` comes to the screen through the `hud\movie` shader that turns
+its YUV into colour, so it takes no shader of a mod's; a GIF or a video does. A video that Windows cannot
+play (no codec, an N edition without the Media Feature Pack) is said in the log, and the name falls back to
+its `.dds`.
+
+**A shader of a mod's.** `<texture shader="my_effect">` on any static draws it with `shaders\r3\my_effect.s`
+(and its `.ps`), as everywhere in the game; the `.s` may bind more textures, render targets among them
+(`shader:dx10texture("s_frame", "$user$game_frame")`). The engine gives the interface's shaders these
+constants, each to any shader that declares it:
+
+| Constant | What it holds |
+| --- | --- |
+| `xms_ui_time` | seconds of a clock that never pauses (wrapped each hour), seconds since the menu or the loading screen opened, seconds of the frame |
+| `xms_ui_rect` | the static being drawn, screen pixels: left, top, right, bottom |
+| `xms_ui_uv` | the part of its texture it shows: u0, v0, u1, v1 |
+| `xms_ui_cursor` | the cursor in pixels, then over the screen 0..1 |
+| `xms_ui_progress` | the loading's progress 0..1, eased, then as it is |
+| `screen_res` | the screen: width, height, 1 / width, 1 / height |
+
+On the loading screen a shader keeps moving while the level loads (see below). A ring that fills with the
+loading, anywhere on the screen:
+
+```hlsl
+// shaders\r3\my_ring.ps
+#include "common.h"
+uniform float4 xms_ui_rect;
+uniform float4 xms_ui_progress;
+
+float4 main(v2p_TL I) : SV_Target
+{
+	float2 size = xms_ui_rect.zw - xms_ui_rect.xy;
+	float2 p = (I.HPos.xy - xms_ui_rect.xy - size * 0.5) / (min(size.x, size.y) * 0.5);
+	float ring = smoothstep(0.08, 0.0, abs(length(p) - 0.8) - 0.06);
+	float done = frac(atan2(p.x, -p.y) / 6.2831853) < xms_ui_progress.x ? 1.0 : 0.2;
+	return float4(I.Color.rgb, I.Color.a * ring * done);
+}
+```
+
+```lua
+-- shaders\r3\my_ring.s
+function normal(shader, t_base, t_second, t_detail)
+	shader:begin("stub_notransform_t", "my_ring")
+		: fog(false)
+		: zb(false, false)
+		: blend(true, blend.srcalpha, blend.invsrcalpha)
+end
+```
+
+```xml
+<auto_static x="944" y="688" width="48" height="48" stretch="1">
+	<texture shader="my_ring">ui\ui_common</texture>
+</auto_static>
+```
+
+**The game under the pause menu.** As the menu opens over a level, the game draws one more frame without
+it and keeps it whole as the render target `$user$game_frame`: a mod's background shader can blur it, tint it
+or frame it. Nothing of the game draws it. `in_game="1"` on a static of any layout shows its texture (or its
+skin) only over a loaded level - the pause menu -, `in_game="0"` only without one; the static and its children
+stay either way. A pause menu over the blurred game, in a mod's `ui_mm_main_16.xml`:
+
+```xml
+<auto_static x="0" y="0" width="1024" height="768" stretch="1" in_game="1">
+	<texture shader="my_blur">$user$game_frame</texture>
+</auto_static>
+```
+
+with `my_blur.ps` sampling `s_base` at `I.HPos.xy * screen_res.zw` with a blur of its choice.
+
+**The loading screen** is `ui_mm_loading_screen.xml` and `ui_mm_loading_screen_16.xml`: the engine's built-in
+layouts node for node, the bar a thin line over the picture without the black frame (the built-in layouts drew
+the bar under the picture, out of sight). Every node but `background` is optional: `loading_progress` (a progress
+bar, textured or a shape; `under_background="1"` puts it under the background as the built-in layout did),
+`loading_progress_percent`, `loading_stage`, `loading_header`, `loading_tip_number`, `loading_tip`, `loading_logo`.
+Any static of the layout can show the progress its own way - a shader reading `xms_ui_progress`, placed anywhere,
+as many as it likes - and the background can be a video (with its sound) or a GIF. A mod's own
+`ui_mm_loading_screen*.xml` replaces the game's, a layout made for the original game included; an XMS module's
+XML patch can change only the bar; with none of the files, the built-in layouts are used as before.
+
+**The loading screen never stops.** It is shown the way the movie player of a modern engine shows one: a
+thread of its own, with a device and a window of its own laid over the game's window, draws it at the display's
+pace whatever the game does meanwhile - the level's long steps, the scripts, the device reset at the end. The game
+lays the screen out as always and draws what does not move into pictures, once and again whenever a text changes;
+the thread draws those pictures and everything that moves itself:
+
+| On the screen | Drawn by the thread as |
+| --- | --- |
+| a static's texture, a skin, a text | the game's picture of it, pixel for pixel |
+| a video (`.mp4`, `.webm`, `.wmv`) | a video of its own through the Media Foundation media engine, decoded on the GPU, its sound played at the music's volume and faded out as the screen goes |
+| a GIF, a Theora video (`.ogm`) | the same file, decoded by the thread |
+| a static with `shader="..."` | the mod's own shader: the `.s` file names the pixel shader, its blend and further textures (`.dds`), and the `.ps` is compiled with the game's include files; it gets `s_base` (the static's texture, its video or GIF too) and the constants above (`xms_ui_time`, `xms_ui_rect`, `xms_ui_uv`, `xms_ui_progress`, `screen_res`, `timers`) |
+| the bar's fill, the per cent | the fill cut and tinted by the progress the way the bar does it, the per cent as the game draws each value |
+
+What a `.s` does beyond that - a render target, a script of its own - is not available to the thread; such a
+static is drawn as the game's picture of it. As the precache ends, the thread hands the screen back to the game's
+own frames (and to the key the game may wait for). In exclusive fullscreen, where no window can lie over the
+game's, and with `loading_screen_async 0`, the game draws the screen itself after each step and between the parts
+of the longest ones. The log tells how it went: `[loading] its own thread drew N frame(s); the longest wait between
+two M ms`. `loading_screen_capture <frames>` makes the thread save its own frames, four a second, into
+`screenshots\loading_<time>\` - the game's `r__capture` sees only the game's window.
 
 ## NPC AI: what scripts and configs see now
 

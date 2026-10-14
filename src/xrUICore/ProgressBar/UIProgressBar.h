@@ -71,6 +71,20 @@ public:
 
     void UseGradient(bool status) { m_bUseGradient = status; }
 
+    // How Draw cuts and tints the fill, for the loading screen's own presenter (da_loading_presenter.h): the
+    // orientation, and the tint by the progress where the bar has one (false: none).
+    [[nodiscard]] u8 GetOrientMode() const { return u8(m_orient_mode); }
+    bool GetFillTint(Fcolor& min, Fcolor& middle, Fcolor& max, bool& useMiddle) const
+    {
+        if (!m_bUseColor)
+            return false;
+        min = m_bUseGradient ? m_minColor : m_maxColor;
+        middle = m_middleColor;
+        max = m_maxColor;
+        useMiddle = m_bUseGradient && m_bUseMiddleColor;
+        return true;
+    }
+
     pcstr GetDebugType() override { return "CUIProgressBar"; }
     void FillDebugInfo() override;
 

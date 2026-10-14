@@ -51,6 +51,7 @@
 #include "login_manager.h"
 #include "profile_store.h"
 #include "xrEngine/xr_input.h"
+#include "xrEngine/da_media.h"
 
 // fwd. decl.
 extern ENGINE_API bool bShowPauseString;
@@ -227,14 +228,18 @@ void CMainMenu::Activate(bool bActivate)
                 Device.Pause(TRUE, TRUE, FALSE, "mm_activate2");
         }
 
+        g_da_ui_shader.opened = da_media_time();
         if (g_pGameLevel)
         {
             if (b_is_single)
             {
                 Device.seqFrame.Remove(g_pGameLevel);
             }
-            Device.seqRender.Remove(g_pGameLevel);
-            CCameraManager::ResetPP();
+            // The level stays drawn for the next frame, the menu not yet: that frame becomes the render
+            // target of the game under the menu, $user$game_frame.
+            m_Flags.set(flFrameCapture, TRUE);
+            m_frameCaptureFrame = Device.dwFrame;
+            GEnv.Render->CaptureMenuFrame();
         };
         Device.seqRender.Add(this, 4); // 1-console 2-cursor 3-tutorial
 
@@ -244,6 +249,10 @@ void CMainMenu::Activate(bool bActivate)
         m_deactivated_frame = Device.dwFrame;
         m_Flags.set(flActive, FALSE);
         m_Flags.set(flNeedChangeCapture, TRUE);
+        // closed before its frame was taken: the level is still drawn and is added again below
+        if (m_Flags.test(flFrameCapture) && g_pGameLevel)
+            Device.seqRender.Remove(g_pGameLevel);
+        m_Flags.set(flFrameCapture, FALSE);
 
         Device.seqRender.Remove(this);
 
@@ -357,7 +366,10 @@ bool CMainMenu::ReloadUI()
 }
 
 bool CMainMenu::IsActive() const { return m_Flags.test(flActive); }
-bool CMainMenu::CanSkipSceneRendering() { return IsActive() && !m_Flags.test(flGameSaveScreenshot); }
+bool CMainMenu::CanSkipSceneRendering()
+{
+    return IsActive() && !m_Flags.test(flGameSaveScreenshot) && !m_Flags.test(flFrameCapture);
+}
 
 void CMainMenu::IR_OnActivate()
 {
@@ -511,13 +523,16 @@ void CMainMenu::IR_OnControllerHold(int dik, const ControllerAxisState& state)
     CDialogHolder::IR_UIOnControllerHold(dik, state);
 }
 
-bool CMainMenu::OnRenderPPUI_query() { return IsActive() && !m_Flags.test(flGameSaveScreenshot) && b_shniaganeed_pp; }
+bool CMainMenu::OnRenderPPUI_query()
+{
+    return IsActive() && !m_Flags.test(flGameSaveScreenshot) && !m_Flags.test(flFrameCapture) && b_shniaganeed_pp;
+}
 
 void CMainMenu::OnRender()
 {
     ZoneScoped;
 
-    if (m_Flags.test(flGameSaveScreenshot))
+    if (m_Flags.test(flGameSaveScreenshot) || m_Flags.test(flFrameCapture))
         return;
 
     GEnv.Render->RenderMenu();
@@ -536,7 +551,7 @@ void CMainMenu::OnRenderPPUI_main()
     if (!IsActive())
         return;
 
-    if (m_Flags.test(flGameSaveScreenshot))
+    if (m_Flags.test(flGameSaveScreenshot) || m_Flags.test(flFrameCapture))
         return;
 
     UI().pp_start();
@@ -558,7 +573,7 @@ void CMainMenu::OnRenderPPUI_PP()
     if (!IsActive())
         return;
 
-    if (m_Flags.test(flGameSaveScreenshot))
+    if (m_Flags.test(flGameSaveScreenshot) || m_Flags.test(flFrameCapture))
         return;
 
     UI().pp_start();
@@ -605,6 +620,18 @@ void CMainMenu::OnFrame()
 
         if (m_Flags.test(flRestoreConsole))
             Console->Show();
+    }
+
+    // the game's frame is taken: the level leaves the screen to the menu
+    if (m_Flags.test(flFrameCapture) && Device.dwFrame > m_frameCaptureFrame)
+    {
+        m_Flags.set(flFrameCapture, FALSE);
+        // (a save's screenshot asked for meanwhile still needs the level: its own end takes it away)
+        if (g_pGameLevel && m_Flags.test(flActive) && !m_Flags.test(flGameSaveScreenshot))
+        {
+            Device.seqRender.Remove(g_pGameLevel);
+            CCameraManager::ResetPP();
+        }
     }
 
     if ((IsActive() || m_sPDProgress.IsInProgress) && m_pGameSpyFull)
@@ -662,7 +689,9 @@ void CMainMenu::Screenshot(IRender::ScreenshotMode mode, LPCSTR name)
         if (g_pGameLevel && m_Flags.test(flActive))
         {
             Device.seqFrame.Add(g_pGameLevel);
-            Device.seqRender.Add(g_pGameLevel);
+            // (the frame for $user$game_frame still has it drawn)
+            if (!m_Flags.test(flFrameCapture))
+                Device.seqRender.Add(g_pGameLevel);
         };
         m_screenshotFrame = Device.dwFrame + 1;
         m_Flags.set(flRestoreConsole, Console->bVisible);

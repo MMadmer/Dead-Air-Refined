@@ -47,6 +47,9 @@ public:
 
     bool Update(u32 _time);
     void DecompressFrame(u32* dst, u32 _width, int& count);
+    // Frames decoded to colour (B, G, R, A in memory) rather than YUV for a shader: the loading screen's own
+    // presenter has no YUV shader (da_loading_presenter.cpp).
+    void DecodeToColour() { bShaderYUV2RGB = false; }
 
     void Play(bool _looped, u32 _time);
     void Pause(bool _pause) { playing = !_pause; }

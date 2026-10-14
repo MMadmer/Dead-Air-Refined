@@ -4,6 +4,8 @@
 
 class CAviPlayerCustom;
 class ENGINE_API CTheoraSurface;
+class ENGINE_API CDaMediaSource;
+enum class DaMediaKind;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -68,6 +70,11 @@ public:
     void apply_avi(CBackend& cmd_list, u32 stage) const;
     void apply_seq(CBackend& cmd_list, u32 stage);
     void apply_normal(CBackend& cmd_list, u32 stage) const;
+#if defined(USE_DX11)
+    // a GIF or a video of da_media.h
+    void apply_media(CBackend& cmd_list, u32 stage);
+    bool load_media(DaMediaKind kind, pcstr fn);
+#endif
 
     void set_slice(int slice);
 
@@ -182,6 +189,7 @@ public: //	Public class members (must be encapsulated further)
 
     CAviPlayerCustom* pAVI;
     CTheoraSurface* pTheora;
+    CDaMediaSource* pMedia{};
     float m_material;
     shared_str m_bumpmap;
 

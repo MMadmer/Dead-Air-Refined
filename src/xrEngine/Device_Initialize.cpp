@@ -74,6 +74,11 @@ void CRenderDevice::Initialize()
         xr_strcpy(Core.ApplicationTitle, title);
         SetSDLSettings(title);
 
+#ifdef XR_PLATFORM_WINDOWS
+        // A long step of a level load keeps this thread from the window's messages while the loading
+        // screen's own thread presents frames: Windows would cover them with a frozen "not responding" ghost.
+        DisableProcessWindowsGhosting();
+#endif
         m_sdlWnd = SDL_CreateWindow(title, 0, 0, 640, 480, flags);
         R_ASSERT3(m_sdlWnd, "Unable to create SDL window", SDL_GetError());
 

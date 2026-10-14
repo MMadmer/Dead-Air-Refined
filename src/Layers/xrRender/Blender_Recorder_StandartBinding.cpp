@@ -11,6 +11,7 @@
 #include "xrEngine/thunderbolt.h"
 #include "xrEngine/da_season.h"
 #include "xrEngine/da_snow_field.h"
+#include "xrEngine/da_media.h"
 #if RENDER == R_R4
 #include "Layers/xrRender/da_wind_history.h"
 #include "Layers/xrRender/da_snow.h"
@@ -267,6 +268,42 @@ class cl_times : public R_constant_setup
     }
 };
 static cl_times binder_times;
+
+// The interface's own shaders (da_media.h): a menu's or the loading screen's background by a mod.
+// xms_ui_time: seconds of the media clock (wrapped each hour), seconds since the menu or the loading
+// screen opened, the frame's seconds.
+class cl_xms_ui_time : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const u32 now = da_media_time();
+        cmd_list.set_c(C, float(now % 3600000) * 0.001f, float(now - g_da_ui_shader.opened) * 0.001f,
+            Device.fTimeDeltaReal, 0.f);
+    }
+};
+static cl_xms_ui_time binder_xms_ui_time;
+
+// (xms_ui_rect and xms_ui_uv change with every static: dxUIRender::FlushPrimitive sets them.)
+
+// the cursor in pixels, and over the screen 0..1
+class cl_xms_ui_cursor : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const Fvector2& p = g_da_ui_shader.cursor;
+        cmd_list.set_c(C, p.x, p.y, p.x / float(Device.dwWidth), p.y / float(Device.dwHeight));
+    }
+};
+static cl_xms_ui_cursor binder_xms_ui_cursor;
+
+class cl_xms_ui_progress : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, g_da_ui_shader.progress_eased, g_da_ui_shader.progress, 0.f, 0.f);
+    }
+};
+static cl_xms_ui_progress binder_xms_ui_progress;
 
 // eye-params
 class cl_eye_P : public R_constant_setup
@@ -1286,6 +1323,9 @@ void CBlender_Compile::SetMapping()
 #endif
     // time
     r_Constant("timers", &binder_times);
+    r_Constant("xms_ui_time", &binder_xms_ui_time);
+    r_Constant("xms_ui_cursor", &binder_xms_ui_cursor);
+    r_Constant("xms_ui_progress", &binder_xms_ui_progress);
 
     // eye-params
     r_Constant("eye_position", &binder_eye_P);

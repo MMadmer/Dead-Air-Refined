@@ -1123,6 +1123,11 @@ public:
 // analysing motion; state lives in globals read by CRender::VideoCaptureTick.
 float ps_r__capture_stop_at = 0.f;
 float ps_r__capture_fps = 20.f;
+#if defined(USE_DX11)
+float video_capture_clock(); // dx11r_screenshot.cpp
+#else
+static float video_capture_clock() { return Device.fTimeGlobal; }
+#endif
 
 class CCC_VideoCapture final : public IConsole_Command
 {
@@ -1137,7 +1142,7 @@ public:
             if (ps_r__capture_stop_at > 0.f)
             {
                 // Force the tick to run its completion branch on the next frame.
-                ps_r__capture_stop_at = Device.fTimeGlobal;
+                ps_r__capture_stop_at = video_capture_clock();
                 Msg("* [capture] stop requested");
             }
             else
@@ -1147,7 +1152,7 @@ public:
         clamp(seconds, 1.f, 120.f);
         clamp(fps, 5.f, 60.f);
         ps_r__capture_fps = fps;
-        ps_r__capture_stop_at = Device.fTimeGlobal + seconds;
+        ps_r__capture_stop_at = video_capture_clock() + seconds;
         Msg("* [capture] recording %.1fs at %.0f fps", seconds, fps);
     }
     void Info(TInfo& info) override { xr_strcpy(info, "record a frame sequence: <seconds> [fps]"); }

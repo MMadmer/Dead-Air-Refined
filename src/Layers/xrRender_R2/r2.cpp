@@ -24,6 +24,8 @@
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_trees_bake.h"
+#include "Layers/xrRender/da_menu_frame.h"
+#include "Layers/xrRender/da_ui_picture.h"
 #include "Layers/xrRenderPC_R4/da_upscaler.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
@@ -986,6 +988,10 @@ void CRender::create()
 #endif
 }
 
+#if RENDER == R_R4
+void CRender::CaptureMenuFrame() { da_menu_frame_request(); }
+#endif
+
 void CRender::destroy()
 {
 #if defined(USE_DX11)
@@ -1008,6 +1014,8 @@ void CRender::destroy()
     da_veg_destroy();
     da_grass_destroy();
     da_snow_destroy();
+    da_menu_frame_destroy();
+    da_ui_picture_destroy();
 #endif
     xr_delete(Target);
 #if RENDER == R_R4

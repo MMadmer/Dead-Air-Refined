@@ -650,15 +650,18 @@ public:
             }
             uses.push_back(u);
         }
-        xr_parallel_for(TaskRange<size_t>(0, jobs.size(), 1), [&jobs](const TaskRange<size_t>& range) {
-            for (size_t i = range.begin(); i != range.end(); ++i)
-            {
-                Job& j = jobs[i];
-                const Species& S = g_data.species[j.species];
-                const float h = template_height(S, j.height_class);
-                da_shrub::generate(S.arch, h, h * 0.5f * (S.width[0] + S.width[1]),
-                    1u + j.species * 7919u + j.height_class * 104729u + j.variant * 1299709u, j.T);
-            }
+        // (Arithmetic only: the loading screen keeps being drawn meanwhile.)
+        g_pGamePersistent->LoadInBackground([&jobs] {
+            xr_parallel_for(TaskRange<size_t>(0, jobs.size(), 1), [&jobs](const TaskRange<size_t>& range) {
+                for (size_t i = range.begin(); i != range.end(); ++i)
+                {
+                    Job& j = jobs[i];
+                    const Species& S = g_data.species[j.species];
+                    const float h = template_height(S, j.height_class);
+                    da_shrub::generate(S.arch, h, h * 0.5f * (S.width[0] + S.width[1]),
+                        1u + j.species * 7919u + j.height_class * 104729u + j.variant * 1299709u, j.T);
+                }
+            });
         });
         xr_vector<u32> elems, axes;
         templates.assign(jobs.size(), Template{});

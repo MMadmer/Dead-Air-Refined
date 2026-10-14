@@ -432,6 +432,20 @@ void CRender::ProcessGamesaveScreenshots()
 extern float ps_r__capture_stop_at;
 extern float ps_r__capture_fps;
 
+// The capture's clock: game time, and real time while the game stands paused under a menu, so a menu
+// records too.
+float video_capture_clock()
+{
+    static float paused = 0.f;
+    static u32 counted = 0;
+    if (Device.Paused() && counted != Device.dwFrame)
+    {
+        paused += Device.fTimeDeltaUnscaled;
+        counted = Device.dwFrame;
+    }
+    return Device.fTimeGlobal + paused;
+}
+
 void CRender::VideoCaptureTick()
 {
     static string_path captureDir{};
@@ -441,7 +455,7 @@ void CRender::VideoCaptureTick()
     if (ps_r__capture_stop_at <= 0.f)
         return;
 
-    if (Device.fTimeGlobal >= ps_r__capture_stop_at)
+    if (video_capture_clock() >= ps_r__capture_stop_at)
     {
         Msg("* [capture] finished: %u frame(s) -> %s", frameIndex, captureDir);
         ps_r__capture_stop_at = 0.f;
@@ -458,18 +472,18 @@ void CRender::VideoCaptureTick()
         xr_sprintf(relative, "capture_%s" DELIMITER, stamp);
         FS.update_path(captureDir, "$screenshots$", relative);
         VerifyPath(captureDir);
-        nextFrameTime = Device.fTimeGlobal;
+        nextFrameTime = video_capture_clock();
         frameIndex = 0;
         Msg("* [capture] recording to %s", captureDir);
     }
 
-    if (Device.fTimeGlobal < nextFrameTime)
+    if (video_capture_clock() < nextFrameTime)
         return;
     nextFrameTime += 1.f / std::max(ps_r__capture_fps, 1.f);
     // If rendering falls behind the requested rate, resync instead of accumulating debt -
     // a burst of back-to-back frames would break the fixed-interval timeline.
-    if (nextFrameTime < Device.fTimeGlobal)
-        nextFrameTime = Device.fTimeGlobal;
+    if (nextFrameTime < video_capture_clock())
+        nextFrameTime = video_capture_clock();
 
     ID3DResource* source;
     Target->get_base_rt()->GetResource(&source);

@@ -568,6 +568,10 @@ public:
     void RenderMenu() override;
 
     void Screenshot(ScreenshotMode mode = SM_NORMAL, pcstr name = nullptr) override;
+#if RENDER == R_R4
+    void CaptureMenuFrame() override;
+    bool RenderUIPicture(const Irect& rect, const std::function<void()>& draw, xr_vector<u32>& rgba) override;
+#endif
     void OnFrame() override;
 #if defined(USE_DX11)
     void ProcessGamesaveScreenshots();

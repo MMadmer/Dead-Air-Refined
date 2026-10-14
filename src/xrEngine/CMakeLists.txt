@@ -40,6 +40,10 @@ target_sources_grouped(
     TARGET xrEngine
     NAME "Engine\\Console\\commands"
     FILES
+    da_loading_presenter.cpp
+    da_loading_presenter.h
+    da_media.cpp
+    da_media.h
     da_season.cpp
     da_season.h
     da_snow_field.cpp
@@ -445,6 +449,19 @@ target_link_libraries(xrEngine
     Theora::Theora
     SDL2::SDL2
     $<$<PLATFORM_ID:Windows>:vfw32>
+    $<$<PLATFORM_ID:Windows>:windowscodecs>
+    $<$<PLATFORM_ID:Windows>:mfplat>
+    $<$<PLATFORM_ID:Windows>:mfreadwrite>
+    $<$<PLATFORM_ID:Windows>:mfuuid>
+    $<$<PLATFORM_ID:Windows>:delayimp>
+)
+
+# Media Foundation is loaded on first use: a Windows N without its Media Feature Pack has none, and the engine
+# must start there all the same (da_media.cpp and da_loading_presenter.cpp check for it first).
+target_link_options(xrEngine
+    PRIVATE
+    $<$<PLATFORM_ID:Windows>:/DELAYLOAD:mfplat.dll>
+    $<$<PLATFORM_ID:Windows>:/DELAYLOAD:mfreadwrite.dll>
 )
 
 target_compile_definitions(xrEngine

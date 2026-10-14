@@ -117,14 +117,19 @@ void CRender::level_Load(IReader* fs)
         chunk = fs->open_chunk(fsL_VISUALS);
         LoadVisuals(chunk);
         chunk->close();
+        g_pGamePersistent->LoadPump();
 
         // Details
         g_pGamePersistent->LoadTitle("st_loading_details");
         Details->Load();
 #if RENDER == R_R4
         // The collision mesh on the GPU, then the snow fields on it, then the blades over both.
+        // (Between these long steps the loading screen gets a frame: LoadPump.)
+        g_pGamePersistent->LoadPump();
         da_ground_level_load();
+        g_pGamePersistent->LoadPump();
         da_snow_level_load();
+        g_pGamePersistent->LoadPump();
         da_grass_level_load();
 #endif
     }
@@ -132,6 +137,7 @@ void CRender::level_Load(IReader* fs)
     // Sectors
     g_pGamePersistent->LoadTitle("st_loading_sectors_portals");
     LoadSectors(fs);
+    g_pGamePersistent->LoadPump();
 
 #if defined(USE_DX11)
     // 3D Fluid
@@ -145,15 +151,19 @@ void CRender::level_Load(IReader* fs)
     // The offloads' auto choice measures the new level from scratch; its path decides whether the GPU
     // registry (built below in auto either way) is applied from the first frame.
     da_offload_level_load();
+    g_pGamePersistent->LoadPump();
     // The stock bushes and trees the procedural vegetation stands in for, before the GPU registry leaves them out.
     da_veg_level_load();
+    g_pGamePersistent->LoadPump();
     // The stock path's vegetation whose billboard cells the bake draws again (the census of da_veg_level_load).
     da_trees_bake_level_load();
+    g_pGamePersistent->LoadPump();
     // Every tree of the level is known now, module overlays included: the GPU registry.
     da_gpu_trees_level_load();
 #endif
 
     // HOM
+    g_pGamePersistent->LoadPump();
     HOM.Load();
 
     // Lights

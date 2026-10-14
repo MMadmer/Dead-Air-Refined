@@ -13,6 +13,7 @@
 #include "Layers/xrRenderPC_R4/da_streamline.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_offload.h"
+#include "da_menu_frame.h"
 #endif
 
 #if defined(XR_PLATFORM_WINDOWS) || defined(XR_PLATFORM_LINUX) || defined(XR_PLATFORM_APPLE)
@@ -375,6 +376,8 @@ void D3DXRenderBase::End()
     cleanup_contexts();
 
 #if RENDER == R_R4
+    // the game's frame under the pause menu ($user$game_frame), as it is about to be shown
+    da_menu_frame_capture();
     // A frame nothing prepared (menu, loading screen) is shown without a generated one.
     da_framegen_present();
 #endif

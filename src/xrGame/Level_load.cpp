@@ -849,15 +849,19 @@ bool CLevel::Load_GameSpecific_After()
 
     // Here and not earlier: the collision model is loaded and Load_GameSpecific_CFORM has already
     // remapped the game-material ids onto its triangles, so flLiquid means what it says.
-    measure_water_body(ObjectSpace);
-    // Unconditionally, and not only where the sweep above found water. The field's water
-    // channels come out empty on a dry level - which is correct, and every consumer gates on
-    // coverage rather than on the map existing - but the puddle fill it bakes alongside them is
-    // terrain concavity, and that is worth having on the levels that are nothing but terrain.
-    bake_water_field(ObjectSpace);
-    // The season's snow: 1 m fields of ground, top and classes and this level's LUT, after the water
-    // (the water reset above clears the old level's snow too).
-    da_snow_bake_level();
+    // The water and the snow below read the collision and the level's files only: the loading screen
+    // keeps being drawn meanwhile.
+    g_pGamePersistent->LoadInBackground([this] {
+        measure_water_body(ObjectSpace);
+        // Unconditionally, and not only where the sweep above found water. The field's water
+        // channels come out empty on a dry level - which is correct, and every consumer gates on
+        // coverage rather than on the map existing - but the puddle fill it bakes alongside them is
+        // terrain concavity, and that is worth having on the levels that are nothing but terrain.
+        bake_water_field(ObjectSpace);
+        // The season's snow: 1 m fields of ground, top and classes and this level's LUT, after the water
+        // (the water reset above clears the old level's snow too).
+        da_snow_bake_level();
+    });
 
     return TRUE;
 }

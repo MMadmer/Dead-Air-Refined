@@ -8,6 +8,9 @@
 #include "xrCommon/xr_vector.h"
 #include "xrCore/Threading/Lock.hpp"
 
+#include <functional>
+#include <thread>
+
 #include "xrCore/xr_trims.h"
 
 #include "xrCDB/ISpatial.h"
@@ -112,6 +115,11 @@ private:
     CTimer phase_timer;
 
     bool loaded{};
+    // LoadPump: when the loading screen was drawn last (da_media_time), and the thread that loads
+    mutable u32 m_load_drawn{};
+    mutable u32 m_load_pumps{};
+    mutable u32 m_load_pump_ms{};
+    std::thread::id m_load_thread;
 
     // Levels
     struct sLevelInfo
@@ -193,6 +201,13 @@ public:
     void LoadTitle(pcstr ls_title = nullptr, bool change_tip = false, shared_str map_name = nullptr);
     void LoadStage(bool draw = true);
     void LoadDraw() const;
+    // A long step of the loading draws the loading screen between its parts, at most 30 times a
+    // second, so what moves on it (a video, a GIF, a shader, the bar) keeps moving. Only the loading
+    // thread, only between parts that leave nothing half done.
+    void LoadPump() const;
+    // A long step of the loading that touches neither the device nor the scripts runs on a thread of its
+    // own while the loading thread keeps the loading screen drawn; outside a loading it runs right here.
+    void LoadInBackground(const std::function<void()>& work) const;
 
     void load_draw_internal() const;
     void ShowLoadingScreen(bool show) const;

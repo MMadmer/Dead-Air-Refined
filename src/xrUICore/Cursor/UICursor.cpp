@@ -5,6 +5,7 @@
 #include "Static/UIStatic.h"
 #include "Buttons/UIBtnHint.h"
 #include "xrEngine/xr_input.h"
+#include "xrEngine/da_media.h"
 
 void CUICursor::InitInternal()
 {
@@ -100,9 +101,19 @@ void CUICursor::OnRender()
     m_static->Draw();
 }
 
+namespace
+{
+// the cursor of the interface's own shaders (xms_ui_cursor), in screen pixels
+void publish_cursor(const Fvector2& pos)
+{
+    g_da_ui_shader.cursor.set(pos.x / UI_BASE_WIDTH * float(Device.dwWidth), pos.y / UI_BASE_HEIGHT * float(Device.dwHeight));
+}
+} // namespace
+
 void CUICursor::SetUICursorPosition(Fvector2 pos)
 {
     vPos = pos;
+    publish_cursor(vPos);
     Ivector2 p;
     p.x = iFloor(vPos.x / correction.x);
     p.y = iFloor(vPos.y / correction.y);
@@ -132,6 +143,7 @@ void CUICursor::UpdateCursorPosition(Fvector2 pos)
     }
     clamp(vPos.x, 0.f, UI_BASE_WIDTH);
     clamp(vPos.y, 0.f, UI_BASE_HEIGHT);
+    publish_cursor(vPos);
 }
 
 void CUICursor::WarpToWindow(const CUIWindow* wnd, bool center /*= false*/)

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "xrEngine/ILoadingScreen.h"
+#include "xrEngine/da_loading_presenter.h"
 #include "xrUICore/Static/UIStatic.h"
 #include "xrUICore/Windows/UIWindow.h"
 
@@ -27,6 +28,24 @@ class UILoadingScreen final : public ILoadingScreen, public CUIWindow
     CUIStatic* loadingHeader;
     CUIStatic* loadingTipNumber;
     CUIStatic* loadingTip;
+    // when the shown progress was eased last (da_media_time)
+    u32 m_eased_at{};
+
+    // What went to the loading screen's own presenter: each layer's description, picture and revision, by its
+    // place in the screen; something changed since (a text, a logo, the screen shown again).
+    struct Published
+    {
+        xr_string signature;
+        u32 revision{};
+        DaPicture pixels;
+        std::shared_ptr<const xr_vector<DaPicture>> percents;
+        // a texture that moves: where the static drew it and the part of it
+        Fvector4 uv{};
+        Irect drawn{};
+    };
+    xr_vector<Published> m_published;
+    u32 m_revisions{};
+    bool m_dirty{ true };
 
 public:
     UILoadingScreen();
@@ -44,6 +63,10 @@ public:
     void SetLevelLogo(const char* name) override;
     void SetStageTitle(const char* title) override;
     void SetStageTip(const char* header, const char* tipNumber, const char* tip) override;
+
+    bool Publish() override;
+    [[nodiscard]]
+    bool NeedsPublish() const override { return m_dirty; }
 
     pcstr GetDebugType() override { return "UILoadingScreen"; }
 };

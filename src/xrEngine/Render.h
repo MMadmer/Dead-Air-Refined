@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "xrEngine/Engine.h"
 #include "xrCDB/Frustum.h"
 #include "xrCDB/ISpatial.h"
@@ -348,6 +350,16 @@ public:
     virtual void AfterWorldRender() = 0; //--#SM+#-- После рендеринга мира (до UI)
 
     virtual void Screenshot(ScreenshotMode mode = SM_NORMAL, pcstr name = nullptr) = 0;
+    // The next frame drawn is copied to the render target $user$game_frame: the game under the pause menu,
+    // for a menu's shaders. A renderer without it leaves the texture empty.
+    virtual void CaptureMenuFrame() {}
+    // What `draw` draws of the interface, as a picture of the screen rectangle `rect` (pixels): straight-alpha
+    // RGBA, rows of the rectangle's width. It draws twice, over black and over white, which gives the alpha back.
+    // For the loading screen's own presenter (da_loading_presenter.h); false where the renderer has no way.
+    virtual bool RenderUIPicture(const Irect& /*rect*/, const std::function<void()>& /*draw*/, xr_vector<u32>& /*rgba*/)
+    {
+        return false;
+    }
     virtual void SetPostProcessParams(const SPPInfo& ppi) = 0;
 
     // Constructor/destructor

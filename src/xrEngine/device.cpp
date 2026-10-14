@@ -19,6 +19,7 @@
 
 #include <SDL.h>
 #include "xrCommon/xr_hash_map.h"
+#include "da_loading_presenter.h"
 
 ENGINE_API CRenderDevice Device;
 ENGINE_API CLoadScreenRenderer load_screen_renderer;
@@ -97,12 +98,14 @@ void CRenderDevice::RenderEnd(void)
         return;
 
     ZoneScoped;
+    bool precacheOver = false;
     if (dwPrecacheFrame)
     {
         GEnv.Sound->set_master_volume(0.f);
         dwPrecacheFrame--;
         if (!dwPrecacheFrame)
         {
+            precacheOver = true;
             GEnv.Render->updateGamma();
             destroy_precache_light();
             GEnv.Sound->set_master_volume(1.f);
@@ -123,6 +126,21 @@ void CRenderDevice::RenderEnd(void)
     g_bRendering = false;
     GEnv.Render->End();
     StartupProfileFinishAfterPresent();
+
+    // The loading screen's own presenter gives the screen back: the precache is over and the game's frames show
+    // the loading screen themselves (and what waits for a key), or a loading without a precache was over three
+    // frames ago.
+    static u32 framesAfterLoading = 0;
+    if (precacheOver)
+        da_loading_presenter_hide();
+    else if (da_loading_presenter_shown() && !load_screen_renderer.IsActive() && g_loading_events.empty() &&
+        g_pGamePersistent && g_pGamePersistent->IsLoaded())
+    {
+        if (++framesAfterLoading >= 3)
+            da_loading_presenter_hide();
+    }
+    else
+        framesAfterLoading = 0;
 
     vCameraPositionSaved = vCameraPosition;
     vCameraDirectionSaved = vCameraDirection;
@@ -639,11 +657,15 @@ void CRenderDevice::Run()
 void CRenderDevice::Shutdown()
 {
     ZoneScoped;
+    // the loading screen's own presenter goes before the device it lies over
+    da_loading_presenter_shutdown();
     seqAppEnd.Process();
 }
 
 u32 app_inactive_time = 0;
 u32 app_inactive_time_start = 0;
+
+u32 CRenderDevice::TimeContinualNow() const { return u32(TimerMM.GetElapsed_ms()) - app_inactive_time; }
 
 void CRenderDevice::FrameMove()
 {

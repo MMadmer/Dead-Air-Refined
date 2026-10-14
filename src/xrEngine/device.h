@@ -207,6 +207,8 @@ public:
     IC CTimer_paused* GetTimerGlobal() { return &TimerGlobal; }
     u32 TimerAsync() { return TimerGlobal.GetElapsed_ms(); }
     u32 TimerAsync_MMT() { return TimerMM.GetElapsed_ms() + Timer_MM_Delta; }
+    // dwTimeContinual as it is now, between frames too (a loading screen drawn while a level loads)
+    u32 TimeContinualNow() const;
 
 public:
     // Creation & Destroying
