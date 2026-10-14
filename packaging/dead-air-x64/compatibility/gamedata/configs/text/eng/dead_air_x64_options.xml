@@ -178,4 +178,10 @@
 	<string id="ui_mm_debug_hud_hint">
 		<text>Debug information on screen. Available only in developer mode.</text>
 	</string>
+	<string id="ui_mm_community_links">
+		<text>Mod communities in the menu</text>
+	</string>
+	<string id="ui_mm_community_links_hint">
+		<text>Shows the icons of the mod's communities in the main menu and the pause menu. A click on an icon opens the page in the browser.</text>
+	</string>
 </string_table>

@@ -17,7 +17,16 @@ enum class DaMediaKind
     Video,
     Sequence,
     Image,
+    Picture, // pixels the game drew itself and published (da_media_publish)
 };
+
+// A picture the game draws itself - the menu's community panel: a texture named DA_MEDIA_PICTURE "<id>"
+// shows the pixels last published under <id> (RGBA, width * 4 bytes a row, top row first), new ones as
+// they come. A texture keeps the size its id had when it was made, so a picture of another size takes
+// another id.
+#define DA_MEDIA_PICTURE "$da_picture$\\"
+ENGINE_API void da_media_publish(pcstr id, u32 width, u32 height, const u8* rgba);
+ENGINE_API void da_media_forget(pcstr id);
 
 // The file the texture `name` (relative to textures\) stands for: the first of .ogm, .avi, .gif, .mp4,
 // .webm, .wmv, .seq and .dds that exists, except that a loose file - a mod's, in gamedata or an XMS

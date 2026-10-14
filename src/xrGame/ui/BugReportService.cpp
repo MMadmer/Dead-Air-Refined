@@ -4,6 +4,7 @@
 #include "StdAfx.h"
 #include "BugReportService.h"
 #include "BugReportConfig.h"
+#include "RemoteConfig.h"
 #include "xrCore/ProductVersion.h"
 
 #ifdef XR_PLATFORM_WINDOWS
@@ -119,6 +120,35 @@ void append_attachment(xr_vector<u8>& body, std::string_view boundary, std::span
     append_bytes(body, "\r\n");
 }
 
+// The server's host and path: the services document's when they are well formed, else the build's own.
+struct Endpoint
+{
+    std::wstring host = BugReportConfig::Host;
+    std::wstring path = BugReportConfig::SubmitPath;
+};
+
+Endpoint endpoint()
+{
+    Endpoint out;
+    const xr_string host = RemoteConfig::Service("report_host");
+    const bool hostOk = !host.empty() && host.size() <= 253 && host.find('.') != xr_string::npos &&
+        host.front() != '-' && host.front() != '.' &&
+        host.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-") == xr_string::npos;
+    if (hostOk)
+        out.host.assign(host.begin(), host.end());
+    else if (!host.empty())
+        Msg("! [bug report] the services document's report_host is not a host name: %s", host.c_str());
+
+    const xr_string path = RemoteConfig::Service("report_path");
+    const bool pathOk = !path.empty() && path.size() <= 128 && path.front() == '/' &&
+        path.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/_.-") == xr_string::npos;
+    if (pathOk)
+        out.path.assign(path.begin(), path.end());
+    else if (!path.empty())
+        Msg("! [bug report] the services document's report_path is not a path: %s", path.c_str());
+    return out;
+}
+
 xr_string extract_error_message(std::string_view response)
 {
     constexpr std::string_view key = "\"message\"";
@@ -190,8 +220,9 @@ bool send_request(const xr_string& title, const xr_string& description, pcstr at
     }
     WinHttpSetTimeouts(session, 5000, 10000, 15000, 15000);
 
-    HINTERNET connection = WinHttpConnect(session, BugReportConfig::Host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"POST", BugReportConfig::SubmitPath, nullptr,
+    const Endpoint server = endpoint();
+    HINTERNET connection = WinHttpConnect(session, server.host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"POST", server.path.c_str(), nullptr,
         WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
     if (!connection || !request)
     {
@@ -279,8 +310,9 @@ bool check_availability()
         return false;
 
     WinHttpSetTimeouts(session, 3000, 5000, 5000, 5000);
-    HINTERNET connection = WinHttpConnect(session, BugReportConfig::Host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"HEAD", BugReportConfig::SubmitPath, nullptr,
+    const Endpoint server = endpoint();
+    HINTERNET connection = WinHttpConnect(session, server.host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"HEAD", server.path.c_str(), nullptr,
         WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
 
     const bool received = request && WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
@@ -377,7 +409,10 @@ void BugReportService::CheckAvailability()
     instance.availabilityWorker = std::thread([]
     {
         ServiceState& instance = service();
-        instance.availability.store(check_availability() ? Availability::Available : Availability::Unavailable,
+        const bool available = check_availability();
+        const Endpoint server = endpoint();
+        Msg("* [bug report] %ls%ls: %s", server.host.c_str(), server.path.c_str(), available ? "available" : "out of reach");
+        instance.availability.store(available ? Availability::Available : Availability::Unavailable,
             std::memory_order_release);
     });
 }

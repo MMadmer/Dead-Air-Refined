@@ -60,6 +60,14 @@ add_compile_options(${XRAY_DISABLE_WARNINGS})
 add_subdirectory(GameSpy)
 add_subdirectory(imgui-proj)
 
+# litehtml lays out the menu's community panel (xrGame ui/UICommunityPanel); static, like DirectXTex
+set(_xray_build_shared_libs "${BUILD_SHARED_LIBS}")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build litehtml as a static library" FORCE)
+set(LITEHTML_BUILD_TESTING OFF CACHE BOOL "Do not build litehtml tests" FORCE)
+add_subdirectory(litehtml EXCLUDE_FROM_ALL)
+set(BUILD_SHARED_LIBS "${_xray_build_shared_libs}" CACHE BOOL "Build engine libraries as shared libraries" FORCE)
+unset(_xray_build_shared_libs)
+
 if (NOT TARGET xrLuabind)
     message(FATAL_ERROR
         "You probably have downloaded the sources as ZIP archive, you can't do that. Use git to clone the repository.\n"

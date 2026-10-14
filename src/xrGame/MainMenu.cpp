@@ -52,6 +52,8 @@
 #include "profile_store.h"
 #include "xrEngine/xr_input.h"
 #include "xrEngine/da_media.h"
+#include "ui/RemoteConfig.h"
+#include "ui/UICommunityPanel.h"
 
 // fwd. decl.
 extern ENGINE_API bool bShowPauseString;
@@ -99,6 +101,9 @@ CMainMenu::CMainMenu()
     // starts on menu activation and the menu buttons are built on the first page load.
     ModOptOut::LoadFromConfig();
     m_saveIndicator = std::make_unique<CUISaveIndicator>();
+    // the community panel and the services' addresses come from the mod's repository
+    RemoteConfig::Start();
+    m_communityPanel = std::make_unique<CUICommunityPanel>();
 
     CUIWindow::SetPPModeHandler(&SetWindowPPMode);
 
@@ -155,6 +160,7 @@ CMainMenu::~CMainMenu()
 
     UpdateService::Shutdown();
     ContentService::Shutdown();
+    RemoteConfig::Stop();
     ModUpdateService::Shutdown();
     ModCatalog::Shutdown();
 
@@ -379,6 +385,10 @@ void CMainMenu::IR_OnActivate()
 void CMainMenu::IR_OnDeactivate()
 {
     MarkForemost(false);
+    // a release that will not come here: the panel forgets its press
+    m_communityPress = false;
+    if (m_communityPanel)
+        m_communityPanel->Hide();
 }
 
 // IInputReceiver
@@ -387,6 +397,12 @@ void CMainMenu::IR_OnMousePress(int btn)
     if (!IsActive())
         return;
 
+    // a link of the community panel is the panel's click, not the menu's
+    if (btn == MOUSE_1 && CommunityPanelShown() && m_communityPanel->OnMousePress())
+    {
+        m_communityPress = true;
+        return;
+    }
     IR_OnKeyboardPress(btn);
 };
 
@@ -395,6 +411,12 @@ void CMainMenu::IR_OnMouseRelease(int btn)
     if (!IsActive())
         return;
 
+    if (btn == MOUSE_1 && m_communityPress)
+    {
+        m_communityPress = false;
+        m_communityPanel->OnMouseRelease();
+        return;
+    }
     IR_OnKeyboardRelease(btn);
 };
 
@@ -540,6 +562,7 @@ void CMainMenu::OnRender()
     if (!OnRenderPPUI_query())
     {
         DoRenderDialogs();
+        DrawCommunityPanel();
         DrawProductVersion();
         UI().RenderFont();
         m_saveIndicator->Render();
@@ -559,6 +582,7 @@ void CMainMenu::OnRenderPPUI_main()
     if (OnRenderPPUI_query())
     {
         DoRenderDialogs();
+        DrawCommunityPanel();
         DrawProductVersion();
         UI().RenderFont();
         m_saveIndicator->Render();
@@ -963,6 +987,19 @@ void CMainMenu::CheckUpdateDialog()
         Msg("* Update notification shown");
         m_updateDialog->ShowDialog(true);
     }
+}
+
+bool CMainMenu::CommunityPanelShown()
+{
+    return m_communityPanel && g_dar_community_links && m_startDialog && TopInputReceiver() == m_startDialog;
+}
+
+void CMainMenu::DrawCommunityPanel()
+{
+    if (CommunityPanelShown())
+        m_communityPanel->Draw();
+    else if (m_communityPanel)
+        m_communityPanel->Hide();
 }
 
 void CMainMenu::DrawProductVersion()

@@ -25,6 +25,9 @@ local function on_init(menu)
 	-- Show the inventory the moment the key is pressed instead of when the backpack scene has
 	-- finished. The scene still plays behind the window. Caption: ui_mm_instant_inventory.
 	menu.gameplay_options["instant_inventory"] = {typ="check"}
+	-- The community icons of the main menu and the pause menu (dar_community_links). Caption:
+	-- ui_mm_community_links.
+	menu.gameplay_options["community_links"] = {typ="check"}
 	menu.gameplay_options["cursor_sens"] = {typ="list", list=CURSOR_SENS_STEPS}
 end
 
@@ -53,6 +56,11 @@ local function on_set_values(menu, opt_manager)
 	local instant_inventory = menu.gameplay_options["instant_inventory"]
 	if (instant_inventory and instant_inventory.ctrl) then
 		instant_inventory.ctrl:SetCheck(console:get_bool("dar_instant_inventory"))
+	end
+
+	local community_links = menu.gameplay_options["community_links"]
+	if (community_links and community_links.ctrl) then
+		community_links.ctrl:SetCheck(console:get_bool("dar_community_links"))
 	end
 
 	local cursor_sens = menu.gameplay_options["cursor_sens"]
@@ -85,6 +93,11 @@ local function on_accept(menu, opt_manager, console)
 	local instant_inventory = menu.gameplay_options["instant_inventory"]
 	if (instant_inventory and instant_inventory.ctrl) then
 		console:execute("dar_instant_inventory " .. (instant_inventory.ctrl:GetCheck() and "1" or "0"))
+	end
+
+	local community_links = menu.gameplay_options["community_links"]
+	if (community_links and community_links.ctrl) then
+		console:execute("dar_community_links " .. (community_links.ctrl:GetCheck() and "1" or "0"))
 	end
 
 	local cursor_sens = menu.gameplay_options["cursor_sens"]

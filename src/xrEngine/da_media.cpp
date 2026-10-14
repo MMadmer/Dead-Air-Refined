@@ -47,8 +47,77 @@ constexpr Candidate candidates[] = {
 };
 } // namespace
 
+namespace
+{
+struct PublishedPicture
+{
+    u32 width{};
+    u32 height{};
+    xr_vector<u8> pixels;
+    u32 revision{};
+};
+
+std::mutex g_pictures_lock;
+xr_map<xr_string, PublishedPicture> g_pictures;
+
+class PictureSource final : public CDaMediaSource
+{
+    xr_string m_id;
+    xr_vector<u8> m_copy;
+    u32 m_revision{};
+
+    // the picture's pixels when they are newer than the copy and of its size
+    bool take(bool first)
+    {
+        std::lock_guard lock(g_pictures_lock);
+        const auto it = g_pictures.find(m_id);
+        if (it == g_pictures.end() || it->second.pixels.empty())
+            return false;
+        const PublishedPicture& picture = it->second;
+        if (first)
+        {
+            m_width = picture.width;
+            m_height = picture.height;
+        }
+        else if (picture.revision == m_revision || picture.width != m_width || picture.height != m_height)
+            return false;
+        m_copy = picture.pixels;
+        m_revision = picture.revision;
+        m_pixels = m_copy.data();
+        return true;
+    }
+
+public:
+    explicit PictureSource(pcstr id) : m_id(id) {}
+    bool Open() { return take(true); }
+    bool Update(u32) override { return take(false); }
+};
+} // namespace
+
+void da_media_publish(pcstr id, u32 width, u32 height, const u8* rgba)
+{
+    std::lock_guard lock(g_pictures_lock);
+    PublishedPicture& picture = g_pictures[id];
+    picture.width = width;
+    picture.height = height;
+    picture.pixels.assign(rgba, rgba + size_t(width) * height * 4);
+    ++picture.revision;
+}
+
+void da_media_forget(pcstr id)
+{
+    std::lock_guard lock(g_pictures_lock);
+    g_pictures.erase(id);
+}
+
 DaMediaKind da_media_resolve(pcstr name, string_path& fn)
 {
+    if (!strncmp(name, DA_MEDIA_PICTURE, sizeof(DA_MEDIA_PICTURE) - 1))
+    {
+        xr_strcpy(fn, name + sizeof(DA_MEDIA_PICTURE) - 1);
+        return DaMediaKind::Picture;
+    }
+
     DaMediaKind first = DaMediaKind::None;
     DaMediaKind loose = DaMediaKind::None;
     bool firstLoose = false;
@@ -727,7 +796,15 @@ public:
 
 CDaMediaSource* CDaMediaSource::Open(DaMediaKind kind, pcstr fn)
 {
-    if (kind == DaMediaKind::Gif)
+    if (kind == DaMediaKind::Picture)
+    {
+        auto* picture = xr_new<PictureSource>(fn);
+        if (picture->Open())
+            return picture;
+        xr_delete(picture);
+        Msg("! [media] picture %s: nothing published under it", fn);
+    }
+    else if (kind == DaMediaKind::Gif)
     {
         auto* gif = xr_new<GifSource>();
         if (gif->Open(fn))
@@ -752,5 +829,14 @@ IStream* da_media_open_stream(pcstr fn)
     return file ? new ReaderStream(file) : nullptr;
 }
 #else
-CDaMediaSource* CDaMediaSource::Open(DaMediaKind, pcstr) { return nullptr; }
+CDaMediaSource* CDaMediaSource::Open(DaMediaKind kind, pcstr fn)
+{
+    if (kind != DaMediaKind::Picture)
+        return nullptr;
+    auto* picture = xr_new<PictureSource>(fn);
+    if (picture->Open())
+        return picture;
+    xr_delete(picture);
+    return nullptr;
+}
 #endif

@@ -441,7 +441,8 @@ bool CTexture::load_media(DaMediaKind kind, pcstr fn)
     pSurface = texture;
     flags.MemoryUsage = desc.Width * desc.Height * 4;
     CHK_DX(HW.pDevice->CreateShaderResourceView(pSurface, nullptr, &m_pSRView));
-    Msg("* [media] %s: %ux%u, %s", fn, desc.Width, desc.Height, kind == DaMediaKind::Gif ? "GIF" : "video");
+    Msg("* [media] %s: %ux%u, %s", fn, desc.Width, desc.Height,
+        kind == DaMediaKind::Gif ? "GIF" : (kind == DaMediaKind::Picture ? "picture" : "video"));
     return true;
 }
 
@@ -475,7 +476,7 @@ void CTexture::Load()
     // A video, a GIF or a sequence before a picture; a mod's loose file before the game's archived one.
     string_path fn;
     const DaMediaKind media = da_media_resolve(cName.c_str(), fn);
-    if ((media == DaMediaKind::Gif || media == DaMediaKind::Video) && load_media(media, fn))
+    if ((media == DaMediaKind::Gif || media == DaMediaKind::Video || media == DaMediaKind::Picture) && load_media(media, fn))
     {
         // the frames go into a surface of its own (apply_media)
     }

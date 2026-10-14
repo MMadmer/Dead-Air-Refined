@@ -2548,6 +2548,8 @@ target_sources(xrGame PRIVATE
     "${CMAKE_SOURCE_DIR}/Externals/GameSpy/src/GameSpy/md5c.c"
     ui/BugReportService.cpp
     ui/BugReportService.h
+    ui/CommunityHtmlCanvas.cpp
+    ui/CommunityHtmlCanvas.h
     ui/ContentService.cpp
     ui/ContentService.h
     ui/UIBugReportWnd.cpp
@@ -2570,6 +2572,10 @@ target_sources(xrGame PRIVATE
     ui/ModRelease.h
     ui/ModUpdateService.cpp
     ui/ModUpdateService.h
+    ui/RemoteConfig.cpp
+    ui/RemoteConfig.h
+    ui/UICommunityPanel.cpp
+    ui/UICommunityPanel.h
     ui/UIModsWnd.cpp
     ui/UIModsDialogs.cpp
     ui/UIModsDialogs.h
@@ -2609,6 +2615,11 @@ target_link_libraries(xrGame
     ZLIB::ZLIBSTATIC
     NVIDIA::Ansel
     $<$<PLATFORM_ID:Windows>:delayimp>
+    $<$<PLATFORM_ID:Windows>:litehtml>
+    $<$<PLATFORM_ID:Windows>:d2d1>
+    $<$<PLATFORM_ID:Windows>:dwrite>
+    $<$<PLATFORM_ID:Windows>:windowscodecs>
+    $<$<PLATFORM_ID:Windows>:bcrypt>
 )
 
 if (WIN32)

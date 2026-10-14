@@ -10,6 +10,7 @@ class CUIUpdateWnd;
 class CUIMajorUpdateWnd;
 class CUIContentWnd;
 class CUISaveIndicator;
+class CUICommunityPanel;
 class CGameSpy_HTTP;
 class CGameSpy_Full;
 
@@ -135,6 +136,8 @@ protected:
     CUIMajorUpdateWnd* m_majorUpdateDialog{};
     CUIContentWnd* m_contentDialog{};
     std::unique_ptr<CUISaveIndicator> m_saveIndicator;
+    std::unique_ptr<CUICommunityPanel> m_communityPanel;
+    bool m_communityPress{}; // the left button went down on the panel: its release is the panel's too
     bool m_contentDialogFailed{};
     bool m_crashReportChecked{};
     bool ReloadUI();
@@ -235,6 +238,9 @@ private:
     bool CheckContentDialog();
     void CheckUpdateDialog();
     void DrawProductVersion();
+    // the community panel, on the menu's own screen only (not under its dialogs)
+    bool CommunityPanelShown();
+    void DrawCommunityPanel();
     void DrawModOptOutNotice();
     void DrawContentNotice();
     DECLARE_SCRIPT_REGISTER_FUNCTION(CDialogHolder, CUIDialogWnd, CUIWindow);

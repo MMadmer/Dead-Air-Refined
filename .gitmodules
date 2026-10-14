@@ -41,3 +41,6 @@
 [submodule "Externals/mimalloc"]
 	path = Externals/mimalloc
 	url = https://github.com/microsoft/mimalloc.git
+[submodule "Externals/litehtml"]
+	path = Externals/litehtml
+	url = https://github.com/litehtml/litehtml.git

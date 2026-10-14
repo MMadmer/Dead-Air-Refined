@@ -12,6 +12,7 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 | Dear ImGui | docking `b334d19b6` | Pinned docking revision based on 1.92.9. |
 | GameSpy | `5597a6c582` | Pinned OpenXRay fork plus local x64 warning fixes. |
 | GLI | `3542f8830` | Pinned upstream revision. |
+| litehtml | `v0.10` (`9bc84b8b`) | Static HTML/CSS layout (BSD-3-Clause) for the menus' community panel; drawn by `src/xrGame/ui/CommunityHtmlCanvas.cpp` with Direct2D and DirectWrite. |
 | LuaJIT | `8b7a19e030` (upstream v2.1 `c6ffc141`, 2026-09-08) | Dead Air fork of the upstream rolling release, see [LuaJIT](#luajit). The same changes are applied to a pristine upstream checkout by the canonical build wrapper. |
 | Luabind | `ffb1e5adb8` | Pinned Dead Air integration revision. |
 | mimalloc | `v3.4.3` (`152fbf2634`) | Static allocator built from pinned source for each configuration. |

@@ -145,4 +145,10 @@
 	<string id="ui_mm_debug_hud_hint">
 		<text>Отладочные сведения на экране. Есть только в режиме разработчика.</text>
 	</string>
+	<string id="ui_mm_community_links">
+		<text>Сообщества мода в меню</text>
+	</string>
+	<string id="ui_mm_community_links_hint">
+		<text>Показывает в главном меню и меню паузы значки сообществ мода. Нажатие на значок открывает страницу в браузере.</text>
+	</string>
 </string_table>

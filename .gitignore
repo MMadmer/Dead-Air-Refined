@@ -56,6 +56,9 @@ __pycache__/
 *.nvuser
 *.PVS-Studio.*
 src/xrGame/ui/BugReportSecrets.local.h
+src/xrGame/ui/RemoteConfigSecrets.local.h
+# the plain sources of the documents of the branch `remote` (tools/remote/remote_config.py)
+/remote/
 
 # Visual Studio profiler
 *.psess

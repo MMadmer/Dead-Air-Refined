@@ -34,6 +34,15 @@ Public builds receive their upload credential through the ignored
 fallback deliberately contains no credential, and report contents or
 authorization headers must never be written to the engine log.
 
+The server's address is not only the build's own (`BugReportConfig::Host`,
+`SubmitPath`): at each start the game takes the services document from the
+branch `remote` of the repository (`src/xrGame/ui/RemoteConfig.cpp`, published by
+`tools/remote/remote_config.py`) and its `report_host` and `report_path`, when
+well formed, override the build's. The document is encrypted on GitHub and in
+`appdataemote`, and the copy the last start kept serves while GitHub is out of
+reach, so a server that moves keeps the reports of released builds coming. The
+log names the server each availability check asked: `[bug report] <host><path>`.
+
 ## Container
 
 Each report is a standard Deflate ZIP named:
