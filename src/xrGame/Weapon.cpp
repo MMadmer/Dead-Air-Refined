@@ -24,6 +24,9 @@
 #include "clsid_game.h"
 #include "WeaponKnife.h"
 #include "WeaponBinocularsVision.h"
+#include "Scope.h"
+#include "Silencer.h"
+#include "GrenadeLauncher.h"
 #include "xrUICore/Windows/UIWindow.h"
 #include "ui/UIXmlInit.h"
 #include "Torch.h"
@@ -1977,6 +1980,19 @@ ALife::EWeaponAddonStatus CWeapon::get_SilencerStatus() const
 bool CWeapon::GrenadeLauncherAttachable() { return get_GrenadeLauncherStatus() == ALife::eAddonAttachable; }
 bool CWeapon::ScopeAttachable() { return get_ScopeStatus() == ALife::eAddonAttachable; }
 bool CWeapon::SilencerAttachable() { return get_SilencerStatus() == ALife::eAddonAttachable; }
+
+bool CWeapon::AddonFits(PIItem addon)
+{
+    const pcstr section = addon->object().cNameSect().c_str();
+    if (smart_cast<CScope*>(addon))
+        return ScopeAttachable() && std::any_of(m_scopes.begin(), m_scopes.end(),
+            [section](const shared_str& scope) { return !xr_strcmp(pSettings->r_string(scope, "scope_name"), section); });
+    if (smart_cast<CSilencer*>(addon))
+        return SilencerAttachable() && !xr_strcmp(m_sSilencerName, section);
+    if (smart_cast<CGrenadeLauncher*>(addon))
+        return GrenadeLauncherAttachable() && !xr_strcmp(m_sGrenadeLauncherName, section);
+    return false;
+}
 
 // Bone names reach LL_BoneID by interned pointer, and the OGF loader lowercases every name it
 // registers, so a value spelled with capitals would silently never match. Spaces are folded into

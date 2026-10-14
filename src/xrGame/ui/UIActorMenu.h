@@ -266,6 +266,9 @@ private:
 
 private:
     void clear_highlight_lists();
+    // Every list of the mode an item may be in: the actor's slots, belt and quick slots, and the bags.
+    template <typename F>
+    void for_each_armament_list(F&& f) const;
     void set_highlight_item(CUICellItem* cell_item);
     void highlight_item_slot(CUICellItem* cell_item);
     void highlight_armament(PIItem item, CUIDragDropListEx* ddlist);

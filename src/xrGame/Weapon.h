@@ -336,6 +336,8 @@ public:
     virtual bool GrenadeLauncherAttachable();
     virtual bool ScopeAttachable();
     virtual bool SilencerAttachable();
+    // An addon this weapon takes, mounted one or not (CanAttach also wants the place free).
+    bool AddonFits(PIItem addon);
 
     ALife::EWeaponAddonStatus get_GrenadeLauncherStatus() const;
     ALife::EWeaponAddonStatus get_ScopeStatus() const;

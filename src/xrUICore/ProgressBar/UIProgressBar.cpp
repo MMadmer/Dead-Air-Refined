@@ -130,7 +130,13 @@ void CUIProgressBar::Draw()
     default: NODEFAULT; break;
     }
 
-    if (m_CurrentLength > 0)
+    if (m_bFillWhole)
+    {
+        UI().PushScissor(rect);
+        m_UIProgressItem.Draw();
+        UI().PopScissor();
+    }
+    else if (m_CurrentLength > 0)
     {
         Fvector2 pos = m_UIProgressItem.GetWndPos();
         progress_rect.add(rect.left + pos.x, rect.top + pos.y);

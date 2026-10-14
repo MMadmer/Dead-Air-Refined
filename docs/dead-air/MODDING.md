@@ -3383,8 +3383,8 @@ constants, each to any shader that declares it:
 | `xms_ui_progress` | the loading's progress 0..1, eased, then as it is |
 | `screen_res` | the screen: width, height, 1 / width, 1 / height |
 
-On the loading screen a shader keeps moving while the level loads (see below). A ring that fills with the
-loading, anywhere on the screen:
+On the loading screen a shader keeps moving while the level loads (see below). The loading screen's bar
+in the form of a ring that fills with the loading, in place of the line:
 
 ```hlsl
 // shaders\r3\my_ring.ps
@@ -3413,10 +3413,13 @@ end
 ```
 
 ```xml
-<auto_static x="944" y="688" width="48" height="48" stretch="1">
-	<texture shader="my_ring">ui\ui_common</texture>
-</auto_static>
+<loading_progress x="944" y="688" width="48" height="48" stretch="1" horz="1" min="0" max="100" pos="0" under_background="0">
+	<progress whole="1"><texture shader="my_ring">ui\ui_common</texture></progress>
+</loading_progress>
 ```
+
+`whole="1"` draws the bar's fill whole, stretched over the bar and uncut: its shader shows the progress itself. Without it
+the fill is cut along the bar as always.
 
 **The game under the pause menu.** As the menu opens over a level, the game draws one more frame without
 it and keeps it whole as the render target `$user$game_frame`: a mod's background shader can blur it, tint it
@@ -3433,14 +3436,17 @@ stay either way. A pause menu over the blurred game, in a mod's `ui_mm_main_16.x
 with `my_blur.ps` sampling `s_base` at `I.HPos.xy * screen_res.zw` with a blur of its choice.
 
 **The loading screen** is `ui_mm_loading_screen.xml` and `ui_mm_loading_screen_16.xml`: the engine's built-in
-layouts node for node, the bar a thin line over the picture without the black frame (the built-in layouts drew
-the bar under the picture, out of sight). Every node but `background` is optional: `loading_progress` (a progress
-bar, textured or a shape; `under_background="1"` puts it under the background as the built-in layout did),
+layouts node for node, the bar a thin line low on the screen without the black frame (the built-in layouts drew
+the bar under the picture, out of sight). Every node but `background` is optional: `loading_progress`,
 `loading_progress_percent`, `loading_stage`, `loading_header`, `loading_tip_number`, `loading_tip`, `loading_logo`.
-Any static of the layout can show the progress its own way - a shader reading `xms_ui_progress`, placed anywhere,
-as many as it likes - and the background can be a video (with its sound) or a GIF. A mod's own
-`ui_mm_loading_screen*.xml` replaces the game's, a layout made for the original game included; an XMS module's
-XML patch can change only the bar; with none of the files, the built-in layouts are used as before.
+The background can be a video (with its sound) or a GIF.
+
+**The bar is the screen's one progress, and a mod replaces it.** `loading_progress` gives it all: its place and
+size, its direction (`horz`, `mode`), its form - a texture, a shape, or a shader of the mod's own over the whole
+bar (`<progress whole="1">`, the ring above) - and whether it lies under the background (`under_background="1"`,
+the built-in layouts') or over it. A mod's own `ui_mm_loading_screen*.xml` replaces the whole screen with it, a
+layout made for the original game included; an XMS module's XML patch of `loading_progress` replaces only the bar
+and leaves the rest of the screen as it is; with none of the files, the built-in layouts are used as before.
 
 **The loading screen never stops.** It is shown the way the movie player of a modern engine shows one: a
 thread of its own, with a device and a window of its own laid over the game's window, draws it at the display's
@@ -3454,7 +3460,7 @@ the thread draws those pictures and everything that moves itself:
 | a video (`.mp4`, `.webm`, `.wmv`) | a video of its own through the Media Foundation media engine, decoded on the GPU, its sound played at the music's volume and faded out as the screen goes |
 | a GIF, a Theora video (`.ogm`) | the same file, decoded by the thread |
 | a static with `shader="..."` | the mod's own shader: the `.s` file names the pixel shader, its blend and further textures (`.dds`), and the `.ps` is compiled with the game's include files; it gets `s_base` (the static's texture, its video or GIF too) and the constants above (`xms_ui_time`, `xms_ui_rect`, `xms_ui_uv`, `xms_ui_progress`, `screen_res`, `timers`) |
-| the bar's fill, the per cent | the fill cut and tinted by the progress the way the bar does it, the per cent as the game draws each value |
+| the bar's fill, the per cent | the fill cut and tinted by the progress the way the bar does it (a whole fill: as a static of its own above), the per cent as the game draws each value |
 
 What a `.s` does beyond that - a render target, a script of its own - is not available to the thread; such a
 static is drawn as the game's picture of it. As the precache ends, the thread hands the screen back to the game's

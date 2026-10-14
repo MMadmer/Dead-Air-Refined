@@ -654,6 +654,33 @@ void CUIActorMenu::UpdateItemsPlace()
 
 // ================================================================
 
+template <typename F>
+void CUIActorMenu::for_each_armament_list(F&& f) const
+{
+    for (int i = eInventoryKnifeList; i <= eInventoryDetectorList; ++i)
+        if (m_pLists[i])
+            f(m_pLists[i]);
+    if (m_pQuickSlot)
+        f(m_pQuickSlot);
+
+    switch (m_currMenuMode)
+    {
+    case mmUndefined:
+    case mmInventory:
+    case mmUpgrade: f(m_pLists[eInventoryBagList]); break;
+    case mmTrade:
+        f(m_pLists[eTradeActorBagList]);
+        f(m_pLists[eTradeActorList]);
+        f(m_pLists[eTradePartnerBagList]);
+        f(m_pLists[eTradePartnerList]);
+        break;
+    case mmDeadBodySearch:
+        f(m_pLists[eSearchLootBagList]);
+        f(m_pLists[eSearchLootActorBagList]);
+        break;
+    }
+}
+
 void CUIActorMenu::clear_highlight_lists()
 {
     if (m_pLists[eInventoryKnifeList])
@@ -672,26 +699,10 @@ void CUIActorMenu::clear_highlight_lists()
     if (m_pLists[eInventoryDetectorList])
         m_pLists[eInventoryDetectorList]->Highlight(false);
     m_pLists[eInventoryBeltList]->Highlight(false);
-    m_pLists[eInventoryBagList]->clear_select_armament();
     if (m_pQuickSlot)
         m_pQuickSlot->Highlight(false);
 
-    switch (m_currMenuMode)
-    {
-    case mmUndefined: break;
-    case mmInventory: break;
-    case mmTrade:
-        m_pLists[eTradeActorBagList]->clear_select_armament();
-        m_pLists[eTradeActorList]->clear_select_armament();
-        m_pLists[eTradePartnerBagList]->clear_select_armament();
-        m_pLists[eTradePartnerList]->clear_select_armament();
-        break;
-    case mmUpgrade: break;
-    case mmDeadBodySearch:
-        m_pLists[eSearchLootBagList]->clear_select_armament();
-        m_pLists[eSearchLootActorBagList]->clear_select_armament();
-        break;
-    }
+    for_each_armament_list([](CUIDragDropListEx* list) { list->clear_select_armament(); });
     m_highlight_clear = true;
 }
 void CUIActorMenu::highlight_item_slot(CUICellItem* cell_item)
@@ -775,31 +786,7 @@ void CUIActorMenu::set_highlight_item(CUICellItem* cell_item)
         return;
     }
     highlight_item_slot(cell_item);
-
-    switch (m_currMenuMode)
-    {
-    case mmUndefined:
-    case mmInventory:
-    case mmUpgrade:
-    {
-        highlight_armament(item, m_pLists[eInventoryBagList]);
-        break;
-    }
-    case mmTrade:
-    {
-        highlight_armament(item, m_pLists[eTradeActorBagList]);
-        highlight_armament(item, m_pLists[eTradeActorList]);
-        highlight_armament(item, m_pLists[eTradePartnerBagList]);
-        highlight_armament(item, m_pLists[eTradePartnerList]);
-        break;
-    }
-    case mmDeadBodySearch:
-    {
-        highlight_armament(item, m_pLists[eSearchLootBagList]);
-        highlight_armament(item, m_pLists[eSearchLootActorBagList]);
-        break;
-    }
-    }
+    for_each_armament_list([this, item](CUIDragDropListEx* list) { highlight_armament(item, list); });
     m_highlight_clear = false;
 }
 
@@ -928,32 +915,11 @@ void CUIActorMenu::highlight_weapons_for_ammo(PIItem ammo_item, CUIDragDropListE
 bool CUIActorMenu::highlight_addons_for_weapon(PIItem weapon_item, CUICellItem* ci)
 {
     PIItem item = (PIItem)ci->m_pData;
-    if (!item)
-    {
+    CWeapon* weapon = smart_cast<CWeapon*>(weapon_item);
+    if (!item || !weapon || !weapon->AddonFits(item))
         return false;
-    }
-
-    CScope* pScope = smart_cast<CScope*>(item);
-    if (pScope && weapon_item->CanAttach(pScope))
-    {
-        ci->m_select_armament = true;
-        return true;
-    }
-
-    CSilencer* pSilencer = smart_cast<CSilencer*>(item);
-    if (pSilencer && weapon_item->CanAttach(pSilencer))
-    {
-        ci->m_select_armament = true;
-        return true;
-    }
-
-    CGrenadeLauncher* pGrenadeLauncher = smart_cast<CGrenadeLauncher*>(item);
-    if (pGrenadeLauncher && weapon_item->CanAttach(pGrenadeLauncher))
-    {
-        ci->m_select_armament = true;
-        return true;
-    }
-    return false;
+    ci->m_select_armament = true;
+    return true;
 }
 
 void CUIActorMenu::highlight_weapons_for_addon(PIItem addon_item, CUIDragDropListEx* ddlist)
@@ -961,47 +927,18 @@ void CUIActorMenu::highlight_weapons_for_addon(PIItem addon_item, CUIDragDropLis
     VERIFY(addon_item);
     VERIFY(ddlist);
 
-    CScope* pScope = smart_cast<CScope*>(addon_item);
-    CSilencer* pSilencer = smart_cast<CSilencer*>(addon_item);
-    CGrenadeLauncher* pGrenadeLauncher = smart_cast<CGrenadeLauncher*>(addon_item);
-
-    if (!pScope && !pSilencer && !pGrenadeLauncher)
-    {
+    if (!smart_cast<CScope*>(addon_item) && !smart_cast<CSilencer*>(addon_item) && !smart_cast<CGrenadeLauncher*>(addon_item))
         return;
-    }
 
     u32 const cnt = ddlist->ItemsCount();
     for (u32 i = 0; i < cnt; ++i)
     {
         CUICellItem* ci = ddlist->GetItemIdx(i);
-        PIItem item = (PIItem)ci->m_pData;
-        if (!item)
-        {
-            continue;
-        }
-        CWeapon* weapon = smart_cast<CWeapon*>(item);
-        if (!weapon)
-        {
-            continue;
-        }
-
-        if (pScope && weapon->CanAttach(pScope))
-        {
+        const auto item = static_cast<PIItem>(ci->m_pData);
+        CWeapon* weapon = item ? smart_cast<CWeapon*>(item) : nullptr;
+        if (weapon && weapon->AddonFits(addon_item))
             ci->m_select_armament = true;
-            continue;
-        }
-        if (pSilencer && weapon->CanAttach(pSilencer))
-        {
-            ci->m_select_armament = true;
-            continue;
-        }
-        if (pGrenadeLauncher && weapon->CanAttach(pGrenadeLauncher))
-        {
-            ci->m_select_armament = true;
-            continue;
-        }
-
-    } // for i
+    }
 }
 
 void CUIActorMenu::highlight_equipped() const

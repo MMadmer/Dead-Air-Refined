@@ -110,6 +110,16 @@ class Layout:
             self.w('            <%s style="%s"/>' % (look, style))
         self.w('        </cells>')
 
+    def state_cells(self, node):
+        """A list over plates of its own (a slot, the belt, the quick slots): no cells drawn, only the item's
+        state - under the cursor, related to the one under it, marked, blocked."""
+        self.w('        <cells>')
+        for look, style in (('selected', 'cell_selected'), ('marked', 'cell_marked'), ('related', 'cell_related'),
+                            ('blocked', 'cell_blocked')):
+            self.w('            <%s style="%s"/>' % (look, style))
+        self.w('        </cells>')
+        self.w('    </%s>' % node)
+
     def button(self, node, x, y, w, h, caption, hint, style='button', window_name=None):
         self.w('    <%s %s hint="%s">' % (node, self.rect(x, y, w, h), hint))
         self.w('        <window_name>%s</window_name>' % (window_name or node))
@@ -326,9 +336,10 @@ class Layout:
             w, h = self.plate_size(cols, rows, bar)
             lx, ly = C + x + 8, top + y + 8
             self.w('    <%s %s cell_width="%d" cell_height="%d" rows_num="%d" cols_num="%d" custom_placement="0"%s'
-                   ' a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>'
+                   ' a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">'
                    % (node, self.rect(lx, ly, cols * self.cell_w, rows * self.cell_y), self.cell_x, self.cell_y, rows, cols,
                       ' vertical_placement="1"' if vertical else ''))
+            self.state_cells(node)
             if progress:
                 self.bar(progress, C + x + 8, top + y + h - 12, w - 16, 4, thin=True)
             self.w('    <%s %s shape="slot_highlight"/>' % (highlight, self.rect(C + x, top + y, w, h)))
@@ -340,9 +351,10 @@ class Layout:
         qx, qy = self.quick()
         spacing = (qx[1] - qx[0]) - self.cell_w
         self.w('    <dragdrop_quick_slots %s cell_width="%d" cell_height="%d" a="0" rows_num="1" cols_num="4"'
-               ' cell_sp_x="%d" cell_sp_y="0" custom_placement="1"/>'
+               ' cell_sp_x="%d" cell_sp_y="0" custom_placement="1">'
                % (self.rect(C + qx[0] + (74 - self.cell_w) / 2, top + qy + 6, 3 * (qx[1] - qx[0]) + self.cell_w, self.cell_y),
                   self.cell_x, self.cell_y, int(round(spacing * self.kx))))
+        self.state_cells('dragdrop_quick_slots')
         self.w('    <quick_slot_highlight %s dx="%s" shape="slot_highlight"/>'
                % (self.rect(C + qx[0], top + qy, 74, 62), num((qx[1] - qx[0]) * self.kx)))
         for i in range(4):
@@ -353,8 +365,9 @@ class Layout:
 
         # the belt of artefacts; a slot the outfit does not give is covered
         bx, by, bw = self.belt()
-        self.w('    <dragdrop_belt %s cell_width="%d" cell_height="%d" rows_num="1" cols_num="7" a="0"/>'
+        self.w('    <dragdrop_belt %s cell_width="%d" cell_height="%d" rows_num="1" cols_num="7" a="0">'
                % (self.rect(C + bx + 8, top + by + 8, 7 * self.cell_w, self.cell_y), self.cell_x, self.cell_y))
+        self.state_cells('dragdrop_belt')
         self.w('    <artefact_slot_highlight %s dx="%s" shape="slot_highlight"/>'
                % (self.rect(C + bx + 8, top + by + 8, self.cell_w, self.cell_y), num(self.cell_x)))
         self.w('    <belt_list_over %s dx="%s" shape="blocker"/>'

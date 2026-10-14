@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The loading screen: the engine's built-in widescreen layout, node for node, with a thin bar without the
-     black frame. A mod replaces this file with a screen of its own, or patches only its loading_progress;
-     a texture here may be a video or a GIF, a static may draw with a shader that reads xms_ui_progress
+<!-- The loading screen: the engine's built-in widescreen layout, node for node, with a thin bar low on the screen
+     without the black frame. The bar is the screen's one progress: a mod gives it its own place, size and
+     form - a texture, a shape, or a shader of its own over the whole bar (<progress whole="1">) - in a
+     screen of its own or in an XMS patch of loading_progress. A texture here may be a video or a GIF
      (MODDING.md). -->
 <w>
 	<background width="1024" height="768">
@@ -16,7 +17,7 @@
 		</auto_static>
 	</background>
 	<loading_logo x="102" y="173" width="819" height="512" stretch="1"/>
-	<loading_progress x="310" y="600" width="405" height="2" horz="1" min="0" max="100" pos="0" under_background="0">
+	<loading_progress x="151.5" y="752" width="720" height="2" horz="1" min="0" max="100" pos="0" under_background="0">
 		<progress><shape fill="#E8E6E0D9" radius="1"/></progress>
 		<background><shape fill="#E8E6E01F" radius="1"/></background>
 	</loading_progress>

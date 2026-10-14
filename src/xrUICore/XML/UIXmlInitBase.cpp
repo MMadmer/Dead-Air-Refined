@@ -565,6 +565,10 @@ bool CUIXmlInitBase::InitProgressBar(CUIXml& xml_doc, pcstr path, int index, CUI
         return false;
 
     InitStatic(xml_doc, buf, index, &pWnd->m_UIProgressItem);
+    // a whole fill covers the bar: its texture stretched over it
+    pWnd->m_bFillWhole = xml_doc.ReadAttribInt(buf, index, "whole", 0) != 0;
+    if (pWnd->m_bFillWhole)
+        pWnd->m_UIProgressItem.SetStretchTexture(true);
 
     pWnd->m_UIProgressItem.SetWndSize(pWnd->GetWndSize());
 

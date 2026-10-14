@@ -1404,6 +1404,7 @@ void CUICellContainer::DrawCellStates()
 void CUICellContainer::DrawShapeCells(const Irect& visible, bool dragArea, const Ivector2& dragCell, const Ivector2& dragSize)
 {
     const SUIGridLooks& looks = *m_pParentDragDropList->GetGridLooks();
+    const bool virtual_cells = m_pParentDragDropList->GetVirtualCells();
 
     Fvector2 origin;
     GetAbsolutePos(origin);
@@ -1446,16 +1447,24 @@ void CUICellContainer::DrawShapeCells(const Irect& visible, bool dragArea, const
                 continue;
             m_shape_items.push_back(item);
 
-            Ivector2 lt{ x, y };
-            while (lt.x > 0 && GetCellAt({ lt.x - 1, lt.y }).m_item == item)
-                --lt.x;
-            while (lt.y > 0 && GetCellAt({ lt.x, lt.y - 1 }).m_item == item)
-                --lt.y;
-            Ivector2 rb = lt;
-            while (rb.x + 1 < m_cellsCapacity.x && GetCellAt({ rb.x + 1, lt.y }).m_item == item)
-                ++rb.x;
-            while (rb.y + 1 < m_cellsCapacity.y && GetCellAt({ lt.x, rb.y + 1 }).m_item == item)
-                ++rb.y;
+            // A slot's virtual cells place the item off the grid, aligned in the list: its own window then.
+            Frect plate;
+            if (virtual_cells)
+                item->GetAbsoluteRect(plate);
+            else
+            {
+                Ivector2 lt{ x, y };
+                while (lt.x > 0 && GetCellAt({ lt.x - 1, lt.y }).m_item == item)
+                    --lt.x;
+                while (lt.y > 0 && GetCellAt({ lt.x, lt.y - 1 }).m_item == item)
+                    --lt.y;
+                Ivector2 rb = lt;
+                while (rb.x + 1 < m_cellsCapacity.x && GetCellAt({ rb.x + 1, lt.y }).m_item == item)
+                    ++rb.x;
+                while (rb.y + 1 < m_cellsCapacity.y && GetCellAt({ lt.x, rb.y + 1 }).m_item == item)
+                    ++rb.y;
+                plate = span(lt, rb);
+            }
 
             // The stock grid's select modes, by name: 1 selected, 2 marked, 3 blocked.
             SUIGridLooks::Look look = SUIGridLooks::Item;
@@ -1473,12 +1482,12 @@ void CUICellContainer::DrawShapeCells(const Irect& visible, bool dragArea, const
                 look = SUIGridLooks::Marked;
             else if (item->m_select_mode == 3)
                 look = SUIGridLooks::Blocked;
-            UIShape::Draw(span(lt, rb), looks.looks[look]);
+            UIShape::Draw(plate, looks.looks[look]);
         }
     }
 
     // Where the dragged item would land.
-    if (dragArea && dragCell.x >= 0 && dragCell.y >= 0)
+    if (dragArea && !virtual_cells && dragCell.x >= 0 && dragCell.y >= 0)
         UIShape::Draw(span(dragCell, { dragCell.x + dragSize.x - 1, dragCell.y + dragSize.y - 1 }), looks.looks[SUIGridLooks::Drop]);
 
     UI().PopScissor();

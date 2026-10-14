@@ -255,9 +255,23 @@
         <text align="l" font="letterica16" color="$text_dim"/>
     </partner_weight_max>
 
-    <dragdrop_binocular x="395.75" y="26" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_binocular x="395.75" y="26" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_binocular>
     <binocular_slot_highlight x="389.75" y="18" width="74" height="57" shape="slot_highlight"/>
-    <dragdrop_helmet x="481" y="26" width="62" height="82" cell_width="31" cell_height="41" rows_num="2" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_helmet x="481" y="26" width="62" height="82" cell_width="31" cell_height="41" rows_num="2" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_helmet>
     <progess_bar_helmet x="481" y="114" width="62" height="4" horz="1" min="0" max="1" pos="0">
         <progress shape="bar_thin_fill"/>
         <background shape="bar_thin_track"/>
@@ -267,9 +281,23 @@
     </progess_bar_helmet>
     <helmet_slot_highlight x="475" y="18" width="74" height="108" shape="slot_highlight"/>
     <helmet_over x="475" y="18" width="74" height="108" shape="blocker"/>
-    <dragdrop_detector x="566.25" y="26" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_detector x="566.25" y="26" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_detector>
     <detector_slot_highlight x="560.25" y="18" width="74" height="57" shape="slot_highlight"/>
-    <dragdrop_pistol x="395.75" y="91" width="62" height="246" cell_width="31" cell_height="41" rows_num="6" cols_num="2" custom_placement="0" vertical_placement="1" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_pistol x="395.75" y="91" width="62" height="246" cell_width="31" cell_height="41" rows_num="6" cols_num="2" custom_placement="0" vertical_placement="1" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_pistol>
     <progess_bar_weapon1 x="395.75" y="343" width="62" height="4" horz="1" min="0" max="1" pos="0">
         <progress shape="bar_thin_fill"/>
         <background shape="bar_thin_track"/>
@@ -278,7 +306,14 @@
         <max_color color="$good"/>
     </progess_bar_weapon1>
     <inv_slot2_highlight x="389.75" y="83" width="74" height="272" shape="slot_highlight"/>
-    <dragdrop_outfit x="481" y="142" width="62" height="123" cell_width="31" cell_height="41" rows_num="3" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_outfit x="481" y="142" width="62" height="123" cell_width="31" cell_height="41" rows_num="3" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_outfit>
     <progess_bar_outfit x="481" y="271" width="62" height="4" horz="1" min="0" max="1" pos="0">
         <progress shape="bar_thin_fill"/>
         <background shape="bar_thin_track"/>
@@ -287,7 +322,14 @@
         <max_color color="$good"/>
     </progess_bar_outfit>
     <outfit_slot_highlight x="475" y="134" width="74" height="149" shape="slot_highlight"/>
-    <dragdrop_automatic x="566.25" y="91" width="62" height="246" cell_width="31" cell_height="41" rows_num="6" cols_num="2" custom_placement="0" vertical_placement="1" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_automatic x="566.25" y="91" width="62" height="246" cell_width="31" cell_height="41" rows_num="6" cols_num="2" custom_placement="0" vertical_placement="1" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_automatic>
     <progess_bar_weapon2 x="566.25" y="343" width="62" height="4" horz="1" min="0" max="1" pos="0">
         <progress shape="bar_thin_fill"/>
         <background shape="bar_thin_track"/>
@@ -296,7 +338,14 @@
         <max_color color="$good"/>
     </progess_bar_weapon2>
     <inv_slot3_highlight x="560.25" y="83" width="74" height="272" shape="slot_highlight"/>
-    <dragdrop_backpack x="481" y="299" width="62" height="82" cell_width="31" cell_height="41" rows_num="2" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_backpack x="481" y="299" width="62" height="82" cell_width="31" cell_height="41" rows_num="2" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_backpack>
     <progess_bar_backpack x="481" y="387" width="62" height="4" horz="1" min="0" max="1" pos="0">
         <progress shape="bar_thin_fill"/>
         <background shape="bar_thin_track"/>
@@ -306,7 +355,14 @@
     </progess_bar_backpack>
     <backpack_slot_highlight x="475" y="291" width="74" height="108" shape="slot_highlight"/>
     <backpack_over x="475" y="291" width="74" height="108" shape="blocker"/>
-    <dragdrop_sidearm x="395.75" y="371" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_sidearm x="395.75" y="371" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_sidearm>
     <progess_bar_sidearm x="395.75" y="418" width="62" height="4" horz="1" min="0" max="1" pos="0">
         <progress shape="bar_thin_fill"/>
         <background shape="bar_thin_track"/>
@@ -315,7 +371,14 @@
         <max_color color="$good"/>
     </progess_bar_sidearm>
     <sidearm_highlight x="389.75" y="363" width="74" height="67" shape="slot_highlight"/>
-    <dragdrop_knife x="566.25" y="371" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <dragdrop_knife x="566.25" y="371" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_knife>
     <progess_bar_knife x="566.25" y="418" width="62" height="4" horz="1" min="0" max="1" pos="0">
         <progress shape="bar_thin_fill"/>
         <background shape="bar_thin_track"/>
@@ -325,7 +388,14 @@
     </progess_bar_knife>
     <knife_highlight x="560.25" y="363" width="74" height="67" shape="slot_highlight"/>
 
-    <dragdrop_quick_slots x="402" y="446" width="220" height="41" cell_width="31" cell_height="41" a="0" rows_num="1" cols_num="4" cell_sp_x="32" cell_sp_y="0" custom_placement="1"/>
+    <dragdrop_quick_slots x="402" y="446" width="220" height="41" cell_width="31" cell_height="41" a="0" rows_num="1" cols_num="4" cell_sp_x="32" cell_sp_y="0" custom_placement="1">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_quick_slots>
     <quick_slot_highlight x="389.75" y="440" width="55.5" height="62" dx="63" shape="slot_highlight"/>
     <quick_slot1_text x="392.75" y="486" width="22.5" height="14">
         <text align="l" font="letterica16" color="$text_muted">quick_use_str_1</text>
@@ -340,7 +410,14 @@
         <text align="l" font="letterica16" color="$text_muted">quick_use_str_4</text>
     </quick_slot4_text>
 
-    <dragdrop_belt x="403.5" y="518" width="217" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="7" a="0"/>
+    <dragdrop_belt x="403.5" y="518" width="217" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="7" a="0">
+        <cells>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+        </cells>
+    </dragdrop_belt>
     <artefact_slot_highlight x="403.5" y="518" width="31" height="41" dx="31" shape="slot_highlight"/>
     <belt_list_over x="403.5" y="518" width="31" height="41" dx="31" shape="blocker"/>
 

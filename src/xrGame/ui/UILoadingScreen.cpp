@@ -52,8 +52,8 @@ void UILoadingScreen::Initialize()
     if (uiXml.NavigateToNode(temp))
         xmlNode = temp;
 
-    // A layout may leave the bar out and show the progress its own way: a shader of its background
-    // reads xms_ui_progress.
+    // The bar is the screen's one progress, its place, size and form the layout's (a shader of its own over the
+    // whole bar with <progress whole="1">); the built-in layouts put it under the background.
     if (uiXml.ReadAttribInt("loading_progress", 0, "under_background", 1))
     {
         loadingProgress = UIHelper::CreateProgressBar(uiXml, "loading_progress", this, false);
@@ -253,6 +253,21 @@ void collect(CUIWindow* parent, CUIStatic* percent, xr_vector<ScreenItem>& items
                 r, nullptr, bar, describe(r, bar->m_UIBackgroundItem.GetTextureColor(), "track") });
             Frect fill;
             bar->m_UIProgressItem.GetAbsoluteRect(fill);
+            // a whole fill shows the progress by its own shader: drawn as a static is
+            if (bar->IsFillWhole())
+            {
+                CUIStatic* st = &bar->m_UIProgressItem;
+                items.push_back({ texture_kind(st), false,
+                    [bar] {
+                        Frect b;
+                        bar->GetAbsoluteRect(b);
+                        UI().PushScissor(b);
+                        bar->m_UIProgressItem.Draw();
+                        UI().PopScissor();
+                    },
+                    fill, st, nullptr, describe(fill, st->GetTextureColor(), st->GetStaticItem()->TextureName().c_str()) });
+                continue;
+            }
             items.push_back({ DaLoadingLayer::Kind::Fill, false,
                 [bar] {
                     // the whole fill, untinted: the presenter cuts and tints it by the progress

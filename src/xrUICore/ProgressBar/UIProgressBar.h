@@ -24,6 +24,8 @@ protected:
     bool m_bUseColor          : 1 { false };
     bool m_bUseMiddleColor    : 1 { false }; // Hrust: optional middle color for CS/SoC compatibility, without middle color it doesn't looks correctly
     bool m_bUseGradient       : 1 { true }; //Alundaio: if false then use only solid color with m_maxColor
+    // <progress whole="1">: the fill is drawn whole, uncut - a shader of its own shows the progress (xms_ui_progress)
+    bool m_bFillWhole         : 1 { false };
 
     Fvector2 m_ProgressPos{}; // x-current y-dest
     float m_MinPos{ 1.0f };
@@ -74,6 +76,7 @@ public:
     // How Draw cuts and tints the fill, for the loading screen's own presenter (da_loading_presenter.h): the
     // orientation, and the tint by the progress where the bar has one (false: none).
     [[nodiscard]] u8 GetOrientMode() const { return u8(m_orient_mode); }
+    [[nodiscard]] bool IsFillWhole() const { return m_bFillWhole; }
     bool GetFillTint(Fcolor& min, Fcolor& middle, Fcolor& max, bool& useMiddle) const
     {
         if (!m_bUseColor)
