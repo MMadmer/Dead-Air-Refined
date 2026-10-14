@@ -1,5 +1,6 @@
 #include "StdAfx.h"
 #include "Weapon.h"
+#include "game_cl_single.h"
 #include "ParticlesObject.h"
 #include "entity_alive.h"
 #include "inventory_item_impl.h"
@@ -1825,6 +1826,24 @@ CWeaponAmmo* CWeapon::GetAmmoForReload(LPCSTR ammo_section) const
 {
     const PIItem ammo = UsesAmmoBelt() ? m_pInventory->Get(ammo_section, false) : m_pInventory->GetAny(ammo_section);
     return smart_cast<CWeaponAmmo*>(ammo);
+}
+
+CWeapon::SCompareStats CWeapon::CompareStats() const
+{
+    SCompareStats stats;
+    // the first ammunition, as the hint's damage bar counts it: a loaded special round would
+    // otherwise make the same rifle better than its twin
+    const float k_hit = m_ammoTypes.empty() ? 1.0f : pSettings->read_if_exists<float>(m_ammoTypes[0], "k_hit", 1.0f);
+    stats.damage = fvHitPower[egdMaster] * k_hit;
+    const float shot_time = GetActorShotTime();
+    stats.rpm = shot_time > EPS ? 60.0f / shot_time : 0.0f;
+    stats.dispersion = fireDispersionBase;
+    stats.recoil = cam_recoil.Dispersion;
+    stats.aim_time = m_zoom_params.m_fZoomRotateTime;
+    stats.bullet_speed = m_fStartBulletSpeed;
+    stats.wear = conditionDecreasePerShot;
+    stats.magazine = iMagazineSize;
+    return stats;
 }
 
 float CWeapon::GetConditionMisfireProbability() const

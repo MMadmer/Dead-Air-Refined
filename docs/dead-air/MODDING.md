@@ -3017,12 +3017,19 @@ Every item grid of the inventory, the loot, the trade and the upgrade window sta
 of a row of small buttons that sits flush left right under the window's header - it rises into the
 free space above the grid, never onto a window there, and the grid keeps whole rows of cells: sort,
 then the filters All, Weapons and ammo, Armour, Food and drink, Medicine, Artefacts and containers,
-Misc. The row is cut out of whichever `actor_menu` layout is
+Misc; at the right end of the player's row, the comparison and the panel of hotkeys (see below). The row is cut out of whichever `actor_menu` layout is
 installed (DA, DAR2, a UI mod), 4:3 and widescreen alike, so a layout needs nothing to get it and
-the row covers nothing. Its look is `configs\ui\actor_menu_tools.xml` (button texture, glyphs,
-colours, sizes, the hint ids); the glyphs are `ui\ui_da_x64_inv_tools`, built by
-`tools\graphics\make_inventory_tools_sheet.py`. A script window laid over the bottom of the bag (an
-older sort button, for one) covers the grid's last row.
+the row covers nothing. Its look is `configs\ui\actor_menu_tools.xml` (button and glyph looks of the
+theme, colours, sizes, the hint ids); the glyphs are pictograms the shader draws (`glyph="pistol"`),
+and a glyph that names no pictogram is taken for a white mask texture, the way mods made them before.
+A script window laid over the bottom of the bag covers the grid's last row.
+
+**The order** is a drop-down beside the sort button: default (the bigger items first, as the game
+always laid them out), by type (the filter categories in their order), by name, by weight (heaviest
+first), by price (dearest first), by condition (best kept first); ties keep the default order. One
+order serves every grid, applies at once to the grids on screen and to every window that fills its
+grids, and is kept in `user.ltx` as `ui_inv_sort`. Without the `sort_mode` node the row has the sort
+button alone.
 
 **Sorting** merges what is split, in the pane the button belongs to: partial ammo boxes into full
 ones (each box's own size), numbered-section stacks (`vodka` + `vodka` = `vodka_2`; the bases are
@@ -3057,6 +3064,235 @@ false outside it) - the same code the buttons run.
 A multi-use item's condition is its share of uses left again: it used to be computed in integers,
 so a partly used one read as worn out (an empty bar, refused by traders).
 
+
+## The interface drawn by the shader: themes, skins, pictograms
+
+Every window built from an XML layout can be drawn by the `xms_ui_shape` shader instead of its texture:
+rounded panels, borders, buttons with a look per state, segmented bars, item grids and pictograms,
+all computed per pixel at the screen's own resolution, so nothing blurs at 1440p or 4K. The actor
+menu (inventory, trade, loot, upgrade), its item hint, its context menu, the carcass window
+(`ui_mutant_loot`) and the save indicator are drawn this way; item icons and portraits stay textures.
+
+**A node takes a skin** with a `shape` attribute naming a look of the theme, a `<shape>` child, or
+both (the child's attributes go over the named look):
+
+```xml
+<exit_button x="389.75" y="714" width="244.5" height="34">
+    <shape style="button"/>
+    <text font="graffiti22" align="c">ui_inv_exit</text>
+</exit_button>
+<auto_static x="10" y="10" width="200" height="40" shape="panel"/>
+<auto_static x="20" y="20" width="14" height="14"><shape kind="heart" fill="$health"/></auto_static>
+```
+
+Statics, frames, frame lines and buttons of every kind read it (`CUIXmlInitBase::InitWindow`), and so
+does whatever is built from them: a progress bar's `<progress>` and `<background>`, a scroll bar
+profile's parts, a hint's `<background>`, the context menu (`<properties_box shape="...">`). A skin
+replaces the texture; the texture's colour still tints it, so a light animation, a condition colour or
+`SetTextureColor` from a script colour the shape the way they coloured the texture. A list box gives
+its rows a skin with `<item shape="..."/>` under the list node: normal, highlight under the cursor,
+checked when selected, and the row's text takes each state's `text` colour.
+
+Attributes of a look: `kind` (`box`, the default, or a pictogram), `fill`, `line` (the border; a
+pictogram's glow), `border`, `radius`, `soft` (a soft edge, a shadow), `segment` and `gap` (a box cut
+into the segments of Dead Air's bars, measured from its left edge), `text` (the caption's colour).
+Lengths are in the 768-line units of every layout; colours are `#rrggbb`, `#rrggbbaa` or `$name`. A
+button's states are children: `<highlight/>`, `<pushed/>`, `<checked/>` (a switch that is on: a
+filter, a tab, a selected row), `<disabled/>`; a state sets only what changes, everything else follows
+the normal look - exactly like a CSS rule over its parent's.
+
+**The theme** is `configs\ui\ui_theme.xml`: named colours (`<color name value/>`) and named looks
+(`<style name base="..." .../>` with state children). Any colour attribute of a shape - and any
+`color="..."` of a text node - may name a colour of the theme as `$name`. A mod restyles the whole
+interface without touching the file: it ships `configs\ui\ui_theme_<anything>.xml`; those files are
+read after `ui_theme.xml`, in name order, and a colour or a look they define replaces the one of the
+same name. Changing `$accent` and `$panel` alone recolours every window.
+
+**Pictograms** (`kind=`): `trefoil`, `grid`, `pistol`, `helmet`, `cutlery`, `medkit`, `gem`, `gear`,
+`sort`, `biohazard`, `bolt`, `flame`, `psi`, `claw`, `bullet`, `impact`, `burst`, `heart`, `drop`,
+`runner`, `weight`, `clock`, `wrench`, `crosshair`, `hand`, `gauge`, `shield`, `cartridge`, `moon`,
+`upgrade`, `pin`, `keyboard`, `scales`, `gasmask`, and the stroke glyphs `search`, `check`, `cross`, `chevron`, `star`.
+They are solid shapes in the fill colour, square on screen whatever the node's aspect; a `line` with a
+`border` gives them a glow. A property icon of the item hint that the engine would swap for a "minus"
+texture is coloured instead: the property's negative colour for an artefact, `$negative` for a drug.
+
+**Item grids** draw their cells as shapes when the list node has a `<cells>` child:
+
+```xml
+<dragdrop_bag ... scroll_profile="thin">
+    <cells style="cell">
+        <item style="cell_item"/> <selected style="cell_selected"/> <marked style="cell_marked"/>
+        <related style="cell_related"/> <blocked style="cell_blocked"/> <drop style="cell_drop"/>
+    </cells>
+</dragdrop_bag>
+```
+
+An empty cell takes `<cells>`'s own look; an item gets one plate across all of its cells (`item`;
+`selected` under the cursor; `marked` for the equipped and the quick slot's own; `related` for the
+ammunition and addons of the selected weapon; `blocked` for what a trade or a script colours red, the
+stock select mode 3); `drop` is the area a dragged item would land on. A grid without `<cells>` keeps
+the `ui_grid` texture. Two more looks lie over the icons of every grid, textured or not: `picked`, an
+item picked for a comparison, and `dim`, an item that cannot join it (`<picked/>` and `<dim/>` under
+`<cells>`; a grid without them takes the theme's `cell_picked` and `cell_dim`).
+
+**Scroll bars**: `scroll_profile="name"` on a list, a scroll view or a grid looks the profile up in
+`scroll_bar.xml` and, failing that, in `scroll_bar_<name>.xml` - a mod adds a bar without replacing
+the game's whole set. `scroll_bar_thin.xml` is the thin shape bar the actor menu uses; arrows of zero
+size leave the thumb the whole length.
+
+**The load bar** of the actor menu (`<actor_weight_bar>`, optional) is the player's weight against the
+limits of Dead Air's movement: the bar ends at the walk limit (`MaxWalkWeight`: `max_walk_weight` and
+the bonuses of the suit, the belt and the rucksack); a mark stands where the overload starts
+(`MaxCarryWeight`: the inventory's limit and the same bonuses), and the stretch after it is tinted. The
+load takes the colour of its zone - `<normal>`, `<overload>` (stamina goes faster), and `<slow>` for a
+full bar, the full overload under which movement slows (`overweight_slowdown_*` of `actor.ltx`).
+`<track>`, `<fill>` and `<mark>` are its looks (the theme's `load_track`, `load_fill`, `load_mark`
+without them), `zone_tint` the strength of the tint, `hint_delay` the delay of its hint, which gives
+the weight and both limits in kilograms (`st_da_weight_hint`).
+
+The layouts of the actor menu and the carcass window are written by `tools\ui\actor_menu_layout.py`
+and `tools\ui\mutant_loot_layout.py` from one geometry for 4:3 and 16:9; the item hint
+(`actor_menu_item`, `af_params`, `booster_params`) by `tools\ui\item_info_from_da.py` from Dead Air's
+own files, node for node. The XML they write is what a mod edits; XMS module XML patches apply to it as
+to any other layout.
+
+Console commands for working on these windows (they open them on the nearest fitting object of the
+level, wherever it stands):
+
+| Command | What it does |
+| --- | --- |
+| `dar_ui_open inventory\|trade\|upgrade\|loot\|stash\|mutant` | opens the window; a trade or an upgrade does not close over distance until the menu does |
+| `dar_ui_cursor <x> <y>` | moves the cursor to a point of the 1024 x 768 layout space (a hint shows) |
+| `dar_ui_click left\|right\|middle [<x> <y>]` | clicks the top window there |
+| `dar_ui_cursor_item <section>` | moves the cursor onto the first cell of the actor menu holding such an item |
+| `dar_ui_hold [alt] [ctrl] [shift] [<key>]` / `dar_ui_hold none` | the keys the inventory hotkeys read as held, until the next call |
+| `dar_ui_key <key>` | a key pressed and let go in the top window (`V`, `kBACK`, `kESCAPE`...) |
+| `ui_inv_sort default\|type\|name\|weight\|price\|condition` | the order of the item grids (saved) |
+| `ui_inv_hotkeys 0\|1` | the panel of hotkeys is up whenever the menu opens (saved) |
+
+## Inventory hotkeys
+
+The inventory, the trade, the search of a body or a box and the upgrade window each have their own
+hotkeys, and the panel that lists them (the keyboard button at the right end of the player's
+toolbar, or H) shows those of the window it is in. What moving an item means follows the window, the
+way a double click does: in a trade the table and back, in a search the player's rucksack and back,
+in the inventory on and off. The defaults:
+
+| Keys | Inventory | Trade | Search |
+| --- | --- | --- | --- |
+| Alt + hover | | the whole stack across | the whole stack across |
+| Alt + LMB | equip / back to the rucksack | | |
+| Ctrl + LMB | | one item across | one item across |
+| Ctrl + RMB | split an ammo box or a numbered stack | half a stack across; an ammo box in two | half a stack, or half a box's rounds, across |
+| Alt + RMB | drop the whole stack | | |
+| MMB, C + LMB | pick for a comparison | the same | the same |
+| V / Backspace | compare / clear the picks | the same | the same |
+| Ctrl (held) | the hint of the item as new | the same | the same |
+| H | the panel | the same | the same |
+
+Shift is left alone: it is most players' sprint key, which already takes everything in a search and
+makes the deal in a trade. A hover hotkey acts again only once the cursor has moved, so a grid
+closing up under a still cursor does not carry off the next stack. Nor does it take what is worn: the way from
+one grid to the other crosses the slots, the belt and the quick slots, which only a click moves. The panel also lists what the game
+does without a hotkey (the double click, the drag, the context menu, the drop key, the sprint key) by
+the keys the player has bound.
+
+The hotkeys are data: `configs\ui\inventory_hotkeys.xml`, then every `inventory_hotkeys_<name>.xml`
+a mod ships, in name order. A `<hotkey>` with the id of one read before changes what it sets;
+`remove="1"` takes it out:
+
+```xml
+<w>
+	<!-- Ctrl + the wheel moves one item across in a trade and a search -->
+	<hotkey id="wheel_one" keys="ctrl" trigger="wheel_down" action="move_one" windows="trade,loot"
+		caption="st_my_wheel_one"/>
+	<!-- a script of the mod's own on Alt + MMB, everywhere -->
+	<hotkey id="my_mark" keys="alt" trigger="mmb" action="script:my_mod.on_mark" windows="all" caption="st_my_mark"/>
+	<!-- no splitting with Ctrl + RMB -->
+	<hotkey id="split" remove="1"/>
+</w>
+```
+
+`keys` is `alt`, `ctrl`, `shift` and at most one other key held with them (`C`, `kC`, `F1`, `kBACK`),
+joined with `+`; `trigger` is `hover`, `lmb`, `rmb`, `mmb`, `wheel_up`, `wheel_down`, `key:<key>`,
+`hold` (while held: a view) or `none` (a row that only tells, with `label` - string ids and
+`action:<game action>`, joined with `|`). The actions of an item are `move`, `move_one`, `split`,
+`use`, `drop`, `drop_stack` and `pick`; of the window `toggle_panel`, `compare`, `clear_picks`; of a
+hold `pristine`; `script:<module>.<function>` is called with the item's game object (nil for a key
+with nothing under the cursor) and the window's name (`inventory`, `trade`, `loot`, `upgrade`).
+`windows` is a comma list of those four or `all`; `caption` is a string id, `caption_<window>` says it
+for one window; `order` places the row (the defaults are 10, 20, 30...). One that asks for a held key
+wins over one with the same modifiers that does not.
+
+The panel's place, size and looks are the `hotkeys_panel` node of the actor menu layout (row height,
+the width of the keys column, the key caps' look and fonts); a layout without it gets
+`actor_menu_hotkeys.xml`. The buttons at the right end of the toolbar are `<action>` nodes of
+`actor_menu_tools.xml` (`action`, `glyph`, `hint`, `panes`): a mod adds one with an XMS patch of that
+file, and its action is any of the above.
+
+## Comparing items
+
+Items are picked with the middle button or C + click (a frame over the icon; everything of another
+kind dims) and compared with the scales button of the toolbar or V; Backspace clears the picks, and a
+window change too. Only items of one kind are compared: firearms, knives, suits, helmets, rucksacks,
+artefacts, ammunition, grenades, weapon addons, devices, food, medicine, everything else. The window
+has a column per item (up to `max_items`, 8), a row per parameter with the best of the row green and
+the worst red, each row's share of the score, the score and the winner, every item against every
+other, and the parameters the winner gained most on. Two profiles weigh the same rows differently:
+the item to keep and the item to sell (Q/E switch them).
+
+The score is not a count of won rows. Every row puts each item against the best of the row on the
+scale of the row's biggest value (a ratio for positive values, sound for signed ones such as an
+artefact's radiation), 0..1; the score is the weighted mean, 0..100. The weights (0..5) follow what
+players of shooters and survival games say they choose by: for a gun the damage, then accuracy,
+reliability and recoil, then the rate of fire; for armour the bullet protection, then the carry bonus
+and the artefact slots; for an artefact its radiation; for selling the price and the price per
+kilogram. A weapon's faults weigh by part and state: `penalty = part * state`, the parts' importance
+in `[item_compare_parts]`, the states (fouled, worn, broken) in `[item_compare_fault_states]`, every
+fault id of `st_condition_type_<id>` mapped in `[item_compare_faults]`.
+
+All of it is `configs\dead_air_x64_item_compare.ltx`; a mod ships `configs\item_compare_<name>.ltx`
+with the same sections, read after it in name order (a line replaces the line of that name,
+`= remove` takes the row out):
+
+```ini
+[item_compare_firearm]
+damage    = 6, 1                 ; more weight to the damage to keep, as before to sell
+mag_size  = remove
+heat      = 3, 0 | key:my_heat_capacity | high | st_my_heat | num
+quirk     = 2, 0 | script:my_mod.quirk_score | high | st_my_quirk | pct
+```
+
+A row is `<weight to keep>, <weight to sell> [| <source> | <better: high or low> | <caption> |
+<format> | <scale>]`; `rows=` orders a kind's rows. The sources the engine reads from the item itself
+(its upgrades and condition in) are listed at the top of the file; `key:<line>` reads a number of the
+item's section, `script:<module>.<function>` gets the item's game object and returns a number. The
+window's place and looks are the `compare_window` node of the actor menu layout, or
+`actor_menu_compare.xml`.
+
+**The item as new**: while Ctrl is held over an item that wears, a second hint beside the first shows
+it at full condition, without faults or fouling (and at the price a trader would pay for it so),
+titled `(100%)`. The weapon, the suit or the artefact is not changed: its condition and faults are
+set aside for the one read of the hint (`CInventoryItem::BeginPristineView`/`EndPristineView`, a
+weapon's override takes the fault mask and the fouling too).
+
+Scripts: `ActorMenu.get_actor_menu()` has `run_hotkey_action(name)` (an action above, on the item
+under the cursor), `pick_item(obj)` (in or out of the comparison; false for another kind or a full
+one), `picked_count()`, `clear_picks()`, `open_comparison()` and `show_hotkeys(bool)`.
+
+## The carcass of a mutant
+
+`ui_mutant_loot.script` is one script for both script layers: the window, the loot table it shows and
+everything the game keeps about a carcass are as before (`itms_manager.loot_mutant` rolls the parts
+once, `loot`/`se_loot` keep them, `looted` marks an emptied carcass, every cut wears the knife and
+closes the window, Revolution II's harvest animation plays where its option is on). A carcass that an
+older save left without either store comes up empty instead of rolling again (`loot_generated`). The
+FDDA harvest scene still wraps `ui_mutant_loot.loot_ui`; `ui_mutant_loot.open_by_id(id)` opens the
+window straight away (the `dar_ui_open mutant` command uses it). Its layout is `ui_mutant_loot.xml`.
+A click marks a part or takes the mark off (the row tinted, a bar at its edge; `file_item:mark` and
+`mark_bar` of the layout); Take cuts every marked part whole, or one of the selected part when none is
+marked, as a double click always does. The sprint key takes every part at once, as Take All does -
+the same key takes everything in a search.
 
 ## NPC AI: what scripts and configs see now
 

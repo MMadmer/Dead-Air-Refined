@@ -4,6 +4,7 @@
 #include "Cursor/UICursor.h"
 #include "xrEngine/xr_input.h"
 #include "Windows/UIWindow.h"
+#include "Static/UIShapeStyle.h"
 
 #define PUSH_OFFSET_RIGHT 1
 #define PUSH_OFFSET_DOWN 1
@@ -96,8 +97,43 @@ bool CUIButton::OnMouseAction(float x, float y, EUIMessages mouse_action)
 }
 
 void CUIButton::OnClick() { GetMessageTarget()->SendMessage(this, BUTTON_CLICKED); }
+u8 CUIButton::ShapeLook() const
+{
+    if (!m_bIsEnabled)
+        return SUIShapeSkin::Disabled;
+    if (m_eButtonState == BUTTON_PUSHED)
+        return m_bIsSwitch ? SUIShapeSkin::Checked : SUIShapeSkin::Pushed;
+    // under the cursor, the way a textured button lights up (pad navigation moves the cursor)
+    if (m_bCursorOverWindow)
+        return SUIShapeSkin::Highlight;
+    return SUIShapeSkin::Normal;
+}
+
+void CUIButton::ApplySkinTextColor(bool restore)
+{
+    const SUIShapeSkin* skin = GetShapeSkin();
+    if (!skin)
+        return;
+    if (!m_skinTextBaseSet)
+    {
+        m_skinTextBase = TextItemControl()->GetTextColor();
+        m_skinTextBaseSet = true;
+    }
+    const auto look = SUIShapeSkin::Look(ShapeLook());
+    // a state without a caption colour of its own carries normal's (UIShape::ReadSkinNode)
+    if (skin->HasText(look) || skin->HasText(SUIShapeSkin::Normal))
+        TextItemControl()->SetTextColor(skin->text[look]);
+    else if (restore)
+        TextItemControl()->SetTextColor(m_skinTextBase);
+}
+
 void CUIButton::DrawTexture()
 {
+    if (!m_bTextureEnable)
+        SkipShapeSkin();
+    else if (DrawShapeSkin())
+        return;
+
     Frect rect;
     GetAbsoluteRect(rect);
 
@@ -178,6 +214,7 @@ void CUIButton::Update()
 
         g_btnHint->SetWndPos(r.lt);
     }
+    ApplySkinTextColor(true);
 }
 
 void CUIButton::OnFocusLost()

@@ -1,5 +1,6 @@
 #include "pch.hpp"
 #include "ui_base.h"
+#include "Static/UIShape.h"
 #include "Cursor/UICursor.h"
 #include "xrCore/XML/XMLDocument.hpp"
 #include "XML/UIXmlInitBase.h"
@@ -233,6 +234,7 @@ void UICore::OnDeviceReset()
 
 void UICore::OnUIReset()
 {
+    UITheme::Reset();
     CUIXmlInitBase::DeleteColorDefs();
     CUITextureMaster::FreeTexInfo();
 
@@ -242,10 +244,18 @@ void UICore::OnUIReset()
 
 UICore::~UICore()
 {
+    xr_delete(m_shapeShader);
     xr_delete(m_pFontManager);
     xr_delete(m_pUICursor);
     CUIXmlInitBase::DeleteColorDefs();
     CUITextureMaster::FreeTexInfo();
+}
+
+ui_shader& UICore::ShapeShader()
+{
+    if (!m_shapeShader)
+        m_shapeShader = xr_new<ui_shader>();
+    return *m_shapeShader;
 }
 
 void UICore::ReadTextureInfo()

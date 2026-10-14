@@ -435,7 +435,7 @@ void CUIActorMenu::InitInventoryContents(CUIDragDropListEx* pBagList, bool onlyB
     else
         ruck_list = m_pActorInvOwner->inventory().m_ruck;
 
-    std::sort(ruck_list.begin(), ruck_list.end(), InventoryUtilities::GreaterRoomInRuck);
+    inventory_tools::sort_items(ruck_list);
 
     for (PIItem item : ruck_list)
     {

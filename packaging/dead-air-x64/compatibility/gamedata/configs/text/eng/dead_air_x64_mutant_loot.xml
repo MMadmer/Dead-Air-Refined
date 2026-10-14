@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<string id="st_mutant_loot_caption">
+		<text>Butchering</text>
+	</string>
+	<string id="st_mutant_loot_hint">
+		<text>Mark the parts you need with a click (a second click removes the mark) and press &quot;Take&quot;: the marked parts are cut whole. Without marks &quot;Take&quot; and a double click cut one of the selected part; &quot;Take all&quot; or the sprint key cuts everything. Every cut dulls the knife.</text>
+	</string>
+	<string id="st_mutant_loot_take">
+		<text>Take</text>
+	</string>
+</string_table>

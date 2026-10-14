@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include "Static/UIShapeStyle.h"
 #include "UIListBox.h"
 #include "UIListBoxItem.h"
 #include "ScrollBar/UIScrollBar.h"
@@ -58,6 +59,7 @@ CUIListBoxItem* CUIListBox::AddItem()
         item->InitTexture(m_selection_texture.c_str());
     else
         item->InitDefault();
+    SkinItem(item);
 
     item->SetFont(GetFont());
     item->SetSelected(false);
@@ -75,10 +77,17 @@ void CUIListBox::AddExistingItem(CUIListBoxItem* item)
         item->InitTexture(m_selection_texture.c_str());
     else
         item->InitDefault();
+    SkinItem(item);
 
     item->SetSelected(false);
     item->SetMessageTarget(this);
     AddWindow(item, true);
+}
+
+void CUIListBox::SkinItem(CUIListBoxItem* item)
+{
+    if (m_item_skin)
+        item->SetShapeSkin(std::make_unique<SUIShapeSkin>(*m_item_skin));
 }
 
 void CUIListBox::SendMessage(CUIWindow* pWnd, s16 msg, void* pData)

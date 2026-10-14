@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The panel of inventory hotkeys. Written by tools\ui\actor_menu_layout.py with actor_menu.xml; the
+     engine reads this file only when the actor_menu layout has no node of this name. -->
+<w>
+    <!-- the panel of hotkeys (the keyboard button of the toolbar, or H); its rows are inventory_hotkeys.xml -->
+    <hotkeys_panel x="389.75" y="436" width="244.5" height="272" shape="panel" row_height="22" keys_width="128" chip_gap="3" chip_padding="5">
+        <title x="9" y="6" width="204" height="24">
+            <text font="letterica18" align="l" vert_align="c" color="$accent">st_da_hk_title</text>
+        </title>
+        <close x="219" y="7" width="16.5" height="22" shape="tool_button" cross="$text_dim"/>
+        <auto_static x="7.5" y="34" width="229.5" height="1" shape="rule"/>
+        <list x="7.5" y="38" width="232.5" height="226" always_show_scroll="0" scroll_profile="thin" right_ident="4" left_ident="0" top_indent="0" bottom_indent="2" vert_interval="0"/>
+        <chip shape="key_chip"><text font="letterica16" color="$text"/></chip>
+        <plus><text font="letterica16" color="$text_muted"/></plus>
+        <caption><text font="letterica16" color="$text_dim"/></caption>
+        <rule shape="rule"/>
+    </hotkeys_panel>
+
+</w>

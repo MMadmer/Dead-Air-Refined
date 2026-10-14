@@ -58,6 +58,7 @@ CUIActorMenu::~CUIActorMenu()
     xr_delete(m_UIPropertiesBox);
     xr_delete(m_hint_wnd);
     xr_delete(m_ItemInfo);
+    xr_delete(m_ItemInfoPristine);
 
     ClearAllLists();
 }
@@ -192,6 +193,7 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
 
     m_ActorWeightBar->init_from_xml(uiXml, "actor");
     m_PartnerWeightBar->init_from_xml(uiXml, "partner");
+    m_ActorWeightBar->SetHintWnd(m_hint_wnd);
     AttachChild(m_ActorWeightBar);
     AttachChild(m_PartnerWeightBar);
 
@@ -290,6 +292,8 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
     m_ItemInfo->InitItemInfo(ACTOR_MENU_ITEM_XML);
     //-	m_ItemInfo->SetAutoDelete			(true);
     //-	AttachChild							(m_ItemInfo);
+    m_ItemInfoPristine = xr_new<CUIItemInfo>();
+    m_ItemInfoPristine->InitItemInfo(ACTOR_MENU_ITEM_XML);
 
     if (ai().get_alife())
     {
@@ -300,6 +304,7 @@ void CUIActorMenu::InitializeUniversal(CUIXml& uiXml)
     }
 
     InitInventoryTools();
+    InitHotkeys(uiXml);
 }
 
 void CUIActorMenu::InitializeInventoryMode(CUIXml& uiXml)

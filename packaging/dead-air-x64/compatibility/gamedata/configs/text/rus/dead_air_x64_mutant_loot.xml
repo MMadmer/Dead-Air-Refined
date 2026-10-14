@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<string id="st_mutant_loot_caption">
+		<text>Разделка туши</text>
+	</string>
+	<string id="st_mutant_loot_hint">
+		<text>Отметьте нужные части щелчком (повторный щелчок снимает отметку) и нажмите «Взять»: отмеченные части будут срезаны целиком. Без отметок «Взять» и двойной щелчок срезают одну выбранную часть, «Взять всё» или клавиша бега — все части сразу. Каждый надрез тупит нож.</text>
+	</string>
+	<string id="st_mutant_loot_take">
+		<text>Взять</text>
+	</string>
+</string_table>

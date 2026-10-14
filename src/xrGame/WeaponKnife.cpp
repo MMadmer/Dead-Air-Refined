@@ -1,6 +1,7 @@
 #include "StdAfx.h"
 
 #include "WeaponKnife.h"
+#include "game_cl_single.h"
 #include "Entity.h"
 #include "Actor.h"
 #include "Level.h"
@@ -951,4 +952,13 @@ void CWeaponKnife::best_victim_selector::operator()(spartial_base_t::value_type 
         m_min_dist = tmp_dist;
         return;
     }
+}
+
+CWeapon::SCompareStats CWeaponKnife::CompareStats() const
+{
+    SCompareStats stats;
+    stats.damage = fvHitPower_1[egdMaster];
+    stats.damage_heavy = fvHitPower_2[egdMaster];
+    stats.wear = conditionDecreasePerShot;
+    return stats;
 }

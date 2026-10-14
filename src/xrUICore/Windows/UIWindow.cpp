@@ -3,6 +3,7 @@
 #include "UIWindow.h"
 
 #include "Cursor/UICursor.h"
+#include "Static/UIShape.h"
 #include "xrEngine/editor_helper.h"
 
 CUIWindow::PPModeHandler CUIWindow::m_ppModeHandler{};
@@ -81,8 +82,41 @@ void CUIWindow::ResetPPMode()
     m_bPP = false;
 }
 
+void CUIWindow::SetShapeSkin(std::unique_ptr<SUIShapeSkin> skin) { m_shapeSkin = std::move(skin); }
+
+bool CUIWindow::DrawShapeSkin()
+{
+    if (!m_shapeSkin)
+        return false;
+    m_shapeSkinDrawn = true;
+
+    SUIShapeStyle look = m_shapeSkin->looks[std::min<u8>(ShapeLook(), SUIShapeSkin::Count - 1)];
+    const u32 tint = ShapeTint();
+    if (tint != 0xFFFFFFFF)
+    {
+        const auto multiply = [tint](u32 color)
+        {
+            return color_argb(color_get_A(color) * color_get_A(tint) / 255, color_get_R(color) * color_get_R(tint) / 255,
+                color_get_G(color) * color_get_G(tint) / 255, color_get_B(color) * color_get_B(tint) / 255);
+        };
+        look.fill = multiply(look.fill);
+        look.line = multiply(look.line);
+    }
+    Frect rect;
+    GetAbsoluteRect(rect);
+    UIShape::Draw(rect, look);
+    return true;
+}
+
 void CUIWindow::Draw()
 {
+    // a plain window draws its skin here; one that drew it from its own Draw already did
+    if (m_shapeSkin && !std::exchange(m_shapeSkinDrawn, false))
+    {
+        DrawShapeSkin();
+        m_shapeSkinDrawn = false;
+    }
+
     for (auto it = m_ChildWndList.begin(); m_ChildWndList.end() != it; ++it)
     {
         if (!(*it)->IsShown())

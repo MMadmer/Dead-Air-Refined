@@ -251,6 +251,21 @@ public:
     BOOL IsMisfire() const;
     BOOL CheckForMisfire();
     u32 GetConditionType() const { return m_condition_type; }
+    void BeginPristineView() override
+    {
+        inherited::BeginPristineView();
+        m_pristine_faults = m_condition_type;
+        m_pristine_fouling = m_fouling;
+        // the parts' faults off, the chamber and magazine state kept
+        m_condition_type &= ~kWeaponDisplayableFaultMask;
+        m_fouling = 0;
+    }
+    void EndPristineView() override
+    {
+        m_condition_type = m_pristine_faults;
+        m_fouling = m_pristine_fouling;
+        inherited::EndPristineView();
+    }
     void SetConditionType(u32 condition_type)
     {
         if (m_condition_type == condition_type)
@@ -296,6 +311,8 @@ protected:
     // progress to the next deformation, dirty faults produced in this cleaning cycle, and the
     // fouling interval in force (0 = not drawn yet).
     u16 m_fouling{};
+    u32 m_pristine_faults{};
+    u16 m_pristine_fouling{};
     u16 m_stress{};
     u16 m_foulingStage{};
     float m_wearProgress{};
@@ -522,6 +539,22 @@ public:
     float GetConditionDispersionFactor() const;
     float GetConditionMisfireProbability() const;
     virtual float GetConditionToShow() const;
+
+    // What the item comparison reads (ui\UIItemCompare.cpp): the weapon as it fires now, its
+    // upgrades in. Angles in radians.
+    struct SCompareStats
+    {
+        float damage{}; // the master's hit power times the k_hit of the first ammunition
+        float damage_heavy{}; // a knife's second attack
+        float rpm{};
+        float dispersion{};
+        float recoil{};
+        float aim_time{};
+        float bullet_speed{};
+        float wear{}; // condition_shot_dec
+        int magazine{};
+    };
+    virtual SCompareStats CompareStats() const;
 
 public:
     CameraRecoil cam_recoil; // simple mode (walk, run)

@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<string id="st_da_hk_title">
+		<text>Горячие клавиши</text>
+	</string>
+	<string id="st_da_hk_ctrl">
+		<text>Ctrl</text>
+	</string>
+	<string id="st_da_hk_alt">
+		<text>Alt</text>
+	</string>
+	<string id="st_da_hk_shift">
+		<text>Shift</text>
+	</string>
+	<string id="st_da_hk_hover">
+		<text>наведение</text>
+	</string>
+	<string id="st_da_hk_lmb">
+		<text>ЛКМ</text>
+	</string>
+	<string id="st_da_hk_rmb">
+		<text>ПКМ</text>
+	</string>
+	<string id="st_da_hk_mmb">
+		<text>СКМ</text>
+	</string>
+	<string id="st_da_hk_wheel_up">
+		<text>колесо вверх</text>
+	</string>
+	<string id="st_da_hk_wheel_down">
+		<text>колесо вниз</text>
+	</string>
+	<string id="st_da_hk_hold">
+		<text>удержание</text>
+	</string>
+	<string id="st_da_hk_dbl">
+		<text>двойной щелчок</text>
+	</string>
+	<string id="st_da_hk_drag">
+		<text>перетаскивание</text>
+	</string>
+	<string id="st_da_hk_hover_move_trade">
+		<text>Переместить стопку целиком: из рюкзака на стол сделки и обратно; товар торговца - на его стол и обратно</text>
+	</string>
+	<string id="st_da_hk_hover_move_loot">
+		<text>Переместить стопку целиком в рюкзак или обратно</text>
+	</string>
+	<string id="st_da_hk_equip">
+		<text>Экипировать предмет или убрать его в рюкзак</text>
+	</string>
+	<string id="st_da_hk_move_one_trade">
+		<text>Переместить один предмет из стопки на стол сделки или обратно</text>
+	</string>
+	<string id="st_da_hk_move_one_loot">
+		<text>Переместить один предмет из стопки в рюкзак или обратно</text>
+	</string>
+	<string id="st_da_hk_split_inventory">
+		<text>Разделить пачку патронов или составной предмет на две части</text>
+	</string>
+	<string id="st_da_hk_split_trade">
+		<text>Переместить половину стопки на стол сделки или обратно; пачку патронов - разделить на две части</text>
+	</string>
+	<string id="st_da_hk_split_loot">
+		<text>Переместить на другую сторону половину стопки или половину патронов пачки</text>
+	</string>
+	<string id="st_da_hk_drop_stack">
+		<text>Выбросить стопку целиком</text>
+	</string>
+	<string id="st_da_hk_pick">
+		<text>Отметить предмет для сравнения (сравниваются только предметы одного типа)</text>
+	</string>
+	<string id="st_da_hk_compare">
+		<text>Сравнить отмеченные предметы</text>
+	</string>
+	<string id="st_da_hk_clear_picks">
+		<text>Снять все отметки</text>
+	</string>
+	<string id="st_da_hk_pristine">
+		<text>Показать рядом характеристики предмета в идеальном состоянии (100%)</text>
+	</string>
+	<string id="st_da_hk_dbl_inventory">
+		<text>Использовать, экипировать или снять предмет</text>
+	</string>
+	<string id="st_da_hk_dbl_trade">
+		<text>Переместить один предмет на стол сделки или обратно</text>
+	</string>
+	<string id="st_da_hk_dbl_loot">
+		<text>Переместить один предмет в рюкзак или обратно</text>
+	</string>
+	<string id="st_da_hk_drag_caption">
+		<text>Переместить один предмет в выбранное место</text>
+	</string>
+	<string id="st_da_hk_context">
+		<text>Меню действий с предметом</text>
+	</string>
+	<string id="st_da_hk_drop_key">
+		<text>Выбросить выбранный предмет</text>
+	</string>
+	<string id="st_da_hk_take_all_trade">
+		<text>Совершить сделку</text>
+	</string>
+	<string id="st_da_hk_take_all_loot">
+		<text>Забрать все предметы</text>
+	</string>
+	<string id="st_da_hk_give_all_trade">
+		<text>Совершить продажу</text>
+	</string>
+	<string id="st_da_hk_give_all_loot">
+		<text>Переложить все предметы из рюкзака</text>
+	</string>
+	<string id="st_da_hk_panel">
+		<text>Показать или скрыть панель горячих клавиш</text>
+	</string>
+	<string id="st_da_hk_button_hint">
+		<text>Горячие клавиши (H)</text>
+	</string>
+	<string id="st_da_cmp_button_hint">
+		<text>Сравнить отмеченные предметы (V). Отметка: СКМ или C + ЛКМ</text>
+	</string>
+	<string id="st_da_pristine_suffix">
+		<text>(100%)</text>
+	</string>
+	<string id="st_da_weight_hint">
+		<text>Текущий вес: %.1f кг\nДо %.1f кг - без перегрузки.\nДо %.1f кг - перегрузка: выносливость расходуется быстрее.\nПри заполненной шкале - полная перегрузка: скорость передвижения снижается.</text>
+	</string>
+	<string id="st_cmp_title">
+		<text>Сравнение: %s (%u)</text>
+	</string>
+	<string id="st_cmp_profile_use">
+		<text>Использование</text>
+	</string>
+	<string id="st_cmp_profile_sale">
+		<text>Продажа</text>
+	</string>
+	<string id="st_cmp_profile_use_hint">
+		<text>Выбор предмета для использования. Слева - доля параметра в итоговой оценке</text>
+	</string>
+	<string id="st_cmp_profile_sale_hint">
+		<text>Выбор предмета для продажи. Слева - доля параметра в итоговой оценке</text>
+	</string>
+	<string id="st_cmp_pairs">
+		<text>Попарное сравнение: разница оценок (строка минус столбец)</text>
+	</string>
+	<string id="st_cmp_winner">
+		<text>Рекомендуемый вариант: %u. %s</text>
+	</string>
+	<string id="st_cmp_reasons">
+		<text>основное преимущество:</text>
+	</string>
+	<string id="st_cmp_no_weights">
+		<text>Для предметов этого типа в данном режиме оценка не ведётся</text>
+	</string>
+	<string id="st_cmp_yes">
+		<text>есть</text>
+	</string>
+	<string id="st_cmp_no">
+		<text>нет</text>
+	</string>
+	<string id="st_cmp_unit_kg">
+		<text>кг</text>
+	</string>
+	<string id="st_cmp_unit_sec">
+		<text>с</text>
+	</string>
+	<string id="st_cmp_unit_mps">
+		<text>м/с</text>
+	</string>
+	<string id="st_cmp_kind_none">
+		<text>предметы</text>
+	</string>
+	<string id="st_cmp_kind_firearm">
+		<text>оружие</text>
+	</string>
+	<string id="st_cmp_kind_melee">
+		<text>ножи</text>
+	</string>
+	<string id="st_cmp_kind_outfit">
+		<text>костюмы</text>
+	</string>
+	<string id="st_cmp_kind_helmet">
+		<text>шлемы</text>
+	</string>
+	<string id="st_cmp_kind_backpack">
+		<text>рюкзаки</text>
+	</string>
+	<string id="st_cmp_kind_artefact">
+		<text>артефакты</text>
+	</string>
+	<string id="st_cmp_kind_ammo">
+		<text>боеприпасы</text>
+	</string>
+	<string id="st_cmp_kind_grenade">
+		<text>гранаты</text>
+	</string>
+	<string id="st_cmp_kind_addon">
+		<text>навесное оборудование</text>
+	</string>
+	<string id="st_cmp_kind_detector">
+		<text>приборы</text>
+	</string>
+	<string id="st_cmp_kind_food">
+		<text>еда и напитки</text>
+	</string>
+	<string id="st_cmp_kind_medicine">
+		<text>медицина</text>
+	</string>
+	<string id="st_cmp_kind_misc">
+		<text>прочие предметы</text>
+	</string>
+	<string id="st_cmp_p_damage">
+		<text>Урон</text>
+	</string>
+	<string id="st_cmp_p_damage_heavy">
+		<text>Урон сильного удара</text>
+	</string>
+	<string id="st_cmp_p_rpm">
+		<text>Скорострельность, выстр./мин</text>
+	</string>
+	<string id="st_cmp_p_accuracy">
+		<text>Разброс</text>
+	</string>
+	<string id="st_cmp_p_recoil">
+		<text>Отдача</text>
+	</string>
+	<string id="st_cmp_p_handling">
+		<text>Инерция</text>
+	</string>
+	<string id="st_cmp_p_aim_time">
+		<text>Время прицеливания</text>
+	</string>
+	<string id="st_cmp_p_mag_size">
+		<text>Магазин</text>
+	</string>
+	<string id="st_cmp_p_bullet_speed">
+		<text>Настильность (скорость пули)</text>
+	</string>
+	<string id="st_cmp_p_endurance">
+		<text>Ресурс, выстр. на 10% износа</text>
+	</string>
+	<string id="st_cmp_p_misfire">
+		<text>Вероятность осечки</text>
+	</string>
+	<string id="st_cmp_p_fouled">
+		<text>Загрязнения</text>
+	</string>
+	<string id="st_cmp_p_deformed">
+		<text>Износ и деформации</text>
+	</string>
+	<string id="st_cmp_p_broken">
+		<text>Поломки</text>
+	</string>
+	<string id="st_cmp_p_addons">
+		<text>Установленный обвес</text>
+	</string>
+	<string id="st_cmp_p_mounts">
+		<text>Крепления под обвес</text>
+	</string>
+	<string id="st_cmp_p_upgrades">
+		<text>Улучшения</text>
+	</string>
+	<string id="st_cmp_p_ammo_cost">
+		<text>Цена патрона</text>
+	</string>
+	<string id="st_cmp_p_condition">
+		<text>Состояние</text>
+	</string>
+	<string id="st_cmp_p_weight">
+		<text>Вес</text>
+	</string>
+	<string id="st_cmp_p_price">
+		<text>Цена</text>
+	</string>
+	<string id="st_cmp_p_price_per_kg">
+		<text>Цена за кг</text>
+	</string>
+	<string id="st_cmp_p_uses">
+		<text>Осталось порций</text>
+	</string>
+	<string id="st_cmp_p_armor">
+		<text>Пулестойкость</text>
+	</string>
+	<string id="st_cmp_p_prot_burn">
+		<text>Термозащита</text>
+	</string>
+	<string id="st_cmp_p_prot_shock">
+		<text>Электрозащита</text>
+	</string>
+	<string id="st_cmp_p_prot_chemical">
+		<text>Химзащита</text>
+	</string>
+	<string id="st_cmp_p_prot_radiation">
+		<text>Радиозащита</text>
+	</string>
+	<string id="st_cmp_p_prot_psi">
+		<text>Пси-защита</text>
+	</string>
+	<string id="st_cmp_p_prot_strike">
+		<text>Защита от ударов</text>
+	</string>
+	<string id="st_cmp_p_prot_wound">
+		<text>Защита от разрывов</text>
+	</string>
+	<string id="st_cmp_p_prot_explosion">
+		<text>Защита от взрывов</text>
+	</string>
+	<string id="st_cmp_p_artefact_slots">
+		<text>Слоты артефактов</text>
+	</string>
+	<string id="st_cmp_p_carry">
+		<text>Переносимый вес</text>
+	</string>
+	<string id="st_cmp_p_power_loss">
+		<text>Расход выносливости</text>
+	</string>
+	<string id="st_cmp_p_night_vision">
+		<text>Ночное видение</text>
+	</string>
+	<string id="st_cmp_p_restore_health">
+		<text>Здоровье</text>
+	</string>
+	<string id="st_cmp_p_restore_power">
+		<text>Выносливость</text>
+	</string>
+	<string id="st_cmp_p_restore_bleeding">
+		<text>Заживление ран</text>
+	</string>
+	<string id="st_cmp_p_restore_satiety">
+		<text>Сытость</text>
+	</string>
+	<string id="st_cmp_p_restore_radiation">
+		<text>Радиация</text>
+	</string>
+	<string id="st_cmp_p_imm_burn">
+		<text>Термозащита</text>
+	</string>
+	<string id="st_cmp_p_imm_shock">
+		<text>Электрозащита</text>
+	</string>
+	<string id="st_cmp_p_imm_chemical">
+		<text>Химзащита</text>
+	</string>
+	<string id="st_cmp_p_imm_radiation">
+		<text>Радиозащита</text>
+	</string>
+	<string id="st_cmp_p_imm_psi">
+		<text>Пси-защита</text>
+	</string>
+	<string id="st_cmp_p_imm_strike">
+		<text>Защита от ударов</text>
+	</string>
+	<string id="st_cmp_p_imm_wound">
+		<text>Защита от разрывов</text>
+	</string>
+	<string id="st_cmp_p_imm_explosion">
+		<text>Защита от взрывов</text>
+	</string>
+	<string id="st_cmp_p_imm_fire_wound">
+		<text>Пулестойкость</text>
+	</string>
+	<string id="st_cmp_p_rounds">
+		<text>Число патронов</text>
+	</string>
+	<string id="st_cmp_p_round_cost">
+		<text>Цена патрона</text>
+	</string>
+	<string id="st_cmp_p_k_hit">
+		<text>Урон</text>
+	</string>
+	<string id="st_cmp_p_k_ap">
+		<text>Бронебойность</text>
+	</string>
+	<string id="st_cmp_p_k_disp">
+		<text>Разброс</text>
+	</string>
+	<string id="st_cmp_p_k_air_resistance">
+		<text>Сопротивление воздуха</text>
+	</string>
+	<string id="st_cmp_p_impair">
+		<text>Износ оружия</text>
+	</string>
+	<string id="st_cmp_p_blast">
+		<text>Урон взрыва</text>
+	</string>
+	<string id="st_cmp_p_blast_r">
+		<text>Радиус взрыва, м</text>
+	</string>
+	<string id="st_cmp_p_frags">
+		<text>Число осколков</text>
+	</string>
+	<string id="st_cmp_p_frag_hit">
+		<text>Урон осколка</text>
+	</string>
+	<string id="st_cmp_p_frags_r">
+		<text>Разлёт осколков, м</text>
+	</string>
+	<string id="st_cmp_p_zoom">
+		<text>Кратность</text>
+	</string>
+	<string id="st_cmp_p_af_radius">
+		<text>Радиус обнаружения, м</text>
+	</string>
+	<string id="st_cmp_p_satiety">
+		<text>Сытость</text>
+	</string>
+	<string id="st_cmp_p_thirst">
+		<text>Утоление жажды</text>
+	</string>
+	<string id="st_cmp_p_health">
+		<text>Здоровье</text>
+	</string>
+	<string id="st_cmp_p_power">
+		<text>Выносливость</text>
+	</string>
+	<string id="st_cmp_p_radiation">
+		<text>Радиация</text>
+	</string>
+	<string id="st_cmp_p_alcohol">
+		<text>Опьянение</text>
+	</string>
+	<string id="st_cmp_p_heal_rate">
+		<text>Лечение со временем</text>
+	</string>
+	<string id="st_cmp_p_bleeding">
+		<text>Остановка кровотечения</text>
+	</string>
+	<string id="st_cmp_p_bleeding_rate">
+		<text>Заживление со временем</text>
+	</string>
+	<string id="st_cmp_p_radiation_rate">
+		<text>Вывод радиации</text>
+	</string>
+	<string id="st_cmp_p_rad_protection">
+		<text>Радиозащита (действие)</text>
+	</string>
+	<string id="st_cmp_p_psi_protection">
+		<text>Пси-защита (действие)</text>
+	</string>
+	<string id="st_cmp_p_chem_protection">
+		<text>Химзащита (действие)</text>
+	</string>
+	<string id="st_cmp_p_boost_time">
+		<text>Время действия, с</text>
+	</string>
+</string_table>

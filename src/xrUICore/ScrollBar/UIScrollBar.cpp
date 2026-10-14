@@ -5,6 +5,7 @@
 #include "XML/UIXmlInitBase.h"
 #include "XML/UITextureMaster.h"
 #include "Cursor/UICursor.h"
+#include "Static/UIShape.h"
 
 CUIScrollBar::CUIScrollBar()
     : CUIWindow("CUIScrollBar"),
@@ -34,11 +35,29 @@ CUIScrollBar::CUIScrollBar()
     focus.UnregisterFocusable(m_IncButton);
 }
 
-bool CUIScrollBar::InitScrollBar(Fvector2 pos, float length, bool bIsHorizontal, cpcstr profile)
+bool CUIScrollBar::InitScrollBar(Fvector2 pos, float length, bool bIsHorizontal, cpcstr requested_profile)
 {
     string256 _path;
     CUIXml xml_doc;
     xml_doc.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "scroll_bar.xml");
+
+    // A profile scroll_bar.xml does not have may come in a file of its own, scroll_bar_<profile>.xml:
+    // a mod adds a scroll bar without replacing the game's whole set.
+    pcstr profile = requested_profile;
+    if (!xml_doc.NavigateToNode(profile, 0))
+    {
+        string_path own;
+        strconcat(own, "scroll_bar_", profile, ".xml");
+        // a parse appends to what the document holds: it starts empty for the other file
+        xml_doc.ClearInternal();
+        if (!xml_doc.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, own, false) || !xml_doc.NavigateToNode(profile, 0))
+        {
+            Msg("! [ui] unknown scroll bar profile [%s]: the default one is used", profile);
+            xml_doc.ClearInternal();
+            xml_doc.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "scroll_bar.xml");
+            profile = "default";
+        }
+    }
 
     const float default_height = xml_doc.ReadAttribFlt(profile, 0, "height", 16.f);
     const float height = bIsHorizontal ? default_height : xml_doc.ReadAttribFlt(profile, 0, "height_v", default_height);
@@ -73,11 +92,10 @@ bool CUIScrollBar::InitScrollBar(Fvector2 pos, float length, bool bIsHorizontal,
                 tempScroll->Show(true);
         }
 
-        strconcat(_path, profile, ":back:texture");
-        cpcstr texture = xml_doc.Read(_path, 0, nullptr);
-        R_ASSERT(texture);
-
-        if (!m_FrameBackground->InitTexture(texture, false))
+        strconcat(_path, profile, ":back");
+        if (auto skin = UIShape::ReadSkin(xml_doc, _path, 0))
+            m_FrameBackground->SetShapeSkin(std::move(skin));
+        else if (strconcat(_path, profile, ":back:texture"); !m_FrameBackground->InitTexture(xml_doc.Read(_path, 0, ""), false))
         {
             tempBackground = xr_new<CUIStatic>("temporary background");
             tempBackground->SetWidth(GetWidth());
@@ -86,7 +104,7 @@ bool CUIScrollBar::InitScrollBar(Fvector2 pos, float length, bool bIsHorizontal,
                 tempBackground->Show(true);
         }
 
-        m_ScrollWorkArea = _max(0, iFloor(GetWidth() - 2 * height));
+        m_ScrollWorkArea = _max(0, iFloor(GetWidth() - m_DecButton->GetWidth() - m_IncButton->GetWidth()));
     }
     else
     {
@@ -108,11 +126,10 @@ bool CUIScrollBar::InitScrollBar(Fvector2 pos, float length, bool bIsHorizontal,
                 tempScroll->Show(true);
         }
 
-        strconcat(_path, profile, ":back_v:texture");
-        cpcstr texture = xml_doc.Read(_path, 0, nullptr);
-        R_ASSERT(texture);
-
-        if (!m_FrameBackground->InitTexture(texture, false))
+        strconcat(_path, profile, ":back_v");
+        if (auto skin = UIShape::ReadSkin(xml_doc, _path, 0))
+            m_FrameBackground->SetShapeSkin(std::move(skin));
+        else if (strconcat(_path, profile, ":back_v:texture"); !m_FrameBackground->InitTexture(xml_doc.Read(_path, 0, ""), false))
         {
             tempBackground = xr_new<CUIStatic>("temporary background");
             tempBackground->SetHeight(GetHeight());
@@ -121,7 +138,7 @@ bool CUIScrollBar::InitScrollBar(Fvector2 pos, float length, bool bIsHorizontal,
                 tempBackground->Show(true);
         }
 
-        m_ScrollWorkArea = _max(0, iFloor(GetHeight() - 2 * height));
+        m_ScrollWorkArea = _max(0, iFloor(GetHeight() - m_DecButton->GetHeight() - m_IncButton->GetHeight()));
     }
 
     m_ScrollBox->SetHorizontal(m_bIsHorizontal);

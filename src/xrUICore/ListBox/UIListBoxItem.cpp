@@ -3,6 +3,7 @@
 #include "ScrollView/UIScrollView.h"
 #include "Common/object_broker.h"
 #include "Static/UIStatic.h"
+#include "Static/UIShapeStyle.h"
 
 CUIListBoxItem::CUIListBoxItem(float height)
     : CUIFrameLineWnd(CUIListBoxItem::GetDebugType()), m_text(nullptr), tag(u32(-1))
@@ -21,10 +22,35 @@ void CUIListBoxItem::SetTAG(u32 value) { tag = value; }
 u32 CUIListBoxItem::GetTAG() { return tag; }
 void CUIListBoxItem::Draw()
 {
-    if (m_bSelected)
+    // A skinned row colours its text fields by its state, the way a skinned button colours its caption.
+    if (const SUIShapeSkin* skin = GetShapeSkin())
+    {
+        if (!m_skin_text_base_set)
+        {
+            m_skin_text_base = GetTextColor();
+            m_skin_text_base_set = true;
+        }
+        const auto look = SUIShapeSkin::Look(ShapeLook());
+        const bool own = skin->HasText(look) || skin->HasText(SUIShapeSkin::Normal);
+        for (CUIWindow* child : m_ChildWndList)
+        {
+            if (auto* field = smart_cast<CUIStatic*>(child))
+                field->SetTextColor(own ? skin->text[look] : m_skin_text_base);
+        }
+    }
+
+    // a skinned row shows every state; a textured one only its selection
+    if (!DrawShapeSkin() && m_bSelected)
         DrawElements();
 
     CUIWindow::Draw();
+}
+
+u8 CUIListBoxItem::ShapeLook() const
+{
+    if (m_bSelected)
+        return SUIShapeSkin::Checked;
+    return m_bCursorOverWindow ? SUIShapeSkin::Highlight : SUIShapeSkin::Normal;
 }
 
 bool CUIListBoxItem::OnKeyboardAction(int dik, EUIMessages keyboard_action)

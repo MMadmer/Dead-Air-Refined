@@ -1,0 +1,521 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The actor menu (CUIActorMenu): the inventory, the trade, the loot of a body or a box. Written by
+     tools\ui\actor_menu_layout.py from one geometry for actor_menu.xml (4:3) and actor_menu_16.xml (16:9);
+     the files are plain layouts, a mod edits them as it would any other. Every surface, button, bar
+     and cell is drawn by the xms_ui_shape shader: shape="name" takes a look of ui_theme.xml, colours
+     written "$name" come from it too. Item icons and portraits are the only textures. -->
+<w>
+    <properties_box shape="menu">
+        <list x="0" y="0" width="10" height="10" item_height="20" always_show_scroll="0" can_select="1" bottom_indent="4" right_ident="4" left_ident="12">
+            <font font="letterica16" color="$text"/>
+            <item shape="menu_row"/>
+        </list>
+    </properties_box>
+
+    <main x="0" y="0" width="1024" height="768">
+        <auto_static x="7.5" y="10" width="368.75" height="748" shape="panel"/>
+        <auto_static x="382.25" y="10" width="259.5" height="748" shape="panel"/>
+        <auto_static x="16.5" y="18" width="350.75" height="100" shape="card"/>
+        <auto_static x="273.5" y="29" width="87" height="78" shape="portrait_frame"/>
+        <auto_static x="389.75" y="18" width="74" height="57" shape="slot"/>
+        <auto_static x="475" y="18" width="74" height="108" shape="slot"/>
+        <auto_static x="489.21" y="36.62" width="45.57" height="60.76" shape="slot_glyph"/>
+        <auto_static x="560.25" y="18" width="74" height="57" shape="slot"/>
+        <auto_static x="389.75" y="83" width="74" height="272" shape="slot"/>
+        <auto_static x="475" y="134" width="74" height="149" shape="slot"/>
+        <auto_static x="560.25" y="83" width="74" height="272" shape="slot"/>
+        <auto_static x="475" y="291" width="74" height="108" shape="slot"/>
+        <auto_static x="489.21" y="309.62" width="45.57" height="60.76" shape="slot_glyph"/>
+        <auto_static x="389.75" y="363" width="74" height="67" shape="slot"/>
+        <auto_static x="560.25" y="363" width="74" height="67" shape="slot"/>
+        <auto_static x="389.75" y="440" width="55.5" height="62" shape="slot"/>
+        <auto_static x="452.75" y="440" width="55.5" height="62" shape="slot"/>
+        <auto_static x="515.75" y="440" width="55.5" height="62" shape="slot"/>
+        <auto_static x="578.75" y="440" width="55.5" height="62" shape="slot"/>
+        <auto_static x="397.5" y="510" width="229" height="57" shape="slot"/>
+        <auto_static x="389.75" y="575" width="244.5" height="135" shape="card"/>
+    </main>
+
+    <left_background x="647.75" y="10" width="368.75" height="748" shape="panel">
+        <auto_static x="9" y="8" width="350.75" height="100" shape="card"/>
+        <auto_static x="266" y="19" width="87" height="78" shape="portrait_frame"/>
+    </left_background>
+
+    <actor_ch_info x="16.5" y="18" width="350.75" height="100">
+        <name_static x="7.5" y="6" width="242.75" height="22">
+            <text align="l" vert_align="c" font="letterica18" color="$text"/>
+        </name_static>
+        <community_caption x="7.5" y="30" width="242.75" height="14">
+            <text align="l" font="letterica16" color="$text_dim">ui_st_community</text>
+        </community_caption>
+        <community_static x="7.5" y="30" width="242.75" height="14">
+            <text align="r" font="letterica16" color="$text"/>
+        </community_static>
+        <rank_caption x="7.5" y="44" width="242.75" height="14">
+            <text align="l" font="letterica16" color="$text_dim">ui_st_rank</text>
+        </rank_caption>
+        <rank_static x="7.5" y="44" width="242.75" height="14">
+            <text align="r" font="letterica16" color="$text"/>
+        </rank_static>
+        <reputation_caption x="7.5" y="58" width="242.75" height="14">
+            <text align="l" font="letterica16" color="$text_dim">ui_st_reputation</text>
+        </reputation_caption>
+        <reputation_static x="7.5" y="58" width="242.75" height="14">
+            <text align="r" font="letterica16" color="$text"/>
+        </reputation_static>
+        <icon x="257.75" y="12" width="85.5" height="76" stretch="1">
+            <deadbody r="255" g="150" b="140" a="200"/>
+        </icon>
+    </actor_ch_info>
+    <partner_ch_info x="656.75" y="18" width="350.75" height="100">
+        <name_static x="7.5" y="6" width="242.75" height="22">
+            <text align="l" vert_align="c" font="letterica18" color="$text"/>
+        </name_static>
+        <community_caption x="7.5" y="30" width="242.75" height="14">
+            <text align="l" font="letterica16" color="$text_dim">ui_st_community</text>
+        </community_caption>
+        <community_static x="7.5" y="30" width="242.75" height="14">
+            <text align="r" font="letterica16" color="$text"/>
+        </community_static>
+        <rank_caption x="7.5" y="44" width="242.75" height="14">
+            <text align="l" font="letterica16" color="$text_dim">ui_st_rank</text>
+        </rank_caption>
+        <rank_static x="7.5" y="44" width="242.75" height="14">
+            <text align="r" font="letterica16" color="$text"/>
+        </rank_static>
+        <reputation_caption x="7.5" y="58" width="242.75" height="14">
+            <text align="l" font="letterica16" color="$text_dim">ui_st_reputation</text>
+        </reputation_caption>
+        <reputation_static x="7.5" y="58" width="242.75" height="14">
+            <text align="r" font="letterica16" color="$text"/>
+        </reputation_static>
+        <relation_caption x="7.5" y="72" width="242.75" height="14">
+            <text align="l" font="letterica16" color="$text_dim">ui_st_relation</text>
+        </relation_caption>
+        <relation_static x="7.5" y="72" width="242.75" height="14">
+            <text align="r" font="letterica16" color="$text"/>
+        </relation_static>
+        <icon x="257.75" y="12" width="85.5" height="76" stretch="1">
+            <deadbody r="255" g="150" b="140" a="200"/>
+        </icon>
+    </partner_ch_info>
+    <actor_money_static x="24" y="100" width="242.75" height="18">
+        <text align="r" vert_align="c" font="graffiti22" color="$text"/>
+    </actor_money_static>
+    <partner_money_static x="664.25" y="100" width="242.75" height="18">
+        <text align="r" vert_align="c" font="graffiti22" color="$text"/>
+    </partner_money_static>
+
+    <dragdrop_bag x="19.5" y="130" width="344.75" height="574" cell_width="31" cell_height="41" rows_num="14" cols_num="11" a="255" unlimited="1" group_similar="1" always_show_scroll="0" condition_progress_bar="1" scroll_profile="thin">
+        <cells style="cell">
+            <item style="cell_item"/>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+            <drop style="cell_drop"/>
+            <picked style="cell_picked"/>
+            <dim style="cell_dim"/>
+        </cells>
+    </dragdrop_bag>
+    <dragdrop_deadbody_bag x="659.75" y="130" width="344.75" height="533" cell_width="31" cell_height="41" rows_num="13" cols_num="11" a="255" unlimited="1" group_similar="1" always_show_scroll="0" condition_progress_bar="1" scroll_profile="thin">
+        <cells style="cell">
+            <item style="cell_item"/>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+            <drop style="cell_drop"/>
+            <picked style="cell_picked"/>
+            <dim style="cell_dim"/>
+        </cells>
+    </dragdrop_deadbody_bag>
+    <dragdrop_actor_trade x="19.5" y="130" width="344.75" height="164" cell_width="31" cell_height="41" rows_num="4" cols_num="11" a="255" unlimited="1" group_similar="1" always_show_scroll="0" condition_progress_bar="1" scroll_profile="thin">
+        <cells style="cell">
+            <item style="cell_item"/>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+            <drop style="cell_drop"/>
+            <picked style="cell_picked"/>
+            <dim style="cell_dim"/>
+        </cells>
+    </dragdrop_actor_trade>
+    <dragdrop_partner_trade x="659.75" y="130" width="344.75" height="164" cell_width="31" cell_height="41" rows_num="4" cols_num="11" a="255" unlimited="1" group_similar="1" always_show_scroll="0" condition_progress_bar="1" scroll_profile="thin">
+        <cells style="cell">
+            <item style="cell_item"/>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+            <drop style="cell_drop"/>
+            <picked style="cell_picked"/>
+            <dim style="cell_dim"/>
+        </cells>
+    </dragdrop_partner_trade>
+    <right_delimiter x="16.5" y="300" width="350.75" height="34" shape="inset">
+        <trade_caption x="238.25" y="9" width="45" height="16">
+            <text align="l" font="letterica16" color="$text_dim">ui_total_price</text>
+        </trade_caption>
+        <trade_price x="260.75" y="9" width="45" height="16">
+            <text align="l" font="letterica18" color="$text"/>
+        </trade_price>
+        <trade_weight_max x="298.25" y="9" width="48" height="16">
+            <text align="l" font="letterica16" color="$text_dim"/>
+        </trade_weight_max>
+    </right_delimiter>
+    <left_delimiter x="656.75" y="300" width="350.75" height="34" shape="inset">
+        <trade_caption x="238.25" y="9" width="45" height="16">
+            <text align="l" font="letterica16" color="$text_dim">ui_total_price</text>
+        </trade_caption>
+        <trade_price x="260.75" y="9" width="45" height="16">
+            <text align="l" font="letterica18" color="$text"/>
+        </trade_price>
+        <trade_weight_max x="298.25" y="9" width="48" height="16">
+            <text align="l" font="letterica16" color="$text_dim"/>
+        </trade_weight_max>
+    </left_delimiter>
+    <dragdrop_actor_trade_bag x="19.5" y="340" width="344.75" height="369" cell_width="31" cell_height="41" rows_num="9" cols_num="11" a="255" unlimited="1" group_similar="1" always_show_scroll="0" condition_progress_bar="1" scroll_profile="thin">
+        <cells style="cell">
+            <item style="cell_item"/>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+            <drop style="cell_drop"/>
+            <picked style="cell_picked"/>
+            <dim style="cell_dim"/>
+        </cells>
+    </dragdrop_actor_trade_bag>
+    <dragdrop_partner_bag x="659.75" y="340" width="344.75" height="369" cell_width="31" cell_height="41" rows_num="9" cols_num="11" a="255" unlimited="1" group_similar="1" always_show_scroll="0" condition_progress_bar="1" scroll_profile="thin">
+        <cells style="cell">
+            <item style="cell_item"/>
+            <selected style="cell_selected"/>
+            <marked style="cell_marked"/>
+            <related style="cell_related"/>
+            <blocked style="cell_blocked"/>
+            <drop style="cell_drop"/>
+            <picked style="cell_picked"/>
+            <dim style="cell_dim"/>
+        </cells>
+    </dragdrop_partner_bag>
+    <dragdrop_trash x="647.75" y="0" width="376.25" height="768" cell_width="376" cell_height="768" rows_num="1" cols_num="1" a="0"/>
+
+    <trade_barter_button x="18.75" y="303" width="127.5" height="28" hint="ui_st_barter_hint">
+        <window_name>trade_barter_button</window_name>
+        <shape style="button_primary"/>
+        <text font="graffiti22" align="c" vert_align="c">ui_st_barter</text>
+    </trade_barter_button>
+    <trade_sell_button x="18.75" y="303" width="127.5" height="28" hint="ui_st_sell_hint">
+        <window_name>trade_sell_button</window_name>
+        <shape style="button_primary"/>
+        <text font="graffiti22" align="c" vert_align="c">ui_st_sell</text>
+    </trade_sell_button>
+    <trade_buy_button x="659" y="303" width="127.5" height="28" hint="ui_st_buy_hint">
+        <window_name>trade_buy_button</window_name>
+        <shape style="button_primary"/>
+        <text font="graffiti22" align="c" vert_align="c">ui_st_buy</text>
+    </trade_buy_button>
+    <takeall_button x="656.75" y="714" width="350.75" height="34" hint="ui_st_take_all_hint">
+        <window_name>takeall_button</window_name>
+        <shape style="button_primary"/>
+        <text font="graffiti22" align="c" vert_align="c">ui_st_take_all</text>
+    </takeall_button>
+    <exit_button x="389.75" y="714" width="244.5" height="34" hint="ui_st_exit_hint">
+        <window_name>exit_button</window_name>
+        <shape style="button"/>
+        <text font="graffiti22" align="c" vert_align="c">ui_inv_exit</text>
+    </exit_button>
+
+    <actor_weight_caption x="24" y="718" width="45" height="16">
+        <text align="l" font="letterica16" color="$text_dim">ui_total_weight</text>
+    </actor_weight_caption>
+    <actor_weight x="69" y="718" width="30" height="16">
+        <text align="l" font="letterica18" color="$text"/>
+    </actor_weight>
+    <actor_weight_max x="277.25" y="718" width="82.5" height="16">
+        <text align="l" font="letterica16" color="$text_dim"/>
+    </actor_weight_max>
+    <actor_weight_bar x="24" y="740" width="335.75" height="5" hint_delay="500" zone_tint="0.22">
+        <track shape="load_track"/>
+        <fill shape="load_fill"/>
+        <mark shape="load_mark"/>
+        <normal color="$good"/>
+        <overload color="$warn"/>
+        <slow color="$bad"/>
+    </actor_weight_bar>
+    <partner_weight_caption x="664.25" y="696" width="45" height="16">
+        <text align="l" font="letterica16" color="$text_dim">ui_total_weight</text>
+    </partner_weight_caption>
+    <partner_weight x="709.25" y="696" width="30" height="16">
+        <text align="l" font="letterica18" color="$text"/>
+    </partner_weight>
+    <partner_weight_max x="1000" y="696" width="1.5" height="16">
+        <text align="l" font="letterica16" color="$text_dim"/>
+    </partner_weight_max>
+
+    <dragdrop_binocular x="395.75" y="26" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <binocular_slot_highlight x="389.75" y="18" width="74" height="57" shape="slot_highlight"/>
+    <dragdrop_helmet x="481" y="26" width="62" height="82" cell_width="31" cell_height="41" rows_num="2" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <progess_bar_helmet x="481" y="114" width="62" height="4" horz="1" min="0" max="1" pos="0">
+        <progress shape="bar_thin_fill"/>
+        <background shape="bar_thin_track"/>
+        <min_color color="$bad"/>
+        <middle_color color="$warn"/>
+        <max_color color="$good"/>
+    </progess_bar_helmet>
+    <helmet_slot_highlight x="475" y="18" width="74" height="108" shape="slot_highlight"/>
+    <helmet_over x="475" y="18" width="74" height="108" shape="blocker"/>
+    <dragdrop_detector x="566.25" y="26" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <detector_slot_highlight x="560.25" y="18" width="74" height="57" shape="slot_highlight"/>
+    <dragdrop_pistol x="395.75" y="91" width="62" height="246" cell_width="31" cell_height="41" rows_num="6" cols_num="2" custom_placement="0" vertical_placement="1" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <progess_bar_weapon1 x="395.75" y="343" width="62" height="4" horz="1" min="0" max="1" pos="0">
+        <progress shape="bar_thin_fill"/>
+        <background shape="bar_thin_track"/>
+        <min_color color="$bad"/>
+        <middle_color color="$warn"/>
+        <max_color color="$good"/>
+    </progess_bar_weapon1>
+    <inv_slot2_highlight x="389.75" y="83" width="74" height="272" shape="slot_highlight"/>
+    <dragdrop_outfit x="481" y="142" width="62" height="123" cell_width="31" cell_height="41" rows_num="3" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <progess_bar_outfit x="481" y="271" width="62" height="4" horz="1" min="0" max="1" pos="0">
+        <progress shape="bar_thin_fill"/>
+        <background shape="bar_thin_track"/>
+        <min_color color="$bad"/>
+        <middle_color color="$warn"/>
+        <max_color color="$good"/>
+    </progess_bar_outfit>
+    <outfit_slot_highlight x="475" y="134" width="74" height="149" shape="slot_highlight"/>
+    <dragdrop_automatic x="566.25" y="91" width="62" height="246" cell_width="31" cell_height="41" rows_num="6" cols_num="2" custom_placement="0" vertical_placement="1" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <progess_bar_weapon2 x="566.25" y="343" width="62" height="4" horz="1" min="0" max="1" pos="0">
+        <progress shape="bar_thin_fill"/>
+        <background shape="bar_thin_track"/>
+        <min_color color="$bad"/>
+        <middle_color color="$warn"/>
+        <max_color color="$good"/>
+    </progess_bar_weapon2>
+    <inv_slot3_highlight x="560.25" y="83" width="74" height="272" shape="slot_highlight"/>
+    <dragdrop_backpack x="481" y="299" width="62" height="82" cell_width="31" cell_height="41" rows_num="2" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <progess_bar_backpack x="481" y="387" width="62" height="4" horz="1" min="0" max="1" pos="0">
+        <progress shape="bar_thin_fill"/>
+        <background shape="bar_thin_track"/>
+        <min_color color="$bad"/>
+        <middle_color color="$warn"/>
+        <max_color color="$good"/>
+    </progess_bar_backpack>
+    <backpack_slot_highlight x="475" y="291" width="74" height="108" shape="slot_highlight"/>
+    <backpack_over x="475" y="291" width="74" height="108" shape="blocker"/>
+    <dragdrop_sidearm x="395.75" y="371" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <progess_bar_sidearm x="395.75" y="418" width="62" height="4" horz="1" min="0" max="1" pos="0">
+        <progress shape="bar_thin_fill"/>
+        <background shape="bar_thin_track"/>
+        <min_color color="$bad"/>
+        <middle_color color="$warn"/>
+        <max_color color="$good"/>
+    </progess_bar_sidearm>
+    <sidearm_highlight x="389.75" y="363" width="74" height="67" shape="slot_highlight"/>
+    <dragdrop_knife x="566.25" y="371" width="62" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="2" custom_placement="0" a="0" virtual_cells="1" vc_vert_align="c" vc_horiz_align="c"/>
+    <progess_bar_knife x="566.25" y="418" width="62" height="4" horz="1" min="0" max="1" pos="0">
+        <progress shape="bar_thin_fill"/>
+        <background shape="bar_thin_track"/>
+        <min_color color="$bad"/>
+        <middle_color color="$warn"/>
+        <max_color color="$good"/>
+    </progess_bar_knife>
+    <knife_highlight x="560.25" y="363" width="74" height="67" shape="slot_highlight"/>
+
+    <dragdrop_quick_slots x="402" y="446" width="220" height="41" cell_width="31" cell_height="41" a="0" rows_num="1" cols_num="4" cell_sp_x="32" cell_sp_y="0" custom_placement="1"/>
+    <quick_slot_highlight x="389.75" y="440" width="55.5" height="62" dx="63" shape="slot_highlight"/>
+    <quick_slot1_text x="392.75" y="486" width="22.5" height="14">
+        <text align="l" font="letterica16" color="$text_muted">quick_use_str_1</text>
+    </quick_slot1_text>
+    <quick_slot2_text x="455.75" y="486" width="22.5" height="14">
+        <text align="l" font="letterica16" color="$text_muted">quick_use_str_2</text>
+    </quick_slot2_text>
+    <quick_slot3_text x="518.75" y="486" width="22.5" height="14">
+        <text align="l" font="letterica16" color="$text_muted">quick_use_str_3</text>
+    </quick_slot3_text>
+    <quick_slot4_text x="581.75" y="486" width="22.5" height="14">
+        <text align="l" font="letterica16" color="$text_muted">quick_use_str_4</text>
+    </quick_slot4_text>
+
+    <dragdrop_belt x="403.5" y="518" width="217" height="41" cell_width="31" cell_height="41" rows_num="1" cols_num="7" a="0"/>
+    <artefact_slot_highlight x="403.5" y="518" width="31" height="41" dx="31" shape="slot_highlight"/>
+    <belt_list_over x="403.5" y="518" width="31" height="41" dx="31" shape="blocker"/>
+
+    <actor_state_info x="389.75" y="575" width="244.5" height="135">
+        <hint_wnd x="0" y="0" width="240" height="120">
+            <background x="0" y="0" width="240" height="120" border="10" shape="tooltip"/>
+            <text x="9" y="10" width="222" height="100" always_show_scroll="0" fit_to_height="1" complex_mode="1">
+                <font font="letterica16" color="$text_dim" align="l" vert_align="t"/>
+            </text>
+        </hint_wnd>
+        <auto_static x="7.5" y="9" width="10.5" height="14"><shape kind="heart" fill="$health"/></auto_static>
+        <health_state x="22.5" y="10" width="184.5" height="12">
+            <hint_text delay="800">st_ui_health_sensor_inv</hint_text>
+            <state_progress x="0" y="0" width="184.5" height="12" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$health"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </health_state>
+        <bleeding_state x="211.5" y="8" width="12" height="16">
+            <hint_text delay="800">st_ui_bleeding_sensor</hint_text>
+            <icon x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$good"/></icon>
+            <icon2 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$warn"/></icon2>
+            <icon3 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="drop" fill="$bad"/></icon3>
+        </bleeding_state>
+        <radiation_state x="226.5" y="8" width="12" height="16">
+            <hint_text delay="800">st_ui_main_sensor</hint_text>
+            <icon x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="trefoil" fill="$good"/></icon>
+            <icon2 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="trefoil" fill="$warn"/></icon2>
+            <icon3 x="0" y="0" width="12" height="16" light_anim="ui_slow_blinking" la_cyclic="1" la_texture="1" la_text="0" la_alpha="1"><shape kind="trefoil" fill="$bad"/></icon3>
+        </radiation_state>
+        <auto_static x="7.5" y="29" width="10.5" height="14"><shape kind="cutlery" fill="$satiety"/></auto_static>
+        <stamina_state x="22.5" y="33" width="184.5" height="6">
+            <hint_text delay="800">st_ui_stamina_sensor_inv</hint_text>
+            <state_progress x="0" y="0" width="184.5" height="6" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_thin_fill"><shape fill="$satiety"/></progress>
+                <background shape="bar_thin_track"/>
+            </state_progress>
+        </stamina_state>
+        <auto_static x="7.5" y="48" width="229.5" height="1" shape="rule"/>
+        <radia_sensor x="7.5" y="58" width="111" height="14">
+            <hint_text delay="800">ui_inv_radiation_protection</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="trefoil" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </radia_sensor>
+        <psi_sensor x="126" y="58" width="111" height="14">
+            <hint_text delay="800">ui_inv_telepatic_protection</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="psi" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </psi_sensor>
+        <acid_sensor x="7.5" y="77" width="111" height="14">
+            <hint_text delay="800">ui_inv_chemical_burn_protection</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="biohazard" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </acid_sensor>
+        <wound_sensor x="126" y="77" width="111" height="14">
+            <hint_text delay="800">ui_inv_wound_protection</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="claw" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </wound_sensor>
+        <shock_sensor x="7.5" y="96" width="111" height="14">
+            <hint_text delay="800">ui_inv_shock_protection</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="bolt" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </shock_sensor>
+        <fire_wound_sensor x="126" y="96" width="111" height="14">
+            <hint_text delay="800">ui_inv_fire_wound_protection</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="bullet" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </fire_wound_sensor>
+        <fire_sensor x="7.5" y="115" width="111" height="14">
+            <hint_text delay="800">ui_inv_burn_protection</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="flame" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </fire_sensor>
+        <power_sensor x="126" y="115" width="111" height="14">
+            <hint_text delay="800">ui_inv_power_restore</hint_text>
+            <icon x="0" y="0" width="10.5" height="14"><shape kind="runner" fill="$text_dim"/></icon>
+            <state_progress x="15" y="3" width="96" height="8" horz="1" min="0" max="1" pos="0">
+                <progress shape="bar_fill"><shape fill="$protection"/></progress>
+                <background shape="bar_track"/>
+            </state_progress>
+        </power_sensor>
+    </actor_state_info>
+
+    <hint_wnd x="0" y="0" width="240" height="120">
+        <background x="0" y="0" width="240" height="120" border="10" shape="tooltip"/>
+        <text x="9" y="10" width="222" height="100" always_show_scroll="0" fit_to_height="1" complex_mode="1">
+            <font font="letterica16" color="$text_dim" align="l" vert_align="t"/>
+        </text>
+    </hint_wnd>
+    <!-- the panel of hotkeys (the keyboard button of the toolbar, or H); its rows are inventory_hotkeys.xml -->
+    <hotkeys_panel x="389.75" y="436" width="244.5" height="272" shape="panel" row_height="22" keys_width="128" chip_gap="3" chip_padding="5">
+        <title x="9" y="6" width="204" height="24">
+            <text font="letterica18" align="l" vert_align="c" color="$accent">st_da_hk_title</text>
+        </title>
+        <close x="219" y="7" width="16.5" height="22" shape="tool_button" cross="$text_dim"/>
+        <auto_static x="7.5" y="34" width="229.5" height="1" shape="rule"/>
+        <list x="7.5" y="38" width="232.5" height="226" always_show_scroll="0" scroll_profile="thin" right_ident="4" left_ident="0" top_indent="0" bottom_indent="2" vert_interval="0"/>
+        <chip shape="key_chip"><text font="letterica16" color="$text"/></chip>
+        <plus><text font="letterica16" color="$text_muted"/></plus>
+        <caption><text font="letterica16" color="$text_dim"/></caption>
+        <rule shape="rule"/>
+    </hotkeys_panel>
+
+    <!-- the comparison of picked items (the scales button of the toolbar, or V); the weights are
+         configs\dead_air_x64_item_compare.ltx -->
+    <compare_window x="137" y="64" width="750" height="640" shape="panel" row_height="20" label_width="210" column_width="360" icon_height="56" padding="6">
+        <shade shape="compare_shade"/>
+        <title x="12" y="10" width="525" height="28">
+            <text font="graffiti22" align="l" vert_align="c" color="$text"/>
+        </title>
+        <tab_use x="541.5" y="12" width="85.5" height="26">
+            <shape style="tab"/>
+            <text font="letterica16" align="c" vert_align="c">st_cmp_profile_use</text>
+        </tab_use>
+        <tab_sale x="631.5" y="12" width="85.5" height="26">
+            <shape style="tab"/>
+            <text font="letterica16" align="c" vert_align="c">st_cmp_profile_sale</text>
+        </tab_sale>
+        <close x="720" y="13" width="18" height="24" shape="tool_button" cross="$text_dim"/>
+        <auto_static x="9" y="46" width="732" height="1" shape="rule"/>
+        <columns x="9" y="52" width="727.5" height="156"/>
+        <list x="9" y="212" width="732" height="382" always_show_scroll="0" scroll_profile="thin" right_ident="0" left_ident="0" top_indent="2" bottom_indent="2" vert_interval="0"/>
+        <auto_static x="9" y="598" width="732" height="1" shape="rule"/>
+        <footer x="12" y="602" width="726" height="30">
+            <text font="letterica16" align="l" vert_align="c" color="$text_dim"/>
+        </footer>
+        <name><text font="letterica16" color="$text"/></name>
+        <score><text font="graffiti22" color="$text"/></score>
+        <label><text font="letterica16" color="$text_dim"/></label>
+        <weight><text font="letterica16" color="$text_muted"/></weight>
+        <value><text font="letterica16" color="$text"/></value>
+        <section><text font="letterica18" color="$accent"/></section>
+        <best color="$good"/>
+        <worst color="$bad"/>
+        <column shape="compare_column"/>
+        <column_winner shape="compare_column_winner"/>
+        <row_alt shape="compare_row"/>
+        <score_bar shape="bar_thin_fill"><shape fill="$accent"/></score_bar>
+        <score_track shape="bar_thin_track"/>
+        <badge shape="compare_badge"/>
+        <rule shape="rule"/>
+    </compare_window>
+
+    <action_sounds>
+        <snd_open>interface\inv_open</snd_open>
+        <snd_close>interface\inv_close</snd_close>
+        <snd_item_to_slot>interface\inv_slot</snd_item_to_slot>
+        <snd_item_to_belt>interface\inv_belt</snd_item_to_belt>
+        <snd_item_to_ruck>interface\inv_ruck</snd_item_to_ruck>
+        <snd_properties>interface\inv_properties</snd_properties>
+        <snd_drop_item>interface\inv_drop</snd_drop_item>
+        <snd_attach_addon>interface\inv_attach_addon</snd_attach_addon>
+        <snd_detach_addon>interface\inv_detach_addon</snd_detach_addon>
+        <snd_item_use>interface\inv_slot</snd_item_use>
+    </action_sounds>
+</w>

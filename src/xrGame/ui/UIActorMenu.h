@@ -29,6 +29,10 @@ class CUIProgressBar;
 class CUITradeBar;
 class CUIWeightBar;
 class CUIInventoryToolbar;
+class CUIInventoryHotkeysPanel;
+class CUIItemCompareWnd;
+struct SInventoryHotkey;
+enum class EHotkeyTrigger : u8;
 
 namespace inventory
 {
@@ -204,9 +208,33 @@ protected:
         xr_vector<u16> released;
         u32 started{};
         u32 settled_frames{};
-        EInventoryPane pane{};
+        u8 panes{}; // 1 << EInventoryPane
         bool active{};
     } m_pending_sort;
+
+    // The hotkeys of the item grids, their panel, the comparison (UIActorMenuHotkeys.cpp)
+    CUIInventoryHotkeysPanel* m_hotkeys_panel{};
+    CUIItemCompareWnd* m_compare_wnd{};
+    // the hint of the item as it would be new, beside the item's own
+    CUIItemInfo* m_ItemInfoPristine{};
+    bool m_pristine_shown{};
+    // A hover hotkey fires again only once the cursor has moved: the grid closing up under a still
+    // cursor would carry off the next item as well.
+    Fvector2 m_hover_cursor{ -1.0f, -1.0f };
+    // the release of a press a hotkey took goes nowhere
+    EUIMessages m_swallow_up{};
+    bool m_swallow_armed{};
+    // A hover hotkey acts after the update: the cell it moves is one the grid is walking through.
+    struct SPendingHover
+    {
+        shared_str action;
+        u16 item{ u16(-1) };
+    } m_pending_hover;
+    // the item a hover hotkey could not move, left alone until the cursor is over another
+    u16 m_hover_refused{ u16(-1) };
+    // items picked for a comparison; the first one's kind is the only one the others may be
+    xr_vector<u16> m_picks;
+    u8 m_pick_kind{};
 
 protected:
     u32 m_last_time;
@@ -223,7 +251,10 @@ public:
     CInventoryOwner* GetPartner() { return m_pPartnerInvOwner; };
     void SetInvBox(CInventoryBox* box);
     CInventoryBox* GetInvBox() { return m_pInvBox; };
+    // dar_ui_open trade: the partner may stand anywhere until the menu closes
+    void SetDistanceExempt(bool exempt) { m_distanceExempt = exempt; }
 private:
+    bool m_distanceExempt{};
     void PropertiesBoxForSlots(PIItem item, bool& b_show);
     void PropertiesBoxForWeapon(CUICellItem* cell_item, PIItem item, bool& b_show);
     void PropertiesBoxForAddon(PIItem item, bool& b_show);
@@ -258,11 +289,50 @@ protected:
     void InitAllowedDrops();
     void InitCallbacks();
     void InitInventoryTools();
+    void InitHotkeys(CUIXml& uiXml);
 
     void SyncInventoryTools();
     void ResetInventoryTools();
     void OnInventoryToolClicked(CUIWindow* w, void* d);
+    // the order every grid is laid out in (ui_inv_sort), applied to the grids on screen at once
+    void SetSortMode(EInventorySort mode);
+    // true when a drop-down of orders was open
+    bool CloseSortModes();
     bool CellPassesItemFilter(CUICellItem* itm);
+    // the pane a grid shows, false for a slot, the belt, a trade table
+    bool PaneOfList(CUIDragDropListEx* list, EInventoryPane& pane);
+    // the inventory a pane's new items go to, null when the player may not change it
+    CGameObject* PaneOwner(EInventoryPane pane);
+
+    // hotkeys
+    u8 HotkeyWindow() const;
+    void SyncHotkeys();
+    CUICellItem* CellUnderCursor();
+    bool OverHotkeysPanel() const;
+    bool TryHotkey(EHotkeyTrigger trigger, int key = 0);
+    bool TryHoverHotkey(CUICellItem* itm);
+    void RunPendingHover();
+    // the cell of a grid holding this item, itself or grouped under it
+    CUICellItem* CellOfItem(u16 id);
+    // a window over the grids takes the mouse: the comparison, a drop-down of orders
+    bool GridsCovered() const;
+    // a hotkey's action, an action button's: the window's own, or one for the item of `cell`
+    bool RunWindowAction(const shared_str& action, CUICellItem* cell);
+    void OnHotkeysPanelClose(CUIWindow*, void*);
+    // one item of a cell to where a double click would send it, the way the window does it
+    bool MoveToOtherSide(CUICellItem* itm, bool equip);
+    bool MoveCell(CUICellItem* cell, bool whole_stack);
+    bool SplitCell(CUICellItem* cell);
+    bool DropCell(CUICellItem* cell, bool whole_stack);
+    // the comparison
+    void TogglePick(CUICellItem* cell);
+    void ClearPicks();
+    bool IsPicked(CUICellItem* cell) const;
+    u8 CellPickState(CUICellItem* cell);
+    void PrunePicks();
+    void OpenCompare();
+    u32 ComparePrice(CInventoryItem& item);
+    void UpdatePristineInfo(CUICellItem* cell_item);
     void UpdatePendingSort();
     void RefillInventoryPane(EInventoryPane pane, const xr_vector<u16>& skip);
     CUIDragDropListEx* GetInventoryPaneList(EInventoryPane pane);
@@ -425,6 +495,19 @@ public:
     void StoreAllToInventoryBox();
 
     IC UIHint* get_hint_wnd() { return m_hint_wnd; }
+
+    // the panel of hotkeys (ui_inv_hotkeys keeps whether it is up)
+    void ShowHotkeysPanel(bool show);
+    bool HotkeysPanelShown() const;
+    // the console's and the scripts' way to the hotkeys and the comparison
+    bool RunHotkeyAction(pcstr action);
+    // an item in or out of the comparison; false when its kind is not the picked one's or it is full
+    bool PickItem(CInventoryItem* item);
+    u32 PickedCount() const { return u32(m_picks.size()); }
+    void ClearComparison() { ClearPicks(); }
+    void OpenComparison() { OpenCompare(); }
+    // the centre of the first cell on screen holding an item of `section` (dar_ui_cursor_item)
+    bool FindCellCenter(pcstr section, Fvector2& at);
 
     // The sort and filter row: what its buttons do, open to scripts as well.
     bool SortInventoryPane(EInventoryPane pane);

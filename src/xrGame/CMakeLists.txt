@@ -337,6 +337,7 @@ target_sources(xrGame PRIVATE
     configs_dump_verifyer.h
     console_commands.cpp
     console_commands_mp.cpp
+    console_commands_ui.cpp
     ContextMenu.cpp
     ContextMenu.h
     control_action.h
@@ -2198,6 +2199,8 @@ target_sources(xrGame PRIVATE
     ui/UIActorMenu.cpp
     ui/UIActorMenuDeadBodySearch.cpp
     ui/UIActorMenu.h
+    ui/UIActorMenuHotkeys.cpp
+    ui/UIActorMenuHotkeys.h
     ui/UIActorMenuInitialize.cpp
     ui/UIActorMenuInventory.cpp
     ui/UIActorMenu_script.cpp
@@ -2278,6 +2281,8 @@ target_sources(xrGame PRIVATE
     ui/UIInvUpgradeInfo.h
     ui/UIInvUpgradeProperty.cpp
     ui/UIInvUpgradeProperty.h
+    ui/UIItemCompare.cpp
+    ui/UIItemCompare.h
     ui/UIItemInfo.cpp
     ui/UIItemInfo.h
     ui/UIKeyBinding.cpp

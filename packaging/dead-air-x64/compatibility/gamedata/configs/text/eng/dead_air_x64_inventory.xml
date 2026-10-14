@@ -33,4 +33,25 @@
 	<string id="st_da_inv_filter_misc">
 		<text>Misc: tools, devices, quest items, valuables and everything else</text>
 	</string>
+	<string id="st_da_inv_order_hint">
+		<text>The order the item grids are laid out in</text>
+	</string>
+	<string id="st_da_inv_order_default">
+		<text>Default</text>
+	</string>
+	<string id="st_da_inv_order_type">
+		<text>By type</text>
+	</string>
+	<string id="st_da_inv_order_name">
+		<text>By name</text>
+	</string>
+	<string id="st_da_inv_order_weight">
+		<text>By weight</text>
+	</string>
+	<string id="st_da_inv_order_price">
+		<text>By price</text>
+	</string>
+	<string id="st_da_inv_order_condition">
+		<text>By condition</text>
+	</string>
 </string_table>

@@ -1,0 +1,286 @@
+; The comparison of items in the actor menu (pick items with the middle button or C + click, then
+; the scales button or V). Only items of one kind are compared; the winner is the best weighted
+; score, not the one that wins the most rows.
+;
+; How the score is made: every row puts each item against the best of the row on the scale of the
+; row's biggest value (a ratio for positive values, sound for signed ones such as an artefact's
+; radiation), 0..1; the score is the weighted mean of those, 0..100.
+;
+; The weights (0..5) follow what players of shooters and survival games say they choose by -
+; STALKER Anomaly/GAMMA, Dead Air, STALKER 2, Escape from Tarkov, Battlefield, Valorant, Fallout,
+; The Elder Scrolls: for a gun the damage first, then accuracy, reliability and recoil, then the
+; rate of fire; for armour the bullet protection, then the carry bonus and the artefact slots; for
+; an artefact its radiation; for selling the price and the price per kilogram.
+;
+; A mod changes them without touching this file: it ships configs\item_compare_<anything>.ltx with
+; the same sections. Those files are read after this one, in name order; a line replaces the line
+; of that name, "= remove" takes the row out.
+;
+; [item_compare_<kind>]: firearm, melee, outfit, helmet, backpack, artefact, ammo, grenade, addon,
+; detector, food, medicine, misc
+;   rows = the order of the rows; lines it does not name come after them
+;   <row> = <weight to keep>, <weight to sell> [| <source> | <better: high or low> | <caption> | <format> | <scale>]
+; The row's name is its source unless a source is given:
+;   condition, weight, price (a trader's in a trade, else the base price the condition leaves),
+;   price_per_kg, uses (portions left), upgrades
+;   a weapon's: damage (hit power with its first ammunition), damage_heavy (a knife's second
+;   strike), rpm, accuracy (base dispersion), recoil, handling (inertia), aim_time, mag_size,
+;   bullet_speed (how flat it shoots), endurance (shots per tenth of the condition), misfire (the
+;   chance now), fouled, deformed, broken (faults, weighed by part: [item_compare_faults]),
+;   addons (attached), mounts (that can be attached), ammo_cost (a round of its ammunition)
+;   a suit's or a helmet's: armor (against bullets), prot_burn, prot_shock, prot_chemical,
+;   prot_radiation, prot_psi, prot_strike, prot_wound, prot_explosion, artefact_slots, carry,
+;   power_loss, night_vision, restore_health, restore_power, restore_bleeding, restore_satiety,
+;   restore_radiation
+;   an artefact's: restore_*, imm_burn, imm_shock, imm_chemical, imm_radiation, imm_psi,
+;   imm_strike, imm_wound, imm_explosion, imm_fire_wound, carry
+;   ammunition's: rounds, round_cost
+;   key:<line> - a number in the item's section; script:<module>.<function> - called with the item's
+;   game object, returns a number
+; The caption is st_cmp_p_<row> unless given; the format is one of num, int, pct, kg, money, sec,
+; mps, deg, yes, faults.
+
+[item_compare]
+max_items = 8
+
+[item_compare_firearm]
+rows = damage, rpm, accuracy, recoil, handling, aim_time, mag_size, bullet_speed, misfire, endurance, condition, fouled, deformed, broken, mounts, addons, upgrades, ammo_cost, weight, price, price_per_kg
+damage       = 5, 1
+accuracy     = 4, 0
+misfire      = 4, 1
+recoil       = 3, 0
+rpm          = 3, 0
+condition    = 3, 4
+broken       = 3, 2
+handling     = 1.5, 0
+aim_time     = 1, 0
+mag_size     = 2, 0
+bullet_speed = 2, 0
+endurance    = 1.5, 0.5
+deformed     = 2, 1
+fouled       = 1, 0.5
+ammo_cost    = 2, 0
+weight       = 2, 2
+mounts       = 1.5, 0.5
+addons       = 1, 1
+upgrades     = 1.5, 1
+price        = 0.5, 5
+price_per_kg = 0, 4
+
+[item_compare_melee]
+rows = damage, damage_heavy, condition, weight, price, price_per_kg
+damage       = 5, 0
+damage_heavy = 3, 0
+condition    = 3, 4
+weight       = 2, 2
+price        = 0.5, 5
+price_per_kg = 0, 4
+
+[item_compare_outfit]
+rows = armor, prot_strike, prot_wound, prot_explosion, prot_radiation, prot_burn, prot_shock, prot_chemical, prot_psi, artefact_slots, carry, power_loss, night_vision, restore_health, restore_power, restore_bleeding, restore_radiation, condition, upgrades, weight, price, price_per_kg
+armor            = 5, 0
+artefact_slots   = 4, 0
+carry            = 4, 0
+prot_strike      = 3, 0
+prot_explosion   = 3, 0
+prot_wound       = 3, 0
+prot_radiation   = 3, 0
+condition        = 3, 4
+power_loss       = 3, 0
+weight           = 3, 2
+prot_burn        = 2, 0
+prot_shock       = 2, 0
+prot_chemical    = 2, 0
+prot_psi         = 2, 0
+night_vision     = 1, 0
+restore_health   = 1, 0
+restore_power    = 1, 0
+restore_bleeding = 1, 0
+restore_radiation = 1, 0
+upgrades         = 1, 1
+price            = 1, 5
+price_per_kg     = 0, 4
+
+[item_compare_helmet]
+rows = armor, prot_radiation, prot_psi, prot_strike, prot_wound, prot_explosion, prot_burn, prot_shock, prot_chemical, night_vision, power_loss, condition, upgrades, weight, price, price_per_kg
+armor          = 5, 0
+prot_radiation = 4, 0
+prot_psi       = 3, 0
+condition      = 3, 4
+night_vision   = 2, 0
+weight         = 2, 2
+prot_strike    = 1, 0
+prot_wound     = 1, 0
+prot_explosion = 1, 0
+prot_burn      = 1, 0
+prot_shock     = 1, 0
+prot_chemical  = 1, 0
+power_loss     = 1, 0
+upgrades       = 1, 1
+price          = 1, 5
+price_per_kg   = 0, 4
+
+[item_compare_backpack]
+rows = carry, weight, power_loss, restore_power, condition, price, price_per_kg
+carry         = 5, 0
+weight        = 3, 1
+power_loss    = 1, 0
+restore_power = 1, 0
+condition     = 1, 3
+price         = 0.5, 5
+price_per_kg  = 0, 4
+
+[item_compare_artefact]
+rows = restore_radiation, carry, imm_fire_wound, imm_strike, restore_power, restore_health, restore_bleeding, restore_satiety, imm_wound, imm_explosion, imm_radiation, imm_burn, imm_shock, imm_chemical, imm_psi, condition, weight, price, price_per_kg
+restore_radiation = 5, 0
+carry             = 4, 0
+imm_fire_wound    = 4, 0
+imm_strike        = 3, 0
+restore_power     = 3, 0
+restore_health    = 3, 0
+condition         = 3, 4
+restore_bleeding  = 2, 0
+imm_wound         = 2, 0
+imm_explosion     = 2, 0
+imm_radiation     = 2, 0
+imm_burn          = 2, 0
+imm_shock         = 2, 0
+imm_chemical      = 2, 0
+imm_psi           = 2, 0
+restore_satiety   = 1, 0
+weight            = 2, 1
+price             = 0.5, 5
+price_per_kg      = 0, 3
+
+[item_compare_ammo]
+rows = k_hit, k_ap, k_disp, k_air_resistance, impair, rounds, round_cost, weight, price, price_per_kg
+k_hit            = 4, 0 | key:k_hit | high | st_cmp_p_k_hit | num
+k_ap             = 4, 0 | key:k_ap | high | st_cmp_p_k_ap | num
+k_disp           = 2, 0 | key:k_disp | low | st_cmp_p_k_disp | num
+k_air_resistance = 1, 0 | key:k_air_resistance | low | st_cmp_p_k_air_resistance | num
+impair           = 2, 0 | key:impair | low | st_cmp_p_impair | num
+round_cost       = 3, 0
+rounds           = 1, 1
+weight           = 1, 1
+price            = 0.5, 5
+price_per_kg     = 0, 5
+
+[item_compare_grenade]
+rows = blast, blast_r, frags, frag_hit, frags_r, weight, price, price_per_kg
+blast        = 4, 0 | key:blast | high | st_cmp_p_blast | num | 100
+blast_r      = 4, 0 | key:blast_r | high | st_cmp_p_blast_r | num
+frags        = 2, 0 | key:frags | high | st_cmp_p_frags | int
+frag_hit     = 2, 0 | key:frag_hit | high | st_cmp_p_frag_hit | num | 100
+frags_r      = 2, 0 | key:frags_r | high | st_cmp_p_frags_r | num
+weight       = 2, 2
+price        = 0.5, 5
+price_per_kg = 0, 4
+
+[item_compare_addon]
+rows = zoom, condition, weight, price, price_per_kg
+zoom         = 3, 0 | key:scope_zoom_factor | high | st_cmp_p_zoom | num
+condition    = 2, 4
+weight       = 2, 2
+price        = 1, 5
+price_per_kg = 0, 4
+
+[item_compare_detector]
+rows = af_radius, condition, weight, price, price_per_kg
+af_radius    = 4, 0 | key:af_radius | high | st_cmp_p_af_radius | num
+condition    = 3, 4
+weight       = 2, 2
+price        = 1, 5
+price_per_kg = 0, 4
+
+[item_compare_food]
+rows = satiety, thirst, health, power, radiation, alcohol, uses, weight, price, price_per_kg
+satiety      = 4, 0 | key:eat_satiety | high | st_cmp_p_satiety | pct
+thirst       = 4, 0 | key:eat_thirst | high | st_cmp_p_thirst | pct
+health       = 3, 0 | key:eat_health | high | st_cmp_p_health | pct
+power        = 2, 0 | key:eat_power | high | st_cmp_p_power | pct
+radiation    = 3, 0 | key:eat_radiation | low | st_cmp_p_radiation | num
+alcohol      = 1, 0 | key:eat_alcohol | low | st_cmp_p_alcohol | num
+uses         = 2, 1
+weight       = 2, 2
+price        = 2, 5
+price_per_kg = 0, 5
+
+[item_compare_medicine]
+rows = health, heal_rate, bleeding, bleeding_rate, radiation, radiation_rate, rad_protection, psi_protection, chem_protection, power, boost_time, uses, weight, price, price_per_kg
+health          = 5, 0 | key:eat_health | high | st_cmp_p_health | pct
+heal_rate       = 4, 0 | key:boost_health_restore | high | st_cmp_p_heal_rate | num | 1000
+bleeding        = 5, 0 | key:wounds_heal_perc | high | st_cmp_p_bleeding | pct
+bleeding_rate   = 3, 0 | key:boost_bleeding_restore | high | st_cmp_p_bleeding_rate | num | 1000
+radiation       = 4, 0 | key:eat_radiation | low | st_cmp_p_radiation | num
+radiation_rate  = 3, 0 | key:boost_radiation_restore | high | st_cmp_p_radiation_rate | num | 1000
+rad_protection  = 2, 0 | key:boost_radiation_protection | high | st_cmp_p_rad_protection | num
+psi_protection  = 2, 0 | key:boost_telepat_protection | high | st_cmp_p_psi_protection | num
+chem_protection = 1, 0 | key:boost_chemburn_protection | high | st_cmp_p_chem_protection | num
+power           = 2, 0 | key:eat_power | high | st_cmp_p_power | pct
+boost_time      = 1, 0 | key:boost_time | high | st_cmp_p_boost_time | int
+uses            = 2, 1
+weight          = 2, 2
+price           = 2, 5
+price_per_kg    = 0, 5
+
+[item_compare_misc]
+rows = condition, weight, price, price_per_kg
+condition    = 2, 4
+weight       = 3, 2
+price        = 3, 5
+price_per_kg = 3, 5
+
+; A weapon's faults weigh by the part and its state: penalty = part * state. The fault ids are
+; those of st_condition_type_<id>; the state is fouled, worn (deformed) or broken.
+[item_compare_parts]
+receiver      = 1.0
+barrel        = 1.0
+bolt          = 0.9
+firing_pin    = 0.85
+sear          = 0.8
+trigger       = 0.75
+hammer        = 0.75
+mainspring    = 0.7
+gas_tube      = 0.7
+return_spring = 0.65
+selector      = 0.45
+scope_mount   = 0.4
+stock         = 0.35
+grip          = 0.3
+muzzle_thread = 0.3
+handguard     = 0.3
+
+[item_compare_fault_states]
+fouled = 0.25
+worn   = 0.6
+broken = 1.0
+
+[item_compare_faults]
+1  = receiver, worn
+2  = receiver, broken
+3  = mainspring, fouled
+4  = mainspring, worn
+5  = return_spring, fouled
+6  = return_spring, worn
+7  = grip, worn
+8  = stock, worn
+9  = hammer, worn
+10 = hammer, broken
+11 = barrel, fouled
+12 = barrel, worn
+13 = barrel, broken
+14 = trigger, worn
+15 = trigger, broken
+16 = sear, fouled
+17 = sear, worn
+18 = sear, broken
+19 = firing_pin, fouled
+20 = firing_pin, worn
+21 = firing_pin, broken
+22 = bolt, fouled
+23 = bolt, worn
+24 = gas_tube, broken
+28 = selector, worn
+29 = scope_mount, worn
+30 = muzzle_thread, worn
+31 = handguard, worn

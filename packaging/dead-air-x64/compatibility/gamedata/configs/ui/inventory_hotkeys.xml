@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The hotkeys of the item grids in the inventory, the trade, the search of a body or a box and the
+     upgrade window, and the rows of the panel that lists them (the keyboard button of the toolbar,
+     or H). Every window has its own: what moving an item means is not the same at a trader's table
+     and over a corpse, the way a double click is not.
+
+     A mod does not edit this file: it ships configs\ui\inventory_hotkeys_<anything>.xml with
+     <hotkey> nodes of its own. Those files are read after this one, in name order. A node with the
+     id of a hotkey read before changes only what it sets; remove="1" takes the hotkey out; a new id
+     comes after the rest unless order="..." puts it elsewhere (these are 10, 20, 30, ...).
+
+     id         - the hotkey's name
+     keys       - what is held: alt, ctrl, shift, and at most one other key (C, kC, F1, kBACK...),
+                  joined with +. Shift is the sprint key of most players and takes everything in a
+                  search, so none of these use it.
+     trigger    - hover (the cursor comes over an item), lmb, rmb, mmb, wheel_up, wheel_down,
+                  key:<key> (pressed), hold (while held: a view, not a deed), none (a row that only
+                  tells, with label)
+     action     - an item's: move (the whole pile where a double click sends one), move_one, split,
+                  use, drop, drop_stack, pick (for a comparison);
+                  the window's: toggle_panel, compare, clear_picks; a hold's: pristine;
+                  script:<module>.<function> - called with the item's game object (nil for a key
+                  with nothing under the cursor) and the window: "inventory", "trade", "loot", "upgrade"
+     windows    - inventory, trade, loot, upgrade, all (a comma list)
+     caption    - what the panel says it does: a string id; caption_<window> says it for one window
+     label      - the keys column for a row that only tells: string ids and action:<game action>
+                  (the key the player bound to it), joined with |
+     order      - the place in the panel -->
+<w>
+	<!-- moving: across a trade or a search, on and off in the inventory -->
+	<hotkey id="hover_move" keys="alt" trigger="hover" action="move" windows="trade,loot"
+		caption_trade="st_da_hk_hover_move_trade" caption_loot="st_da_hk_hover_move_loot"/>
+	<hotkey id="click_move" keys="alt" trigger="lmb" action="move" windows="inventory"
+		caption="st_da_hk_equip"/>
+	<hotkey id="move_one" keys="ctrl" trigger="lmb" action="move_one" windows="trade,loot"
+		caption_trade="st_da_hk_move_one_trade" caption_loot="st_da_hk_move_one_loot"/>
+	<hotkey id="split" keys="ctrl" trigger="rmb" action="split" windows="inventory,trade,loot"
+		caption_inventory="st_da_hk_split_inventory" caption_trade="st_da_hk_split_trade"
+		caption_loot="st_da_hk_split_loot"/>
+	<hotkey id="drop_stack" keys="alt" trigger="rmb" action="drop_stack" windows="inventory"
+		caption="st_da_hk_drop_stack"/>
+
+	<!-- comparing -->
+	<hotkey id="pick_mmb" trigger="mmb" action="pick" windows="all" caption="st_da_hk_pick"/>
+	<hotkey id="pick_key" keys="C" trigger="lmb" action="pick" windows="all" caption="st_da_hk_pick"/>
+	<hotkey id="compare" trigger="key:V" action="compare" windows="all" caption="st_da_hk_compare"/>
+	<hotkey id="clear_picks" trigger="key:kBACK" action="clear_picks" windows="all" caption="st_da_hk_clear_picks"/>
+	<hotkey id="pristine" keys="ctrl" trigger="hold" action="pristine" windows="all" caption="st_da_hk_pristine"/>
+
+	<!-- what the game does without a hotkey -->
+	<hotkey id="double_click" trigger="none" label="st_da_hk_dbl" windows="inventory,trade,loot"
+		caption_inventory="st_da_hk_dbl_inventory" caption_trade="st_da_hk_dbl_trade" caption_loot="st_da_hk_dbl_loot"/>
+	<hotkey id="drag" trigger="none" label="st_da_hk_drag" windows="inventory,trade,loot" caption="st_da_hk_drag_caption"/>
+	<hotkey id="context" trigger="none" label="st_da_hk_rmb" windows="all" caption="st_da_hk_context"/>
+	<hotkey id="drop_key" trigger="none" label="action:drop" windows="inventory" caption="st_da_hk_drop_key"/>
+	<hotkey id="take_all" trigger="none" label="action:sprint_toggle" windows="trade,loot"
+		caption_trade="st_da_hk_take_all_trade" caption_loot="st_da_hk_take_all_loot"/>
+	<hotkey id="give_all" trigger="none" label="st_da_hk_ctrl|action:sprint_toggle" windows="trade,loot"
+		caption_trade="st_da_hk_give_all_trade" caption_loot="st_da_hk_give_all_loot"/>
+
+	<hotkey id="panel" trigger="key:H" action="toggle_panel" windows="all" caption="st_da_hk_panel"/>
+</w>

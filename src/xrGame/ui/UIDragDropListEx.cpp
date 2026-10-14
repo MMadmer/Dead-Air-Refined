@@ -3,6 +3,7 @@
 #include "xrUICore/ScrollBar/UIScrollBar.h"
 #include "Common/object_broker.h"
 #include "UICellItem.h"
+#include "xrUICore/Static/UIShape.h"
 #include "xrUICore/Cursor/UICursor.h"
 //Alundaio
 #include "Inventory.h"
@@ -92,7 +93,7 @@ void CUIDragDropListEx::InitDragDropList(Fvector2 pos, Fvector2 size)
 {
     inherited::SetWndPos(pos);
     inherited::SetWndSize(size);
-    m_vScrollBar->InitScrollBar(Fvector2().set(size.x, 0.0f), size.y, false);
+    m_vScrollBar->InitScrollBar(Fvector2().set(size.x, 0.0f), size.y, false, m_scroll_profile.c_str());
     m_vScrollBar->SetWndPos(
         Fvector2().set(m_vScrollBar->GetWndPos().x - m_vScrollBar->GetWidth(), m_vScrollBar->GetWndPos().y));
 }
@@ -1235,8 +1236,6 @@ void CUICellContainer::Draw()
         }
     }
 
-    GEnv.UIRender->StartPrimitive(max_prim_cnt, IUIRender::ptTriList, UI().m_currentPointType);
-
     Ivector2 dragCell{-1, -1};
     Ivector2 dragSize{};
     bool highlightDragArea = CUIDragDropListEx::m_drag_item &&
@@ -1271,6 +1270,14 @@ void CUICellContainer::Draw()
         }
     }
 
+    if (m_pParentDragDropList->GetGridLooks())
+    {
+        DrawShapeCells(tgt_cells, highlightDragArea, dragCell, dragSize);
+        UI().PushScissor(clientArea);
+    }
+    else
+    {
+    GEnv.UIRender->StartPrimitive(max_prim_cnt, IUIRender::ptTriList, UI().m_currentPointType);
     //	u32 cell_i = 0;
     for (int x = 0; x <= tgt_cells.width(); ++x)
     {
@@ -1332,6 +1339,7 @@ void CUICellContainer::Draw()
 
     GEnv.UIRender->SetShader(*hShader);
     GEnv.UIRender->FlushPrimitive();
+    }
 
     // draw shown items in range
     if (m_cells_to_draw.size())
@@ -1347,8 +1355,133 @@ void CUICellContainer::Draw()
         }
     }
 
+    DrawCellStates();
     UI().PopScissor();
     DrawBlocker();
+}
+
+const SUIGridLooks& SUIGridLooks::Overlays()
+{
+    static SUIGridLooks looks;
+    static u32 built = u32(-1);
+    // the theme is read again whenever the UI is rebuilt
+    if (built != Device.dwFrame)
+    {
+        built = Device.dwFrame;
+        constexpr std::pair<Look, pcstr> styles[] = { { Picked, "cell_picked" }, { Dim, "cell_dim" } };
+        for (const auto& [look, name] : styles)
+        {
+            if (const SUIShapeSkin* skin = UITheme::Skin(name))
+                looks.looks[look] = skin->looks[SUIShapeSkin::Normal];
+        }
+    }
+    return looks;
+}
+
+void CUICellContainer::DrawCellStates()
+{
+    const SUIGridLooks& looks = m_pParentDragDropList->GetGridLooks() ? *m_pParentDragDropList->GetGridLooks() : SUIGridLooks::Overlays();
+    m_shape_items.clear();
+    for (CUICell& cell : m_cells_to_draw)
+    {
+        CUICellItem* item = cell.m_item;
+        if (!item || !item->IsShown() || std::find(m_shape_items.begin(), m_shape_items.end(), item) != m_shape_items.end())
+            continue;
+        m_shape_items.push_back(item);
+        const u8 state = m_pParentDragDropList->CellState(item);
+        if (!state)
+            continue;
+
+        Frect rect;
+        item->GetAbsoluteRect(rect);
+        if (state & CUIDragDropListEx::cellDimmed)
+            UIShape::Draw(rect, looks.looks[SUIGridLooks::Dim]);
+        if (state & CUIDragDropListEx::cellPicked)
+            UIShape::Draw(rect, looks.looks[SUIGridLooks::Picked]);
+    }
+}
+
+void CUICellContainer::DrawShapeCells(const Irect& visible, bool dragArea, const Ivector2& dragCell, const Ivector2& dragSize)
+{
+    const SUIGridLooks& looks = *m_pParentDragDropList->GetGridLooks();
+
+    Fvector2 origin;
+    GetAbsolutePos(origin);
+    const Fvector2 cell{ float(m_cellSize.x), float(m_cellSize.y) };
+    const Fvector2 step{ float(m_cellSize.x + m_cellSpacing.x), float(m_cellSize.y + m_cellSpacing.y) };
+    const auto corner = [&](const Ivector2& c) { return Fvector2{ origin.x + c.x * step.x, origin.y + c.y * step.y }; };
+    const auto span = [&](const Ivector2& lt, const Ivector2& rb)
+    {
+        const Fvector2 a = corner(lt);
+        const Fvector2 b = corner(rb);
+        return Frect().set(a.x, a.y, b.x + cell.x, b.y + cell.y);
+    };
+
+    Frect clientArea;
+    m_pParentDragDropList->GetClientArea(clientArea);
+    UI().PushScissor(clientArea);
+
+    // The empty cells, all of them in one draw.
+    m_shape_centres.clear();
+    for (int x = visible.x1; x <= visible.x2; ++x)
+    {
+        for (int y = visible.y1; y <= visible.y2; ++y)
+        {
+            if (!GetCellAt({ x, y }).Empty())
+                continue;
+            const Fvector2 lt = corner({ x, y });
+            m_shape_centres.push_back({ lt.x + cell.x * 0.5f, lt.y + cell.y * 0.5f });
+        }
+    }
+    UIShape::DrawBatch(cell, m_shape_centres, nullptr, looks.looks[SUIGridLooks::Empty]);
+
+    // One plate under each item, across all of its cells, even those scrolled out of view.
+    m_shape_items.clear();
+    for (int x = visible.x1; x <= visible.x2; ++x)
+    {
+        for (int y = visible.y1; y <= visible.y2; ++y)
+        {
+            CUICellItem* item = GetCellAt({ x, y }).m_item;
+            if (!item || std::find(m_shape_items.begin(), m_shape_items.end(), item) != m_shape_items.end())
+                continue;
+            m_shape_items.push_back(item);
+
+            Ivector2 lt{ x, y };
+            while (lt.x > 0 && GetCellAt({ lt.x - 1, lt.y }).m_item == item)
+                --lt.x;
+            while (lt.y > 0 && GetCellAt({ lt.x, lt.y - 1 }).m_item == item)
+                --lt.y;
+            Ivector2 rb = lt;
+            while (rb.x + 1 < m_cellsCapacity.x && GetCellAt({ rb.x + 1, lt.y }).m_item == item)
+                ++rb.x;
+            while (rb.y + 1 < m_cellsCapacity.y && GetCellAt({ lt.x, rb.y + 1 }).m_item == item)
+                ++rb.y;
+
+            // The stock grid's select modes, by name: 1 selected, 2 marked, 3 blocked.
+            SUIGridLooks::Look look = SUIGridLooks::Item;
+            if (item->m_cur_mark)
+                look = SUIGridLooks::Marked;
+            else if (item->m_selected)
+                look = SUIGridLooks::Selected;
+            else if (item->m_select_armament)
+                look = SUIGridLooks::Related;
+            else if (item->m_select_equipped && g_inv_highlight_equipped)
+                look = SUIGridLooks::Marked;
+            else if (item->m_select_mode == 1)
+                look = SUIGridLooks::Selected;
+            else if (item->m_select_mode == 2)
+                look = SUIGridLooks::Marked;
+            else if (item->m_select_mode == 3)
+                look = SUIGridLooks::Blocked;
+            UIShape::Draw(span(lt, rb), looks.looks[look]);
+        }
+    }
+
+    // Where the dragged item would land.
+    if (dragArea && dragCell.x >= 0 && dragCell.y >= 0)
+        UIShape::Draw(span(dragCell, { dragCell.x + dragSize.x - 1, dragCell.y + dragSize.y - 1 }), looks.looks[SUIGridLooks::Drop]);
+
+    UI().PopScissor();
 }
 
 void CUICellContainer::DrawBlocker() const

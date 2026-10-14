@@ -101,7 +101,7 @@ void CUIActorMenu::InitPartnerInventoryContents()
 
     TIItemContainer items_list;
     m_pPartnerInvOwner->inventory().AddAvailableItems(items_list, true);
-    std::sort(items_list.begin(), items_list.end(), InventoryUtilities::GreaterRoomInRuck);
+    inventory_tools::sort_items(items_list);
 
     TIItemContainer::iterator itb = items_list.begin();
     TIItemContainer::iterator ite = items_list.end();

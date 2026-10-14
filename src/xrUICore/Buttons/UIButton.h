@@ -51,6 +51,13 @@ public:
     pcstr GetDebugType() override { return "CUIButton"; }
 
 protected:
+    u8 ShapeLook() const override;
+    // The caption takes the colour the skin gives the current look; a look without one gets back the
+    // caption's own colour when `restore` (a 3t button sets its own colours every frame instead).
+    void ApplySkinTextColor(bool restore);
+    u32 m_skinTextBase{};
+    bool m_skinTextBaseSet{};
+
     struct alignas(2) ButtonAccelerator
     {
         s16  accel : 15;

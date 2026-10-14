@@ -17,6 +17,7 @@ public:
 
     virtual void SetTextureColor(u32 color) { m_texture_color = color; }
     virtual u32 GetTextureColor() const { return m_texture_color; }
+    u32 ShapeTint() const override { return GetTextureColor(); }
     virtual bool InitTexture(pcstr texture, bool fatal = true);
     virtual bool InitTextureEx(pcstr texture, pcstr shader, bool fatal = true);
 

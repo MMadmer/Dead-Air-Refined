@@ -94,6 +94,12 @@ void CUIStatic::DrawText()
 
 void CUIStatic::DrawTexture()
 {
+    // a skinned static draws its shape instead of its texture, and neither when the texture is off
+    if (!m_bTextureEnable)
+        SkipShapeSkin();
+    else if (DrawShapeSkin())
+        return;
+
     if (m_bTextureEnable && GetShader() && GetShader()->inited())
     {
         Frect rect;

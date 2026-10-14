@@ -27,6 +27,8 @@
 #include "UIMessageBoxEx.h"
 #include "xrUICore/PropertiesBox/UIPropertiesBox.h"
 #include "UIMainIngameWnd.h"
+#include "UIActorMenuHotkeys.h"
+#include "UIItemCompare.h"
 
 bool CUIActorMenu::AllowItemDrops(EDDListType from, EDDListType to)
 {
@@ -330,6 +332,7 @@ bool CUIActorMenu::OnItemFocusReceive(CUICellItem* itm)
 
     itm->m_selected = true;
     set_highlight_item(itm);
+    TryHoverHotkey(itm);
 
 	luabind::functor<bool> funct1;
 	if (GEnv.ScriptEngine->functor("actor_menu_inventory.CUIActorMenu_OnItemFocusReceive", funct1))
@@ -374,6 +377,15 @@ bool CUIActorMenu::OnItemFocusedUpdate(CUICellItem* itm)
         {
             set_highlight_item(itm);
         }
+        // a hover hotkey may move the item away: nothing more of it this frame then
+        if (TryHoverHotkey(itm))
+            return true;
+    }
+    // under the panel of hotkeys or the comparison no item tells about itself
+    if (OverHotkeysPanel() || (m_compare_wnd && m_compare_wnd->IsShown()))
+    {
+        InfoCurItem(nullptr);
+        return true;
     }
     if (Device.dwTimeContinual < itm->FocusReceiveTime() + (m_ItemInfo ? m_ItemInfo->delay : 0))
     {
@@ -383,6 +395,15 @@ bool CUIActorMenu::OnItemFocusedUpdate(CUICellItem* itm)
     {
         return true;
     }
+    // an open drop-down of orders lies over the grid: the item under it shows no hint
+    for (CUIInventoryToolbar* toolbar : m_inventory_tools)
+    {
+        if (toolbar->SortModesShown())
+        {
+            InfoCurItem(nullptr);
+            return true;
+        }
+    }
 
     InfoCurItem(itm);
     return true;
@@ -390,6 +411,48 @@ bool CUIActorMenu::OnItemFocusedUpdate(CUICellItem* itm)
 
 bool CUIActorMenu::OnMouseAction(float x, float y, EUIMessages mouse_action)
 {
+    // The comparison is modal: the menu under it takes nothing.
+    if (m_compare_wnd && m_compare_wnd->IsShown())
+    {
+        Frect rect;
+        m_compare_wnd->GetAbsoluteRect(rect);
+        const Fvector2 cursor = GetUICursor().GetCursorPosition();
+        m_compare_wnd->OnMouseAction(cursor.x - rect.left, cursor.y - rect.top, mouse_action);
+        return true;
+    }
+
+    // the release of a press a hotkey took
+    if (m_swallow_armed && mouse_action == m_swallow_up)
+    {
+        m_swallow_armed = false;
+        return true;
+    }
+
+    // a click anywhere but on an open drop-down of orders closes it
+    if (mouse_action == WINDOW_LBUTTON_DOWN || mouse_action == WINDOW_RBUTTON_DOWN || mouse_action == WINDOW_CBUTTON_DOWN)
+    {
+        for (CUIInventoryToolbar* toolbar : m_inventory_tools)
+            toolbar->OnMouseDown(GetUICursor().GetCursorPosition());
+    }
+
+    // A click or a turn of the wheel with the modifiers of a hotkey is the hotkey's.
+    // A wheel has no release to swallow.
+    constexpr std::tuple<EUIMessages, EHotkeyTrigger, EUIMessages, bool> triggers[] = {
+        { WINDOW_LBUTTON_DOWN, EHotkeyTrigger::LeftClick, WINDOW_LBUTTON_UP, true },
+        { WINDOW_RBUTTON_DOWN, EHotkeyTrigger::RightClick, WINDOW_RBUTTON_UP, true },
+        { WINDOW_CBUTTON_DOWN, EHotkeyTrigger::MiddleClick, WINDOW_CBUTTON_UP, true },
+        { WINDOW_MOUSE_WHEEL_UP, EHotkeyTrigger::WheelUp, WINDOW_MOUSE_WHEEL_UP, false },
+        { WINDOW_MOUSE_WHEEL_DOWN, EHotkeyTrigger::WheelDown, WINDOW_MOUSE_WHEEL_DOWN, false } };
+    for (const auto& [message, trigger, release, swallow] : triggers)
+    {
+        if (mouse_action == message && TryHotkey(trigger))
+        {
+            m_swallow_up = release;
+            m_swallow_armed = swallow;
+            return true;
+        }
+    }
+
     inherited::OnMouseAction(x, y, mouse_action);
     return true; // no click`s
 }
@@ -397,6 +460,22 @@ bool CUIActorMenu::OnMouseAction(float x, float y, EUIMessages mouse_action)
 bool CUIActorMenu::OnKeyboardAction(int dik, EUIMessages keyboard_action)
 {
     InfoCurItem(NULL);
+
+    // The comparison takes the keys while it is up; a way out closes it alone.
+    if (m_compare_wnd && m_compare_wnd->IsShown())
+    {
+        if (WINDOW_KEY_PRESSED == keyboard_action &&
+            (IsBinded(kQUIT, dik) || IsBinded(kINVENTORY, dik) || IsBinded(kUI_BACK, dik, EKeyContext::UI)))
+        {
+            m_compare_wnd->Close();
+            return true;
+        }
+        m_compare_wnd->OnKeyboardAction(dik, keyboard_action);
+        return true;
+    }
+
+    if (WINDOW_KEY_PRESSED == keyboard_action && TryHotkey(EHotkeyTrigger::Key, dik))
+        return true;
 
     if (IsBinded(kDROP, dik))
     {
@@ -428,10 +507,10 @@ bool CUIActorMenu::OnKeyboardAction(int dik, EUIMessages keyboard_action)
     if (IsBinded(kQUIT, dik) || IsBinded(kINVENTORY, dik) || IsBinded(kUSE, dik) ||
         IsBinded(kUI_BACK, dik, EKeyContext::UI))
     {
-        if (WINDOW_KEY_PRESSED == keyboard_action)
-        {
+        // Escape closes an open drop-down of orders first, the menu on the next press.
+        const bool back = IsBinded(kQUIT, dik) || IsBinded(kUI_BACK, dik, EKeyContext::UI);
+        if (WINDOW_KEY_PRESSED == keyboard_action && !(back && CloseSortModes()))
             OnBtnExitClicked(this, nullptr);
-        }
         return true;
     }
 

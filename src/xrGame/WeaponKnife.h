@@ -53,6 +53,9 @@ protected:
     virtual void LoadFireParams(LPCSTR section);
 
 public:
+    SCompareStats CompareStats() const override;
+
+public:
     CWeaponKnife();
     virtual ~CWeaponKnife();
 

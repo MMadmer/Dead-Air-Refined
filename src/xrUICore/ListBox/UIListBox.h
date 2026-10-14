@@ -1,6 +1,7 @@
 #pragma once
 
 #include "xrUICore/ScrollView/UIScrollView.h"
+#include "xrUICore/Static/UIShapeStyle.h"
 
 class CUIListBoxItem;
 
@@ -49,6 +50,15 @@ protected:
     float m_def_item_height;
     u32 m_text_color;
     shared_str m_selection_texture;
+
+public:
+    // Every row of the list drawn by the shader: normal, highlight under the cursor, checked when
+    // selected (the layout's <list><item shape="..."/></list>).
+    void SetItemSkin(std::unique_ptr<SUIShapeSkin> skin) { m_item_skin = std::move(skin); }
+
+protected:
+    std::unique_ptr<SUIShapeSkin> m_item_skin;
+    void SkinItem(CUIListBoxItem* item);
 
     bool m_bImmediateSelection;
 

@@ -1,5 +1,7 @@
 #include "StdAfx.h"
 #include "UIActorMenu.h"
+#include "UIActorMenuHotkeys.h"
+#include "UIItemCompare.h"
 #include "UIActorStateInfo.h"
 #include "Actor.h"
 #include "UIGameSP.h"
@@ -113,8 +115,13 @@ void CUIActorMenu::SetMenuMode(EMenuMode mode)
 
     if (mode != m_currMenuMode)
     {
-        // A filter and a pending sort belong to the window they were made in.
+        // A filter, a pending sort and the picks of a comparison belong to the window they were made in.
         ResetInventoryTools();
+        ClearPicks();
+        m_swallow_armed = false;
+        m_pending_hover = {};
+        if (m_compare_wnd && m_compare_wnd->IsShown())
+            m_compare_wnd->Close();
 
         switch (m_currMenuMode)
         {
@@ -152,6 +159,7 @@ void CUIActorMenu::SetMenuMode(EMenuMode mode)
     }
     UpdateButtonsLayout();
     SyncInventoryTools();
+    SyncHotkeys();
 }
 
 void CUIActorMenu::PlaySnd(eActorMenuSndAction a)
@@ -164,6 +172,10 @@ void CUIActorMenu::SendMessage(CUIWindow* pWnd, s16 msg, void* pData) { CUIWndCa
 void CUIActorMenu::Show(bool status)
 {
     inherited::Show(status);
+    // a press a hotkey took and the menu lost before its release
+    m_swallow_armed = false;
+    m_pending_hover = {};
+    m_hover_refused = u16(-1);
     if (status)
     {
         SetMenuMode(m_currMenuMode);
@@ -174,6 +186,7 @@ void CUIActorMenu::Show(bool status)
     {
         PlaySnd(eSndClose);
         SetMenuMode(mmUndefined);
+        m_distanceExempt = false;
     }
     m_ActorStateInfo->Show(status);
     m_message_static = nullptr;
@@ -206,6 +219,8 @@ void CUIActorMenu::Draw()
     inherited::Draw();
     if (m_ItemInfo)
         m_ItemInfo->Draw();
+    if (m_pristine_shown && m_ItemInfoPristine)
+        m_ItemInfoPristine->Draw();
     if (m_hint_wnd)
         m_hint_wnd->Draw();
     if (m_message_static)
@@ -219,6 +234,7 @@ void CUIActorMenu::Update()
         m_ActorStateInfo->UpdateActorInfo(m_pActorInvOwner);
         UpdatePendingSort();
         SyncInventoryTools();
+        PrunePicks();
     }
 
     switch (m_currMenuMode)
@@ -275,8 +291,11 @@ void CUIActorMenu::Update()
     }
 
     inherited::Update();
+    RunPendingHover();
     if (m_ItemInfo)
         m_ItemInfo->Update();
+    if (m_pristine_shown && m_ItemInfoPristine)
+        m_ItemInfoPristine->Update();
     if (m_hint_wnd)
         m_hint_wnd->Update();
 }
@@ -329,7 +348,7 @@ void CUIActorMenu::CheckDistance()
 
     if (pPartnerGO)
     {
-        if ((pActorGO->Position().distance_to(pPartnerGO->Position()) > 3.0f) &&
+        if (!m_distanceExempt && (pActorGO->Position().distance_to(pPartnerGO->Position()) > 3.0f) &&
             !m_pPartnerInvOwner->NeedOsoznanieMode())
         {
             g_btnHint->Discard();
@@ -338,7 +357,7 @@ void CUIActorMenu::CheckDistance()
     }
     else // pBoxGO
     {
-        if (pActorGO->Position().distance_to(pBoxGO->Position()) > 3.0f)
+        if (!m_distanceExempt && pActorGO->Position().distance_to(pBoxGO->Position()) > 3.0f)
         {
             g_btnHint->Discard();
             HideDialog();
@@ -510,6 +529,7 @@ void CUIActorMenu::InfoCurItem(CUICellItem* cell_item)
     if (!cell_item)
     {
         m_ItemInfo->InitItem(nullptr);
+        m_pristine_shown = false;
         return;
     }
     PIItem current_item = (PIItem)cell_item->m_pData;
@@ -568,6 +588,7 @@ void CUIActorMenu::InfoCurItem(CUICellItem* cell_item)
     //	m_ItemInfo->InitItem	( current_item, compare_item );
     float dx_pos = GetWndRect().left;
     fit_in_rect(m_ItemInfo, Frect().set(0.0f, 0.0f, UI_BASE_WIDTH - dx_pos, UI_BASE_HEIGHT), 10.0f, dx_pos);
+    UpdatePristineInfo(cell_item);
 }
 
 CUIItemInfo* CUIActorMenu::GetModeSpecificItemInfo()

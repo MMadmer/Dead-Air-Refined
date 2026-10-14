@@ -1,0 +1,371 @@
+-- The carcass of a mutant: the parts it gives, one cut at a time or all at once.
+-- Dead Air's window (Alundaio, ponney68; Open S.T.A.L.K.E.R. Mod License 1.0) redrawn for Dead Air:
+-- Refined on the shapes of ui_theme.xml (ui_mutant_loot.xml). One script for both script layers:
+-- Revolution II's harvest animation and its "take all" are used where they exist.
+--
+-- What it keeps of the game's rules: itms_manager rolls the loot once per carcass (it decides, as
+-- before, whether a knife and a fresh carcass are there at all), every cut wears the knife, a cut
+-- closes the window the way the original did, and the loot stays on the carcass between visits and
+-- saves. A carcass whose stores were lost by an older save comes up empty instead of rolling again.
+--
+-- A click marks a part or lets it go; "Take" cuts every marked part whole, or one of the selected
+-- part when none is marked (a double click always does that); "Take all" and the sprint key cut
+-- everything.
+
+-- The pictures of the PDA encyclopedia, by species (393 x 200 each).
+local pictures = {
+	snork       = {file = "ui\\ui_actor_monsters_pda", x = 393, y = 0},
+	dog         = {file = "ui\\ui_actor_monsters_pda", x = 0, y = 800},
+	pseudodog   = {file = "ui\\ui_actor_monsters_pda", x = 393, y = 200},
+	psy_dog     = {file = "ui\\ui_actor_monsters_pda", x = 393, y = 200},
+	poltergeist = {file = "ui\\ui_actor_monsters_pda", x = 0, y = 400},
+	bloodsucker = {file = "ui\\ui_actor_monsters_pda", x = 393, y = 400},
+	controller  = {file = "ui\\ui_actor_monsters_pda", x = 393, y = 800},
+	chimera     = {file = "ui\\ui_actor_monsters_pda", x = 0, y = 600},
+	tushkano    = {file = "ui\\ui_actor_monsters_pda", x = 0, y = 0},
+	rat         = {file = "ui\\ui_actor_monsters_pda", x = 0, y = 0},
+	flesh       = {file = "ui\\ui_actor_monsters_pda", x = 393, y = 600},
+	burer       = {file = "ui\\ui_actor_monsters_pda_1", x = 0, y = 0},
+	boar        = {file = "ui\\ui_actor_monsters_pda_1", x = 393, y = 0},
+	giant       = {file = "ui\\ui_actor_monsters_pda_1", x = 0, y = 200},
+	cat         = {file = "ui\\ui_actor_monsters_pda_2", x = 0, y = 0},
+	fracture    = {file = "ui\\ui_actor_monsters_pda_2", x = 393, y = 200},
+	bird        = {file = "ui\\ui_actor_monsters_pda_2", x = 393, y = 0},
+	zombie      = {file = "ui\\ui_actor_monsters_pda_2", x = 0, y = 200},
+}
+
+-- the share of the screen a layout unit takes across: a 16:9 layout squeezes its x units
+local function x_scale()
+	return (utils and utils.is_widescreen and utils.is_widescreen()) and 0.75 or 1
+end
+
+-- Revolution II plays its own harvest animation when its option is on; otherwise the cut is the
+-- stock effect and its sound.
+local function play_cut()
+	knife_manager.degradate()
+	if not actor_effects then
+		return
+	end
+	local animated = dar2_animations_enhanced and axr_main and axr_main.config
+		and axr_main.config:r_value("mm_options", "enable_consumable_animation", 1, false) == true
+	if animated then
+		dar2_animations_enhanced.monster_on_actor_use_2()
+	else
+		actor_effects.use_item(db.actor:has_info("perk_butcher") and "mutant_looting_fast" or "mutant_looting")
+		xr_sound.set_sound_play(db.actor:id(), "inv_mutant_loot_animal")
+	end
+end
+
+-------------------------------------------------------------------------------------------------
+class "loot_item" (CUIListBoxItem)
+
+function loot_item:__init(height) super(height)
+	self.fn = self:GetTextItem()
+	self.fn:SetFont(GetFontLetterica18Russian())
+	self.fn:SetEllipsis(true)
+end
+
+function loot_item:__finalize()
+end
+
+-------------------------------------------------------------------------------------------------
+class "loot_ui" (CUIScriptWnd)
+
+function loot_ui:__init(owner, obj) super()
+	self.owner = owner
+	self.section = obj:section()
+	self.clsid = obj:clsid()
+	self.id = obj:id()
+	self.obj = obj
+
+	self:InitControls()
+	self:InitCallBacks()
+	self:FillList()
+end
+
+function loot_ui:__finalize()
+end
+
+function loot_ui:InitControls()
+	self:SetWndRect(Frect():set(0, 0, 1024, 768))
+	self:SetAutoDelete(true)
+
+	local xml = CScriptXmlInit()
+	self.xml = xml
+	xml:ParseFile("ui_mutant_loot.xml")
+
+	local ctrl = CUIWindow()
+	xml:InitWindow("loot:file_item:main", 0, ctrl)
+	self.row_size = vector2():set(ctrl:GetWidth(), ctrl:GetHeight())
+	xml:InitWindow("loot:file_item:fn", 0, ctrl)
+	self.name_size = vector2():set(ctrl:GetWidth(), ctrl:GetHeight())
+	xml:InitWindow("loot:file_item:fd", 0, ctrl)
+	self.count_size = vector2():set(ctrl:GetWidth(), ctrl:GetHeight())
+
+	xml:InitStatic("loot:shade", self)
+	self.form = xml:InitStatic("loot:form", self)
+	xml:InitStatic("loot:form:image_frame", self.form)
+	self.image = xml:InitStatic("loot:form:image", self.form)
+	xml:InitStatic("loot:form:caption", self.form)
+	xml:InitStatic("loot:form:hint", self.form)
+	xml:InitStatic("loot:form:list_frame", self.form)
+	xml:InitStatic("loot:form:preview_frame", self.form)
+	self.picture = xml:InitStatic("loot:form:icon", self.form)
+	self.picture_box = {
+		x = self.picture:GetWndPos().x, y = self.picture:GetWndPos().y,
+		w = self.picture:GetWidth(), h = self.picture:GetHeight(),
+	}
+	self.picture:Show(false)
+	self.picture_name = xml:InitStatic("loot:form:icon_name", self.form)
+
+	self.list_box = xml:InitListBox("loot:form:list", self.form)
+	self.list_box:ShowSelectedItem(true)
+	self:Register(self.list_box, "list_window")
+
+	self:Register(xml:Init3tButton("loot:form:btn_ok", self.form), "button_ok")
+	self:Register(xml:Init3tButton("loot:form:btn_ok_all", self.form), "button_ok_all")
+	self:Register(xml:Init3tButton("loot:form:btn_cancel", self.form), "button_cancel")
+
+	self:SetMutantImage()
+end
+
+function loot_ui:SetMutantImage()
+	local species = game.translate_string(system_ini():r_string_ex(self.section, "species") or "")
+	local picture = pictures[species]
+	if not picture then
+		self.image:Show(false)
+		return
+	end
+	self.image:InitTexture(picture.file)
+	self.image:SetTextureRect(Frect():set(picture.x, picture.y, picture.x + 393, picture.y + 200))
+end
+
+function loot_ui:InitCallBacks()
+	self:AddCallback("button_ok", ui_events.BUTTON_CLICKED, self.OnButton_ok, self)
+	self:AddCallback("button_ok_all", ui_events.BUTTON_CLICKED, self.OnButton_ok_all, self)
+	self:AddCallback("button_cancel", ui_events.BUTTON_CLICKED, self.OnButton_cancel, self)
+	self:AddCallback("list_window", ui_events.LIST_ITEM_CLICKED, self.OnListItemClicked, self)
+	self:AddCallback("list_window", ui_events.WINDOW_LBUTTON_DB_CLICK, self.OnListItemDbClicked, self)
+end
+
+function loot_ui:SaveLoot()
+	utils.save_var(self.obj, "loot", self.loot)
+	utils.se_obj_save_var(self.id, self.obj:name(), "se_loot", self.loot)
+end
+
+function loot_ui:FillList()
+	self.list_box:RemoveAll()
+
+	local id, name = self.id, self.obj:name()
+	self.loot = utils.load_var(self.obj, "loot", nil) or utils.se_obj_load_var(id, name, "se_loot")
+	local looted = utils.se_obj_load_var(id, name, "looted") == "true"
+	local generated = utils.se_obj_load_var(id, name, "loot_generated") == "true"
+
+	if not self.loot then
+		if looted or generated then
+			-- Rolled once already: a save that lost both stores keeps the carcass empty.
+			self.loot = {}
+		else
+			self.loot = {}
+			itms_manager.loot_mutant(self.obj, self.clsid, self.loot)
+			utils.se_obj_save_var(id, name, "loot_generated", "true")
+		end
+		self:SaveLoot()
+	elseif not utils.se_obj_load_var(id, name, "se_loot") then
+		-- The persistent list was lost while the object's own copy survived.
+		utils.se_obj_save_var(id, name, "se_loot", self.loot)
+	end
+
+	local any
+	for sec, t in pairs(self.loot) do
+		if t.count and t.count > 0 then
+			self:AddItemToList(sec, t.count)
+			any = true
+		end
+	end
+
+	if any then
+		self:ShowDialog(true)
+		self.list_box:SetSelectedIndex(0)
+		self:ShowPreview()
+	else
+		SetHudMsg(game.translate_string("st_nothing_useful"), 4)
+		utils.se_obj_save_var(id, name, "looted", "true")
+	end
+end
+
+function loot_ui:AddItemToList(sec, count)
+	local ini = system_ini()
+	local item = loot_item(self.row_size.y)
+	item:SetWndSize(self.row_size)
+	item.fn:SetWndPos(vector2():set(0, 0))
+	item.fn:SetWndSize(self.name_size)
+	item.fn:SetText(game.translate_string(ini:r_string_ex(sec, "inv_name") or sec))
+	item.count = item:AddTextField("x" .. count, self.count_size.x)
+	item.count:SetFont(GetFontLetterica16Russian())
+	item.count:SetWndPos(vector2():set(self.name_size.x + 4, 0))
+	item.count:SetWndSize(self.count_size)
+
+	item.sec = sec
+	item.name = game.translate_string(ini:r_string_ex(sec, "inv_name") or sec)
+	item.texture = ini:r_string_ex(sec, "icons_texture") or "ui\\ui_icon_equipment"
+	local gx, gy = ini:r_float_ex(sec, "inv_grid_x") or 0, ini:r_float_ex(sec, "inv_grid_y") or 0
+	local gw, gh = ini:r_float_ex(sec, "inv_grid_width") or 1, ini:r_float_ex(sec, "inv_grid_height") or 1
+	item.rect = {x1 = gx * 50, y1 = gy * 50, x2 = (gx + gw) * 50, y2 = (gy + gh) * 50}
+	item.grid = {w = gw, h = gh}
+	-- the mark of a part chosen for the next cut
+	item.mark = self.xml:InitStatic("loot:file_item:mark", item)
+	item.mark_bar = self.xml:InitStatic("loot:file_item:mark_bar", item)
+	item.marked = false
+	item.mark:Show(false)
+	item.mark_bar:Show(false)
+	self.list_box:AddExistingItem(item)
+end
+
+function loot_ui:SetMarked(item, marked)
+	item.marked = marked
+	item.mark:Show(marked)
+	item.mark_bar:Show(marked)
+end
+
+function loot_ui:MarkedItems()
+	local marked = {}
+	for i = 0, self.list_box:GetSize() - 1 do
+		local item = self.list_box:GetItemByIndex(i)
+		if item and item.marked then
+			marked[#marked + 1] = item
+		end
+	end
+	return marked
+end
+
+-- A click marks the part or lets it go, and shows it.
+function loot_ui:OnListItemClicked()
+	local item = self.list_box:GetSize() > 0 and self.list_box:GetSelectedItem()
+	if item then
+		self:SetMarked(item, not item.marked)
+		self:ShowPreview()
+	end
+end
+
+-- The selected part, as large as its box allows, square cells kept square on any screen.
+function loot_ui:ShowPreview()
+	if self.list_box:GetSize() == 0 then
+		return
+	end
+	local item = self.list_box:GetSelectedItem()
+	if not item then
+		return
+	end
+
+	local box, kx = self.picture_box, x_scale()
+	local fit = math.min(box.w / kx / item.grid.w, box.h / item.grid.h)
+	local w, h = item.grid.w * fit * kx, item.grid.h * fit
+	self.picture:InitTexture(item.texture)
+	self.picture:SetTextureRect(Frect():set(item.rect.x1, item.rect.y1, item.rect.x2, item.rect.y2))
+	self.picture:SetWndSize(vector2():set(w, h))
+	self.picture:SetWndPos(vector2():set(box.x + (box.w - w) / 2, box.y + (box.h - h) / 2))
+	self.picture:Show(true)
+	self.picture_name:TextControl():SetText(item.name)
+end
+
+-- A double click cuts one of the part under it, whatever is marked: its first click marked it, which
+-- is taken back.
+function loot_ui:OnListItemDbClicked()
+	local item = self.list_box:GetSelectedItem()
+	if item then
+		self:SetMarked(item, not item.marked)
+	end
+	self:CutOne()
+end
+
+function loot_ui:OnButton_ok()
+	local marked = self:MarkedItems()
+	if #marked == 0 then
+		self:CutOne()
+		return
+	end
+
+	-- every marked part, whole, in one cut
+	play_cut()
+	for _, item in ipairs(marked) do
+		local entry = self.loot[item.sec]
+		for i = 1, entry and entry.count or 0 do
+			alife():create(item.sec, db.actor:position(), 0, 0, 0)
+		end
+		self.loot[item.sec] = nil
+	end
+	self:SaveLoot()
+	if not next(self.loot) then
+		utils.se_obj_save_var(self.id, self.obj:name(), "looted", "true")
+	end
+	xr_statistic.inc_counter("field_dressings")
+	self:HideDialog()
+end
+
+function loot_ui:CutOne()
+	local item = self.list_box:GetSelectedItem()
+	if not item then
+		return
+	end
+
+	play_cut()
+	alife():create(item.sec, db.actor:position(), 0, 0, 0)
+	local entry = self.loot[item.sec]
+	entry.count = entry.count - 1
+	if entry.count <= 0 then
+		self.loot[item.sec] = nil
+	end
+	self:SaveLoot()
+	xr_statistic.inc_counter("field_dressings")
+	self:HideDialog()
+end
+
+function loot_ui:OnButton_ok_all()
+	if not self.loot then
+		return
+	end
+
+	play_cut()
+	for sec, t in pairs(self.loot) do
+		for i = 1, t.count or 0 do
+			alife():create(sec, db.actor:position(), 0, 0, 0)
+		end
+	end
+	self.loot = {}
+	self:SaveLoot()
+	utils.se_obj_save_var(self.id, self.obj:name(), "looted", "true")
+	xr_statistic.inc_counter("field_dressings")
+	self:HideDialog()
+end
+
+function loot_ui:OnButton_cancel()
+	self:HideDialog()
+end
+
+function loot_ui:OnKeyboard(dik, keyboard_action)
+	CUIScriptWnd.OnKeyboard(self, dik, keyboard_action)
+	if keyboard_action == ui_events.WINDOW_KEY_PRESSED then
+		if dik == DIK_keys.DIK_RETURN then
+			self:OnButton_ok()
+		elseif dik == DIK_keys.DIK_ESCAPE then
+			self:OnButton_cancel()
+		-- the sprint key takes everything, as it does in a search of a body or a box
+		elseif dik_to_bind(dik) == key_bindings.kSPRINT_TOGGLE then
+			self:OnButton_ok_all()
+		end
+	end
+	return true
+end
+
+-- The window itself, without the harvest scene enhanced_animations puts in front of loot_ui.
+local window = loot_ui
+
+-- dar_ui_open mutant: the carcass by its id, straight to the window.
+function open_by_id(id)
+	local obj = id and level.object_by_id(id)
+	local hud = get_hud()
+	if obj and hud then
+		window(hud, obj)
+	end
+end

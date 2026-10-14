@@ -78,6 +78,8 @@ LPCSTR GetTimePeriodAsString(pstr _buff, u32 buff_sz, ALife::_TIME_ID _from, ALi
 // Отобразить вес, который несет (*pInvOwner)
 void UpdateWeight(CUIStatic& wnd, CInventoryOwner* pInvOwner, bool withPrefix = false);
 void UpdateWeightStr(CUIStatic& wnd, CUIStatic& wnd_max, CInventoryOwner* pInvOwner);
+// the most the owner carries without overload, as the weight readouts show it
+float DisplayedMaxWeight(CInventoryOwner* pInvOwner);
 
 // Функции получения строки-идентификатора ранга и отношения по их числовому идентификатору
 LPCSTR GetRankAsText(CHARACTER_RANK_VALUE rankID);

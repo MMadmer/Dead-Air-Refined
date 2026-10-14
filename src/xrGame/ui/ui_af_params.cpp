@@ -286,7 +286,8 @@ bool UIArtefactParamItem::Init(CUIXml& xml, pcstr section, pcstr caption,
 
         pcstr texture_plus = xml.Read("caption:texture", 0, nullptr);
         m_texture_plus = texture_plus;
-        VERIFY(m_texture_plus.size());
+        // a pictogram the shader draws has no texture of its own: the sign tints it
+        VERIFY(m_texture_plus.size() || (m_caption && m_caption->GetShapeSkin()));
     }
     xml.SetLocalRoot(base_node);
     return true;
@@ -314,7 +315,10 @@ void UIArtefactParamItem::SetValue(float value)
     u32 color = positive ? m_positive_color : m_negative_color;
     m_value.SetTextColor(color);
 
-    if (m_texture_minus.size() && m_caption)
+    // A pictogram drawn by the shader has no second texture: the sign colours it instead.
+    if (m_caption && m_caption->GetShapeSkin())
+        m_caption->SetTextureColor(positive ? 0xFFFFFFFF : m_negative_color);
+    else if (m_texture_minus.size() && m_caption)
     {
         if (positive)
         {

@@ -211,7 +211,18 @@ void CUIActorMenu::script_register(lua_State* luaState)
                     return false;
                 self->TakeAllFromPartner(nullptr, nullptr);
                 return true;
-            }),
+            })
+            // The hotkeys and the comparison: an action of inventory_hotkeys.xml on the item under the
+            // cursor, an item picked or let go, the comparison of the picks.
+            .def("run_hotkey_action", +[](CUIActorMenu* self, pcstr action) { return self->RunHotkeyAction(action); })
+            .def("pick_item", +[](CUIActorMenu* self, CScriptGameObject* object)
+            {
+                return object && self->PickItem(smart_cast<CInventoryItem*>(&object->object()));
+            })
+            .def("picked_count", +[](CUIActorMenu* self) { return self->PickedCount(); })
+            .def("clear_picks", +[](CUIActorMenu* self) { self->ClearComparison(); })
+            .def("open_comparison", +[](CUIActorMenu* self) { self->OpenComparison(); })
+            .def("show_hotkeys", +[](CUIActorMenu* self, bool show) { self->ShowHotkeysPanel(show); }),
 
         class_<CUIPdaWnd, CUIDialogWnd>("CUIPdaWnd")
             .def(constructor<>())

@@ -100,6 +100,7 @@ target_sources(xrUICore PRIVATE
     Static/UILanimController.h
     Static/UIShape.cpp
     Static/UIShape.h
+    Static/UIShapeStyle.h
     Static/UIStatic.cpp
     Static/UIStatic.h
     Static/UIStaticItem.cpp

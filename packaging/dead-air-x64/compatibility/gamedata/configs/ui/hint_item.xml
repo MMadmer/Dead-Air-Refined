@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The hint of a button (CUIButtonHint), every button of the game: Dead Air's node, drawn by the
+     xms_ui_shape shader in the theme's tooltip look. The texture node stays: it is what tells the
+     engine to draw the hint as one frame; the shape is drawn in its place. -->
+<window>
+	<button_hint x="0" y="0" width="210" height="100" shape="tooltip">
+		<texture>ui_icons_PDA_tooltips</texture>
+
+		<frame_line x="0" y="0" width="210" height="30" shape="tooltip">
+			<texture>ui_icons_PDA_tooltips</texture>
+		</frame_line>
+
+		<description x="10" y="10" width="190" height="20" complex_mode="1" light_anim="ui_btn_hint" la_cyclic="0" la_texture="0" la_text="1" la_alpha="1">
+			<text font="letterica18" align="l" color="$text"/>
+		</description>
+	</button_hint>
+</window>

@@ -60,7 +60,7 @@ bool CUIFrameLineWnd::InitTextureEx(pcstr texture, pcstr shader, bool fatal /*= 
 
 void CUIFrameLineWnd::Draw()
 {
-    if (m_bTextureVisible)
+    if (!DrawShapeSkin() && m_bTextureVisible)
         DrawElements();
 
     inherited::Draw();

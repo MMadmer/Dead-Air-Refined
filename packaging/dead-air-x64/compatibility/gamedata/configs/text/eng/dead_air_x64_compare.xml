@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<string_table>
+	<string id="st_da_hk_title">
+		<text>Hotkeys</text>
+	</string>
+	<string id="st_da_hk_ctrl">
+		<text>Ctrl</text>
+	</string>
+	<string id="st_da_hk_alt">
+		<text>Alt</text>
+	</string>
+	<string id="st_da_hk_shift">
+		<text>Shift</text>
+	</string>
+	<string id="st_da_hk_hover">
+		<text>hover</text>
+	</string>
+	<string id="st_da_hk_lmb">
+		<text>LMB</text>
+	</string>
+	<string id="st_da_hk_rmb">
+		<text>RMB</text>
+	</string>
+	<string id="st_da_hk_mmb">
+		<text>MMB</text>
+	</string>
+	<string id="st_da_hk_wheel_up">
+		<text>wheel up</text>
+	</string>
+	<string id="st_da_hk_wheel_down">
+		<text>wheel down</text>
+	</string>
+	<string id="st_da_hk_hold">
+		<text>hold</text>
+	</string>
+	<string id="st_da_hk_dbl">
+		<text>double click</text>
+	</string>
+	<string id="st_da_hk_drag">
+		<text>drag</text>
+	</string>
+	<string id="st_da_hk_hover_move_trade">
+		<text>Move a whole stack: from the rucksack onto the table and back; the trader's goods onto his table and back</text>
+	</string>
+	<string id="st_da_hk_hover_move_loot">
+		<text>Move a whole stack into the rucksack or back</text>
+	</string>
+	<string id="st_da_hk_equip">
+		<text>Equip an item or put it back in the rucksack</text>
+	</string>
+	<string id="st_da_hk_move_one_trade">
+		<text>Move one item of a stack onto the table or back</text>
+	</string>
+	<string id="st_da_hk_move_one_loot">
+		<text>Move one item of a stack into the rucksack or back</text>
+	</string>
+	<string id="st_da_hk_split_inventory">
+		<text>Split an ammo box or a stacked item in two</text>
+	</string>
+	<string id="st_da_hk_split_trade">
+		<text>Move half of a stack onto the table or back; split an ammo box in two</text>
+	</string>
+	<string id="st_da_hk_split_loot">
+		<text>Move half of a stack, or half of an ammo box's rounds, to the other side</text>
+	</string>
+	<string id="st_da_hk_drop_stack">
+		<text>Drop a whole stack</text>
+	</string>
+	<string id="st_da_hk_pick">
+		<text>Pick an item for a comparison (only items of one kind are compared)</text>
+	</string>
+	<string id="st_da_hk_compare">
+		<text>Compare the picked items</text>
+	</string>
+	<string id="st_da_hk_clear_picks">
+		<text>Clear all picks</text>
+	</string>
+	<string id="st_da_hk_pristine">
+		<text>Show beside it the item's characteristics in perfect condition (100%)</text>
+	</string>
+	<string id="st_da_hk_dbl_inventory">
+		<text>Use, equip or take off an item</text>
+	</string>
+	<string id="st_da_hk_dbl_trade">
+		<text>Move one item onto the table or back</text>
+	</string>
+	<string id="st_da_hk_dbl_loot">
+		<text>Move one item into the rucksack or back</text>
+	</string>
+	<string id="st_da_hk_drag_caption">
+		<text>Move one item to the chosen place</text>
+	</string>
+	<string id="st_da_hk_context">
+		<text>Item actions menu</text>
+	</string>
+	<string id="st_da_hk_drop_key">
+		<text>Drop the selected item</text>
+	</string>
+	<string id="st_da_hk_take_all_trade">
+		<text>Make the deal</text>
+	</string>
+	<string id="st_da_hk_take_all_loot">
+		<text>Take all items</text>
+	</string>
+	<string id="st_da_hk_give_all_trade">
+		<text>Make the sale</text>
+	</string>
+	<string id="st_da_hk_give_all_loot">
+		<text>Put all items from the rucksack</text>
+	</string>
+	<string id="st_da_hk_panel">
+		<text>Show or hide the hotkeys panel</text>
+	</string>
+	<string id="st_da_hk_button_hint">
+		<text>Hotkeys (H)</text>
+	</string>
+	<string id="st_da_cmp_button_hint">
+		<text>Compare the picked items (V). To pick: MMB or C + LMB</text>
+	</string>
+	<string id="st_da_pristine_suffix">
+		<text>(100%)</text>
+	</string>
+	<string id="st_da_weight_hint">
+		<text>Current weight: %.1f kg\nUp to %.1f kg - no overload.\nUp to %.1f kg - overload: stamina is spent faster.\nA full bar is a full overload: movement slows down.</text>
+	</string>
+	<string id="st_cmp_title">
+		<text>Comparison: %s (%u)</text>
+	</string>
+	<string id="st_cmp_profile_use">
+		<text>To keep</text>
+	</string>
+	<string id="st_cmp_profile_sale">
+		<text>To sell</text>
+	</string>
+	<string id="st_cmp_profile_use_hint">
+		<text>The item to keep. On the left: each parameter's share of the score</text>
+	</string>
+	<string id="st_cmp_profile_sale_hint">
+		<text>The item to sell. On the left: each parameter's share of the score</text>
+	</string>
+	<string id="st_cmp_pairs">
+		<text>Pairwise: the difference of the scores (row minus column)</text>
+	</string>
+	<string id="st_cmp_winner">
+		<text>Recommended: %u. %s</text>
+	</string>
+	<string id="st_cmp_reasons">
+		<text>main advantage:</text>
+	</string>
+	<string id="st_cmp_no_weights">
+		<text>Items of this kind are not scored in this mode</text>
+	</string>
+	<string id="st_cmp_yes">
+		<text>yes</text>
+	</string>
+	<string id="st_cmp_no">
+		<text>no</text>
+	</string>
+	<string id="st_cmp_unit_kg">
+		<text>kg</text>
+	</string>
+	<string id="st_cmp_unit_sec">
+		<text>s</text>
+	</string>
+	<string id="st_cmp_unit_mps">
+		<text>m/s</text>
+	</string>
+	<string id="st_cmp_kind_none">
+		<text>items</text>
+	</string>
+	<string id="st_cmp_kind_firearm">
+		<text>firearms</text>
+	</string>
+	<string id="st_cmp_kind_melee">
+		<text>knives</text>
+	</string>
+	<string id="st_cmp_kind_outfit">
+		<text>suits</text>
+	</string>
+	<string id="st_cmp_kind_helmet">
+		<text>helmets</text>
+	</string>
+	<string id="st_cmp_kind_backpack">
+		<text>rucksacks</text>
+	</string>
+	<string id="st_cmp_kind_artefact">
+		<text>artefacts</text>
+	</string>
+	<string id="st_cmp_kind_ammo">
+		<text>ammunition</text>
+	</string>
+	<string id="st_cmp_kind_grenade">
+		<text>grenades</text>
+	</string>
+	<string id="st_cmp_kind_addon">
+		<text>weapon addons</text>
+	</string>
+	<string id="st_cmp_kind_detector">
+		<text>devices</text>
+	</string>
+	<string id="st_cmp_kind_food">
+		<text>food and drink</text>
+	</string>
+	<string id="st_cmp_kind_medicine">
+		<text>medicine</text>
+	</string>
+	<string id="st_cmp_kind_misc">
+		<text>other items</text>
+	</string>
+	<string id="st_cmp_p_damage">
+		<text>Damage</text>
+	</string>
+	<string id="st_cmp_p_damage_heavy">
+		<text>Heavy strike damage</text>
+	</string>
+	<string id="st_cmp_p_rpm">
+		<text>Rate of fire, rounds/min</text>
+	</string>
+	<string id="st_cmp_p_accuracy">
+		<text>Dispersion</text>
+	</string>
+	<string id="st_cmp_p_recoil">
+		<text>Recoil</text>
+	</string>
+	<string id="st_cmp_p_handling">
+		<text>Inertia</text>
+	</string>
+	<string id="st_cmp_p_aim_time">
+		<text>Time to aim</text>
+	</string>
+	<string id="st_cmp_p_mag_size">
+		<text>Magazine</text>
+	</string>
+	<string id="st_cmp_p_bullet_speed">
+		<text>Flatness (bullet speed)</text>
+	</string>
+	<string id="st_cmp_p_endurance">
+		<text>Endurance, shots per 10% wear</text>
+	</string>
+	<string id="st_cmp_p_misfire">
+		<text>Misfire chance</text>
+	</string>
+	<string id="st_cmp_p_fouled">
+		<text>Fouled parts</text>
+	</string>
+	<string id="st_cmp_p_deformed">
+		<text>Worn parts</text>
+	</string>
+	<string id="st_cmp_p_broken">
+		<text>Broken parts</text>
+	</string>
+	<string id="st_cmp_p_addons">
+		<text>Attached addons</text>
+	</string>
+	<string id="st_cmp_p_mounts">
+		<text>Addon mounts</text>
+	</string>
+	<string id="st_cmp_p_upgrades">
+		<text>Upgrades</text>
+	</string>
+	<string id="st_cmp_p_ammo_cost">
+		<text>Price of a round</text>
+	</string>
+	<string id="st_cmp_p_condition">
+		<text>Condition</text>
+	</string>
+	<string id="st_cmp_p_weight">
+		<text>Weight</text>
+	</string>
+	<string id="st_cmp_p_price">
+		<text>Price</text>
+	</string>
+	<string id="st_cmp_p_price_per_kg">
+		<text>Price per kg</text>
+	</string>
+	<string id="st_cmp_p_uses">
+		<text>Portions left</text>
+	</string>
+	<string id="st_cmp_p_armor">
+		<text>Bullet protection</text>
+	</string>
+	<string id="st_cmp_p_prot_burn">
+		<text>Burn protection</text>
+	</string>
+	<string id="st_cmp_p_prot_shock">
+		<text>Shock protection</text>
+	</string>
+	<string id="st_cmp_p_prot_chemical">
+		<text>Chemical protection</text>
+	</string>
+	<string id="st_cmp_p_prot_radiation">
+		<text>Radiation protection</text>
+	</string>
+	<string id="st_cmp_p_prot_psi">
+		<text>Psi protection</text>
+	</string>
+	<string id="st_cmp_p_prot_strike">
+		<text>Impact protection</text>
+	</string>
+	<string id="st_cmp_p_prot_wound">
+		<text>Rupture protection</text>
+	</string>
+	<string id="st_cmp_p_prot_explosion">
+		<text>Explosion protection</text>
+	</string>
+	<string id="st_cmp_p_artefact_slots">
+		<text>Artefact slots</text>
+	</string>
+	<string id="st_cmp_p_carry">
+		<text>Carry weight</text>
+	</string>
+	<string id="st_cmp_p_power_loss">
+		<text>Stamina use</text>
+	</string>
+	<string id="st_cmp_p_night_vision">
+		<text>Night vision</text>
+	</string>
+	<string id="st_cmp_p_restore_health">
+		<text>Health</text>
+	</string>
+	<string id="st_cmp_p_restore_power">
+		<text>Stamina</text>
+	</string>
+	<string id="st_cmp_p_restore_bleeding">
+		<text>Wound healing</text>
+	</string>
+	<string id="st_cmp_p_restore_satiety">
+		<text>Satiety</text>
+	</string>
+	<string id="st_cmp_p_restore_radiation">
+		<text>Radiation</text>
+	</string>
+	<string id="st_cmp_p_imm_burn">
+		<text>Burn protection</text>
+	</string>
+	<string id="st_cmp_p_imm_shock">
+		<text>Shock protection</text>
+	</string>
+	<string id="st_cmp_p_imm_chemical">
+		<text>Chemical protection</text>
+	</string>
+	<string id="st_cmp_p_imm_radiation">
+		<text>Radiation protection</text>
+	</string>
+	<string id="st_cmp_p_imm_psi">
+		<text>Psi protection</text>
+	</string>
+	<string id="st_cmp_p_imm_strike">
+		<text>Impact protection</text>
+	</string>
+	<string id="st_cmp_p_imm_wound">
+		<text>Rupture protection</text>
+	</string>
+	<string id="st_cmp_p_imm_explosion">
+		<text>Explosion protection</text>
+	</string>
+	<string id="st_cmp_p_imm_fire_wound">
+		<text>Bullet protection</text>
+	</string>
+	<string id="st_cmp_p_rounds">
+		<text>Rounds</text>
+	</string>
+	<string id="st_cmp_p_round_cost">
+		<text>Price of a round</text>
+	</string>
+	<string id="st_cmp_p_k_hit">
+		<text>Damage</text>
+	</string>
+	<string id="st_cmp_p_k_ap">
+		<text>Armour piercing</text>
+	</string>
+	<string id="st_cmp_p_k_disp">
+		<text>Dispersion</text>
+	</string>
+	<string id="st_cmp_p_k_air_resistance">
+		<text>Air drag</text>
+	</string>
+	<string id="st_cmp_p_impair">
+		<text>Weapon wear</text>
+	</string>
+	<string id="st_cmp_p_blast">
+		<text>Blast damage</text>
+	</string>
+	<string id="st_cmp_p_blast_r">
+		<text>Blast radius, m</text>
+	</string>
+	<string id="st_cmp_p_frags">
+		<text>Fragments</text>
+	</string>
+	<string id="st_cmp_p_frag_hit">
+		<text>Fragment damage</text>
+	</string>
+	<string id="st_cmp_p_frags_r">
+		<text>Fragment range, m</text>
+	</string>
+	<string id="st_cmp_p_zoom">
+		<text>Magnification</text>
+	</string>
+	<string id="st_cmp_p_af_radius">
+		<text>Detection radius, m</text>
+	</string>
+	<string id="st_cmp_p_satiety">
+		<text>Satiety</text>
+	</string>
+	<string id="st_cmp_p_thirst">
+		<text>Thirst</text>
+	</string>
+	<string id="st_cmp_p_health">
+		<text>Health</text>
+	</string>
+	<string id="st_cmp_p_power">
+		<text>Stamina</text>
+	</string>
+	<string id="st_cmp_p_radiation">
+		<text>Radiation</text>
+	</string>
+	<string id="st_cmp_p_alcohol">
+		<text>Intoxication</text>
+	</string>
+	<string id="st_cmp_p_heal_rate">
+		<text>Healing over time</text>
+	</string>
+	<string id="st_cmp_p_bleeding">
+		<text>Stops bleeding</text>
+	</string>
+	<string id="st_cmp_p_bleeding_rate">
+		<text>Wound healing over time</text>
+	</string>
+	<string id="st_cmp_p_radiation_rate">
+		<text>Radiation purge</text>
+	</string>
+	<string id="st_cmp_p_rad_protection">
+		<text>Radiation protection (effect)</text>
+	</string>
+	<string id="st_cmp_p_psi_protection">
+		<text>Psi protection (effect)</text>
+	</string>
+	<string id="st_cmp_p_chem_protection">
+		<text>Chemical protection (effect)</text>
+	</string>
+	<string id="st_cmp_p_boost_time">
+		<text>Effect time, s</text>
+	</string>
+</string_table>

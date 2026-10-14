@@ -112,6 +112,8 @@ public:
     void FillDebugInfo() override;
 
 protected:
+    u32 ShapeTint() const override { return GetTextureColor(); }
+
     CUILines* m_pTextControl{};
 
     CUIStaticItem m_UIStaticItem;

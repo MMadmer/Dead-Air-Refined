@@ -2,6 +2,7 @@
 #include "UIPropertiesBox.h"
 #include "ListBox/UIListBoxItem.h"
 #include "XML/UIXmlInitBase.h"
+#include "Static/UIShape.h"
 
 #define OFFSET_X (5.0f)
 #define OFFSET_Y (5.0f)
@@ -43,9 +44,15 @@ void CUIPropertiesBox::InitPropertiesBox(Fvector2 pos, Fvector2 size)
         R_ASSERT2(xml_doc.NavigateToNode("properties_box"), "Can't find properties_box in [actor_menu.xml]");
     }
 
-    LPCSTR t = xml_doc.Read("properties_box:texture", 0, nullptr);
-    R_ASSERT2(t, "Please, specify texture for properties_box");
-    InitTexture(t);
+    // a skinned box (shape="..." or <shape>) has no texture to ask for
+    if (auto skin = UIShape::ReadSkin(xml_doc, "properties_box", 0))
+        SetShapeSkin(std::move(skin));
+    else
+    {
+        LPCSTR t = xml_doc.Read("properties_box:texture", 0, nullptr);
+        R_ASSERT2(t, "Please, specify texture for properties_box");
+        InitTexture(t);
+    }
 
     CUIXmlInitBase::InitListBox(xml_doc, "properties_box:list", 0, &m_UIListWnd);
 

@@ -2,6 +2,7 @@
 
 #include "xrUICore/Windows/UIWindow.h"
 #include "xrUICore/Callbacks/UIWndCallback.h"
+#include "xrUICore/Static/UIShapeStyle.h"
 
 class CUICellContainer;
 class CUIScrollBar;
@@ -30,6 +31,33 @@ struct CUICell
     bool MainItem() { return m_bMainItem; }
     void Clear();
     bool operator==(const CUICell& C) const { return (m_item == C.m_item); }
+};
+
+// The cells of a grid drawn by the xms_ui_shape shader (the layout's <cells> node): an empty cell,
+// the plate under an item, the item selected, marked (equipped, the quick slot's own), related (the
+// ammunition and addons of the selected weapon), blocked (what a trade or a script refuses), and the
+// area a dragged item would take. A grid without them keeps its ui_grid texture.
+// Picked and dim are drawn over the icons of any grid, textured or not: an item picked for a
+// comparison, and the items that cannot join it.
+struct SUIGridLooks
+{
+    enum Look : u8
+    {
+        Empty,
+        Item,
+        Selected,
+        Marked,
+        Related,
+        Blocked,
+        Drop,
+        Picked,
+        Dim,
+        Count
+    };
+    SUIShapeStyle looks[Count];
+
+    // the overlays of a grid without <cells>: the theme's cell_picked and cell_dim
+    static const SUIGridLooks& Overlays();
 };
 
 typedef xr_vector<CUICell> UI_CELLS_VEC;
@@ -85,6 +113,13 @@ public:
     typedef fastdelegate::FastDelegate1<CUICellItem*, bool> DRAG_CELL_EVENT;
     typedef fastdelegate::FastDelegate2<CUIDragItem*, bool, void> DRAG_ITEM_EVENT;
     typedef fastdelegate::FastDelegate1<CUICellItem*, bool> CELL_FILTER;
+    // what lies over a cell's icon: ECellState bits
+    typedef fastdelegate::FastDelegate1<CUICellItem*, u8> CELL_STATE;
+    enum ECellState : u8
+    {
+        cellPicked = 1 << 0,
+        cellDimmed = 1 << 1,
+    };
 
     DRAG_CELL_EVENT m_f_item_drop;
     DRAG_CELL_EVENT m_f_item_start_drag;
@@ -174,6 +209,17 @@ public:
 
     bool GetConditionProgBarVisibility() { return m_bConditionProgBarVisible; };
     void SetConditionProgBarVisibility(bool b) { m_bConditionProgBarVisible = b; };
+
+    void SetGridLooks(std::unique_ptr<SUIGridLooks> looks) { m_grid_looks = std::move(looks); }
+    const SUIGridLooks* GetGridLooks() const { return m_grid_looks.get(); }
+    // the scroll_bar.xml (or scroll_bar_<name>.xml) profile of the grid's scroll bar
+    void SetScrollProfile(pcstr profile) { m_scroll_profile = profile; }
+
+private:
+    std::unique_ptr<SUIGridLooks> m_grid_looks;
+    shared_str m_scroll_profile{ "default" };
+
+public:
 public:
     // items management
     virtual void SetItem(CUICellItem* itm); // auto
@@ -201,6 +247,8 @@ public:
     // empty filter brings the layout the list had before filtering back as far as it still fits.
     void SetCellFilter(const CELL_FILTER& filter);
     bool HasCellFilter() const { return !m_cell_filter.empty(); }
+    void SetCellState(const CELL_STATE& state) { m_cell_state = state; }
+    u8 CellState(CUICellItem* itm) const { return m_cell_state.empty() ? 0 : m_cell_state(itm); }
 
     // The root cells a bulk move takes: every one, or under a filter only those on screen.
     xr_vector<CUICellItem*> GetShownItems();
@@ -209,6 +257,7 @@ public:
 
 private:
     CELL_FILTER m_cell_filter;
+    CELL_STATE m_cell_state;
     xr_vector<std::pair<CUICellItem*, Ivector2>> m_unfiltered_layout;
 
     bool PassesFilter(CUICellItem* itm) const { return m_cell_filter.empty() || m_cell_filter(itm); }
@@ -263,6 +312,12 @@ public:
 protected:
     virtual void Draw();
     void DrawBlocker() const;
+    // the cells as shapes, in place of the ui_grid texture
+    void DrawShapeCells(const Irect& visible, bool dragArea, const Ivector2& dragCell, const Ivector2& dragSize);
+    // picked and dimmed items, over their icons
+    void DrawCellStates();
+    xr_vector<Fvector2> m_shape_centres;
+    xr_vector<CUICellItem*> m_shape_items;
 
     IC const Ivector2& CellsCapacity() { return m_cellsCapacity; };
     void SetCellsCapacity(const Ivector2& c);

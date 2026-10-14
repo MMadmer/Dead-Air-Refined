@@ -180,6 +180,14 @@ public:
     IC float GetCondition() const { return m_fCondition; }
     virtual float GetConditionToShow() const { return GetCondition(); }
     IC void SetCondition(float val) { m_fCondition = val; }
+    // The item as if new, for one read by a hint: full condition, and a weapon without faults or
+    // fouling. Begin and End go round that read and nothing in between saves or sends the item.
+    virtual void BeginPristineView()
+    {
+        m_pristine_condition = m_fCondition;
+        m_fCondition = 1.0f;
+    }
+    virtual void EndPristineView() { m_fCondition = m_pristine_condition; }
     void ChangeCondition(float fDeltaCondition);
     void DrainCondition(float deltaSeconds);
     bool GetDrainCondition() const;
@@ -202,6 +210,7 @@ protected:
     u32 m_cost;
     float m_weight;
     float m_fCondition{ 1.0f };
+    float m_pristine_condition{ 1.0f };
     shared_str m_Description;
 
 protected:

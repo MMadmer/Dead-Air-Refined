@@ -1,18 +1,20 @@
-// XMS UI shapes (xrUICore UIShape): boxes, stars and small glyphs computed per pixel from
-// signed distances, at the screen's own resolution. Nothing is sampled from a texture, so a
-// border stays one sharp pixel and a corner stays round at any size.
+// XMS UI shapes (xrUICore UIShape): boxes, stars, stroke glyphs and solid pictograms computed per
+// pixel from signed distances, at the screen's own resolution. Nothing is sampled from a texture,
+// so a border stays one sharp pixel and a corner stays round at any size.
 //
 // Tex0 is the pixel's position relative to the shape's centre, in screen pixels; the vertex
 // colour is the fill. The output is premultiplied (xms_ui_shape.s blends ONE, INVSRCALPHA).
 #include "common.h"
+#include "xms_ui_glyphs.h"
 
 // half width, half height, corner radius, border (a glyph's stroke) width - screen pixels
 uniform float4 xms_shape_box;
 // the border colour; the empty part of a star
 uniform float4 xms_shape_line;
-// kind (0 box, 1 star, 2 search, 3 check, 4 cross, 5 chevron, 6 gas mask), a star's filled fraction
-// or a gas mask's badge (0 none, 1 done, 2 failed), the width of the edge's fade in pixels (1 = crisp),
-// the badge's scale
+// kind (0 box, 1 star, 2 search, 3 check, 4 cross, 5 chevron, 6 gas mask, 7.. pictograms of
+// xms_ui_glyphs.h); y: a star's filled fraction, a gas mask's badge (0 none, 1 done, 2 failed) or a
+// box's segment period in pixels (0 = whole); z: the width of the edge's fade in pixels (1 = crisp);
+// w: the badge's scale or the empty part of a box's segment, in pixels
 uniform float4 xms_shape_mode;
 
 float sd_box(float2 p, float2 b, float r)
@@ -99,7 +101,15 @@ float4 main(p_TL I) : SV_Target
 		float d = sd_box(p, half_size, min(xms_shape_box.z, min(half_size.x, half_size.y)));
 		float outer = saturate(0.5 - d / soft);
 		float inner = xms_shape_box.w > 0.0 ? saturate(0.5 - (d + xms_shape_box.w) / soft) : outer;
-		return fill * inner + edge * (outer - inner);
+		float4 color = fill * inner + edge * (outer - inner);
+		// cut into segments from the left edge, the way Dead Air drew its bars
+		float period = xms_shape_mode.y;
+		if (period > 0.5)
+		{
+			float along = g_mod(p.x + half_size.x, period);
+			color *= saturate(min(along, period - xms_shape_mode.w - along) + 0.5);
+		}
+		return color;
 	}
 
 	float size = min(half_size.x, half_size.y);
@@ -115,9 +125,10 @@ float4 main(p_TL I) : SV_Target
 
 	if (kind > 5.5)
 	{
-		// the gas mask, solid; the border colour glows round it over the border width
+		// a solid pictogram; the border colour glows round it over the border width
 		float scale = size * 0.92;
-		float d = sd_gas_mask(float2(p.x, -p.y) / scale, xms_shape_mode.y, xms_shape_mode.w) * scale;
+		float2 q = float2(p.x, -p.y) / scale;
+		float d = (kind < 6.5 ? sd_gas_mask(q, xms_shape_mode.y, xms_shape_mode.w) : sd_glyph(kind, q)) * scale;
 		float coverage = saturate(0.5 - d / soft);
 		float glow = xms_shape_box.w > 0.0 ? saturate(1.0 - max(d, 0.0) / xms_shape_box.w) : 0.0;
 		return fill * coverage + edge * (glow * glow * (1.0 - coverage));

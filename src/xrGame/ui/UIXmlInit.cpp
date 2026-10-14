@@ -20,6 +20,7 @@
 #include "xrUICore/XML/UITextureMaster.h"
 #include "UIDragDropListEx.h"
 #include "UIDragDropReferenceList.h"
+#include "xrUICore/Static/UIShape.h"
 #include "UITabButtonMP.h"
 #include "xrUICore/Lines/UILines.h"
 
@@ -65,6 +66,8 @@ bool CUIXmlInit::InitDragDropListEx(CUIXml& xml_doc, LPCSTR path, int index, CUI
 
     InitAlignment(xml_doc, path, index, pos.x, pos.y, pWnd);
 
+    if (cpcstr profile = xml_doc.ReadAttrib(path, index, "scroll_profile", nullptr))
+        pWnd->SetScrollProfile(profile);
     pWnd->InitDragDropList(pos, size);
 
     Ivector2 w_cell_sz, w_cells, w_cell_sp;
@@ -109,6 +112,39 @@ bool CUIXmlInit::InitDragDropListEx(CUIXml& xml_doc, LPCSTR path, int index, CUI
     }
 
     pWnd->back_color = GetColor(xml_doc, path, index, 0xFFFFFFFF);
+
+    // <cells style="..." ...> with <empty/> <item/> <selected/> <marked/> <related/> <blocked/> <drop/>:
+    // each starts from the node's own look (or a theme style of its own) and sets what it changes.
+    string512 cells;
+    strconcat(cells, path, ":cells");
+    if (xml_doc.NavigateToNode(cells, index))
+    {
+        constexpr pcstr names[SUIGridLooks::Count] = { "empty", "item", "selected", "marked", "related", "blocked", "drop",
+            "picked", "dim" };
+        const auto from_style = [&](pcstr node, SUIShapeStyle& style)
+        {
+            if (const SUIShapeSkin* skin = UITheme::Skin(xml_doc.ReadAttrib(node, index, "style", nullptr)))
+                style = skin->looks[SUIShapeSkin::Normal];
+        };
+        SUIShapeStyle base;
+        from_style(cells, base);
+        UIShape::Read(xml_doc, cells, index, base);
+
+        auto looks = std::make_unique<SUIGridLooks>();
+        string512 node;
+        for (u8 i = 0; i < SUIGridLooks::Count; ++i)
+        {
+            // the overlays start from the theme's own, a plate from the grid's
+            const bool overlay = i >= SUIGridLooks::Picked;
+            looks->looks[i] = overlay ? SUIGridLooks::Overlays().looks[i] : base;
+            strconcat(node, cells, ":", names[i]);
+            if (!xml_doc.NavigateToNode(node, index))
+                continue;
+            from_style(node, looks->looks[i]);
+            UIShape::Read(xml_doc, node, index, looks->looks[i]);
+        }
+        pWnd->SetGridLooks(std::move(looks));
+    }
 
     return true;
 }

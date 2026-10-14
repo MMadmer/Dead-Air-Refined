@@ -428,6 +428,8 @@ void InventoryUtilities::UpdateWeight(CUIStatic& wnd, CInventoryOwner* pInvOwner
 
 //////////////////////////////////////////////////////////////////////////
 
+float InventoryUtilities::DisplayedMaxWeight(CInventoryOwner* pInvOwner) { return displayed_max_weight(pInvOwner); }
+
 void InventoryUtilities::UpdateWeightStr(CUIStatic& wnd, CUIStatic& wnd_max, CInventoryOwner* pInvOwner)
 {
     R_ASSERT(pInvOwner);

@@ -27,6 +27,9 @@ class XRUICORE_API UICore : public CDeviceResetNotifier, public CUIResetNotifier
     CUIDebugger m_debugger;
     CUIFocusSystem m_focusSystem;
 
+    // the xms_ui_shape shader every skinned window draws with (UIShape::Draw)
+    ui_shader* m_shapeShader{};
+
     Fvector2 m_pp_scale_;
     Fvector2 m_scale_;
     Fvector2* m_current_scale;
@@ -38,6 +41,7 @@ public:
     ~UICore();
     void ReadTextureInfo();
     CFontManager& Font() { return *m_pFontManager; }
+    ui_shader& ShapeShader();
     CUICursor& GetUICursor() { return *m_pUICursor; }
     auto& Focus() { return m_focusSystem; }
     auto& Debugger() { return m_debugger; }

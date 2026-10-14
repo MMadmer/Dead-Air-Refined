@@ -177,8 +177,9 @@ void CUIWpnParams::SetInfo(CInventoryItem* slot_wpn, CInventoryItem& cur_wpn)
 
         if (m_textConditionValue)
         {
+            // 99 % at most for a used one, 100 % for one as new (the hint of an item as new)
             int condition = iFloor(weapon->GetCondition() * 100.0f);
-            clamp(condition, 0, 99);
+            clamp(condition, 0, weapon->GetCondition() >= 0.9999f ? 100 : 99);
 
             if (condition <= 33)
                 m_textConditionValue->SetTextColor(color_rgba(255, 0, 0, 255));

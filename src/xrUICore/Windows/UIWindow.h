@@ -10,6 +10,10 @@
 
 #include "xrScriptEngine/ScriptExporter.hpp"
 
+#include <memory>
+
+struct SUIShapeSkin;
+
 class XRUICORE_API CUIWindow : public CUIDebuggable
 {
 public:
@@ -358,7 +362,26 @@ public:
     bool FillDebugTree(const CUIDebugState& debugState) override;
     void FillDebugInfo() override;
 
+    // A look drawn by the xms_ui_shape shader in place of the window's texture or frame
+    // (UIShapeStyle.h), from the layout's shape="style" attribute or <shape> node.
+    void SetShapeSkin(std::unique_ptr<SUIShapeSkin> skin);
+    [[nodiscard]]
+    SUIShapeSkin* GetShapeSkin() const { return m_shapeSkin.get(); }
+
 protected:
+    // The look of the skin that shows now: a button answers by its state.
+    [[nodiscard]]
+    virtual u8 ShapeLook() const { return 0; }
+    // What the skin's colours are multiplied by: a static's texture colour, so a light animation
+    // or a condition colour tints the shape exactly as it would tint the texture.
+    [[nodiscard]]
+    virtual u32 ShapeTint() const { return 0xFFFFFFFF; }
+    // Draws the skin's current look over the window; false when it has none. A window that draws
+    // it from its own Draw keeps CUIWindow::Draw from drawing it a second time.
+    bool DrawShapeSkin();
+    // The window's texture is off: its skin is not drawn either, here or by CUIWindow::Draw.
+    void SkipShapeSkin() { m_shapeSkinDrawn = m_shapeSkin != nullptr; }
+
     void SafeRemoveChild(CUIWindow* child)
     {
         auto it = std::find(m_ChildWndList.begin(), m_ChildWndList.end(), child);
@@ -415,6 +438,8 @@ protected:
 private:
     static PPModeHandler m_ppModeHandler;
     bool m_bPP{};
+    bool m_shapeSkinDrawn{};
+    std::unique_ptr<SUIShapeSkin> m_shapeSkin;
 
     DECLARE_SCRIPT_REGISTER_FUNCTION();
 };

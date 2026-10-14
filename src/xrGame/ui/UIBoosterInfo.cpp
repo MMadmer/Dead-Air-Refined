@@ -8,6 +8,7 @@
 #include "UIXmlInit.h"
 #include "UIHelper.h"
 #include "xrCommon/xr_hash_map.h"
+#include "xrUICore/Static/UIShape.h"
 
 namespace
 {
@@ -288,7 +289,8 @@ void UIBoosterInfoItem::Init(CUIXml& xml, LPCSTR section)
 
         LPCSTR texture_plus = xml.Read("caption:texture", 0, "");
         m_texture_plus._set(texture_plus);
-        VERIFY(m_texture_plus.size());
+        // a pictogram the shader draws has no texture of its own: the sign tints it
+        VERIFY(m_texture_plus.size() || m_caption->GetShapeSkin());
     }
 }
 
@@ -323,7 +325,15 @@ void UIBoosterInfoItem::SetValue(float value)
     bool positive = (value >= 0.0f);
     m_value->SetTextColor(color_rgba(170, 170, 170, 255));
 
-    if (m_texture_minus.size())
+    // A pictogram drawn by the shader has no second texture: a negative effect takes the theme's
+    // "negative" colour instead.
+    if (m_caption->GetShapeSkin())
+    {
+        u32 negative = color_rgba(220, 100, 90, 255);
+        UITheme::Color("negative", negative);
+        m_caption->SetTextureColor(positive || !m_texture_minus.size() ? 0xFFFFFFFF : negative);
+    }
+    else if (m_texture_minus.size())
     {
         if (positive)
             m_caption->InitTexture(m_texture_plus.c_str());

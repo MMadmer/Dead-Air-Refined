@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The carcass of a mutant (ui_mutant_loot.script): its picture, the parts it gives, a preview of the part
+     selected. Written by tools\ui\mutant_loot_layout.py for 4:3 and 16:9; every surface and button is drawn
+     by the xms_ui_shape shader (ui_theme.xml), the mutant's picture and the item icon are the textures. -->
+<w>
+    <loot>
+        <shade x="0" y="0" width="1024" height="768" shape="shadow"><shape fill="$shade" soft="0" radius="0"/></shade>
+        <form x="232" y="198" width="560" height="372" shape="panel">
+            <image_frame x="14" y="14" width="236" height="120" shape="inset"/>
+            <image x="16" y="16" width="232" height="116" stretch="1"/>
+            <caption x="266" y="18" width="280" height="26">
+                <text font="graffiti22" align="l" vert_align="c" color="$text">st_mutant_loot_caption</text>
+            </caption>
+            <hint x="266" y="48" width="280" height="94" complex_mode="1">
+                <text font="letterica16" align="l" vert_align="t" complex_mode="1" color="$text_dim">st_mutant_loot_hint</text>
+            </hint>
+            <list_frame x="14" y="146" width="330" height="170" shape="inset"/>
+            <list x="18" y="150" width="322" height="162" item_height="24" can_select="1" always_show_scroll="0" scroll_profile="thin">
+                <font font="letterica18" color="$text"/>
+                <item shape="list_row_marks"/>
+            </list>
+            <preview_frame x="354" y="146" width="192" height="170" shape="inset"/>
+            <icon x="364" y="156" width="172" height="118" stretch="1"/>
+            <icon_name x="360" y="278" width="180" height="34" complex_mode="1">
+                <text font="letterica16" align="c" vert_align="c" complex_mode="1" color="$text"/>
+            </icon_name>
+            <btn_cancel x="14" y="326" width="120" height="32">
+                <shape style="button"/>
+                <text font="letterica18" align="c" vert_align="c">ui_inv_cancel</text>
+            </btn_cancel>
+            <btn_ok x="280" y="326" width="126" height="32">
+                <shape style="button"/>
+                <text font="letterica18" align="c" vert_align="c">st_mutant_loot_take</text>
+            </btn_ok>
+            <btn_ok_all x="414" y="326" width="132" height="32">
+                <shape style="button_primary"/>
+                <text font="letterica18" align="c" vert_align="c">ui_st_take_all</text>
+            </btn_ok_all>
+        </form>
+        <file_item>
+            <mark x="0" y="0" width="318" height="24"><shape fill="$accent_soft" radius="2"/></mark>
+            <mark_bar x="0" y="3" width="3" height="18"><shape fill="$accent" radius="1"/></mark_bar>
+            <main width="318" height="24"/>
+            <fn width="250" height="24"/>
+            <fd width="56" height="24"/>
+        </file_item>
+    </loot>
+</w>

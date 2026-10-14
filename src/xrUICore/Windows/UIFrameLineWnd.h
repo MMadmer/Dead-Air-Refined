@@ -44,6 +44,7 @@ public:
 
     void SetTextureColor(u32 cl) override { m_texture_color = cl; }
     u32 GetTextureColor() const override { return m_texture_color; }
+    u32 ShapeTint() const override { return GetTextureColor(); }
 
     void SetStretchTexture(bool stretch) override { m_bStretchTexture = stretch;}
     bool GetStretchTexture() override { return m_bStretchTexture; }

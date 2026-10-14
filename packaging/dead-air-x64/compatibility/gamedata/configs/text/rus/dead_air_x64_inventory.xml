@@ -33,4 +33,25 @@
 	<string id="st_da_inv_filter_misc">
 		<text>Прочее: инструменты, приборы, квестовые предметы, ценности и всё остальное</text>
 	</string>
+	<string id="st_da_inv_order_hint">
+		<text>Порядок, в котором раскладываются сетки предметов</text>
+	</string>
+	<string id="st_da_inv_order_default">
+		<text>По умолчанию</text>
+	</string>
+	<string id="st_da_inv_order_type">
+		<text>По типу</text>
+	</string>
+	<string id="st_da_inv_order_name">
+		<text>По имени</text>
+	</string>
+	<string id="st_da_inv_order_weight">
+		<text>По весу</text>
+	</string>
+	<string id="st_da_inv_order_price">
+		<text>По цене</text>
+	</string>
+	<string id="st_da_inv_order_condition">
+		<text>По состоянию</text>
+	</string>
 </string_table>

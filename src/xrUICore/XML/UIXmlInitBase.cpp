@@ -12,6 +12,7 @@
 #include "ListBox/UIListBox.h"
 #include "ComboBox/UIComboBox.h"
 #include "TrackBar/UITrackBar.h"
+#include "Static/UIShape.h"
 
 #include "UITextureMaster.h"
 #include "Lines/UILines.h"
@@ -74,6 +75,8 @@ bool CUIXmlInitBase::InitWindow(CUIXml& xml_doc, pcstr path, int index, CUIWindo
     size.y = xml_doc.ReadAttribFlt(path, index, "height");
     pWnd->SetWndPos(pos);
     pWnd->SetWndSize(size);
+    // shape="style" or a <shape> node: the shader draws the window instead of its texture
+    pWnd->SetShapeSkin(UIShape::ReadSkin(xml_doc, path, index));
 
     string512 buf;
     strconcat(buf, path, ":window_name");
@@ -145,6 +148,8 @@ bool CUIXmlInitBase::InitStatic(CUIXml& xml_doc, pcstr path, int index, CUIStati
 
     string256 buf;
     InitText(xml_doc, strconcat(buf, path, ":text"), index, pWnd->TextItemControl());
+    if (const SUIShapeSkin* skin = pWnd->GetShapeSkin(); skin && skin->HasText(SUIShapeSkin::Normal))
+        pWnd->TextItemControl()->SetTextColor(skin->text[SUIShapeSkin::Normal]);
     InitTexture(xml_doc, path, index, pWnd);
     InitTextureOffset(xml_doc, path, index, pWnd);
 
@@ -1289,6 +1294,9 @@ bool CUIXmlInitBase::InitListBox(CUIXml& xml_doc, pcstr path, int index, CUIList
 
     const float h = xml_doc.ReadAttribFlt(path, index, "item_height", 20.0f);
     pWnd->SetItemHeight(h);
+
+    strconcat(_path, path, ":item");
+    pWnd->SetItemSkin(UIShape::ReadSkin(xml_doc, _path, index));
     return true;
 }
 
@@ -1386,6 +1394,9 @@ u32 CUIXmlInitBase::GetColor(const CUIXml& xml_doc, pcstr path, int index, u32 d
 {
     if (cpcstr clr_def = xml_doc.ReadAttrib(path, index, "color", nullptr))
     {
+        // "$name": a colour of the theme (ui_theme.xml), so text follows the palette the shapes do
+        if (clr_def[0] == '$')
+            return UIShape::ParseColor(clr_def, def_clr);
         VERIFY(GetColorDefs()->find(clr_def) != GetColorDefs()->end());
         return (*m_pColorDefs)[clr_def];
     }

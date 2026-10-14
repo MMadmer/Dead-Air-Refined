@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The thin scroll bar (profile "thin", scroll_profile="thin" on a list or a grid): a track and a
+     thumb drawn by the xms_ui_shape shader, no arrows. The engine reads a profile that scroll_bar.xml
+     does not have from scroll_bar_<profile>.xml, so a mod adds its own bar the same way. -->
+<w>
+    <thin height="4" height_v="4" hold_delay="50">
+        <left_arrow x="0" y="0" width="0" height="0"/>
+        <right_arrow x="0" y="0" width="0" height="0"/>
+        <box x="0" y="0" width="4" height="4" shape="scroll_thumb"/>
+        <back shape="scroll_track"/>
+        <up_arrow x="0" y="0" width="0" height="0"/>
+        <down_arrow x="0" y="0" width="0" height="0"/>
+        <box_v x="0" y="0" width="4" height="4" shape="scroll_thumb"/>
+        <back_v shape="scroll_track"/>
+    </thin>
+</w>

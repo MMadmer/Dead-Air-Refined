@@ -1,0 +1,170 @@
+<!-- Dead Air's af_params.xml with every texture drawn by the xms_ui_shape shader (ui_theme.xml):
+     written by tools\ui\item_info_from_da.py; the nodes are where Dead Air put them. -->
+<af_params x="0" y="0" width="260" height="20">
+    <prop_line x="0" y="4" width="260" height="1" stretch="1">
+        <shape style="tooltip_rule"/>
+    </prop_line>
+
+	<condition x="0" y="0" width="257" height="20">
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="wrench" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="100">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</condition>
+	
+	<health_restore_speed x="0" y="0" width="257" height="20">
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="heart" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="6600">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</health_restore_speed>
+
+	<radiation_restore_speed x="0" y="0" width="257" height="20">
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="trefoil" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<texture_minus>ui_am_prop_radio_restore</texture_minus>
+		<value x="140" y="0" width="30" height="20" magnitude="1000" sign_inverse="1">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</radiation_restore_speed>
+
+	<satiety_restore_speed x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="cutlery" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="10">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</satiety_restore_speed>
+
+	<power_restore_speed x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="runner" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="2000">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</power_restore_speed>
+
+	<bleeding_restore_speed x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="drop" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="1000">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</bleeding_restore_speed>
+
+
+	<burn_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="flame" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="30">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</burn_immunity>
+
+	<shock_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="bolt" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="48">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</shock_immunity>
+
+	<radiation_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="trefoil" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="30">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</radiation_immunity>
+
+	<telepatic_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="psi" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="30">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</telepatic_immunity>
+
+	<chemical_burn_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="biohazard" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="30">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</chemical_burn_immunity>
+
+	<wound_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="claw" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="100">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</wound_immunity>
+	
+	<fire_wound_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="bullet" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="100">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</fire_wound_immunity>
+	
+	<explosion_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="burst" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="100">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</explosion_immunity>
+	
+	<strike_immunity x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="impact" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="100">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</strike_immunity>
+	
+	<additional_weight x="0" y="0" width="257" height="20" >
+		<caption x="0" y="0" width="257" height="20" complex_mode="0">
+			<shape kind="weight" fill="$text_dim"/>
+			<text color="ui_3" font="letterica16" vert_align="c" x="22" y="0"/>
+		</caption>
+		<value x="140" y="0" width="30" height="20" magnitude="1" unit_str="st_kg">
+			<text font="letterica16" vert_align="c"/>
+		</value>
+	</additional_weight>
+
+</af_params>

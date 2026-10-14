@@ -38,6 +38,10 @@ public:
     pcstr GetDebugType() override { return "CUIListBoxItem"; }
 
 protected:
+    u8 ShapeLook() const override;
+    // the text's own colour, for a look the skin gives none
+    u32 m_skin_text_base{};
+    bool m_skin_text_base_set{};
     CUIStatic* m_text;
     u32 tag;
     void* pData;

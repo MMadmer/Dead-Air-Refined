@@ -161,6 +161,7 @@ float g_ph_ik_dist = 0.f;
 int g_ai_dead_vision_ms = 1000;
 
 void register_mp_console_commands();
+void register_ui_console_commands();
 //-----------------------------------------------------------
 
 BOOL g_bCheckTime = FALSE;
@@ -4455,4 +4456,5 @@ void CCC_RegisterCommands()
     CMD2(CCC_UI_Time_Dilation_Mode, "time_dilation_pda", UITimeDilator::Pda);
 
     register_mp_console_commands();
+    register_ui_console_commands();
 }

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The comparison of items. Written by tools\ui\actor_menu_layout.py with actor_menu.xml; the
+     engine reads this file only when the actor_menu layout has no node of this name. -->
+<w>
+    <!-- the comparison of picked items (the scales button of the toolbar, or V); the weights are
+         configs\dead_air_x64_item_compare.ltx -->
+    <compare_window x="22" y="64" width="980" height="640" shape="panel" row_height="20" label_width="210" column_width="360" icon_height="56" padding="6">
+        <shade shape="compare_shade"/>
+        <title x="16" y="10" width="680" height="28">
+            <text font="graffiti22" align="l" vert_align="c" color="$text"/>
+        </title>
+        <tab_use x="702" y="12" width="114" height="26">
+            <shape style="tab"/>
+            <text font="letterica16" align="c" vert_align="c">st_cmp_profile_use</text>
+        </tab_use>
+        <tab_sale x="822" y="12" width="114" height="26">
+            <shape style="tab"/>
+            <text font="letterica16" align="c" vert_align="c">st_cmp_profile_sale</text>
+        </tab_sale>
+        <close x="940" y="13" width="24" height="24" shape="tool_button" cross="$text_dim"/>
+        <auto_static x="12" y="46" width="956" height="1" shape="rule"/>
+        <columns x="12" y="52" width="950" height="156"/>
+        <list x="12" y="212" width="956" height="382" always_show_scroll="0" scroll_profile="thin" right_ident="0" left_ident="0" top_indent="2" bottom_indent="2" vert_interval="0"/>
+        <auto_static x="12" y="598" width="956" height="1" shape="rule"/>
+        <footer x="16" y="602" width="948" height="30">
+            <text font="letterica16" align="l" vert_align="c" color="$text_dim"/>
+        </footer>
+        <name><text font="letterica16" color="$text"/></name>
+        <score><text font="graffiti22" color="$text"/></score>
+        <label><text font="letterica16" color="$text_dim"/></label>
+        <weight><text font="letterica16" color="$text_muted"/></weight>
+        <value><text font="letterica16" color="$text"/></value>
+        <section><text font="letterica18" color="$accent"/></section>
+        <best color="$good"/>
+        <worst color="$bad"/>
+        <column shape="compare_column"/>
+        <column_winner shape="compare_column_winner"/>
+        <row_alt shape="compare_row"/>
+        <score_bar shape="bar_thin_fill"><shape fill="$accent"/></score_bar>
+        <score_track shape="bar_thin_track"/>
+        <badge shape="compare_badge"/>
+        <rule shape="rule"/>
+    </compare_window>
+
+</w>

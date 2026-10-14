@@ -79,7 +79,7 @@ void CUIActorMenu::InitDeadBodySearchMode()
         m_pInvBox->AddAvailableItems(items_list);
     }
 
-    std::sort(items_list.begin(), items_list.end(), InventoryUtilities::GreaterRoomInRuck);
+    inventory_tools::sort_items(items_list);
 
     TIItemContainer::iterator it = items_list.begin();
     TIItemContainer::iterator it_e = items_list.end();

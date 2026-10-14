@@ -161,7 +161,8 @@ bool CUIFrameWindow::InitTexture(pcstr texture, bool fatal)
 
 void CUIFrameWindow::Draw()
 {
-    if (m_bTextureVisible)
+    // a skinned frame draws its shape instead of its nine textures
+    if (!DrawShapeSkin() && m_bTextureVisible)
         DrawElements();
 
     inherited::Draw();

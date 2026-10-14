@@ -157,6 +157,10 @@ void CUI3tButton::SetTextureOffset(float x, float y)
 void CUI3tButton::Draw() { inherited::Draw(); }
 void CUI3tButton::DrawTexture()
 {
+    // m_bTextureEnable only says the button has textures (InitTexture); a skin stands in for them
+    if (DrawShapeSkin())
+        return;
+
     if (m_bTextureEnable)
     {
         if (m_background)
@@ -243,4 +247,5 @@ void CUI3tButton::Update()
     }
 
     TextItemControl()->SetTextColor(textColor);
+    ApplySkinTextColor(false);
 }

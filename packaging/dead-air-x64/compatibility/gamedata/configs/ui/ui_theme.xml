@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The interface theme: named colours and named looks every layout may use. A layout node takes
+     a look with shape="name" or <shape style="name" .../> (and may set any attribute over it); any
+     colour attribute, of a shape or of a text, may name a colour of the theme as "$name".
+
+     A mod restyles the interface without touching this file: it ships ui_theme_<anything>.xml in
+     configs\ui. Those files are read after this one, in name order, and a colour or a style they
+     define replaces the one of the same name.
+
+     <color name value="#rrggbb[aa]"/>
+     <style name base="another style" kind fill line border radius soft segment gap text>
+         <highlight/> <pushed/> <checked/> <disabled/>   - the states of a button, a row, a tab
+     </style>
+     A style's own attributes are its normal look and every state's that does not set them; a state
+     sets only what changes. kind is box (the default) or a pictogram: trefoil, grid, pistol, helmet,
+     cutlery, medkit, gem, gear, sort, biohazard, bolt, flame, psi, claw, bullet, impact, burst,
+     heart, drop, runner, weight, clock, wrench, crosshair, hand, gauge, shield, cartridge, moon,
+     upgrade, pin, keyboard, scales, gasmask (and the stroke glyphs search, check, cross, chevron,
+     star). Lengths are
+     768-line units; segment and gap cut a box into the segmented bars of Dead Air. -->
+<w>
+    <!-- Dead Air's own: a warm near-black, the beige of its text, the orange of its highlights. -->
+    <color name="panel" value="#15120FFA"/>
+    <color name="panel_edge" value="#4C443AFF"/>
+    <color name="card" value="#1D1915F5"/>
+    <color name="inset" value="#0D0B09E6"/>
+    <color name="inset_edge" value="#2F2A23FF"/>
+    <color name="rule" value="#4C443A99"/>
+    <color name="shade" value="#00000066"/>
+
+    <color name="text" value="#E6D8BFFF"/>
+    <color name="text_dim" value="#A39886FF"/>
+    <color name="text_muted" value="#6E665AFF"/>
+    <color name="text_dark" value="#14110EFF"/>
+
+    <color name="accent" value="#E8962AFF"/>
+    <color name="accent_dim" value="#B8731FFF"/>
+    <color name="accent_soft" value="#E8962A2E"/>
+
+    <color name="good" value="#86B36BFF"/>
+    <color name="warn" value="#D9A441FF"/>
+    <color name="bad" value="#D8574BFF"/>
+    <color name="negative" value="#E07A6CFF"/>
+    <color name="health" value="#C8382CFF"/>
+    <color name="satiety" value="#7FA05AFF"/>
+    <color name="protection" value="#B3AA9BFF"/>
+
+    <!-- surfaces -->
+    <style name="panel" fill="$panel" line="$panel_edge" border="1" radius="4"/>
+    <style name="card" fill="$card" line="$inset_edge" border="1" radius="3"/>
+    <style name="inset" fill="$inset" line="$inset_edge" border="1" radius="3"/>
+    <style name="slot" fill="$inset" line="$inset_edge" border="1" radius="3"/>
+    <style name="rule" fill="$rule"/>
+    <style name="shadow" fill="#000000A6" soft="14" radius="8"/>
+    <style name="portrait_frame" fill="#00000000" line="$panel_edge" border="1" radius="2"/>
+    <style name="blocker" fill="#0B0908D9" line="$inset_edge" border="1" radius="2"/>
+    <style name="slot_highlight" fill="$accent_soft" line="$accent" border="1" radius="3"/>
+    <style name="slot_glyph" kind="trefoil" fill="#E6D8BF1F"/>
+
+    <!-- buttons: a plain one, the one that does the window's business, a square tool -->
+    <style name="button" fill="#221E19FF" line="#5A5145FF" border="1" radius="3" text="$text">
+        <highlight fill="$accent" line="$accent" text="$text_dark"/>
+        <pushed fill="$accent_dim" line="$accent_dim" text="$text_dark"/>
+        <checked fill="$accent_soft" line="$accent" text="$accent"/>
+        <disabled fill="#1A1714FF" line="#2F2A23FF" text="$text_muted"/>
+    </style>
+    <style name="button_primary" base="button" fill="#2A2116FF" line="$accent" text="$accent"/>
+    <style name="tool_button" base="button" fill="#1C1915FF" line="#3F382FFF">
+        <highlight fill="#2C261FFF" line="$accent" text="$text"/>
+        <pushed fill="$accent_soft" line="$accent" text="$accent"/>
+        <checked fill="$accent_soft" line="$accent" text="$accent"/>
+    </style>
+    <style name="tool_glyph" fill="#FFFFFFFF"/>
+
+    <!-- a drop-down and a context menu -->
+    <style name="menu" fill="#14110EFA" line="$panel_edge" border="1" radius="3" soft="1"/>
+    <style name="menu_row" fill="#00000000" radius="2" text="$text_dim">
+        <highlight fill="$accent" text="$text_dark"/>
+        <pushed fill="$accent_dim" text="$text_dark"/>
+        <checked fill="$accent_soft" text="$accent"/>
+    </style>
+    <!-- a row of a list whose choice is shown by marks of its own (the carcass's parts) -->
+    <style name="list_row_marks" fill="#00000000" radius="2" text="$text">
+        <highlight fill="#FFFFFF10"/>
+    </style>
+
+    <!-- the hint over an item, a button, a sensor -->
+    <style name="tooltip" fill="#110E0CF7" line="$panel_edge" border="1" radius="3"/>
+    <style name="tooltip_rule" fill="$rule"/>
+
+    <!-- bars: Dead Air's segments, the track a shade of the fill -->
+    <style name="bar_track" fill="#FFFFFF12" segment="3" gap="1"/>
+    <style name="bar_fill" fill="#FFFFFFFF" segment="3" gap="1"/>
+    <style name="bar_thin_track" fill="#FFFFFF14" segment="2" gap="1"/>
+    <style name="bar_thin_fill" fill="#FFFFFFFF" segment="2" gap="1"/>
+    <style name="tip_bar_track" fill="#FFFFFF14" segment="3" gap="1"/>
+    <style name="tip_bar_fill" fill="#C9BFAEFF" segment="3" gap="1"/>
+    <!-- the player's load: the track, the load, a mark at each limit of movement -->
+    <style name="load_track" fill="#FFFFFF12" radius="1"/>
+    <style name="load_fill" fill="#FFFFFFFF" radius="1"/>
+    <style name="load_mark" fill="$text_dim"/>
+
+    <!-- the cells of an item grid -->
+    <style name="cell" fill="#FFFFFF06" line="#FFFFFF0C" border="1" radius="2"/>
+    <style name="cell_item" fill="#FFFFFF0D" line="#FFFFFF1A" border="1" radius="2"/>
+    <style name="cell_selected" fill="#E8962A26" line="$accent" border="1" radius="2"/>
+    <style name="cell_marked" fill="#86B36B1F" line="#86B36B99" border="1" radius="2"/>
+    <style name="cell_related" fill="#D9A4411C" line="#D9A44180" border="1" radius="2"/>
+    <style name="cell_blocked" fill="#D8574B26" line="#D8574B99" border="1" radius="2"/>
+    <style name="cell_drop" fill="#E8962A1F" line="$accent" border="1" radius="2"/>
+    <style name="badge" fill="#0D0B09D9" line="#4C443AB3" border="1" radius="2"/>
+    <!-- over the icons: an item picked for a comparison, and what cannot join it -->
+    <style name="cell_picked" fill="#E8962A14" line="$accent" border="2" radius="3"/>
+    <style name="cell_dim" fill="#0B0908B8" radius="2"/>
+
+    <!-- the comparison: the shade over the menu, a column, the winner's, every other row, the star -->
+    <style name="compare_shade" fill="#000000A0"/>
+    <style name="compare_column" fill="#FFFFFF07" line="#FFFFFF12" border="1" radius="3"/>
+    <style name="compare_column_winner" fill="#E8962A1C" line="$accent" border="1" radius="3"/>
+    <style name="compare_row" fill="#FFFFFF06" radius="2"/>
+    <style name="compare_badge" kind="star" fill="$accent"/>
+    <style name="tab" base="button" fill="#1C1915FF" line="#3F382FFF" text="$text_dim">
+        <highlight fill="#2C261FFF" line="$accent" text="$text"/>
+        <pushed fill="$accent_soft" line="$accent" text="$accent"/>
+        <checked fill="$accent_soft" line="$accent" text="$accent"/>
+    </style>
+
+    <!-- the panel of hotkeys: a key on its key cap -->
+    <style name="key_chip" fill="#2A2520FF" line="#5A5145FF" border="1" radius="3"/>
+
+    <!-- a thin scroll bar (scroll_bar_shape.xml) -->
+    <style name="scroll_track" fill="#FFFFFF0A" radius="1"/>
+    <style name="scroll_thumb" fill="#E6D8BF66" radius="1">
+        <highlight fill="$accent"/>
+    </style>
+</w>

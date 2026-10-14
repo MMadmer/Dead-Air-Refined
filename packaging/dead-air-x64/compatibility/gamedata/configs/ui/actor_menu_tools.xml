@@ -1,35 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The sort and filter row of the actor menu (CUIInventoryToolbar). The engine takes whole rows of
      cells off the top of every item grid of the inventory, the loot, the trade and the upgrade window
-     and puts one of these rows in their place, flush left, right under the window's header, so the row belongs to whichever actor_menu layout is installed
-     and covers nothing. One file serves 4:3 and widescreen: sizes are in 4:3 units and the engine
-     squeezes the widths for a wider screen, so the buttons stay square.
+     and puts one of these rows in their place, flush left, right under the window's header, so the row
+     belongs to whichever actor_menu layout is installed and covers nothing. One file serves 4:3 and
+     widescreen: sizes are in 4:3 units and the engine squeezes the widths for a wider screen, so the
+     buttons stay square. When the row would not fit its grid, all of it shrinks together.
 
-     size, spacing, gap  - button side, space between the filters, space after the sort button
+     size, spacing, gap  - button side, space between the buttons, space after the drop-down
      lift, margin        - how far the row may rise above the grid's top edge into the free space
                            under the header, and the least space it keeps below any window there
      gap_below           - space between the row and the grid, which then keeps whole rows of cells
      glyph_inset         - share of the button the glyph keeps clear on every side
-     button_texture      - a 3t button texture: <name>_e, _h, _t, _d
-     glyph_color*        - the glyph tint: normal, under the cursor, pressed or the active filter
-     glyph               - a white mask from ui_da_x64_inv_tools.xml
-     hint*               - string ids; the sort button has one per pane -->
+     button              - the look of every square button (shape="style" of ui_theme.xml, or a
+                           <shape> node); without it, button_texture: a 3t texture <name>_e, _h, _t, _d
+     glyph               - the look of a glyph; the state colours below tint it
+     glyph_color*        - the glyph's colour: normal, under the cursor, pressed or the active filter
+                           (value="#rrggbb[aa]" or "$name" of the theme, or r g b)
+     <node glyph="...">  - a pictogram the shader draws (ui_theme.xml lists them), or the name of a
+                           white mask texture the way glyphs were made before
+     sort_mode           - the drop-down of orders beside the sort button: its width, its caption, the
+                           list it opens (list), its rows (row, row_height) and the space round them
+                           (padding); without this node the row has the sort button alone
+     hint*               - string ids; the sort button has one per pane
+     glyph_color_disabled - the glyph of a button that cannot be pressed now
+     <action>            - a button at the right end of the row, the last node rightmost: action is
+                           what a hotkey of inventory_hotkeys.xml could do (toggle_panel, compare,
+                           clear_picks, script:<module>.<function>), panes the rows it is in
+                           (actor, loot, trader; actor alone by default). A mod adds its own with
+                           an XMS patch of this file. -->
 <w>
-	<inventory_tools size="26" spacing="3" gap="12" lift="8" margin="2" gap_below="4" glyph_inset="0.14">
-		<button_texture>ui_inGame2_inventory_button</button_texture>
-		<glyph_color r="240" g="217" b="182"/>
-		<glyph_color_hover r="0" g="0" b="0"/>
-		<glyph_color_active r="238" g="155" b="23"/>
+	<inventory_tools size="24" spacing="3" gap="8" lift="8" margin="2" gap_below="4" glyph_inset="0.2">
+		<button shape="tool_button"/>
+		<glyph shape="tool_glyph"/>
+		<glyph_color value="$text_dim"/>
+		<glyph_color_hover value="$text"/>
+		<glyph_color_active value="$accent"/>
+		<glyph_color_disabled value="$text_muted"/>
 
-		<sort glyph="ui_da_x64_inv_sort" hint_actor="st_da_inv_sort_actor" hint_loot="st_da_inv_sort_loot"
+		<sort glyph="sort" hint_actor="st_da_inv_sort_actor" hint_loot="st_da_inv_sort_loot"
 			hint_trader="st_da_inv_sort_trader"/>
 
-		<filter_all glyph="ui_da_x64_inv_all" hint="st_da_inv_filter_all"/>
-		<filter_weapons glyph="ui_da_x64_inv_weapons" hint="st_da_inv_filter_weapons"/>
-		<filter_armour glyph="ui_da_x64_inv_armour" hint="st_da_inv_filter_armour"/>
-		<filter_food glyph="ui_da_x64_inv_food" hint="st_da_inv_filter_food"/>
-		<filter_medicine glyph="ui_da_x64_inv_medicine" hint="st_da_inv_filter_medicine"/>
-		<filter_artefacts glyph="ui_da_x64_inv_artefacts" hint="st_da_inv_filter_artefacts"/>
-		<filter_misc glyph="ui_da_x64_inv_misc" hint="st_da_inv_filter_misc"/>
+		<sort_mode width="92" row_height="20" padding="3" hint="st_da_inv_order_hint" shape="tool_button">
+			<text font="letterica16" align="l" vert_align="c" x="6" color="$text"/>
+			<list shape="menu"/>
+			<row shape="menu_row">
+				<text font="letterica16" align="l" vert_align="c" x="6"/>
+			</row>
+		</sort_mode>
+
+		<filter_all glyph="grid" hint="st_da_inv_filter_all"/>
+		<filter_weapons glyph="pistol" hint="st_da_inv_filter_weapons"/>
+		<filter_armour glyph="helmet" hint="st_da_inv_filter_armour"/>
+		<filter_food glyph="cutlery" hint="st_da_inv_filter_food"/>
+		<filter_medicine glyph="medkit" hint="st_da_inv_filter_medicine"/>
+		<filter_artefacts glyph="gem" hint="st_da_inv_filter_artefacts"/>
+		<filter_misc glyph="gear" hint="st_da_inv_filter_misc"/>
+
+		<action action="compare" glyph="scales" hint="st_da_cmp_button_hint"/>
+		<action action="toggle_panel" glyph="keyboard" hint="st_da_hk_button_hint"/>
 	</inventory_tools>
 </w>
