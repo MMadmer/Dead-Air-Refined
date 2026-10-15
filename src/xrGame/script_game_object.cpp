@@ -56,7 +56,7 @@ class CScriptBinderObject;
 Fvector CScriptGameObject::Center()
 {
     Fvector c;
-    m_game_object->Center(c);
+    object().Center(c);
     return c;
 }
 

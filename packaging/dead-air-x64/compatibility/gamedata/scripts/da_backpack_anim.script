@@ -50,6 +50,8 @@ local menu_was_open = false
 local menu_grace = 0
 -- The scene put the item of the left hand away (a detector, a lamp) and owes it back.
 local left_hidden = false
+-- Owed back, but the hands went to someone else's scene: given back once no scene holds them.
+local left_due = false
 
 -- Звук сцены. Модульная переменная, а не локальная - разбор у места запуска.
 scene_snd = nil
@@ -77,6 +79,7 @@ function reset()
 	my_scene, window_asked_at = 0, 0
 	for_trade = false
 	left_hidden = false
+	left_due = false
 	scene_snd = nil
 end
 
@@ -183,6 +186,7 @@ local function start_show(from)
 	local hud = get_hud()
 	if hud then hud:HidePdaMenu() end
 	-- Сцена ДВУРУКАЯ: обе руки заняты сумкой, поэтому оружие убираем.
+	left_due = false
 	left_busy()
 	db.actor:hide_weapon()
 	state = ST_SHOW
@@ -212,7 +216,7 @@ end
 local function yield()
 	if scene_snd then scene_snd:stop() end
 	if db.actor then db.actor:restore_weapon() end
-	give_left_back()
+	left_due = left_hidden
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
 	my_scene, window_asked_at = 0, 0
 	for_trade = false
@@ -251,6 +255,10 @@ local function hands_busy()
 end
 
 function update()
+	if left_due and db.actor and not game.scene_active() then
+		left_due = false
+		give_left_back()
+	end
 	if state == ST_OFF or not db.actor then return end
 
 	if playing and game.hud_scene_id() ~= my_scene then

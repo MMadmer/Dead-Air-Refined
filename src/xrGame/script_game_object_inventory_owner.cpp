@@ -1962,7 +1962,7 @@ bool CScriptGameObject::death_sound_enabled() const
 void CScriptGameObject::register_door()
 {
     VERIFY2(!m_door, make_string("object %s has been registered as a door already", m_game_object->cName().c_str()));
-    m_door = ai().doors().register_door(*smart_cast<CPhysicObject*>(m_game_object));
+    m_door = ai().doors().register_door(*smart_cast<CPhysicObject*>(&object()));
     //	Msg									( "registering door 0x%-08x", m_door );
 }
 

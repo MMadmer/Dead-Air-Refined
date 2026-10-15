@@ -115,10 +115,11 @@ bool CDialogScriptHelper::Precondition(const CGameObject* pSpeakerGO, LPCSTR dia
         luabind::functor<bool> lua_function;
         THROW(Preconditions()[i].c_str());
         const bool functor_exists = GEnv.ScriptEngine->functor(Preconditions()[i].c_str(), lua_function);
+        // Missing, it keeps the phrase closed: its actions may hand over what only the precondition made sure of.
         if (!functor_exists)
         {
-            Msg("! Cannot find precondition: %s, skipped", Preconditions()[i].c_str());
-            continue;
+            Msg("! Cannot find precondition: %s, the phrase stays closed", Preconditions()[i].c_str());
+            return false;
         }
         predicate_result = lua_function(pSpeakerGO->lua_game_object());
         if (!predicate_result)
@@ -170,8 +171,8 @@ bool CDialogScriptHelper::Precondition(const CGameObject* pSpeakerGO1, const CGa
         const bool functor_exists = GEnv.ScriptEngine->functor(Preconditions()[i].c_str(), lua_function);
         if (!functor_exists)
         {
-            Msg("! Cannot find phrase precondition: %s, skipped", Preconditions()[i].c_str());
-            continue;
+            Msg("! Cannot find phrase precondition: %s, the phrase stays closed", Preconditions()[i].c_str());
+            return false;
         }
         predicate_result = lua_function(
             pSpeakerGO1->lua_game_object(), pSpeakerGO2->lua_game_object(), dialog_id, phrase_id, next_phrase_id);

@@ -522,14 +522,21 @@ void update()
     // ---- Window-led ownership: derive the presenter from the window, every frame -------
     // The window shown but no presenter item -> raise one. The window hidden but the item
     // still up -> put it away. State never leaks because nothing here is remembered.
-    if (cfg.available && g_pGameLevel && Level().bReady)
+    if ((cfg.available || raise_gave_up) && g_pGameLevel && Level().bReady)
     {
         CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
         if (actor && !actor->g_Alive())
             actor = nullptr;
         const bool win = window_shown();
         PIItem in_slot = presenter_item(actor);
-        if (actor)
+        if (actor && !cfg.available)
+        {
+            // Given up on the device: a raise still in flight - the slot taken once a long reload ends - is put
+            // away again, or it stays in the hands on the device's rig with the 2D dialog shown.
+            if (presenter || in_slot)
+                request_deactivate();
+        }
+        else if (actor)
         {
             // The hands in a scene - the backpack going away as the inventory closes, an item
             // being used - bring the device up once it is over: raised at once, its rig swap cut
@@ -567,6 +574,7 @@ void update()
                         occupant ? occupant->object().cNameSect().c_str() : "", actor->inventory().GetActiveSlot());
                     raise_gave_up = true;
                     fall_back_to_2d();
+                    request_deactivate();
                 }
             }
             else if (!win && (presenter || in_slot))

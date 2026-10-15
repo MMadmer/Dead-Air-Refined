@@ -12,6 +12,8 @@
 #include "ai_space.h"
 #include "xrScriptEngine/script_engine.hpp"
 
+#include <stdexcept>
+
 IC CGameObject& CScriptGameObject::object() const
 {
 #ifdef DEBUG
@@ -30,5 +32,8 @@ IC CGameObject& CScriptGameObject::object() const
     THROW2(m_game_object && m_game_object->lua_game_object() == this,
         "Probably, you are trying to use a destroyed object!");
 #endif // #ifdef DEBUG
+    // A retired handle: luabind turns this into a script error for the caller instead of a crash.
+    if (!m_game_object)
+        throw std::runtime_error("the game object of this handle went offline or was destroyed");
     return (*m_game_object);
 }

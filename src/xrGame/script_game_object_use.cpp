@@ -236,9 +236,10 @@ void CScriptGameObject::RemoveCallback(GameObject::ECallbackType type, pcstr id)
 }
 void CScriptGameObject::set_fastcall(const luabind::functor<bool>& functor, const luabind::object& object)
 {
-    CPHScriptGameObjectCondition* c = xr_new<CPHScriptGameObjectCondition>(object, functor, m_game_object);
+    CGameObject* self = &this->object();
+    CPHScriptGameObjectCondition* c = xr_new<CPHScriptGameObjectCondition>(object, functor, self);
     CPHDummiAction* a = xr_new<CPHDummiAction>();
-    CPHSriptReqGObjComparer cmpr(m_game_object);
+    CPHSriptReqGObjComparer cmpr(self);
     Level().ph_commander_scripts().RemoveCallsDeferred(&cmpr);
     Level().ph_commander_scripts().AddCallDeferred(c, a);
 }

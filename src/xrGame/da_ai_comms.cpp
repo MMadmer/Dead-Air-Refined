@@ -747,6 +747,29 @@ Estimate payload(const CAI_Stalker& npc, const Outgoing& out)
     return result;
 }
 
+// The squad said this a moment ago: the news still reaches the mates within earshot, it is only not said aloud
+// again. Coordination rides on it - a search spot cleared, a target lost - so dropping it with the words left
+// mates sent back to spots already cleared.
+void pass_unsaid(CAI_Stalker& npc, const SquadState& squad, const Message& base)
+{
+    const Config& c = config();
+    const u32 now = Device.dwTimeGlobal;
+    Message message = base;
+    message.channel = Channel::hushed;
+    message.estimate = describe(base.estimate, Channel::hushed, npc);
+    for (const u16 id : squad.members)
+    {
+        NpcState* mate = DaAi::npc(id);
+        if (id == npc.ID() || !mate || mate->dead || !mate->owner || !mate->comms)
+            continue;
+        if (mate->owner->Position().distance_to_sqr(npc.Position()) > _sqr(c.relay_range))
+            continue;
+        Message delivery = message;
+        delivery.t_available = now + understand_ms(*mate->owner, Channel::hushed, false);
+        queue(*mate->owner, *mate->comms, delivery);
+    }
+}
+
 // Tries every channel still pending; the ones that are done or impossible are cleared.
 void transmit(CAI_Stalker& npc, CommsState& state, Outgoing& out)
 {
@@ -774,8 +797,11 @@ void transmit(CAI_Stalker& npc, CommsState& state, Outgoing& out)
     SquadState* say_squad = say_interval ? squad_of(npc) : nullptr;
     const bool words =
         !(say_squad && say_squad->comms && said_recently(*say_squad->comms, out.kind, out.target, say_interval));
-    if (!words)
+    if (!words && (out.channels & voice_bits))
+    {
+        pass_unsaid(npc, *say_squad, base);
         out.channels &= ~voice_bits;
+    }
 
     if (out.channels & bit(Channel::gesture))
     {

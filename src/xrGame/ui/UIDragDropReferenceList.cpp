@@ -191,7 +191,7 @@ void CUIDragDropReferenceList::OnItemDBClick(CUIWindow* w, void* pData)
         CActor* actor = smart_cast<CActor*>(Level().CurrentViewEntity());
         if (actor)
         {
-            PIItem itm = actor->inventory().GetAny(ACTOR_DEFS::g_quick_use_slots[index]);
+            PIItem itm = actor->inventory().GetQuick(ACTOR_DEFS::g_quick_use_slots[index]);
             if (itm)
                 inherited::RemoveItem(GetCellIdx(index).m_item, false);
         }
