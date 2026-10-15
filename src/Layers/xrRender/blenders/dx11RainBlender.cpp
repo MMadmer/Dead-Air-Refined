@@ -75,6 +75,7 @@ void CBlender_rain::Compile(CBlender_Compile& C)
         // ground: its fill map and the ripple field, bound under the names that pass uses.
         C.r_dx11Texture("s_puddle_fill", r2_RT_puddle_fill);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Sampler("smp_rtlinear");
 
         C.r_End();
@@ -212,6 +213,7 @@ void CBlender_rain_msaa::Compile(CBlender_Compile& C)
         // ground: its fill map and the ripple field, bound under the names that pass uses.
         C.r_dx11Texture("s_puddle_fill", r2_RT_puddle_fill);
         C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+        C.r_dx11Texture("s_water_field", r2_RT_water_field);
         C.r_dx11Sampler("smp_rtlinear");
 
         C.r_End();

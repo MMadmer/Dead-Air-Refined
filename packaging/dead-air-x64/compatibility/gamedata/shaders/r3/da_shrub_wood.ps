@@ -16,6 +16,7 @@
 #include "da_velocity.h"
 #include "da_material_codes.h"
 #include "da_shrub_common.h"
+#include "da_lattice.h"
 
 struct p_shrub_wood
 {
@@ -380,8 +381,8 @@ void	shrub_end_grain	(p_shrub_wood I, float3 n, float3 dpx, float3 dpy, float3 t
 	{
 		const float2 bp = p / max(0.035f, 0.18f * R) + seed * 13.0f;
 		const float2 bi = floor(bp), bf = bp - bi, bu = bf * bf * (3.0f - 2.0f * bf);
-		const float h00 = frac(sin(dot(bi, float2(127.1f, 311.7f))) * 43758.5453f), h10 = frac(sin(dot(bi + float2(1.0f, 0.0f), float2(127.1f, 311.7f))) * 43758.5453f);
-		const float h01 = frac(sin(dot(bi + float2(0.0f, 1.0f), float2(127.1f, 311.7f))) * 43758.5453f), h11 = frac(sin(dot(bi + float2(1.0f, 1.0f), float2(127.1f, 311.7f))) * 43758.5453f);
+		const float h00 = da_lattice_hash(bi.x, bi.y, 23u), h10 = da_lattice_hash(bi.x + 1.0f, bi.y, 23u);
+		const float h01 = da_lattice_hash(bi.x, bi.y + 1.0f, 23u), h11 = da_lattice_hash(bi.x + 1.0f, bi.y + 1.0f, 23u);
 		const float blot = lerp(0.5f, lerp(lerp(h00, h10, bu.x), lerp(h01, h11, bu.x), bu.y),
 			saturate(1.6f - 2.2f * foot / max(0.035f, 0.18f * R)));
 		wood *= 0.86f + 0.24f * blot;

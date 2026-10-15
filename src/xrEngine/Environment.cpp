@@ -663,6 +663,7 @@ ENGINE_API float g_wind_force_override = -1.f;
 
 // The wind-field maths, shared with the vertex shaders: one file, two compilers.
 #include "../../packaging/dead-air-x64/compatibility/gamedata/shaders/r3/da_wind_core.h"
+#include "../../packaging/dead-air-x64/compatibility/gamedata/shaders/r3/da_lattice.h"
 
 namespace
 {
@@ -1132,33 +1133,19 @@ float CEnvironment::SampleWindMotors(const Fvector& p) const
 }
 
 // ---- CPU replica of the puddle-shader noise (da_puddles.h) -------------------------------
-// Bit-for-bit the same formulas in fp32: gameplay decides "did this land in water" with the
-// same picture the player sees. Minor GPU/CPU rounding drift only matters within a few
-// centimetres of a puddle's edge - acceptable for a hit test.
-static float da_cpu_hash21(float px, float py)
-{
-    // HLSL source (da_puddles.h): p = frac(p * (127.1, 311.7)); p += dot(p, p + 34.23);
-    // return frac(p.x * p.y);
-    float fx = px * 127.1f, fy = py * 311.7f;
-    fx -= floorf(fx);
-    fy -= floorf(fy);
-    const float dp = fx * (fx + 34.23f) + fy * (fy + 34.23f);
-    fx += dp;
-    fy += dp;
-    const float r = fx * fy;
-    return r - floorf(r);
-}
-
+// The same formulas in fp32 and the same integer lattice hash (da_lattice.h): gameplay decides "did
+// this land in water" with the same picture the player sees. Minor GPU/CPU rounding drift only
+// matters within a few centimetres of a puddle's edge - acceptable for a hit test.
 static float da_cpu_vnoise(float px, float py)
 {
     const float ix = floorf(px), iy = floorf(py);
     float fx = px - ix, fy = py - iy;
     fx = fx * fx * (3.f - 2.f * fx);
     fy = fy * fy * (3.f - 2.f * fy);
-    const float a = da_cpu_hash21(ix, iy);
-    const float b = da_cpu_hash21(ix + 1.f, iy);
-    const float c = da_cpu_hash21(ix, iy + 1.f);
-    const float d = da_cpu_hash21(ix + 1.f, iy + 1.f);
+    const float a = da_lattice_hash(ix, iy, 0u);
+    const float b = da_lattice_hash(ix + 1.f, iy, 0u);
+    const float c = da_lattice_hash(ix, iy + 1.f, 0u);
+    const float d = da_lattice_hash(ix + 1.f, iy + 1.f, 0u);
     return (a * (1.f - fx) + b * fx) * (1.f - fy) + (c * (1.f - fx) + d * fx) * fy;
 }
 
@@ -1170,6 +1157,8 @@ extern ENGINE_API int ps_r__puddle_fill;
 // How far a full dip raises the noise's level, in the noise's own 0..1 domain.
 // DA_PUDDLE_FILL_GAIN in da_puddles.h is the same number; the two masks are one mask.
 static constexpr float da_puddle_fill_gain = .8f;
+// How far under a water body's surface the ground holds no puddle (DA_PUDDLE_SUBMERGED).
+static constexpr float da_puddle_submerged = .02f;
 
 float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
 {
@@ -1182,6 +1171,9 @@ float CEnvironment::SamplePuddleMask(const Fvector& pos, float ground_ny)
     // The shader's hemi "open sky" gate is stood in by the shelter ray: rain does not pool
     // under a roof, and neither does the shader draw water there.
     if (wind_sheltered(pos))
+        return 0.f;
+    // Under a pond the water body stands, not a puddle (the shader's water field test).
+    if (float surface, bed; water_at(pos, surface, bed) && surface > pos.y + da_puddle_submerged)
         return 0.f;
     float n = da_cpu_vnoise(pos.x * 0.33f, pos.z * 0.33f) * 0.62f +
         da_cpu_vnoise(pos.x * 1.10f, pos.z * 1.10f) * 0.38f;

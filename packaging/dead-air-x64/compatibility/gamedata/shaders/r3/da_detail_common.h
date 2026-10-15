@@ -17,6 +17,7 @@
 // replacement that brings its own wind keeps its look on the vertex path.
 
 #include "da_wind_motors.h"
+#include "da_lattice.h"
 #include "da_snow_sample.h"
 
 // The season of the stock detail classes (CDetailManager::StockSeasonConstants, docs/dead-air/GRASS.md):
@@ -252,12 +253,9 @@ float	detail_tint_n	(float2 root_xz, float inv_patch)
 	const float2 wxz = root_xz * inv_patch;
 	const float2 c   = floor( wxz );
 	const float2 f   = smoothstep( 0.0f, 1.0f, wxz - c );
-	float4 h   = sin( float4(
-		dot( c + float2(0,0), float2(127.1f, 311.7f) ),
-		dot( c + float2(1,0), float2(127.1f, 311.7f) ),
-		dot( c + float2(0,1), float2(127.1f, 311.7f) ),
-		dot( c + float2(1,1), float2(127.1f, 311.7f) ) ) ) * 43758.5453f;
-	h = h - floor( h );
+	// (The corners by the integer lattice hash: a float one steps at the cell borders under DXC, da_lattice.h.)
+	const float4 h   = float4( da_lattice_hash( c.x, c.y, 11u ), da_lattice_hash( c.x + 1.0f, c.y, 11u ),
+		da_lattice_hash( c.x, c.y + 1.0f, 11u ), da_lattice_hash( c.x + 1.0f, c.y + 1.0f, 11u ) );
 	return lerp( lerp(h.x,h.y,f.x), lerp(h.z,h.w,f.x), f.y ) * 2.0f - 1.0f;
 }
 

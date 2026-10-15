@@ -11,6 +11,7 @@ function normal (shader, t_base, t_second, t_detail)
 	shader:dx10texture	("s_position",		"$user$position")
 	shader:dx10texture	("s_puddle_fill",	"$user$puddle_fill")
 	shader:dx10texture	("s_water_ripple",	"$user$water_ripple0")
+	shader:dx10texture	("s_water_field",	"$user$water_field")
 
 	shader:dx10sampler	("smp_nofilter")
 	shader:dx10sampler	("smp_rtlinear")

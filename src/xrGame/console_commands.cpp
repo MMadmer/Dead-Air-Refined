@@ -103,6 +103,8 @@ extern int g_dar_community_links;
 extern int g_dar_instant_inventory;
 // ZoneCampfire.cpp - rain puts campfires out.
 extern int g_dar_rain_douses_fires;
+// ui/UITalkDialogWnd.cpp - where the dialog window stands.
+extern int g_dar_dialog_position;
 
 extern void show_smart_cast_stats();
 extern void clear_smart_cast_stats();
@@ -3938,6 +3940,9 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "dar_community_links", &g_dar_community_links, 0, 1);
     CMD4(CCC_Integer, "dar_instant_inventory", &g_dar_instant_inventory, 0, 1);
     CMD4(CCC_Integer, "dar_rain_douses_fires", &g_dar_rain_douses_fires, 0, 1);
+    // the dialog window at the screen's left edge (0), where its layout puts it (1, the middle) or at the right
+    // edge (2)
+    CMD4(CCC_Integer, "dar_dialog_position", &g_dar_dialog_position, 0, 2);
 
     // alife
 #ifdef DEBUG

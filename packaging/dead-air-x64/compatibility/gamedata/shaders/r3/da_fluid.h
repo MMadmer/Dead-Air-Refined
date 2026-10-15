@@ -2,6 +2,7 @@
 #define DA_FLUID_H
 
 #include "fluid_common.h"
+#include "da_lattice.h"
 
 // The campfire's own simulation, on top of the engine's 3D fluid grid. The field carried in
 // the colour texture is (temperature, fuel, burn, smoke) instead of the stock single density,
@@ -35,26 +36,20 @@ cbuffer DaFireSim
 //	Noise. Value noise off a hash - no texture, and only the handful of cells that sit on
 //	the fuel bed ever evaluate it.
 
-float da_ff_hash(float3 p)
-{
-	p = frac(p * 0.3183099 + float3(0.71, 0.113, 0.419));
-	p *= 17.0;
-	return frac(p.x * p.y * p.z * (p.x + p.y + p.z));
-}
-
 float da_ff_noise(float3 x)
 {
 	const float3 i = floor(x);
 	float3 f = frac(x);
 	f = f * f * (3.0 - 2.0 * f);
-	const float n000 = da_ff_hash(i + float3(0, 0, 0));
-	const float n100 = da_ff_hash(i + float3(1, 0, 0));
-	const float n010 = da_ff_hash(i + float3(0, 1, 0));
-	const float n110 = da_ff_hash(i + float3(1, 1, 0));
-	const float n001 = da_ff_hash(i + float3(0, 0, 1));
-	const float n101 = da_ff_hash(i + float3(1, 0, 1));
-	const float n011 = da_ff_hash(i + float3(0, 1, 1));
-	const float n111 = da_ff_hash(i + float3(1, 1, 1));
+	// (The corners by the integer lattice hash: the float one stepped at the cell borders under DXC, da_lattice.h.)
+	const float n000 = da_lattice_hash3(i.x, i.y, i.z, 7u);
+	const float n100 = da_lattice_hash3(i.x + 1.0f, i.y, i.z, 7u);
+	const float n010 = da_lattice_hash3(i.x, i.y + 1.0f, i.z, 7u);
+	const float n110 = da_lattice_hash3(i.x + 1.0f, i.y + 1.0f, i.z, 7u);
+	const float n001 = da_lattice_hash3(i.x, i.y, i.z + 1.0f, 7u);
+	const float n101 = da_lattice_hash3(i.x + 1.0f, i.y, i.z + 1.0f, 7u);
+	const float n011 = da_lattice_hash3(i.x, i.y + 1.0f, i.z + 1.0f, 7u);
+	const float n111 = da_lattice_hash3(i.x + 1.0f, i.y + 1.0f, i.z + 1.0f, 7u);
 	return lerp(lerp(lerp(n000, n100, f.x), lerp(n010, n110, f.x), f.y),
 	            lerp(lerp(n001, n101, f.x), lerp(n011, n111, f.x), f.y), f.z);
 }

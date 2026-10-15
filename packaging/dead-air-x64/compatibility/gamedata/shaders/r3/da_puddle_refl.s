@@ -26,6 +26,8 @@ function normal (shader, t_base, t_second, t_detail)
 	-- reads it through da_wf_ripple_slope). The G-buffer half binds the same name to the same
 	-- texture in uber_deffer.cpp, for the same bit-for-bit reason as the fill map above.
 	shader:dx10texture	("s_water_ripple", "$user$water_ripple0")
+	-- The baked water field: no puddle under a pond. The G-buffer half binds it in uber_deffer.cpp.
+	shader:dx10texture	("s_water_field", "$user$water_field")
 	-- Ray traced reflections (DirectX 12, RTX): the traced mirror, read only while da_rt.x says so,
 	-- and the requests, so a pixel takes only a puddle's own ray (water drawn over it asked for its own).
 	shader:dx10texture	("s_rt_refl", "$user$rt_refl")

@@ -151,4 +151,19 @@
 	<string id="ui_mm_community_links_hint">
 		<text>Показывает в главном меню и меню паузы значки сообществ мода. Нажатие на значок открывает страницу в браузере.</text>
 	</string>
+	<string id="ui_mm_dialog_position">
+		<text>Окно диалога</text>
+	</string>
+	<string id="ui_mm_dialog_position_hint">
+		<text>Расположение окна разговора на экране: у левого края, по центру или у правого края.</text>
+	</string>
+	<string id="ui_mm_dialog_position_left">
+		<text>Слева</text>
+	</string>
+	<string id="ui_mm_dialog_position_center">
+		<text>По центру</text>
+	</string>
+	<string id="ui_mm_dialog_position_right">
+		<text>Справа</text>
+	</string>
 </string_table>

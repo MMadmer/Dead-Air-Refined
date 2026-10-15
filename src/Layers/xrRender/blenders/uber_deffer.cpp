@@ -230,6 +230,9 @@ bool uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
     // The ripple field, for the rings a puddle carries (da_puddles.h reads it through
     // da_wf_ripple_slope). Same silent-skip contract, same twin in da_puddle_refl.s.
     C.r_dx11Texture("s_water_ripple", r2_RT_water_ripple "0");
+    // The baked water field: no puddle under a pond (da_puddles.h). Same silent-skip contract, same twin in
+    // da_puddle_refl.s.
+    C.r_dx11Texture("s_water_field", r2_RT_water_field);
     // Blade grass cover under the ground tint of deffer_impl_flat.ps (da_grass_blades.cpp publishes it
     // per level). Same silent-skip contract.
     C.r_dx11Texture("s_grass_cover", "$user$grass_cover");

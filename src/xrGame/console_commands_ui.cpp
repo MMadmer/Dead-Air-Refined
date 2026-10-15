@@ -140,6 +140,23 @@ public:
                 gameUi->StartTrade(actor, smart_cast<CInventoryOwner*>(object));
             }
         }
+        else if (0 == xr_stricmp(what, "talk"))
+        {
+            // the nearest trader's dialog, as if the use key had been pressed at him: the actor first stands a step
+            // in front of him (a partner's scripts end a talk across the map)
+            if (IGameObject* object = open(Wanted::Trader, what))
+            {
+                Fvector dir = Fvector().sub(actor->Position(), object->Position());
+                dir.y = 0.f;
+                if (dir.square_magnitude() < EPS_L)
+                    dir.set(0.f, 0.f, 1.f);
+                dir.normalize();
+                float heading, pitch;
+                Fvector().invert(dir).getHP(heading, pitch);
+                actor->MoveActor(Fvector().mad(object->Position(), dir, 1.5f), Fvector().set(0.f, -heading, 0.f));
+                actor->RunTalkDialog(smart_cast<CInventoryOwner*>(object), false);
+            }
+        }
         else if (0 == xr_stricmp(what, "upgrade"))
         {
             if (IGameObject* object = open(Wanted::Trader, what))
@@ -175,12 +192,12 @@ public:
             Msg("! dar_ui_open: unknown window [%s]", what);
     }
 
-    void GetStatus(TStatus& status) override { xr_strcpy(status, "inventory|trade|upgrade|loot|stash|mutant"); }
+    void GetStatus(TStatus& status) override { xr_strcpy(status, "inventory|trade|talk|upgrade|loot|stash|mutant"); }
     void Save(IWriter*) override {}
 
     void fill_tips(vecTips& tips, u32) override
     {
-        for (pcstr window : {"inventory", "trade", "upgrade", "loot", "stash", "mutant"})
+        for (pcstr window : {"inventory", "trade", "talk", "upgrade", "loot", "stash", "mutant"})
             tips.emplace_back(window);
     }
 };

@@ -17,6 +17,9 @@
 #include "alife_registry_wrappers.h"
 #include "UIHelper.h"
 
+// dar_dialog_position: the window at the screen's left edge (0), where its layout puts it (1) or at the right edge (2).
+int g_dar_dialog_position = 1;
+
 CUITalkDialogWnd::CUITalkDialogWnd()
     : CUIWindow("CUITalkDialogWnd"),
       m_uiXml(nullptr),
@@ -137,10 +140,30 @@ void CUITalkDialogWnd::InitTalkDialogWnd()
     {
         AddCallback(UIToExitButton, BUTTON_CLICKED, CUIWndCallback::void_function(this, &CUITalkDialogWnd::OnExitClicked));
     }
+
+    // What the layout covers across the screen, for dar_dialog_position.
+    for (const CUIWindow* child : GetChildWndList())
+    {
+        const Frect r = child->GetWndRect();
+        m_content_x.x = std::min(m_content_x.x, r.x1);
+        m_content_x.y = std::max(m_content_x.y, r.x2);
+    }
 }
 
 void CUITalkDialogWnd::Show()
 {
+    // The whole window against the left or the right edge of the screen, or where its layout puts it.
+    float dx = 0.f;
+    if (m_content_x.x < m_content_x.y)
+    {
+        constexpr float margin = 8.f;
+        if (g_dar_dialog_position == 0)
+            dx = margin - m_content_x.x;
+        else if (g_dar_dialog_position == 2)
+            dx = UI_BASE_WIDTH - margin - m_content_x.y;
+    }
+    SetWndPos({ dx, GetWndPos().y });
+
     InventoryUtilities::SendInfoToActor("ui_talk_show");
     inherited::Show(true);
     inherited::Enable(true);

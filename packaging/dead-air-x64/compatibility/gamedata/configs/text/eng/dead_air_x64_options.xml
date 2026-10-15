@@ -184,4 +184,19 @@
 	<string id="ui_mm_community_links_hint">
 		<text>Shows the icons of the mod's communities in the main menu and the pause menu. A click on an icon opens the page in the browser.</text>
 	</string>
+	<string id="ui_mm_dialog_position">
+		<text>Dialog window</text>
+	</string>
+	<string id="ui_mm_dialog_position_hint">
+		<text>Where the conversation window stands on the screen: at the left edge, in the middle or at the right edge.</text>
+	</string>
+	<string id="ui_mm_dialog_position_left">
+		<text>Left</text>
+	</string>
+	<string id="ui_mm_dialog_position_center">
+		<text>Center</text>
+	</string>
+	<string id="ui_mm_dialog_position_right">
+		<text>Right</text>
+	</string>
 </string_table>

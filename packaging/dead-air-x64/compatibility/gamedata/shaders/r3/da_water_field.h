@@ -81,6 +81,22 @@ float4 da_wf_sample(float2 wxz)
 	return s_water_field.SampleLevel(smp_nofilter, uv, 0);
 }
 
+//	The same texel by Load, for a pass that binds the field and no point sampler (the terrain's G-buffer, the
+//	rain's patch normals): no sampler state to get wrong.
+float4 da_wf_load(float2 wxz)
+{
+	[branch]
+	if (da_water_map2.w < 0.5f)
+		return 0.0f;
+	const float2 uv = da_wf_uv(wxz);
+	[branch]
+	if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f)
+		return 0.0f;
+	uint w, h;
+	s_water_field.GetDimensions(w, h);
+	return s_water_field.Load(int3(min(uint2(uv * float2(w, h)), uint2(w, h) - 1u), 0));
+}
+
 //	Is there water at this XZ at all. Every other query is only meaningful where this is true.
 bool da_wf_here(float2 wxz)
 {

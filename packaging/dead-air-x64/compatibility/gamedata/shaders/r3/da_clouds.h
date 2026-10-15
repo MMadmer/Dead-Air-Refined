@@ -1,6 +1,8 @@
 #ifndef DA_CLOUDS_H
 #define DA_CLOUDS_H
 
+#include "da_lattice.h"
+
 // The cloud deck: one coverage field, three consumers.
 //
 // The deck is a world object - a layer of cloud at a fixed altitude above the level, drifting
@@ -41,10 +43,11 @@ float da_cl_noise(float2 p)
     const float2 i = floor(p);
     float2 f = p - i;
     f = f * f * (3.0f - 2.0f * f);
-    const float a = da_cl_hash(i);
-    const float b = da_cl_hash(i + float2(1.0f, 0.0f));
-    const float c = da_cl_hash(i + float2(0.0f, 1.0f));
-    const float d = da_cl_hash(i + float2(1.0f, 1.0f));
+    // (The corners by the integer lattice hash: the float one stepped at the cell borders under DXC, da_lattice.h.)
+    const float a = da_lattice_hash(i.x, i.y, 5u);
+    const float b = da_lattice_hash(i.x + 1.0f, i.y, 5u);
+    const float c = da_lattice_hash(i.x, i.y + 1.0f, 5u);
+    const float d = da_lattice_hash(i.x + 1.0f, i.y + 1.0f, 5u);
     return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
 }
 

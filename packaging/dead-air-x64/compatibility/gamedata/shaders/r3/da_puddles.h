@@ -41,6 +41,7 @@
 // of its own because the map shares the water field's footprint exactly, so da_water_map (bound
 // for every shader already) addresses it and da_water_map2.w says whether it exists at all.
 #include "da_water_field.h"
+#include "da_lattice.h"
 
 Texture2D s_puddle_fill;
 
@@ -109,10 +110,11 @@ float da_vnoise(float2 p)
 	float2 f = frac(p);
 	f = f * f * (3.0f - 2.0f * f);
 
-	float a = da_hash21(i);
-	float b = da_hash21(i + float2(1.0f, 0.0f));
-	float c = da_hash21(i + float2(0.0f, 1.0f));
-	float d = da_hash21(i + float2(1.0f, 1.0f));
+	// (The corners by the integer lattice hash: the float one broke into square cells under DXC, da_lattice.h.)
+	float a = da_lattice_hash(i.x, i.y, 0u);
+	float b = da_lattice_hash(i.x + 1.0f, i.y, 0u);
+	float c = da_lattice_hash(i.x, i.y + 1.0f, 0u);
+	float d = da_lattice_hash(i.x + 1.0f, i.y + 1.0f, 0u);
 
 	return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
 }
@@ -137,6 +139,9 @@ float da_vnoise(float2 p)
 // How far a full dip raises the noise's level, in the noise's own 0..1 domain. Mirrored on the CPU
 // as da_puddle_fill_gain (Environment.cpp) - the two masks are one mask.
 #define DA_PUDDLE_FILL_GAIN	0.8f
+// How far under the water's surface the ground is the water body's and no puddle's (m; da_puddle_submerged in
+// Environment.cpp): past the waterline's own wobble.
+#define DA_PUDDLE_SUBMERGED	0.02f
 
 float2 da_puddle_fill_level(float2 wp)
 {
@@ -212,6 +217,16 @@ da_puddle_result da_puddles(float3 pos_v, float hemi_in, float3 N_in)
 
 	// Геометрическая нормаль из производных мировой позиции — без матричных допущений.
 	const float3 gn_w = normalize(cross(ddy(pos_w), ddx(pos_w)));
+
+	// Under a pond, a lake or a river (the level's baked water field: covered here, its surface above the ground)
+	// no puddle stands and no rain wets the ground: the water body is there, and its surface draws it. The bed of
+	// a pond is a dip, and the mask filled it with a glossy sheet that lit up yellow in the sun through the water.
+	// (CEnvironment::SamplePuddleMask asks the same of the CPU field. After the derivatives: they need the whole quad.)
+	{
+		const float4 wf = da_wf_load(pos_w.xz);
+		if (wf.y > 0.5f && wf.x > pos_w.y + DA_PUDDLE_SUBMERGED)
+			return R;
+	}
 
 	// [DA_PORT] Геометрической нормали в пространстве вида здесь БОЛЬШЕ НЕТ.
 	//

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The dialog window (CUITalkDialogWnd). Written by tools\ui\talk_layout.py for 4:3 and 16:9 in the look of
+     the inventory and the trade: every surface and button is drawn by the xms_ui_shape shader (ui_theme.xml).
+     The window is laid out in the middle; the option "Dialog window" (dar_dialog_position) moves all of it
+     to the left or the right edge of the screen. -->
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <auto_static x="275" y="6" width="474" height="760" shape="shadow"/>
+        <auto_static x="279.5" y="10" width="465" height="748" shape="panel"/>
+        <auto_static x="288.5" y="22" width="447" height="100" shape="card"/>
+        <auto_static x="641.75" y="33" width="87" height="78" shape="portrait_frame"/>
+    </main>
+
+    <left_character_icon x="288.5" y="22" width="447" height="100"/>
+
+    <frame_top x="288.5" y="130" width="447" height="390" shape="inset"/>
+    <frame_bottom x="288.5" y="528" width="447" height="176" shape="inset"/>
+    <!-- relative to their frames -->
+    <answers_list x="6" y="8" width="435" height="374" always_show_scroll="0" scroll_profile="thin" vert_interval="2"/>
+    <questions_list x="6" y="8" width="435" height="160" always_show_scroll="0" scroll_profile="thin" vert_interval="2"/>
+
+    <button x="422" y="714" width="180" height="32">
+        <shape style="button_primary"/>
+        <text font="graffiti22" align="c" vert_align="c">ui_st_trade</text>
+    </button>
+
+    <question_item x="0" y="0" width="427.5" height="22" min_height="22">
+        <num_text x="1.5" y="2" width="13.5" height="20">
+            <text font="letterica18" color="$text_muted"/>
+        </num_text>
+        <content_text x="16.5" y="2" width="408" height="20">
+            <text font="letterica18" color="$text" align="l" complex_mode="1"/>
+            <text_color>
+                <e color="$text"/>
+                <t color="$accent"/>
+                <h color="$accent"/>
+                <d color="$text_muted"/>
+            </text_color>
+        </content_text>
+    </question_item>
+
+    <other_answer_item x="0" y="0" width="427.5" height="0" min_height="14" bottom_footer="8">
+        <name_caption x="0" y="2" width="421.5" height="18">
+            <text font="graffiti22" color="$accent" complex_mode="0"/>
+        </name_caption>
+        <content_text x="16.5" y="24" width="405" height="10" complex_mode="1">
+            <text font="letterica18" color="$text"/>
+        </content_text>
+    </other_answer_item>
+
+    <actor_answer_item x="0" y="0" width="427.5" height="0" min_height="14" bottom_footer="8">
+        <name_caption x="0" y="2" width="421.5" height="18">
+            <text font="graffiti22" color="$text_dim" complex_mode="0"/>
+        </name_caption>
+        <content_text x="16.5" y="24" width="405" height="10" complex_mode="1">
+            <text font="letterica18" color="$text_dim"/>
+        </content_text>
+    </actor_answer_item>
+
+    <iconed_answer_item x="0" y="0" width="427.5" height="0" min_height="32" bottom_footer="6">
+        <name_caption x="0" y="0" width="0" height="0"/>
+        <content_text x="51" y="0" width="370.5" height="30" complex_mode="1">
+            <text font="letterica18" color="$text"/>
+        </content_text>
+        <msg_icon x="16.5" y="2" width="30.75" height="29" stretch="1"/>
+    </iconed_answer_item>
+
+    <simple_answer_item x="0" y="0" width="427.5" height="0" min_height="14" bottom_footer="6">
+        <name_caption x="0" y="0" width="0" height="0"/>
+        <content_text x="16.5" y="0" width="405" height="30" complex_mode="1">
+            <text font="letterica18" color="$text"/>
+        </content_text>
+        <msg_icon x="0" y="0" width="0" height="0"/>
+    </simple_answer_item>
+
+    <iconed_trade_info x="0" y="0" width="427.5" height="0" min_height="22" bottom_footer="6">
+        <name_caption x="0" y="0" width="0" height="0"/>
+        <content_text x="43.5" y="2" width="378" height="20" complex_mode="1">
+            <text font="letterica18" color="$text_dim"/>
+        </content_text>
+        <msg_icon x="16.5" y="0" width="21" height="20" stretch="1"/>
+    </iconed_trade_info>
+</w>

@@ -4,6 +4,10 @@
 -- one source of truth and it persists in user.ltx like every other sensitivity.
 local CURSOR_SENS_STEPS = { "0.50", "0.75", "1.00", "1.25", "1.50", "2.00" }
 
+-- Where the dialog window stands (dar_dialog_position: 0 left, 1 as the layout has it - the middle -, 2 right). The
+-- combo box shows the captions; its item ids are the values.
+local DIALOG_POSITIONS = { "ui_mm_dialog_position_left", "ui_mm_dialog_position_center", "ui_mm_dialog_position_right" }
+
 local function nearest_cursor_step(value)
 	local best, best_diff = "1.00", nil
 	for _, step in ipairs(CURSOR_SENS_STEPS) do
@@ -29,6 +33,11 @@ local function on_init(menu)
 	-- ui_mm_community_links.
 	menu.gameplay_options["community_links"] = {typ="check"}
 	menu.gameplay_options["cursor_sens"] = {typ="list", list=CURSOR_SENS_STEPS}
+	local positions = {}
+	for i, id in ipairs(DIALOG_POSITIONS) do
+		positions[i] = game.translate_string(id)
+	end
+	menu.gameplay_options["dialog_position"] = {typ="list", list=positions}
 end
 
 local function on_set_values(menu, opt_manager)
@@ -67,6 +76,12 @@ local function on_set_values(menu, opt_manager)
 	if (cursor_sens and cursor_sens.ctrl) then
 		cursor_sens.ctrl:SetText(nearest_cursor_step(console:get_float("ui_cursor_sens")))
 	end
+
+	local dialog_position = menu.gameplay_options["dialog_position"]
+	if (dialog_position and dialog_position.ctrl) then
+		local id = DIALOG_POSITIONS[console:get_integer("dar_dialog_position") + 1] or DIALOG_POSITIONS[2]
+		dialog_position.ctrl:SetText(game.translate_string(id))
+	end
 end
 
 local function on_accept(menu, opt_manager, console)
@@ -103,6 +118,16 @@ local function on_accept(menu, opt_manager, console)
 	local cursor_sens = menu.gameplay_options["cursor_sens"]
 	if (cursor_sens and cursor_sens.ctrl) then
 		console:execute("ui_cursor_sens " .. cursor_sens.ctrl:GetText())
+	end
+
+	local dialog_position = menu.gameplay_options["dialog_position"]
+	if (dialog_position and dialog_position.ctrl) then
+		local text = dialog_position.ctrl:GetText()
+		for i, id in ipairs(DIALOG_POSITIONS) do
+			if (game.translate_string(id) == text) then
+				console:execute("dar_dialog_position " .. tostring(i - 1))
+			end
+		end
 	end
 end
 

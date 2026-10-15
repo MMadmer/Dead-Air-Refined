@@ -43,6 +43,8 @@ public:
     CUIWindow* UIDialogFrameBottom{};
 
     Fvector2 m_btn_pos[3];
+    // The layout's extent across the screen (x1, x2), for dar_dialog_position.
+    Fvector2 m_content_x{ flt_max, -flt_max };
     CUI3tButton UIToTradeButton;
     CUI3tButton* UIToExitButton;
 
