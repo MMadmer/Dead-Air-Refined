@@ -148,19 +148,30 @@ held 4 cm, swept by the wind.
 | 7 cm and more (`safe`) | it carries him; ice under twice that still creaks now and then |
 
 The physics: the water's triangles stay passable, and a contact on one is a contact on the runtime material
-`materials\ice` (a copy of `materials\flooring_tile` with its own steps, hits and particles) where the ice holds and
+`materials\ice` (a copy of `materials\flooring_tile` with its own hits and particles; its steps are the tile's
+recorded hard steps for every creature: a synthesized crunch read as a splash) where the ice holds and
 the body lies on the surface (no more than 25 cm into it): the actor, corpses, items and grenades lie on the ice; a
 body already standing through it (wading in a hole, on the bed) passes. A man in the water under the ice's plane
 breaks a channel as he goes. The level's AI graph never changes: its creatures keep off the water as always.
 
 **Holes** (`da_ice_hole_add`, at most 96): a hole of open water (a man, a blast) and a bullet's mark on ice that held.
-The picture draws the 16 nearest the camera (`da_ice_marks` in `da_snow_ice.h`): a hole is a polygon of straight
+The picture draws every one at any distance (`da_ice_marks` in `da_snow_ice.h`; with only the 16 nearest a trail
+lost its far end two steps on): a hole is a polygon of straight
 fractures (a sheet breaks along lines between the points where its cracks met, not in a round wobble), open water in
 it (plates floating flat in it read as cut-outs: no tilt, no thickness), the water it pushed up soaking the ice and the
 snow round it grey, and four to six cracks running out of it - straight runs with a kink every 10-25 cm, thin lines of
 water darker than the ice (never white). The snow grid's vertices keep their sheet over a hole and its pixels cut it
-(`da_sn_ice_whole`), so the edge is the fractures', not the grid's triangles'. A bullet the ice stopped crushed a spot of it white, a centimetre or two, cracked it
-with a few short fine fractures (faint pale lines in clear ice) and blew the snow out round it. Inside a hole the water
+(`da_sn_ice_whole`), so the edge is the fractures', not the grid's triangles'. A bullet the ice stopped leaves what
+the photos of rifle rounds in lake ice show (bare and under snow): a crater of white granular crushed ice 2-3 cm
+across its radius with a ragged edge, the round's dark pit in it, white chips thrown 15 cm round it, the snow blown
+out of it (no wider: a wider pit bared a ring of black ice round the white), the chips lying on the snow as clear
+chunks a little greyer and bluer than it, a puff of crushed ice (`bullet_particles`), and no cracks running out of it
+at the surface (a star of lines is a windscreen, not lake ice). A bullet through thin ice punches a small hole of open
+water with no cracks and throws a spurt of the water (`bullet_thin_particles`); a blast's ring throws chunks. Glass
+shards (the first particles) lay on the ice as flat white and black polygons. A hole has a wall: the water's level
+seen through the snow sheet's cut past the far rim is drawn as the wall the sight line left the hole through (the
+ice's thickness dark and wet, the snow over it white; `water.ps`), not as that level's own snow on ice, which read as
+a white sheet floating in the hole. Inside a hole the water
 is water (rings, splashes, waves). In frost a hole skins over in `refreeze_hours`; a load forgets them.
 
 **On the ice** the feet report the ice: a character's contacts with the water mesh where the ice holds and his feet are

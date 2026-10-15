@@ -233,15 +233,16 @@ void da_ice_bullet_hit(const Fvector& p, bool solid)
     make_sounds();
     if (solid)
     {
-        // The ice holds: a white star of cracks where it struck (the pair plays the chips and the crack).
-        da_ice_hole_add(p, cfg.bullet_radius * 4.f, 1);
+        // The ice holds: a crater of crushed ice where it struck, its chips thrown 15 cm or so (the pair plays the
+        // chips and the crack).
+        da_ice_hole_add(p, cfg.bullet_radius * 2.5f, 1);
         return;
     }
     // Ice too thin to stop it: a small hole, a splash of the water under it, the crack of the skin.
     da_ice_hole_add(p, cfg.bullet_radius, 0);
-    da_ice_hole_add(p, cfg.bullet_radius * 5.f, 1);
+    da_ice_hole_add(p, cfg.bullet_radius * 4.f, 1);
     s_bullet_thin.play(p, 0.8f);
-    particles(cfg.ps_bullet, p);
+    particles(cfg.ps_bullet_thin, p);
 }
 
 bool da_ice_blast(const Fvector& p, float blast_radius)
@@ -338,11 +339,13 @@ public:
         const u16 step_mtl = actor->material().last_material_idx();
         const SGameMtl* sm = step_mtl < GMLib.CountMaterial() ? GMLib.GetMaterialByIdx(step_mtl) : nullptr;
         const CPHMovementControl* mc = actor->character_physics_support() ? actor->character_physics_support()->movement() : nullptr;
+        const SGameMtlPair* pair = sm ? GMLib.GetMaterialPairByIndices(actor->material().self_material_idx(), step_mtl) : nullptr;
         Msg("* [qa] ice_probe feet (%.2f, %.3f, %.2f) water %d%s surface %.3f bed %.3f shore %.1f ice %.2f state %u "
-            "strength %.3f holes %u material %u | steps on %s, in water %.3f m",
+            "strength %.3f holes %u material %u | steps on %s (%s), in water %.3f m",
             feet.x, feet.y, feet.z, water ? 1 : 0, env.water_flowing_at(at) ? " running" : "", surface, bed,
             env.water_shore_dist(at), water ? env.ice_at(at) : 0.f, u32(st), strength, u32(da_ice_holes().size()),
-            u32(da_ice_material()), sm ? sm->m_Name.c_str() : "?", mc ? mc->WaterDepth() : -1.f);
+            u32(da_ice_material()), sm ? sm->m_Name.c_str() : "?", pair ? pair->src_step.c_str() : "?",
+            mc ? mc->WaterDepth() : -1.f);
     }
 };
 

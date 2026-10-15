@@ -570,6 +570,29 @@ float4 main( vf I ) : SV_Target
 		const float  F_i    = F * lerp( 0.25f, 0.6f, saturate( bare.a / DA_ICE_GLOSS_MAX ) );
 		float3 ice_rgb = body_i * ( 1.0f - F_i ) + reflection * F_i;
 		ice_rgb = lerp( ice_rgb, min( da_snow_albedo_open.rgb, 0.9f ) * DA_W_SNOW_TINT * irradiance, snowc );
+		// A hole's wall. Near the camera the snow grid's sheet lies over this surface and its cut over a hole shows
+		// the water's level through it: a sight line that reaches this level past the far rim, s from it along the
+		// view, left the hole through its wall s / tan(view angle) over the water - in the ice there (dark, wet,
+		// the water showing through it), in the snow over it above that. (This level's own snow on ice drawn there
+		// read as a white sheet floating in the hole.) Beyond the grid a far hole shows its far wall the same way.
+		[branch]
+		if ( da_ice_state.x > 0.5f )
+		{
+			// (only past the hole's far rim: its near wall faces the camera under the snow sheet's top)
+			const da_ice_mark hm = da_ice_marks( Pw.xz, footprint );
+			const float  cos_f  = dot( hm.away, V.xz / max( length( V.xz ), 1e-3f ) );
+			const float  h_wall = cos_f > 0.05f ? hm.outside * max( -V.y, 0.02f ) / ( max( length( V.xz ), 1e-3f ) * cos_f ) : 1000.0f;
+			const float  t_ice  = da_ice_state.y > 0.0f ? da_ice_state.y : 0.1f;
+			const float  t_all  = t_ice + max( da_snow_ice.w * da_snow_ice.z, d_snow );
+			[branch]
+			if ( h_wall < t_all + 0.02f )
+			{
+				const float3 ice_wall  = lerp( bare.rgb * 0.5f * irradiance, column, 0.35f );
+				const float3 snow_wall = min( da_snow_albedo_open.rgb, 0.9f ) * DA_W_SNOW_TINT * irradiance * 0.75f;
+				const float3 wall = lerp( ice_wall, snow_wall, smoothstep( t_ice - 0.01f, t_ice + 0.01f, h_wall ) );
+				ice_rgb = lerp( ice_rgb, wall, 1.0f - smoothstep( t_all, t_all + 0.02f, h_wall ) );
+			}
+		}
 		final = lerp( final, ice_rgb, ice );
 	}
 	// ---- atmosphere ------------------------------------------------------------------------

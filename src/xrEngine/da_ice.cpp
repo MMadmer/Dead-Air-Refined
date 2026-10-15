@@ -15,7 +15,7 @@
 
 namespace
 {
-constexpr size_t holes_max = 96;
+constexpr size_t holes_max = da_ice_holes_max;
 
 xr_vector<SDaIceHole> s_holes;
 u32 s_hole_seed = 0x1CE5EEDu;
@@ -62,7 +62,7 @@ const SDaIceCfg& da_ice_cfg()
     rs("bullet_thin_sounds", cfg.snd_bullet_thin);
     rs("break_particles", cfg.ps_break);
     rs("splash_particles", cfg.ps_splash);
-    rs("bullet_particles", cfg.ps_bullet);
+    rs("bullet_thin_particles", cfg.ps_bullet_thin);
     cfg.hold = std::max(cfg.hold, 0.005f);
     cfg.safe = std::max(cfg.safe, cfg.hold + 0.005f);
     return cfg;

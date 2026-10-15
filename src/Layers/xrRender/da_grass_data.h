@@ -115,6 +115,9 @@ struct DaGrassProfile
     // 1: last year's culms stand through the winter (a reed bed, a cattail stand): the snow's grass visibility does not
     // thin it, only the snow over a blade buries that blade.
     float winter_stand{};
+    // How much the dead tissue's colour varies culm to culm and clone to clone (0 none, 1 a reed bed's: tawny to
+    // grey-buff, pale to dark).
+    float dead_vary{};
 };
 
 // A plant community ([grass_community_N]): the graminoids a detail object grows and their cover shares in

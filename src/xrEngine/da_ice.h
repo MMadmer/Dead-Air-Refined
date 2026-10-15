@@ -29,7 +29,7 @@ struct SDaIceCfg
     float bullet_radius = 0.06f;
     float refreeze_hours = 8.f; // game hours a hole needs to skin over again in frost
     shared_str snd_crack, snd_break, snd_bullet_thin;
-    shared_str ps_break, ps_splash, ps_bullet;
+    shared_str ps_break, ps_splash, ps_bullet_thin;
 };
 ENGINE_API const SDaIceCfg& da_ice_cfg();
 
@@ -55,8 +55,10 @@ struct SDaIceHole
 ENGINE_API void da_ice_hole_add(const Fvector& p, float radius, u8 kind);
 ENGINE_API bool da_ice_in_hole(const Fvector& p);
 ENGINE_API const xr_vector<SDaIceHole>& da_ice_holes();
-// The holes nearest the camera for the shaders: x, z, radius, kind * 1000 + seed % 1000 (up to da_ice_holes_gpu).
-constexpr u32 da_ice_holes_gpu = 16;
+// The holes for the shaders, nearest the camera first: x, z, radius, kind * 1000 + seed % 1000. Every hole the ice keeps
+// (da_ice_holes_max): with fewer, a trail of a few dozen lost its far end and took it back as the camera moved.
+constexpr u32 da_ice_holes_max = 96;
+constexpr u32 da_ice_holes_gpu = da_ice_holes_max;
 ENGINE_API u32 da_ice_holes_near(const Fvector& eye, Fvector4 (&out)[da_ice_holes_gpu]);
 // A level load clears them (the holes of another level, or of a load, are not this one's).
 ENGINE_API void da_ice_reset();

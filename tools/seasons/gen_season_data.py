@@ -483,6 +483,9 @@ def species_sections(ltx, kf, sp_data, comm_data, still):
         # Last year's culms stand through the winter (reed, cattail): the snow's grass visibility does not thin them.
         if s.get('winter_stand', 0.0) > 0.0:
             sec.append(('winter_stand', num(s['winter_stand'])))
+        # Dead tissue varying culm to culm and clone to clone (reed, cattail, the marsh sedges and grasses).
+        if s.get('dead_vary', 0.0) > 0.0:
+            sec.append(('dead_vary', num(s['dead_vary'])))
         sec.append(('seed_ramp', ', '.join('%s:%s' % (num(float(st)), c) for st, c in
                                            sorted(s['seed_ramp'].items(), key=lambda kv: float(kv[0])))))
     for i, s in enumerate(species):

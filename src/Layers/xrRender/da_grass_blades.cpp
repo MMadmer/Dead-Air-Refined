@@ -228,6 +228,7 @@ void parse_profile(const CInifile::Sect& s, DaGrassProfile& p)
     read_float(s, "tussock_r", p.tussock_r);
     read_vector(s, "stem_tint", p.stem_tint);
     read_float(s, "winter_stand", p.winter_stand);
+    read_float(s, "dead_vary", p.dead_vary);
     // Seed or flower colour ramp "stage:#RRGGBB" at 0.25, 0.5, 0.75, 1.
     if (pcstr ramp = find_value(s, "seed_ramp"))
         for_each_key(ramp, [&p](float stage, pcstr colour) {
@@ -1285,7 +1286,7 @@ void fill_profile(u32 p, Fvector4* r, float height)
     r[23].set(P.cauline_h[0], P.cauline_h[1], P.cauline_w[0], P.cauline_w[1]);
     r[24].set(deg2rad(P.cauline_tilt[0]), deg2rad(P.cauline_tilt[1]), P.cauline_span[0], P.cauline_span[1]);
     r[25].set(P.cauline_taper, P.cauline_arrange, P.cauline_bend, P.cauline_droop);
-    r[26].set(P.stem_tint.x, P.stem_tint.y, P.stem_tint.z, 0.f);
+    r[26].set(P.stem_tint.x, P.stem_tint.y, P.stem_tint.z, P.dead_vary);
     // The widest a lane of the species can be for the pixel rule (da_grass_gen.cs's early out): a leaf, or a stem
     // with its leaves and head over its shortest height (a head over a third of it, the stem growing in spring).
     const float stem_h = std::max(P.culm_h[0], 0.05f);

@@ -75,6 +75,12 @@ blades grow a reed bed instead (`src/Layers/xrRender/da_reeds.{h,cpp}`, `dead_ai
   November, and through the winter last year's culms stand pale over the snow and the ice with their plumes
   (`winter_stand = 1` on *Phragmites* and *Typha*: the snow's grass visibility, which leaves the meadows bare from
   December to February, does not thin them; the snow over a blade still buries it).
+- A dead reed bed is not one straw colour: `dead_vary` (1 *Phragmites*, 0.8 *Typha*, 0.6 the marsh sedges and grasses
+  *Carex acuta*, *Glyceria maxima*, *Phalaris arundinacea*) spreads its dead culms, leaves and ripe plumes blade by
+  blade and a little clump by clump from tawny to grey-buff and from pale to dark round the season's colour
+  (`grass_dead_vary`). Measured on 40 Commons photos of dry reed beds, autumn to winter (pixels of hue 18-58 deg):
+  hue 24-41 deg p10-p90, saturation 0.18-0.55, r/g x1.6 and b/g x2 across a bed, neighbouring culms 30 % apart in
+  value.
 - `r__reeds 0` (QA) puts the stock models back. Log: `* [reeds] N stock reed models stand as reed beds of the blades
   (M in water)`, `* [grass] N reed beds grow in M slot touches (deepest emergence X m)`.
 

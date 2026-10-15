@@ -197,6 +197,23 @@ float	grass_leaf_width	(float t, uint outline)
 	return grass_taper(t);
 }
 
+// Dead tissue of a species whose culms differ from one another (profile row 26 w: reed, cattail, the marsh sedges and
+// grasses), per blade (hash hb) and a little per clump (hc). 40 photos of dry reed beds, autumn to winter: hue 24-41
+// deg p10-p90, saturation 0.18-0.55, r/g x1.6 and b/g x2 across a bed, neighbouring culms 30 % apart in value; so
+// from tawny to grey-buff, from pale to dark, at the season colour's luminance on average.
+float3	grass_dead_vary	(float3 dead, uint p, float hb, float hc)
+{
+	const float dv = grass_prof(p, 26).w;
+	[branch] if (dv <= 0.0f)
+		return dead;
+	const float3 LUMW = float3(0.2126f, 0.7152f, 0.0722f);
+	const float y0 = dot(dead, LUMW);
+	float3 v = dead * lerp(float3(1.1f, 0.92f, 0.75f), float3(0.94f, 1.04f, 1.3f), lerp(frac(hb * 53.91f), hc, 0.35f));
+	const float y = dot(v, LUMW);
+	v = max(y + (v - y) * lerp(0.55f, 1.3f, frac(hb * 17.31f)), 0.0f) * (y0 / max(y, 1e-4f));
+	return lerp(dead, v * lerp(0.78f, 1.22f, frac(hb * 71.13f)), dv);
+}
+
 // Season colour of a blade at t (linear rgb, dry albedo with dew, frost, flood and snow on top).
 float3	grass_colour	(grass_blade B, uint p, float t, float3 n_world)
 {
@@ -229,6 +246,7 @@ float3	grass_colour	(grass_blade B, uint p, float t, float3 n_world)
 	const float3 LUMW = float3(0.2126f, 0.7152f, 0.0722f);
 	float3 dead = thatch ? thatch_c : lerp(yellowing, straw, saturate(sen_v * 2.0f - 1.0f));
 	dead = lerp(dot(dead, LUMW), dead, 0.82f);
+	dead = grass_dead_vary(dead, p, hb, B.hc);
 	// A green that is already cool (the glaucous fescues, grey hair-grass, wormwoods: blue over green above half)
 	// keeps its hue: turned further to blue on top of its photo colour it read cyan-white in a front-lit field. The
 	// chroma it keeps like every green (the colour grade takes a quarter of the greens' saturation).
@@ -260,7 +278,9 @@ float3	grass_head_colour	(grass_blade B, uint p, float stage)
 	const float3 seed = grass_seed_ramp(p, stage, grass_seas(p, 8, false).rgb);
 	const bool thatch = (B.flags & GRASS_F_THATCH) != 0u;
 	const bool forb = uint(grass_prof(p, 19).z + 0.5f) != GRASS_FORM_GRAMINOID;
-	return (thatch ? lerp(seed, grass_seas(p, 7, false).rgb, 0.5f) : seed) * (forb && !thatch ? 1.0f : 0.8f);
+	const float3 c = (thatch ? lerp(seed, grass_seas(p, 7, false).rgb, 0.5f) : seed) * (forb && !thatch ? 1.0f : 0.8f);
+	// Ripe and old plumes differ head to head as their culms do (silvery buff to purple-brown in a reed bed).
+	return lerp(c, grass_dead_vary(c, p, frac(grass_hash01(B) * 7.31f), B.hc), thatch ? 1.0f : saturate(stage * 2.0f - 1.0f));
 }
 
 // The G-buffer interpolants of blades, culms and heads (da_grass_blade.ps).

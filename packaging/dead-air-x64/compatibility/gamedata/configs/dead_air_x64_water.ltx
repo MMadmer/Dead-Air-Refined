@@ -239,7 +239,8 @@ drops_step              = 0.05  ; how far the value must move before the console
 
 ; The season's ice under a weight and under fire (docs/dead-air/WEATHER.md, ice). Where the climate's ice holds,
 ; a contact on the water's liquid triangle is a contact on a material the game makes at load: a copy of `source`
-; with its pairs, its own steps (every creature), bullet hits and collisions. The thresholds follow the Ukrainian
+; with its pairs and steps (the source's recorded hard steps, every creature), its own bullet hits and collisions
+; (bullet_radius: the hole a round punches through thin ice; its crater's chips fly 2.5 times that). The thresholds follow the Ukrainian
 ; emergency service's rule: 7 cm of clear ice carries one person; under 3 cm nothing; between, the ice cracks under
 ; a man and gives way after a while (sooner the thinner and the faster he moves; a landing at once). Rotten spring
 ; ice carries half its thickness.
@@ -257,12 +258,12 @@ hole_radius        = 0.9
 trail_radius       = 0.6
 bullet_radius      = 0.06
 refreeze_hours     = 8
-steps              = dead_air_x64\ice\step_1, dead_air_x64\ice\step_2, dead_air_x64\ice\step_3, dead_air_x64\ice\step_4
 bullet_sounds      = dead_air_x64\ice\bullet_1, dead_air_x64\ice\bullet_2, dead_air_x64\ice\bullet_3, dead_air_x64\ice\bullet_4
-bullet_particles   = hit_fx\hit_glass_01
+bullet_particles   = hit_fx\effects\hit_dust_glass
 collide_sounds     = dead_air_x64\ice\knock_1, dead_air_x64\ice\knock_2, dead_air_x64\ice\knock_3
 crack_sounds       = dead_air_x64\ice\crack_1, dead_air_x64\ice\crack_2, dead_air_x64\ice\crack_3, dead_air_x64\ice\crack_4, dead_air_x64\ice\crack_5, dead_air_x64\ice\crack_6
 break_sounds       = dead_air_x64\ice\break_1, dead_air_x64\ice\break_2, dead_air_x64\ice\break_3
 bullet_thin_sounds = dead_air_x64\ice\bullet_thin_1, dead_air_x64\ice\bullet_thin_2
-break_particles    = hit_fx\hit_glass_01
+bullet_thin_particles = hit_fx\hit_water_00
+break_particles    = hit_fx\hit_water_00
 splash_particles   = amik\hit_fx\hit_water_splash_00

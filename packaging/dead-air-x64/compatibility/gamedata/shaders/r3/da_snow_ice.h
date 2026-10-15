@@ -18,9 +18,9 @@ uniform float4 da_snow_ice;
 // The climate's ice (docs/dead-air/WEATHER.md): x the number of holes in da_ice_holes, y standing water's ice (m),
 // z running water's (m), w how rotten the standing water's spring ice is (0..1).
 uniform float4 da_ice_state;
-// Holes broken into the ice near the camera (xrEngine da_ice.h): x, z, radius, kind * 1000 + seed (kind 0 a hole of
-// open water, 1 a bullet's star of cracks in ice that held).
-uniform float4 da_ice_holes[16];
+// The holes broken into the ice, nearest the camera first (xrEngine da_ice.h, all of them): x, z, radius, kind * 1000 +
+// seed (kind 0 a hole of open water, 1 a bullet the ice stopped).
+uniform float4 da_ice_holes[96];
 
 // The integer hash and fade of CEnvironment::ice_at (Environment.cpp).
 float da_ice_hash(int2 c)
@@ -69,23 +69,24 @@ float da_ice_rim(float ang, float r, float seed, float n)
 // seed; kind 0 a hole broken through, 1 a bullet the ice stopped). A hole is a polygon of fractures, open water in it,
 // the water it pushed up soaking the ice and the snow round it, and a few cracks running out of it: jagged lines of
 // water, darker than the ice, never white. (Flat plates floating in it read as cut-outs: a plate tilts and shows its
-// thickness, which a surface cannot.) A bullet the ice
-// stopped crushed a spot of it white, a centimetre or two, cracked it with a few short fine fractures that show as
-// faint pale lines in clear ice, and blew the snow out round it. Fine lines fade out below the pixel footprint (m).
-// The physics takes a hole's mean circle (da_ice_in_hole).
+// thickness, which a surface cannot.) A bullet the ice stopped leaves a crater of crushed ice and its chips (below).
+// Lines and chips fade out below the pixel footprint (m). The physics takes a hole's mean circle (da_ice_in_hole).
 struct da_ice_mark
 {
 	float open;  // open water in a hole
-	float crack; // a crack of water in the ice
+	float crack; // a crack of water in the ice, a bullet's pit
 	float wet;   // the water pushed up round a hole
-	float white; // crushed ice: a bullet's spot, a fresh fracture face
-	float pit;   // the snow blown out round a bullet's spot
-	float fine;  // a bullet's fine fractures in clear ice
+	float white; // crushed ice: a bullet's crater, a fresh fracture face
+	float pit;   // the snow blown out of a bullet's crater
+	float chip;  // the chips of ice it threw (on the snow too)
+	float outside; // how far xz lies outside the nearest hole's rim (m; 1000: no hole near)
+	float2 away;   // the way out of that hole at xz (unit)
 };
 
 da_ice_mark da_ice_marks(float2 xz, float footprint)
 {
 	da_ice_mark m = (da_ice_mark)0;
+	m.outside = 1000.0;
 	const float fp = max(footprint, 1e-3);
 	const int n = (int)da_ice_state.x;
 	[loop] for (int i = 0; i < n; ++i)
@@ -107,11 +108,16 @@ da_ice_mark da_ice_marks(float2 xz, float footprint)
 			const float fw = max(0.5 * fp, 0.004);
 			const float inside = 1.0 - smoothstep(rr - fw, rr + fw, dist);
 			m.open = max(m.open, inside);
+			[flatten] if (dist - rr < m.outside)
+			{
+				m.outside = max(dist - rr, 0.0);
+				m.away = d / max(dist, 1e-4);
+			}
 			// the sheet's fresh fracture face along the edge
 			const float face = (1.0 - smoothstep(0.0, 0.012 + fp, dist - rr)) * step(rr, dist);
 			m.white = max(m.white, face * 0.3 * saturate((0.08 - fp) / 0.05));
 			// the water it pushed up
-			const float halo = 1.0 - smoothstep(rr, rr * 1.35 + 0.1, dist);
+			const float halo = 1.0 - smoothstep(rr, rr * 1.35 + 0.1 * smoothstep(0.1, 0.3, r) + 0.015, dist);
 			m.wet = max(m.wet, (1.0 - inside) * halo * (0.55 + 0.45 * da_ice_noise(xz * 14.0 + seed)));
 			// cracks out of it, four to six, each its own length, tapering to the tip: straight runs with a kink every
 			// 10-25 cm (a crack runs straight until the sheet turns it), never a wave
@@ -130,24 +136,49 @@ da_ice_mark da_ice_marks(float2 xz, float footprint)
 			const float along = saturate((dist - rr) / max(len, 1e-3));
 			const float w = 0.0045 * (1.0 - 0.7 * along);
 			const float lit = (1.0 - smoothstep(w, w + fp, off)) * step(rr, dist) * (1.0 - smoothstep(0.8, 1.0, along));
-			m.crack = max(m.crack, lit * 0.7 * saturate((0.12 - fp) / 0.08));
+			m.crack = max(m.crack, lit * 0.7 * saturate((0.12 - fp) / 0.08) * smoothstep(0.12, 0.25, r));
 		}
 		else
 		{
-			// The bullet's crushed spot, the snow blown out round it, its fine fractures.
-			const float rw = r * (0.22 + 0.12 * da_ice_hash(int2(int(seed), 5)));
-			m.white = max(m.white, (1.0 - smoothstep(rw * 0.55, rw, dist)) * 0.85);
-			m.pit = max(m.pit, 1.0 - smoothstep(r * 0.4, r * 0.75, dist));
-			const float K = 5.0 + floor(3.0 * da_ice_hash(int2(int(seed), 9)));
-			const float stepk = 6.2831853 / K;
-			const float t = (ang - seed * 0.53) / stepk;
-			const float kk = floor(t + 0.5);
-			const float off = abs(t - kk) * stepk * dist;
-			const float len = r * (0.7 + 1.5 * da_ice_hash(int2(int(kk) + 29, int(seed))));
-			const float along = saturate(dist / max(len, 1e-3));
-			const float w = 0.0012 + 0.001 * (1.0 - along);
-			const float lit = (1.0 - smoothstep(w, w + fp, off)) * (1.0 - smoothstep(0.7, 1.0, along)) * step(rw * 0.8, dist);
-			m.fine = max(m.fine, lit * 0.3 * saturate((0.06 - fp) / 0.04));
+			// A bullet the ice stopped (photos of rifle rounds in lake ice, bare and under snow): a small crater of
+			// crushed ice, white and granular, with a ragged edge, the round's dark pit in it, white chips thrown round
+			// it, the snow blown out of it; no cracks run out of it at the surface. r is how far the chips fly; a
+			// blast's ring is the same at its own scale (chunks for chips).
+			const float rc = r * (0.13 + 0.07 * da_ice_hash(int2(int(seed), 5)));
+			const float sector = (ang + 3.1415927) * (11.0 / 6.2831853);
+			const float s0 = floor(sector);
+			const float e0 = da_ice_hash(int2(int(s0) % 11, int(seed) + 7));
+			const float e1 = da_ice_hash(int2((int(s0) + 1) % 11, int(seed) + 7));
+			const float edge = rc * (0.75 + 0.5 * lerp(e0, e1, smoothstep(0.0, 1.0, sector - s0)));
+			const float crater = 1.0 - smoothstep(edge - max(0.3 * rc, fp), edge + fp, dist);
+			// Grains of 1-3 mm with shadows between them (round lobes about the mark's centre: a square cell per grain
+			// read as a checkerboard), averaged out once a pixel is wider; the round's pit as ragged as the crater.
+			const float grain = lerp(0.6 * da_ice_noise(d * 6667.0 + seed) + 0.4 * da_ice_noise(d * 16000.0 + seed * 1.7),
+				0.5, saturate(fp / 0.006));
+			m.white = max(m.white, crater);
+			m.crack = max(m.crack, crater * 0.35 * saturate(1.0 - grain * 1.6));
+			m.crack = max(m.crack, (1.0 - smoothstep(0.18 * edge, 0.18 * edge + fp + 0.002, dist)) * 0.65);
+			m.pit = max(m.pit, 1.0 - smoothstep(edge * 0.6, edge, dist));
+			// The chips: at most one per cell of a jittered grid, fewer further out, flakes of their own size and
+			// direction; gone once a pixel is wider than two cells.
+			const float cs = 0.09 * r;
+			[branch] if (dist < r && dist > edge && fp < 2.0 * cs)
+			{
+				const float2 q = d / cs;
+				const int2 c = int2(floor(q));
+				const int sd = int(seed) * 7 + 3;
+				const float cr = 0.12 + 0.2 * da_ice_hash(c + int2(0, sd));
+				const float2 cp = cr + (1.0 - 2.0 * cr) * float2(da_ice_hash(c + int2(sd, sd)), da_ice_hash(c - int2(sd, 1)));
+				const float fall = saturate((dist - rc) / max(r - rc, 1e-3));
+				const float a = 6.2831853 * da_ice_hash(c + int2(1, sd));
+				const float2 ax = float2(cos(a), sin(a));
+				const float2 v = q - floor(q) - cp;
+				const float e = length(float2(dot(v, ax), 1.8 * dot(v, float2(-ax.y, ax.x))));
+				const float fpc = fp / cs;
+				const float chip = (1.0 - smoothstep(cr - fpc, cr + fpc, e)) *
+					step(da_ice_hash(c + int2(sd, 0)), 0.45 * (1.0 - fall) * (1.0 - fall));
+				m.chip = max(m.chip, chip * saturate((2.0 * cs - fp) / cs));
+			}
 		}
 	}
 	return m;
@@ -270,12 +301,12 @@ float4 da_ice_albedo(float2 xz, float footprint)
 		crack = max(l0 * m0 * 0.5, l1 * m1 * 0.3) * saturate((0.15 - fp) / 0.1);
 	}
 	a = lerp(a, float3(0.24, 0.27, 0.27), crack);
-	// What the holes and the bullets did: water in the cracks (darker than the ice), the faint pale fractures of a
-	// bullet in clear ice, the white of crushed ice, the soaked ring round a hole, its wet grey plates.
+	// What the holes and the bullets did: the white of crushed ice, water in the cracks and a bullet's pit (darker
+	// than the ice), the soaked ring round a hole.
 	const da_ice_mark mk = da_ice_marks(xz, fp);
+	// crushed ice scatters nearly as snow does
+	a = lerp(a, float3(0.78, 0.81, 0.84), max(mk.white, mk.chip));
 	a = lerp(a, a * 0.3, mk.crack);
-	a = lerp(a, float3(0.34, 0.37, 0.38), mk.fine);
-	a = lerp(a, float3(0.6, 0.64, 0.66), mk.white);
 	a = lerp(a, a * 0.6, mk.wet);
 	// Rotten spring ice: candled, grey-white and porous, wet on top.
 	a = lerp(a, float3(0.2, 0.22, 0.22), 0.7 * saturate(da_ice_state.w));
@@ -287,7 +318,7 @@ float4 da_ice_albedo(float2 xz, float footprint)
 	float gloss = lerp(DA_ICE_GLOSS_MAX, 0.03, max(dust, 0.6 * cloudy));
 	// water on it is a mirror; crushed ice scatters
 	gloss = lerp(gloss, DA_ICE_GLOSS_MAX, mk.wet);
-	gloss = lerp(gloss, 0.02, mk.white);
+	gloss = lerp(gloss, 0.02, max(mk.white, mk.chip));
 	return float4(a, gloss);
 }
 

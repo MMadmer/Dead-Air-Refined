@@ -8,7 +8,8 @@ sheet as a dispersive wave: the high frequencies arrive first, so a struck pond 
 ends in the water: plates knocking, a plunge, bubbles. A boot on ice with a dusting of snow is a dull knock under a
 crisp crunch. Every file is normalized to -8 dB of peak like every sound of the project.
 
-  step_1..4          a boot on ice (with every creature: the ice material's step pairs)
+  (no steps: a boot on ice is the recorded hard-floor step of the material the ice stands in for - a synthesized
+  crunch read as a splash)
   knock_1..3         an object dropped on ice (the material's collisions)
   bullet_1..4        a bullet stopped by ice: a crack, chips, the whistle of the sheet
   bullet_thin_1..2   a bullet through thin ice: a crack and a plop
@@ -135,12 +136,6 @@ def splash(n, at, length, amp):
     return out
 
 
-def step():
-    n = int(0.35 * RATE)
-    return (thud(n, 0.0, 180.0, 0.05, 0.9) + crunch(n, 0.004, 0.09, 26, 2200.0, 8000.0, 0.55) +
-            snap(n, 0.002, 0.15, 5000.0))
-
-
 def knock():
     n = int(0.5 * RATE)
     return (thud(n, 0.0, 300.0, 0.03, 0.9) + snap(n, 0.0, 0.5) +
@@ -211,8 +206,6 @@ def write(name, x, min_d, max_d):
 
 def main():
     made = []
-    for i in range(1, 5):
-        made.append(write('step_%d' % i, step(), 0.5, 30))
     for i in range(1, 4):
         made.append(write('knock_%d' % i, knock(), 0.5, 30))
     for i in range(1, 5):

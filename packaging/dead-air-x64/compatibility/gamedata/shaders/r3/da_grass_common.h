@@ -79,7 +79,7 @@ float4	grass_t4	(uint f4)	{ return asfloat(da_grass_tables.Load4(f4 * 16)); }
 // 22 basal droop min/max, basal pairs per leaf lane, clump lean (rad)
 // 23 cauline leaf h min/max, w min/max   24 cauline tilt min/max (rad), first and last node (share of the stem)
 // 25 cauline upper/lower size, opposite (0/1), bend, droop
-// 26 stem tint (linear rgb factor of the culm colour), unused
+// 26 stem tint (linear rgb factor of the culm colour), how much the dead tissue varies (grass_dead_vary)
 // 27 the widest a lane can be for the pixel rule (the generation's early out), unused
 float4	grass_prof	(uint p, uint r)	{ return grass_t4(GRASS_T_PROF + p * GRASS_PROF_F4 + r); }
 
