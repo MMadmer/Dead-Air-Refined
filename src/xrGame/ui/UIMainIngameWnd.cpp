@@ -848,7 +848,10 @@ void CUIMainIngameWnd::UpdateQuickSlots()
             shared_str item_name = g_quick_use_slots[i];
             if (item_name.size())
             {
-                const u32 count = pActor->inventory().dwfGetSameItemCount(item_name.c_str(), true);
+                const u32 count = pActor->inventory().QuickCount(item_name.c_str());
+                // The icon of the item the key will use: a bottle with as much left in it.
+                if (const PIItem next = pActor->inventory().GetQuick(item_name.c_str()))
+                    item_name = next->object().cNameSect();
                 string32 str;
                 xr_sprintf(str, "x%d", count);
                 wnd->TextItemControl()->SetText(str);

@@ -275,6 +275,8 @@ void load_config()
     c.update_interval_ms = READ_IF_EXISTS(pSettings, r_u32, section, "update_interval_ms", c.update_interval_ms);
     c.update_min_move = READ_IF_EXISTS(pSettings, r_float, section, "update_min_move", c.update_min_move);
     c.lost_after_ms = READ_IF_EXISTS(pSettings, r_u32, section, "lost_after_ms", c.lost_after_ms);
+    c.lost_window_ms = READ_IF_EXISTS(pSettings, r_u32, section, "lost_window_ms", c.lost_window_ms);
+    c.lost_repeat_ms = READ_IF_EXISTS(pSettings, r_u32, section, "lost_repeat_ms", c.lost_repeat_ms);
     c.relay_range = READ_IF_EXISTS(pSettings, r_float, section, "relay_range", c.relay_range);
     c.report_confidence = READ_IF_EXISTS(pSettings, r_float, section, "report_confidence", c.report_confidence);
     c.gesture_range = READ_IF_EXISTS(pSettings, r_float, section, "gesture_range", c.gesture_range);
@@ -283,6 +285,7 @@ void load_config()
     c.gesture_ms = read_range(section, "gesture_ms", c.gesture_ms);
     c.witness_ms = read_range(section, "witness_ms", c.witness_ms);
     c.witness_interval_ms = READ_IF_EXISTS(pSettings, r_u32, section, "witness_interval_ms", c.witness_interval_ms);
+    c.witness_fresh_ms = READ_IF_EXISTS(pSettings, r_u32, section, "witness_fresh_ms", c.witness_fresh_ms);
     c.witness_range = READ_IF_EXISTS(pSettings, r_float, section, "witness_range", c.witness_range);
     c.witness_confidence = READ_IF_EXISTS(pSettings, r_float, section, "witness_confidence", c.witness_confidence);
     // The geometry of a friend's aim seen from outside is know's error model; read from its section, not copied.
@@ -379,6 +382,17 @@ void load_config()
         }
     }
 
+    // [ai_comms_say_interval]: kind = ms one squad says it about one target at most once in
+    if (pSettings->section_exist("ai_comms_say_interval"))
+    {
+        for (const auto& line : pSettings->r_section("ai_comms_say_interval").Data)
+        {
+            Kind kind;
+            if (line.second.size() && kind_by_name(line.first.c_str(), kind))
+                c.kind_say_interval[size_t(kind)] = u32(atoi(line.second.c_str()));
+        }
+    }
+
     // [ai_comms_kinds]: kind = the channels that may carry it
     if (pSettings->section_exist("ai_comms_kinds"))
     {
@@ -426,6 +440,31 @@ bool rate_allows(CommsSquad& squad, Kind kind, u16 target, u32 extra)
     }
     push_capped(squad.sent, CommsSquad::Sent{kind, target, extra, now}, sent_cap);
     return true;
+}
+
+// Spoken news per squad, kind and target whatever the extra: a search clears its spots one by one, and each clear was
+// an "all clear" in the ear. The message itself still goes out as data.
+bool said_recently(const CommsSquad& squad, Kind kind, u16 target, u32 interval)
+{
+    for (const auto& said : squad.said)
+    {
+        if (said.kind == kind && said.target == target)
+            return Device.dwTimeGlobal < said.time + interval;
+    }
+    return false;
+}
+
+void stamp_said(CommsSquad& squad, Kind kind, u16 target)
+{
+    for (auto& said : squad.said)
+    {
+        if (said.kind == kind && said.target == target)
+        {
+            said.time = Device.dwTimeGlobal;
+            return;
+        }
+    }
+    push_capped(squad.said, CommsSquad::Sent{kind, target, 0, Device.dwTimeGlobal}, sent_cap);
 }
 
 // Alive members of the npc's squad with AI state, the npc itself excluded.
@@ -562,11 +601,24 @@ bool send_radio(CAI_Stalker& npc, CommsState& state, const Message& base, bool s
 
     const u32 key = u32(roll(c.radio_key_ms));
     const u32 length = u32(roll(c.radio_message_ms));
+    // The words come out of the receiver nearest to the camera only: every radio of an army post replayed them.
+    const NpcState* speaker_radio = nullptr;
+    float speaker_distance = flt_max;
+    for (NpcState* receiver : receivers)
+    {
+        const float distance = receiver->owner->Position().distance_to_sqr(Device.vCameraPosition);
+        if (distance < speaker_distance)
+        {
+            speaker_distance = distance;
+            speaker_radio = receiver;
+        }
+    }
     for (NpcState* receiver : receivers)
     {
         Message delivery = message;
         delivery.t_available = now + key + length + understand_ms(*receiver->owner, Channel::radio, false);
-        queue(*receiver->owner, *receiver->comms, delivery, now + key, state.voice != VoiceMode::none ? line : no_line);
+        const bool words = receiver == speaker_radio && state.voice != VoiceMode::none;
+        queue(*receiver->owner, *receiver->comms, delivery, now + key, words ? line : no_line);
     }
     if (hq)
         hq_enqueue(npc, message);
@@ -718,6 +770,13 @@ void transmit(CAI_Stalker& npc, CommsState& state, Outgoing& out)
     const bool want_radio = out.channels & bit(Channel::radio);
     bool voiced = false;
 
+    const u32 say_interval = c.kind_say_interval[size_t(out.kind)];
+    SquadState* say_squad = say_interval ? squad_of(npc) : nullptr;
+    const bool words =
+        !(say_squad && say_squad->comms && said_recently(*say_squad->comms, out.kind, out.target, say_interval));
+    if (!words)
+        out.channels &= ~voice_bits;
+
     if (out.channels & bit(Channel::gesture))
     {
         // Signals go at once, whoever talks; a sneak signalled to someone keeps its mouth shut.
@@ -760,9 +819,12 @@ void transmit(CAI_Stalker& npc, CommsState& state, Outgoing& out)
     if (want_radio)
     {
         if (DaAi::npc(npc)->has_radio)
-            radioed = send_radio(npc, state, base, !voiced && state.voice != VoiceMode::none && p.callouts, line);
+            radioed = send_radio(npc, state, base, words && !voiced && state.voice != VoiceMode::none && p.callouts,
+                words ? line : no_line);
         out.channels &= ~bit(Channel::radio);
     }
+    if (words && say_squad && say_squad->comms && (voiced || radioed))
+        stamp_said(*say_squad->comms, out.kind, out.target);
 
     if (out.channels & bit(Channel::pda))
     {
@@ -1033,10 +1095,24 @@ void watch_combat(CAI_Stalker& npc, CommsState& state)
 
     if (state.combat_target != u16(-1) && id == u16(-1))
     {
+        // Said by an NPC that saw him itself a moment ago and lost him: not by one that let a rumour go or gave a
+        // search up (the belief is forgotten then), and not again for the same man for a while.
         const auto* lost = smart_cast<const CEntityAlive*>(Level().Objects.net_Find(state.combat_target));
-        const u32 seen = lost ? Know::last_seen_time(npc, lost) : 0;
-        if (lost && lost->g_Alive() && now >= seen + c.lost_after_ms)
-            request(npc, Kind::lost, state.combat_target);
+        u32 seen = 0;
+        if (lost && lost->g_Alive())
+        {
+            if (const Belief* belief = Know::belief(npc, lost->ID()))
+                seen = belief->t_seen_own;
+            else if (!Know::active(npc))
+                seen = Know::last_seen_time(npc, lost);
+        }
+        const bool fresh = seen && seen != u32(-1) && now >= seen + c.lost_after_ms && now < seen + c.lost_window_ms;
+        const bool repeat = state.lost_target == state.combat_target && now < state.lost_at + c.lost_repeat_ms;
+        if (fresh && !repeat && request(npc, Kind::lost, state.combat_target))
+        {
+            state.lost_target = state.combat_target;
+            state.lost_at = now;
+        }
     }
     state.combat_target = id;
 
@@ -1496,11 +1572,15 @@ bool witness(CAI_Stalker& viewer, const CAI_Stalker& mate)
     if (!self || !self->comms || !feature(Feature::comms) || !config().available)
         return false;
 
-    // An alarmed friend matters only to a viewer with no danger of its own (as the stock danger copy).
-    const CEntityAlive* enemy = mate.memory().enemy().selected();
-    if (!enemy && (!mate.memory().danger().selected() || viewer.memory().danger().selected()))
-        return true;
+    // A friend fights what he has seen himself a moment ago. One with an enemy he only believes in is searching:
+    // what he shows is alarm. Passed on as a fight, it came back to him from the next friend as a fresh sighting,
+    // and a garrison that sees itself kept the player "in sight" through walls for good.
     const Config& c = config();
+    const CEntityAlive* enemy = mate.memory().enemy().selected();
+    const bool sighted = enemy && enemy->g_Alive() && Know::seen_own_within(mate, *enemy, c.witness_fresh_ms);
+    // An alarmed friend matters only to a viewer with no danger of its own (as the stock danger copy).
+    if (!sighted && ((!enemy && !mate.memory().danger().selected()) || viewer.memory().danger().selected()))
+        return true;
     if (viewer.Position().distance_to(mate.Position()) > c.witness_range ||
         !viewer.memory().visual().visible_now(&mate))
     {
@@ -1526,7 +1606,7 @@ bool witness(CAI_Stalker& viewer, const CAI_Stalker& mate)
     spot.reporter = mate.ID();
     spot.source = Source::witness;
     spot.confidence = c.witness_confidence;
-    cue.fighting = enemy && enemy->g_Alive() && viewer.is_relation_enemy(enemy);
+    cue.fighting = sighted && viewer.is_relation_enemy(enemy);
     spot.target = cue.fighting ? enemy->ID() : u16(-1);
     cue.mate = mate.ID();
     cue.frame = Device.dwFrame;

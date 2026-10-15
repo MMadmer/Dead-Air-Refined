@@ -342,7 +342,7 @@ void CGameObject::net_Destroy()
     scriptBinder.net_Destroy();
     m_script_clsid = -1;
 
-    xr_delete(m_lua_game_object);
+    CScriptGameObject::Retire(m_lua_game_object);
     m_spawned = false;
 }
 

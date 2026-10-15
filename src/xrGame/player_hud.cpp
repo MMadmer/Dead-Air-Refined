@@ -1263,15 +1263,15 @@ u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, floa
 
     const motion_descr& M = motion->m_animations[Random.randI(motion->m_animations.size())];
 
-    // Stretch the cycle to the scene length when one is given: a cycle marked stop-at-end
-    // freezes on its last frame and the hands stand still for the rest of the scene otherwise.
+    // A cycle longer than the scene is hurried to fit it. A shorter one plays at its own pace and
+    // the scene ends with it: stretched, a 4.5 s medkit dragged over its 7 s scene.
     float eff_speed = speed;
     if (target_ms > 0)
     {
         const CMotionDef* base_md = nullptr;
         const u32 base = motion_length(M.mid, base_md, 1.f, nullptr);
         if (base > 0)
-            eff_speed = float(base) / float(target_ms);
+            eff_speed = _max(speed, float(base) / float(target_ms));
     }
 
     scene_item_release();

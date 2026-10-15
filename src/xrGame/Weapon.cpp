@@ -719,7 +719,9 @@ void CWeapon::LoadScope(const shared_str& section)
         return;
     pWpnScopeXml.Init();
     R_ASSERT(m_UIScope);
-    CUIXmlInit::InitWindow(*pWpnScopeXml, section.c_str(), 0, m_UIScope);
+    // A weapon pack whose configs name a reticle its scopes.xml lacks zooms without one instead of ending the game.
+    if (!CUIXmlInit::InitWindow(*pWpnScopeXml, section.c_str(), 0, m_UIScope, false))
+        Msg("! weapon [%s]: scope [%s] is not in scopes.xml, zoomed without a reticle", cNameSect().c_str(), section.c_str());
 }
 
 shared_str CWeapon::GetScopeTextureName(pcstr section) const

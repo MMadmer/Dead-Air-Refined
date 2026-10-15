@@ -1012,6 +1012,57 @@ PIItem CInventory::GetAny(LPCSTR name) const
     return itm;
 }
 
+namespace
+{
+// A multi-use item is one section per uses left, each inheriting the last (vodka, vodka_2, vodka_3). The kind is
+// the section without the uses; a section with no such base is its own kind. Out: the uses, 1 for the base.
+xr_string quick_kind(pcstr section, u32& uses)
+{
+    uses = 1;
+    pcstr tail = strrchr(section, '_');
+    if (!tail || !tail[1] || !std::all_of(tail + 1, tail + xr_strlen(tail), [](char c) { return isdigit(u8(c)); }))
+        return section;
+    xr_string base(section, tail - section);
+    if (!pSettings->section_exist(base.c_str()))
+        return section;
+    uses = u32(atoi(tail + 1));
+    return base;
+}
+}
+
+PIItem CInventory::GetQuick(LPCSTR name) const
+{
+    u32 uses = 0;
+    const xr_string kind = quick_kind(name, uses);
+    PIItem best = nullptr;
+    u32 best_uses = u32(-1);
+    for (const TIItemContainer* list : {&m_belt, &m_ruck})
+    {
+        for (PIItem it : *list)
+        {
+            if (it->Useful() && quick_kind(it->object().cNameSect().c_str(), uses) == kind && uses < best_uses)
+            {
+                best = it;
+                best_uses = uses;
+            }
+        }
+    }
+    return best;
+}
+
+u32 CInventory::QuickCount(LPCSTR name) const
+{
+    u32 uses = 0;
+    const xr_string kind = quick_kind(name, uses);
+    u32 count = 0;
+    for (PIItem it : m_all)
+    {
+        if (quick_kind(it->object().cNameSect().c_str(), uses) == kind)
+            ++count;
+    }
+    return count;
+}
+
 PIItem CInventory::item(CLASS_ID cls_id) const
 {
     const TIItemContainer& list = m_all;

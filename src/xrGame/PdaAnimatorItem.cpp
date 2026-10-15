@@ -176,10 +176,11 @@ bool CPdaAnimatorItem::Action(u16 cmd, u32 flags)
         return true;
 
     case kWPN_ZOOM:
-        // RMB = focus TOGGLE (holding it would fight the cursor): press with the device
+        // RMB = enter focus (holding it would fight the cursor): press with the device
         // down raises straight into focus; press during a look-zoom promotes it to focus;
-        // leaving focus happens inside the UI (RMB/ESC there -> request_unzoom). The
-        // release is eaten - the stock hold-to-zoom path must not lower the device.
+        // leaving focus happens inside the UI (ESC or a PDA bind -> request_unzoom), RMB
+        // there is the pages' own click. The release is eaten - the stock hold-to-zoom
+        // path must not lower the device.
         if (!(flags & CMD_START))
             return true;
         if (!IsZoomed())

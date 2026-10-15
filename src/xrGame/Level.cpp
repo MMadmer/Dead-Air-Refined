@@ -6,6 +6,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "ParticlesObject.h"
 #include "Level.h"
+#include "script_game_object.h"
 #include "HUDManager.h"
 #include "xrServer.h"
 #include "NET_Queue.h"
@@ -201,6 +202,7 @@ CLevel::~CLevel()
     if (g_pGamePersistent)
         g_pGamePersistent->Environment().reset_water_body();
     deinit_compression();
+    CScriptGameObject::ReleaseRetired(true);
 }
 
 shared_str CLevel::name() const { return map_data.m_name; }
@@ -422,6 +424,8 @@ void CLevel::MakeReconnect()
 void CLevel::OnFrame()
 {
     ZoneScoped;
+
+    CScriptGameObject::ReleaseRetired(false);
 
 #ifdef DEBUG
     DBG_RenderUpdate();

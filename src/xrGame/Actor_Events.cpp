@@ -242,6 +242,16 @@ void CActor::OnEvent(NET_Packet& P, u16 type)
         PIItem iitem = smart_cast<CInventoryItem*>(Obj);
         R_ASSERT(iitem);
 
+        // Only what the actor carries. A script putting back an item that meanwhile went elsewhere (the arena takes
+        // its weapon back as it teleports the winner, mid-climb) left a slot holding an item of no inventory, and the
+        // weapon panel read through it.
+        if ((type == GEG_PLAYER_ITEM2SLOT || type == GEG_PLAYER_ITEM2BELT || type == GEG_PLAYER_ITEM2RUCK) &&
+            Obj->H_Parent() != this)
+        {
+            Msg("! actor: [%s] is not carried by the actor, not moved", Obj->cName().c_str());
+            break;
+        }
+
         switch (type)
         {
         case GEG_PLAYER_ITEM2SLOT:

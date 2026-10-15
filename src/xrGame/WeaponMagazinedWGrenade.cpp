@@ -989,7 +989,9 @@ bool CWeaponMagazinedWGrenade::install_upgrade_impl(LPCSTR section, bool test)
 
 bool CWeaponMagazinedWGrenade::GetBriefInfo(II_BriefInfo& info)
 {
-    VERIFY(m_pInventory);
+    // An item on its way out of the inventory (released, or taken by a script) has none any more.
+    if (!m_pInventory)
+        return false;
     /*
         if(!inherited::GetBriefInfo(info))
             return false;

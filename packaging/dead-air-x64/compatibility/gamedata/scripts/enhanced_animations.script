@@ -131,8 +131,8 @@ function start_anim(anim_section_hud)
 	UnregisterScriptCallback("actor_on_update", actor_on_update)
 	fov_anim_manager.change_fov(0.45)
 	local speed = ini_eff:r_float_ex(used_item or "nothing", "speed", 1)
-	-- The sixth argument stretches the cycle to the scene length, or the hands freeze on the
-	-- last frame for the remainder (bread: 5970 ms cycle against a 7000 ms scene).
+	-- The sixth argument is the scene length: a longer cycle is hurried to fit it, a shorter one
+	-- plays at its own pace and the hands leave with its end (stretched, medicine played slow).
 	local scene_ms = used_item and ini_eff:r_float_ex(used_item, "tm") or 0
 	local before = game.hud_scene_id()
 	game.play_hud_motion(2, anim_section_hud, "anm_ea_show", false, speed, scene_ms and math.floor(scene_ms) or 0)

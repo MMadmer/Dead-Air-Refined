@@ -152,11 +152,13 @@ void CUIWindow::Update()
             OnFocusLost();
     }
 
-    for (auto it = m_ChildWndList.begin(); m_ChildWndList.end() != it; ++it)
+    // By index, re-read every step: a child's update may attach or detach windows of this list (a script window
+    // closing itself at the end of the game), and an iterator kept across that read freed memory.
+    for (size_t i = 0; i < m_ChildWndList.size(); ++i)
     {
-        if (!(*it)->IsShown())
-            continue;
-        (*it)->Update();
+        CUIWindow* child = m_ChildWndList[i];
+        if (child->IsShown())
+            child->Update();
     }
 }
 

@@ -212,6 +212,8 @@ struct CommsState
     u32 update_time{};
     Fvector update_pos{}; // believed position of the last position update sent
     bool reloading{}; // the active weapon was reloading at the last update
+    u16 lost_target{u16(-1)}; // the last "lost him" of this NPC and when
+    u32 lost_at{};
     xr_vector<Comms::Outgoing> outgoing;
     xr_vector<Comms::Pending> inbox;
     xr_vector<Comms::Utterance> spoken;
@@ -234,6 +236,7 @@ struct CommsSquad
     };
 
     xr_vector<Sent> sent; // rate limit per kind, target and extra
+    xr_vector<Sent> said; // spoken lines per kind and target, the extra ignored ([ai_comms_say_interval])
     xr_vector<Comms::MessageKey> relayed; // news of mates without a radio a carrier already keyed
 };
 // [ai:comms] end state
@@ -319,6 +322,8 @@ struct Config
     u32 update_interval_ms{6000};
     float update_min_move{8.f};
     u32 lost_after_ms{3000};
+    u32 lost_window_ms{30000};
+    u32 lost_repeat_ms{60000};
     float relay_range{40.f};
     float report_confidence{.8f};
     float gesture_range{25.f};
@@ -326,6 +331,7 @@ struct Config
     Range gesture_ms{400.f, 800.f};
     Range witness_ms{300.f, 700.f};
     u32 witness_interval_ms{3000};
+    u32 witness_fresh_ms{4000};
     float witness_range{100.f};
     float witness_confidence{.4f};
     // [ai_errors] witness_cone_deg and witness_distance_prior (know's model of a friend's aim seen from outside)
@@ -339,6 +345,7 @@ struct Config
     // [ai_comms_voice] and [ai_comms_kinds]
     u32 kind_line[size_t(Kind::count)]{};
     u8 kind_channels[size_t(Kind::count)]{};
+    u32 kind_say_interval[size_t(Kind::count)]{};
     bool kind_loud_only[size_t(Kind::count)]{};
     bool kind_urgent[size_t(Kind::count)]{};
     // [ai_comms_lines]: extra lines by the voice prefix

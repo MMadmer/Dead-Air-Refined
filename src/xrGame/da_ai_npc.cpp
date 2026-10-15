@@ -12,6 +12,7 @@
 #include "da_ai_search.h"
 
 #include "ai/stalker/ai_stalker.h"
+#include "Level.h"
 #include "ai_space.h"
 #include "alife_simulator.h"
 #include "alife_object_registry.h"
@@ -137,7 +138,18 @@ NpcState* npc(const CAI_Stalker& npc) { return npc.da_ai(); }
 NpcState* npc(u16 id)
 {
     const auto found = g_states.find(id);
-    return found == g_states.end() ? nullptr : found->second;
+    if (found == g_states.end())
+        return nullptr;
+    // The state answers for the object online under its id only. A crash report (1.5.0, a squad mate's weapon read
+    // through a gone owner) showed a state that outlived its NPC; how is not known, so no lookup trusts one.
+    NpcState* state = found->second;
+    if (Level().Objects.net_Find(id) != state->owner)
+    {
+        Msg("! [ai] state of [%u] outlived its NPC, dropped", u32(id));
+        g_states.erase(found);
+        return nullptr;
+    }
+    return state;
 }
 
 SquadState* squad(u16 id)

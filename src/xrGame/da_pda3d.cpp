@@ -178,6 +178,10 @@ float activate_at{};
 float deactivate_at{};
 // Until when the raise waits for a scene on the hands to end; -1 when not waiting.
 float scene_wait_until{ -1.f };
+// Since when the window has been up without a device; -1 when not raising.
+float raise_since{ -1.f };
+// The 3D mode was given up after a raise that never came (until the next load).
+bool raise_gave_up{};
 bool hands_swapped{};
 shared_str prev_hands;
 
@@ -489,7 +493,23 @@ void reset()
     activate_at = 0.f;
     deactivate_at = 0.f;
     scene_wait_until = -1.f;
+    raise_since = -1.f;
+    if (raise_gave_up)
+    {
+        raise_gave_up = false;
+        cfg.available = true;
+    }
     joystick_reset();
+}
+
+// A shown window that can never grow a device is the one state the player cannot escape:
+// the screen is blurred and nothing comes up. Give the plain 2D dialog instead.
+static void fall_back_to_2d()
+{
+    cfg.available = false;
+    hide_window();
+    if (CUIGameCustom* ui = CurrentGameUI())
+        ui->ShowPdaMenu();
 }
 
 void update()
@@ -521,21 +541,32 @@ void update()
                 scene_wait_until = now + 1.5f;
             const bool wait_hands = scene && scene_wait_until > 0.f && now < scene_wait_until;
 
+            if (!win || presenter)
+                raise_since = -1.f;
+            else if (raise_since < 0.f)
+                raise_since = now;
+
             // window up, device not raised (missing, spawned-but-idle, or mid-holster) ->
             // ask the script to raise; window down but anything still up -> put it away.
             if (win && !presenter && !wait_hands)
             {
                 if (!request_activate())
                 {
-                    // The script bridge refused with a live actor: the Lua side is absent
-                    // or broken. Kill the 3D capability for this session and reopen the
-                    // plain 2D dialog - a shown window that can never grow a device is the
-                    // one state the player cannot escape.
+                    // The script bridge refused with a live actor: the Lua side is absent or
+                    // broken. No 3D for the rest of the session.
                     Msg("! [pda3d] activation bridge dead - falling back to the 2D dialog");
-                    cfg.available = false;
-                    hide_window();
-                    if (CUIGameCustom* ui = CurrentGameUI())
-                        ui->ShowPdaMenu();
+                    fall_back_to_2d();
+                }
+                else if (now - raise_since > 6.f)
+                {
+                    // The script keeps saying "in flight" and nothing arrives. 2D until the
+                    // next load, which tries the device again.
+                    const PIItem occupant = actor->inventory().ItemFromSlot(ANIMATION_SLOT);
+                    Msg("! [pda3d] the device did not come up in 6 s (animation slot [%s], active slot %u) - "
+                        "falling back to the 2D dialog",
+                        occupant ? occupant->object().cNameSect().c_str() : "", actor->inventory().GetActiveSlot());
+                    raise_gave_up = true;
+                    fall_back_to_2d();
                 }
             }
             else if (!win && (presenter || in_slot))

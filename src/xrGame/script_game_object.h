@@ -159,6 +159,12 @@ public:
     virtual ~CScriptGameObject();
     operator IGameObject*();
 
+    // The object went offline or away. A script that kept its handle (a mod's binder) used it after that and
+    // read freed memory - a crash in id() or cost() far from the script. The handle is cut from its object and
+    // kept a while, so such calls log "cannot access" instead; ReleaseRetired frees them later.
+    static void Retire(CScriptGameObject*& handle);
+    static void ReleaseRetired(bool all);
+
     IC CGameObject& object() const;
     CScriptGameObject* Parent() const;
     void Hit(CScriptHit* tLuaHit);

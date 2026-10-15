@@ -215,7 +215,7 @@ void CActor::IR_OnKeyboardPress(int cmd)
                 break;
             const shared_str& item_name = g_quick_use_slots[cmd - kQUICK_USE_1];
             if (item_name.size())
-                itm = inventory().GetAny(item_name.c_str());
+                itm = inventory().GetQuick(item_name.c_str());
         }
         else
             itm = inventory().item((cmd == kUSE_BANDAGE) ? CLSID_IITEM_BANDAGE : CLSID_IITEM_MEDKIT);

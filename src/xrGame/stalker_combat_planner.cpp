@@ -168,7 +168,9 @@ void CStalkerCombatPlanner::initialize()
     const CEntityAlive* alarm_enemy = m_object->memory().enemy().selected();
     const u32 alarm_flags =
         CScriptActionPlanner::m_storage.property(eWorldPropertyUseSuddenness) ? DaAi::Comms::quiet : 0;
-    if (!alarm_enemy ||
+    // Contact is news only from an NPC that saw the enemy itself: entering combat on a report or a friend's alarm,
+    // it went out again to every post on the level and came back as fresh news.
+    if (!alarm_enemy || !DaAi::Know::seen_own_within(object(), *alarm_enemy, 5000) ||
         !DaAi::Comms::request(object(), DaAi::Comms::Kind::contact, alarm_enemy->ID(), 0, alarm_flags))
     {
         if (m_object->memory().visual().visible_now(alarm_enemy))

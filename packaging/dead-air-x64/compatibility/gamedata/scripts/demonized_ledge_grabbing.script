@@ -815,9 +815,14 @@ function tryToClimb(fromStanding)
 				end
 				RegisterScriptCallback("actor_on_update", unstuckFunc)
 
+				-- Only what the actor still carries: the climb may end in a teleport that took the item away.
+				local function carried(obj)
+					local parent = obj and obj:parent()
+					return parent ~= nil and parent:id() == db.actor:id()
+				end
 				if activeWpnId then
 					local obj = level.object_by_id(activeWpnId)
-					if obj then
+					if carried(obj) then
 						db.actor:move_to_slot(obj, activeSlot)
 						nextTick(function()
 							db.actor:activate_slot(activeSlot)
@@ -827,10 +832,11 @@ function tryToClimb(fromStanding)
 				end
 				if activeDetectorId then
 					local obj = level.object_by_id(activeDetectorId)
-					if obj then
+					if carried(obj) then
 						db.actor:move_to_slot(obj, 9)
 						CreateTimeEvent("ledge_grabbing", "activate_detector", 0.5, function()
-							obj:switch_state(1)
+							local det = level.object_by_id(activeDetectorId)
+							if carried(det) then det:switch_state(1) end
 							return true
 						end)
 					end

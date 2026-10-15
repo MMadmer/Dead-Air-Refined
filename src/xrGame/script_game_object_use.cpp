@@ -46,6 +46,42 @@ CScriptGameObject::~CScriptGameObject()
     unregister_door();
 }
 
+namespace
+{
+struct RetiredHandle
+{
+    CScriptGameObject* handle;
+    u32 time;
+};
+xr_vector<RetiredHandle> g_retired_handles;
+constexpr u32 retired_keep_ms = 60000;
+}
+
+void CScriptGameObject::Retire(CScriptGameObject*& handle)
+{
+    if (!handle)
+        return;
+    if (handle->m_door)
+    {
+        handle->unregister_door();
+        handle->m_door = nullptr;
+    }
+    handle->m_game_object = nullptr;
+    g_retired_handles.push_back({handle, Device.dwTimeGlobal});
+    handle = nullptr;
+}
+
+void CScriptGameObject::ReleaseRetired(bool all)
+{
+    // Pushed in time order, so the expired ones are a prefix.
+    const auto keep = all ? g_retired_handles.end() :
+        std::find_if(g_retired_handles.begin(), g_retired_handles.end(),
+            [](const RetiredHandle& retired) { return Device.dwTimeGlobal < retired.time + retired_keep_ms; });
+    for (auto it = g_retired_handles.begin(); it != keep; ++it)
+        xr_delete(it->handle);
+    g_retired_handles.erase(g_retired_handles.begin(), keep);
+}
+
 CScriptGameObject* CScriptGameObject::Parent() const
 {
     CGameObject* l_tpGameObject = smart_cast<CGameObject*>(object().H_Parent());

@@ -317,6 +317,10 @@ function loot_ui:CutOne()
 		self.loot[item.sec] = nil
 	end
 	self:SaveLoot()
+	-- the last part cut one at a time leaves the body as dressed as cutting them all does
+	if not next(self.loot) then
+		utils.se_obj_save_var(self.id, self.obj:name(), "looted", "true")
+	end
 	xr_statistic.inc_counter("field_dressings")
 	self:HideDialog()
 end

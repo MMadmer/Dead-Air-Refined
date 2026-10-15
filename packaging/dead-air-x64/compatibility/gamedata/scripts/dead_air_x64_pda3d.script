@@ -18,6 +18,11 @@ local last_slot = 0
 local spawn_at = 0
 local item_id = nil
 local holster_fallback_done = false
+-- A raise the engine keeps asking for while this machine says "in flight" (since when).
+local swallow_since = nil
+-- Someone else's item idling in the animation slot (its id and since when).
+local foreign_id = nil
+local foreign_since = 0
 
 local function section()
     if cfg == nil then
@@ -58,8 +63,17 @@ function _G.da_pda3d_activate()
         return true
     end
     if state ~= 0 then
-        return true -- raise already in flight; swallow the repeat
+        -- raise already in flight; swallow the repeat. The engine asks only while it sees no
+        -- device in the hands, so a flight that lasts this long is a state from before a level
+        -- change or a teleport: start over, an item left in the slot is adopted below.
+        swallow_since = swallow_since or time_global()
+        if time_global() < swallow_since + 4000 then
+            return true
+        end
+        state = 0
+        item_id = nil
     end
+    swallow_since = nil
     local sect = section()
     if not (sect and db.actor and db.actor:alive()) then
         return false
@@ -76,10 +90,23 @@ function _G.da_pda3d_activate()
         return true
     end
     -- someone else's animation item is in the slot (a knife strike in flight): not a
-    -- refusal, the engine asks again once it is gone
-    if db.actor:item_in_slot(13) then
+    -- refusal, the engine asks again once it is gone. One that idles there out of the hands
+    -- is stranded - its script lost track of it (a hand animation has no timeout when the
+    -- slot refuses to activate) and the save keeps it, so the PDA could never come up again.
+    local other = db.actor:item_in_slot(13)
+    if other then
+        if db.actor:active_slot() == 13 or foreign_id ~= other:id() then
+            foreign_id = other:id()
+            foreign_since = time_global()
+        elseif time_global() > foreign_since + 3000 then
+            printf("[pda3d] releasing stranded animation item [" .. other:section() .. "]")
+            local se = alife_object(other:id())
+            if se then alife():release(se) end
+            foreign_id = nil
+        end
         return true
     end
+    foreign_id = nil
     alife():create(sect, db.actor:position(), db.actor:level_vertex_id(),
         db.actor:game_vertex_id(), db.actor:id())
     state = 1
@@ -88,6 +115,7 @@ function _G.da_pda3d_activate()
 end
 
 function _G.da_pda3d_deactivate()
+    swallow_since = nil
     if state == 0 then
         -- a save made with the device up restores the item while this state machine is
         -- idle: adopt it, otherwise the PDA could never be put away after such a load
@@ -304,6 +332,15 @@ function get_interference()
     return v
 end
 
+-- A load or a level change does not restart this script, but the engine side starts clean.
+local function first_update()
+    state = 0
+    item_id = nil
+    swallow_since = nil
+    foreign_id = nil
+end
+
 function on_game_start()
     RegisterScriptCallback("actor_on_update", tick)
+    RegisterScriptCallback("actor_on_first_update", first_update)
 end

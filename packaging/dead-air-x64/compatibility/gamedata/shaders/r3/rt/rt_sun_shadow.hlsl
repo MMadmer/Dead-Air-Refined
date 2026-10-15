@@ -47,9 +47,26 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( sun_position, sun_normal, int2( id.xy ), view );
+	// The hands are not in the scene: they take the sun the eye sees. Written as lit, they shone in full sun under
+	// any roof, since the cascades leave the static casters to these rays.
 	[branch] if ( rt_is_hud( z, s ) )
 	{
-		sun_write( id.xy, 1.0f, 0.0f );
+		RayDesc eye_ray;
+		eye_ray.Origin = view.camera.xyz;
+		eye_ray.Direction = view.sun.xyz;
+		eye_ray.TMin = 0.05f;
+		eye_ray.TMax = sun_params.x;
+		RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> eye;
+		eye.TraceRayInline( rt_scene, RAY_FLAG_NONE, RT_RAYS_SHADOW, eye_ray );
+		while ( eye.Proceed() )
+		{
+			if ( eye.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+				rt_alpha_solid( eye.CandidateInstanceID(), eye.CandidateInstanceIndex(), eye.CandidateGeometryIndex(),
+					eye.CandidatePrimitiveIndex(), eye.CandidateTriangleBarycentrics(), eye.CandidateObjectToWorld3x4(),
+					rt_pixel_size( 1.0f, view ), view ) )
+				eye.CommitNonOpaqueTriangleHit();
+		}
+		sun_write( id.xy, eye.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f, 0.0f );
 		return;
 	}
 

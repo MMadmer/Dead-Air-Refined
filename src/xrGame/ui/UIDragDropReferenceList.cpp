@@ -148,7 +148,7 @@ void CUIDragDropReferenceList::ReloadReferences(CInventoryOwner* pActor)
             LPCSTR item_name = ACTOR_DEFS::g_quick_use_slots[cellsCapacity.x * j + i];
             if (item_name && xr_strlen(item_name))
             {
-                PIItem itm = pActor->inventory().GetAny(item_name);
+                PIItem itm = pActor->inventory().GetQuick(item_name);
                 if (itm)
                 {
                     SetItem(create_cell_item(itm), Ivector2().set(i, j));

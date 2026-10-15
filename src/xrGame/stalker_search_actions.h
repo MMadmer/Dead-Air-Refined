@@ -42,6 +42,7 @@ class CStalkerActionReachAmbushLocation : public CStalkerActionCombatBase
 private:
     CPropertyStorage* m_combat_storage;
     u32 m_last_hit_time;
+    bool m_lost_said{};
 
 protected:
     typedef CStalkerActionCombatBase inherited;

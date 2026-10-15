@@ -48,6 +48,8 @@ local menu_was_open = false
 -- Окно появляется не в том же кадре, в котором его попросили: до этого момента "меню закрыто"
 -- не значит, что игрок его закрыл.
 local menu_grace = 0
+-- The scene put the item of the left hand away (a detector, a lamp) and owes it back.
+local left_hidden = false
 
 -- Звук сцены. Модульная переменная, а не локальная - разбор у места запуска.
 scene_snd = nil
@@ -60,6 +62,8 @@ local ANIM_FALLBACK_MS = 1200
 local MENU_GRACE_MS = 400
 local WINDOW_WAIT_MS = 1500
 local HANDS_WAIT_MS = 4000
+local DETECTOR_SLOT = 9
+local HUD_IDLE, HUD_HIDDEN = 0, 3
 
 function on_game_start()
 	RegisterScriptCallback("actor_on_first_update", reset)
@@ -72,6 +76,7 @@ function reset()
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
 	my_scene, window_asked_at = 0, 0
 	for_trade = false
+	left_hidden = false
 	scene_snd = nil
 end
 
@@ -145,6 +150,27 @@ end
 -- length to pass; the holster length plus a margin is the cap should the slot never empty.
 local settle_until = 0
 
+-- The scene takes both hands, so the item of the left hand goes away like the weapon, its light
+-- with it: drawn over, the hand vanished while the lamp went on burning. True while it is still
+-- on its way; a hide refused mid-draw is asked again.
+local function left_busy()
+	local det = db.actor:item_in_slot(DETECTOR_SLOT)
+	if not det then return false end
+	local st = det:get_state()
+	if st == HUD_HIDDEN then return false end
+	if st == HUD_IDLE then
+		db.actor:hide_detector(false)
+		left_hidden = true
+	end
+	return true
+end
+
+local function give_left_back()
+	if not left_hidden then return end
+	left_hidden = false
+	if db.actor then db.actor:restore_detector(false) end
+end
+
 local function start_show(from)
 	sect = scene_section()
 	pending_start = from or 0
@@ -157,6 +183,7 @@ local function start_show(from)
 	local hud = get_hud()
 	if hud then hud:HidePdaMenu() end
 	-- Сцена ДВУРУКАЯ: обе руки заняты сумкой, поэтому оружие убираем.
+	left_busy()
 	db.actor:hide_weapon()
 	state = ST_SHOW
 end
@@ -173,6 +200,7 @@ local function finish()
 	-- Страховка: если ввод погасил кто-то другой, сцена его вернёт.
 	level.enable_input()
 	if db.actor then db.actor:restore_weapon() end
+	give_left_back()
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
 	my_scene, window_asked_at = 0, 0
 	for_trade = false
@@ -184,6 +212,7 @@ end
 local function yield()
 	if scene_snd then scene_snd:stop() end
 	if db.actor then db.actor:restore_weapon() end
+	give_left_back()
 	state, playing, menu_was_open, menu_grace = ST_OFF, false, false, 0
 	my_scene, window_asked_at = 0, 0
 	for_trade = false
@@ -217,6 +246,7 @@ end
 -- Something is still in the hands: a weapon holstering, the PDA going away, or someone else's scene.
 local function hands_busy()
 	if db.actor:active_slot() ~= 0 then return true end
+	if left_busy() then return true end
 	return game.scene_active() and game.hud_scene_id() ~= my_scene
 end
 

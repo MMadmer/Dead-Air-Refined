@@ -865,6 +865,19 @@ u32 last_seen_time(const CAI_Stalker& npc, const CGameObject* object)
     return npc.memory().visual().visible_object_time_last_seen(object);
 }
 
+bool seen_own_within(const CAI_Stalker& npc, const CGameObject& object, u32 ms)
+{
+    if (npc.memory().visual().visible_now(&object))
+        return true;
+    if (const KnowState* state = active_state(npc))
+    {
+        const Belief* known = find(*state, object.ID());
+        return known && known->t_seen_own && now() < known->t_seen_own + ms;
+    }
+    const u32 seen = last_seen_time(npc, &object);
+    return seen != u32(-1) && Device.dwTimeGlobal < seen + ms;
+}
+
 Estimate report_of(const CAI_Stalker& sender, u16 id)
 {
     Estimate result{};

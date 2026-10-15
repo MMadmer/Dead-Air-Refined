@@ -1501,7 +1501,7 @@ radio_message_ms                = 600, 2000
 gesture_range                   = 25        ; m: hand signals between NPCs that see each other
 gesture_fov                     = 120       ; deg: the signaller must be this far inside the viewer's field of view
 gesture_ms                      = 400, 800
-pda_sound                       = device\pda\pda_tip ; the tone of an arriving PDA text, played within the squelch range
+pda_sound                       =           ; the tone of an arriving PDA text (none: pda_tip is the player's task tone)
 pda_typing_ms                   = 3000, 6000
 pda_delay_ms                    = 5000, 20000
 pda_fire_block_ms               = 5000      ; no typing this long after being hit
@@ -1529,11 +1529,14 @@ hq_min_interval_ms              = 20000     ; one HQ relay per community, kind a
 update_interval_ms              = 6000      ; position updates over the radio while the enemy is in sight
 update_min_move                 = 8         ; m the believed position must have moved since the last update
 lost_after_ms                   = 3000      ; unseen this long when the enemy is dropped: "lost him"
+lost_window_ms                  = 30000     ; ...but seen by the NPC itself no longer ago than this
+lost_repeat_ms                  = 60000     ; one "lost him" per NPC and enemy this often
 relay_range                     = 40        ; m: a carrier tells radio news to mates without a radio this close
 report_confidence               = 0.8       ; confidence of a report x this (errors: [ai_errors] describe_*)
 ; Witness cue: a fighting or alarmed friend in own sight tells only where he looks ([ai_errors] witness_* geometry).
 witness_ms                      = 300, 700  ; to take in what the friend is doing
 witness_interval_ms             = 3000      ; one cue per friend this often
+witness_fresh_ms                = 4000      ; a friend fights what he saw himself this recently; otherwise he is only alarmed
 witness_range                   = 100       ; m: farther away his posture cannot be read
 witness_confidence              = 0.4
 
@@ -1585,12 +1588,17 @@ search_assign                   = search1_with_allies
 all_clear                       = all_clear
 surrender                       = panic_human
 
+; Kind -> ms one squad says it (by voice or into the radio) about one target at most once in; the message still goes.
+[ai_comms_say_interval]
+all_clear                       = 30000
+lost                            = 30000
+
 ; Kind -> channels that may carry it (voice = loud or hushed by the speaker's voice). Hand signals (gesture) go to
 ; everyone who sees the signaller and whom it sees; a quiet sender who signalled to someone keeps silent.
 [ai_comms_kinds]
 contact                         = voice, gesture, radio, pda, hq
 update                          = radio, hq
-lost                            = voice, gesture, radio, pda
+lost                            = voice, gesture, radio
 man_down                        = voice, radio, pda
 leader_down                     = voice, radio, pda
 taking_fire                     = voice, radio
@@ -1602,7 +1610,7 @@ fall_back                       = voice, gesture, radio
 attack                          = voice, gesture, radio
 help                            = voice, radio, pda
 search_assign                   = voice, gesture, radio
-all_clear                       = voice, gesture, radio, pda
+all_clear                       = voice, gesture, radio
 surrender                       = voice
 
 ; Extra voice lines by the NPC's voice prefix, for kinds no stock bark says (base DA voice sets).

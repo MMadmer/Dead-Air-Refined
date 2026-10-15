@@ -141,6 +141,8 @@ Fvector known_position(const CAI_Stalker& npc, const CGameObject& object);
 float known_distance(const CAI_Stalker& npc, const CGameObject& object);
 Fvector known_direction(const CAI_Stalker& npc, const CGameObject& object);
 u32 last_seen_time(const CAI_Stalker& npc, const CGameObject* object);
+// The NPC's own eyes saw the object now or within `ms`.
+bool seen_own_within(const CAI_Stalker& npc, const CGameObject& object, u32 ms);
 // Time of the last hit the NPC itself took from the enemy (0 = none). The agent's hit entry is shared by the group
 // and refreshed by every member's hit, so a mate's wound reaches this NPC only as a message (F2).
 u32 hit_time(const CAI_Stalker& npc, const CEntityAlive* enemy);

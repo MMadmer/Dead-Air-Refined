@@ -449,8 +449,10 @@ CBlend* CKinematicsAnimated::LL_PlayCycle(u16 part, MotionID motion_ID, BOOL bMi
             effective_minimum_time = _min(effective_minimum_time, playable_time);
     }
 
+    // A cut also drops the cycles it replaces at once, whatever falloff the file gives.
+    const bool cut = blendAccrue <= 0.f && effective_minimum_time <= 0.f;
     blendAccrue = AnimationBlend::ApplyMinimumTime(blendAccrue, effective_minimum_time);
-    blendFalloff = AnimationBlend::ApplyMinimumTime(blendFalloff, effective_minimum_time);
+    blendFalloff = cut ? AnimationBlend::CutRate : AnimationBlend::ApplyMinimumTime(blendFalloff, effective_minimum_time);
 
     //	shared_motions* s_mots	= &m_Motions[motion.slot];
     //	CMotionDef* m_def		= s_mots->motion_def(motion.idx);

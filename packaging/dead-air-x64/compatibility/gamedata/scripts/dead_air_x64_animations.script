@@ -29,6 +29,13 @@ function _G.da_before_item_use(npc, item)
 	return flags.ret_value
 end
 
+-- Whether the module has a scene for the item. A mod that brings its own enhanced_animations replaces
+-- ours along with this function: then the module covers nothing, and its own scenes are the mod's.
+local function module_has_anim(section)
+	local has = enhanced_animations and enhanced_animations.da_has_anim
+	return type(has) == "function" and has(section) == true
+end
+
 -- ---- stock item effects vs the module ------------------------------------------------------------
 -- Both sets hang on the same use event. Without this the stock set (camera shake, weapon hide)
 -- played over the module's hands. The stock set is muted for what the module covers and plays
@@ -50,7 +57,7 @@ local function install_actor_effects_patch()
 			if (not worn) or (da_wear_anims and da_wear_anims.covers(worn, wear_slot)) then return end
 		end
 
-		if enhanced_animations and enhanced_animations.da_has_anim(name) then return end
+		if module_has_anim(name) then return end
 
 		return original(name)
 	end
@@ -85,7 +92,7 @@ local covers = {
 				local ok, name = pcall(function() return arg:section() end)
 				section = ok and name or nil
 			end
-			if (section and enhanced_animations.da_has_anim(section)) then return true end
+			if (section and module_has_anim(section)) then return true end
 		end
 		return false
 	end,

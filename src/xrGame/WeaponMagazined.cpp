@@ -1658,7 +1658,9 @@ void CWeaponMagazined::net_Import(NET_Packet& P)
 
 bool CWeaponMagazined::GetBriefInfo(II_BriefInfo& info)
 {
-    VERIFY(m_pInventory);
+    // An item on its way out of the inventory (released, or taken by a script) has none any more.
+    if (!m_pInventory)
+        return false;
     string32 int_str;
 
     const int ae = GetAmmoElapsed();

@@ -197,6 +197,7 @@ void CStalkerActionReachAmbushLocation::initialize()
     inherited::initialize();
 
     m_last_hit_time = DaAi::Know::hit_time(object(), object().memory().enemy().selected());
+    m_lost_said = false;
 }
 
 void CStalkerActionReachAmbushLocation::finalize() { inherited::finalize(); }
@@ -259,8 +260,12 @@ void CStalkerActionReachAmbushLocation::execute()
     if (!object().movement().path_completed())
     {
 #ifndef SILENT_COMBAT
-        if (!DaAi::Search::quiet(object()))
+        // Once per walk: a destination never reached (one in an anomaly) repeated it every 10 s.
+        if (!m_lost_said && !DaAi::Search::quiet(object()))
+        {
             play_enemy_lost_sound(0, 0, 10000, 10000);
+            m_lost_said = true;
+        }
 #endif // SILENT_COMBAT
         return;
     }

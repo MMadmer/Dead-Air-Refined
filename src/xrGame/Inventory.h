@@ -96,6 +96,10 @@ public:
     // Ищет на поясе или в рюкзаке IItem с указанным CLS_ID
     PIItem Get(CLASS_ID cls_id, bool bSearchRuck) const;
     PIItem GetAny(LPCSTR name) const; // search both (ruck and belt)
+    // Quick slots: any item of the section's kind (multi-use items are one section per uses left), the one with
+    // the fewest uses first, and how many of the kind are carried.
+    PIItem GetQuick(LPCSTR name) const;
+    u32 QuickCount(LPCSTR name) const;
     PIItem item(CLASS_ID cls_id) const;
 
     // get all the items with the same section name

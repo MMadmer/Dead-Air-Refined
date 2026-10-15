@@ -142,6 +142,14 @@ bool CUICustomEdit::OnMouseAction(float x, float y, EUIMessages mouse_action)
     {
         CaptureFocus(true);
     }
+
+    if (m_multiline && (mouse_action == WINDOW_MOUSE_WHEEL_UP || mouse_action == WINDOW_MOUSE_WHEEL_DOWN))
+    {
+        float line = TextItemControl()->m_pFont->CurrentHeight_();
+        UI().ClientToScreenScaledHeight(line);
+        m_scroll += (mouse_action == WINDOW_MOUSE_WHEEL_DOWN ? 3.f : -3.f) * line;
+        return true;
+    }
     return false;
 }
 
@@ -197,12 +205,45 @@ void CUICustomEdit::Draw()
 
     if (m_multiline)
     {
+        CUILines* lines = TextItemControl();
         xr_string displayed = ec().str_edit();
+        const int cursor = ec().cursor_position();
         if (m_bInputFocus)
-            displayed.insert(ec().cursor_position(), 1, '_');
-        TextItemControl()->SetText(displayed.c_str());
+            displayed.insert(cursor, 1, '_');
+
+        if (m_text_top < 0.f)
+            m_text_top = lines->m_TextOffset.y;
+        float line = font->CurrentHeight_();
+        UI().ClientToScreenScaledHeight(line);
+        const float box = std::max(GetHeight() - 2.f * m_text_top, line);
+
+        // Text taller than the box scrolls, and the line with the cursor stays in it: typed past
+        // the bottom, the text went on under the buttons. Followed only when the cursor or the
+        // text moved, so the wheel can look elsewhere in between.
+        if (cursor != m_follow_cursor || displayed.size() != m_follow_length)
+        {
+            m_follow_cursor = cursor;
+            m_follow_length = displayed.size();
+            lines->SetText(displayed.substr(0, size_t(cursor) + (m_bInputFocus ? 1 : 0)).c_str());
+            const float to_cursor = std::max(lines->GetVisibleHeight(), line);
+            if (to_cursor - m_scroll > box)
+                m_scroll = to_cursor - box;
+            if (to_cursor - line < m_scroll)
+                m_scroll = to_cursor - line;
+        }
+
+        lines->SetText(displayed.c_str());
+        m_scroll = std::clamp(m_scroll, 0.f, std::max(lines->GetVisibleHeight() - box, 0.f));
+        lines->m_TextOffset.y = m_text_top - m_scroll;
+
+        // Strings other windows queued in this font go out first, or the clip would take them too.
+        font->OnRender();
+        Frect rect;
+        GetAbsoluteRect(rect);
+        UI().PushScissor(rect);
         inherited::Draw();
         font->OnRender();
+        UI().PopScissor();
         return;
     }
 

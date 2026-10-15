@@ -352,6 +352,9 @@ void CUIHudStatesWnd::UpdateActiveItemInfo(CActor* actor)
 {
     const bool drawInfo = psHUD_Flags.test(HUD_DRAW_INFO);
     PIItem item = actor->inventory().ActiveItem();
+    // A weapon released under the hands (the arena takes its gun back as the fight ends) is not shown.
+    if (item && (item->object().getDestroy() || !item->m_pInventory))
+        item = nullptr;
     if (item)
     {
         if (m_b_force_update)

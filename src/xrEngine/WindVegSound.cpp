@@ -262,11 +262,11 @@ void CEffect_WindVeg::OnFrame()
             Fvector feet = m.pos;
             feet.y += 0.25f;
             v.snd.play_at_pos(nullptr, feet, 0);
-            // Against the normalized source this lands a walk at about the loudness of a
-            // canopy rustling twenty metres away, and a sprint clearly above it. Speed
-            // 0.6 m/s is the "actually moving" floor.
+            // Half (-6 dB) of what it was: players heard every tuft as loud as walking into a
+            // bush. A walk is a hiss at the feet, a sprint a little more. Speed 0.6 m/s is the
+            // "actually moving" floor.
             const float k = clampr((m.speed - 0.6f) / 4.4f, 0.f, 1.f);
-            const float vol = 0.15f + 0.20f * k;
+            const float vol = 0.075f + 0.10f * k;
             v.snd.set_volume(vol);
             v.snd.set_frequency(1.10f * ::Random.randF(0.94f, 1.06f));
             v.snd.set_range(1.f, 12.f);

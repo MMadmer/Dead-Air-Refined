@@ -619,7 +619,15 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
 {
     const float fi = 1 - f;
 
-    exec_time = fi * A.exec_time + f * B.exec_time;
+    // Forward from A to B across midnight: the plain mix of 23:00 and 00:00 ran the day backwards within that hour,
+    // and the dynamic sun (the moon's flare with it) rose and set again - at every pair a weather change laid over
+    // midnight too.
+    float span = B.exec_time - A.exec_time;
+    if (span < 0.f)
+        span += DAY_LENGTH;
+    exec_time = A.exec_time + f * span;
+    if (exec_time >= DAY_LENGTH)
+        exec_time -= DAY_LENGTH;
 
     weight = f;
     modif_power = 1.f / (modifier_power + 1); // the environment itself

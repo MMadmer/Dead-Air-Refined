@@ -170,9 +170,10 @@ float CCustomOutfit::HitThroughArmor(float hit_power, s16 element, float ap, boo
     case SBoneProtections::HitFractionActorCOP:
     case SBoneProtections::HitFractionActorCS:
     {
+        // Unlike the helmet, the suit meets every non-bullet hit whatever bone it lands on (Dead Air):
+        // an anomaly or a bite lands on the root, which no armour table lists, and skipping those
+        // bones let a snork or an electro kill through any suit.
         const float ba = element == static_cast<s16>(BI_NONE) ? -1.0f : GetBoneArmor(element);
-        if (element != static_cast<s16>(BI_NONE) && ba <= 0.0f)
-            return NewHitPower;
 
         if (hit_type == ALife::eHitTypeFireWound)
         {

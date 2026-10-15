@@ -72,6 +72,11 @@ protected:
     bool m_force_update;
     bool m_read_mode;
     bool m_multiline{};
+    // Multiline: how far the text is scrolled up, and the cursor/length it last followed.
+    float m_scroll{};
+    float m_text_top{ -1.f }; // the authored text offset, taken on the first draw
+    int m_follow_cursor{ -1 };
+    size_t m_follow_length{};
 
     CUICustomEdit* m_next_focus_capturer;
 };
