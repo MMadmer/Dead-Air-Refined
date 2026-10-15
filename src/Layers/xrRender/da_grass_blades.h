@@ -54,4 +54,17 @@ void da_grass_stats();
 void da_grass_pin_species(pcstr name);
 // Renderer shutdown (CRender::destroy, before the Resources go): every GPU object and $user$grass_cover.
 void da_grass_destroy();
+
+// A reed bed the stock reed models stood for (da_reeds.cpp): its centre and radius, the bed under it, the water over
+// that bed and the community that grows there.
+struct DaReedBed
+{
+    float x{}, z{}, r{};
+    float y_bed{}, depth{};
+    s32 community{-1};
+};
+// The reed beds of the level (empty: none): the blades grow their communities there, rooted on the bed and standing
+// out of the water by their own height. reload: a loaded grass is set up again with them at once (not while the level
+// goes).
+void da_grass_set_reed_beds(xr_vector<DaReedBed>&& beds, bool reload);
 } // namespace xray::render::RENDER_NAMESPACE

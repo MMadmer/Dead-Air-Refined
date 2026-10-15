@@ -112,6 +112,9 @@ struct DaGrassProfile
     float tussock_h[2]{}, tussock_share{}, tussock_r{};
     Fvector3 seed_ramp[4]{};          // linear, at seed stage 0.25, 0.5, 0.75, 1
     Fvector3 stem_tint{1.f, 1.f, 1.f}; // linear factor of the culm colour
+    // 1: last year's culms stand through the winter (a reed bed, a cattail stand): the snow's grass visibility does not
+    // thin it, only the snow over a blade buries that blade.
+    float winter_stand{};
 };
 
 // A plant community ([grass_community_N]): the graminoids a detail object grows and their cover shares in

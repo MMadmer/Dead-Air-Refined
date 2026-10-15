@@ -1,4 +1,5 @@
 #include "StdAfx.h"
+#include "xrEngine/da_ice.h"
 
 #include "PHMovementControl.h"
 #include "xrCDB/Intersect.hpp"
@@ -265,6 +266,10 @@ void CPHMovementControl::UpdateWaterState()
         return;
 
     const float depth = surface - vPosition.y;
+    // On the season's ice that holds the feet are over the water, not in it: no entry splash stepping onto it, no
+    // wading, no dose of the water (a man who went through stands in a hole, where it does not hold).
+    if (depth < 0.12f && da_ice_holds(Fvector().set(vPosition.x, surface, vPosition.z)))
+        return;
 
     // The landing damage reads the whole column, deep water included: a fall into a lake ends
     // on its bed, and the metres it went through are what cushioned it. The entry speed is the

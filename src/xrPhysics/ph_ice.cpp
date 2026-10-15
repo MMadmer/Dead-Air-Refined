@@ -4,6 +4,8 @@
 #include "stdafx.h"
 #include "ph_ice.h"
 #include "xrEngine/da_ice.h"
+#include "xrEngine/IGame_Persistent.h"
+#include "xrEngine/Environment.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 
 namespace
@@ -22,4 +24,17 @@ u16 ph_contact_material(u16 material, const float* pos, float depth)
     if (ice == u16(GAMEMTL_NONE_IDX) || depth > ice_contact_depth)
         return material;
     return da_ice_holds(Fvector().set(pos[0], pos[1], pos[2])) ? ice : material;
+}
+
+u16 ph_foot_material(u16 material, const Fvector& feet)
+{
+    const SGameMtl* m = GMLib.GetMaterialByIdx(material);
+    if (!m || !m->Flags.test(SGameMtl::flLiquid) || !g_pGamePersistent)
+        return material;
+    const u16 ice = da_ice_material();
+    float surface = 0.f, bed = 0.f;
+    if (ice == u16(GAMEMTL_NONE_IDX) || !g_pGamePersistent->Environment().water_at(feet, surface, bed) ||
+        feet.y < surface - ice_contact_depth)
+        return material;
+    return da_ice_holds(Fvector().set(feet.x, surface, feet.z)) ? ice : material;
 }

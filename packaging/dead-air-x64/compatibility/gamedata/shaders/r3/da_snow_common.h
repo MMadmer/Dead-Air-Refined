@@ -496,6 +496,18 @@ float2 da_sn_ice_at(float2 xz)
 	return float2(ice, da_ice_snow(xz, ice));
 }
 
+// The ice cover at xz before the holes broken into it (the snow grid's vertices: a hole is cut per pixel).
+float da_sn_ice_whole(float2 xz)
+{
+	[branch] if (max(da_snow_ice.x, da_snow_ice.y) < 0.02)
+		return 0.0;
+	bool flowing, inside;
+	const float4 wf = da_sn_water(xz, flowing, inside);
+	[branch] if (inside && da_sn_water_indoor(xz))
+		return 0.0;
+	return da_ice_cover_whole(xz, inside, flowing, wf.w);
+}
+
 // The waterline of the window's own water at xz, from continuous quantities only: the bilinear ground (the bed
 // under the water) against the level of the water within reach, so the line follows the ground's own contour at
 // any distance instead of the water texels' 0.25 m squares (the stair-stepped shore of a frozen pond). The

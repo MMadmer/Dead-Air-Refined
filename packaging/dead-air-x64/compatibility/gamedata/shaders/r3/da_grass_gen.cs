@@ -321,6 +321,8 @@ struct grass_lane
 	float3		root;
 	float2		centre;
 	float		d, wmin, base_raise;
+	// Metres a reed bed's blade rises for the water over its root (the slot's emergence, da_grass_blades.cpp).
+	float		emerge;
 	grass_shape	cur, prev;
 	grass_force	f_cur, f_prev;
 	float		wv, wn, wm;
@@ -535,7 +537,7 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const float d = distance(root, cam);
 	L.d = d;
 	const float hset = da_grass_lat.w;
-	const float hbound = max(P0.y, P1.y + P10.z + 0.5f) * hset;
+	const float hbound = max(P0.y, P1.y + P10.z + 0.5f) * hset + L.emerge;
 	const bool view = (tflags & 1u) != 0u && d < da_grass_cam.w
 		&& grass_visible(root + float3(0.0f, 0.5f * hbound, 0.0f), 0.6f * hbound + 0.3f);
 	const bool sh_near = (tflags & 2u) != 0u && d < da_grass_sh.x;
@@ -549,7 +551,9 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const float4 K0 = grass_seas(p, 0, false), K2 = grass_seas(p, 2, false), K3 = grass_seas(p, 3, false);
 	const float shade = saturate((0.6f - hemi) / 0.3f);
 	const float height_k = lerp(0.85f, 1.15f, lerp(0.5f, hc, P19.x)) * lerp(1.0f, P8.z, shade) * hset;
-	const float hmax = culm ? lerp(P1.x, P1.y, h[7]) : lerp(P0.x, P0.y, h[7]);
+	// (The rise for the water is added at the blade's full height: a reed in a metre of water stands its own height
+	// over the surface, as its growth follows the water level.)
+	const float hmax = (culm ? lerp(P1.x, P1.y, h[7]) : lerp(P0.x, P0.y, h[7])) + L.emerge / max(height_k, 0.1f);
 	const float end_fade = 1.0f - smoothstep(0.0f, 1.0f, saturate((d - da_grass_lod.z) * da_grass_lod.w));
 	L.thatch = life.thatch;
 	L.sen = life.sen;
@@ -895,6 +899,7 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	if (alive)
 		S = da_grass_slots.Load4((uint(sxz.y) * uint(da_grass_slot.z) + uint(sxz.x)) * 16u);
 	uint comm = 0u;
+	uint picked = 0u;
 	{
 		const uint ids[4] = { (S.x >> 20) & 63u, (S.x >> 26) & 63u, S.y & 63u, (S.y >> 6) & 63u };
 		const float2 f = frac(xz * 0.5f);
@@ -917,7 +922,10 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 			{
 				// The last object with a weight takes the rounding remainder.
 				if (!found && a[k2] > 0.0f)
+				{
 					comm = cs[k2];
+					picked = k2;
+				}
 				if (!found && a[k2] > 0.0f && r < a[k2])
 					found = true;
 				r -= a[k2];
@@ -937,6 +945,8 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 
 	// ---- The blade (only for a lane that is still alive) ----------------------------------------
 	grass_lane L = (grass_lane)0;
+	// A reed bed's object (the green bits' mask): its blades rise out of the water over their roots (red, 0.1 m).
+	L.emerge = (((S.y >> 24) >> picked) & 1u) != 0u ? float((S.y >> 20) & 15u) * 0.1f : 0.0f;
 	[branch] if (alive)
 		grass_evaluate(L, g, seed, h, xz, p, c, hemi, level, tflags);
 

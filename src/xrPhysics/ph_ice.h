@@ -12,3 +12,6 @@
 
 // The material of a contact at pos with a triangle of material `material`, the body that far under its plane.
 XRPHYSICS_API u16 ph_contact_material(u16 material, const float* pos, float depth);
+// The material a character's feet at `feet` report (steps, the dose of the water): a liquid one is the ice where the
+// ice holds over the water there and the feet are on it or within a contact's depth under its plane.
+XRPHYSICS_API u16 ph_foot_material(u16 material, const Fvector& feet);

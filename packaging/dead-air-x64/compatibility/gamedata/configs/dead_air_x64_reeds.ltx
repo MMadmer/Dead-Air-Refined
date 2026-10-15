@@ -1,0 +1,20 @@
+; Reed beds (docs/dead-air/GRASS.md, reed beds): the stock reed and sedge models the blade grass stands in for.
+; Where a model of these cards stands, its grass community grows instead - common reed, cattail, reed canary grass,
+; reed sweet-grass and sedges through the year, rooted on the bed under the water - and past the blades' radius
+; the model's billboard stands for the bed. A mod's own reed model is added here by its card.
+
+; A stock card (the level shader's base texture) = the grass community grown where a model of it stands.
+[reed_cards]
+trees\trees_kamish_big_01   = reed_bed
+trees\trees_kamish_big_02   = reed_bed
+trees\trees_kamish_sux      = reed_bed
+trees\trees_kamish_sux_fake = reed_bed
+trees\trees_kamysh          = reed_bed
+trees\trees_osoka           = sedge_marsh
+trees\trees_osoka_sux       = sedge_marsh
+
+[reed_beds]
+; A bed's radius against the model's mean half width.
+footprint = 0.85
+; How far the culms rise per metre of water over their roots (a reed stands its own height over the surface).
+emerge    = 1.0

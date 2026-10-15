@@ -26,7 +26,7 @@ BASE = dict(
     clump_lean=5, density_leaf=400, density_culm=50, density_basal=1500, density_cal=0.95, cover=1.0,
     shade_density=1.0, shade_height=1.0, head_type=4, head_len=[0.06, 0.12], head_w=[0.03, 0.06], head_branches=4,
     head_open=[45, 25], head_grain=1.0, head_petals=0, head_share=0.35, head_nod=[0, 0], fold_h=0.2, tussock_h=[0, 0],
-    tussock_share=0.0, tussock_r=0.0, stem_tint=[1.0, 1.0, 1.0])
+    tussock_share=0.0, tussock_r=0.0, stem_tint=[1.0, 1.0, 1.0], winter_stand=0.0)
 FORB = dict(BASE, leaf_h=[0.08, 0.15], leaf_w=[0.02, 0.04], leaf_tilt=[30, 60], leaf_bend=[0.15, 0.3],
             leaf_droop=[0.05, 0.15], culm_tilt=[1, 6], culm_bend=[0.02, 0.05], culm_stiff=0.75, density_basal=0,
             clump_cell=0.25, clump_pull=0.15, clump_face_away=0.2, clump_lean=3, head_share=0.85, fold_h=0.0,
@@ -196,7 +196,8 @@ S = [
        cauline_tilt=[45, 75], cauline_span=[0.2, 0.85], cauline_taper=0.75, cauline_arrange=0, cauline_bend=0.4,
        cauline_droop=0.35, clump_cell=0.5, clump_pull=0.1, clump_face_away=0.0, clump_lean=3, density_leaf=0,
        density_culm=70, density_basal=0, head_type=7, head_len=[0.18, 0.32], head_w=[0.05, 0.12], head_branches=6,
-       head_open=[30, 20], head_nod=[10, 30], head_share=0.75, fold_h=0.15, shift=dict(heads=0, green=0)),
+       head_open=[30, 20], head_nod=[10, 30], head_share=0.75, fold_h=0.15, winter_stand=1.0,
+       shift=dict(heads=0, green=0)),
     sp('pha_aru', 'Phalaris arundinacea', 0, 'P4_SEDGE_MARSH',
        col('#50664A', '#587045', '#5E6440', '#A08A55', '#B49C6E', '#9A8668'),
        ramp('#6E7A60', '#7A6A70', '#B09A68', '#A89878'),
@@ -248,7 +249,7 @@ S = [
        leaf_droop=[0.05, 0.2], leaf_stiff=0.6, culm_h=[1.0, 1.6], culm_w=[0.006, 0.01], culm_tilt=[0, 4],
        culm_bend=[0.01, 0.03], culm_stiff=0.85, clump_cell=0.5, clump_pull=0.3, clump_face_away=0.6,
        density_leaf=110, density_culm=10, density_basal=0, head_type=2, head_len=[0.12, 0.22],
-       head_w=[0.018, 0.028], head_branches=0, head_open=[0, 0], head_grain=1.5, head_share=0.6,
+       head_w=[0.018, 0.028], head_branches=0, head_open=[0, 0], head_grain=1.5, head_share=0.6, winter_stand=1.0,
        shift=dict(heads=10, green=0)),
     # ---- forest floor ----------------------------------------------------------------------------------------
     sp('cal_aru', 'Calamagrostis arundinacea', 0, 'P1_TALL_CALAMAGROSTIS',

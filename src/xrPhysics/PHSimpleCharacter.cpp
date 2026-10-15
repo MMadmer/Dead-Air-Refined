@@ -1585,10 +1585,14 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
         do_collide = false;
         return;
     }
+    // The season's ice over the water: what the feet stand on there reads as the ice (ph_ice.h) - the steps sound of
+    // it, the water's dose stays in the water. (Only the reported materials: the contact itself keeps its own.)
+    Fvector feet;
+    GetPosition(feet);
     if (tri_material->Flags.test(SGameMtl::flPassable) && !do_collide)
     {
         UpdateStaticDamage(c, tri_material, bo1);
-        foot_material_update(contact_material, foot_material_idx);
+        foot_material_update(ph_foot_material(contact_material, feet), ph_foot_material(foot_material_idx, feet));
         return;
     }
     if (do_collide)
@@ -1637,7 +1641,7 @@ void CPHSimpleCharacter::InitContact(dContact* c, bool& do_collide, u16 material
         contact_material = obj_material_idx;
     }
 
-    foot_material_update(contact_material, foot_material_idx);
+    foot_material_update(ph_foot_material(contact_material, feet), ph_foot_material(foot_material_idx, feet));
 
     // if(!((g1==m_wheel) || (g2==m_wheel)||(m_elevator_state.ClimbingState())  ))//
     //	return;

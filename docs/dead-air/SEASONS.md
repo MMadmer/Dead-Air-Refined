@@ -111,7 +111,8 @@ builder takes the longest assigned prefix of a path.
 - Tree cards (`trees/`): only for what still stands as a stock model. The level trees and bushes are the
   procedural ones and take their year from the species tables, leaf by leaf (`TREES.md`, `SHRUBS.md`), so
   the looks of their old cards are gone (WP7, 08.10.2026). Twenty cards keep them: the reeds and sedge
-  (`trees_kamish_big_01`, `_big_02`, `trees_kamish_sux`, `trees_kamysh`, `trees_osoka_sux`), the duckweed
+  (`trees_kamish_big_01`, `_big_02`, `trees_kamish_sux`, `trees_kamysh`, `trees_osoka_sux`; only their far
+  billboards wear them - within the blades' radius the reed beds of the blades stand for them, GRASS.md), the duckweed
   (`trees_tina`), the forest walls (`trees_forestwall1`, `_2`), the stock fallen trees and debris
   (`trees_vetkasux2`, `_red`, `trees_new_vetka`, `trees_atp_sosnodub_branch`), a static pine (`trees_sosna_sux`)
   and the cards of props and DAR2 models (`trees_elka`, `trees_fake`, `trees_new_vetka_green1`, `trees_sosna`,

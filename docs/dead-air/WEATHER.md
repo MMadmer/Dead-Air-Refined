@@ -153,10 +153,19 @@ the body lies on the surface (no more than 25 cm into it): the actor, corpses, i
 body already standing through it (wading in a hole, on the bed) passes. A man in the water under the ice's plane
 breaks a channel as he goes. The level's AI graph never changes: its creatures keep off the water as always.
 
-**Holes** (`da_ice_hole_add`, at most 96): a hole of open water (a man, a blast) and a bullet's star of cracks. The
-picture draws the 16 nearest the camera (`da_ice_holes`: a ragged edge of broken plates, radial cracks and a ring round
-a hole, a white bruise and a star round a bullet's mark); inside a hole the water is water (rings, splashes, waves). In
-frost a hole skins over in `refreeze_hours`; a load forgets them.
+**Holes** (`da_ice_hole_add`, at most 96): a hole of open water (a man, a blast) and a bullet's mark on ice that held.
+The picture draws the 16 nearest the camera (`da_ice_marks` in `da_snow_ice.h`): a hole is a polygon of straight
+fractures (a sheet breaks along lines between the points where its cracks met, not in a round wobble), open water in
+it (plates floating flat in it read as cut-outs: no tilt, no thickness), the water it pushed up soaking the ice and the
+snow round it grey, and four to six cracks running out of it - straight runs with a kink every 10-25 cm, thin lines of
+water darker than the ice (never white). The snow grid's vertices keep their sheet over a hole and its pixels cut it
+(`da_sn_ice_whole`), so the edge is the fractures', not the grid's triangles'. A bullet the ice stopped crushed a spot of it white, a centimetre or two, cracked it
+with a few short fine fractures (faint pale lines in clear ice) and blew the snow out round it. Inside a hole the water
+is water (rings, splashes, waves). In frost a hole skins over in `refreeze_hours`; a load forgets them.
+
+**On the ice** the feet report the ice: a character's contacts with the water mesh where the ice holds and his feet are
+on it read as the ice material (`ph_foot_material`: the steps sound of ice, the water's dose stays in the water), and
+the movement does not count him in the water there (no entry splash stepping onto it, no wading).
 
 **Bullets**: on ice that holds, the bullet stops on (or skips off) the ice material - chips, its crack, a star; through
 ice too thin to stop it, a small hole, a splash and a star, no ring; into open water, the ring and the splash as ever.

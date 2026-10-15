@@ -14,6 +14,7 @@
 #include "stdafx.h"
 #include "da_veg.h"
 #include "da_veg_internal.h"
+#include "da_reeds.h"
 #include "da_grass_data.h"
 #include "da_temporal.h"
 #include "da_wind_history.h"
@@ -2177,6 +2178,7 @@ void da_veg_replaced_visuals(xr_vector<dxRender_Visual*>& out)
     for (u32 pi = 0; pi < kPops; ++pi)
         if (const Population* P = pop(pi))
             P->replaced_visuals(out);
+    da_reeds_replaced_visuals(out);
 }
 
 bool da_veg_stand_in(const dxRender_Visual* visual, DaVegStandIn& out)

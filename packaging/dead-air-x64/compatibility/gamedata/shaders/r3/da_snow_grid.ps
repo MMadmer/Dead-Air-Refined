@@ -42,6 +42,9 @@ f_deffer main(da_sn_grid_v2p I)
 		[branch] if (da_snow_ice.x > 0.02)
 			pond = da_sn_pond(I.Pw.xz, b);
 		const float2 ice = da_sn_ice_at(I.Pw.xz);
+		// A hole broken into the ice is open water whatever the window says of the water there.
+		[branch] if (da_ice_state.x > 0.5 && da_ice_marks(I.Pw.xz, 0.02).open > 0.5)
+			discard;
 		const bool frozen = ice.x > 0.5;
 		const bool water = frozen ? pond.y > 0.5 : b.z > 0.5;
 		[branch] if (water)

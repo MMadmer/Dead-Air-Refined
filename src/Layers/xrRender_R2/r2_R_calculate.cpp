@@ -6,6 +6,7 @@
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_reeds.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -85,6 +86,8 @@ void CRender::Calculate()
     da_gpu_trees_apply_switch();
     // A changed r__shrubs or r__trees: the stock bushes and trees leave or rejoin their hierarchies before the views walk them.
     da_veg_apply_switch();
+    // ... and r__reeds, the stock reeds.
+    da_reeds_apply_switch();
 #endif
 
     // Transfer to global space to avoid deep pointer access
@@ -212,6 +215,10 @@ void CRender::Calculate()
         r_main.run();
     }
     BasicStats.Culling.End();
+#if RENDER == R_R4
+    // The replaced reeds' billboards past the blades' radius, into the main view's LOD list.
+    da_reeds_frame(dsgraph_main);
+#endif
 
 #if RENDER == R_R4
     // Everything the sun cascades draw of the shrubs and the blades is ready before r_sun.run(): with the

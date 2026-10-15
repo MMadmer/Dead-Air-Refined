@@ -100,8 +100,12 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	[branch] if (!none && da_snow_ice.x > 0.02)
 		pond = da_sn_pond(x, b0);
 	float2 ice = float2(0.0, 0.0);
+	float ice_whole = 0.0;
 	[branch] if (!none && (max(b0.z, pond.y) > 0.0 || pond.x > DA_SN_NONE * 0.5))
+	{
 		ice = da_sn_ice_at(x);
+		ice_whole = da_ice_state.x > 0.5 ? da_sn_ice_whole(x) : ice.x;
+	}
 	const bool frozen = ice.x > 0.5;
 	// Open water within a metre of the ice front (its cover ramps 0..0.5 there) keeps the sheet's height: the pixel
 	// shader ends the sheet on the cover's own curve at 0.5. Clipped at the vertex, the front was the grid's cells in
@@ -109,7 +113,7 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 #ifdef DA_SN_SHADOW
 	const bool sheet = frozen;
 #else
-	const bool sheet = ice.x > 0.0;
+	const bool sheet = ice_whole > 0.0;
 #endif
 	const float psh = sheet ? pond.y : 0.0;
 	const float wsh = none ? 0.0 : (sheet ? psh : saturate(b0.z));

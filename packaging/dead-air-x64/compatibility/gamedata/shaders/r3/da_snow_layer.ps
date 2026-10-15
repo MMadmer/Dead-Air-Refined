@@ -540,6 +540,9 @@ void da_sn_sheet(inout da_sn_layer_out o, float4 P, float3 Pw, float2 ice, float
 		N = normalize(float3(-pack.g.x * k, 1.0, -pack.g.y * k));
 	}
 	A = min(A, 0.9) * DA_SNOW_TINT;
+	// Round a hole the water it pushed up soaks the snow grey, and seeps along the cracks as darker lines.
+	const da_ice_mark mk = da_ice_marks(Pw.xz, footprint);
+	A *= 1.0 - 0.45 * saturate(mk.wet + 0.8 * mk.crack);
 	const float slush = saturate(1.0 - dot(da_snow_state, float4(1.0, 1.0, 1.0, 1.0)));
 	const float rough = dot(da_snow_state, float4(0.80, 0.70, 0.55, 0.45)) + slush * 0.4;
 	const float gloss = lerp(bare.a, saturate(1.0 - rough) * DA_SN_GLOSS * da_sn_sheen(), k);

@@ -258,6 +258,8 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrub_gen.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrub_gen.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrubs.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_reeds.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_reeds.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrubs.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_menu_frame.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_menu_frame.h"

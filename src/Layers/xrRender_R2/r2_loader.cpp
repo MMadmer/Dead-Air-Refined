@@ -24,6 +24,7 @@
 #include "Layers/xrRender/da_snow.h"
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_reeds.h"
 #include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #include "Layers/xrRenderPC_R4/da_offload.h"
@@ -154,6 +155,9 @@ void CRender::level_Load(IReader* fs)
     g_pGamePersistent->LoadPump();
     // The stock bushes and trees the procedural vegetation stands in for, before the GPU registry leaves them out.
     da_veg_level_load();
+    g_pGamePersistent->LoadPump();
+    // The stock reeds the blades' reed beds stand in for (the same census), before the GPU registry leaves them out.
+    da_reeds_level_load();
     g_pGamePersistent->LoadPump();
     // The stock path's vegetation whose billboard cells the bake draws again (the census of da_veg_level_load).
     da_trees_bake_level_load();
@@ -301,6 +305,7 @@ void CRender::level_Unload()
 #if RENDER == R_R4
     // In reverse of the load, and before the details: the blades point into the detail slots.
     da_trees_bake_level_unload();
+    da_reeds_level_unload();
     da_veg_level_unload();
     da_grass_level_unload();
     da_snow_level_unload();

@@ -10,6 +10,7 @@
 #include "ParticlesObject.h"
 #include "CharacterPhysicsSupport.h"
 #include "PHMovementControl.h"
+#include "material_manager.h"
 #include "xrEngine/da_ice.h"
 #include "xrEngine/da_climate.h"
 #include "xrEngine/da_particle_suppress.h"
@@ -333,11 +334,15 @@ public:
         at.y = surface;
         float strength = 0.f;
         const EDaIce st = water ? da_ice_at(at, &strength) : da_ice_none;
+        // What the feet report (the steps' material) and the water the movement counts the actor in.
+        const u16 step_mtl = actor->material().last_material_idx();
+        const SGameMtl* sm = step_mtl < GMLib.CountMaterial() ? GMLib.GetMaterialByIdx(step_mtl) : nullptr;
+        const CPHMovementControl* mc = actor->character_physics_support() ? actor->character_physics_support()->movement() : nullptr;
         Msg("* [qa] ice_probe feet (%.2f, %.3f, %.2f) water %d%s surface %.3f bed %.3f shore %.1f ice %.2f state %u "
-            "strength %.3f holes %u material %u",
+            "strength %.3f holes %u material %u | steps on %s, in water %.3f m",
             feet.x, feet.y, feet.z, water ? 1 : 0, env.water_flowing_at(at) ? " running" : "", surface, bed,
             env.water_shore_dist(at), water ? env.ice_at(at) : 0.f, u32(st), strength, u32(da_ice_holes().size()),
-            u32(da_ice_material()));
+            u32(da_ice_material()), sm ? sm->m_Name.c_str() : "?", mc ? mc->WaterDepth() : -1.f);
     }
 };
 

@@ -480,6 +480,9 @@ def species_sections(ltx, kf, sp_data, comm_data, still):
         for k in pairs:
             sec.append((k, rng(s[k], 4)))
         sec.append(('stem_tint', ', '.join(num(x, 3) for x in s['stem_tint'])))
+        # Last year's culms stand through the winter (reed, cattail): the snow's grass visibility does not thin them.
+        if s.get('winter_stand', 0.0) > 0.0:
+            sec.append(('winter_stand', num(s['winter_stand'])))
         sec.append(('seed_ramp', ', '.join('%s:%s' % (num(float(st)), c) for st, c in
                                            sorted(s['seed_ramp'].items(), key=lambda kv: float(kv[0])))))
     for i, s in enumerate(species):

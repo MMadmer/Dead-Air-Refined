@@ -227,6 +227,7 @@ void parse_profile(const CInifile::Sect& s, DaGrassProfile& p)
     read_float(s, "tussock_share", p.tussock_share);
     read_float(s, "tussock_r", p.tussock_r);
     read_vector(s, "stem_tint", p.stem_tint);
+    read_float(s, "winter_stand", p.winter_stand);
     // Seed or flower colour ramp "stage:#RRGGBB" at 0.25, 0.5, 0.75, 1.
     if (pcstr ramp = find_value(s, "seed_ramp"))
         for_each_key(ramp, [&p](float stage, pcstr colour) {
@@ -1218,7 +1219,8 @@ void fill_season(u32 p, float day, Fvector4* rows, float grass_visible)
     rows[0].set(std::min(v[gkNewGrowth], 1.f), std::min(v[gkGreen], 1.f), std::min(v[gkCohortGreen], 1.f), std::min(v[gkThatch], 1.f));
     rows[1].set(std::min(v[gkThatchLodge], 1.f), std::min(v[gkStrawLodge], 1.f), std::min(v[gkHeads], 1.f), std::min(v[gkSeedStage], 1.f));
     rows[2].set(std::min(v[gkTipDry], 1.f), std::min(v[gkWet], 1.f), std::min(v[gkFrost], 1.f), v[gkDensity]);
-    rows[3].set(std::min(v[gkFlood], 1.f), std::min(v[gkFloodIce], 1.f), grass_visible, old_heads);
+    rows[3].set(std::min(v[gkFlood], 1.f), std::min(v[gkFloodIce], 1.f),
+        g_data.profiles[p].winter_stand > 0.5f ? 1.f : grass_visible, old_heads);
     for (u32 c = 0; c < gcCount; ++c)
     {
         const Fvector3 col = k.c[c].empty() ? linear_of(kColourFallback[c]) : k.c[c].at(day);
@@ -1496,7 +1498,8 @@ void build_tiles()
     const Latch& L = g.latch;
     g.groups.clear();
     g.group_count = g.lane_count = 0;
-    if (L.dlat <= 0.f || L.grass_visible <= 0.f)
+    // (Under the winter's snow no meadow grows - its communities' densities are zero - but a reed bed stands.)
+    if (L.dlat <= 0.f)
     {
         g.green.store(0.f, std::memory_order_relaxed);
         return;
@@ -1896,6 +1899,143 @@ void da_grass_destroy()
     g_cover = nullptr;
 }
 
+namespace
+{
+// The level's reed beds (da_grass_set_reed_beds): they outlive a reload of the blades (a renderer reset).
+xr_vector<DaReedBed> s_reed_beds;
+// Metres the culms of a reed bed stand taller for the water they root under (the slot's emergence bits).
+float s_reed_emerge_max = 0.f;
+
+// The reed beds into the blades' copy of the slots. A community the beds grow takes a free object id of the level's
+// (from the top of the table down past its own objects); a slot under a bed carries that id with the beds' cover at
+// its four corners (soft edges, the bed's own patches do the rest), its other objects giving way by as much; its box
+// reaches down to the bed, so the ground window finds it under the water (the water mesh is passable); its colour bits
+// carry how far the culms rise for the water (red: 0.1 m units, the deepest bed's) and which of its four objects are
+// the beds' (green: a mask). The stock decompress never sees the copy.
+void apply_reed_beds(const CDetailManager& dm)
+{
+    s_reed_emerge_max = 0.f;
+    if (s_reed_beds.empty())
+        return;
+    u8 vid_of[da_grass_communities];
+    std::fill(std::begin(vid_of), std::end(vid_of), u8(DetailSlot::ID_Empty));
+    u32 next = DetailSlot::ID_Empty - 1;
+    for (const DaReedBed& b : s_reed_beds)
+    {
+        if (b.community < 0 || b.community >= s32(da_grass_communities) || !g_data.communities[b.community].used ||
+            vid_of[b.community] != DetailSlot::ID_Empty)
+            continue;
+        if (next < dm.objects.size())
+        {
+            Msg("! [grass] no free detail id for the reed community '%s'", da_grass_community_name(u32(b.community)));
+            continue;
+        }
+        vid_of[b.community] = u8(next);
+        g.id_profile[next] = u8(b.community + 1);
+        --next;
+    }
+    // Cover of a community at a point: full within three quarters of a bed's radius, nothing three quarters of a
+    // metre past it (a slot's corner is two metres from the next).
+    const auto cover = [](const DaReedBed& b, float x, float z) {
+        const float d = _sqrt((x - b.x) * (x - b.x) + (z - b.z) * (z - b.z));
+        const float r_in = 0.75f * b.r, r_out = b.r + 0.75f;
+        return d <= r_in ? 1.f : d >= r_out ? 0.f : 1.f - (d - r_in) / (r_out - r_in);
+    };
+    const auto q = [](float v) { return u16(std::clamp(iFloor(v * 15.f + 0.5f), 0, 15)); };
+    u32 slots = 0;
+    for (const DaReedBed& b : s_reed_beds)
+    {
+        if (b.community < 0 || b.community >= s32(da_grass_communities) || vid_of[b.community] == DetailSlot::ID_Empty)
+            continue;
+        const float reach = b.r + 0.75f;
+        const int sx0 = std::max(iFloor((b.x - reach) / DETAIL_SLOT_SIZE) + g.offs_x, 0);
+        const int sx1 = std::min(iFloor((b.x + reach) / DETAIL_SLOT_SIZE) + g.offs_x, int(g.size_x) - 1);
+        const int sz0 = std::max(iFloor((b.z - reach) / DETAIL_SLOT_SIZE) + g.offs_z, 0);
+        const int sz1 = std::min(iFloor((b.z + reach) / DETAIL_SLOT_SIZE) + g.offs_z, int(g.size_z) - 1);
+        const u8 vid = vid_of[b.community];
+        for (int sz = sz0; sz <= sz1; ++sz)
+            for (int sx = sx0; sx <= sx1; ++sx)
+            {
+                DetailSlot& S = g.slot_copy[size_t(sz) * g.size_x + size_t(sx)];
+                const float x0 = float(sx - g.offs_x) * DETAIL_SLOT_SIZE, z0 = float(sz - g.offs_z) * DETAIL_SLOT_SIZE;
+                const float x1 = x0 + DETAIL_SLOT_SIZE, z1 = z0 + DETAIL_SLOT_SIZE;
+                // Corners in the order of the palette's nibbles (r3 da_grass_gen.cs: a0 (x0, z0), a1 (x1, z0),
+                // a2 (x0, z1), a3 (x1, z1)).
+                const float cv[4] = {cover(b, x0, z0), cover(b, x1, z0), cover(b, x0, z1), cover(b, x1, z1)};
+                if (std::max({cv[0], cv[1], cv[2], cv[3]}) <= 0.f)
+                    continue;
+                // Its entry: the community's own, else an empty one, else the weakest of the slot's.
+                u32 k = 4, weakest = 0, weakest_sum = ~0u;
+                bool bare = true;
+                for (u32 e = 0; e < 4; ++e)
+                {
+                    const u32 id = S.r_id(e);
+                    if (id == vid)
+                        k = e;
+                    const DetailPalette& pal = S.palette[e];
+                    const u32 sum = id == DetailSlot::ID_Empty ? 0u : u32(pal.a0 + pal.a1 + pal.a2 + pal.a3);
+                    bare = bare && sum == 0u;
+                    if (sum < weakest_sum)
+                    {
+                        weakest_sum = sum;
+                        weakest = e;
+                    }
+                }
+                const bool fresh = k == 4;
+                if (fresh)
+                    k = weakest;
+                DetailPalette& P = S.palette[k];
+                const float was[4] = {fresh ? 0.f : P.a0 / 15.f, fresh ? 0.f : P.a1 / 15.f, fresh ? 0.f : P.a2 / 15.f,
+                    fresh ? 0.f : P.a3 / 15.f};
+                S.w_id(k, vid);
+                P.a0 = q(std::max(was[0], cv[0]));
+                P.a1 = q(std::max(was[1], cv[1]));
+                P.a2 = q(std::max(was[2], cv[2]));
+                P.a3 = q(std::max(was[3], cv[3]));
+                // The meadow gives way under the reeds (the beds' own entries keep theirs).
+                for (u32 e = 0; e < 4; ++e)
+                {
+                    const u32 id = S.r_id(e);
+                    if (e == k || id == DetailSlot::ID_Empty || (id > next && id < DetailSlot::ID_Empty))
+                        continue;
+                    DetailPalette& O = S.palette[e];
+                    O.a0 = q(O.a0 / 15.f * (1.f - cv[0]));
+                    O.a1 = q(O.a1 / 15.f * (1.f - cv[1]));
+                    O.a2 = q(O.a2 / 15.f * (1.f - cv[2]));
+                    O.a3 = q(O.a3 / 15.f * (1.f - cv[3]));
+                }
+                // The box down to the bed, a hand over it at least; a slot the level left bare gets the bed's alone.
+                const float base = S.r_ybase(), top = base + S.r_yheight();
+                const float nb = bare ? b.y_bed - 0.3f : std::min(base, b.y_bed - 0.3f);
+                const float nt = bare ? b.y_bed + 0.6f : std::max(top, b.y_bed + 0.6f);
+                S.w_y(nb, nt - nb);
+                // A slot the level left bare has no sky term of its own: an open marsh.
+                if (bare && S.c_hemi < 12)
+                    S.c_hemi = 12;
+                const u32 emerge = u32(std::clamp(iFloor(b.depth / 0.1f + 0.5f), 0, 15));
+                S.c_r = std::max(u32(S.c_r), emerge);
+                // (green: which of the slot's four objects are beds)
+                S.c_g = S.c_g | (1u << k);
+                s_reed_emerge_max = std::max(s_reed_emerge_max, float(S.c_r) * 0.1f);
+                ++slots;
+            }
+    }
+    Msg("* [grass] %u reed beds grow in %u slot touches (deepest emergence %.1f m)", u32(s_reed_beds.size()), slots,
+        s_reed_emerge_max);
+}
+} // namespace
+
+void da_grass_set_reed_beds(xr_vector<DaReedBed>&& beds, bool reload)
+{
+    s_reed_beds = std::move(beds);
+    if (reload && RImplementation.Details && RImplementation.Details->m_blades && g_pGameLevel && !g.failed)
+    {
+        // In a running level the detail calc task builds this frame's tiles from the slots on a worker: done first.
+        RImplementation.Details->WaitForCalc();
+        da_grass_level_load();
+    }
+}
+
 void da_grass_level_load()
 {
     release_all();
@@ -1920,8 +2060,15 @@ void da_grass_level_load()
     g.offs_z = int(dm->dtH.z_offs());
     g.slot_copy.assign(dm->dtSlots, dm->dtSlots + size_t(g.size_x) * g.size_z);
     g.slots = g.slot_copy.data();
+    // The stock colour bits mean nothing to the blades; red and green carry the reed beds' water and mask below.
+    for (DetailSlot& S : g.slot_copy)
+    {
+        S.c_r = 0;
+        S.c_g = 0;
+    }
     for (u32 i = 0; i < dm->objects.size() && i < dm_max_objects; ++i)
         g.id_profile[i] = u8(da_grass_object_profile(*dm->objects[i]) + 1);
+    apply_reed_beds(*dm);
     g.level_hmax = 0.3f;
     g.max_area_width = 0.006f;
     for (u32 c = 0; c < da_grass_communities; ++c)
@@ -1941,6 +2088,8 @@ void da_grass_level_load()
             g.max_area_width = std::max({g.max_area_width, P.leaf_w[1], P.culm_w[1] * 2.f});
         }
     }
+    // A reed bed's culms stand that much taller for the water over their roots.
+    g.level_hmax += s_reed_emerge_max;
     g.slot_info.assign(size_t(g.size_x) * g.size_z, 0);
     bool any = false;
     for (size_t i = 0; i < g.slot_info.size(); ++i)
@@ -2092,7 +2241,7 @@ void da_grass_frame_latch()
             const u32 p = i < C.count ? C.species[i] : C.forb[i - C.count];
             const DaGrassProfile& P = g_data.profiles[p];
             L.dens_now[c] = std::max(L.dens_now[c], species_lanes(P, L.height) * L.density_scale *
-                std::max(curve_or(g_data.keys[p].s[gkDensity], day, 1.f), 0.f) * L.grass_visible);
+                std::max(curve_or(g_data.keys[p].s[gkDensity], day, 1.f), 0.f) * (P.winter_stand > 0.5f ? 1.f : L.grass_visible));
         }
     }
     for (u32 i = 0; i < 2; ++i)

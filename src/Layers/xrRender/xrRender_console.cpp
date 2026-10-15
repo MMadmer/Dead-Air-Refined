@@ -458,6 +458,8 @@ int ps_r__gpu_driven = -1;
 int ps_r__grass_mesh = -1;
 // QA: 0 draws the stock bushes again in place of the procedural shrubs (SHRUBS.md).
 int ps_r__shrubs = 1;
+// QA: 0 draws the stock reed models again in place of the blades' reed beds (GRASS.md, reed beds).
+int ps_r__reeds = 1;
 // QA: draws of the shrubs left out (bits: 1 wood, 2 leaves, 4 blooms, 8 clusters, 16 blobs, 32 every shadow map; the
 // leaves one by one: 64 the shaped ones, 128 the cut quads, 256 the near sprays).
 int ps_r__dbg_shrubs = 0;
@@ -2212,6 +2214,7 @@ void xrRender_initconsole()
     CMD2(CCC_DaCall, "r__snow_stats", &da_snow_stats);
     // QA: the procedural shrubs (SHRUBS.md) - the stock bushes back for an A/B, the frame's numbers, one species everywhere.
     CMD4(CCC_RuntimeInteger, "r__shrubs", &ps_r__shrubs, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__reeds", &ps_r__reeds, 0, 1);
     CMD2(CCC_DaCall, "r__shrubs_stats", &da_shrubs_stats);
     CMD2(CCC_DaCallArg, "r__shrubs_species_pin", &da_shrubs_pin_species);
     CMD2(CCC_DaCallArg, "r__shrubs_probe", &da_shrubs_probe);

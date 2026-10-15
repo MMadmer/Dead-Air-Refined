@@ -47,6 +47,37 @@ communities are complete ones a mod can map its own classes to. The stock decomp
 up. The key is verified byte for byte against the reference generator (`tools/seasons/gen_season_data.py`,
 478 keys over 494 objects).
 
+### Reed beds
+
+The levels' reeds and sedge are not details but stock multiple-use models (`trees_kamish_big_01`, `_big_02`,
+`trees_kamish_sux`, `trees_kamysh`, `trees_osoka`, `trees_osoka_sux`: GSC's crossed cards). Where one stands the
+blades grow a reed bed instead (`src/Layers/xrRender/da_reeds.{h,cpp}`, `dead_air_x64_reeds.ltx`):
+
+- `[reed_cards]` names a stock card (the level shader's base texture) and the community a model of it stands for:
+  `reed_bed` (*Phragmites australis* 73 %, *Typha latifolia*, *Phalaris arundinacea*, *Carex acuta*, *Glyceria
+  maxima* - the Pripyat floodplain's beds) or `sedge_marsh`. A mod's reed model is added here by its card.
+- At level load (after the vegetation core's census, before the bake and the GPU-driven registry) every such model
+  is a bed: its footprint (`footprint` x its mean half width), the bed under it (the static ground past the water),
+  the water over that bed. The models leave their sector hierarchies (every view, shadow, the GPU registry and the ray
+  tracing scene forget them; the ray tracing scene keeps them as stand-ins), the blades are set up again with the beds.
+- The blades' copy of the slots carries them: each community takes a free object id at the top of the table, a slot
+  under a bed gets that id with the bed's cover at its four palette corners (full within three quarters of the radius,
+  none three quarters of a metre past it), the meadow's own objects giving way by as much, its box down to the bed (the
+  ground window finds the bed under the passable water), an open sky term where the level left the slot bare. Its
+  colour bits, unused by the blades, carry the water: red is how far the culms rise for it (0.1 m units, the deepest
+  bed's, x `emerge`), green a mask of the slot's bed objects. A bed's blade rises by that much at full growth, so a reed
+  in a metre of water stands its own height over the surface (in spring the new shoots come up through it).
+- Past the blades' radius the stock model's billboard stands for the bed, fading in over the radius' last 15 % as the
+  blades fade out (`da_reeds_frame`: the replaced FLODs into the main view's LOD list after its graph is built; the
+  batch's alpha comes from the encoded size measure); its cells are drawn for the day by the bake like every stock-path
+  FLOD (`TREES.md`).
+- The year is the species' own: green culms and leaves from May, the plumes in August and September, straw in
+  November, and through the winter last year's culms stand pale over the snow and the ice with their plumes
+  (`winter_stand = 1` on *Phragmites* and *Typha*: the snow's grass visibility, which leaves the meadows bare from
+  December to February, does not thin them; the snow over a blade still buries it).
+- `r__reeds 0` (QA) puts the stock models back. Log: `* [reeds] N stock reed models stand as reed beds of the blades
+  (M in water)`, `* [grass] N reed beds grow in M slot touches (deepest emergence X m)`.
+
 ## Species and communities
 
 **Species** (`[grass_species_N]`, up to 64 - the six species bits of a record; `make_species.py`): 64 plants of
