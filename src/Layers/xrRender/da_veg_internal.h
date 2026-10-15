@@ -273,6 +273,8 @@ struct Species
     // Row 21 (trees, z and w): the upper bark's value and chroma against its layer's (a pine's mirror bark less
     // saturated than its painted tile).
     float bark_value_upper{1.f}, bark_chroma_upper{1.f};
+    // Row 21 x: how far one plant's crop falls short of the best one's (0 every plant alike .. 0.95: some next to bare).
+    float crop_spread{};
     DaSeasonCurve keys[skCount];
     DaColourCurve colours[scCount];
 };

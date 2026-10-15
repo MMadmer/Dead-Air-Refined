@@ -880,6 +880,10 @@ f_deffer	main	(p_shrub_bloom I)
 						gi = fruit_turn(i, G);
 					const fpart P = fruit_part(i, G, gi);
 					g = float2(g.x * kGolden.x - g.y * kGolden.y, g.x * kGolden.y + g.y * kGolden.x);
+					// The fruits the group carries (fb.w, shrub_fruit_keep): the rest of its layout never set or was eaten,
+					// its places in the group left empty.
+					[branch] if (shrub_b_hash(float2(float(i), 11.0f), hsh) >= I.fb.w)
+						continue;
 					float4 l = 0.0f;
 					float3 nn = float3(0.0f, 0.0f, 1.0f);
 					float z = -1e3f;

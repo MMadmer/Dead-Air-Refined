@@ -441,9 +441,15 @@ copy of them; RT shadows leave foliage to the cascades anyway.
 and the lean (`da_wind_core.h`, the shaders' own maths) - now and a frame back, into the bush's instance record
 (every vertex evaluated the gust field's noise twice before). Every vertex bends with its chain of axes from the
 stem out (up to four): each axis turns rigidly about its base by its own angle - its flex times the wind's
-pressure at the bush, a downwind lean and `da_sway` at the axis's own frequency and phase, the motors (bodies,
-shots, blasts) pushing it from its base with its length as the lever - a cantilever's deflection at a share of its
-length is its tip angle times the square root of the share. Leaves flutter about their petioles on top (the
+pressure at the bush, a downwind lean, the **gust passing its base now** (`da_wind_turb`, `da_wind_core.h`: eddies of
+8 and 4 m ridden downwind on the gust field's scroll, so a stem and its shoots bow together and a gust runs through
+the crown) and a small ring at the axis's own frequency while the gust shakes it (0.1 / sqrt(freq) of the push: a
+stem's a tenth, a twig's a few hundredths), the motors (bodies, shots, blasts) pushing it from its base with its
+length as the lever - a cantilever's deflection at a share of its
+length is its tip angle times the square root of the share. (Swung by `da_sway` at their own frequencies as the
+whole motion, the twigs went back and forth three to fourteen times a second in any breeze - 40 % of a birch crown's
+motion over 4-8 Hz at 7 m - and the crowns read as twitching; the grafted wood of the trees shares this bend.)
+Leaves flutter about their petioles on top (the
 species' flutter, the sheltered inner leaves less) in **eddies carried downwind** (frozen
 turbulence, at 1.5-5.5 m/s by the wind's strength): two analytic waves give each place its eddy's strength and a
 phase field coherent over a hand's span, so neighbouring leaves move together, a gust's front runs through the
@@ -476,8 +482,23 @@ of the species' flower and fruit (`bloom_size`, `fruit_size`); each draws at its
 fruit group's own outline without its stalks: a single fruit's length, a pair's or a corymb's breadth, a raceme's
 or a panicle's length (drawn at the flower's, a dog rose's hip was three times a leaflet).
 
+**How many fruits.** `fruits` is a group's layout - the most it holds -, not what it carries: the season key
+`fruit_keep` is the share of a group's fruits there today (the fruits its flowers set, then what the birds leave
+through the winter), `crop_spread` how far one bush's crop falls short of the best one's (a hash of the bush picks
+1 .. 1 - spread), and `shrub_fruit_keep` multiplies the two. A group's pixel shader drops each fruit of its layout
+whose hash is past that share - its place in the group left empty, the others' sizes kept -; a site of one fruit (a
+hip, a drupe, a pod) loses it whole, its share of the sites dropping instead; the clusters' and blobs' fruit cells
+take the same share. Snow lies on a flower's or a catkin's upper side, never on a fruit group or a pod (their quad
+turns to the eye: from above every one of them read as snowed over, a hawthorn's haws pink-white). Without the key a
+species keeps all it sets; only the common hawthorn has its own (Commons pack of 16.10.2026, 36 winter, 46 autumn and
+40 summer photos of *Crataegus monogyna*): a corymb ripens half of its eight haws, a quarter of the corymbs none
+(`fruit` 0.75), one bush laden and the next with a few clusters (`crop_spread` 0.7), and the thrushes leave 70 % by
+mid-December, 45 % by late January, a fifth by March, the frosts darkening them maroon by January (`ripe` 1.85; with
+every one of its corymbs full, every twig of a January hawthorn was red).
+
 A **fruit group** is laid out in three dimensions by the inflorescence it came from (`bloom_shape`) and drawn whole
-by the pixel shader, exactly `fruits` of them (up to 64), facing the camera with its depth toward the eye: a
+by the pixel shader, a layout of `fruits` of them (up to 64) and the share it carries (below), facing the camera
+with its depth toward the eye: a
 corymb's flat-topped disc on Vogel's spiral (guelder rose, hawthorn, alder buckthorn); an elder's cyme, five rays
 each ending in a small dome of berries, turning over as they ripen (`umbel`); a raceme's or a berry panicle's
 fruits round their axis by the golden angle, the biggest at the base (bird cherry, serviceberry, currants, red
@@ -592,7 +613,7 @@ leaf layers a, b, card and leaflet; `leaf_hull`: the near leaf's hull; `bark_tex
 manifests, `tools/shrubs/textures`; `young_relief`, `bark_tint`, `bark_contrast`, `bark_scale`: the bark as the
 species wears it; `prickle_colour`: linear rgb; `twig_blush`: linear rgb and its share; `far_value`, `far_chroma`: the far
 parts' value and chroma on their open, light top against the near leaves, 1 unless measured off - a dog rose's 0.8
-and 0.7); the season keys as
+and 0.7; `crop_spread`: how far one bush's crop of fruit falls short of the best one's); the season keys as
 `day:value` lists (`leaf_out`, `leaf_grow`, `autumn`, `fallen`, `bloom`, `bloom_stage`, `fruit`, `ripe`,
 `catkin`, `catkin_grow`, `autumn_spread`, `fruit_keep`) and the colours as `day:#rrggbb` lists (`c_young`,
 `c_summer`, `c_autumn_a`, `c_autumn_b`, `c_dead`, `c_under`, `c_bark`, `c_twig`, `c_petal`, `c_centre`,

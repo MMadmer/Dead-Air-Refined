@@ -162,7 +162,7 @@ species('bet_pen', 'Betula pendula Roth', [16, 25], [0.35, 0.55],
         dict(outline='ovate', gloss=0.2, translucency=0.6, flutter=0.25, fold=0.1, underside=[1.25, 0.05],
              jitter=[0.15, 0.06], bloom_shape='none', fruit_shape='cone', fruits=1, catkin_shape='hanging'),
         catkin_winter=True, autumn_order=(0.45, 0.4), crown_fill=0.6, follow=0.7, dead=0.03, bark_zone=(0.5, 3.5),
-        bark=[0.3, 0.2, 0.9], bark_scale=2.5, bark_contrast=1.2, lichen=0.2, fruit_keep=0.3, twig_r=0.012,
+        bark=[0.3, 0.2, 0.9], bark_scale=2.5, bark_contrast=1.2, lichen=0.2, twig_r=0.012,
         browning=0.1)
 # Downy birch: rounder and denser than silver birch, the twigs not weeping, often several crooked stems on bogs; the
 # base greyer, shallowly cracked (no thick black rhytidome); a week later.
@@ -179,7 +179,7 @@ species('bet_pub', 'Betula pubescens Ehrh.', [12, 20], [0.45, 0.7],
         dict(outline='ovate', gloss=0.08, translucency=0.55, flutter=0.2, fold=0.1, underside=[1.3, 0.06],
              jitter=[0.15, 0.06], bloom_shape='none', fruit_shape='cone', fruits=1, catkin_shape='hanging'),
         catkin_winter=True, autumn_order=(0.45, 0.4), crown_fill=0.7, follow=0.6, dead=0.03, bark_zone=(0.3, 1.2),
-        bark=[0.3, 0.15, 0.8], bark_scale=2.5, bark_contrast=1.15, lichen=0.3, fruit_keep=0.3, twig_r=0.01,
+        bark=[0.3, 0.15, 0.8], bark_scale=2.5, bark_contrast=1.15, lichen=0.3, twig_r=0.01,
         browning=0.1)
 # Aspen: a long clear bole, few thick ascending limbs, a sparse twig network, leaves clustered on short shoots on
 # flattened petioles (the whole crown trembles); grey silky catkins in March, seed cotton in May; copper flush.
@@ -230,7 +230,7 @@ species('car_bet', 'Carpinus betulus L.', [15, 20], [0.6, 0.8],
         dict(outline='elliptic', gloss=0.1, translucency=0.6, flutter=0.1, fold=0.18, underside=[1.2, 0.05],
              jitter=[0.15, 0.06], bloom_shape='none', fruit_shape='pod', fruits=8, catkin_shape='hanging'),
         marcescent=0.4, autumn_order=(0.45, -0.2), crown_fill=0.85, follow=0.55, dead=0.02, bark_zone=None,
-        bark=[0.15, 0.2, 0.2], bark_scale=2.0, bark_contrast=1.15, lichen=0.35, fruit_keep=0.2)
+        bark=[0.15, 0.2, 0.2], bark_scale=2.0, bark_contrast=1.15, lichen=0.35)
 # Norway maple: opposite, stout twigs, branches ascending then spreading into a dense rounded dome; palmate leaves
 # 10-18 cm on long petioles; lime-green upright corymbs before the leaves, wide-angled samaras.
 species('ace_pla', 'Acer platanoides L.', [15, 25], [0.6, 0.85],
@@ -245,7 +245,7 @@ species('ace_pla', 'Acer platanoides L.', [15, 25], [0.6, 0.85],
         dict(outline='lobed', lobes=5, gloss=0.2, translucency=0.6, flutter=0.1, fold=0.08, underside=[1.2, 0.05],
              jitter=[0.15, 0.06], bloom_shape='corymb', petals=5, fruit_shape='pod', fruits=6),
         autumn_order=(0.45, -0.35), crown_fill=0.85, follow=0.55, dead=0.01, bark_zone=(2.0, 6.0),
-        bark=[0.6, 0.15, 0.05], bark_scale=2.5, bark_contrast=1.2, lichen=0.25, fruit_keep=0.3)
+        bark=[0.6, 0.15, 0.05], bark_scale=2.5, bark_contrast=1.2, lichen=0.25)
 # Small-leaved lime: a dense ovoid crown, two-ranked zigzag twigs, the lower branches arching down, sprouts at the
 # base; heart-shaped leaves 3-8 cm, bluish-white below; scented pale yellow flowers in late June, nutlets on bracts.
 species('til_cor', 'Tilia cordata Mill.', [15, 25], [0.55, 0.75],
@@ -259,7 +259,7 @@ species('til_cor', 'Tilia cordata Mill.', [15, 25], [0.55, 0.75],
         dict(outline='round', gloss=0.1, translucency=0.55, flutter=0.12, fold=0.08, underside=[1.5, 0.25],
              jitter=[0.15, 0.06], bloom_shape='corymb', petals=5, fruit_shape='nut', fruits=4),
         autumn_order=(0.45, -0.2), crown_fill=0.85, follow=0.55, dead=0.01, bark_zone=(2.0, 6.0),
-        bark=[0.5, 0.2, 0.1], bark_scale=2.5, bark_contrast=1.15, lichen=0.3, fruit_keep=0.5, fruit_winter=True)
+        bark=[0.5, 0.2, 0.1], bark_scale=2.5, bark_contrast=1.15, lichen=0.3, fruit_winter=True)
 # European ash: a high open crown on a long clean bole, few stout opposite branches upturned at the ends
 # (candelabra), thick grey-green twigs with black buds; pinnate leaves 20-35 cm of 9-13 leaflets, out late (mid May),
 # falling green or pale yellow; purple-black flower tufts before the leaves, samara bunches hanging all winter.
@@ -275,8 +275,7 @@ species('fra_exc', 'Fraxinus excelsior L.', [15, 25], [0.45, 0.65],
         dict(outline='lanceolate', gloss=0.3, translucency=0.55, flutter=0.15, fold=0.25, underside=[1.2, 0.05],
              jitter=[0.15, 0.06], bloom_shape='panicle', petals=0, fruit_shape='pod', fruits=12, leaflet_ratio=0.3),
         autumn_green=0.45, fruit_winter=True, autumn_order=(0.4, 0.0), graft_levels=2, crown_fill=0.55, follow=0.55,
-        dead=0.08, bark_zone=(2.0, 6.0), bark=[0.55, 0.25, 0.05], bark_scale=2.5, bark_contrast=1.2, lichen=0.3,
-        fruit_keep=0.8)
+        dead=0.08, bark_zone=(2.0, 6.0), bark=[0.55, 0.25, 0.05], bark_scale=2.5, bark_contrast=1.2, lichen=0.3)
 # European white elm: a broad rounded open crown, spreading branches, fine dense two-ranked zigzag twigs; elliptic
 # leaves 6-12 cm with an oblique base; long-stalked hanging flower tassels in March, green samaras haze the bare
 # crown in late April and fall in May.
@@ -319,7 +318,7 @@ species('sor_auc', 'Sorbus aucuparia L.', [5, 12], [0.5, 0.7],
         dict(outline='lanceolate', gloss=0.06, translucency=0.55, flutter=0.12, fold=0.25, underside=[1.25, 0.1],
              jitter=[0.15, 0.06], bloom_shape='corymb', petals=5, fruit_shape='berry', fruits=30, leaflet_ratio=0.3),
         fruit_winter=True, autumn_order=(0.4, 0.2), crown_fill=0.6, follow=0.55, dead=0.03, bark_zone=(0.5, 1.5),
-        bark=[0.15, 0.4, 0.6], bark_scale=2.0, bark_contrast=1.1, lichen=0.3, fruit_keep=0.6)
+        bark=[0.15, 0.4, 0.6], bark_scale=2.0, bark_contrast=1.1, lichen=0.3)
 
 # ---- Floodplain and wetland trees ---------------------------------------------------------------------------------
 # Black alder: a narrow cone with a persistent leader when young, branches near-perpendicular in regular tiers;
@@ -336,8 +335,7 @@ species('aln_glu', 'Alnus glutinosa (L.) Gaertn.', [18, 25], [0.4, 0.55],
         dict(outline='round', gloss=0.35, translucency=0.45, flutter=0.1, fold=0.06, underside=[1.2, 0.04],
              jitter=[0.15, 0.06], bloom_shape='none', fruit_shape='cone', fruits=4, catkin_shape='hanging'),
         catkin_winter=True, fruit_all_year=True, autumn_green=0.6, autumn_order=(0.3, 0.2), crown_fill=0.8, follow=0.75,
-        dead=0.03, bark_zone=(3.0, 8.0), bark=[0.6, 0.35, 0.5], bark_scale=2.5, bark_contrast=1.2, lichen=0.35,
-        fruit_keep=1.0)
+        dead=0.03, bark_zone=(3.0, 8.0), bark=[0.6, 0.35, 0.5], bark_scale=2.5, bark_contrast=1.2, lichen=0.35)
 # White willow: a broad rounded to irregular crown, often leaning or several stems, ascending branches, long flexible
 # twigs with drooping tips; lanceolate leaves 5-10 cm, silky white below (the crown flashes silver); catkins with the
 # leaves, seed cotton in late May.
@@ -436,7 +434,7 @@ species('rob_pse', 'Robinia pseudoacacia L.', [10, 20], [0.5, 0.8],
         dict(outline='elliptic', gloss=0.06, translucency=0.55, flutter=0.15, fold=0.25, underside=[1.2, 0.05],
              jitter=[0.15, 0.06], bloom_shape='raceme', petals=5, fruit_shape='pod', fruits=3, leaflet_ratio=0.6),
         fruit_winter=True, autumn_green=0.4, autumn_order=(0.4, 0.2), graft_levels=2, crown_fill=0.5, follow=0.55,
-        dead=0.03, bark_zone=None, bark=[0.9, 0.1, 0.0], bark_scale=3.0, bark_contrast=1.35, lichen=0.15, fruit_keep=0.8)
+        dead=0.03, bark_zone=None, bark=[0.9, 0.1, 0.0], bark_scale=3.0, bark_contrast=1.35, lichen=0.15)
 # Box elder: an irregular sprawling crown, a short trunk splitting into curved limbs, stems leaning and with age
 # almost lying, dense water sprouts; opposite green violet-bloomed twigs; pinnate leaves of 3-5 leaflets; yellow-green
 # tassels before the leaves, samara bunches hanging all winter.
@@ -453,7 +451,7 @@ species('ace_neg', 'Acer negundo L.', [9, 17], [0.7, 1.1],
         dict(outline='ovate', gloss=0.06, translucency=0.55, flutter=0.12, fold=0.25, underside=[1.2, 0.05],
              jitter=[0.15, 0.06], bloom_shape='raceme', petals=0, fruit_shape='pod', fruits=10, leaflet_ratio=0.55),
         fruit_winter=True, autumn_order=(0.4, 0.1), crown_fill=0.7, follow=0.55, dead=0.03, bark_zone=(1.0, 3.0),
-        bark=[0.45, 0.3, 0.1], bark_scale=2.0, bark_contrast=1.15, lichen=0.15, fruit_keep=0.8)
+        bark=[0.45, 0.3, 0.1], bark_scale=2.0, bark_contrast=1.15, lichen=0.15)
 # Sycamore maple: a broad dense dome; opposite stout twigs with green buds; dark coarse-toothed five-lobed leaves
 # 10-16 cm, glaucous below; hanging yellow-green racemes in May, samaras at an acute angle; grey bark flaking in
 # irregular plates on old trees.
@@ -469,7 +467,7 @@ species('ace_pse', 'Acer pseudoplatanus L.', [20, 30], [0.6, 0.85],
         dict(outline='lobed', lobes=5, gloss=0.12, translucency=0.5, flutter=0.1, fold=0.08, underside=[1.4, 0.2],
              jitter=[0.15, 0.06], bloom_shape='raceme', petals=5, fruit_shape='pod', fruits=8),
         autumn_order=(0.45, -0.35), crown_fill=0.85, follow=0.55, dead=0.02, bark_zone=(2.0, 5.0),
-        bark=[0.55, 0.15, 0.05], bark_scale=2.5, bark_contrast=1.2, lichen=0.25, fruit_keep=0.2)
+        bark=[0.55, 0.15, 0.05], bark_scale=2.5, bark_contrast=1.2, lichen=0.25)
 # Horse chestnut: a broad dense ovoid dome, upswept branches with hanging branchlets turning up at their tips,
 # opposite stout twigs with big sticky buds; palmate leaves of 5-7 leaflets 10-25 cm, browned by the leaf miner from
 # July; white candles in May, spiny capsules and conkers in September.
@@ -515,7 +513,7 @@ species('fra_pen', 'Fraxinus pennsylvanica Marshall', [15, 20], [0.5, 0.75],
         dict(outline='lanceolate', gloss=0.2, translucency=0.55, flutter=0.15, fold=0.25, underside=[1.2, 0.05],
              jitter=[0.15, 0.06], bloom_shape='panicle', petals=0, fruit_shape='pod', fruits=10, leaflet_ratio=0.4),
         fruit_winter=True, autumn_order=(0.4, 0.1), graft_levels=2, crown_fill=0.6, follow=0.55, dead=0.04,
-        bark_zone=None, bark=[0.7, 0.15, 0.0], bark_scale=2.5, bark_contrast=1.25, lichen=0.25, fruit_keep=0.8)
+        bark_zone=None, bark=[0.7, 0.15, 0.0], bark_scale=2.5, bark_contrast=1.25, lichen=0.25)
 
 # ---- Orchard relics -------------------------------------------------------------------------------------------------
 # Apple (feral and relic): a broad, rounded, low, gnarled crown on crooked limbs, spur shoots, water sprouts and dead
@@ -531,7 +529,7 @@ species('mal_dom', 'Malus domestica Borkh.', [5, 10], [0.9, 1.3],
         dict(outline='ovate', gloss=0.1, translucency=0.45, flutter=0.08, fold=0.1, underside=[1.35, 0.1],
              jitter=[0.15, 0.06], bloom_shape='corymb', petals=5, fruit_shape='pome', fruits=1),
         autumn_order=(0.4, -0.1), crown_fill=0.75, follow=0.55, dead=0.1, bark_zone=None, bark=[0.7, 0.15, 0.05],
-        bark_scale=2.0, bark_contrast=1.2, lichen=0.4, fruit_keep=0.15)
+        bark_scale=2.0, bark_contrast=1.2, lichen=0.4)
 # Pear and wild pear: a narrow, steep, pyramidal-ovoid crown, branches ascending at acute angles, spur shoots and
 # thorny spurs on the wild trees; rounded glossy leathery leaves on long petioles; white blossom in late April, small
 # hard pears in September; dark grey bark cracked into small square blocks.
@@ -547,7 +545,7 @@ species('pyr_com', 'Pyrus communis L. (incl. P. pyraster)', [10, 20], [0.45, 0.6
         dict(outline='round', gloss=0.4, translucency=0.4, flutter=0.15, fold=0.08, underside=[1.15, 0.03],
              jitter=[0.15, 0.06], bloom_shape='corymb', petals=5, fruit_shape='pome', fruits=2),
         autumn_order=(0.4, -0.1), crown_fill=0.7, follow=0.55, dead=0.05, bark_zone=None, bark=[0.8, 0.1, 0.0],
-        bark_scale=2.0, bark_contrast=1.3, lichen=0.35, fruit_keep=0.1)
+        bark_scale=2.0, bark_contrast=1.3, lichen=0.35)
 # Sour cherry (the shrubs' pru_cer grown as a tree): a rounded crown with drooping thin branches; glossy dark green
 # elliptic leaves; white blossom in late April, red cherries in late June and July; glossy red-brown bark with
 # horizontal lenticels, peeling in rings. (The stock cherry trees reach 16-24 m: wild cherry's size, sour cherry's
@@ -1540,7 +1538,8 @@ def season_keys(sid):
     # (The top-down and inside/outside order spans about two weeks of the crown's colouring: more of the wave than a
     # bush's.)
     k['autumn_spread'] = [(1, 0.2 if ex.get('evergreen') else 0.5)]
-    k['fruit_keep'] = [(1, ex.get('fruit_keep', 0.0))]
+    # (A tree's fruit groups keep every fruit they set: shrub_fruit_keep.)
+    k['fruit_keep'] = [(1, 1.0)]
     return k
 
 

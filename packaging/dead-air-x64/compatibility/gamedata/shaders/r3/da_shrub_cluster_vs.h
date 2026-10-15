@@ -26,7 +26,8 @@ struct v2p_shrub_mass
 	float4	t_h			: TEXCOORD4;	// the quad's x direction (view space), hemi x occlusion
 #endif
 	float4	part		: TEXCOORD5;	// x species, y rank, z fall, w light
-	float4	dens		: TEXCOORD6;	// x leaf cover (Beer-Lambert of its area), y cells across, z bloom share, w hash
+	float4	dens		: TEXCOORD6;	// x leaf cover (Beer-Lambert of its area), y cells across, z the cells' share in
+										// flower or fruit, w hash
 	float4	misc		: TEXCOORD7;	// x the plant's state (shrub_mass_state), y its phenology offset, z blob (0/1), w size on
 										// screen (px)
 	float4	xy_t		: TEXCOORD8;	// x, y across and along the quad (-1..1), z translucency where the light comes through
@@ -116,7 +117,10 @@ v2p_shrub_mass	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 	const float leaf_len = sqrt(max(e_area, 1e-6f) / (0.67f * ratio)) * I.scale;
 	const float cells = blob && e_area <= 0.0f ? 12.0f : clamp(2.0f * ra.x * I.scale / max(0.75f * leaf_len, 1e-3f), 3.0f, blob ? 48.0f : 36.0f);
 	O.part = float4(float(I.species), E.a, E.b, light);
-	O.dens = float4(cover, cells, bloom_share, V.hash);
+	// (The share of the cells that flower or fruit now: a fruit cell at the share of its group's fruits the bush carries,
+	// as the near tier draws them.)
+	const float4 K1 = shrub_seas(I.species, 1);
+	O.dens = float4(cover, cells, bloom_share * max(K1.x, K1.z * 0.7f * shrub_fruit_keep(I.species, I.seed)), V.hash);
 	// (The plant's state for da_shrub_mass.h - alive, dead, a Red Forest pine's red needles, its marcescent share and
 	// spring lead -, its phenology offset.)
 	O.misc = float4(shrub_mass_state(I, I.species), I.pheno, blob ? 1.0f : 0.0f, 0.0f);

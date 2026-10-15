@@ -701,8 +701,20 @@ def texture_lines(sid):
             ['prickle_colour = %s' % fmt([round(x, 4) for x in to_lin(hex_rgb(PRICKLE[sid]))])] if sid in PRICKLE else []) + (
             ['twig_blush = %s' % fmt([round(x, 4) for x in to_lin(hex_rgb(BLUSH[sid][0]))] + [BLUSH[sid][1]])]
             if sid in BLUSH else []) + (['far_value = %s' % fmt(FAR_VALUE[sid])] if sid in FAR_VALUE else []) + (
-            ['far_chroma = %s' % fmt(FAR_CHROMA[sid])] if sid in FAR_CHROMA else [])
+            ['far_chroma = %s' % fmt(FAR_CHROMA[sid])] if sid in FAR_CHROMA else []) + (
+            ['crop_spread = %s' % fmt(FRUIT_CROP[sid]['crop_spread'])] if sid in FRUIT_CROP else [])
 
+
+# The fruit a species' groups carry (season key fruit_keep: the share of a group's fruits that set, then what the
+# birds leave of it through the winter), the share of its flowering sites that set any, and how far one bush's crop
+# falls short of the best one's (crop_spread). Every other species keeps all it sets.
+# Common hawthorn (Commons pack 16.10.2026: 36 winter, 46 autumn, 40 summer photos of Crataegus monogyna): a corymb of
+# five to twenty-five flowers ripens one to eight haws, four or so in a good year, and a quarter of the corymbs set
+# none; one bush stands laden in October, the next carries a few clusters; thrushes and waxwings strip the haws through
+# the winter - the January photos keep a quarter of the autumn's crop or less, dark and shrivelled, by March a few.
+# winter: (day of the year, share of the set left), 'b' the bud burst.
+FRUIT_CROP = {'cra_mon': dict(set=0.5, sites=0.75, crop_spread=0.7,
+                              winter=[(300, 1.0), (349, 0.7), (20, 0.45), (60, 0.2), ('b', 0.1)])}
 
 # Phenology the flora's cards have wrong for the zone: the brooms' pods blacken by mid-July (their 'ripe' was the
 # seed's shedding in late summer).
@@ -957,7 +969,15 @@ def season_keys(sid):
         # Ripeness 0 .. 0.7 while the fruit grows, 0.7 .. 1 while it colours: a fruit stays green until its last
         # weeks (a third of its time, two weeks at least); the bloom shaders read the two stretches apart.
         turn = wrap(max(fset + 5, r - COLOUR_DAYS.get(sid, max(14, 0.3 * (r - fset)))))
-        if ex.get('fruit_winter'):
+        fc = FRUIT_CROP.get(sid)
+        if fc and ex.get('fruit_winter'):
+            # Its sites hold their groups to the bud burst; the birds take the fruits one by one (fruit_keep).
+            b = ph.get('bud_burst') or 100
+            k['fruit'] = [(fset, 0.0), (set_, fc['sites']), (wrap(b - 8), fc['sites']), (wrap(b), 0.0)]
+            # (The frosts darken what is left: a hawthorn's haws maroon by January.)
+            k['ripe'] = [(fset, 0.0), (turn, 0.7), (r, 1.0), (wrap(r + 60), 1.3), (20, 1.85), (wrap(b - 5), 1.9), (wrap(b), 0.0)]
+            k['fruit_keep'] = [(wrap(fset), fc['set'])] + [(wrap(b if d == 'b' else d), fc['set'] * v) for d, v in fc['winter']]
+        elif ex.get('fruit_winter'):
             b = ph.get('bud_burst') or 100
             k['fruit'] = [(fset, 0.0), (set_, 1.0), (wrap(r + 60), 1.0), (wrap(b - 20), 0.35), (wrap(b), 0.0)]
             k['ripe'] = [(fset, 0.0), (turn, 0.7), (r, 1.0), (wrap(r + 90), 1.4), (wrap(b - 5), 1.8), (wrap(b), 0.0)]
@@ -981,7 +1001,7 @@ def season_keys(sid):
                            (wrap(fe + 8), 3.0), (wrap(fe + 14), 0.0)]
             k['catkin_grow'] = [(wrap(fs - 12), 0.4), (wrap(fs + 4), 1.0)]
     k['autumn_spread'] = [(1, 0.45 if ex.get('autumn_margin') else 0.35)]
-    k['fruit_keep'] = [(1, 0.0)]
+    k.setdefault('fruit_keep', [(1, 1.0)])
     return k
 
 

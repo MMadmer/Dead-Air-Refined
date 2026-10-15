@@ -551,6 +551,8 @@ constexpr float kCell = 4.f;
 constexpr u32 kPushSize = 512;
 constexpr float kPushTexel = 0.125f;
 constexpr float kPushTau = 2.5f;
+// How fast a stamp pulls the push field toward its own push (s): a boot presses its grass within a tenth of a second.
+constexpr float kPushAttack = 0.06f;
 // The near sun cascade's box (render_phase_sun.cpp, m_sun_cascades[0].size).
 constexpr float kNearReach = 20.f;
 // Staging copies of the bin counts in flight: enough for a GPU-bound frame queue of any depth to keep
@@ -1814,7 +1816,7 @@ void update_push(CBackend& cmd)
     dispatch(cmd, g.s_resolve, kPushSize / 8, kPushSize / 8, {{0, g.push[prev].srv}}, {g.stamp.uav, g.push[cur].uav}, [&] {
         cmd.set_c("da_gp_win", win_cur);
         cmd.set_c("da_gp_win_prev", kPushTexel, float(kPushSize), float(g.px[prev]), float(g.pz[prev]));
-        cmd.set_c("da_gp_decay", decay, g.pvalid ? 1.f : 0.f, 0.f, 0.f);
+        cmd.set_c("da_gp_decay", decay, g.pvalid ? 1.f : 0.f, 1.f - std::exp(-Device.fTimeDelta / kPushAttack), 0.f);
     });
     g.pcur = cur;
     g.pvalid = true;

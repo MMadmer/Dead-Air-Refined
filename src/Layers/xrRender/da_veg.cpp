@@ -467,6 +467,8 @@ void parse_species(const CInifile::Sect& s, Species& sp, u32 (*class_bits)(pcstr
     sp.bark_value_upper = std::clamp(sp.bark_value_upper, 0.25f, 4.f);
     read_float(s, "bark_chroma_upper", sp.bark_chroma_upper);
     sp.bark_chroma_upper = std::clamp(sp.bark_chroma_upper, 0.f, 2.f);
+    read_float(s, "crop_spread", sp.crop_spread);
+    sp.crop_spread = std::clamp(sp.crop_spread, 0.f, 0.95f);
     sp.droop = sp.arch.leaf_droop;
     for (u32 k = 0; k < skCount; ++k)
         if (pcstr v = da_ini_value(s, kKeyNames[k]))
@@ -531,7 +533,7 @@ void fill_profile(const Species& S, float elem_area, Fvector4* r)
     r[19].set(S.wood_sap[0], S.wood_sap[1], S.wood_sap[2], heart ? std::clamp(S.wood_heart[3], 0.f, 0.95f) : 0.f);
     r[20].set(heart ? S.wood_heart[0] : S.wood_sap[0], heart ? S.wood_heart[1] : S.wood_sap[1], heart ? S.wood_heart[2] : S.wood_sap[2],
         S.ring_width);
-    r[21].set(0.f, 0.f, S.bark_value_upper, S.bark_chroma_upper);
+    r[21].set(S.crop_spread, 0.f, S.bark_value_upper, S.bark_chroma_upper);
 }
 
 void fill_season(const Species& S, float day, Fvector4* r, float lead)
@@ -542,7 +544,7 @@ void fill_season(const Species& S, float day, Fvector4* r, float lead)
     r[0].set(k(skLeafOut, 0.f, 1.f, 1.f), k(skLeafGrow, 0.f, 1.f, 1.f), k(skAutumn, 0.f, 1.f, 0.f), k(skFallen, 0.f, 1.f, 0.f));
     r[1].set(k(skBloom, 0.f, 1.f, 0.f), k(skBloomStage, 0.f, 2.f, 0.f), k(skFruit, 0.f, 1.f, 0.f), k(skRipe, 0.f, 2.f, 0.f));
     r[2].set(k(skCatkin, 0.f, 3.f, 0.f), k(skCatkinLen, 0.f, 1.f, 1.f), k(skAutumnSpread, 0.02f, 1.f, 0.25f),
-        k(skFruitKeep, 0.f, 1.f, 0.f));
+        k(skFruitKeep, 0.f, 1.f, 1.f));
     static const Fvector3 fallback[scCount] = {{0.16f, 0.3f, 0.06f}, {0.07f, 0.16f, 0.04f}, {0.45f, 0.36f, 0.06f},
         {0.35f, 0.08f, 0.04f}, {0.2f, 0.12f, 0.06f}, {0.12f, 0.2f, 0.08f}, {0.12f, 0.1f, 0.08f}, {0.16f, 0.12f, 0.08f},
         {0.8f, 0.8f, 0.75f}, {0.6f, 0.5f, 0.15f}, {0.15f, 0.3f, 0.08f}, {0.4f, 0.03f, 0.03f}, {0.35f, 0.32f, 0.18f}};

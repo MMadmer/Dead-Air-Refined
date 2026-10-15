@@ -250,7 +250,10 @@ grass_life	grass_life_at	(uint p, bool culm, float h_thatch, float h_sen, float 
 }
 
 // The tip of a blade (rest tilt and facing, length L) displaced by d (world xz, m): new facing and tilt, the
-// length kept, never below 5 % of the length above its root.
+// length kept, never below 5 % of the length above its root. The blade turns its flat side toward where its tip
+// leans by as much as it leans: near upright the tip's heading swings round at the least push, and a trampled blade
+// rising back past upright as its push faded spun about its length in a frame. Within a twentieth of its length of
+// upright it keeps its own facing, at a third it faces its lean (the tip's place is the same either way).
 void	grass_lean	(inout float2 facing, inout float tilt, float L, float2 d)
 {
 	float s, c;
@@ -261,7 +264,13 @@ void	grass_lean	(inout float2 facing, inout float tilt, float L, float2 d)
 	tilt = acos(saturate(tip.y));
 	const float hl = length(tip.xz);
 	if (hl > 1e-4f)
-		facing = tip.xz / hl;
+	{
+		const float2 to = tip.xz / hl;
+		const float turn = atan2(facing.x * to.y - facing.y * to.x, dot(facing, to)) * smoothstep(0.05f, 0.35f, hl);
+		float st, ct;
+		sincos(turn, st, ct);
+		facing = float2(facing.x * ct - facing.y * st, facing.x * st + facing.y * ct);
+	}
 }
 
 // The forces on a lane's blades at this or the previous frame: the tip's lean per metre of upright height

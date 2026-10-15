@@ -170,7 +170,9 @@ Per frame:
    nothing below its base. Only the strips the window moved onto (8 m steps) are rebaked.
 4. **Push field** (compute): every creature, corpse and settled object stamped this frame
    (`da_snow_stamps()`, the same deformer list as the snow) pushes the grass in a 64 m toroidal field
-   (512², 12.5 cm) outwards and along its motion; the field springs back over a few seconds.
+   (512², 12.5 cm) outwards and along its motion; the field springs back over a few seconds. A stamp pulls a texel
+   toward its push over a tenth of a second (0.06 s), never overwrites it: the frame a standing foot's outward press
+   outgrew the fading trail under it, the texel jumped from the trail's heading to the foot's and its blades spun.
 5. **Generation** (`da_grass_gen.cs`): per lane the community of the slot's objects (picked by their
    bilinear palette weights; presence and cover above), the species (forb patches and scattered forbs, then
    the graminoids' clonal patches or the scattered share), an early out on the species' widest lane against
@@ -396,6 +398,15 @@ The blades bend with exactly the stock tufts' wind (the travelling gust field, t
 heading, sheltering by the baked hemi) and the 8 wind motors (boots, bullets, blasts, scripts), plus the
 push field of every creature and settled object, plus a lean downhill. Shots and explosions keep working
 through the motors; trails of NPCs, mutants and the player press the grass through the push field.
+
+The wave is the gusts and lulls of the moment, not a harmonic: the tuft's lean is its mean (0.42 + 0.38 x the wind)
+plus the rest of the way times the turbulence at its root (`da_wind_turb`: eddies of 8 and 4 m ridden downwind on
+the gust field's scroll, the small ones boiling on the wave's clock), so a gust bows the grass in a patch that runs
+across the meadow and a lull lets it stand. (`da_sway` of the wave's phase rocked every blade from almost upright to
+its full lean about once a second in any wind, tonal at 1-3 Hz: twitching.) A blade turns its flat side toward its
+lean by as much as it leans (`grass_lean`: its own facing within a twentieth of its length of upright, the lean's at
+a third): near upright the tip's heading swings round at the least push, and a blade pushed back past upright - a
+trampled one standing up again, an upwind-facing one in a gust - spun about its length in a frame.
 
 The wave, the gust lean and the bob scale with the real wind (`field.z`, the effective wind 0..1.25,
 `smoothstep(0.03, 0.45)`): the gust field's amplitude never drops below 0.6, and without that factor a dead

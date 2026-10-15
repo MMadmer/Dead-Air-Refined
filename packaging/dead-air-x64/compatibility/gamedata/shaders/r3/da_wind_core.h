@@ -134,6 +134,22 @@ DA_FUNC float da_wind_field_dev(float wx, float wz, float ox, float oz)
 // place to place, a storm stream straightens to ~11.
 DA_FUNC float da_wind_dev_angle(float dev, float strength) { return dev * (0.50f - 0.30f * DA_SAT(strength)); }
 
+// ---- Turbulence ---------------------------------------------------------------------------
+// The gusts and lulls a plant feels from moment to moment (Taylor's frozen turbulence): eddies of eight and four
+// metres riding downwind at 0.6 and 0.9 of the gust field's scroll (the eddies near the ground travel slower than
+// the gust fronts; the small ones boil through the large ones instead of travelling as one picture), so a gust is
+// seen running across a meadow and through a crown and the plants on its path bow to it in turn - some two seconds
+// to a large eddy in light air, one in a storm. boil moves the small eddies on a clock of the consumer's own. -1 ..
+// 1, about 0.45 standard deviation. The cells and the shares keep the scroll's wrap at 2560 m seamless (192 and 576
+// periods of the hash's 64 cells).
+DA_FUNC float da_wind_turb(float wx, float wz, float ox, float oz, float boil)
+{
+    const float a = da_wf_noise((wx - 0.6f * ox) * 0.125f + 17.3f, (wz - 0.6f * oz) * 0.125f + 5.1f);
+    const float b = da_wf_noise((wx - 0.9f * ox) * 0.25f + 3.7f, (wz - 0.9f * oz) * 0.25f + 29.9f + boil);
+    const float t = (a * 0.65f + b * 0.35f - 0.5f) * 3.2f;
+    return t < -1.0f ? -1.0f : (t > 1.0f ? 1.0f : t);
+}
+
 // ---- Vertical profile ---------------------------------------------------------------------
 // Logarithmic wind profile of the surface layer: speed at height z relative to the 10 m
 // reference, with z0 the roughness length (0.03 m open grass, 0.5 m forest/village). Below
@@ -145,7 +161,8 @@ DA_FUNC float da_wind_profile(float z, float z0)
 }
 
 // ---- Waveforms ----------------------------------------------------------------------------
-// da_sway: a static downwind lean with smooth harmonic oscillation around it - three
+// da_sway (the stock trees and their far billboards): a static downwind lean with smooth harmonic oscillation around
+// it - three
 // incommensurable harmonics, C-infinity, ~[-1..1] with rare full peaks. The beat of the pair
 // IS the "lean - hold - half spring-back - lean again" the eye expects.
 DA_FUNC float da_sway(float ph)

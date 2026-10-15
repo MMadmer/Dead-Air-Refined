@@ -163,22 +163,19 @@ float2	detail_bend_tail	(float3 root, detail_wind w, float H, float frac, float 
 }
 
 #ifdef DA_WIND_FIELD_H
-// Wave shape: mean lean + smooth oscillation (da_sway), replacing the symmetric wave that swung
-// blades as far upwind as downwind and ricocheted off its peaks. Real grass under wind holds a
-// downwind lean proportional to the wind and oscillates around it: light air = shallow lean with
-// wide swings almost back upright, steady strong wind = deep lean with only an elastic spring.
-//
-// The phase comes from the instance ROOT, not the vertex. The wave still travels across a meadow
-// - the roots are metres apart - but no longer across ONE clump: the field runs a cycle every
-// 19..44 m depending on the axis, nothing on a hand-high tuft and about 39 degrees across a
-// two-metre stand of marsh reed. That spread is what made tall grass writhe instead of lean.
-// field, wv (wave) and, below, dir (dir2D) pick the wind: this frame's, or the previous frame's
-// for the motion vectors.
+// Wave shape: the mean lean plus the gusts and lulls of the moment. Real grass under wind holds a downwind lean
+// that grows with the wind and bows deeper as a gust runs over it, standing up in the lull behind: the turbulence
+// (da_wind_turb) at the tuft's ROOT - one tuft moves as a whole, its neighbours in turn as the gust travels on -,
+// its small eddies boiling on the wave's clock (wv.w; the two wave groups' xyz keep their fields apart). The old
+// harmonic wave rocked every blade from almost upright to its full lean about once a second whatever the wind
+// did, and read as twitching. field, wv (wave) and, below, dir (dir2D) pick the wind: this frame's, or the previous
+// frame's for the motion vectors.
 float	detail_sway	(float3 root, float4 field, float4 wv)
 {
 	const float wind_k = saturate(field.z);
 	const float sway_mean = 0.42f + 0.38f * wind_k;
-	return	sway_mean + (1.0f - sway_mean) * da_sway(dot(float4(root, 1.0f), wv));
+	return	sway_mean + (1.0f - sway_mean) * da_wind_turb(root.x, root.z, field.x, field.y,
+		wv.w + dot(wv.xyz, float3(13.0f, 7.0f, 3.0f)));
 }
 
 // Local flow from the travelling gust field is evaluated at the TUFT ROOT so one tuft always moves

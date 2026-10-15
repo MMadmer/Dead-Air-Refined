@@ -117,8 +117,8 @@ float4	shrub_t4	(uint f4)	{ return asfloat(da_shrub_tables.Load4(f4 * 16)); }
 //    w's and row 13 w's when it has none of its own)
 // 19 trees: the wood a cut end shows - the sapwood's colour (linear rgb), the heartwood's share of the radius
 // 20 the heartwood's colour (linear rgb: the sapwood's where it has none), a year's ring width (m)
-// 21 trees: the spray cards' value and chroma against the tiers beside them, the upper bark's value and chroma
-//    against its layer's
+// 21 how far one plant's crop falls short of the best one's (shrub_fruit_keep), unused; trees: the upper bark's value
+//    and chroma against its layer's
 float4	shrub_prof	(uint s, uint r)	{ return shrub_t4(SHRUB_T_PROF + s * SHRUB_PROF_F4 + r); }
 
 // ---- Textures (tools/shrubs/textures: our own procedural sets, one layer a leaf or a bark) -----------------
@@ -151,7 +151,7 @@ float3	shrub_unpack_n	(float2 rg)
 //  1 bloom (share open), bloom stage (0 bud .. 1 open .. 2 over), fruit (share set), ripeness (0 .. 1 ripe .. 2
 //    shrivelled)
 //  2 catkin stage (0 none .. 1 closed .. 2 open .. 3 shed), catkin length (share of full), autumn spread (how
-//    much of the colour wave the leaves' order spans), fruit kept after the leaf fall (share)
+//    much of the colour wave the leaves' order spans), the share of a fruit group's fruits on it (shrub_fruit_keep)
 //  3 young leaf, 4 summer leaf, 5 autumn A, 6 autumn B, 7 dead leaf, 8 leaf underside (linear rgb)
 //  9 bark, 10 young twig, 11 petals, 12 flower centre, 13 unripe fruit, 14 ripe fruit, 15 catkin; the colours' w 0
 //    but 11's, the flower's size, and 13's, the fruit group's (m: a bloom element is the larger of the two,
@@ -159,6 +159,16 @@ float3	shrub_unpack_n	(float2 rg)
 //    0 the policy's spring lead ahead (dead_air_x64_trees.ltx young_lead days) while that day has more leaves on - in
 //    spring -, else today's (shrub_seas_lead)
 float4	shrub_seas	(uint s, uint r)	{ return shrub_t4(SHRUB_T_SEAS + s * SHRUB_SEAS_F4 + r); }
+
+// The share of its fruits a fruit group of bush `seed` carries today: the species' season row (the fruits a
+// corymb or a cyme sets of its flowers, then the birds' toll through the winter - a hawthorn's haws are eaten
+// by January, a guelder rose's bitter berries stay) times the bush's own crop (one hawthorn laden, the next with
+// a few clusters: row 21 x, how far a crop falls short of the best one's).
+float	shrub_fruit_keep	(uint sp, uint seed)
+{
+	const float spread = shrub_prof(sp, 21).x;
+	return shrub_seas(sp, 2).w * (1.0f - spread * frac(float(seed) * (7.31f / 65536.0f) + 0.13f));
+}
 
 #define SHRUB_OUT_OVATE		0u	// hazel, alder buckthorn, bird cherry
 #define SHRUB_OUT_ELLIPTIC	1u	// spindle, honeysuckle, dogwood
@@ -606,14 +616,6 @@ float3	shrub_rotate	(float3 v, float3 k, float s, float c)
 // instead of move. A frequency is held to a whole number of cycles per 64 s, so the wrap turns over seamlessly.
 float	shrub_fq	(float f)	{ return round(f * 64.0f) * (1.0f / 64.0f); }
 
-// da_sway (da_wind_core.h) at f Hz from phase p (cycles), each harmonic on its own held frequency.
-float	shrub_sway	(float t, float f, float p)
-{
-	const float a = shrub_fq(f), b = shrub_fq(f * 1.731f), c = shrub_fq(f * 3.09f);
-	return 0.62f * sin(6.2831853f * (a * t + p)) + 0.28f * sin(6.2831853f * (b * t + 1.731f * p) + 1.3f)
-		+ 0.10f * sin(6.2831853f * (c * t + 3.09f * p) + 4.1f);
-}
-
 // da_flutter (da_wind_core.h) the same way.
 float	shrub_flut	(float t, float f, float p)
 {
@@ -675,10 +677,16 @@ void	shrub_axis_turn_of	(shrub_axis X, shrub_inst I, shrub_wind W, out float3 ba
 	A = 0.0f;
 	const float3 dirw = normalize(shrub_world_dir(I, X.dir));
 	const float lenw = X.len * I.scale;
-	// The wind's push at the tip (travel per metre of length): the mean lean plus the sway at the axis's
-	// frequency, each bush on its own phase.
+	// The wind's push at the tip (travel per metre of length): the mean lean plus the gust passing the axis's base
+	// now (da_wind_turb: the eddies ride through the crown, a stem and its shoots bow together and in turn), and a
+	// little ring at the axis's own frequency while a gust shakes it - more for a stem, a few hundredths for a twig,
+	// each bush on its own phase. (A harmonic sway as the whole motion swung every twig back and forth three to
+	// fourteen times a second in any breeze: the crowns twitched.)
 	const float mean = 0.45f + 0.35f * saturate(W.field.z);
-	const float sway = mean + (1.0f - mean) * shrub_sway(W.time, X.freq, X.phase + float(I.seed) * (1.0f / 65536.0f));
+	const float gust = da_wind_turb(base.x, base.z, W.field.x, W.field.y, 0.0f);
+	const float ring = 0.1f * (0.35f + 0.65f * abs(gust)) * rsqrt(max(X.freq, 0.5f)) *
+		sin(6.2831853f * (shrub_fq(X.freq) * W.time + X.phase + float(I.seed) * (1.0f / 65536.0f)));
+	const float sway = mean + (1.0f - mean) * gust + ring;
 	float2 push = W.dir * (X.flex * W.pressure * (sway + 0.5f * W.lean));
 	// (A rigid axis - a prickle, a dead stub - rides its wood: no motor turns it.)
 	[branch] if (W.motors && X.flex > 0.0f)

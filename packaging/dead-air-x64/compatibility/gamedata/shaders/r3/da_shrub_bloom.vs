@@ -65,6 +65,10 @@ v2p_shrub_bloom	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 	float what = 0.0f, stage = 0.0f, k = 0.0f, shape = 0.0f, aspect = 1.0f;
 	float layout = FL_SINGLE, rg = 0.4f, reach = 0.0f, hang = 0.0f, own = 1.0f;
 	bool group = false;
+	// The fruits on the site's group (the pixel shader drops the rest one by one); a site of one fruit (a hip, a drupe,
+	// a pod) loses it whole: its share of the sites drops instead.
+	const float keep = shrub_fruit_keep(sp, V.I.seed);
+	const float fruit_sites = K1.z * (P3.w < 1.5f ? keep : 1.0f);
 	if (catkin)
 	{
 		// Catkins: formed in late summer, closed through the winter, long and open before the leaves, then shed.
@@ -75,13 +79,13 @@ v2p_shrub_bloom	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 		shape = P4.x;
 		aspect = lerp(2.5f, 6.0f, K2.y);
 	}
-	else if (rank < K1.z && K1.z > 0.0f && P3.z > 0.5f)
+	else if (rank < fruit_sites && fruit_sites > 0.0f && P3.z > 0.5f)
 	{
 		// A fruit: from set to ripe to shrivelled. Its ripeness runs 0 .. 0.7 while it grows (full size by 0.6) and
 		// 0.7 .. 1 while it colours (tools/shrubs/make_shrubs.py season_keys: green until its last weeks).
 		what = 1.0f;
 		stage = K1.w;
-		k = saturate((K1.z - rank) * 30.0f) * lerp(0.45f, 1.0f, saturate(K1.w * 1.6667f));
+		k = saturate((fruit_sites - rank) * 30.0f) * lerp(0.45f, 1.0f, saturate(K1.w * 1.6667f));
 		shape = P3.z;
 		own = big > 0.0f ? fruit_m / big : 1.0f;
 		// A broom's pod is slender - one to a site, six times as long as wide, as long as the fruit size (the quad
@@ -289,7 +293,9 @@ v2p_shrub_bloom	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 		c0 = lerp(c0, c0 * float3(0.7f, 0.6f, 0.45f), saturate(stage - 1.0f));
 		c1 = shrub_seas(sp, 12).rgb;
 	}
-	const float snow = da_shrub_sun.w * saturate(n.y);
+	// Snow on a flower's or a catkin's upper side. Not on a fruit group or a pod: their quad turns to the eye, and from
+	// above every one of them read as snowed over, the haws under it pink-white (snow slides off a round fruit).
+	const float snow = what == 1.0f ? 0.0f : da_shrub_sun.w * saturate(n.y);
 	c0 = lerp(c0, 0.82f, snow * 0.6f);
 	// Past the near cascade, the self-shadow the far shadow maps lose (as the leaves round it).
 	const float far_k = shrub_far_shade(float(E.w.w & 0xFFu) / 255.0f, max(dot(site - da_shrub_cam.xyz, da_shrub_fwd.xyz), 0.05f));
@@ -304,7 +310,8 @@ v2p_shrub_bloom	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 		O.fa = float4(a_q * reach, group ? layout : -1.0f);
 		// A pedicel is about a millimetre thick; a shrivelled fruit (ripeness past 1) shrinks by an eighth.
 		const float unit = 0.5f * size * sqrt(aspect);
-		O.fb = float4(rg, clamp(0.0005f / max(unit, 1e-4f), 0.004f, 0.06f), 1.0f - 0.12f * saturate((stage - 1.0f) * 2.5f), 0.0f);
+		O.fb = float4(rg, clamp(0.0005f / max(unit, 1e-4f), 0.004f, 0.06f), 1.0f - 0.12f * saturate((stage - 1.0f) * 2.5f),
+			group ? keep : 1.0f);
 		// The stalks: green as the young twig and the leaves round them, taking some of the ripe fruit's colour (an
 		// elder's and a guelder rose's redden with their berries).
 		const float3 stalk = lerp(lerp(shrub_seas(sp, 10).rgb, leaf_mean, 0.6f), shrub_seas(sp, 14).rgb * 0.6f,

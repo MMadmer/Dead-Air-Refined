@@ -59,8 +59,8 @@ struct shrub_mass_frame
 	float4	K0;
 };
 
-// p: quad coordinates (-1..1); part: species, rank, fall, light; dens: cover, cells, bloom share, hash; misc: the
-// plant's state (shrub_mass_state), phenology offset, blob, size (px, a shadow map's texels).
+// p: quad coordinates (-1..1); part: species, rank, fall, light; dens: cover, cells, the share of cells in flower or
+// fruit, hash; misc: the plant's state (shrub_mass_state), phenology offset, blob, size (px, a shadow map's texels).
 // The outline: a round part with a ragged rim (leaves stick out of it) - its radius at p, the rim there and the pixel's
 // ramp inside it.
 void	shrub_mass_outline	(float2 p, float4 part, float4 dens, float4 misc, out float r, out float rim, out float inside,
@@ -181,7 +181,6 @@ shrub_mass	shrub_mass_at	(float2 p, float4 part, float4 dens, float4 misc, float
 {
 	shrub_mass M = (shrub_mass)0;
 	const uint sp = uint(part.x + 0.5f);
-	const float4 K1 = shrub_seas(sp, 1);
 	const float cells = dens.y;
 	const shrub_mass_frame F = shrub_mass_frame_at(p, part, dens, misc);
 	// (A pixel out of the part's ragged outline - the quad's corners, a fifth of it - has no cover whatever its leaves:
@@ -293,7 +292,7 @@ shrub_mass	shrub_mass_at	(float2 p, float4 part, float4 dens, float4 misc, float
 				M.tilt = d * (frac(h * 13.1f) - 0.5f);
 				best_q = q;
 				best_d = d;
-				M.bloom = frac(h * 21.7f) < dens.z * max(K1.x, K1.z * 0.7f) ? 1.0f : 0.0f;
+				M.bloom = frac(h * 21.7f) < dens.z ? 1.0f : 0.0f;
 			}
 		}
 	// The leaves' distance in quad units (a cell is 2 / cells, the ellipse's minor semi-axis `minor` of it), the mean
