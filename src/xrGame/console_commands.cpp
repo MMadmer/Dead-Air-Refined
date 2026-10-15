@@ -28,6 +28,7 @@
 #include "Inventory.h"
 #include "HudItem.h"
 #include "da_pda3d.h"
+#include "da_shells.h"
 #include "da_opt_bench.h"
 #include "da_profiler.h"
 #include "Actor_Flags.h"
@@ -3562,6 +3563,28 @@ public:
 // what an outfit change and the 3D PDA both do. The rigs do not carry the same motion sets, and
 // an item left holding ids from the previous one crashed the game between two frames of the
 // swap; this is the one call that mechanism needs, without a PDA, an outfit or a save.
+class CCC_QaShells : public IConsole_Command
+{
+public:
+    CCC_QaShells(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        float height = 0.f;
+        if (args && 1 == sscanf_s(args, "look %f", &height))
+            da_shells::look(height);
+        else if (args && 1 == sscanf_s(args, "goto %f", &height))
+            da_shells::approach(height);
+        // a step forward this frame, as the held key would ask for it
+        else if (args && !xr_strcmp(args, "walk"))
+        {
+            if (CActor* actor = Actor())
+                actor->SetWishfulBodyState(actor->GetWishfulBodyState() | mcFwd);
+        }
+        else
+            da_shells::report();
+    }
+};
+
 class CCC_QaHandsRig : public IConsole_Command
 {
 public:
@@ -4473,6 +4496,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_QaRainColumn, "qa_rain_column");
     CMD1(CCC_QaNpcGround, "qa_npc_ground");
     CMD1(CCC_QaHandsRig, "qa_hands_rig");
+    CMD1(CCC_QaShells, "qa_shells");
     CMD1(CCC_QaHudMotion, "qa_hud_motion");
     CMD1(CCC_QaVisorWet, "qa_visor_wet");
     CMD1(CCC_VisorRate, "visor_rate");

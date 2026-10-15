@@ -1,6 +1,7 @@
 #include "pch_script.h"
 
 #include "WeaponMagazined.h"
+#include "da_shells.h"
 #include "da_ai.h"
 #include "Actor.h"
 #include "ParticlesObject.h"
@@ -917,10 +918,23 @@ void CWeaponMagazined::OnShot()
     // Animation
     PlayAnimShoot();
 
-    // Shell Drop
+    // Shell Drop: a case of the calibre where the data has one, else the sprite
     Fvector vel;
     PHGetLinearVell(vel);
-    OnShellDrop(get_LastSP(), vel);
+    da_shells::Ejection casing;
+    casing.shooter = smart_cast<CGameObject*>(H_Parent());
+    casing.weapon = cNameSect();
+    casing.particles = m_sShellParticles;
+    casing.ammo = m_ammoTypes.size() > m_ammoType ? m_ammoTypes[m_ammoType] : shared_str();
+    casing.position = get_LastSP();
+    casing.forward = get_LastFD();
+    // A held weapon has no physics of its own: the case leaves with the speed of whoever carries it.
+    casing.carrier_velocity = vel;
+    if (CEntityAlive* owner = smart_cast<CEntityAlive*>(H_Parent()))
+        owner->PHGetLinearVell(casing.carrier_velocity);
+    casing.hud = IsHudModeNow();
+    if (!m_sShellParticles.size() || !da_shells::eject(casing))
+        OnShellDrop(get_LastSP(), vel);
 
     // Огонь из ствола
     StartFlameParticles();

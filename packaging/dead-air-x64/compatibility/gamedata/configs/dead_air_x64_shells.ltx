@@ -1,0 +1,218 @@
+; Spent cartridge cases (src/xrGame/da_shells.cpp). A case of the shot's calibre leaves the ejection port,
+; bounces off the level and the objects in it, and lies where it lands until the quality preset's count of
+; cases (r__shells) makes room for a new one - the resting case farthest from the camera goes first. The
+; models and the atlas are made by tools/shells, the bounce sounds too.
+
+[shells]
+enabled                 = true
+render_distance         = 25        ; m: farther a case is under a pixel and is not drawn
+spawn_distance          = 40        ; m: an NPC's shot farther than this throws no case
+sound_distance          = 20        ; m: bounces heard this far
+own_ignore_s            = 0.4       ; the shooter's own body does not stop its cases for this long
+gravity                 = 9.81
+drag                    = 0.1       ; of the speed per second in the air
+kick_radius             = 0.3       ; m: feet this close push a lying case
+kick_speed              = 0.8       ; m/s of the case per m/s of the feet, for a case of kick_mass
+kick_max                = 1.8       ; m/s: a kicked case never flies off
+kick_mass               = 0.01      ; kg: heavier cases go less far, lighter further (square root)
+sound_volume            = 0.6
+shadow_distance         = 6         ; m: lights and sun cascades get only the cases this close to the camera
+shadow_max              = 48        ; and no more of them than this per pass
+eject_dir               = 1, 0.55, -0.15 ; right, up and forward of the weapon: out of the port, up and back
+
+; Weapons that throw their cases elsewhere (section prefix = right, up, forward).
+[shells_eject]
+wpn_p90                 = 0, -1, 0.15
+wpn_m249                = 0.25, -1, 0
+wpn_fn2000              = 0.7, 0.35, 0.6
+
+; The calibre: the ammo of the shot first (longest section prefix), else the weapon's shell_particles.
+[shells_by_ammo]
+ammo_9x18               = shell_9x18
+ammo_9x19               = shell_9x19
+ammo_11.43x23           = shell_45acp
+ammo_7.62x25            = shell_762x25
+ammo_5.7x28             = shell_57x28
+ammo_5.45x39            = shell_545x39
+ammo_5.56x45            = shell_556x45
+ammo_7.62x39            = shell_762x39
+ammo_9x39               = shell_9x39
+ammo_7.92x33            = shell_792x33
+ammo_7.62x51            = shell_762x51
+ammo_7.62x54            = shell_762x54r
+ammo_pkm_100            = shell_762x54r
+ammo_magnum_300         = shell_300wm
+ammo_12.7x55            = shell_127x55
+ammo_12.7x99            = shell_127x99
+ammo_30carbine          = shell_30carbine
+ammo_50ae               = shell_50ae
+ammo_12x70              = shell_12ga
+ammo_12x76              = shell_12ga
+
+[shells_by_particles]
+weapons\9x18            = shell_9x18
+amik\weapons\data\9x18\9x18_2_r = shell_9x18
+weapons\9x19            = shell_9x19
+weapons\45acp           = shell_45acp
+weapons\545x39          = shell_545x39
+weapons\556x45          = shell_556x45
+weapons\762x39          = shell_762x39
+weapons\9x39            = shell_9x39
+weapons\762x51          = shell_762x51
+weapons\762x54          = shell_762x54r
+weapons\762x54l         = shell_762x54r
+weapons\12ga            = shell_12ga
+weapons\generic_shells_shotgun = shell_12ga
+weapons\generic_shells  = shell_556x45
+
+; Bounce sounds by the size of the case: <prefix><hard|soft|metal>_<n>.ogg, n from 1.
+[shell_sounds]
+pistol                  = dead_air_x64\shells\pistol_
+rifle                   = dead_air_x64\shells\rifle_
+large                   = dead_air_x64\shells\large_
+shotgun                 = dead_air_x64\shells\shotgun_
+
+; One case per calibre: model, half its diameter and length (m), mass (kg), the throw (m/s and rad/s).
+[shell_base]
+eject_speed             = 2.0, 3.2
+eject_up                = 0.8, 1.6
+eject_back              = -0.4, 0.2
+spin                    = 15, 40
+
+[shell_9x18]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_9x18
+radius                  = 0.00497
+half_length             = 0.009
+mass                    = 0.0034
+sound                   = pistol
+
+[shell_9x19]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_9x19
+radius                  = 0.00498
+half_length             = 0.0096
+mass                    = 0.004
+sound                   = pistol
+
+[shell_45acp]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_45acp
+radius                  = 0.006
+half_length             = 0.0114
+mass                    = 0.006
+sound                   = pistol
+
+[shell_762x25]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_762x25
+radius                  = 0.0049
+half_length             = 0.0125
+mass                    = 0.0047
+sound                   = pistol
+
+[shell_57x28]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_57x28
+radius                  = 0.004
+half_length             = 0.0145
+mass                    = 0.0024
+sound                   = pistol
+
+[shell_30carbine]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_30carbine
+radius                  = 0.0045
+half_length             = 0.0164
+mass                    = 0.0045
+sound                   = pistol
+
+[shell_50ae]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_50ae
+radius                  = 0.007
+half_length             = 0.0163
+mass                    = 0.009
+sound                   = pistol
+
+[shell_rifle]:shell_base
+eject_speed             = 3.0, 4.8
+eject_up                = 1.0, 2.0
+spin                    = 12, 32
+
+[shell_545x39]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_545x39
+radius                  = 0.005
+half_length             = 0.0199
+mass                    = 0.0065
+sound                   = rifle
+
+[shell_556x45]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_556x45
+radius                  = 0.0048
+half_length             = 0.0224
+mass                    = 0.0062
+sound                   = rifle
+
+[shell_762x39]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_762x39
+radius                  = 0.0057
+half_length             = 0.0194
+mass                    = 0.007
+sound                   = rifle
+
+[shell_9x39]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_9x39
+radius                  = 0.0057
+half_length             = 0.0194
+mass                    = 0.007
+sound                   = rifle
+
+[shell_792x33]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_792x33
+radius                  = 0.006
+half_length             = 0.0165
+mass                    = 0.0075
+sound                   = rifle
+
+[shell_762x51]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_762x51
+radius                  = 0.006
+half_length             = 0.0256
+mass                    = 0.012
+sound                   = rifle
+
+[shell_762x54r]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_762x54r
+radius                  = 0.0062
+half_length             = 0.0269
+mass                    = 0.0125
+sound                   = rifle
+
+[shell_300wm]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_300wm
+radius                  = 0.0065
+half_length             = 0.0333
+mass                    = 0.016
+sound                   = large
+spin                    = 10, 25
+
+[shell_127x55]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_127x55
+radius                  = 0.0077
+half_length             = 0.0275
+mass                    = 0.02
+sound                   = large
+spin                    = 10, 25
+
+[shell_127x99]:shell_rifle
+visual                  = dynamics\weapons\shells\dar_shell_127x99
+radius                  = 0.0102
+half_length             = 0.0495
+mass                    = 0.058
+sound                   = large
+eject_speed             = 3.0, 4.5
+spin                    = 6, 16
+
+[shell_12ga]:shell_base
+visual                  = dynamics\weapons\shells\dar_shell_12ga
+radius                  = 0.0103
+half_length             = 0.035
+mass                    = 0.0075
+sound                   = shotgun
+eject_speed             = 2.0, 3.0
+eject_up                = 1.0, 1.8
+spin                    = 8, 22

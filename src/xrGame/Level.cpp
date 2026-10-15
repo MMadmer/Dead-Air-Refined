@@ -7,6 +7,7 @@
 #include "ParticlesObject.h"
 #include "Level.h"
 #include "script_game_object.h"
+#include "da_shells.h"
 #include "HUDManager.h"
 #include "xrServer.h"
 #include "NET_Queue.h"
@@ -203,6 +204,7 @@ CLevel::~CLevel()
         g_pGamePersistent->Environment().reset_water_body();
     deinit_compression();
     CScriptGameObject::ReleaseRetired(true);
+    da_shells::level_unload();
 }
 
 shared_str CLevel::name() const { return map_data.m_name; }
@@ -570,6 +572,8 @@ void CLevel::OnFrame()
     stats.BulletManagerCommit.Begin();
     BulletManager().CommitRenderSet();
     stats.BulletManagerCommit.End();
+    // after the objects: the shots of this frame are in, and the camera is where this frame draws it
+    da_shells::update();
     // update static sounds
     if (!GEnv.isDedicatedServer)
     {

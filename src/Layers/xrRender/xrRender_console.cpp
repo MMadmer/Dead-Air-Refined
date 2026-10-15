@@ -68,6 +68,7 @@ extern ENGINE_API float ps_r__rain_radius;
 extern ENGINE_API float ps_r__rain_splash;
 extern ENGINE_API float ps_r__rain_splash_time;
 extern ENGINE_API int ps_r__rain_drops;
+extern ENGINE_API int ps_shells_max;
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -1258,6 +1259,9 @@ void xrRender_sync_preset_derived()
     // The player's own world shadow starts at Medium: it is one more full-body caster in
     // every shadow map, which the two lowest presets should not pay for.
     static constexpr int actor_shadow_by_preset[] = {0, 0, 1, 1, 1};
+    // Spent cartridge cases lying about at once: past the count the farthest resting one goes.
+    static constexpr int shells_by_preset[] = {32, 64, 128, 192, 256};
+    ps_shells_max = shells_by_preset[ps_Preset];
     // The fluid campfire: the two top presets simulate the nearest fires on the 3D grid.
     static constexpr int fire_fluid_by_preset[] = {0, 0, 0, 1, 1};
     ps_r__fire_fluid = fire_fluid_by_preset[ps_Preset];

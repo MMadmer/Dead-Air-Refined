@@ -607,6 +607,8 @@ ENGINE_API float ps_r__rain_splash_time = 0.10f;
 
 // QA diagnostic: log one average-FPS line every N seconds (0 = off). See device.cpp.
 ENGINE_API int ps_r__fps_log = 0;
+// Spent cartridge cases lying about at once (xrGame da_shells); the quality preset sets it.
+ENGINE_API int ps_shells_max = 128;
 
 // Exported: the renderer's final combine applies the same curve in the shader when the
 // hardware gamma ramp is not in charge (windowed/borderless).
@@ -1001,6 +1003,7 @@ void CCC_Register()
     CMD1(CCC_SaveCFG, "cfg_save");
     CMD1(CCC_LoadCFG, "cfg_load");
     CMD4(CCC_Float, "animation_blend_min_time", &AnimationBlend::g_min_time, 0.f, 10.f);
+    CMD4(CCC_Integer, "r__shells", &ps_shells_max, 0, 1024);
     CMD3(CCC_Token, "animation_blend_curve", &AnimationBlend::g_curve, animation_blend_curve_token);
 
 #ifdef DEBUG
