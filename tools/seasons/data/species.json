@@ -132,6 +132,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.0,
    "shift": {
     "heads": -10,
     "green": 0
@@ -333,6 +335,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 22,
     "green": 0
@@ -534,6 +538,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 4,
     "green": -5
@@ -735,6 +741,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": -7,
     "green": -5
@@ -936,6 +944,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": -14,
     "green": -5
@@ -1137,6 +1147,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 9,
     "green": -8
@@ -1338,6 +1350,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": -15,
     "green": 0
@@ -1539,6 +1553,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 24,
     "green": 0
@@ -1740,6 +1756,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.12,
    "shift": {
     "heads": 34,
     "green": 0
@@ -1941,6 +1959,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 24,
     "green": 12
@@ -2142,6 +2162,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": -36,
     "green": -15
@@ -2343,6 +2365,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 7,
     "green": 0
@@ -2544,6 +2568,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.1,
    "shift": {
     "heads": 15,
     "green": -8
@@ -2745,6 +2771,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 6,
     "green": 0
@@ -2946,6 +2974,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": -5,
     "green": -35
@@ -3147,6 +3177,8 @@
    ],
    "winter_stand": 1.0,
    "dead_vary": 1.0,
+   "head_velvet": 0.0,
+   "water_depth": 1.5,
    "shift": {
     "heads": 8,
     "green": 0
@@ -3348,6 +3380,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.6,
+   "head_velvet": 0.0,
+   "water_depth": 0.3,
    "shift": {
     "heads": 40,
     "green": -5
@@ -3549,6 +3583,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.6,
+   "head_velvet": 0.0,
+   "water_depth": 0.8,
    "shift": {
     "heads": 45,
     "green": 0
@@ -3750,6 +3786,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.6,
+   "head_velvet": 0.0,
+   "water_depth": 0.4,
    "shift": {
     "heads": -8,
     "green": 0
@@ -3951,6 +3989,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.08,
    "shift": {
     "heads": -43,
     "green": 0
@@ -4152,6 +4192,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.2,
    "shift": {
     "heads": 55,
     "green": 0
@@ -4228,43 +4270,43 @@
   {
    "outline": 4,
    "leaf_h": [
-    0.9,
-    1.4
+    1.3,
+    2.2
    ],
    "leaf_w": [
-    0.012,
-    0.022
+    0.014,
+    0.024
    ],
    "leaf_tilt": [
-    5,
-    22
+    3,
+    14
    ],
    "leaf_bend": [
-    0.05,
-    0.2
+    0.06,
+    0.18
    ],
    "leaf_droop": [
     0.05,
-    0.2
+    0.25
    ],
-   "leaf_stiff": 0.6,
+   "leaf_stiff": 0.65,
    "culm_h": [
-    1.0,
-    1.6
+    1.5,
+    2.4
    ],
    "culm_w": [
-    0.006,
-    0.01
+    0.008,
+    0.012
    ],
    "culm_tilt": [
     0,
-    4
+    3
    ],
    "culm_bend": [
-    0.01,
-    0.03
+    0.005,
+    0.02
    ],
-   "culm_stiff": 0.85,
+   "culm_stiff": 0.9,
    "culm_knee": 0.0,
    "culm_leaves": 0,
    "cauline_h": [
@@ -4311,8 +4353,8 @@
    "clump_pull": 0.3,
    "clump_face_away": 0.6,
    "clump_lean": 5,
-   "density_leaf": 110,
-   "density_culm": 10,
+   "density_leaf": 90,
+   "density_culm": 22,
    "density_basal": 0,
    "density_cal": 0.95,
    "cover": 1.0,
@@ -4320,21 +4362,21 @@
    "shade_height": 1.0,
    "head_type": 2,
    "head_len": [
-    0.12,
-    0.22
+    0.24,
+    0.42
    ],
    "head_w": [
-    0.018,
-    0.028
+    0.024,
+    0.034
    ],
    "head_branches": 0,
    "head_open": [
     0,
     0
    ],
-   "head_grain": 1.5,
+   "head_grain": 0.25,
    "head_petals": 0,
-   "head_share": 0.6,
+   "head_share": 0.9,
    "head_nod": [
     0,
     0
@@ -4353,6 +4395,8 @@
    ],
    "winter_stand": 1.0,
    "dead_vary": 0.8,
+   "head_velvet": 1.0,
+   "water_depth": 1.2,
    "shift": {
     "heads": -51,
     "green": 0
@@ -4554,6 +4598,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": -5,
     "green": 0
@@ -4755,6 +4801,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "shift": {
     "heads": 0,
     "green": 5
@@ -4956,6 +5004,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "con_maj",
    "latin": "Convallaria majalis",
    "form": 2,
@@ -5167,6 +5217,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "sol_can",
    "latin": "Solidago canadensis",
    "form": 1,
@@ -5378,6 +5430,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "art_vul",
    "latin": "Artemisia vulgaris",
    "form": 1,
@@ -5589,6 +5643,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "art_abs",
    "latin": "Artemisia absinthium",
    "form": 1,
@@ -5800,6 +5856,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "art_cam",
    "latin": "Artemisia campestris",
    "form": 1,
@@ -6011,6 +6069,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "tan_vul",
    "latin": "Tanacetum vulgare",
    "form": 1,
@@ -6222,6 +6282,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "ach_mil",
    "latin": "Achillea millefolium",
    "form": 1,
@@ -6433,6 +6495,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "pla_lan",
    "latin": "Plantago lanceolata",
    "form": 2,
@@ -6644,6 +6708,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "pla_maj",
    "latin": "Plantago major",
    "form": 2,
@@ -6855,6 +6921,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.0,
    "id": "urt_dio",
    "latin": "Urtica dioica",
    "form": 1,
@@ -7066,6 +7134,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "ant_syl",
    "latin": "Anthriscus sylvestris",
    "form": 1,
@@ -7277,6 +7347,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "eri_can",
    "latin": "Erigeron canadensis",
    "form": 1,
@@ -7488,6 +7560,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "cha_ang",
    "latin": "Chamerion angustifolium",
    "form": 1,
@@ -7699,6 +7773,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.3,
    "id": "lyt_sal",
    "latin": "Lythrum salicaria",
    "form": 1,
@@ -7910,6 +7986,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "hyp_per",
    "latin": "Hypericum perforatum",
    "form": 1,
@@ -8121,6 +8199,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "gal_ver",
    "latin": "Galium verum",
    "form": 1,
@@ -8332,6 +8412,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "tri_pra",
    "latin": "Trifolium pratense",
    "form": 1,
@@ -8543,6 +8625,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "vic_cra",
    "latin": "Vicia cracca",
    "form": 1,
@@ -8754,6 +8838,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "tri_rep",
    "latin": "Trifolium repens",
    "form": 2,
@@ -8965,6 +9051,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "tar_off",
    "latin": "Taraxacum officinale agg.",
    "form": 2,
@@ -9176,6 +9264,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "lat_pra",
    "latin": "Lathyrus pratensis",
    "form": 1,
@@ -9387,6 +9477,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "ran_acr",
    "latin": "Ranunculus acris",
    "form": 1,
@@ -9598,6 +9690,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "sil_lat",
    "latin": "Silene latifolia",
    "form": 1,
@@ -9809,6 +9903,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "sil_flo",
    "latin": "Silene flos-cuculi",
    "form": 1,
@@ -10020,6 +10116,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "cen_jac",
    "latin": "Centaurea jacea",
    "form": 1,
@@ -10231,6 +10329,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "rum_acl",
    "latin": "Rumex acetosella",
    "form": 1,
@@ -10442,6 +10542,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "rum_acs",
    "latin": "Rumex acetosa",
    "form": 1,
@@ -10653,6 +10755,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "oen_bie",
    "latin": "Oenothera biennis",
    "form": 1,
@@ -10864,6 +10968,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "cir_arv",
    "latin": "Cirsium arvense",
    "form": 1,
@@ -11075,6 +11181,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "jas_mon",
    "latin": "Jasione montana",
    "form": 1,
@@ -11286,6 +11394,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "hel_are",
    "latin": "Helichrysum arenarium",
    "form": 1,
@@ -11497,6 +11607,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "ber_inc",
    "latin": "Berteroa incana",
    "form": 1,
@@ -11708,6 +11820,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "ver_lyc",
    "latin": "Verbascum lychnitis",
    "form": 1,
@@ -11919,6 +12033,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "sol_vir",
    "latin": "Solidago virgaurea",
    "form": 1,
@@ -12130,6 +12246,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "pru_vul",
    "latin": "Prunella vulgaris",
    "form": 1,
@@ -12341,6 +12459,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "dau_car",
    "latin": "Daucus carota",
    "form": 1,
@@ -12552,6 +12672,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "cam_pat",
    "latin": "Campanula patula",
    "form": 1,
@@ -12763,6 +12885,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.1,
    "id": "equ_arv",
    "latin": "Equisetum arvense",
    "form": 1,
@@ -12974,6 +13098,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.25,
    "id": "lys_vul",
    "latin": "Lysimachia vulgaris",
    "form": 1,
@@ -13185,6 +13311,8 @@
    ],
    "winter_stand": 0.0,
    "dead_vary": 0.0,
+   "head_velvet": 0.0,
+   "water_depth": 0.05,
    "id": "che_maj",
    "latin": "Chelidonium majus",
    "form": 1,

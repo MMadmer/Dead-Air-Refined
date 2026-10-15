@@ -190,7 +190,10 @@ f_deffer	main	(p_grass I)
 	// A middle-distance head is spikelets and air: under TAA a new share of its pixels is cut every frame,
 	// which resolves into a see-through head; without the motion vectors it stays solid.
 	const float solid = (I.misc.z < 0.5f && da_grass_vmisc.y > 0.5f && I.sp2.w < 0.5f) ? 0.75f : 1.0f;
-	clip(cov * solid - ign - 1e-3f);
+	// A cattail's velvet is whole (da_grass_head_vs.h).
+	const bool velvet = I.sp2.y < -0.5f;
+	if (!velvet)
+		clip(cov * solid - ign - 1e-3f);
 
 	// Each grain its own tone, its glumes lighter towards the tip and shaded at its margin; darker between
 	// the clusters; the fluff catches a little more light at grazing angles.
@@ -202,6 +205,9 @@ f_deffer	main	(p_grass I)
 	// A flower's eye (stamens, the throat) is darker than its petals.
 	albedo *= lerp(1.0f, lerp(0.72f, 1.0f, smoothstep(0.12f, 0.35f, rad)), fine * (petals > 0.5f ? 1.0f : 0.0f));
 	albedo *= 1.0f + 0.1f * fluff * (1.0f - abs(dot(N, V)));
+	// Velvet: a faint sheen at grazing angles, darker where it turns from the light (the grains' own tone is gone).
+	if (velvet)
+		albedo = I.alb_h.rgb * lerp(0.9f, 1.08f, tone) * (1.0f + 0.12f * (1.0f - abs(dot(N, V))));
 
 	// Gloss as sub-pixel normal variance (GoT), on the Oren-Nayar slice's Blinn lobe (exponent 16).
 	float gloss = I.lat_g.w;

@@ -66,5 +66,5 @@ struct DaReedBed
 // The reed beds of the level (empty: none): the blades grow their communities there, rooted on the bed and standing
 // out of the water by their own height. reload: a loaded grass is set up again with them at once (not while the level
 // goes).
-void da_grass_set_reed_beds(xr_vector<DaReedBed>&& beds, bool reload);
+void da_grass_set_reed_beds(xr_vector<DaReedBed>&& beds, bool reload, float emerge);
 } // namespace xray::render::RENDER_NAMESPACE

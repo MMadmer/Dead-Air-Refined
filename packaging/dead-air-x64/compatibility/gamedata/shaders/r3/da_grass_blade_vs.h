@@ -74,7 +74,7 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 		morph = smoothstep(0.8f * da_grass_vlod.y, da_grass_vlod.y, d);
 #endif
 	// The bob, not in the middle cascade (large-scale wind only there).
-	const float2 bob = (lod == 4u) ? float2(0.0f, 0.0f) : P12.zw;
+	const float2 bob = (lod == 4u) ? float2(0.0f, 0.0f) : grass_stem_bob(p, culm, P12.zw);
 
 	float3 C, dC, S;
 	grass_curve_lod(B.cur, B.root, t0, culm, rows_lo, morph, yaw, bob, da_grass_vlod.z, hash, knee, C, dC, S);
@@ -193,7 +193,9 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	{
 		const float dry = (B.flags & GRASS_F_THATCH) != 0u ? 1.0f : smoothstep(0.3f, 0.8f, B.sen);
 		const float y_c = dot(albedo, float3(0.2126f, 0.7152f, 0.0722f));
-		albedo = lerp(albedo, lerp(y_c, albedo, 0.75f) * 0.88f, dry);
+		// (A reed's or a cattail's dead culm is glossy straw, the palest of the bed, not a weathered grey stem.)
+		const float marsh = grass_prof(p, 26).w;
+		albedo = lerp(albedo, lerp(y_c, albedo, lerp(0.75f, 1.0f, marsh)) * lerp(0.88f, 1.0f, marsh), dry);
 		// A species' own stem colour (the purple-brown of mugwort, the red of field wormwood), half of it left
 		// on the dead stem.
 		albedo *= lerp(grass_prof(p, 26).rgb, 1.0f, 0.5f * dry);
@@ -204,7 +206,10 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	}
 	// Occlusion by the height above the ground in canopy heights; litter lies at the foot of the stand, in its
 	// shade but not in the dark of the tussocks' bases.
-	const float y_rel = litter ? 0.25f : (C.y - B.root.y) / grass_canopy_h(p);
+	// (A stem leaf's root is its node up the stem, in the upper canopy: taken as the ground, its base sat in the
+	// dark of the stand's foot and a reed's leaves were near black.)
+	const bool cauline = (B.flags & GRASS_F_CAULINE) != 0u;
+	const float y_rel = litter ? 0.25f : (C.y - B.root.y) / grass_canopy_h(p) + (cauline ? 0.5f : 0.0f);
 	O.alb_h = float4(grass_to_albedo(albedo), grass_sky(B.hemi) * lerp(grass_ao(d, B.ao, y_rel), grass_ao(d, B.ao, 0.5f), culm_sub));
 
 	const float sen = ((B.flags & GRASS_F_THATCH) != 0u || litter) ? 1.0f : B.sen;

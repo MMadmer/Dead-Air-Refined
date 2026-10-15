@@ -26,7 +26,8 @@ BASE = dict(
     clump_lean=5, density_leaf=400, density_culm=50, density_basal=1500, density_cal=0.95, cover=1.0,
     shade_density=1.0, shade_height=1.0, head_type=4, head_len=[0.06, 0.12], head_w=[0.03, 0.06], head_branches=4,
     head_open=[45, 25], head_grain=1.0, head_petals=0, head_share=0.35, head_nod=[0, 0], fold_h=0.2, tussock_h=[0, 0],
-    tussock_share=0.0, tussock_r=0.0, stem_tint=[1.0, 1.0, 1.0], winter_stand=0.0, dead_vary=0.0)
+    tussock_share=0.0, tussock_r=0.0, stem_tint=[1.0, 1.0, 1.0], winter_stand=0.0, dead_vary=0.0, head_velvet=0.0,
+    water_depth=0.05)
 FORB = dict(BASE, leaf_h=[0.08, 0.15], leaf_w=[0.02, 0.04], leaf_tilt=[30, 60], leaf_bend=[0.15, 0.3],
             leaf_droop=[0.05, 0.15], culm_tilt=[1, 6], culm_bend=[0.02, 0.05], culm_stiff=0.75, density_basal=0,
             clump_cell=0.25, clump_pull=0.15, clump_face_away=0.2, clump_lean=3, head_share=0.85, fold_h=0.0,
@@ -245,13 +246,17 @@ S = [
     sp('typ_lat', 'Typha latifolia', 0, 'P5_REED_BED',
        col('#56694A', '#5E7148', '#8A7A50', '#9A8452', '#A88E64', '#957E62'),
        ramp('#5E6A48', '#6A5638', '#4E3A2A', '#8C7E6E'),
-       outline=4, leaf_h=[0.9, 1.4], leaf_w=[0.012, 0.022], leaf_tilt=[5, 22], leaf_bend=[0.05, 0.2],
-       leaf_droop=[0.05, 0.2], leaf_stiff=0.6, culm_h=[1.0, 1.6], culm_w=[0.006, 0.01], culm_tilt=[0, 4],
-       culm_bend=[0.01, 0.03], culm_stiff=0.85, clump_cell=0.5, clump_pull=0.3, clump_face_away=0.6,
-       density_leaf=110, density_culm=10, density_basal=0, head_type=2, head_len=[0.12, 0.22],
-       head_w=[0.018, 0.028], head_branches=0, head_open=[0, 0], head_grain=1.5, head_share=0.6, winter_stand=1.0,
-       dead_vary=0.8,
-       shift=dict(heads=10, green=0)),
+       # (Leaves 1.5-2.5 m and 1-2.5 cm wide, stiff and upright with their tips arching over; the fertile stems as
+       # tall, a fifth of the shoots, each with its brown velvet sausage - 10-25 x 2-3.5 cm - and the male spike right
+       # above it: head_len the two together, the female 58 %, head_velvet. It flowers in June and is brown by July:
+       # its heads a month before the reed's plumes.)
+       outline=4, leaf_h=[1.3, 2.2], leaf_w=[0.014, 0.024], leaf_tilt=[3, 14], leaf_bend=[0.06, 0.18],
+       leaf_droop=[0.05, 0.25], leaf_stiff=0.65, culm_h=[1.5, 2.4], culm_w=[0.008, 0.012], culm_tilt=[0, 3],
+       culm_bend=[0.005, 0.02], culm_stiff=0.9, clump_cell=0.5, clump_pull=0.3, clump_face_away=0.6,
+       density_leaf=90, density_culm=22, density_basal=0, head_type=2, head_len=[0.24, 0.42],
+       head_w=[0.024, 0.034], head_branches=0, head_open=[0, 0], head_grain=0.25, head_share=0.9, head_velvet=1.0,
+       winter_stand=1.0, dead_vary=0.8,
+       shift=dict(heads=-35, green=0)),
     # ---- forest floor ----------------------------------------------------------------------------------------
     sp('cal_aru', 'Calamagrostis arundinacea', 0, 'P1_TALL_CALAMAGROSTIS',
        col('#3E5530', '#4A6234', '#5A5A36', '#8A7844', '#A48D5E', '#7A6C56'),
@@ -695,6 +700,11 @@ CLONAL = {'urt_dio': 0.75, 'con_maj': 0.75, 'sol_can': 0.7, 'tan_vul': 0.5, 'art
 # lanes per m2 while their swards keep their leaf counts.
 FOLDS = {'poa_pra': 0.6, 'poa_ang': 0.6, 'fes_rub': 0.6, 'fes_ovi': 0.6, 'agr_cap': 0.6, 'cor_can': 0.6,
          'ave_fle': 0.6, 'des_ces': 0.6}
+# The deepest standing water a species grows in (m; floras: reed to 1.5-2 m, cattail 1-1.5 m, reed sweet-grass 0.8,
+# tufted sedge 0.4, reed canary grass and purple loosestrife 0.3, yellow loosestrife 0.25); the rest a puddle's
+# (0.05), a nettle or a wood small-reed none. A meadow grass rooted on a reed bed's bed stood up out of the water.
+WATER = {'phr_aus': 1.5, 'typ_lat': 1.2, 'gly_max': 0.8, 'car_acu': 0.4, 'pha_aru': 0.3, 'lyt_sal': 0.3, 'lys_vul': 0.25,
+         'jun_eff': 0.2, 'agr_gig': 0.12, 'des_ces': 0.1, 'equ_arv': 0.1, 'car_hir': 0.08, 'urt_dio': 0.0, 'cal_epi': 0.0}
 LANES = {'agr_gig': dict(density_leaf=480), 'ely_rep': dict(density_leaf=440), 'car_hir': dict(density_leaf=470)}
 
 
@@ -823,6 +833,13 @@ C = [
     # forbs' standing dead stems are what those cards drew: A. absinthium 80, Galium verum 80, Silene 73, Hypericum
     # 67, Rumex acetosa 60, Verbascum 53, Achillea 47, Vicia 47, Berteroa 40, Daucus 40, Campanula patula 40,
     # Oenothera 40, Equisetum 40, Erigeron 33; fireweed and mugwort patches.
+    # The stock marsh models of cattail (trees_kamish_big: dense stands of strap leaves with brown sausages, the
+    # reed-bed cards standing for them): broadleaf cattail stands of the Pripyat floodplain, a little reed at their
+    # margins, the tall sedges and reed sweet-grass in their gaps, loosestrifes.
+    community('cattail_bed', [],
+              dict(typ_lat=0.70, phr_aus=0.10, car_acu=0.06, gly_max=0.06, pha_aru=0.04, jun_eff=0.02),
+              dict(lys_vul=0.012, lyt_sal=0.012), 0.06,
+              patch=10.0, scattered=0.1, forb_patch=3.0, litter=0.6, litter_h=[0.25, 0.5], litter_w=0.012),
     community('forb_fallow', ['KS_SHRUB'],
               dict(cal_epi=0.30, ely_rep=0.14, poa_ang=0.08, dac_glo=0.04, agr_cap=0.03, bro_ine=0.03, car_hir=0.03,
                    poa_pra=0.03),
@@ -1103,6 +1120,7 @@ def main():
     for s in S:
         s.update(TRAITS.get(s['id'], {}))
         s.update(LANES.get(s['id'], {}))
+        s['water_depth'] = WATER.get(s['id'], s['water_depth'])
         if s['id'] in FOLDS:
             s['fold_h'] = FOLDS[s['id']]
     photo = json.load(open(os.path.join(HERE, 'species_photo_colours.json'), encoding='utf-8'))['species']

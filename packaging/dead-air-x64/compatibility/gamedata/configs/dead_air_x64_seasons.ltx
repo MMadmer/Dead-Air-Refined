@@ -211,6 +211,7 @@ head_open       = 11, 5
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
+water_depth     = 0
 seed_ramp       = 0.25:#68614A, 0.5:#937369, 0.75:#9A8870, 1:#977B66
 
 ; Species 2 ely_rep (Elytrigia repens): form 0 (0 graminoid, 1 forb, 2 rosette, 3 rush), season template P2_MEADOW_MIX
@@ -675,6 +676,7 @@ head_open       = 45, 25
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
+water_depth     = 0.12
 seed_ramp       = 0.25:#656347, 0.5:#8B7C64, 0.75:#927F61, 1:#867A6C
 
 ; Species 10 phl_pra (Phleum pratense): form 0 (0 graminoid, 1 forb, 2 rosette, 3 rush), season template P2_MEADOW_MIX
@@ -907,6 +909,7 @@ head_open       = 45, 30
 head_nod        = 0, 0
 tussock_h       = 0.05, 0.14
 stem_tint       = 1, 1, 1
+water_depth     = 0.1
 seed_ramp       = 0.25:#5E5D34, 0.5:#837249, 0.75:#908263, 1:#83735D
 
 ; Species 14 cor_can (Corynephorus canescens): form 0 (0 graminoid, 1 forb, 2 rosette, 3 rush), season template P6_SPARSE_SAND
@@ -1082,6 +1085,7 @@ head_nod        = 10, 30
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
 winter_stand    = 1
+water_depth     = 1.5
 dead_vary       = 1
 seed_ramp       = 0.25:#505339, 0.5:#5F513B, 0.75:#877755, 1:#84705F
 
@@ -1141,6 +1145,7 @@ head_open       = 25, 8
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
+water_depth     = 0.3
 dead_vary       = 0.6
 seed_ramp       = 0.25:#5F6240, 0.5:#81765A, 0.75:#8C7A65, 1:#7F6850
 
@@ -1200,6 +1205,7 @@ head_open       = 45, 30
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
+water_depth     = 0.8
 dead_vary       = 0.6
 seed_ramp       = 0.25:#535641, 0.5:#635F4F, 0.75:#7E735B, 1:#7B6E52
 
@@ -1259,6 +1265,7 @@ head_open       = 20, 40
 head_nod        = 0, 0
 tussock_h       = 0.04, 0.12
 stem_tint       = 1, 1, 1
+water_depth     = 0.4
 dead_vary       = 0.6
 seed_ramp       = 0.25:#4C4E24, 0.5:#4C3523, 0.75:#513F2D, 1:#482C16
 
@@ -1318,6 +1325,7 @@ head_open       = 20, 40
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
+water_depth     = 0.08
 seed_ramp       = 0.25:#4F4F35, 0.5:#523B29, 0.75:#4D3726, 1:#4E3627
 
 ; Species 21 jun_eff (Juncus effusus): form 3 (0 graminoid, 1 forb, 2 rosette, 3 rush), season template P4_SEDGE_MARSH
@@ -1376,6 +1384,7 @@ head_open       = 30, 30
 head_nod        = 0, 0
 tussock_h       = 0.03, 0.1
 stem_tint       = 1, 1, 1
+water_depth     = 0.2
 seed_ramp       = 0.25:#4E5122, 0.5:#58381F, 0.75:#5C3929, 1:#583F2D
 
 ; Species 22 typ_lat (Typha latifolia): form 0 (0 graminoid, 1 forb, 2 rosette, 3 rush), season template P5_REED_BED
@@ -1383,8 +1392,8 @@ seed_ramp       = 0.25:#4E5122, 0.5:#58381F, 0.75:#5C3929, 1:#583F2D
 name            = typ_lat
 form            = 0
 outline         = 4
-leaf_stiff      = 0.6
-culm_stiff      = 0.85
+leaf_stiff      = 0.65
+culm_stiff      = 0.9
 culm_knee       = 0
 culm_leaves     = 0
 cauline_taper   = 1
@@ -1395,8 +1404,8 @@ clump_cell      = 0.5
 clump_pull      = 0.3
 clump_face_away = 0.6
 clump_lean      = 5
-density_leaf    = 110
-density_culm    = 10
+density_leaf    = 90
+density_culm    = 22
 density_basal   = 0
 density_cal     = 0.95
 cover           = 1
@@ -1404,21 +1413,21 @@ shade_density   = 1
 shade_height    = 1
 head_type       = 2
 head_branches   = 0
-head_grain      = 1.5
+head_grain      = 0.25
 head_petals     = 0
-head_share      = 0.6
+head_share      = 0.9
 fold_h          = 0.2
 tussock_share   = 0
 tussock_r       = 0
-leaf_h          = 0.9, 1.4
-leaf_w          = 0.012, 0.022
-leaf_tilt       = 5, 22
-leaf_bend       = 0.05, 0.2
-leaf_droop      = 0.05, 0.2
-culm_h          = 1, 1.6
-culm_w          = 0.006, 0.01
-culm_tilt       = 0, 4
-culm_bend       = 0.01, 0.03
+leaf_h          = 1.3, 2.2
+leaf_w          = 0.014, 0.024
+leaf_tilt       = 3, 14
+leaf_bend       = 0.06, 0.18
+leaf_droop      = 0.05, 0.25
+culm_h          = 1.5, 2.4
+culm_w          = 0.008, 0.012
+culm_tilt       = 0, 3
+culm_bend       = 0.005, 0.02
 cauline_h       = 0.1, 0.2
 cauline_w       = 0.005, 0.01
 cauline_tilt    = 40, 70
@@ -1428,13 +1437,15 @@ basal_w         = 0.003, 0.006
 basal_tilt      = 22, 50
 basal_bend      = 0.15, 0.35
 basal_droop     = 0.1, 0.28
-head_len        = 0.12, 0.22
-head_w          = 0.018, 0.028
+head_len        = 0.24, 0.42
+head_w          = 0.024, 0.034
 head_open       = 0, 0
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
 winter_stand    = 1
+water_depth     = 1.2
+head_velvet     = 1
 dead_vary       = 0.8
 seed_ramp       = 0.25:#4A5029, 0.5:#523926, 0.75:#452B1E, 1:#4F362C
 
@@ -2132,6 +2143,7 @@ head_open       = 50, 60
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 0.95, 1, 0.95
+water_depth     = 0
 seed_ramp       = 0.25:#485B32, 0.5:#4F5938, 0.75:#6F5D49, 1:#796452
 
 ; Species 35 ant_syl (Anthriscus sylvestris): form 1 (0 graminoid, 1 forb, 2 rosette, 3 rush), forb phenology
@@ -2364,6 +2376,7 @@ head_open       = 0, 0
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1.23, 0.74, 1.2
+water_depth     = 0.3
 seed_ramp       = 0.25:#695357, 0.5:#B963A8, 0.75:#876D51, 1:#775E49
 
 ; Species 39 hyp_per (Hypericum perforatum): form 1 (0 graminoid, 1 forb, 2 rosette, 3 rush), forb phenology
@@ -3756,6 +3769,7 @@ head_open       = 45, 25
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
+water_depth     = 0.1
 seed_ramp       = 0.25:#52632F, 0.5:#6A7044, 0.75:#6A6044, 1:#5A5040
 
 ; Species 63 lys_vul (Lysimachia vulgaris): form 1 (0 graminoid, 1 forb, 2 rosette, 3 rush), forb phenology
@@ -3814,6 +3828,7 @@ head_open       = 30, 35
 head_nod        = 0, 0
 tussock_h       = 0, 0
 stem_tint       = 1, 1, 1
+water_depth     = 0.25
 seed_ramp       = 0.25:#6D752C, 0.5:#C0B431, 0.75:#8C7B5F, 1:#4F2E21
 
 ; Species 64 che_maj (Chelidonium majus): form 1 (0 graminoid, 1 forb, 2 rosette, 3 rush), forb phenology
@@ -5379,6 +5394,19 @@ litter_h   = 0.12, 0.3
 litter_w   = 0.005
 
 [grass_community_13]
+name       = cattail_bed
+species    = typ_lat:0.7143, phr_aus:0.102, car_acu:0.0612, gly_max:0.0612, pha_aru:0.0408, jun_eff:0.0204
+forbs      = lys_vul:0.0018:0.0203:0.5, lyt_sal:0.0018:0.0226:0.45
+forb_patch = 3
+patch      = 10
+scattered  = 0.1
+presence   = 0.4
+cover      = 1
+litter     = 0.6
+litter_h   = 0.25, 0.5
+litter_w   = 0.012
+
+[grass_community_14]
 name       = forb_fallow
 species    = cal_epi:0.4412, ely_rep:0.2059, poa_ang:0.1176, dac_glo:0.0588, agr_cap:0.0441, bro_ine:0.0441, car_hir:0.0441, poa_pra:0.0441
 forbs      = art_abs:0.0206:0.0687:0.3, gal_ver:0.0062:0.0778:0.45, sil_lat:0.0183:0.0611:0.3, hyp_per:0.016:0.0534:0.3, rum_acs:0.0137:0.0458:0.3, ver_lyc:0.0137:0.0458:0.3, ach_mil:0.0114:0.0382:0.3, vic_cra:0.0034:0.0486:0.4, ber_inc:0.0092:0.0305:0.3, dau_car:0.0092:0.0305:0.3, cam_pat:0.0092:0.0305:0.3, oen_bie:0.0092:0.0305:0.3, equ_arv:0.0021:0.0195:0.6, eri_can:0.0069:0.0229:0.3, art_vul:0.0021:0.0234:0.5, cha_ang:0.0016:0.0187:0.5

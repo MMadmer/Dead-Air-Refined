@@ -229,6 +229,8 @@ void parse_profile(const CInifile::Sect& s, DaGrassProfile& p)
     read_vector(s, "stem_tint", p.stem_tint);
     read_float(s, "winter_stand", p.winter_stand);
     read_float(s, "dead_vary", p.dead_vary);
+    read_float(s, "head_velvet", p.head_velvet);
+    read_float(s, "water_depth", p.water_depth);
     // Seed or flower colour ramp "stage:#RRGGBB" at 0.25, 0.5, 0.75, 1.
     if (pcstr ramp = find_value(s, "seed_ramp"))
         for_each_key(ramp, [&p](float stage, pcstr colour) {
@@ -650,6 +652,8 @@ public:
         {
             C.r_dx11Texture("s_da_snow_fine", "$user$da_snow_fine");
             C.r_dx11Texture("s_da_snow_level", "$user$da_snow_level");
+            // (The generation: the water over a lane's root, r3\da_water_field.h.)
+            C.r_dx11Texture("s_water_field", r2_RT_water_field);
         }
         C.r_dx11Sampler("smp_linear");
         C.r_dx11Sampler("smp_rtlinear");
@@ -1277,7 +1281,7 @@ void fill_profile(u32 p, Fvector4* r, float height)
     r[14].set(0.02f, 0.012f, 0.60f, 0.85f);
     for (u32 i = 0; i < 4; ++i)
         r[15 + i].set(P.seed_ramp[i].x, P.seed_ramp[i].y, P.seed_ramp[i].z, 0.f);
-    r[19].set(0.5f, P.outline, P.form, 0.f);
+    r[19].set(0.5f, P.outline, P.form, P.head_velvet);
     // The basal pairs: shape, and how many a leaf lane carries (leaf lanes are records of one leaf, or of
     // two in a folded profile; a basal record is always a pair).
     r[20].set(P.basal_h[0], P.basal_h[1], P.basal_w[0], P.basal_w[1]);
@@ -1294,7 +1298,7 @@ void fill_profile(u32 p, Fvector4* r, float height)
     const float stem_h = std::max(P.culm_h[0], 0.05f);
     const float stem = P.culm_w[1] + P.culm_leaves * P.cauline_h[1] * P.cauline_w[1] / stem_h +
         P.head_w[1] * 0.6f * P.head_len[1] / std::max(0.3f * stem_h, 0.05f);
-    r[27].set(1.2f * std::max(P.leaf_w[1], P.density_culm > 0.f ? stem : 0.f), 0.f, 0.f, 0.f);
+    r[27].set(1.2f * std::max(P.leaf_w[1], P.density_culm > 0.f ? stem : 0.f), std::max(P.water_depth, 0.f), 0.f, 0.f);
 }
 
 // The community block c (r3\da_grass_common.h grass_comm): the species ids ride as raw bits.
@@ -1908,13 +1912,16 @@ namespace
 xr_vector<DaReedBed> s_reed_beds;
 // Metres the culms of a reed bed stand taller for the water they root under (the slot's emergence bits).
 float s_reed_emerge_max = 0.f;
+// How far the culms rise per metre of water over their roots (dead_air_x64_reeds.ltx [reed_beds] emerge).
+float s_reed_emerge_k = 1.f;
 
 // The reed beds into the blades' copy of the slots. A community the beds grow takes a free object id of the level's
 // (from the top of the table down past its own objects); a slot under a bed carries that id with the beds' cover at
 // its four corners (soft edges, the bed's own patches do the rest), its other objects giving way by as much; its box
 // reaches down to the bed, so the ground window finds it under the water (the water mesh is passable); its colour bits
-// carry how far the culms rise for the water (red: 0.1 m units, the deepest bed's) and which of its four objects are
-// the beds' (green: a mask). The stock decompress never sees the copy.
+// carry how far the culms rise for the water (red: 0.1 m units, the deepest bed's), which of its four objects are the
+// beds' (green: a mask) and how far the box went down (blue: 0.2 m units - the meadow's objects keep to the stock box,
+// or they grew up through the water from the bed). The stock decompress never sees the copy.
 void apply_reed_beds(const CDetailManager& dm)
 {
     s_reed_emerge_max = 0.f;
@@ -2008,10 +2015,12 @@ void apply_reed_beds(const CDetailManager& dm)
                     O.a3 = q(O.a3 / 15.f * (1.f - cv[3]));
                 }
                 // The box down to the bed, a hand over it at least; a slot the level left bare gets the bed's alone.
-                const float base = S.r_ybase(), top = base + S.r_yheight();
+                // (Its stock base: the box as an earlier bed left it, raised by what that bed took.)
+                const float base = S.r_ybase(), top = base + S.r_yheight(), stock_base = base + float(S.c_b) * 0.2f;
                 const float nb = bare ? b.y_bed - 0.3f : std::min(base, b.y_bed - 0.3f);
                 const float nt = bare ? b.y_bed + 0.6f : std::max(top, b.y_bed + 0.6f);
                 S.w_y(nb, nt - nb);
+                S.c_b = bare ? 0u : u32(std::clamp(iFloor((stock_base - S.r_ybase()) / 0.2f + 0.5f), 0, 15));
                 // A slot the level left bare has no sky term of its own: an open marsh.
                 if (bare && S.c_hemi < 12)
                     S.c_hemi = 12;
@@ -2028,9 +2037,10 @@ void apply_reed_beds(const CDetailManager& dm)
 }
 } // namespace
 
-void da_grass_set_reed_beds(xr_vector<DaReedBed>&& beds, bool reload)
+void da_grass_set_reed_beds(xr_vector<DaReedBed>&& beds, bool reload, float emerge)
 {
     s_reed_beds = std::move(beds);
+    s_reed_emerge_k = emerge;
     if (reload && RImplementation.Details && RImplementation.Details->m_blades && g_pGameLevel && !g.failed)
     {
         // In a running level the detail calc task builds this frame's tiles from the slots on a worker: done first.
@@ -2063,11 +2073,13 @@ void da_grass_level_load()
     g.offs_z = int(dm->dtH.z_offs());
     g.slot_copy.assign(dm->dtSlots, dm->dtSlots + size_t(g.size_x) * g.size_z);
     g.slots = g.slot_copy.data();
-    // The stock colour bits mean nothing to the blades; red and green carry the reed beds' water and mask below.
+    // The stock colour bits mean nothing to the blades; red, green and blue carry the reed beds' water, mask and the
+    // box's drop below.
     for (DetailSlot& S : g.slot_copy)
     {
         S.c_r = 0;
         S.c_g = 0;
+        S.c_b = 0;
     }
     for (u32 i = 0; i < dm->objects.size() && i < dm_max_objects; ++i)
         g.id_profile[i] = u8(da_grass_object_profile(*dm->objects[i]) + 1);
@@ -2402,6 +2414,7 @@ void da_grass_frame_prepare(CBackend& cmd)
                 cmd.set_c("da_grass_pwin", push_window(g.pcur));
                 cmd.set_c("da_grass_pwin_prev", push_window(g.pcur ^ 1u));
                 cmd.set_c("da_grass_snow", L.snow ? 1.f : 0.f, float(g.pin), float(ps_r__dbg_grass), 0.f);
+                cmd.set_c("da_grass_water", s_reed_emerge_k, s_reed_emerge_max, 0.f, 0.f);
                 for (u32 i = 0; i < 6; ++i)
                     cmd.set_ca("da_grass_planes", i, L.planes[i]);
                 for (u32 i = 0; i < 3; ++i)

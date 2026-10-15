@@ -118,6 +118,11 @@ struct DaGrassProfile
     // How much the dead tissue's colour varies culm to culm and clone to clone (0 none, 1 a reed bed's: tawny to
     // grey-buff, pale to dark).
     float dead_vary{};
+    // 1: the head is a cattail's - a velvet cylinder and its male spike above (row 19 w).
+    float head_velvet{};
+    // The deepest water (m) the species stands in (row 27 y): a reed a metre and a half, a sedge a span, a meadow grass
+    // a puddle's.
+    float water_depth{0.05f};
 };
 
 // A plant community ([grass_community_N]): the graminoids a detail object grows and their cover shares in

@@ -68,44 +68,16 @@ bool	grass_is_culm	(grass_blade B)	{ return (B.flags & GRASS_F_CULM) != 0u; }
 bool	grass_is_litter	(grass_blade B)	{ return (B.flags & (GRASS_F_LITTER | GRASS_F_CULM)) == GRASS_F_LITTER; }
 float	grass_hash01	(grass_blade B)	{ return float(B.flags & 0xFFFFu) / 65536.0f; }
 
-float3	grass_bez	(float3 a, float3 b, float3 c, float3 d, float t)
-{
-	const float s = 1.0f - t;
-	return s * s * s * a + 3.0f * s * s * t * b + 3.0f * s * t * t * c + t * t * t * d;
-}
-float3	grass_dbez	(float3 a, float3 b, float3 c, float3 d, float t)
-{
-	const float s = 1.0f - t;
-	return 3.0f * s * s * (b - a) + 6.0f * s * t * (c - b) + 3.0f * t * t * (d - c);
-}
-
-float2	grass_rotate	(float2 v, float a)
-{
-	float s, c;
-	sincos(a, s, c);
-	return float2(v.x * c - v.y * s, v.x * s + v.y * c);
-}
-
-// The point, tangent and side of a blade at t (0 root .. 1 tip). yaw turns the facing (folded pairs), bob
-// adds the GoT sine (x amplitude, y frequency; 0 = none), time picks this or the previous frame.
+// The point, tangent and side of a blade at t (0 root .. 1 tip): its control points (grass_ctrl), yaw turning the
+// facing (folded pairs), bob adding the GoT sine (x amplitude, y frequency; 0 = none), time picking this or the
+// previous frame.
 void	grass_curve	(grass_shape s, float3 root, float t, float yaw, float2 bob, float time, float hash, float knee,
 	out float3 P, out float3 dP, out float3 S)
 {
+	float3 P0, P1, P2, P3;
+	grass_ctrl(s, root, yaw, knee, P0, P1, P2, P3, S);
 	const float2 f = grass_rotate(s.facing, yaw);
-	S = float3(f.y, 0.0f, -f.x);
-	float st, ct;
-	sincos(s.tilt, st, ct);
 	const float3 fwd = float3(f.x, 0.0f, f.y);
-	const float3 P0 = root;
-	float3 P3 = root + s.height * float3(f.x * st, ct, f.y * st);
-	// Arching leaves (sedge): the tip falls forward and down, never into the ground (a lodged leaf).
-	P3 += (fwd * 0.25f - float3(0.0f, 0.45f, 0.0f)) * (s.droop * s.height);
-	P3.y = max(P3.y, root.y + 0.03f * s.height);
-	// The bend lifts the midpoint to the inner, upper side of the chord: the blade leaves its root steeper
-	// than the chord and arches outward toward the tip, as real leaves and culms do. The outer, lower side
-	// made every blade start almost flat and turn up at the end (a J).
-	const float3 up2 = normalize(cross(P3 - P0, S) + float3(0.0f, 1e-5f, 0.0f));
-	float3 P2 = lerp(P0, P3, 2.0f / 3.0f) + up2 * (s.bend * s.height);
 	[branch] if (bob.x > 0.0f)
 	{
 		const float ph = bob.y * time + 6.2831853f * hash;
@@ -114,8 +86,6 @@ void	grass_curve	(grass_shape s, float3 root, float t, float yaw, float2 bob, fl
 		P2 += bob_dir * (a * 0.5f * sin(ph + 0.7f));
 		P3 += bob_dir * (a * sin(ph + 1.4f));
 	}
-	// A geniculate (kneed) culm leaves its root upright for a share of its height.
-	const float3 P1 = P0 + float3(0.0f, knee * s.height, 0.0f);
 	P = grass_bez(P0, P1, P2, P3, t);
 	dP = grass_dbez(P0, P1, P2, P3, max(t, 0.02f));
 }
@@ -200,7 +170,7 @@ float	grass_leaf_width	(float t, uint outline)
 // Dead tissue of a species whose culms differ from one another (profile row 26 w: reed, cattail, the marsh sedges and
 // grasses), per blade (hash hb) and a little per clump (hc). 40 photos of dry reed beds, autumn to winter: hue 24-41
 // deg p10-p90, saturation 0.18-0.55, r/g x1.6 and b/g x2 across a bed, neighbouring culms 30 % apart in value; so
-// from tawny to grey-buff, from pale to dark, at the season colour's luminance on average.
+// from tawny to grey-buff, from pale to dark, at the season colour's luminance and chroma on average.
 float3	grass_dead_vary	(float3 dead, uint p, float hb, float hc)
 {
 	const float dv = grass_prof(p, 26).w;
@@ -210,7 +180,7 @@ float3	grass_dead_vary	(float3 dead, uint p, float hb, float hc)
 	const float y0 = dot(dead, LUMW);
 	float3 v = dead * lerp(float3(1.1f, 0.92f, 0.75f), float3(0.94f, 1.04f, 1.3f), lerp(frac(hb * 53.91f), hc, 0.35f));
 	const float y = dot(v, LUMW);
-	v = max(y + (v - y) * lerp(0.55f, 1.3f, frac(hb * 17.31f)), 0.0f) * (y0 / max(y, 1e-4f));
+	v = max(y + (v - y) * lerp(0.7f, 1.35f, frac(hb * 17.31f)), 0.0f) * (y0 / max(y, 1e-4f));
 	return lerp(dead, v * lerp(0.78f, 1.22f, frac(hb * 71.13f)), dv);
 }
 
@@ -233,7 +203,7 @@ float3	grass_colour	(grass_blade B, uint p, float t, float3 n_world)
 		float3 lit = lerp(thatch_c, straw, 0.25f * yb);
 		lit = lerp(dot(lit, LUMW_L), lit, 0.6f) * lerp(0.42f, 0.7f, vb) * lerp(0.9f, 1.08f, B.hc);
 		lit *= lerp(1.0f, 0.55f, max(K2.y * 0.5f, da_season_env.y * 0.6f) * 0.5f);
-		lit = lerp(lit, float3(0.62f, 0.66f, 0.70f), 0.6f * da_season_env.x);
+		lit = lerp(lit, float3(0.74f, 0.76f, 0.78f), 0.3f * da_season_env.x);
 		return lit;
 	}
 	// Tips cure first; the dry share of the tip comes from the season.
@@ -245,7 +215,9 @@ float3	grass_colour	(grass_blade B, uint p, float t, float3 n_world)
 	// screen, so it loses some chroma at the same luminance.
 	const float3 LUMW = float3(0.2126f, 0.7152f, 0.0722f);
 	float3 dead = thatch ? thatch_c : lerp(yellowing, straw, saturate(sen_v * 2.0f - 1.0f));
-	dead = lerp(dot(dead, LUMW), dead, 0.82f);
+	// (A reed bed's straw keeps its chroma: the photos' dead reed and cattail, November to March, stand at a
+	// saturation of 0.30-0.38 against the drawn 0.15-0.2 with a fifth taken here and a quarter more off the culms.)
+	dead = lerp(dot(dead, LUMW), dead, lerp(0.82f, 1.0f, grass_prof(p, 26).w));
 	dead = grass_dead_vary(dead, p, hb, B.hc);
 	// A green that is already cool (the glaucous fescues, grey hair-grass, wormwoods: blue over green above half)
 	// keeps its hue: turned further to blue on top of its photo colour it read cyan-white in a front-lit field. The
@@ -256,12 +228,15 @@ float3	grass_colour	(grass_blade B, uint p, float t, float3 n_world)
 	live_g = max(y_g + (live_g - y_g) * 1.3f, 0.0f) * (dot(live, LUMW) / max(y_g, 1e-4f));
 	const float3 live_b = lerp(live_g, yellowing, 0.25f * yb * yb);
 	float3 c = lerp(live_b, dead, saturate(sen_v * 2.0f)) * (lerp(0.88f, 1.12f, B.hc) * lerp(0.86f, 1.14f, vb));
-	// Dark base, light top (GoT: colour along the blade); the occlusion darkens the base further.
-	c *= lerp(0.62f, 1.04f, sqrt(t));
+	// Dark base, light top (GoT: colour along the blade); the occlusion darkens the base further. A stem leaf's base is
+	// its sheath up the stem, not the foot of the stand.
+	c *= lerp((B.flags & GRASS_F_CAULINE) != 0u ? 0.85f : 0.62f, 1.04f, sqrt(t));
 	// Silt on the lower blade after a flood.
 	c *= lerp(1.0f, 0.75f, K3.x * (1.0f - smoothstep(0.1f, 0.35f, t)));
-	// Hoarfrost on the upper blade.
-	c = lerp(c, float3(0.62f, 0.66f, 0.70f), 0.7f * da_season_env.x * sqrt(t));
+	// Hoarfrost on the upper blade: white crystals along its edges, the blade's own colour between them. (At 0.7 of a
+	// blue-grey a November morning turned the straw of a reed bed lavender: 28 % of its pixels against none in the
+	// photos.)
+	c = lerp(c, float3(0.74f, 0.76f, 0.78f), 0.35f * da_season_env.x * sqrt(t));
 	// Dew and the season's damp: porous straw darkens more than waxy live blades (Lagarde).
 	const float wet = max(K2.y * 0.5f, da_season_env.y * 0.6f);
 	c *= lerp(1.0f, lerp(0.85f, 0.4f, sen_v), wet * 0.5f);

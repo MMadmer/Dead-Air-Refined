@@ -40,6 +40,7 @@ struct Reed
 struct State
 {
     bool loaded{}, detached{};
+    float emerge{1.f};
     xr_vector<Reed> reeds;
     xr_vector<DaReedBed> beds;
 };
@@ -144,7 +145,7 @@ void set_detached(bool detach, bool reload)
             children.push_back(r.flod);
     }
     s.detached = detach;
-    da_grass_set_reed_beds(detach ? xr_vector<DaReedBed>(s.beds) : xr_vector<DaReedBed>(), reload);
+    da_grass_set_reed_beds(detach ? xr_vector<DaReedBed>(s.beds) : xr_vector<DaReedBed>(), reload, s.emerge);
 }
 } // namespace
 
@@ -204,6 +205,7 @@ void da_reeds_level_load()
     if (s.reeds.empty())
         return;
     s.loaded = true;
+    s.emerge = D.emerge;
     if (ps_r__reeds)
         set_detached(true, true);
     Msg("* [reeds] %u stock reed models stand as reed beds of the blades (%u in water)", u32(s.reeds.size()), in_water);

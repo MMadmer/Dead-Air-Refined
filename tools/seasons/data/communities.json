@@ -1001,6 +1001,41 @@
    "litter_w": 0.005
   },
   {
+   "name": "cattail_bed",
+   "classes": [],
+   "species": {
+    "typ_lat": 0.7143,
+    "phr_aus": 0.102,
+    "car_acu": 0.0612,
+    "gly_max": 0.0612,
+    "pha_aru": 0.0408,
+    "jun_eff": 0.0204
+   },
+   "forbs": {
+    "lys_vul": [
+     0.0018,
+     0.0203,
+     0.5
+    ],
+    "lyt_sal": [
+     0.0018,
+     0.0226,
+     0.45
+    ]
+   },
+   "forb_patch": 3.0,
+   "patch": 10.0,
+   "scattered": 0.1,
+   "presence": 0.4,
+   "cover": 1.0,
+   "litter": 0.6,
+   "litter_h": [
+    0.25,
+    0.5
+   ],
+   "litter_w": 0.012
+  },
+  {
    "name": "forb_fallow",
    "classes": [
     "KS_SHRUB"

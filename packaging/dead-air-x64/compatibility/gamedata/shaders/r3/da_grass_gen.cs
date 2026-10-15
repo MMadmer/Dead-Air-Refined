@@ -18,6 +18,7 @@
 #include "da_detail_common.h"
 #include "da_season_common.h"
 #include "da_grass_common.h"
+#include "da_water_field.h"
 
 ByteAddressBuffer	da_grass_slots		: register(t0);	// level.details slots, 16 bytes each
 ByteAddressBuffer	da_grass_groups		: register(t2);	// 16 bytes per group: tile, level, flags, lanes
@@ -45,6 +46,9 @@ uniform float4	da_grass_planes[6];	// view frustum (world): outside when dot(n, 
 uniform float4	da_grass_bin_d[3];	// upper distance of the 9 view bins
 uniform float4	da_grass_bin_base[4];	// first record of each bin
 uniform float4	da_grass_bin_cap[4];	// records each bin holds
+// x how far a culm rises per metre of water over its root (dead_air_x64_reeds.ltx emerge), y the most it rises (the
+// deepest reed bed's: the blades' bounds count with it)
+uniform float4	da_grass_water;
 uniform float4	da_grass_wave[4];		// wave, dir2D of the two wind groups (deffer_detail_w_flat.vs)
 uniform float4	da_grass_wave_prev[4];
 
@@ -332,6 +336,9 @@ struct grass_lane
 	float		d, wmin, base_raise;
 	// Metres a reed bed's blade rises for the water over its root (the slot's emergence, da_grass_blades.cpp).
 	float		emerge;
+	// The lowest ground the lane may root on: a meadow object's stock box base where a reed bed took the slot's box
+	// down to its bed under the water (-1e9: none).
+	float		floor_y;
 	grass_shape	cur, prev;
 	grass_force	f_cur, f_prev;
 	float		wv, wn, wm;
@@ -531,8 +538,20 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 
 	float yG = 0.0f;
 	float3 nG = float3(0.0f, 1.0f, 0.0f);
-	if (!grass_ground(xz, yG, nG))
+	if (!grass_ground(xz, yG, nG) || yG < L.floor_y)
 		return;
+	// The water over the root (the level's baked water field): no deeper than the species stands in - a reed a metre and
+	// a half, a sedge a span, a meadow grass or a nettle a puddle's (a hand either way at the margin) -, and the culms rise
+	// by what is over their own root (the reed bed's deepest water raised every culm of a slot, a shore's too). Without
+	// the field the slot's own rise of a reed bed holds.
+	[branch] if (da_water_map2.w > 0.5f)
+	{
+		const float4 wf = da_wf_sample(xz);
+		const float wd = wf.y > 0.5f ? max(wf.x - yG, 0.0f) : 0.0f;
+		if (wd > grass_prof(p, 27).y * lerp(0.75f, 1.25f, grass_u01(grass_hash(seed ^ 0x3A7Eu))))
+			return;
+		L.emerge = min(wd * da_grass_water.x, da_grass_water.y);
+	}
 	L.nground = nG.xz;
 	// Tussocks lift the roots in a clump's centre (wet meadow, sedge marsh).
 	const bool tussock = grass_u01(grass_hash(cid ^ 0x7055u)) < P9.z;
@@ -787,18 +806,20 @@ void	grass_store_void	(uint at0, uint at1)
 		da_grass_blades.Store4(i * GRASS_REC + 16u, uint4(0u, 0u, 0u, 0u));
 }
 
-// Leaves on a stem, rooted on its axis and moving with its lean (the previous frame's root offset rides in the
-// record): a reed's on alternate sides, a forb's in a spiral or in opposite pairs turning a quarter per node,
+// Leaves on a stem, rooted on its curve at its node and moving with it (the previous frame's root offset rides in
+// the record): a reed's on alternate sides, a forb's in a spiral or in opposite pairs turning a quarter per node,
 // from the first to the last node (shares of the stem), the upper ones smaller; a dying forb's leaves curl.
 void	grass_store_cauline	(uint at0, uint count, float wscale, grass_lane L, uint p, float hemi, bool with_prev)
 {
 	const float4 P23 = grass_prof(p, 23), P24 = grass_prof(p, 24), P25 = grass_prof(p, 25), P19 = grass_prof(p, 19);
-	float sa, ca;
-	sincos(L.cur.tilt, sa, ca);
-	const float3 axis = float3(L.cur.facing.x * sa, ca, L.cur.facing.y * sa);
-	float sp, cp;
-	sincos(L.prev.tilt, sp, cp);
-	const float3 axis_p = with_prev ? float3(L.prev.facing.x * sp, cp, L.prev.facing.y * sp) : axis;
+	const float knee = grass_prof(p, 7).w;
+	float3 C0, C1, C2, C3, Q0, Q1, Q2, Q3, Sx;
+	grass_ctrl(L.cur, L.root, 0.0f, knee, C0, C1, C2, C3, Sx);
+	// (HLSL picks no structure by a condition.)
+	grass_shape sq = L.cur;
+	if (with_prev)
+		sq = L.prev;
+	grass_ctrl(sq, L.root, 0.0f, knee, Q0, Q1, Q2, Q3, Sx);
 	const uint mode = uint(P25.y + 0.5f);
 	const uint nodes = mode == 2u ? (count + 1u) >> 1 : count;
 	const float phi0 = grass_u01(grass_hash(L.seed ^ 0xCA01u)) * 6.2831853f;
@@ -838,8 +859,8 @@ void	grass_store_cauline	(uint at0, uint count, float wscale, grass_lane L, uint
 		lc.bend = P25.z * lerp(0.7f, 1.3f, u[4]);
 		lc.droop = P25.w * lerp(0.6f, 1.4f, u[5]);
 		lc.wind = L.cur.wind;
-		const float3 r = L.root + axis * (L.cur.height * tn);
-		const float3 dp = (axis_p - axis) * (L.cur.height * tn);
+		const float3 r = grass_bez(C0, C1, C2, C3, tn);
+		const float3 dp = grass_bez(Q0, Q1, Q2, Q3, tn) - r;
 		da_grass_blades.Store4((at0 + k) * GRASS_REC, uint4(asuint(r.x), asuint(r.y), asuint(r.z),
 			((L.seed + k * 0x3779u) & 0xFFFFu) | grass_species_bits(p) | GRASS_F_CAULINE | (L.thatch ? GRASS_F_THATCH : 0u)));
 		da_grass_blades.Store4((at0 + k) * GRASS_REC + 16u, grass_pack_shape(lc));
@@ -955,7 +976,11 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	// ---- The blade (only for a lane that is still alive) ----------------------------------------
 	grass_lane L = (grass_lane)0;
 	// A reed bed's object (the green bits' mask): its blades rise out of the water over their roots (red, 0.1 m).
-	L.emerge = (((S.y >> 24) >> picked) & 1u) != 0u ? float((S.y >> 20) & 15u) * 0.1f : 0.0f;
+	const bool bed = (((S.y >> 24) >> picked) & 1u) != 0u;
+	L.emerge = bed ? float((S.y >> 20) & 15u) * 0.1f : 0.0f;
+	// (A meadow object of a slot a bed took down: not below its stock box, the blue bits' drop over the box's base,
+	// less a hand for the base's 0.2 m step.)
+	L.floor_y = !bed && (S.y >> 28) != 0u ? float(S.x & 0xFFFu) * 0.2f - 200.0f + float(S.y >> 28) * 0.2f - 0.1f : -1e9f;
 	[branch] if (alive)
 		grass_evaluate(L, g, seed, h, xz, p, c, hemi, level, tflags);
 

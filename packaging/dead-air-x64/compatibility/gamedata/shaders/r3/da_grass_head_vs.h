@@ -148,9 +148,14 @@ void	grass_head_frame	(float3 T, float2 facing, float nod, out float3 A, out flo
 // The point of head vertex v from the culm's top P with tangent T (Wc: core ribbon width, Wb: branch ribbon
 // width, build: grass_head_build, spread: the head's width, Hx: the horizontal across the view). Returns the
 // point; outputs the local tangent (for the screen-facing side), the width, the side and s along the head.
+// The places along a cattail's head of its core's pairs (6 near, 3 in the middle distance): the female spike's rounded
+// foot and shoulder, its join to the male spike, the male spike's tip (spread evenly, the sausage read as a spindle).
+static const float grass_velvet_s6[6] = { 0.0f, 0.05f, 0.53f, 0.575f, 0.62f, 0.93f };
+static const float grass_velvet_s3[3] = { 0.0f, 0.55f, 0.6f };
+
 float3	grass_head_point	(uint v, uint core_pairs, uint branch_pairs, uint type, float branches, float open_angle,
 	float len, float Wc, float Wb, float4 build, float nod, float branch_k, float hash, float3 P, float3 T, float2 facing,
-	float spread, float3 Hx, out float3 tangent, out float width, out float side, out float s, out float rib)
+	float spread, float3 Hx, bool velvet, out float3 tangent, out float width, out float side, out float s, out float rib)
 {
 	float3 A, X, Y;
 	grass_head_frame(T, facing, nod, A, X, Y);
@@ -166,7 +171,8 @@ float3	grass_head_point	(uint v, uint core_pairs, uint branch_pairs, uint type, 
 		const bool tip = v == 2u * core_pairs;
 		rib = 0.0f;
 		side = tip ? 0.0f : ((v & 1u) ? 1.0f : -1.0f);
-		s = tip ? 1.0f : float(p) / float(core_pairs);
+		s = tip ? 1.0f : (velvet ? (core_pairs >= 6u ? grass_velvet_s6[min(p, 5u)] : grass_velvet_s3[min(p, 2u)])
+			: float(p) / float(core_pairs));
 		// The florets of a corymb or an umbel: a flat disc on the rays' ends, the core its diameter across the view
 		// and its width the chord there (the vertex shader lays the chord level), an umbel's a little domed.
 		if (rayed)
@@ -300,7 +306,8 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	const float nod = lerp(P7.y, P7.z, hash) * stage;
 
 	float3 Ptop, dTop, Sx;
-	grass_curve(B.cur, B.root, 1.0f, 0.0f, P12.zw, da_grass_vlod.z, grass_hash01(B), P7.w, Ptop, dTop, Sx);
+	const float2 bob = grass_stem_bob(p, true, P12.zw);
+	grass_curve(B.cur, B.root, 1.0f, 0.0f, bob, da_grass_vlod.z, grass_hash01(B), P7.w, Ptop, dTop, Sx);
 	// A corymb's or an umbel's disc opens from the buds' knot to its full width by anthesis; its diameter runs
 	// level across the view (Hx), the same on the previous frame.
 	const bool rayed = grass_head_rayed(type);
@@ -310,8 +317,16 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	const bool disc = rayed && v < 2u * core_pairs + 1u;
 	float3 tangent;
 	float width, side, s, rib;
-	const float3 C = grass_head_point(v, core_pairs, branch_pairs, type, branches, open_angle, len, W, Wb, build, nod,
-		branch_k, hash, Ptop, normalize(dTop), B.cur.facing, spread_h, Hx, tangent, width, side, s, rib);
+	// A cattail's head (profile row 19 w): the female spike a smooth velvet cylinder over the lower 58 % of the head,
+	// blunt at its ends, the male spike right above it a third as thick and withering to a bare spike; no lobes, no
+	// fluff, no air between grains (as a spike type its brown sausage read as a granular dock).
+	const bool velvet = grass_prof(p, 19).w > 0.5f;
+	float3 C = grass_head_point(v, core_pairs, branch_pairs, type, branches, open_angle, len, W, Wb, build, nod,
+		branch_k, hash, Ptop, normalize(dTop), B.cur.facing, spread_h, Hx, velvet, tangent, width, side, s, rib);
+	const float male = velvet ? smoothstep(0.56f, 0.6f, s) : 0.0f;
+	if (velvet && v < 2u * core_pairs + 1u)
+		width = (side == 0.0f) ? 0.0f : W * lerp(lerp(0.6f, 1.0f, smoothstep(0.0f, 0.05f, s)) * (1.0f - 0.2f * smoothstep(0.53f, 0.575f, s)),
+			lerp(0.36f, 0.22f, smoothstep(0.6f, 0.75f, stage)) * (1.0f - 0.6f * smoothstep(0.85f, 1.0f, s)), male);
 
 	// The disc's chord lies level (Hz), with the florets' own depth upright: at least the pixel floor, so a disc
 	// seen edge-on stays a line.
@@ -338,9 +353,9 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	{
 		float3 Pp, dPp, Sp, tp;
 		float wp, sdp, spp, rp;
-		grass_curve(B.prev, B.root_prev, 1.0f, 0.0f, P12.zw, da_grass_vlod.w, grass_hash01(B), P7.w, Pp, dPp, Sp);
+		grass_curve(B.prev, B.root_prev, 1.0f, 0.0f, bob, da_grass_vlod.w, grass_hash01(B), P7.w, Pp, dPp, Sp);
 		Cp = grass_head_point(v, core_pairs, branch_pairs, type, branches, open_angle, len, W, Wb, build, nod, branch_k,
-			hash, Pp, normalize(dPp), B.prev.facing, spread_h, Hx, tp, wp, sdp, spp, rp);
+			hash, Pp, normalize(dPp), B.prev.facing, spread_h, Hx, velvet, tp, wp, sdp, spp, rp);
 	}
 	const float3 pos_prev = Cp + off;
 
@@ -360,7 +375,9 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	// Beyond the near LOD a head is a few pixels standing out of the canopy against the darker leaves:
 	// toned down, so the heads read as a haze over the field rather than a field of lit knobs.
 	const float far_k = smoothstep(0.6f * da_grass_vlod.x, 1.5f * da_grass_vlod.x, d);
-	const float3 c_head = grass_head_colour(B, p, stage) * lerp(1.0f, 0.82f, far_k);
+	float3 c_head = grass_head_colour(B, p, stage) * lerp(1.0f, 0.82f, far_k);
+	// The male spike yellow with pollen while it flowers, grey-brown and thin once it withers.
+	c_head = lerp(c_head, lerp(float3(0.42f, 0.33f, 0.12f), float3(0.17f, 0.14f, 0.1f), smoothstep(0.45f, 0.65f, stage)), male);
 	O.alb_h = float4(grass_to_albedo(c_head), grass_sky(B.hemi) * grass_ao(d, B.ao, y_rel));
 	// Translucency: flowering, ripe and fluffy, weathered (where back-lit).
 	const float tr = grass_translucency(thatch ? 0.45f : (stage < 0.6f ? 0.55f : 0.7f), Vw);
@@ -370,13 +387,14 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	// A forb's flowers are petals and florets, not a fluffy panicle: their rim stays nearly whole.
 	const bool forb_head = uint(grass_prof(p, 19).z + 0.5f) != GRASS_FORM_GRAMINOID;
 	const float fuzz = tex.y * lerp(0.6f, 1.0f, smoothstep(0.5f, 0.85f, stage)) * (thatch ? 0.7f : 1.0f) * (forb_head ? 0.35f : 1.0f);
-	O.misc = float4(tr, 2.0f, near_lod ? 1.0f : 0.0f, tex.x + min(fuzz, 0.95f));
+	O.misc = float4(tr, 2.0f, near_lod ? 1.0f : 0.0f, velvet ? 0.0f : tex.x + min(fuzz, 0.95f));
 	// The spikelet frame: metres along the head and across the ribbon (the drawn half-width, the pixel
 	// floor included), a seed per ribbon so no two branches share their grains.
 	O.sp = float4(disc ? (2.0f * s - 1.0f) * 0.5f * spread_h : s * len, side * hw, frac(hash * 7.31f + rib * 0.618034f) * 512.0f,
 		float(type));
 	// The species' grain scale, its flowers' petals (0: round grains), a disc's radius (0: a ribbon).
-	O.sp2 = float4(max(P10.w, 0.25f), P11.w, disc ? 0.5f * spread_h : 0.0f, forb_head ? 1.0f : 0.0f);
+	// (A cattail's velvet: the petals' slot at -1, the pixel shader keeps it whole.)
+	O.sp2 = float4(max(P10.w, 0.25f), velvet ? -1.0f : P11.w, disc ? 0.5f * spread_h : 0.0f, forb_head ? 1.0f : 0.0f);
 	return O;
 #endif
 }

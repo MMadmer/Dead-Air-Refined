@@ -74,13 +74,13 @@ float4	grass_t4	(uint f4)	{ return asfloat(da_grass_tables.Load4(f4 * 16)); }
 // 13 wind tilt, wind bend, push tilt, slope tilt
 // 14 gloss live, gloss dead, translucency root, translucency tip
 // 15..18 seed or flower colour ramp (linear) at stage 0.25, 0.5, 0.75, 1
-// 19 clump height variance, leaf outline, form, unused
+// 19 clump height variance, leaf outline, form, a cattail's velvet head (1)
 // 20 basal leaf h min/max, w min/max     21 basal tilt min/max (rad), basal bend min/max
 // 22 basal droop min/max, basal pairs per leaf lane, clump lean (rad)
 // 23 cauline leaf h min/max, w min/max   24 cauline tilt min/max (rad), first and last node (share of the stem)
 // 25 cauline upper/lower size, opposite (0/1), bend, droop
 // 26 stem tint (linear rgb factor of the culm colour), how much the dead tissue varies (grass_dead_vary)
-// 27 the widest a lane can be for the pixel rule (the generation's early out), unused
+// 27 the widest a lane can be for the pixel rule (the generation's early out), the deepest water the species stands in
 float4	grass_prof	(uint p, uint r)	{ return grass_t4(GRASS_T_PROF + p * GRASS_PROF_F4 + r); }
 
 // Season keys of species p at the day (prev: the previous frame's day), da_grass_data.h order:
@@ -180,6 +180,56 @@ struct grass_shape
 	float	wind;
 	float	droop;
 };
+
+float3	grass_bez	(float3 a, float3 b, float3 c, float3 d, float t)
+{
+	const float s = 1.0f - t;
+	return s * s * s * a + 3.0f * s * s * t * b + 3.0f * s * t * t * c + t * t * t * d;
+}
+float3	grass_dbez	(float3 a, float3 b, float3 c, float3 d, float t)
+{
+	const float s = 1.0f - t;
+	return 3.0f * s * s * (b - a) + 6.0f * s * t * (c - b) + 3.0f * t * t * (d - c);
+}
+
+float2	grass_rotate	(float2 v, float a)
+{
+	float s, c;
+	sincos(a, s, c);
+	return float2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+
+// The cubic Bezier of a blade at rest of its bob (GoT: P1 = P0, the tip from tilt and facing, the midpoint bent "up
+// and away"), and its side. The vertex shaders draw it (grass_curve adds the bob); the generation roots a stem's
+// leaves on it (a leaf on the chord stood off a bent reed by a hand and hung in the air).
+void	grass_ctrl	(grass_shape s, float3 root, float yaw, float knee, out float3 P0, out float3 P1, out float3 P2,
+	out float3 P3, out float3 S)
+{
+	const float2 f = grass_rotate(s.facing, yaw);
+	S = float3(f.y, 0.0f, -f.x);
+	float st, ct;
+	sincos(s.tilt, st, ct);
+	const float3 fwd = float3(f.x, 0.0f, f.y);
+	P0 = root;
+	P3 = root + s.height * float3(f.x * st, ct, f.y * st);
+	// Arching leaves (sedge): the tip falls forward and down, never into the ground (a lodged leaf).
+	P3 += (fwd * 0.25f - float3(0.0f, 0.45f, 0.0f)) * (s.droop * s.height);
+	P3.y = max(P3.y, root.y + 0.03f * s.height);
+	// The bend lifts the midpoint to the inner, upper side of the chord: the blade leaves its root steeper
+	// than the chord and arches outward toward the tip, as real leaves and culms do. The outer, lower side
+	// made every blade start almost flat and turn up at the end (a J).
+	const float3 up2 = normalize(cross(P3 - P0, S) + float3(0.0f, 1e-5f, 0.0f));
+	P2 = lerp(P0, P3, 2.0f / 3.0f) + up2 * (s.bend * s.height);
+	// A geniculate (kneed) culm leaves its root upright for a share of its height.
+	P1 = P0 + float3(0.0f, knee * s.height, 0.0f);
+}
+
+// A stem's own bob (da_grass_blade_vs.h): none for a stem that carries leaves - they are rooted on its curve at rest,
+// and a bobbing stem left them behind.
+float2	grass_stem_bob	(uint p, bool culm, float2 bob)
+{
+	return (culm && grass_prof(p, 6).z > 0.5f) ? float2(0.0f, 0.0f) : bob;
+}
 
 uint4	grass_pack_shape	(grass_shape s)
 {

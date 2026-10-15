@@ -483,6 +483,12 @@ def species_sections(ltx, kf, sp_data, comm_data, still):
         # Last year's culms stand through the winter (reed, cattail): the snow's grass visibility does not thin them.
         if s.get('winter_stand', 0.0) > 0.0:
             sec.append(('winter_stand', num(s['winter_stand'])))
+        # The deepest standing water the species grows in (da_grass_gen.cs; 0.05 m, a puddle's, without the key).
+        if abs(s.get('water_depth', 0.05) - 0.05) > 1e-6:
+            sec.append(('water_depth', num(s['water_depth'])))
+        # A cattail's velvet head with its male spike (da_grass_head_vs.h).
+        if s.get('head_velvet', 0.0) > 0.0:
+            sec.append(('head_velvet', num(s['head_velvet'])))
         # Dead tissue varying culm to culm and clone to clone (reed, cattail, the marsh sedges and grasses).
         if s.get('dead_vary', 0.0) > 0.0:
             sec.append(('dead_vary', num(s['dead_vary'])))

@@ -54,8 +54,11 @@ The levels' reeds and sedge are not details but stock multiple-use models (`tree
 blades grow a reed bed instead (`src/Layers/xrRender/da_reeds.{h,cpp}`, `dead_air_x64_reeds.ltx`):
 
 - `[reed_cards]` names a stock card (the level shader's base texture) and the community a model of it stands for:
-  `reed_bed` (*Phragmites australis* 73 %, *Typha latifolia*, *Phalaris arundinacea*, *Carex acuta*, *Glyceria
-  maxima* - the Pripyat floodplain's beds) or `sedge_marsh`. A mod's reed model is added here by its card.
+  the `kamish_big` cards draw cattail stands (strap leaves, brown sausages) - `cattail_bed` (*Typha latifolia* 71 %,
+  a tenth of reed, *Carex acuta*, *Glyceria maxima*, *Phalaris arundinacea*); the `kamysh` card a reed - `reed_bed`
+  (*Phragmites australis* 73 %, the same company - the Pripyat floodplain's beds); the sedge cards `sedge_marsh`. (Grown
+  as a reed bed, the cattail stands read as anything but cattail: the user's "rogoz".) A mod's reed model is added
+  here by its card.
 - At level load (after the vegetation core's census, before the bake and the GPU-driven registry) every such model
   is a bed: its footprint (`footprint` x its mean half width), the bed under it (the static ground past the water),
   the water over that bed. The models leave their sector hierarchies (every view, shadow, the GPU registry and the ray
@@ -65,8 +68,15 @@ blades grow a reed bed instead (`src/Layers/xrRender/da_reeds.{h,cpp}`, `dead_ai
   none three quarters of a metre past it), the meadow's own objects giving way by as much, its box down to the bed (the
   ground window finds the bed under the passable water), an open sky term where the level left the slot bare. Its
   colour bits, unused by the blades, carry the water: red is how far the culms rise for it (0.1 m units, the deepest
-  bed's, x `emerge`), green a mask of the slot's bed objects. A bed's blade rises by that much at full growth, so a reed
-  in a metre of water stands its own height over the surface (in spring the new shoots come up through it).
+  bed's, x `emerge`), green a mask of the slot's bed objects, blue how far the box went down (0.2 m units: the
+  meadow's objects of the slot root no lower than its stock box - rooted on the bed they stood up out of the water).
+- **The water over each root** (the level's baked water field, `da_water_field.h`, in the generation): a lane deeper
+  than its species stands in (`water_depth`, profile row 27 y: reed 1.5 m, cattail 1.2, reed sweet-grass 0.8, tufted
+  sedge 0.4, reed canary grass and purple loosestrife 0.3, a puddle's 0.05 for the rest, nettle and wood small-reed
+  none; a hand either way at the margin) is not grown, and a blade rises by the water over its own root x `emerge`
+  (at most the deepest bed's): a reed in a metre of water stands its own height over the surface, a reed on the
+  shore its own height over the shore (it rose by the slot's deepest water). Without the field the slot's red bits
+  hold.
 - Past the blades' radius the stock model's billboard stands for the bed, fading in over the radius' last 15 % as the
   blades fade out (`da_reeds_frame`: the replaced FLODs into the main view's LOD list after its graph is built; the
   batch's alpha comes from the encoded size measure); its cells are drawn for the day by the bake like every stock-path
@@ -81,6 +91,21 @@ blades grow a reed bed instead (`src/Layers/xrRender/da_reeds.{h,cpp}`, `dead_ai
   (`grass_dead_vary`). Measured on 40 Commons photos of dry reed beds, autumn to winter (pixels of hue 18-58 deg):
   hue 24-41 deg p10-p90, saturation 0.18-0.55, r/g x1.6 and b/g x2 across a bed, neighbouring culms 30 % apart in
   value.
+- **Cattail** (`head_velvet = 1`, profile row 19 w): its head a smooth velvet sausage over the lower 58 % of the head,
+  blunt at its ends, the male spike right above it a third as thick (yellow with pollen while it flowers, a thin
+  grey-brown spike once withered), its vertices placed at those joins (spread evenly the sausage read as a spindle);
+  no lobes, fluff or air between grains (as the cylinder spike type it read as a granular dock). Leaves 1.3-2.2 m,
+  1.4-2.4 cm wide, stiff with arching tips; a fifth of the shoots fertile stems as tall; heads from June, brown by July.
+- **Stem leaves** (a reed's) are rooted on their stem's curve at their node (`grass_ctrl`, shared with the vertex
+  shaders), and a stem that carries leaves has no bob of its own (on the straight chord, a bent reed's leaves stood a
+  hand off it and hung in the air); their occlusion counts from the upper canopy, not from their node as the ground
+  (their bases sat in the dark of the stand's foot: near black).
+- **The dead season** checked against a Commons pack of 714 dated photos of *Typha* and *Phragmites* by month (pixels
+  of the plants, hue and saturation medians): green June to September (hue 75-88 deg), mixed in May and October,
+  straw November to April at hue 28-37 deg and saturation 0.30-0.47. The marsh plants' dead tissue keeps its chroma
+  (no fifth off the straw, no quarter off a dead culm - a reed's culm is glossy straw, the palest of the bed), and the
+  hoarfrost is a third of a white over the upper blade, not 0.7 of a blue-grey (the bed's straw went grey and lavender
+  from October to February: saturation 0.15-0.2 and 28 % of the pixels lavender in November).
 - `r__reeds 0` (QA) puts the stock models back. Log: `* [reeds] N stock reed models stand as reed beds of the blades
   (M in water)`, `* [grass] N reed beds grow in M slot touches (deepest emergence X m)`.
 
