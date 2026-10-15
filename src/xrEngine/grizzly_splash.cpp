@@ -265,7 +265,11 @@ bool run_d3d11(SDL_Window* window, const std::atomic_bool& should_exit, const st
         if (!create || !compile)
             break;
         const D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0 };
+        // The game's renderer (Direct3D 11 or 12) does not exist yet: the splash has a small device of its own. Any
+        // GPU with Direct3D 12 drivers runs Direct3D 11 too; without a usable GPU Windows' software rasterizer (WARP).
         if (FAILED(create(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels,
+                UINT(std::size(levels)), D3D11_SDK_VERSION, &device, nullptr, &context)) &&
+            FAILED(create(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels,
                 UINT(std::size(levels)), D3D11_SDK_VERSION, &device, nullptr, &context)))
             break;
         {
@@ -398,7 +402,8 @@ void grizzly_splash_size(int& width, int& height)
         mode.w = 1920;
         mode.h = 1080;
     }
-    height = std::clamp(int(std::lround(mode.h * 0.46)), 200, mode.h);
+    // (about a quarter of the screen, as a launcher splash usually is: 390 x 624 at 1440p, 292 x 467 at 1080p)
+    height = std::clamp(int(std::lround(mode.h * 0.27)), 240, mode.h);
     width = std::min(int(std::lround(height * 1.6)), int(mode.w * 0.9));
 }
 
