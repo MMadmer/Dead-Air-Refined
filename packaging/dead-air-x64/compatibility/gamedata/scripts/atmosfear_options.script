@@ -480,6 +480,9 @@ function af_options_dialog:SetCurrentValues()
 	if (self.list_season) then
 		self.list_season:SetCurrentID(season_index(get_console():get_string("r__season")))
 	end
+	if (self.check_season_weather) then
+		self.check_season_weather:SetCheck(get_console():get_bool("r__season_weather"))
+	end
 
 	self.dlg_weather:Show		(true)
 end
@@ -578,6 +581,14 @@ function af_options_dialog:OnBtnAccept()
 		local console = get_console()
 		if (chosen and chosen ~= console:get_string("r__season")) then
 			console:execute("r__season " .. chosen)
+			console:execute("cfg_save")
+		end
+	end
+	if (self.check_season_weather) then
+		local on = self.check_season_weather:GetCheck()
+		local console = get_console()
+		if (on ~= console:get_bool("r__season_weather")) then
+			console:execute("r__season_weather " .. (on and "on" or "off"))
 			console:execute("cfg_save")
 		end
 	end
@@ -772,4 +783,14 @@ function af_opt_season:InitControls(x, y, xml, handler)
 	handler:Register(combo, "list_season")
 	row.ctrl, row.kind = combo, "list"
 	list.commit_row(self, xml, row)
+
+	-- The climate's weather (r__season_weather, docs/dead-air/WEATHER.md): only with an engine that has it.
+	if (get_console():get_string("r__season_weather") ~= nil) then
+		local row2 = list.new_row(self, xml, "season_weather", "season", "ui_mm_af_season_weather", HINTS .. "season_weather")
+		local check = xml:InitCheck("season_page:check_season_weather", row2.wnd)
+		handler.check_season_weather = check
+		handler:Register(check, "check_season_weather")
+		row2.ctrl, row2.kind = check, "check"
+		list.commit_row(self, xml, row2)
+	end
 end

@@ -93,8 +93,12 @@ float da_water_ice( float2 xz, bool on_field, float shore )
 	[branch]
 	if ( max( da_snow_ice.x, da_snow_ice.y ) < 0.02f )
 		return 0.0f;
-	const bool flowing = on_field && s_water_class.SampleLevel( smp_nofilter, da_wf_uv( xz ), 0 ).r > 0.5f;
-	return da_ice_cover( xz, on_field, flowing, shore );
+	// Classes: standing 0, indoors 0.5 (never freezes), running 1.
+	const float cls = on_field ? s_water_class.SampleLevel( smp_nofilter, da_wf_uv( xz ), 0 ).r : 0.0f;
+	[branch]
+	if ( abs( cls - 0.5f ) < 0.2f )
+		return 0.0f;
+	return da_ice_cover( xz, on_field, cls > 0.75f, shore );
 }
 // da_underwater and the DA_UW_RAMP submersion ramp come from da_water_common.h, which the
 // deferred underwater pass reads through the same header. One owner, one ramp: this file used
@@ -558,7 +562,10 @@ float4 main( vf I ) : SV_Target
 		const float  t_snow = 1.0f / ( 1.0f + 0.135f * d_snow * 250.0f / 0.6f );
 		const float  snowc  = smoothstep( 0.002f, 0.02f, d_snow ) * ( 1.0f - t_snow * t_snow );
 		const float3 column = Br * T * thru + body * thru;
-		const float3 body_i = lerp( bare.rgb * irradiance, column, 0.33f * ( 1.0f - saturate( da_snow_ice.x ) * 0.5f ) );
+		// Young ice is black and lets the water through; a hand's width of it no longer does (the climate's thickness
+		// when it drives the ice, the cover key's stand-in otherwise).
+		const float  young  = da_ice_state.y > 0.0f ? 1.0f - saturate( da_ice_state.y / 0.08f ) : 1.0f - saturate( da_snow_ice.x ) * 0.5f;
+		const float3 body_i = lerp( bare.rgb * irradiance, column, 0.15f + 0.4f * young );
 		const float  F_i    = F * lerp( 0.25f, 0.6f, saturate( bare.a / DA_ICE_GLOSS_MAX ) );
 		float3 ice_rgb = body_i * ( 1.0f - F_i ) + reflection * F_i;
 		ice_rgb = lerp( ice_rgb, min( da_snow_albedo_open.rgb, 0.9f ) * DA_W_SNOW_TINT * irradiance, snowc );

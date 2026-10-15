@@ -403,7 +403,8 @@ float4 da_sn_water(float2 xz, out bool flowing, out bool inside)
 	const int2 last = int2(w, h) - 1;
 	const int2 t = min(int2(uv * float2(w, h)), last);
 	float4 r = s_water_field.Load(int3(t, 0));
-	flowing = r.y > 0.5 && s_water_class.Load(int3(t, 0)) > 0.5;
+	// (classes: standing 0, indoors 0.5, running 1)
+	flowing = r.y > 0.5 && s_water_class.Load(int3(t, 0)) > 0.75;
 	const float2 q = uv * float2(w, h) - 0.5;
 	const float2 qi = floor(q);
 	const float2 qf = q - qi;
@@ -470,12 +471,24 @@ float2 da_sn_flood(float2 xz, float hg)
 
 // Ice and the snow on it at xz, where the ground window has a water surface: x ice cover, y snow depth on
 // the ice (m) (da_snow_ice.h, the rule water.ps draws by).
+// Whether the field's water at xz is indoors (class 0.5: a flooded cellar, a factory floor), which never freezes.
+bool da_sn_water_indoor(float2 xz)
+{
+	uint w, h;
+	s_water_class.GetDimensions(w, h);
+	const float2 uv = (xz - da_water_map.xy) * da_water_map.zw;
+	const int2 t = clamp(int2(uv * float2(w, h)), int2(0, 0), int2(w, h) - 1);
+	return abs(s_water_class.Load(int3(t, 0)) - 0.5) < 0.2;
+}
+
 float2 da_sn_ice_at(float2 xz)
 {
 	[branch] if (max(da_snow_ice.x, da_snow_ice.y) < 0.02)
 		return float2(0.0, 0.0);
 	bool flowing, inside;
 	const float4 wf = da_sn_water(xz, flowing, inside);
+	[branch] if (inside && da_sn_water_indoor(xz))
+		return float2(0.0, 0.0);
 	// Inside the baked field the front keeps its distance from the bank even on the waterline's texels the
 	// field's nearest-texel mask leaves dry (the distance runs on through them, near nothing): the shore of
 	// the ice follows the water's own edge instead of the field's metre squares.

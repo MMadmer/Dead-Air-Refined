@@ -44,8 +44,13 @@ target_sources_grouped(
     da_loading_presenter.h
     da_media.cpp
     da_media.h
+    da_climate.cpp
+    da_climate.h
+    da_ice.cpp
+    da_ice.h
     da_season.cpp
     da_season.h
+    da_season_keys.h
     da_snow_field.cpp
     da_snow_field.h
     xr_ioc_cmd.cpp

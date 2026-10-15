@@ -179,6 +179,8 @@ public:
     xr_vector<ref_sound> CollideSounds;
     xr_vector<shared_str> CollideParticles;
     FactoryPtr<IWallMarkArray> CollideMarks;
+    // The lists as the library spelled them (Load): a material made at runtime copies another's pairs from these.
+    shared_str src_breaking, src_step, src_collide, src_particles, src_marks;
 
 public:
     SGameMtlPair(CGameMtlLibrary* owner)
@@ -249,6 +251,9 @@ private:
 
     u32 m_library_crc32{};
     EGameMtlVersion m_version{};
+
+    // Materials the game makes itself after the library (GameMtlLib_Engine.cpp): the frozen water.
+    void AppendRuntimeMaterials();
 
 public:
     CGameMtlLibrary();

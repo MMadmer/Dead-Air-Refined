@@ -13,6 +13,8 @@
 #include "xrHemisphere.h"
 #include "perlin.h"
 #include "da_snow_field.h"
+#include "da_climate.h"
+#include "da_ice.h"
 
 #ifndef _EDITOR
 #include "IGame_Level.h"
@@ -304,9 +306,32 @@ void CEnvironment::SetGameTime(float game_time, float time_factor)
 {
     if (g_env_time_pin >= 0.f)
         game_time = g_env_time_pin;
+
+    // The sky clock: the cycles' dawn and dusk land on the season's sunrise and sunset. A weather effect holds the
+    // offset (its keys are laid out on the clock it started on); afterwards, a season jump or the option switched,
+    // the offset eases over to the new one at six sky seconds a second instead of jumping the sky.
+    const auto pm12 = [](float v) { return v - DAY_LENGTH * std::floor(v / DAY_LENGTH + 0.5f); };
+    const float target = pm12(da_sky_clock(game_time, da_season_day()) - game_time);
+    const float step = sky_offset_level < 0.f ? DAY_LENGTH : std::abs(pm12(game_time - sky_offset_level));
+    if (!sky_offset_valid || g_env_time_pin >= 0.f || step > 600.f)
+    {
+        // A load, a pinned clock, a sleep or a time jump: the sky of the new moment at once.
+        sky_offset = target;
+        sky_offset_valid = true;
+    }
+    else if (!bWFX)
+    {
+        const float d = pm12(target - sky_offset);
+        const float most = 6.f * std::max(step, 1.f);
+        sky_offset += clampr(d, -most, most);
+    }
+    sky_offset_level = game_time;
+    fLevelTime = game_time;
+    const float sky = NormalizeTime(game_time + sky_offset);
+
     if (bWFX)
-        wfx_time -= TimeDiff(fGameTime, game_time);
-    fGameTime = game_time;
+        wfx_time -= TimeDiff(fGameTime, sky);
+    fGameTime = sky;
     fTimeFactor = time_factor;
 }
 
@@ -830,6 +855,14 @@ float CEnvironment::weather_wind_profile()
         }
         else
             Msg("! [wind] dead_air_x64_wind.ltx not found - weather wind profiles disabled");
+    }
+
+    // The climate's wind (docs/dead-air/WEATHER.md): its mean speed at 10 m, as the base the service turns into
+    // m/s (11 * base * (0.55 + 0.4 * base)). A weather effect keeps its own gale.
+    if (da_climate_enabled() && !bWFX)
+    {
+        const float ms = std::max(da_climate_now().wind_ms, 0.f);
+        return clampr((-6.05f + std::sqrt(36.6f + 17.6f * ms)) / 8.8f, 0.f, 1.f);
     }
 
     const shared_str& name = CurrentWeatherName;
@@ -1410,8 +1443,17 @@ static float da_ice_noise(float x, float z)
     return a + (b - a) * tz;
 }
 
+bool CEnvironment::water_flowing_at(const Fvector& p) const
+{
+    const int at = da_water_field_texel(*this, p);
+    return at >= 0 && size_t(at) < water_class.size() && water_class[at] == water_class_running;
+}
+
 float CEnvironment::ice_at(const Fvector& p) const
 {
+    // A hole broken into it is open water (da_ice.h).
+    if (da_ice_in_hole(p))
+        return 0.f;
     const Fvector4& k = da_snow_frame().ice;
     if (std::max(k.x, k.y) < 0.02f)
         return 0.f;
@@ -1424,13 +1466,17 @@ float CEnvironment::ice_at(const Fvector& p) const
         return k.x < 0.02f ? 0.f : clampr((k.x * 1.2f - n01) * 5.f, 0.f, 1.f);
     }
     // Ice grows out from the banks: the front stands key * reach metres from the nearest bank, ragged
-    // by the noise. Still water closes over completely at key 1; running water keeps a lane wider than
-    // twice its reach.
-    const bool flowing = size_t(at) < water_class.size() && water_class[at] > 127;
+    // by the noise. Both close over completely at key 1 (past the 32 m the shore distance is clamped to);
+    // running water's key lags, so it keeps a lane over the current longer.
+    const u8 cls = size_t(at) < water_class.size() ? water_class[at] : 0;
+    // Water indoors never freezes.
+    if (cls == water_class_indoor)
+        return 0.f;
+    const bool flowing = cls == water_class_running;
     const float key = flowing ? k.y : k.x;
     if (key < 0.02f)
         return 0.f;
-    const float reach = key * (flowing ? 32.f : 38.f);
+    const float reach = key * (flowing ? 40.f : 38.f);
     return clampr((reach - water_field[at].shore + 3.f * (n01 * 2.f - 1.f)) * 0.5f, 0.f, 1.f);
 }
 
@@ -1835,6 +1881,13 @@ void CEnvironment::water_tick(float delta)
     const float snow_we = 2.5f * d15 * (1.f - liquid);
     rain_ext_km = (rain_rate_mmh > 0.f ? 0.312f * powf(rain_rate_mmh, 0.67f) : 0.f) +
         (snow_we > 0.f ? 2.5f * powf(snow_we, 0.7f) : 0.f);
+    // Blowing snow: the wind lifts the loose snow off the ground; a blizzard closes the view to a couple of hundred
+    // metres (docs/dead-air/WEATHER.md).
+    if (da_climate_enabled() && !bWFX)
+    {
+        const float drift = clampr(da_climate_state().drift, 0.f, 1.f);
+        rain_ext_km += 10.f * drift * drift;
+    }
 
     // ---- Camera against the baked field. ----------------------------------------------------
     // Nothing else knows whether the eye is under water: the surface is a forward pass and the
@@ -1948,6 +2001,8 @@ void CEnvironment::wind_tick(float delta)
     float base;
     if (eff_wind_force >= 0.f)
         base = eff_wind_force;
+    else if (profile >= 0.f && da_climate_enabled() && !bWFX)
+        base = std::max(wind_profile_smooth, base_implied); // the climate says it in full
     else if (profile >= 0.f)
         base = std::max(wind_profile_smooth * (0.70f + 0.60f * base_cfg), base_implied);
     else

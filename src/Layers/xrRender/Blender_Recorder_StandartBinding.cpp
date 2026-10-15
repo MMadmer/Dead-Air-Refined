@@ -11,6 +11,8 @@
 #include "xrEngine/thunderbolt.h"
 #include "xrEngine/da_season.h"
 #include "xrEngine/da_snow_field.h"
+#include "xrEngine/da_climate.h"
+#include "xrEngine/da_ice.h"
 #include "xrEngine/da_media.h"
 #if RENDER == R_R4
 #include "Layers/xrRender/da_wind_history.h"
@@ -1132,6 +1134,38 @@ static cl_da_snow_frame<&SSnowFrame::albedo_open> binder_da_snow_albedo_open;
 static cl_da_snow_frame<&SSnowFrame::albedo_road> binder_da_snow_albedo_road;
 static cl_da_snow_frame<&SSnowFrame::albedo_trees> binder_da_snow_albedo_trees;
 
+// The climate's ice (xrEngine da_ice.h, docs/dead-air/WEATHER.md): x holes bound, y standing water's ice (m), z running
+// water's (m), w the rot of the standing water's spring ice; and the holes nearest the camera.
+static Fvector4 s_ice_holes[da_ice_holes_gpu];
+static u32 s_ice_holes_n = 0, s_ice_holes_frame = u32(-1);
+static void ice_holes_frame()
+{
+    if (s_ice_holes_frame == Device.dwFrame)
+        return;
+    s_ice_holes_frame = Device.dwFrame;
+    s_ice_holes_n = da_ice_holes_near(Device.vCameraPosition, s_ice_holes);
+}
+static class cl_da_ice_state final : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        ice_holes_frame();
+        const SDaClimateState& st = da_climate_state();
+        const bool on = da_climate_enabled();
+        cmd_list.set_c(C, float(s_ice_holes_n), on ? st.ice[0] : 0.f, on ? st.ice[1] : 0.f,
+            on ? clampr(st.ice_rot[0] / 15.f, 0.f, 1.f) : 0.f);
+    }
+} binder_da_ice_state;
+static class cl_da_ice_holes final : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        ice_holes_frame();
+        for (u32 i = 0; i < da_ice_holes_gpu; ++i)
+            cmd_list.set_ca(C, i, i < s_ice_holes_n ? s_ice_holes[i] : Fvector4{});
+    }
+} binder_da_ice_holes;
+
 #if RENDER == R_R4
 // r3\da_snow_sample.h: the fine trail window and the level-wide depth texture, and the whole misc
 // vector (x cap, y fine half-size, z depth present, w fine-to-level blend band).
@@ -1417,6 +1451,8 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_snow_dirt", &binder_da_snow_dirt);
     r_Constant("da_snow_fall", &binder_da_snow_fall);
     r_Constant("da_snow_ice", &binder_da_snow_ice);
+    r_Constant("da_ice_state", &binder_da_ice_state);
+    r_Constant("da_ice_holes", &binder_da_ice_holes);
     r_Constant("da_snow_albedo_open", &binder_da_snow_albedo_open);
     r_Constant("da_snow_albedo_road", &binder_da_snow_albedo_road);
     r_Constant("da_snow_albedo_trees", &binder_da_snow_albedo_trees);

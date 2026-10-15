@@ -322,4 +322,11 @@
 	<string id="st_da_x64_weather_hint_season">
 		<text>Время года в Зоне: трава, снег, деревья и земля. «По календарю ПК» идёт за датой этого компьютера.</text>
 	</string>
+	<!-- The seasons page: the climate's weather (r__season_weather, docs/dead-air/WEATHER.md). -->
+	<string id="ui_mm_af_season_weather">
+		<text>Погода по климату ЧЗО</text>
+	</string>
+	<string id="st_da_x64_weather_hint_season_weather">
+		<text>Небо, осадки, ветер, снежный покров и лёд следуют климату Зоны отчуждения в выбранное время года: долгота дня, снегопады, метели, оттепели, туманы и грозы с их настоящей частотой; снег копится только в снегопад, лёд нарастает в морозы. Если выключено, погоду выбирает AtmosFear по периодам локаций.</text>
+	</string>
 </string_table>

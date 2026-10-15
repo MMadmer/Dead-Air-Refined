@@ -1,0 +1,232 @@
+-- The climate's weather (docs/dead-air/WEATHER.md).
+--
+-- AtmosFear's weather manager (level_weathers.script) picks the sky of a level from per-level period graphs once a
+-- day at 21:00. With r__season_weather on, the engine's climate says what the sky does hour by hour - the Zone's
+-- clear, overcast, foggy, rainy, stormy, snowy and blizzard hours in the shares the Chornobyl records give each month
+-- - and this layer hands its sky to the manager: the same af3_<night brightness>_<sky> cycles, two new ones (snow,
+-- blizzard), the manager's moon phases and night brightness. The engine takes what falls, its phase and the wind
+-- from the climate whatever the cycle draws.
+--
+-- A level whose two AtmosFear periods are both "veryfoggy" keeps its own weather: that is how Dead Air designs its
+-- fog levels (Rostok, the Red Forest), and the fog stays there in every season. A blowout or a psi storm keeps its
+-- own pre-blowout sky and weather effect; the climate comes back after it. With the option off nothing here acts.
+--
+-- The climate is a function of the game's time and a seed; the seed is kept with the game, so another game has
+-- another weather history and a reload replays this one.
+
+local SEED_KEY = "dead_air_x64_climate_seed"
+
+-- The AtmosFear state the rest of the scripts know a climate sky by (depth of field kernels, fog particles, the
+-- radiation of the weather): every new sky maps onto one the manager's tables have.
+local BASE_STATE = {
+	clear_steady = "clear",
+	partly = "clear",
+	cloudy_no_sun = "cloudy_no_sun",
+	foggy = "foggy",
+	rain_steady = "rain",
+	storm = "storm",
+	thunder = "storm",
+	snow = "cloudy",
+	blizzard = "storm",
+}
+-- Skies whose cycles come one per moon phase (af3_<night>_<sky>_<phase>).
+local MOON_SKIES = { clear_steady = true, partly = true }
+
+local seed
+
+local function climate_on()
+	return level.climate_enabled and level.climate_enabled()
+end
+
+-- A level that keeps a weather of its own: both its periods are veryfoggy in the AtmosFear options.
+local function keeps_own_weather(level_name)
+	local cfg = atmosfear_options and atmosfear_options.config
+	if not (cfg and level_name) then
+		return false
+	end
+	local good = cfg:r_value("atmosfear_current_parameters", "opt_" .. level_name .. "_period_good")
+	local bad = cfg:r_value("atmosfear_current_parameters", "opt_" .. level_name .. "_period_bad")
+	return good == "veryfoggy" and bad == "veryfoggy"
+end
+
+-- The cycle for the climate's sky now, or nil when the manager keeps its own choice.
+local function climate_cycle(wm)
+	if not climate_on() or wm.weatherType ~= "atmosfear" or wm.weather_fx then
+		return nil
+	end
+	if wm.transition_period or wm.pre_blowout_period or level.is_wfx_playing() then
+		return nil
+	end
+	if keeps_own_weather(level.name()) then
+		return nil
+	end
+	local sky = level.climate_sky()
+	if not BASE_STATE[sky] then
+		return nil
+	end
+	local brightness = atmosfear_options.config:r_value("atmosfear_current_parameters", "opt_night_brightness") or "bright"
+	local name = "af3_" .. brightness .. "_" .. sky
+	if MOON_SKIES[sky] then
+		name = name .. "_" .. wm:get_moon_phase()
+	end
+	return name, sky
+end
+
+local wrapped
+
+local function install()
+	local wm = level_weathers and level_weathers.WeatherManager
+	if not (wm and wm.select_weather and wm.update) then
+		return false
+	end
+	if wrapped == wm then
+		return true
+	end
+	wrapped = wm
+
+	local base_select = wm.select_weather
+	wm.select_weather = function(self, now, new)
+		local name, sky = climate_cycle(self)
+		if not name then
+			level.climate_set_sky_driven(false)
+			self.climate_cycle = nil
+			return base_select(self, now, new)
+		end
+		local state = BASE_STATE[sky]
+		self.curr_weather = state
+		self.next_weather = state
+		if now then
+			self.last_hour = level.get_time_hours()
+			self.next_hour = (self.last_hour + 1) % 24
+		end
+		-- Forced only the first time on a level (a load, a level change) or after a jump of the clock (a sleep):
+		-- AtmosFear's own daily reselection at 21:00 must not cut the sky over in one frame; a new sky lerps in over
+		-- the cycle's next key.
+		local forced = self.climate_cycle == nil or self.forced_weather_change_on_time_change
+		self.forced_weather_change_on_time_change = false
+		if name ~= self.climate_cycle or forced then
+			level.set_weather(name, forced)
+			self.climate_cycle = name
+		end
+		level.climate_set_sky_driven(true)
+	end
+
+	local base_reset = wm.reset
+	wm.reset = function(self)
+		self.climate_cycle = nil
+		return base_reset(self)
+	end
+
+	local base_update = wm.update
+	wm.update = function(self)
+		base_update(self)
+		-- The climate's sky moves by the hour; a look every two seconds is plenty.
+		local now = time_global()
+		if self.climate_look and now < self.climate_look then
+			return
+		end
+		self.climate_look = now + 2000
+		if not climate_on() then
+			if self.climate_cycle then
+				-- The option went off: AtmosFear's own sky again at once.
+				self.climate_cycle = nil
+				level.climate_set_sky_driven(false)
+				base_select(self, true, true)
+			end
+			return
+		end
+		local name = climate_cycle(self)
+		if name ~= self.climate_cycle then
+			self:select_weather(false)
+		end
+	end
+
+	-- AtmosFear's distant storms follow the "rain_day" ambient of its rain cycle; under the climate a rain is not a
+	-- thunderstorm unless the climate says so (a January thaw rains without lightning).
+	local base_storm = wm.distant_storm
+	if base_storm then
+		wm.distant_storm = function(self)
+			if self.climate_cycle and level.climate_sky() ~= "thunder" then
+				return
+			end
+			return base_storm(self)
+		end
+	end
+	return true
+end
+
+-- Day and night by the light, not the clock: the season's day is long in June and short in December
+-- (r__season_daylight), and the sky's hour (level.sky_hours) puts a winter's 17:00 at dusk. The stock helpers that
+-- ask "is it day" keep their own thresholds, on that hour. Quest timings (hour_between and the named ones) keep
+-- the clock.
+local function sky_hour()
+	return level.sky_hours and level.sky_hours() or level.get_time_hours()
+end
+
+local function patch_day_night()
+	if xr_conditions then
+		xr_conditions.is_day = function(actor, npc)
+			local h = sky_hour()
+			return db.actor ~= nil and h >= 6 and h < 21
+		end
+		xr_conditions.is_dark_night = function(actor, npc)
+			local h = sky_hour()
+			return db.actor ~= nil and (h < 3 or h > 22)
+		end
+		xr_conditions.is_night = function(actor, npc)
+			local h = sky_hour()
+			return db.actor ~= nil and (h < 5 or h > 19)
+		end
+	end
+	if utils and utils.is_day then
+		utils.is_day = function()
+			local h = sky_hour()
+			return h >= 5 and h < 21
+		end
+	end
+	if bind_dynamic_light and bind_dynamic_light.is_night then
+		bind_dynamic_light.is_night = function()
+			local h = sky_hour()
+			return db.actor ~= nil and (h < 5 or h > 18)
+		end
+	end
+	if bind_heli and bind_heli.is_night then
+		bind_heli.is_night = function()
+			local h = sky_hour()
+			return db.actor ~= nil and (h < 6 or h > 20)
+		end
+	end
+end
+
+local function save_state(m_data)
+	m_data[SEED_KEY] = seed
+end
+
+local function load_state(m_data)
+	seed = m_data[SEED_KEY]
+end
+
+local function on_game_load()
+	-- A game saved before the climate gets a seed of its own now and keeps it.
+	if not seed then
+		seed = math.random(1, 999999)
+	end
+	if level.climate_set_seed then
+		level.climate_set_seed(seed)
+	end
+end
+
+function on_game_start()
+	local ok, installed = pcall(install)
+	if not (ok and installed) then
+		printf("! dead_air_x64: the climate weather is not installed")
+		return
+	end
+	local ok_light = pcall(patch_day_night)
+	if not ok_light then
+		printf("! dead_air_x64: the day and night helpers keep the clock")
+	end
+	RegisterScriptCallback("save_state", save_state)
+	RegisterScriptCallback("load_state", load_state)
+	RegisterScriptCallback("on_game_load", on_game_load)
+end

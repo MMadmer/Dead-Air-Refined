@@ -3,6 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
+#include "da_ice_game.h"
 #include "Level.h"
 #include "Level_Bullet_Manager.h"
 #include "game_cl_base.h"
@@ -631,7 +632,9 @@ bool CBulletManager::firetrace_callback(collide::rq_result& result, LPVOID param
     if (!result.O)
     {
         CDB::TRI const& triangle = *(Level().ObjectSpace.GetStaticTris() + result.element);
-        bullet_manager.RegisterEvent(EVENT_HIT, FALSE, &bullet, collide_position, result, triangle.material);
+        // The season's ice over the water stops the bullet where it holds (da_ice_game.h).
+        bullet_manager.RegisterEvent(EVENT_HIT, FALSE, &bullet, collide_position, result,
+            da_ice_bullet_material(u16(triangle.material), collide_position));
         return (FALSE);
     }
 

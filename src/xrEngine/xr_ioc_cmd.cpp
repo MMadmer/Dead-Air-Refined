@@ -10,6 +10,7 @@
 #include "Environment.h"
 #include "IGame_Persistent.h"
 #include "da_season.h"
+#include "da_climate.h"
 
 namespace
 {
@@ -1045,6 +1046,8 @@ void CCC_Register()
     CMD4(CCC_Float, "r__color_add_b", &ps_r__color_add_b, -0.5f, 0.5f);
     // r__season and its QA commands (da_season.cpp).
     da_season_register_commands();
+    // r__season_weather, r__season_daylight and the climate's QA commands (da_climate.cpp).
+    da_climate_register_console();
 
     CMD1(CCC_Editor, "rs_editor");
 

@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "Rain.h"
+#include "da_climate.h"
 #include "IGame_Persistent.h"
 #include "Environment.h"
 #include "da_snow_field.h"
@@ -116,10 +117,39 @@ void CEffect_Rain::Born(Item& dest, float radius, const Fvector& wind_v)
     // of the ceiling of the room below, until the time its landing in the yard was due.
     // Snow, sleet or rain: the item takes the phase falling now (da_precip), so a change of phase
     // spreads through the sheet as items are reborn rather than switching it in one frame.
-    dest.flake = ::Random.randF() >= da_precip().liquid;
+    const float drift_d = da_rain_drift();
+    const float dens = std::max(g_pGamePersistent->Environment().CurrentEnv.rain_density, 0.f);
+    dest.drift = drift_d > 0.f && ::Random.randF() * (dens + drift_d) < drift_d;
+    dest.flake = dest.drift || ::Random.randF() >= da_precip().liquid;
     float column = da_rain::source_offset;
     float min_fall = 0.4f;
-    if (dest.flake)
+    float below_eye = 0.f;
+    if (dest.drift)
+    {
+        // Lifted grains: they hardly sink, they fly with the gust.
+        const float fall = ::Random.randF(da_rain::drift_fall_min, da_rain::drift_fall_max);
+        const float drift = ::Random.randF(0.8f, 1.1f);
+        float tx = wind_v.x * drift, tz = wind_v.z * drift;
+        const float hmax = fall * std::tan(da_rain::drift_max_slant);
+        const float h = _sqrt(tx * tx + tz * tz);
+        if (h > hmax)
+        {
+            tx *= hmax / h;
+            tz *= hmax / h;
+        }
+        Fvector v;
+        v.set(tx, -fall, tz);
+        dest.fSpeed = std::max(v.magnitude(), 0.05f);
+        dest.D.div(v, dest.fSpeed);
+        dest.flutter_amp = ::Random.randF(0.02f, 0.08f);
+        dest.flutter_rate = ::Random.randF(3.f, 7.f);
+        dest.flutter_phase = ::Random.randF(PI_MUL_2);
+        dest.flake_half = ::Random.randF(da_rain::flake_half_min * 0.6f, da_rain::flake_half_max * 0.7f);
+        column = da_rain::drift_column;
+        min_fall = _cos(da_rain::drift_max_slant);
+        below_eye = da_rain::drift_height * ::Random.randF(0.4f, 1.2f);
+    }
+    else if (dest.flake)
     {
         // A flake sinks at its own speed and moves with the whole wind: the slant is atan(wind / fall),
         // steep in any breeze, capped so a gale does not lay the sheet flat.
@@ -177,7 +207,7 @@ void CEffect_Rain::Born(Item& dest, float radius, const Fvector& wind_v)
     const float angle = ::Random.randF(0, PI_MUL_2);
     const float dist = _sqrt(::Random.randF()) * radius;
     Fvector land;
-    land.set(view.x + dist * _cos(angle), view.y, view.z + dist * _sin(angle));
+    land.set(view.x + dist * _cos(angle), view.y - below_eye, view.z + dist * _sin(angle));
 
     const float inv_fall = 1.f / std::max(-dest.D.y, min_fall);
     const float up_range = column * inv_fall;
@@ -555,6 +585,13 @@ void CEffect_Rain::HitItem(Item& src)
     // The drop keeps to the line its birth ray solved, so it lands exactly where that ray found
     // the surface - whatever the frame the timer fires in has carried it past.
     Splash(src.Phit, src.Nhit, src.mtl_hit);
+}
+
+float da_rain_drift()
+{
+    if (!g_pGamePersistent || !da_climate_enabled() || g_pGamePersistent->Environment().IsWFXPlaying())
+        return 0.f;
+    return da_rain::drift_density * clampr(da_climate_state().drift, 0.f, 1.f);
 }
 
 // startup _new_ particle system

@@ -1,0 +1,45 @@
+{
+ "meta": {
+  "version": "1.0",
+  "generated": "2026-10-15",
+  "what": "The climate's weather (src/xrEngine/da_climate.cpp, docs/dead-air/WEATHER.md): shares of the hours of each month by sky, the precipitation, the wind, the melt; and the scalars of the processes, the snowpack and the ice",
+  "sources": "_work research of 15.10.2026 (climate_research.md): Kyiv 33345 / Gomel 33041 SYNOP tables (pogodaiklimat), WMO 1991-2020 normals (Kyiv, Ovruch, Gomel, Bragin), NOAA Chornobyl 1981-2010, Gomel precipitation durations (Leonovich 2012), Ukrhydromet hazard criteria, DSNS ice rules",
+  "derivations": {
+   "p_clear": "share of hours under 0-2/10 total cloud: Kyiv/Gomel clear days + clear hours of partly cloudy days (mean total cloud 7.7-8.2 tenths in Dec-Jan, 4.6-5.5 in Jul-Aug)",
+   "p_overcast": "share of hours under 8-10/10 total cloud, the wet hours included: overcast days (Kyiv 5-20, Gomel 6-23 a month) and the overcast hours of other days",
+   "p_wet": "share of hours with precipitation falling: Gomel solid 430 h + mixed 91 h + liquid 611 h a year, split by snowfall, mixed and rain days of each month (5.7 / 4.7 / 4.4 h a day)",
+   "precip_mm": "Chornobyl monthly precipitation, NOAA 1981-2010",
+   "p_fog": "fog hours: fog days (mean of Kyiv and Gomel) x 6.5 h",
+   "wind_ms": "Kyiv mean wind at 10 m, WMO 1991-2020",
+   "p_blizzard": "share of snow hours with a blizzard: blizzard days (Kyiv/Gomel 6-7 a year, 1-2 a month Nov-Mar) x ~5 h over the month's snow hours",
+   "p_storm": "share of rain hours of a rainstorm (heavy rain and a gale): days of wind >= 15 m/s with rain",
+   "p_thunder": "share of rain hours with thunder: thunder days x 2 h over the month's rain hours",
+   "cloud_t_corr": "a clear winter sky is a cold anticyclone (positive), a clear summer sky a hot one (negative)",
+   "fog_dawn": "radiation fog before dawn (summer: 1) against all-day advective fog (winter: 0.3)",
+   "ddf": "degree-day melt factor on the day's mean (mm w.e. per C per day): open field 5 (BSUIR), calibrated down in Dec-Feb (low sun, cold content) so that a 30-year run gives Kyiv's mean depths (Dec 5, Jan 9, Feb 11 cm)"
+  },
+  "calibration": "scratchpad climate_sim.py, 20 years: snow Jan 7.6 / Feb 10.2 cm mean, cover 91 %; pond ice 1 Jan 16 cm, 1 Feb 23 cm, 15 Feb 23 cm; walkable (>= 7 cm) Dec 79 %, Jan 97 %, Feb 99 %, Mar 50 %, Nov 10 %; blizzard 10 h/month Jan-Feb"
+ },
+ "months": {
+  "p_clear":      [0.15, 0.17, 0.17, 0.17, 0.18, 0.17, 0.20, 0.25, 0.22, 0.15, 0.08, 0.08],
+  "p_overcast":   [0.62, 0.55, 0.48, 0.38, 0.30, 0.28, 0.25, 0.22, 0.32, 0.45, 0.66, 0.68],
+  "p_wet":        [0.21, 0.21, 0.15, 0.10, 0.083, 0.092, 0.083, 0.066, 0.086, 0.093, 0.17, 0.20],
+  "precip_mm":    [34, 37, 36, 40, 61, 73, 80, 55, 56, 42, 48, 43],
+  "p_fog":        [0.039, 0.044, 0.031, 0.018, 0.0087, 0.0063, 0.0057, 0.010, 0.023, 0.044, 0.059, 0.057],
+  "wind_ms":      [2.9, 2.9, 3.0, 2.7, 2.4, 2.3, 2.2, 2.0, 2.2, 2.3, 2.6, 2.7],
+  "p_blizzard":   [0.10, 0.12, 0.08, 0.03, 0, 0, 0, 0, 0, 0.02, 0.07, 0.08],
+  "p_storm":      [0.05, 0.05, 0.05, 0.06, 0.08, 0.10, 0.10, 0.10, 0.08, 0.07, 0.06, 0.05],
+  "p_thunder":    [0, 0, 0.005, 0.034, 0.145, 0.21, 0.23, 0.16, 0.05, 0.008, 0, 0],
+  "cloud_t_corr": [0.5, 0.45, 0.25, 0, -0.2, -0.3, -0.35, -0.3, -0.15, 0.15, 0.4, 0.5],
+  "fog_dawn":     [0.3, 0.35, 0.6, 0.8, 1, 1, 1, 1, 0.9, 0.7, 0.4, 0.3],
+  "ddf":          [0.7, 1.0, 2.8, 4.5, 5, 5, 5, 5, 5, 4, 1.3, 0.7]
+ },
+ "climate": {
+  "tau_cloud": 1.3, "tau_wet": 0.28, "tau_wind": 0.45, "tau_fog": 0.6,
+  "wind_sigma": 0.55, "blizzard_ms": 9, "fog_wind_max": 4, "hysteresis": 0.15, "thunder_day": 1.8,
+  "rate_shape": 1.5, "phase_bias": -1.0, "phase_sigma": 1.0,
+  "rho_max_dry": 260, "rho_max_wet": 450, "tau_dry": 240, "tau_wet_h": 30, "fresh_tau": 30, "drift_ms": 6,
+  "ice_alpha": 0.024, "ice_snow_ins": 3, "ice_melt": 0.006, "water_tau_still": 4, "water_tau_flow": 9,
+  "flow_growth": 0.8, "flow_melt": 1.3, "ice_cover_still": 0.03, "ice_cover_flow": 0.12, "rot_full": 15
+ }
+}

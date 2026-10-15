@@ -25,6 +25,8 @@
 #include "ai/monsters/basemonster/base_monster.h"
 #include "da_snow_deformers.h"
 #include "da_water_impact.h"
+#include "da_ice_game.h"
+#include "xrEngine/da_ice.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/IGame_Persistent.h"
 
@@ -184,14 +186,21 @@ void CBulletManager::FireShotmark(SBullet* bullet, const Fvector& vDir, const Fv
         if (tgt && !tgt->Flags.test(SGameMtl::flDynamic) && wcfg.enabled)
         {
             auto& env = g_pGamePersistent->Environment();
+            // The season's ice: a bullet the ice stopped marks it with a star; one through ice too thin to stop it
+            // holes it, and the water under it splashes without a ring (da_ice_game.h).
+            const bool on_ice = da_ice_material() != u16(GAMEMTL_NONE_IDX) && target_material == da_ice_material();
+            const bool through_ice = tgt->Flags.test(SGameMtl::flLiquid) && env.ice_at(vEnd) > 0.5f;
+            if (on_ice || through_ice)
+                da_ice_bullet_hit(vEnd, on_ice);
             // Water is water: the liquid material of a lake or a river as much as the rain
             // puddle - the same ring, the same splash pair.
-            if (tgt->Flags.test(SGameMtl::flLiquid) || env.SamplePuddleMask(vEnd, vNormal.y) > wcfg.mask_threshold)
+            if (!on_ice && (tgt->Flags.test(SGameMtl::flLiquid) || env.SamplePuddleMask(vEnd, vNormal.y) > wcfg.mask_threshold))
             {
                 static const u16 water_idx = GMLib.GetMaterialIdx(wcfg.material.c_str());
                 if (water_idx != u16(GAMEMTL_NONE_IDX))
                     mtl_pair = GMLib.GetMaterialPairByIndices(bullet->bullet_material_idx, water_idx);
-                env.water_hit(vEnd, wcfg.ring_radius_bullet, CEnvironment::EWaterHit::ring);
+                if (!through_ice)
+                    env.water_hit(vEnd, wcfg.ring_radius_bullet, CEnvironment::EWaterHit::ring);
             }
         }
     }

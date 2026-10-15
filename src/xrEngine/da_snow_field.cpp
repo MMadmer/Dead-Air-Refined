@@ -8,6 +8,8 @@
 
 #include "stdafx.h"
 #include "da_snow_field.h"
+#include "da_season_keys.h"
+#include "da_climate.h"
 #include "Environment.h"
 #include "IGame_Level.h"
 #include "IGame_Persistent.h"
@@ -29,63 +31,10 @@ constexpr float snow_we_full = 2.5f;
 // Most stamps a frame keeps; past it the frame is a pathological crowd and the rest wait a frame.
 constexpr size_t stamps_max = 4096;
 
-enum EPhase : int
-{
-    phase_snow = 0,
-    phase_sleet,
-    phase_rain
-};
-constexpr pcstr phase_name[3] = {"snow", "sleet", "rain"};
-
 float srgb_to_linear(float c)
 {
     return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
 }
-
-struct SColourCurve
-{
-    DaSeasonCurve ch[3];
-
-    Fvector at(float day) const
-    {
-        Fvector c;
-        c.set(std::max(ch[0].at(day), 0.f), std::max(ch[1].at(day), 0.f), std::max(ch[2].at(day), 0.f));
-        return c;
-    }
-};
-
-struct SSnowKeys
-{
-    SSnowTargets targets;
-    DaSeasonCurve state[4]; // fresh, settled, old, wet
-    DaSeasonCurve age, crust, wet, drift, comp_road, rho_open, rho_road, dirt_road, litter_trees;
-    SColourCurve albedo[3]; // open, road, trees
-
-    DaSeasonCurve p_snow, p_mixed, p_rain, snowfall_share, p_precip, thunder, glaze, frost_night;
-    DaSeasonCurve t_mean, t_sigma, t_range;
-    bool t_mean_keys = true; // false: the annual cosine fit below stands in for the monthly means
-    float t_a = 7.89f, t_b = 12.14f, t_phase = 194.5f;
-    float ts = -0.4f, tl = 2.8f, tw = 2.f;
-    // Precipitation days run this much colder, with this factor on the day-to-day spread.
-    float t_precip_bias = -0.5f, t_precip_sigma = 1.4f;
-    // Decision D6: everything falls as snow from snow_from to snow_to (days, wrapping the new year).
-    float snow_from = 334.f, snow_to = 58.5f;
-
-    // Never shorter than the zero-grass window (28 Feb runs to its midnight there, to noon in the data).
-    bool snow_only(float day) const
-    {
-        const float d = da_season_wrap(day);
-        if (da_snow_winter_window(d))
-            return true;
-        return snow_from <= snow_to ? (d >= snow_from && d <= snow_to) : (d >= snow_from || d <= snow_to);
-    }
-    float mean_temperature(float day) const
-    {
-        return t_mean_keys ? t_mean.at(day) : t_a + t_b * std::cos(PI_MUL_2 * (day - t_phase) / 365.f);
-    }
-
-    DaSeasonCurve ice_still, ice_flowing, ice_snow_cover, ice_snow_depth;
-};
 
 void set_months(DaSeasonCurve& c, const float (&v)[12])
 {
@@ -354,57 +303,17 @@ const SSnowKeys& keys()
     return g_keys;
 }
 
-// ---- Hash and noise ---------------------------------------------------------------------------------
+// ---- Hash -----------------------------------------------------------------------------------------------
 
-u32 hash_u32(u32 x)
+// The QA sweep's draws (the climate has the weather's own noise, da_climate.cpp).
+float hash01(u32 x)
 {
     x ^= x >> 16;
     x *= 0x7feb352du;
     x ^= x >> 15;
     x *= 0x846ca68bu;
     x ^= x >> 16;
-    return x;
-}
-
-float hash01(u32 x) { return float(hash_u32(x) >> 8) * (1.f / 16777216.f); }
-
-// A standard normal value per lattice point (Box-Muller over two hashes).
-float lattice_gauss(s64 i, u32 seed)
-{
-    const u32 a = hash_u32(u32(i) * 0x9E3779B1u ^ seed);
-    const float u1 = std::max(float(a >> 8) * (1.f / 16777216.f), 1e-7f);
-    const float u2 = hash01(a ^ 0x68E31DA4u);
-    return std::sqrt(-2.f * std::log(u1)) * std::cos(PI_MUL_2 * u2);
-}
-
-float value_noise(double x, u32 seed)
-{
-    const double fl = std::floor(x);
-    const s64 i = s64(fl);
-    float t = float(x - fl);
-    t = t * t * (3.f - 2.f * t);
-    return lattice_gauss(i, seed) + (lattice_gauss(i + 1, seed) - lattice_gauss(i, seed)) * t;
-}
-
-float synoptic_raw(double days) { return value_noise(days / 2.5, 0x5A17C0DEu) + 0.5f * value_noise(days / 1.1, 0x33C1A5E7u); }
-
-// The synoptic temperature anomaly in standard deviations: weather systems last a few days, so the
-// anomaly is correlated over ~2.5 game days. A pure function of game time, so a reload replays it.
-float synoptic(double days)
-{
-    static float norm = 0.f;
-    if (norm <= 0.f)
-    {
-        double sum = 0.0;
-        constexpr int n = 8192;
-        for (int i = 0; i < n; ++i)
-        {
-            const float v = synoptic_raw(double(i) * 0.371);
-            sum += double(v) * double(v);
-        }
-        norm = float(1.0 / std::sqrt(std::max(sum / n, 1e-6)));
-    }
-    return synoptic_raw(days) * norm;
+    return float(x >> 8) * (1.f / 16777216.f);
 }
 
 // ---- State --------------------------------------------------------------------------------------------
@@ -479,6 +388,94 @@ void reset_runtime()
     s_rt = SPrecipRuntime{};
     s_rt.qa_hour = qa_hour;
 }
+
+// ---- The snowpack in the season's picture -------------------------------------------------------------------
+// The climate's snowpack (da_climate) is one depth of open ground. The level's picture of snow - where it lies
+// deeper, thinner, where the melt bares the ground first - is the season LUT of a day; the pack shows the day
+// whose open mean depth it has: on the way in (1 Nov .. 15 Feb) a winter that has come that far, on the way out
+// (15 Feb .. 15 May) a spring that melted that far. Past the deepest key the same picture deepens.
+
+// Open-ground mean depth of the keys at a day: the covered share times the depth of the covered part.
+float open_mean(const SSnowKeys& k, float day)
+{
+    return k.targets.cover_at(da_snow_open, day) * k.targets.depth_at(da_snow_open, day);
+}
+
+struct SPackBranch
+{
+    static constexpr int n = 241;
+    float day[n]{}, depth[n]{};
+};
+
+// The branches sampled densely and made monotone (in: running maximum, out: running minimum).
+const SPackBranch& pack_branch(bool melting)
+{
+    static SPackBranch in, out;
+    static bool built = false;
+    if (!built)
+    {
+        built = true;
+        const SSnowKeys& k = keys();
+        constexpr float in_from = 304.f, in_to = 45.5f + 365.f;
+        constexpr float out_from = 45.5f, out_to = 135.f;
+        for (int i = 0; i < SPackBranch::n; ++i)
+        {
+            const float t = float(i) / float(SPackBranch::n - 1);
+            in.day[i] = da_season_wrap(in_from + (in_to - in_from) * t);
+            in.depth[i] = open_mean(k, in.day[i]);
+            out.day[i] = out_from + (out_to - out_from) * t;
+            out.depth[i] = open_mean(k, out.day[i]);
+            if (i)
+            {
+                in.depth[i] = std::max(in.depth[i], in.depth[i - 1]);
+                out.depth[i] = std::min(out.depth[i], out.depth[i - 1]);
+            }
+        }
+    }
+    return melting ? out : in;
+}
+
+// The season day whose picture the pack shows, and the factor the picture deepens by past the deepest key.
+void pack_day(float old_depth, float D, float& day, float& ratio)
+{
+    const float d = da_season_wrap(D);
+    const bool melting = d >= 45.5f && d < 150.f;
+    const SPackBranch& br = pack_branch(melting);
+    constexpr int last = SPackBranch::n - 1;
+    ratio = 1.f;
+    const float peak = melting ? br.depth[0] : br.depth[last];
+    if (old_depth <= 1e-4f)
+    {
+        day = melting ? br.day[last] : br.day[0];
+        return;
+    }
+    if (old_depth >= peak)
+    {
+        day = melting ? br.day[0] : br.day[last];
+        ratio = peak > 1e-4f ? old_depth / peak : 1.f;
+        return;
+    }
+    day = br.day[last];
+    for (int i = 1; i < SPackBranch::n; ++i)
+    {
+        const float a = br.depth[i - 1], b = br.depth[i];
+        if (melting ? b > old_depth : b < old_depth)
+            continue;
+        const float t = std::abs(b - a) > 1e-6f ? clampr((old_depth - a) / (b - a), 0.f, 1.f) : 1.f;
+        day = da_season_wrap(br.day[i - 1] + da_season_wrap(br.day[i] - br.day[i - 1]) * t);
+        return;
+    }
+}
+
+// How much of a fresh fall each class keeps: the crowns catch some, the snow on a road settles faster.
+constexpr float fresh_share[da_snow_classes] = {1.f, 0.7f, 0.8f, 1.f};
+// A fresh fall of this many metres whitens the bare patches of the picture to a third.
+constexpr float fresh_whiten = 0.02f;
+
+// The last frame's dynamic S / Mc (motion vectors), and the field they belong to.
+Fvector4 s_last_S{}, s_last_Mc{};
+u32 s_last_stamp = 0;
+bool s_last_valid = false;
 } // namespace
 
 // ---- Field ----------------------------------------------------------------------------------------------
@@ -541,6 +538,7 @@ void da_snow_field_reset()
     reset_runtime();
 }
 
+const SSnowKeys& da_snow_keys() { return keys(); }
 const SSnowTargets& da_snow_targets() { return keys().targets; }
 
 float da_snow_texel_depth(const SSnowField& field, size_t index, const Fvector4& S, const Fvector4& Mc)
@@ -577,17 +575,55 @@ void da_snow_frame_update()
 
     SSnowFrame f;
     const SSnowField* field = da_snow_field();
+
+    // The climate's snowpack (docs/dead-air/WEATHER.md); the season keys while it is off or a QA sweep drives D.
+    const bool dynamic = da_climate_enabled() && !qa;
+    const SDaClimateState& pack = da_climate_state();
+    float day = D, ratio = 1.f, fresh = 0.f;
+    if (dynamic)
+    {
+        // Quantised to 2 mm: the composites rerun only when the picture moves by a step they can store.
+        constexpr float q = 0.002f;
+        fresh = std::round(pack.fresh / q) * q;
+        const float old = std::max(std::round(pack.depth / q) * q - fresh, 0.f);
+        pack_day(old, D, day, ratio);
+    }
+    const float whiten = std::exp(-fresh / fresh_whiten);
+
     if (field)
     {
-        lut_at(*field, D, f.S, f.Mc);
-        lut_at(*field, Dp, f.S_prev, f.Mc_prev);
+        lut_at(*field, day, f.S, f.Mc);
+        if (dynamic)
+        {
+            f.S.set(f.S.x * ratio + fresh * fresh_share[0], f.S.y * ratio + fresh * fresh_share[1],
+                f.S.z * ratio + fresh * fresh_share[2], f.S.w * ratio + fresh * fresh_share[3]);
+            f.Mc.mul(ratio * whiten);
+            const bool same_field = s_last_valid && s_last_stamp == da_snow_field_stamp();
+            f.S_prev = same_field ? s_last_S : f.S;
+            f.Mc_prev = same_field ? s_last_Mc : f.Mc;
+            s_last_S = f.S;
+            s_last_Mc = f.Mc;
+            s_last_stamp = da_snow_field_stamp();
+            s_last_valid = true;
+        }
+        else
+        {
+            lut_at(*field, Dp, f.S_prev, f.Mc_prev);
+            s_last_valid = false;
+        }
     }
 
     float cover[da_snow_classes], depth[da_snow_classes];
     for (u32 c = 0; c < da_snow_classes; ++c)
     {
-        cover[c] = k.targets.cover_at(c, D);
-        depth[c] = k.targets.depth_at(c, D);
+        cover[c] = k.targets.cover_at(c, day);
+        depth[c] = k.targets.depth_at(c, day);
+        if (dynamic)
+        {
+            // A fresh fall whitens the bare patches; the picture deepens with the pack.
+            cover[c] = 1.f - (1.f - cover[c]) * whiten;
+            depth[c] = std::min(depth[c] * ratio + fresh * fresh_share[c], k.targets.cap);
+        }
     }
     f.cover.set(cover[0], cover[1], cover[2], cover[3]);
 
@@ -614,17 +650,40 @@ void da_snow_frame_update()
     f.state.set(st[0], st[1], st[2], st[3]);
 
     const float crust = clampr(qa ? k.crust.at(D) : std::max(k.crust.at(D), s_rt.crust_evt), 0.f, 1.f);
-    const float wet = clampr(qa ? k.wet.at(D) : std::max(k.wet.at(D), s_rt.rain_on_snow), 0.f, 1.f);
-    f.surf.set(age, crust, wet, clampr(k.drift.at(D), 0.f, 1.f));
+    float wet = clampr(qa ? k.wet.at(D) : std::max(k.wet.at(D), s_rt.rain_on_snow), 0.f, 1.f);
+    // A thawing pack is wet whatever the month: half a millimetre of melt an hour soaks it.
+    if (dynamic)
+        wet = std::max(wet, clampr(pack.melt / 0.5f, 0.f, 1.f));
+    // The wind's drift: the month's key, and the snow the wind carries now.
+    const float drift = clampr(std::max(k.drift.at(D), dynamic ? pack.drift : 0.f), 0.f, 1.f);
+    f.surf.set(age, crust, wet, drift);
     f.dirt.set(clampr(k.dirt_road.at(D), 0.f, 1.f), clampr(k.litter_trees.at(D), 0.f, 1.f),
         clampr(k.comp_road.at(D), 0.f, 1.f), k.targets.cap);
 
-    // Trails refill from fresh snow in game time; the renderer integrates over real seconds.
+    // Trails refill from fresh snow in game time, and from what a blizzard carries (4 cm an hour at full drift);
+    // the renderer integrates over real seconds.
     const float time_factor = g_pGamePersistent ? std::max(g_pGamePersistent->Environment().fTimeFactor, 0.f) : 1.f;
-    f.fall.set(s_rt.fresh_mh, s_rt.fresh_mh * time_factor * (1.f / 3600.f), s_precip.air_temp, 0.f);
+    const float fill_mh = s_rt.fresh_mh + (dynamic ? 0.04f * pack.drift : 0.f);
+    f.fall.set(s_rt.fresh_mh, fill_mh * time_factor * (1.f / 3600.f), s_precip.air_temp, 0.f);
 
-    f.ice.set(clampr(k.ice_still.at(D), 0.f, 1.f), clampr(k.ice_flowing.at(D), 0.f, 1.f),
-        clampr(k.ice_snow_cover.at(D), 0.f, 1.f), clampr(k.ice_snow_depth.at(D), 0.f, k.targets.cap));
+    if (!field)
+    {
+        // A level without the snow's field (underground, interiors): its water never freezes.
+        f.ice.set(0.f, 0.f, 0.f, 0.f);
+    }
+    else if (dynamic)
+    {
+        // The climate's ice: the cover closes over with the thickness (thin ice at the banks first); the snow on it is
+        // what fell once it held.
+        const float still = pack.ice_cover[0];
+        const float flowing = pack.ice_cover[1];
+        const float snow_on = std::max(pack.ice_snow[0], pack.ice_snow[1]);
+        f.ice.set(still, flowing, clampr(snow_on / 0.02f, 0.f, 1.f) * std::max(still, flowing),
+            clampr(snow_on, 0.f, k.targets.cap));
+    }
+    else
+        f.ice.set(clampr(k.ice_still.at(D), 0.f, 1.f), clampr(k.ice_flowing.at(D), 0.f, 1.f),
+            clampr(k.ice_snow_cover.at(D), 0.f, 1.f), clampr(k.ice_snow_depth.at(D), 0.f, k.targets.cap));
 
     const Fvector a_open = k.albedo[0].at(D), a_road = k.albedo[1].at(D), a_trees = k.albedo[2].at(D);
     f.albedo_open.set(a_open.x, a_open.y, a_open.z, 0.f);
@@ -786,14 +845,16 @@ void da_precip_tick(CEnvironment& env)
         s_rt.qa_hour = -1.f;
     s_rt.hour = hour;
 
-    // ---- Air temperature: climatology + synoptic anomaly + diurnal swing ----------------------------
+    // ---- Air temperature: climatology + synoptic anomaly + diurnal swing (da_climate) ----------------
+    // The climate's air when it drives the weather (its own swing under its own cloud and rain, docs/dead-air/
+    // WEATHER.md); otherwise its day's mean with the swing the weather's density flattens.
+    const SDaClimateSample& w = da_climate_now();
+    const bool climate = da_climate_enabled() && !qa;
     const float t_mean = k.mean_temperature(D);
-    const float sigma = std::max(k.t_sigma.at(D), 0.f);
     const float range = std::max(k.t_range.at(D), 0.f);
-    const float anomaly = qa ? 0.f : synoptic(game_days);
-    s_rt.t_day = t_mean + sigma * anomaly;
-    // Cloud and rain flatten the day's swing.
-    float t_air = s_rt.t_day + 0.5f * range * (1.f - 0.6f * density) * std::cos(PI_MUL_2 * (hour - 15.f) / 24.f);
+    s_rt.t_day = qa ? t_mean : w.t_day;
+    float t_air = climate ? w.t_air :
+                            s_rt.t_day + 0.5f * range * (1.f - 0.6f * density) * std::cos(PI_MUL_2 * (hour - 15.f) / 24.f);
 
     // ---- Phase: drawn once per six-hour block of game time (QA: every half second of wall time) ------
     const s64 block = qa ? s64(std::floor(Device.fTimeGlobal / 0.5f)) : s64(std::floor(game_days * 4.0));
@@ -802,35 +863,35 @@ void da_precip_tick(CEnvironment& env)
     {
         s_rt.block = block;
         const u32 b = u32(u64(block) & 0xffffffffu) ^ u32(u64(block) >> 32);
-        if (k.snow_only(D))
-            s_rt.phase = phase_snow;
+        if (!qa)
+        {
+            // The six-hour block's draw of the climate (the same one the snowpack's history took).
+            s_rt.phase = w.phase;
+            s_rt.glaze = w.glaze;
+        }
         else
         {
-            float p_snow, p_mixed;
-            if (qa)
+            if (k.snow_only(D))
+                s_rt.phase = phase_snow;
+            else
             {
                 // No weather noise in a sweep: the climatological shares of the day itself.
                 const float ps = std::max(k.p_snow.at(D), 0.f), pm = std::max(k.p_mixed.at(D), 0.f),
                             pr = std::max(k.p_rain.at(D), 0.f);
                 const float sum = std::max(ps + pm + pr, 1e-4f);
-                p_snow = ps / sum;
-                p_mixed = pm / sum;
+                const float u = hash01(b * 0x9E3779B1u ^ 0x6A09E667u);
+                s_rt.phase = u < ps / sum ? phase_snow : u < (ps + pm) / sum ? phase_sleet : phase_rain;
             }
-            else
-            {
-                // Precipitation days run a little colder and wider than days in general.
-                const double block_days = double(block) * 0.25;
-                const float t_phase = t_mean + k.t_precip_bias + k.t_precip_sigma * sigma * synoptic(block_days);
-                p_snow = 1.f / (1.f + std::exp((t_phase - k.ts) / k.tw));
-                const float p_rain = 1.f / (1.f + std::exp(-(t_phase - k.tl) / k.tw));
-                p_mixed = std::max(1.f - p_snow - p_rain, 0.f);
-            }
-            const float u = hash01(b * 0x9E3779B1u ^ 0x6A09E667u);
-            s_rt.phase = u < p_snow ? phase_snow : u < p_snow + p_mixed ? phase_sleet : phase_rain;
+            const float glaze_p = clampr(k.glaze.at(D), 0.f, 1.f) / std::max(1.f - clampr(k.p_snow.at(D), 0.f, 1.f), 0.05f);
+            s_rt.glaze = s_rt.phase != phase_snow && hash01(b * 0xC2B2AE35u ^ 0x61A2u) < glaze_p;
         }
         s_rt.thunder = hash01(b * 0x85EBCA6Bu ^ 0x7417u) < clampr(k.thunder.at(D), 0.f, 1.f);
-        const float glaze_p = clampr(k.glaze.at(D), 0.f, 1.f) / std::max(1.f - clampr(k.p_snow.at(D), 0.f, 1.f), 0.05f);
-        s_rt.glaze = s_rt.phase != phase_snow && hash01(b * 0xC2B2AE35u ^ 0x61A2u) < glaze_p;
+    }
+    // The phase follows the climate's draw as its blocks turn over between two ticks of ours.
+    if (!qa && s_rt.phase != w.phase)
+    {
+        s_rt.phase = w.phase;
+        s_rt.glaze = w.glaze;
     }
 
     const int phase = s_qa_phase >= 0 ? s_qa_phase : s_rt.phase;
@@ -863,7 +924,8 @@ void da_precip_tick(CEnvironment& env)
     const float d15 = density * std::sqrt(density);
     s_precip.snow_rate = precipitating ? clampr(d15 * (1.f - s_precip.liquid), 0.f, 1.f) : 0.f;
     s_precip.air_temp = t_air;
-    s_precip.thunder_ok = s_rt.thunder && phase == phase_rain;
+    // The climate's lightning comes with its thunder sky; the cycles' own (the climate off) by the six-hour draw.
+    s_precip.thunder_ok = climate ? w.thunder && phase == phase_rain : s_rt.thunder && phase == phase_rain;
     s_rt.precipitating = precipitating;
 
     // ---- Frost and dew --------------------------------------------------------------------------------

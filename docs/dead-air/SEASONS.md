@@ -156,7 +156,9 @@ builder takes the longest assigned prefix of a path.
 They follow `D` and nothing else: the blade grass and its seed heads (`GRASS.md`), the stock details
 by class (keep, height and burial curves on the GPU), the snow layer and its depth by class
 (`SNOW.md`), precipitation phase, ice and the far ground tint (`WINTER.md`). The keyframes and their
-sources are in `SEASON_DATA.md`. The player's grass density and height settings and the graphics preset
+sources are in `SEASON_DATA.md`. With the climate's weather on (`WEATHER.md`, the Seasons page's second row) the
+snow's depth and the ice are what the climate's weather left rather than the month's keys, and the length of the day
+is the season's. The player's grass density and height settings and the graphics preset
 stay what they are under every season.
 
 ## QA

@@ -53,7 +53,8 @@ void dxRainRender::Copy(IRainRender& _in) { *this = *(dxRainRender*)&_in; }
 void dxRainRender::Render(CEffect_Rain& owner)
 {
     CEnvironment& env = g_pGamePersistent->Environment();
-    const float factor = env.CurrentEnv.rain_density;
+    // What falls, and the snow the wind lifts (Rain.h, blowing snow).
+    const float factor = std::max(env.CurrentEnv.rain_density, da_rain_drift());
     const float dt = Device.fTimeDelta;
     const Fvector& vEye = Device.vCameraPosition;
     const int tier = ps_r__rain_quality;
@@ -65,7 +66,7 @@ void dxRainRender::Render(CEffect_Rain& owner)
     const float rate01 = clampr(powf(env.RainRateMmh() * (1.f / 25.f), 0.7f), 0.f, 1.f);
     // The rate is the LIQUID share's (Environment::water_tick); the snow falling alongside it has its
     // own (da_precip), and the sheet is sized on whichever is heavier.
-    const float snow01 = clampr(powf(da_precip().snow_rate, 0.7f), 0.f, 1.f);
+    const float snow01 = clampr(powf(std::max(da_precip().snow_rate, da_rain_drift()), 0.7f), 0.f, 1.f);
     const float fall01 = std::max(rate01, snow01);
 
     // The sheet stops when the weather does; the splash pool must NOT. That early-out used to
@@ -151,7 +152,8 @@ void dxRainRender::Render(CEffect_Rain& owner)
             // the wind slanted the fall axis. Drops that leave the volume (the camera moved)
             // are simply reborn into the landing disc: Born costs the same ray as the old
             // edge-teleport machinery did.
-            const float t_eye = (vEye.y - one.P.y) / std::min(one.D.y, -0.05f);
+            // A level stream of blowing snow never reaches eye level: it belongs where it is now.
+            const float t_eye = one.drift ? 0.f : (vEye.y - one.P.y) / std::min(one.D.y, -0.05f);
             Fvector wdir;
             wdir.set(one.P.x + one.D.x * t_eye - vEye.x, 0, one.P.z + one.D.z * t_eye - vEye.z);
             if (wdir.square_magnitude() > b_radius_wrap_sqr || (one.P.y - vEye.y) < da_rain::sink_offset)

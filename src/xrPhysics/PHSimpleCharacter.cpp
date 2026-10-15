@@ -6,6 +6,7 @@
 #include "xrEngine/xr_object_list.h"
 #include "tri-colliderknoopc/__aabb_tri.h"
 #include "PHSimpleCharacter.h"
+#include "ph_ice.h"
 #include "PHContactBodyEffector.h"
 
 #include "SpaceUtils.h"
@@ -2047,13 +2048,14 @@ bool CPHSimpleCharacter::TouchRestrictor(ERestrictionType rttype)
     return rttype == RestrictionType();
 }
 
-IC bool valide_res(u16& res_material_idx, const collide::rq_result& R)
+IC bool valide_res(u16& res_material_idx, const collide::rq_result& R, const Fvector& at)
 {
     if (!R.O)
     {
         CDB::TRI* tri = inl_ph_world().ObjectSpace().GetStaticTris() + R.element;
         VERIFY(tri);
-        res_material_idx = tri->material;
+        // The season's ice over the water: the steps sound of it.
+        res_material_idx = ph_contact_material(u16(tri->material), &at.x, 0.f);
         return !ignore_material(res_material_idx);
     }
     IRenderVisual* V = R.O->Visual();
@@ -2077,9 +2079,10 @@ bool PickMaterial(
     while (inl_ph_world().ObjectSpace().RayPick(pos, dir, range, collide::rqtBoth, R, ignore_object))
     {
         float r_range = R.range + EPS_L;
+        const Fvector hit = Fvector().mad(pos, dir, R.range);
         Fvector next_pos = pos.mad(dir, r_range);
         float next_range = range - r_range;
-        if (valide_res(res_material_idx, R))
+        if (valide_res(res_material_idx, R, hit))
             return true;
         range = next_range;
         pos = next_pos;

@@ -8,6 +8,7 @@
 #include "xrPhysics/console_vars.h"
 #include "xrPhysics/PHWorld.h"
 #include "xrCDB/xr_area.h"
+#include "xrPhysics/ph_ice.h"
 
 #ifdef DEBUG
 #include "xrPhysics/debug_output.h"
@@ -412,5 +413,21 @@ IC int dcTriListCollider::dSortTriPrimitiveCollide(
     }
     if (!*pushing_neg) // no_last_pos|| && !*pushing_b_neg
         dVectorSet(last_pos, p);
+
+    // The season's ice: a contact on a liquid triangle where the ice holds is a contact on the ice (ph_ice.h). The
+    // foot's material follows it, so the steps sound of ice.
+    for (int i = 0; i < ret; ++i)
+    {
+        dContactGeom* c = CONTACT(contact, i * skip);
+        dSurfaceParameters* surface = SURFACE(contact, i * skip);
+        const u16 was = u16(surface->mode);
+        const u16 now = ph_contact_material(was, c->pos, c->depth);
+        if (now != was)
+        {
+            surface->mode = now;
+            if (data->tri_material == was)
+                data->tri_material = now;
+        }
+    }
     return ret;
 }

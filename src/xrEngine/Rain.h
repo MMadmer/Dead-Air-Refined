@@ -113,7 +113,19 @@ constexpr float flake_half_min = 0.0075f;
 constexpr float flake_half_max = 0.015f;
 // A visor gets wet from snow too: the flakes melt on the glass, at this share of what rain would do.
 constexpr float flake_visor_share = 0.3f;
+// Blowing snow (docs/dead-air/WEATHER.md): a wind over loose dry snow lifts it - low, nearly level streams of fine
+// grains that run along the ground under a blizzard and on their own in a ground blizzard. Born in a short column
+// round knee to chest height, sinking slowly, flying with the wind almost flat.
+constexpr float drift_fall_min = 0.15f;
+constexpr float drift_fall_max = 0.5f;
+constexpr float drift_column = 2.5f;
+constexpr float drift_max_slant = deg2rad(86.f);
+constexpr float drift_height = 1.2f; // how far under the eye the stream runs
+constexpr float drift_density = 0.6f; // the sheet's density of a full drift
 } // namespace da_rain
+
+// The sheet density blowing snow adds (0 while the climate is off or a weather effect plays).
+ENGINE_API float da_rain_drift();
 
 class IGameObject;
 
@@ -148,6 +160,8 @@ private:
         float flutter_phase;
         float flake_half;
         bool flake;
+        // Blowing snow rather than falling snow: a low, nearly level flight with the wind.
+        bool drift;
         // The spawn column is blocked at its very top: the drop would be born inside geometry.
         // Parked out of the sheet instead of being reborn, and re-raycast, every frame.
         bool sheltered;

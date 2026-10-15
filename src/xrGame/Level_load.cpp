@@ -1,4 +1,5 @@
 #include "StdAfx.h"
+#include "xrEngine/da_ice.h"
 #include "Common/LevelGameDef.h"
 #include "ai_space.h"
 #include "ParticlesObject.h"
@@ -483,8 +484,35 @@ void bake_water_field(CObjectSpace& space)
     // Running against standing water, for the ice of the season (water.ps, CEnvironment::ice_at): every
     // connected sheet (8-connected, surfaces within half a metre) is judged by its width - about twice
     // the distance to the bank deep inside it - against its area. A channel narrower than 60 m and at
-    // least six widths long runs; it freezes later and keeps open lanes.
+    // least six widths long runs; it freezes later and keeps open lanes. A sheet inside a building (a
+    // flooded cellar, a puddle on a factory floor: a roof over it and walls round it at most of its points)
+    // never freezes - the ground keeps it above zero (CEnvironment::water_class_indoor).
+    // A solid hit within `range` along dir: passable faces (crowns, bushes, the water itself) are looked through.
+    const auto solid_hit = [&space](Fvector from, const Fvector& dir, float range) {
+        collide::rq_result rq;
+        for (int k = 0; k < 8 && range > 0.01f; ++k)
+        {
+            if (!space.RayPick(from, dir, range, collide::rqtStatic, rq, nullptr))
+                return false;
+            const SGameMtl* m = GMLib.GetMaterialByIdx(u16(space.GetStaticTris()[rq.element].material));
+            if (m && !m->Flags.test(SGameMtl::flPassable))
+                return true;
+            from.mad(dir, rq.range + 0.02f);
+            range -= rq.range + 0.02f;
+        }
+        return false;
+    };
+    const auto enclosed = [&](const Fvector& p) {
+        if (!solid_hit(p, Fvector{0.f, 1.f, 0.f}, 8.f))
+            return false;
+        constexpr Fvector sides[4] = {{1.f, 0.f, 0.f}, {-1.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, {0.f, 0.f, -1.f}};
+        int walls = 0;
+        for (const Fvector& d : sides)
+            walls += solid_hit(p, d, 12.f) ? 1 : 0;
+        return walls >= 3;
+    };
     xr_vector<u8> flow(field.size(), 0);
+    u32 indoor_sheets = 0;
     {
         xr_vector<u8> seen(field.size(), 0);
         xr_vector<size_t> stack, members;
@@ -526,9 +554,28 @@ void bake_water_field(CObjectSpace& space)
             if (width < 60.f && area >= 6.f * width * width)
                 for (const size_t i : members)
                     flow[i] = 255;
+            // Indoors: at most 24 of its points, spread over it, half a hand over the surface.
+            const size_t samples = std::min<size_t>(members.size(), 24);
+            u32 inside = 0;
+            for (size_t s = 0; s < samples; ++s)
+            {
+                const size_t i = members[s * members.size() / samples];
+                const int x = int(i % size_t(dim)), z = int(i / size_t(dim));
+                const Fvector p{bounds.vMin.x + (float(x) + 0.5f) * texel, field[i].surface + 0.15f,
+                    bounds.vMin.z + (float(z) + 0.5f) * texel};
+                inside += enclosed(p) ? 1 : 0;
+            }
+            if (samples && float(inside) >= 0.7f * float(samples))
+            {
+                for (const size_t i : members)
+                    flow[i] = CEnvironment::water_class_indoor;
+                ++indoor_sheets;
+            }
         }
     }
 
+    if (indoor_sheets)
+        Msg("* [water] %u sheet(s) of water indoors: they never freeze", indoor_sheets);
     env.set_water_field(std::move(field), std::move(fill), bounds);
     env.set_water_class(std::move(flow));
 }
@@ -861,6 +908,8 @@ bool CLevel::Load_GameSpecific_After()
         // The season's snow: 1 m fields of ground, top and classes and this level's LUT, after the water
         // (the water reset above clears the old level's snow too).
         da_snow_bake_level();
+        // The holes broken into the ice belong to the level and the load they were made in.
+        da_ice_reset();
     });
 
     return TRUE;

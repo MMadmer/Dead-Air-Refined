@@ -236,3 +236,33 @@ rad_move_speed          = 3.0
 drops_rise              = 2.5   ; per second while the head is under
 drops_fall              = 0.25  ; per second once it is out
 drops_step              = 0.05  ; how far the value must move before the console is touched
+
+; The season's ice under a weight and under fire (docs/dead-air/WEATHER.md, ice). Where the climate's ice holds,
+; a contact on the water's liquid triangle is a contact on a material the game makes at load: a copy of `source`
+; with its pairs, its own steps (every creature), bullet hits and collisions. The thresholds follow the Ukrainian
+; emergency service's rule: 7 cm of clear ice carries one person; under 3 cm nothing; between, the ice cracks under
+; a man and gives way after a while (sooner the thinner and the faster he moves; a landing at once). Rotten spring
+; ice carries half its thickness.
+[ice]
+material           = materials\ice
+source             = materials\flooring_tile
+bullet_material    = objects\bullet
+friction           = 0.45
+shoot_factor       = 0.0
+safe               = 0.07
+hold               = 0.03
+crack_min          = 0.25
+crack_max          = 4.0
+hole_radius        = 0.9
+trail_radius       = 0.6
+bullet_radius      = 0.06
+refreeze_hours     = 8
+steps              = dead_air_x64\ice\step_1, dead_air_x64\ice\step_2, dead_air_x64\ice\step_3, dead_air_x64\ice\step_4
+bullet_sounds      = dead_air_x64\ice\bullet_1, dead_air_x64\ice\bullet_2, dead_air_x64\ice\bullet_3, dead_air_x64\ice\bullet_4
+bullet_particles   = hit_fx\hit_glass_01
+collide_sounds     = dead_air_x64\ice\knock_1, dead_air_x64\ice\knock_2, dead_air_x64\ice\knock_3
+crack_sounds       = dead_air_x64\ice\crack_1, dead_air_x64\ice\crack_2, dead_air_x64\ice\crack_3, dead_air_x64\ice\crack_4, dead_air_x64\ice\crack_5, dead_air_x64\ice\crack_6
+break_sounds       = dead_air_x64\ice\break_1, dead_air_x64\ice\break_2, dead_air_x64\ice\break_3
+bullet_thin_sounds = dead_air_x64\ice\bullet_thin_1, dead_air_x64\ice\bullet_thin_2
+break_particles    = hit_fx\hit_glass_01
+splash_particles   = amik\hit_fx\hit_water_splash_00

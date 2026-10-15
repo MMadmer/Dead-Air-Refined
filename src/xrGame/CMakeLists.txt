@@ -741,6 +741,8 @@ target_sources(xrGame PRIVATE
     Level_load.cpp
     da_snow_bake.cpp
     da_snow_bake.h
+    da_ice_game.cpp
+    da_ice_game.h
     da_snow_deformers.cpp
     da_snow_deformers.h
     level_location_selector.h

@@ -14,6 +14,8 @@
 #include "x_ray.h"
 #include "da_season.h"
 #include "da_snow_field.h"
+#include "da_climate.h"
+#include "da_ice.h"
 
 #include "xrScriptEngine/script_space.hpp"
 
@@ -728,6 +730,9 @@ void CRenderDevice::FrameMove()
 
     // One season day, one snow state and one stamp list for every OnFrame of this frame.
     da_season_frame();
+    // The weather of the frame and what it left (docs/dead-air/WEATHER.md): before the snow reads the snowpack.
+    da_climate_frame();
+    da_ice_frame();
     da_snow_stamps_publish();
     da_snow_frame_update();
 

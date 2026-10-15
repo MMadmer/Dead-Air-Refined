@@ -290,7 +290,18 @@ public:
 protected:
     CPerlinNoise1D* PerlinNoise1D;
 
+    // The weather's clock: the level's time of day remapped to the day the cycles were drawn for, so their dawn and
+    // dusk fall on the season's (da_sky_clock, docs/dead-air/WEATHER.md). The level's own clock is fLevelTime.
     float fGameTime{};
+    float fLevelTime{};
+    // fGameTime - fLevelTime, eased after a weather effect held it or the season jumped; fLevelTime of last frame.
+    float sky_offset{};
+    float sky_offset_level{-1.f};
+    bool sky_offset_valid{};
+
+public:
+    // The level's own clock (seconds of the day): the sun stands where this time and the season day put it.
+    float GetLevelTime() const { return fLevelTime; }
 
 public:
     FactoryPtr<IEnvironmentRender> m_pRender;
@@ -644,7 +655,13 @@ public:
     // Running water (255) against standing water (0) per field texel, same indexing, empty with the
     // field: channels and streams freeze later and keep open lanes. Uploaded as $user$water_class.
     xr_vector<u8> water_class;
+    // The classes: standing 0, indoors (a cellar, a factory floor: never freezes) 128, running 255; the shaders read
+    // them as 0, 0.5 and 1.
+    static constexpr u8 water_class_indoor = 128;
+    static constexpr u8 water_class_running = 255;
     void set_water_class(xr_vector<u8>&& flow);
+    // Whether the water at a point runs (a channel, a stream) by the field's class; false off the field.
+    bool water_flowing_at(const Fvector& p) const;
     // Ice on the water surface at a point, 0..1, by the season's ice keys (da_snow_frame().ice): the
     // same rule water.ps draws (da_water_ice in the shader). 0 where there is no water or no ice.
     float ice_at(const Fvector& p) const;

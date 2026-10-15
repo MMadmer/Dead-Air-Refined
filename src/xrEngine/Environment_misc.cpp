@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #pragma hdrstop
 
+#include "da_climate.h"
 #include "Environment.h"
 #include "xr_efflensflare.h"
 #include "thunderbolt.h"
@@ -661,6 +662,11 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
     fog_far = 0.99f * fog_distance;
 
     rain_density = fi * A.rain_density + f * B.rain_density;
+    // The climate says how much falls (docs/dead-air/WEATHER.md), whatever the cycle draws; a weather effect (a
+    // blowout, a psi storm) keeps its own.
+    const bool climate = da_climate_enabled() && !parent.IsWFXPlaying();
+    if (climate)
+        rain_density = clampr(da_climate_now().precip, 0.f, 1.f);
     rain_color.lerp(A.rain_color, B.rain_color, f);
     bolt_period = fi * A.bolt_period + f * B.bolt_period;
     bolt_duration = fi * A.bolt_duration + f * B.bolt_duration;
@@ -679,7 +685,7 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
     current_state.sun_reflection = sun_reflection;
     current_sun_reflection.store(sun_reflection, std::memory_order_relaxed);
 
-    const float wetness = fi * state_a.wetness + f * state_b.wetness;
+    const float wetness = climate ? rain_density : fi * state_a.wetness + f * state_b.wetness;
     const float snow_factor = fi * state_a.snow_factor + f * state_b.snow_factor;
     current_state.wetness = wetness;
     current_state.snow_factor = snow_factor;
@@ -726,9 +732,22 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
      // Igor. Dynamic sun position.
     if (!GEnv.Render->is_sun_static() && use_dynamic_sun_dir)
     {
-        auto [dir, blend] = calculate_dynamic_sun_dir(exec_time, sun_azimuth);
-        sun_dir = dir;
-        sun_color.mul(blend);
+        if (da_season_daylight())
+        {
+            // The real sun of the season day and the level's clock (the cycle's colours follow it through the
+            // sky clock); held a degree over the horizon at night, as the stock sun is, with its light faded.
+            const SDaSun sun = da_sun_at(parent.GetLevelTime(), da_season_day(), sun_azimuth);
+            const float min_e = deg2rad(1.f), full_e = deg2rad(3.f);
+            const float e = std::max(sun.elevation, min_e);
+            sun_dir.setHP(sun.azimuth, -e);
+            sun_color.mul(clampr((sun.elevation - min_e) / (full_e - min_e), 0.f, 1.f));
+        }
+        else
+        {
+            auto [dir, blend] = calculate_dynamic_sun_dir(exec_time, sun_azimuth);
+            sun_dir = dir;
+            sun_color.mul(blend);
+        }
     }
     else
     {

@@ -22,6 +22,7 @@ Inputs, all in `tools/seasons/data/` (copies of the 1.6.0 research, so the run n
 | `keyframes.json` | grass scalars and colours per profile, snow per class, on the 15th of each month (ChEZ, a snowy modern year) |
 | `stock_keys.json` | keep / height / burial keys of the stock detail classes |
 | `precip_keys.json` | precipitation phase, temperatures, thunder, glaze, frost, water ice |
+| `weather_keys.json` | the climate's weather: shares of the hours by sky, precipitation, wind, melt; its scalars (WEATHER.md) |
 | `detail_hash_map.json` | the 478 detail content keys (KSPR) and their classes, with the level objects behind each |
 | `detail_types_preview.ltx` | the research preview of `[detail_types]` (cross-check) |
 | `category_folders.json` | the per-category texture folder table and its painted-snow audit (cross-check) |
@@ -150,6 +151,23 @@ Reference result on l01_escape (followup_4, cover and depth reproduced to roundi
 | `flowing` | iced share of channels and streams (1 - flowing in Jan/Feb = polynyas) |
 | `snow_cover_on_ice` | snow on the ice: open cover x max(still, flowing) |
 | `snow_depth_on_ice` | m: 0.8 x open depth (wind scours open ice) |
+
+### `[weather_keys]` and `[climate]` (WEATHER.md: `da_climate.cpp`)
+
+| Field | Meaning |
+|---|---|
+| `p_clear`, `p_overcast` | shares of the month's hours under 0-2/10 and 8-10/10 cloud (overcast counts the wet hours) |
+| `p_wet`, `precip_mm` | share of hours with precipitation falling; the month's precipitation (mm) |
+| `p_fog` | share of hours with fog (calm, dry) |
+| `wind_ms` | mean wind at 10 m |
+| `p_blizzard`, `p_storm`, `p_thunder` | shares of the snow hours with a blizzard, of the rain hours with a rainstorm, with thunder |
+| `cloud_t_corr`, `fog_dawn` | the cloud's correlation with the temperature anomaly; the dawn weight of fog |
+| `ddf` | degree-day melt factor on the day's mean (mm w.e. per C per day) |
+
+`[climate]`: the processes' scales (`tau_*`, game days), the wind's spread and the blizzard's least wind, fog's wind
+limit, the cloud classes' hysteresis, the afternoon weight of thunder, the rate's spread and the precipitation hour's
+phase, the snowpack's settling (`rho_max_*`, `tau_*`), the loose top, blowing snow's wind, the ice (`ice_alpha`,
+`ice_snow_ins`, `ice_melt`, the water's cooling, running water's factors, the cover's thicknesses, the rot).
 
 ### `[grass_heads]`
 
@@ -348,7 +366,7 @@ and members included.
 - D3 max depth open / trees / road / drift (m): 0.220 / 0.140 / 0.120 / 0.536.
 - folders: trees winter days, min open cover: 63 days, 0.9998.
 - folders: decal winter days, min open cover: 63 days, 0.9998.
-- curves checked / samples: 1281 / 2840914.
+- curves checked / samples: 1293 / 2858578.
 - Overshoot, negative and range errors: none.
 
 ### Month summary

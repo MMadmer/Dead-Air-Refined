@@ -612,6 +612,9 @@
 				<d r="70" g="70" b="70"/>
 			</text_color>
 		</list_season>
+		<check_season_weather x="330" y="0" width="44" height="29">
+			<texture>ui_inGame2_checkbox</texture>
+		</check_season_weather>
 	</season_page>
 
 	<weather_page>

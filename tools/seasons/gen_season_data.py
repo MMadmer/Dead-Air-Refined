@@ -362,6 +362,26 @@ def snow_sections(ltx, kf, precip):
     return still
 
 
+def weather_sections(ltx, wk):
+    """[weather_keys] and [climate]: the climate's shares of hours, precipitation, wind and melt per month, and its
+    scalars (src/xrEngine/da_climate.cpp, docs/dead-air/WEATHER.md)."""
+    s = ltx.section('weather_keys', [
+        "The climate (docs/dead-air/WEATHER.md): shares of the hours of a month under a clear sky (0-2/10), overcast",
+        "(8-10/10, the wet hours included), with precipitation falling, with fog; the month's precipitation (mm), mean",
+        "wind (m/s at 10 m); shares of the snow hours that blow a blizzard, of the rain hours of a rainstorm and of a",
+        "thunderstorm; the cloud's correlation with the temperature anomaly; the dawn weight of fog; the degree-day melt",
+        "factor (mm w.e. per C per day on the day's mean). The engine calibrates its thresholds to these shares at load."])
+    for name, values in wk['months'].items():
+        assert len(values) == 12, name
+        s.append((name, keylist(months(values), 4)))
+    c = ltx.section("climate", [
+        "Scales of the climate's processes (game days), the wind's spread, the snowpack's settling and loose top, the",
+        "precipitation hour's phase, the ice (Stefan's law in m per sqrt(C day), the thaw in m per C day, the water's",
+        "cooling in days, the thickness that closes the water over, the thaw that halves a rotten ice's strength)."])
+    for name, value in wk['climate'].items():
+        c.append((name, num(value)))
+
+
 def shifted(values, shift):
     """A template's 12 month values read `shift` days later over the growing season (1 Mar - 31 Oct), the dormant
     months as the template has them: an early species reaches the template's state of D at D + shift."""
@@ -697,6 +717,7 @@ def build():
     ltx = Ltx()
     folder_sections(ltx, cf)
     still = snow_sections(ltx, kf, precip)
+    weather_sections(ltx, load('weather_keys.json'))
     species_sections(ltx, kf, spd, comm, still)
     stock_sections(ltx, stock)
     counts, fix_empty = detail_types(ltx, hm, os.path.join(DATA, 'detail_types_preview.ltx'))
@@ -784,7 +805,8 @@ def grass_visible(cover_open, D):
 def check(ini):
     curves = curves_of(ini)
     errors = []
-    unbounded = {('precip_keys', 't_mean'), ('precip_keys', 't_min'), ('precip_keys', 't_max'),
+    unbounded = {('weather_keys', 'precip_mm'), ('weather_keys', 'wind_ms'), ('weather_keys', 'ddf'),
+                 ('weather_keys', 'cloud_t_corr'), ('precip_keys', 't_mean'), ('precip_keys', 't_min'), ('precip_keys', 't_max'),
                  ('precip_keys', 't_range'), ('precip_keys', 't_sigma'), ('snow_keys', 'rho_open'), ('snow_keys', 'rho_road')}
     days = samples()
     stats = dict(curves=0, samples=0)

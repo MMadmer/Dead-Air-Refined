@@ -237,4 +237,5 @@ void CGameMtlLibrary::Load()
         material_pairs_rt[idx1] = mtlPair;
     }
     FS.r_close(F);
+    AppendRuntimeMaterials();
 }

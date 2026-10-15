@@ -1,4 +1,5 @@
 #include "pch_script.h"
+#include "da_ice_game.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "da_ai.h"
 #include "da_snow_deformers.h"
@@ -4485,6 +4486,7 @@ void CCC_RegisterCommands()
     CMD4(CCC_Integer, "keypress_on_start", &g_keypress_on_start_legacy, 0, 1);
     CMD1(CCC_UI_Time_Factor, "ui_time_factor");
     CMD1(CCC_QaWaterGoto, "qa_water_goto");
+    da_ice_register_console();
     CMD1(CCC_QaWaterDryUnder, "qa_water_dry_under");
     CMD1(CCC_QaWaterState, "qa_water_state");
     CMD1(CCC_QaWaterDive, "qa_water_dive");

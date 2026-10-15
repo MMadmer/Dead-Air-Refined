@@ -14,6 +14,12 @@
 // x ice on standing water, y ice on running water, z snow cover on the ice, w snow depth on it (m): the
 // season's ice keys at this day (da_snow_frame().ice), all zero outside the ice months.
 uniform float4 da_snow_ice;
+// The climate's ice (docs/dead-air/WEATHER.md): x the number of holes in da_ice_holes, y standing water's ice (m),
+// z running water's (m), w how rotten the standing water's spring ice is (0..1).
+uniform float4 da_ice_state;
+// Holes broken into the ice near the camera (xrEngine da_ice.h): x, z, radius, kind * 1000 + seed (kind 0 a hole of
+// open water, 1 a bullet's star of cracks in ice that held).
+uniform float4 da_ice_holes[16];
 
 // The integer hash and fade of CEnvironment::ice_at (Environment.cpp).
 float da_ice_hash(int2 c)
@@ -40,9 +46,51 @@ float da_ice_noise(float2 xz)
 	return lerp(a, b, t.y);
 }
 
+// The holes at xz: x 1 inside a hole of open water (its edge ragged, broken plates), y the white lines of the cracks
+// round a hole and of a bullet's star, fading out below the pixel footprint (m). The physics takes the hole's mean
+// circle (da_ice_in_hole).
+float2 da_ice_hole(float2 xz, float footprint)
+{
+	float open = 0.0, crack = 0.0;
+	const int n = (int)da_ice_state.x;
+	[loop] for (int i = 0; i < n; ++i)
+	{
+		const float4 h = da_ice_holes[i];
+		const float2 d = xz - h.xy;
+		const float r = h.z;
+		const float d2 = dot(d, d);
+		[branch] if (d2 > r * r * 12.0)
+			continue;
+		const float kind = floor(h.w * 0.001);
+		const float seed = h.w - kind * 1000.0;
+		const float dist = sqrt(d2);
+		const float ang = atan2(d.y, d.x);
+		// The broken edge: plates of a few sizes round the hole.
+		const float rr = r * (1.0 + 0.16 * sin(ang * 5.0 + seed) + 0.09 * sin(ang * 11.0 + seed * 1.7) +
+			0.05 * sin(ang * 23.0 + seed * 0.31));
+		[flatten] if (kind < 0.5)
+			open = max(open, 1.0 - smoothstep(rr * 0.96, rr * 1.04, dist));
+		// Radial cracks out of it, each its own length, and a ring of them round a hole.
+		const float spokes = kind < 0.5 ? 9.0 : 7.0;
+		const float phase = ang * spokes * 0.159155 + seed * 0.137;
+		const float k = floor(phase);
+		const float len = rr * (kind < 0.5 ? 1.4 + 1.3 * da_ice_hash(int2(k, seed)) : 2.2 + 2.6 * da_ice_hash(int2(k, seed)));
+		const float off = abs(frac(phase) - 0.5) * 6.2832 / spokes * dist;
+		const float w = 0.006 + 0.004 * saturate(1.0 - dist / len);
+		const float spoke = (1.0 - smoothstep(w, w + max(footprint, 1e-3), off)) * saturate(1.0 - dist / len) *
+			step(rr * (kind < 0.5 ? 1.0 : 0.0), dist);
+		const float ring = kind < 0.5 ? (1.0 - smoothstep(0.006, 0.006 + max(footprint, 1e-3), abs(dist - rr * 1.45))) *
+			step(0.45, da_ice_hash(int2(floor(ang * 3.0 + seed), 7))) : 0.0;
+		// A bullet's bruise: the struck ice turned white at the centre.
+		const float bruise = kind < 0.5 ? 0.0 : 1.0 - smoothstep(r * 0.25, r * 0.6, dist);
+		crack = max(crack, max(max(spoke, ring) * saturate((0.15 - footprint) / 0.1), bruise));
+	}
+	return float2(open, crack);
+}
+
 // Ice cover 0..1. It grows out from the banks: the front stands key * reach metres from the nearest bank,
-// ragged by the noise; standing water closes over completely at key 1, running water keeps a lane wider
-// than twice its reach. Water the baked field does not carry takes the standing key, patchy while partial.
+// ragged by the noise; both close over completely at key 1, running water's key lags (a lane over the current
+// while its ice is young). Water the baked field does not carry takes the standing key, patchy while partial.
 float da_ice_cover(float2 xz, bool on_field, bool flowing, float shore)
 {
 	const float4 k = da_snow_ice;
@@ -54,8 +102,9 @@ float da_ice_cover(float2 xz, bool on_field, bool flowing, float shore)
 	const float key = flowing ? k.y : k.x;
 	[branch] if (key < 0.02)
 		return 0.0;
-	const float reach = key * (flowing ? 32.0 : 38.0);
-	return saturate((reach - shore + 3.0 * (n01 * 2.0 - 1.0)) * 0.5);
+	const float reach = key * (flowing ? 40.0 : 38.0);
+	// A hole broken into it is open water.
+	return saturate((reach - shore + 3.0 * (n01 * 2.0 - 1.0)) * 0.5) * (1.0 - da_ice_hole(xz, 1.0).x);
 }
 
 // Snow depth on the ice (m): the season's depth where its cover key reaches, by a noise of 3 m lobes with
@@ -146,6 +195,10 @@ float4 da_ice_albedo(float2 xz, float footprint)
 		crack = max(l0 * m0 * 0.5, l1 * m1 * 0.3) * saturate((0.15 - fp) / 0.1);
 	}
 	a = lerp(a, float3(0.24, 0.27, 0.27), crack);
+	// The cracks round a hole and a bullet's white star.
+	a = lerp(a, float3(0.42, 0.46, 0.47), da_ice_hole(xz, fp).y * 0.8);
+	// Rotten spring ice: candled, grey-white and porous, wet on top.
+	a = lerp(a, float3(0.2, 0.22, 0.22), 0.7 * saturate(da_ice_state.w));
 
 	// Snow dust in broken streaks along the winter wind, over a part of the ice: the rest stays dark.
 	const float streak = da_ice_noise(float2(xz.x * 1.5, xz.y * 16.0) + 41.0) * lerp(0.6, 1.0, da_ice_noise(xz * 12.0 + 29.0));

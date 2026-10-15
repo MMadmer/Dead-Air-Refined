@@ -36,6 +36,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrCDB/xr_collide_defs.h"
 #include "da_water_impact.h"
+#include "da_ice_game.h"
 #include "da_snow_deformers.h"
 #include "xrEngine/da_particle_suppress.h"
 
@@ -412,9 +413,13 @@ void CExplosive::Explode()
             }
             else
                 found = false;
-            // Frozen water throws no fountain and rings nothing: the blast lands on ice.
+            // Frozen water throws no fountain where the ice stays; the blast breaks it by its strength
+            // (da_ice_game.h), and a hole it opened answers as open water.
             if (found && open_water && env.ice_at(gp) > 0.5f)
-                found = false;
+            {
+                da_ice_blast(gp, m_fBlastRadius);
+                found = env.ice_at(gp) <= 0.5f;
+            }
             if (found)
             {
                 const float mask = open_water ? 1.f : env.SamplePuddleMask(gp, n.y);

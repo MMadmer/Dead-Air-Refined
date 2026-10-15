@@ -118,7 +118,8 @@ what (`da_precip()`, ticked in `CEnvironment::OnFrame` after the weather lerp):
   time, ~2.5 game days, `t_sigma` spread) and the diurnal swing (`t_range`, flattened by cloud and rain).
 - **Phase**, drawn once per six game hours from the logistic model (`ts`, `tl`, `w`; precipitation days
   `t_precip_bias` colder and `t_precip_sigma` wider): snow, sleet or rain. Inside `snow_only` (1 Dec - 28 Feb,
-  decision D6) it is always snow. A pure function of game time: a reload replays it. While it falls the air is
+  decision D6) it is always snow while the climate is off; the climate's winters (WEATHER.md) thaw and rain now and
+  then, as Chornobyl's do, and draw the phase on the hour's own fit (`[climate] phase_bias`, `phase_sigma`). A pure function of game time: a reload replays it. While it falls the air is
   kept consistent with it (no snow at +8 C, no rain at -6 C); freezing rain (`glaze`) holds the air below 0.
 - **liquid** (rain 1, sleet 0.5, snow 0) eases over seconds; `snow_rate = density^1.5 (1 - liquid)`.
 - **Thunder**: a block keeps its lightning with the probability `thunder_weight` (July 1, January 0.02), and
@@ -152,10 +153,13 @@ rain and snow rates on the same `r__rain_quality` ladder.
 
 ## Ice
 
-Visual only (decision D7). `CEnvironment::ice_at(p)`, `water.ps` and the snow passes share one rule
+With the climate on (WEATHER.md) the ice keys below are the climate's - the cover closes over with the thickness
+the frosts grew - and the ice carries a man where it is thick enough, cracks and gives way where it is not, and holes
+(WEATHER.md, ice); with it off, the season keys and the ice is visual only (decision D7). `CEnvironment::ice_at(p)`,
+`water.ps` and the snow passes share one rule
 (`shaders/r3/da_snow_ice.h`): the season's ice keys (`[ice_keys]`: still and running water), a front that grows
-from the banks (`key x 38 m` on still water, so it closes over at key 1; `key x 32 m` on running water, so wide
-channels keep an open lane), ragged by a 20 m noise. Running water is told from standing water at load
+from the banks (`key x 38 m` on still water, `key x 40 m` on running water: both close over at key 1, and the
+running key lags, so a channel keeps an open lane while its ice is young), ragged by a 20 m noise. Running water is told from standing water at load
 (`CEnvironment::water_class`: connected sheets of the water field narrower than 60 m and at least six widths
 long). Water the field does not carry (the marsh's radiation water) takes the still key, patchy while partial.
 Water is frozen from half its ice cover on, as gameplay takes it; the outer half of the cover is the front

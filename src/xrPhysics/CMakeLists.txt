@@ -330,6 +330,8 @@ target_sources_grouped(
     PHItemList.h
     PHWorld.cpp
     PHWorld.h
+    ph_ice.cpp
+    ph_ice.h
     PHWorldScript.cpp
     Physics.cpp
     Physics.h

@@ -214,7 +214,8 @@ Every frame, in this order:
    car, a crate pile, a wall top), the foot in the cover's upper half (a boot beside a low cover in the same metre
    still prints the ground); where no shell lies the layer's coat thins over a print and bares the cover under a press
    most of the way down (`1 - smoothstep(0.2, 0.7, depth share)`): bullets and boots mark a wall's or a car's snow too.
-3. **Refill**: the snow that falls (`SSnowFrame::fall.y`, metres per real second) raises every carved surface,
+3. **Refill**: the snow that falls and the snow a blizzard carries (`SSnowFrame::fall.y`, metres per real second;
+   WEATHER.md) raises every carved surface,
    in whole unorm steps; a texel back at the cap is untouched again. The roof map's depressions shrink by the
    same steps.
 4. **Pool**: L0 tiles that were stamped hand their mean carved surface and lowest deformer down to L1.

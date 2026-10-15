@@ -279,6 +279,7 @@
 				<d r="70" g="70" b="70"/>
 			</text_color>
 		</list_season>
+		<check_season_weather x="125" y="1" width="30" height="21" stretch="1"/>
 	</season_page>
 
 	<weather_page>

@@ -68,6 +68,7 @@
 #include "location_manager.h"
 #include "player_hud.h"
 #include "da_snow_deformers.h"
+#include "da_ice_game.h"
 #include "da_script_cam.h"
 #include "da_water_actor.h"
 #include "PHMovementControl.h"
@@ -1497,6 +1498,8 @@ void CActor::UpdateCL()
         // the camera that still need their footprint.
         da_snow_deform_entity(*this);
         da_snow_deform_frame();
+        // The ice under him: weak ice cracks and breaks, a man in the water breaks a channel through it.
+        da_ice_actor_update(*this);
 
         // Wind pushes the body too: the drag equation F = 0.5*rho*Cd*A*v^2 gives ~0.46*v^2 N
         // for a standing human - about 56 N in a real gale. Ground friction eats most of it
