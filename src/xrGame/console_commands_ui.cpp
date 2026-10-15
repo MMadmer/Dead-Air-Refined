@@ -98,9 +98,15 @@ public:
 
     void Execute(pcstr args) override
     {
+        // user.ltx runs before there is any level or game UI to ask
+        if (!g_pGameLevel)
+        {
+            Msg("! dar_ui_open: no live actor on a level");
+            return;
+        }
         auto* gameUi = smart_cast<CUIGameSP*>(CurrentGameUI());
         CActor* actor = Actor();
-        if (!g_pGameLevel || !gameUi || !actor || !actor->g_Alive())
+        if (!gameUi || !actor || !actor->g_Alive())
         {
             Msg("! dar_ui_open: no live actor on a level");
             return;
@@ -313,6 +319,11 @@ public:
 
     void Execute(pcstr args) override
     {
+        if (!MainMenu())
+        {
+            Msg("! dar_ui_dialog: the main menu is not up yet");
+            return;
+        }
         string64 what{}, state{};
         sscanf(args, "%63s %63s", what, state);
 
