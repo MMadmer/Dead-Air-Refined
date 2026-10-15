@@ -4,6 +4,7 @@
 #include "Level.h"
 #include "GamePersistent.h"
 #include "xrPhysics/ExtendedGeom.h"
+#include "xrPhysics/ph_ice.h"
 #include "PhysicsGamePars.h"
 
 #include "xrPhysics/PhysicsExternalCommon.h"
@@ -216,7 +217,10 @@ void TContactShotMark(CDB::TRI* T, dContactGeom* c)
     float square_cam_dist = to_camera.square_magnitude();
     if (data)
     {
-        SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(T->material, data->material);
+        // Water the season's ice covers is a contact on the ice (ph_ice.h): its pair's sounds and marks, no ripple.
+        const u16 tri_mtl = ph_contact_material(u16(T->material), c->pos, c->depth);
+        const bool on_ice = tri_mtl != u16(T->material);
+        SGameMtlPair* mtl_pair = GMLib.GetMaterialPairByIndices(tri_mtl, data->material);
         if (mtl_pair)
         {
             // Ripples: a body landing in water (a liquid material) or on a rain puddle spreads
@@ -227,7 +231,7 @@ void TContactShotMark(CDB::TRI* T, dContactGeom* c)
                 const auto& wcfg = da_water_impact_cfg();
                 const bool character = data->ph_object && data->ph_object->CastType() == CPHObject::tpCharacter;
                 extern ENGINE_API int ps_e_wind_dbg;
-                if (wcfg.enabled && !character && vel_cret > wcfg.ring_object_threshold &&
+                if (wcfg.enabled && !character && !on_ice && vel_cret > wcfg.ring_object_threshold &&
                     square_cam_dist < wcfg.ring_distance * wcfg.ring_distance)
                 {
                     Fvector surface;
@@ -275,7 +279,7 @@ void TContactShotMark(CDB::TRI* T, dContactGeom* c)
             }
             if (square_cam_dist < SQUARE_SOUND_EFFECT_DIST)
             {
-                SGameMtl* static_mtl = GMLib.GetMaterialByIdx(T->material);
+                SGameMtl* static_mtl = GMLib.GetMaterialByIdx(tri_mtl);
                 VERIFY(static_mtl);
                 if (!static_mtl->Flags.test(SGameMtl::flPassable))
                 {
@@ -302,7 +306,7 @@ void TContactShotMark(CDB::TRI* T, dContactGeom* c)
             }
             if (square_cam_dist < SQUARE_PARTICLE_EFFECT_DIST && !mtl_pair->CollideParticles.empty())
             {
-                SGameMtl* static_mtl = GMLib.GetMaterialByIdx(T->material);
+                SGameMtl* static_mtl = GMLib.GetMaterialByIdx(tri_mtl);
                 VERIFY(static_mtl);
                 LPCSTR ps_name = mtl_pair->CollideParticles[::Random.randI(0, mtl_pair->CollideParticles.size())].c_str();
                 play_particles<Pars>(vel_cret, data, c, b_invert_normal, static_mtl, ps_name);

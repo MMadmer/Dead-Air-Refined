@@ -664,7 +664,7 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
     rain_density = fi * A.rain_density + f * B.rain_density;
     // The climate says how much falls (docs/dead-air/WEATHER.md), whatever the cycle draws; a weather effect (a
     // blowout, a psi storm) keeps its own.
-    const bool climate = da_climate_enabled() && !parent.IsWFXPlaying();
+    const bool climate = da_climate_outdoors() && !parent.IsWFXPlaying();
     if (climate)
         rain_density = clampr(da_climate_now().precip, 0.f, 1.f);
     rain_color.lerp(A.rain_color, B.rain_color, f);

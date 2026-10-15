@@ -103,8 +103,16 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	[branch] if (!none && (max(b0.z, pond.y) > 0.0 || pond.x > DA_SN_NONE * 0.5))
 		ice = da_sn_ice_at(x);
 	const bool frozen = ice.x > 0.5;
-	const float psh = frozen ? pond.y : 0.0;
-	const float wsh = none ? 0.0 : (frozen ? psh : saturate(b0.z));
+	// Open water within a metre of the ice front (its cover ramps 0..0.5 there) keeps the sheet's height: the pixel
+	// shader ends the sheet on the cover's own curve at 0.5. Clipped at the vertex, the front was the grid's cells in
+	// steps and slants. (The cascade has no per-pixel cut: it keeps the vertex's own answer.)
+#ifdef DA_SN_SHADOW
+	const bool sheet = frozen;
+#else
+	const bool sheet = ice.x > 0.0;
+#endif
+	const float psh = sheet ? pond.y : 0.0;
+	const float wsh = none ? 0.0 : (sheet ? psh : saturate(b0.z));
 	const float hb = lerp(b0.x, max(b0.x, pond.x), psh);
 	// The neighbours as the snow lies on them: never under the level of the frozen pond beside them.
 	const float lvl = (da_snow_ice.x > 0.5) ? pond.x : DA_SN_NONE;
@@ -146,7 +154,7 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	// the thaw, with a few centimetres of snow on the bank, it drew a stepped grey band along the grid's triangles
 	// under the edge of the bank's snow. The grid keeps that shore (no clip, no per-pixel cut) at least at the
 	// top of the ice.
-	const float ice_top = (frozen && pond.x > DA_SN_NONE * 0.5) ? da_sn_ice_top(pond.x, h0.w) : DA_SN_NONE;
+	const float ice_top = (sheet && pond.x > DA_SN_NONE * 0.5) ? da_sn_ice_top(pond.x, h0.w) : DA_SN_NONE;
 	// (no lower than a bank lies: ground half a metre under the ice lies past a wall or a rim - by a house whose floor
 	// carries a liquid face it was lifted to that level in a flat sheet, torn at its edges)
 	const bool low_bank = !none && wsh <= 0.0 && hb < ice_top + da_sn_bank_slack(slope) && hb > ice_top - 0.2;
@@ -161,8 +169,8 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	const float clip_l = min(D.x - dmin, reach - 0.001);
 	// On the water: frozen, the snow on the ice, never under the bob of the water mesh and the depth steps
 	// it needs to win; open, under the surface and clipped, so the bank's snow runs down into the water.
-	const float dw = frozen ? max(ice.y, DA_SN_ICE_LIFT + dz) : -2.0 * dmin;
-	const float clip_w = frozen ? reach - 0.001 : -0.01;
+	const float dw = sheet ? max(ice.y, DA_SN_ICE_LIFT + dz) : -2.0 * dmin;
+	const float clip_w = sheet ? reach - 0.001 : -0.01;
 	// One surface across the shore: base and depth blend by the water share, so the bank's snow meets the
 	// sheet on the ice along the waterline without a step, whatever the bank does at the grid's cells.
 	// Beside frozen water the bank keeps its triangles, its snow never below the ground (no raise under dmin):
@@ -173,7 +181,7 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	const float d = lerp(ice_shore ? max(dl, 0.0) : dl, dw, wsh);
 	const float d_prev = lerp(ice_shore ? max(dl_prev, 0.0) : dl_prev, dw, wsh);
 	float clip = cliff ? -1000.0 : lerp(clip_l, clip_w, wsh);
-	[flatten] if (ice_shore && (frozen || wsh <= 0.0))
+	[flatten] if (ice_shore && (sheet || wsh <= 0.0))
 		clip = reach - 0.001;
 	// A vertex at the water's edge or on the flat shore beside it never sinks under the ice of the pond.
 	const float y_floor = (wsh > 0.0 || low_bank) ? ice_top : DA_SN_NONE;

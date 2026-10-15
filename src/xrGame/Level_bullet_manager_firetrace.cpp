@@ -27,6 +27,7 @@
 #include "da_water_impact.h"
 #include "da_ice_game.h"
 #include "xrEngine/da_ice.h"
+#include "xrEngine/da_climate.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/IGame_Persistent.h"
 
@@ -189,7 +190,7 @@ void CBulletManager::FireShotmark(SBullet* bullet, const Fvector& vDir, const Fv
             // The season's ice: a bullet the ice stopped marks it with a star; one through ice too thin to stop it
             // holes it, and the water under it splashes without a ring (da_ice_game.h).
             const bool on_ice = da_ice_material() != u16(GAMEMTL_NONE_IDX) && target_material == da_ice_material();
-            const bool through_ice = tgt->Flags.test(SGameMtl::flLiquid) && env.ice_at(vEnd) > 0.5f;
+            const bool through_ice = da_climate_enabled() && tgt->Flags.test(SGameMtl::flLiquid) && env.ice_at(vEnd) > 0.5f;
             if (on_ice || through_ice)
                 da_ice_bullet_hit(vEnd, on_ice);
             // Water is water: the liquid material of a lake or a river as much as the rain

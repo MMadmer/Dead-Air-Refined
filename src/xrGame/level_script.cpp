@@ -222,14 +222,16 @@ pcstr climate_sky() { return da_sky_name(da_climate_now().sky); }
 void climate_set_sky_driven(bool driven) { da_climate_set_sky_driven(driven); }
 u32 climate_seed() { return da_climate_seed(); }
 void climate_set_seed(u32 seed) { da_climate_set_seed(seed); }
+pcstr climate_state_save() { return da_climate_state_save(); }
+bool climate_state_load(pcstr text) { return da_climate_state_load(text); }
 // The air temperature here and now (C), the open snowpack (m) and the ice of standing water (m); the wind is
 // level.environment():wind_speed().
 float air_temperature() { return da_precip().air_temp; }
 // The hour of the sky (0..24): the level's clock on the day the weather cycles were drawn for (sunrise 6:15, sunset
 // 19:55), so a winter's 17:00 is already its dusk; what "day" and "night" mean to anything that looks at the light.
 float sky_hours() { return g_pGamePersistent->Environment().GetGameTime() / 3600.f; }
-float snow_depth() { return da_climate_enabled() ? da_climate_state().depth : 0.f; }
-float ice_thickness() { return da_climate_enabled() ? da_climate_state().ice[0] : 0.f; }
+float snow_depth() { return da_climate_outdoors() ? da_climate_state().depth : 0.f; }
+float ice_thickness() { return da_climate_outdoors() ? da_climate_state().ice[0] : 0.f; }
 float snow_factor() { return g_pGamePersistent->Environment().GetSnowFactor(); }
 u32 vertex_in_direction(u32 level_vertex_id, Fvector direction, float max_distance)
 {
@@ -1069,6 +1071,8 @@ void CLevel::script_register(lua_State* luaState)
         def("climate_set_sky_driven", climate_set_sky_driven),
         def("climate_seed", climate_seed),
         def("climate_set_seed", climate_set_seed),
+        def("climate_state_save", climate_state_save),
+        def("climate_state_load", climate_state_load),
         def("air_temperature", air_temperature),
         def("sky_hours", sky_hours),
         def("snow_depth", snow_depth),

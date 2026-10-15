@@ -10,6 +10,7 @@
 #include "stdafx.h"
 #include "da_climate.h"
 #include "da_season_keys.h"
+#include "da_snow_field.h"
 #include "IGame_Level.h"
 #include "IGame_Persistent.h"
 #include "Environment.h"
@@ -304,11 +305,11 @@ float quantile(xr_vector<float>& v, float share_above)
 
 float liquid_of(int phase) { return phase == phase_rain ? 1.f : phase == phase_sleet ? 0.5f : 0.f; }
 
-// The phase a sample would draw, as a share of liquid: the expectation of da_climate's draw at that anomaly.
+// The phase a sample would draw with the climate on, as a share of liquid: the expectation of block_phase's draw at
+// that anomaly. (The blizzard and storm thresholds it splits only matter with the climate on, and the calibration runs
+// once whatever the option says then.)
 float expected_liquid(const SSnowKeys& s, float D, float zt)
 {
-    if (!da_climate_enabled() && s.snow_only(D))
-        return 0.f;
     const SClimateKeys& k = keys();
     const float t = s.mean_temperature(D) + k.phase_bias + k.phase_sigma * std::max(s.t_sigma.at(D), 0.f) * zt;
     const float p_snow = 1.f / (1.f + std::exp((t - s.ts) / s.tw));
@@ -439,6 +440,16 @@ u32 s_seed = 0;
 int s_qa_sky = -1;
 float s_qa_precip = -1.f;
 float s_qa_temp = std::numeric_limits<float>::quiet_NaN();
+
+// What a forced sky drops: snow from snow and blizzard skies, rain from the rain skies, else the hour's own phase.
+int qa_forced_phase(int phase)
+{
+    if (s_qa_sky == da_sky_snow || s_qa_sky == da_sky_blizzard)
+        return phase_snow;
+    if (s_qa_sky == da_sky_rain || s_qa_sky == da_sky_storm || s_qa_sky == da_sky_thunder)
+        return phase_rain;
+    return phase;
+}
 
 double hour_mid(s64 b) { return (double(b) + 0.5) / 24.0; }
 
@@ -644,10 +655,11 @@ bool s_state_valid = false;
 void step(SDaClimateState& st, const SDaClimateSample& w, float D, float hours)
 {
     const SClimateKeys& k = keys();
+    // The water that falls (sample's density inverted at the phase's full rate), shared by the phase: sleet is half snow.
     const float liq = liquid_of(w.phase);
-    const float rate = w.precip * std::sqrt(w.precip);
-    const float snow_mm = (1.f - liq) * snow_mm_full * rate * hours;
-    const float rain_mm = liq * rain_mm_full * rate * hours;
+    const float water = w.precip * std::sqrt(w.precip) * (liq * rain_mm_full + (1.f - liq) * snow_mm_full) * hours;
+    const float snow_mm = (1.f - liq) * water;
+    const float rain_mm = liq * water;
     const float T = w.t_air;
 
     // Fresh snow: lighter the colder (Hedstrom and Pomeroy), packed by a strong wind.
@@ -799,6 +811,7 @@ const SDaClimateState& da_climate_state() { return s_state; }
 const SDaClimateSample& da_climate_now() { return s_now; }
 
 bool da_climate_enabled() { return s_flags.test(flag_weather); }
+bool da_climate_outdoors() { return da_climate_enabled() && da_snow_field(); }
 bool da_season_daylight() { return s_flags.test(flag_daylight); }
 
 namespace
@@ -818,6 +831,43 @@ void da_climate_set_seed(u32 seed)
     Msg("* [climate] seed %u", seed);
 }
 u32 da_climate_seed() { return s_seed; }
+
+pcstr da_climate_state_save()
+{
+    static xr_string text;
+    text.clear();
+    if (!s_state_valid)
+        return text.c_str();
+    const SDaClimateState& s = s_state;
+    string512 buf;
+    xr_sprintf(buf, "1 %.9f %.4f %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g", s_state_day,
+        s_state_D, s.swe, s.rho, s.depth, s.fresh, s.water_t[0], s.water_t[1], s.ice[0], s.ice[1], s.ice_rot[0],
+        s.ice_rot[1], s.ice_snow[0], s.ice_snow[1], s.ice_cover[0], s.ice_cover[1]);
+    text = buf;
+    return text.c_str();
+}
+
+bool da_climate_state_load(pcstr text)
+{
+    int version = 0;
+    double day = 0.0;
+    float D = 0.f;
+    SDaClimateState s;
+    if (!text || sscanf(text, "%d %lf %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", &version, &day, &D, &s.swe, &s.rho,
+                     &s.depth, &s.fresh, &s.water_t[0], &s.water_t[1], &s.ice[0], &s.ice[1], &s.ice_rot[0],
+                     &s.ice_rot[1], &s.ice_snow[0], &s.ice_snow[1], &s.ice_cover[0], &s.ice_cover[1]) != 17 ||
+        version != 1 || !std::isfinite(day) || !std::isfinite(s.swe) || s.rho < 1.f)
+    {
+        Msg("! [climate] the saved snowpack and ice are unreadable: the history runs");
+        return false;
+    }
+    s_state = s;
+    s_state_day = day;
+    s_state_D = D;
+    s_state_seed = s_seed;
+    s_state_valid = true;
+    return true;
+}
 
 float da_climate_ice_thickness(float cover, bool flowing)
 {
@@ -875,8 +925,7 @@ void da_climate_frame()
             if (s_qa_precip >= 0.f)
             {
                 w.precip = s_qa_precip;
-                if (s_qa_sky == da_sky_snow || s_qa_sky == da_sky_blizzard)
-                    w.phase = phase_snow;
+                w.phase = qa_forced_phase(w.phase);
             }
             if (!std::isnan(s_qa_temp))
                 w.t_air = w.t_day = s_qa_temp;
@@ -896,8 +945,7 @@ void da_climate_frame()
     if (s_qa_precip >= 0.f)
     {
         s_now.precip = s_qa_precip;
-        if (s_qa_sky == da_sky_snow || s_qa_sky == da_sky_blizzard)
-            s_now.phase = phase_snow;
+        s_now.phase = qa_forced_phase(s_now.phase);
     }
     if (!std::isnan(s_qa_temp))
         s_now.t_air = s_qa_temp;
@@ -1006,6 +1054,18 @@ SDaSun da_sun_at(float level_seconds, float D, float azimuth_offset)
 
 namespace
 {
+// qa_rain_state: the rain and snow sheet as it stands (Rain.cpp).
+class CCC_QaRainState final : public IConsole_Command
+{
+public:
+    CCC_QaRainState(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        if (g_pGamePersistent)
+            g_pGamePersistent->Environment().QaRainReport();
+    }
+};
+
 class CCC_QaClimateState final : public IConsole_Command
 {
 public:
@@ -1139,6 +1199,7 @@ void da_climate_register_console()
     CMD3(CCC_Mask, "r__season_weather", &s_flags, flag_weather);
     CMD3(CCC_Mask, "r__season_daylight", &s_flags, flag_daylight);
     CMD1(CCC_QaClimateState, "qa_climate_state");
+    CMD1(CCC_QaRainState, "qa_rain_state");
     CMD1(CCC_QaClimateForce, "qa_climate_force");
     CMD1(CCC_QaSnowpack, "qa_snowpack");
     CMD1(CCC_QaIce, "qa_ice");

@@ -68,6 +68,9 @@ ENGINE_API const SDaClimateSample& da_climate_now();
 // r__season_weather: the climate drives the weather (the sky, what falls, the wind, the snowpack, the ice). Off:
 // AtmosFear's own graphs and the season keys of the snow and the ice, as before 1.6.0's third phase.
 ENGINE_API bool da_climate_enabled();
+// The climate drives this level's weather: on, and the level is out under the sky (it has a snow field; an
+// underground level keeps its own indoor weather).
+ENGINE_API bool da_climate_outdoors();
 // The weather manager (Lua) set the climate's sky on this level: the precipitation, its phase and the wind of the
 // climate replace the cycle's own. A level that keeps a weather of its own (a design fog) still takes what falls.
 ENGINE_API void da_climate_set_sky_driven(bool driven);
@@ -75,6 +78,11 @@ ENGINE_API bool da_climate_sky_driven();
 // The game's climate seed (saved by the scripts with the game): another seed is another weather history.
 ENGINE_API void da_climate_set_seed(u32 seed);
 ENGINE_API u32 da_climate_seed();
+// The integrated snowpack and ice as text, kept with the game by the scripts: a load continues the weather it left
+// instead of a history integrated again (that one sees the season move with every game day, the live one does not).
+// Empty while there is none; a load of an unknown or broken text is refused and the history runs.
+ENGINE_API pcstr da_climate_state_save();
+ENGINE_API bool da_climate_state_load(pcstr text);
 
 // The ice a point of water carries for gameplay: its thickness (m) where the season's ice covers it (cover from
 // CEnvironment::ice_at at the point, flowing from the level's water class), and how much of it a weight can trust

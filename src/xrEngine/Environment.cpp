@@ -138,6 +138,11 @@ float CEnvironment::GetRainVolume() { return eff_Rain ? eff_Rain->GetVolume() : 
 float CEnvironment::GetRainExposure() const { return eff_Rain ? eff_Rain->GetExposure() : 0.f; }
 
 float CEnvironment::GetRainCover() const { return eff_Rain ? eff_Rain->GetCover() : 1.f; }
+void CEnvironment::QaRainReport() const
+{
+    if (eff_Rain)
+        eff_Rain->QaReport();
+}
 
 float CEnvironment::GetWetness() const { return GetCurrentWetness(); }
 
@@ -859,7 +864,7 @@ float CEnvironment::weather_wind_profile()
 
     // The climate's wind (docs/dead-air/WEATHER.md): its mean speed at 10 m, as the base the service turns into
     // m/s (11 * base * (0.55 + 0.4 * base)). A weather effect keeps its own gale.
-    if (da_climate_enabled() && !bWFX)
+    if (da_climate_outdoors() && !bWFX)
     {
         const float ms = std::max(da_climate_now().wind_ms, 0.f);
         return clampr((-6.05f + std::sqrt(36.6f + 17.6f * ms)) / 8.8f, 0.f, 1.f);
@@ -1883,7 +1888,7 @@ void CEnvironment::water_tick(float delta)
         (snow_we > 0.f ? 2.5f * powf(snow_we, 0.7f) : 0.f);
     // Blowing snow: the wind lifts the loose snow off the ground; a blizzard closes the view to a couple of hundred
     // metres (docs/dead-air/WEATHER.md).
-    if (da_climate_enabled() && !bWFX)
+    if (da_climate_outdoors() && !bWFX)
     {
         const float drift = clampr(da_climate_state().drift, 0.f, 1.f);
         rain_ext_km += 10.f * drift * drift;
@@ -2001,7 +2006,7 @@ void CEnvironment::wind_tick(float delta)
     float base;
     if (eff_wind_force >= 0.f)
         base = eff_wind_force;
-    else if (profile >= 0.f && da_climate_enabled() && !bWFX)
+    else if (profile >= 0.f && da_climate_outdoors() && !bWFX)
         base = std::max(wind_profile_smooth, base_implied); // the climate says it in full
     else if (profile >= 0.f)
         base = std::max(wind_profile_smooth * (0.70f + 0.60f * base_cfg), base_implied);

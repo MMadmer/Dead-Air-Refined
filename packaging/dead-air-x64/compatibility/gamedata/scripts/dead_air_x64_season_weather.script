@@ -12,9 +12,11 @@
 -- own pre-blowout sky and weather effect; the climate comes back after it. With the option off nothing here acts.
 --
 -- The climate is a function of the game's time and a seed; the seed is kept with the game, so another game has
--- another weather history and a reload replays this one.
+-- another weather history and a reload replays this one. So are the snowpack and the ice it left: a load continues
+-- from them.
 
 local SEED_KEY = "dead_air_x64_climate_seed"
+local STATE_KEY = "dead_air_x64_climate_state"
 
 -- The AtmosFear state the rest of the scripts know a climate sky by (depth of field kernels, fog particles, the
 -- radiation of the weather): every new sky maps onto one the manager's tables have.
@@ -33,6 +35,7 @@ local BASE_STATE = {
 local MOON_SKIES = { clear_steady = true, partly = true }
 
 local seed
+local saved_state
 
 local function climate_on()
 	return level.climate_enabled and level.climate_enabled()
@@ -49,12 +52,43 @@ local function keeps_own_weather(level_name)
 	return good == "veryfoggy" and bad == "veryfoggy"
 end
 
+-- A blowout or psi storm the manager's pre-blowout sky announced is still to come or under way (change_period's own
+-- test: due within two hours and enabled in the options, or started).
+local function storm_ahead()
+	local cfg = atmosfear_options.config
+	local now = game.get_game_time()
+	local sm = surge_manager and surge_manager.SurgeManager
+	if sm and (sm.started or (sm._delta and sm.last_surge_time and sm._delta - now:diffSec(sm.last_surge_time) < 7200
+		and cfg:r_value("atmosfear_current_parameters", "opt_enable_blowout", 2, 1) == 1)) then
+		return true
+	end
+	local pm = psi_storm_manager and psi_storm_manager.PsiStormManager
+	if pm and (pm.started or (pm._delta and pm.last_psi_storm_time
+		and pm._delta - now:diffSec(pm.last_psi_storm_time) < 7200
+		and cfg:r_value("atmosfear_current_parameters", "opt_enable_psi_storm", 2, 1) == 1)) then
+		return true
+	end
+	return false
+end
+
+-- The AtmosFear weather of the level's current period (what the manager's own selection would take).
+local function period_weather(wm)
+	local level_name = level.name()
+	local period = level_name and atmosfear_options.config:r_value("atmosfear_current_parameters",
+		"opt_" .. level_name .. "_period_" .. tostring(wm.period))
+	return "atmosfear_" .. (period or "clear")
+end
+
 -- The cycle for the climate's sky now, or nil when the manager keeps its own choice.
 local function climate_cycle(wm)
 	if not climate_on() or wm.weatherType ~= "atmosfear" or wm.weather_fx then
 		return nil
 	end
 	if wm.transition_period or wm.pre_blowout_period or level.is_wfx_playing() then
+		return nil
+	end
+	-- The pre-blowout sky stays until its storm has come and gone.
+	if (wm.levelWeather == "atmosfear_pre_blowout" or wm.levelWeather == "atmosfear_transition") and storm_ahead() then
 		return nil
 	end
 	if keeps_own_weather(level.name()) then
@@ -95,14 +129,18 @@ local function install()
 		local state = BASE_STATE[sky]
 		self.curr_weather = state
 		self.next_weather = state
+		-- The manager's own state goes on under the climate: its depth of field, meteorites and saves read
+		-- levelWeather, which a new game would otherwise never set.
+		self.levelWeather = period_weather(self)
 		if now then
 			self.last_hour = level.get_time_hours()
 			self.next_hour = (self.last_hour + 1) % 24
 		end
 		-- Forced only the first time on a level (a load, a level change) or after a jump of the clock (a sleep):
-		-- AtmosFear's own daily reselection at 21:00 must not cut the sky over in one frame; a new sky lerps in over
-		-- the cycle's next key.
-		local forced = self.climate_cycle == nil or self.forced_weather_change_on_time_change
+		-- AtmosFear's own daily reselection at 21:00 must not cut the sky over in one frame, nor the climate's return
+		-- after a storm's sky; a new sky lerps in over the cycle's next key.
+		local forced = not self.climate_level_set or self.forced_weather_change_on_time_change
+		self.climate_level_set = true
 		self.forced_weather_change_on_time_change = false
 		if name ~= self.climate_cycle or forced then
 			level.set_weather(name, forced)
@@ -114,6 +152,7 @@ local function install()
 	local base_reset = wm.reset
 	wm.reset = function(self)
 		self.climate_cycle = nil
+		self.climate_level_set = nil
 		return base_reset(self)
 	end
 
@@ -200,10 +239,13 @@ end
 
 local function save_state(m_data)
 	m_data[SEED_KEY] = seed
+	local st = level.climate_state_save and level.climate_state_save()
+	m_data[STATE_KEY] = st ~= "" and st or nil
 end
 
 local function load_state(m_data)
 	seed = m_data[SEED_KEY]
+	saved_state = m_data[STATE_KEY]
 end
 
 local function on_game_load()
@@ -214,6 +256,10 @@ local function on_game_load()
 	if level.climate_set_seed then
 		level.climate_set_seed(seed)
 	end
+	if saved_state and level.climate_state_load then
+		level.climate_state_load(saved_state)
+	end
+	saved_state = nil
 end
 
 function on_game_start()

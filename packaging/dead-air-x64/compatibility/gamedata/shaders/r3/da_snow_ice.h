@@ -112,10 +112,10 @@ float da_ice_cover(float2 xz, bool on_field, bool flowing, float shore)
 // none on young ice. The full key leaves only a few wind-swept spots.
 float da_ice_snow(float2 xz, float ice)
 {
-	[branch] if (da_snow_ice.w <= 0.0 || da_snow_ice.z <= 0.0 || ice <= 0.25)
+	[branch] if (da_snow_ice.w <= 0.0 || da_snow_ice.z <= 0.0 || ice <= 0.5)
 		return 0.0;
 	const float n = 0.75 * da_ice_noise(xz * 6.0) + 0.25 * da_ice_noise(xz * 20.0 + 31.0);
-	const float c = saturate((da_snow_ice.z * 1.2 - n) * 4.0) * saturate(ice * 2.0 - 0.5);
+	const float c = saturate((da_snow_ice.z * 1.2 - n) * 4.0) * saturate((ice - 0.5) * 4.0);
 	const float drift = 0.8 + 0.4 * da_ice_noise(xz * 9.0 + 57.0);
 	return da_snow_ice.w * drift * c * c * (3.0 - 2.0 * c);
 }

@@ -146,7 +146,8 @@ Everything the rain drives follows the liquid share:
 The snow mode of the rain sheet (`CEffect_Rain`, `dxRainRender`): a flake sinks at 0.6-1.5 m/s and moves with
 the whole wind (slant `atan(wind / fall)`, capped at 75 degrees), swings 5-20 cm round its line at 1-3 rad/s,
 is born in a 14 m column through the same shelter ray as the drops (no snow indoors or under roofs, crowns let
-it through), and lands without a crown or a sound. Flakes are camera-facing quads of 1.5-3 cm drawn by
+it through), and lands without a crown or a sound. Flakes land in the inner 60 % of the sheet's disc (past some 8 m one is under a pixel) and are camera-facing
+quads of 2-4.5 cm, wound as the streaks are (the pass culls back faces), drawn by
 `da_rain_flake.ps` (`effects_rain_flake.s`): a soft disc with a denser core, lit like the streaks with ice's
 forward scatter, fogged and soft against the scene - no texture asset. The count follows the heavier of the
 rain and snow rates on the same `r__rain_quality` ladder.

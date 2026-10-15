@@ -415,18 +415,20 @@ void dxRainRender::RenderFlakes(CEffect_Rain& owner, u32 items, u32 flakes, floa
             continue;
         const u32 c = color_rgba_f(fr, fg, fb, _min(a, 1.f));
 
+        // Wound as the streaks are (top edge first, clockwise on screen): the shader's pass brings its own
+        // back-face cull, and the reverse order drew every flake as a culled back face.
         Fvector Q;
-        Q.mad(P, top, -h).mad(right, -h);
-        verts->set(Q, c, 0.f, 1.f);
-        verts++;
-        Q.mad(P, top, -h).mad(right, h);
-        verts->set(Q, c, 1.f, 1.f);
-        verts++;
         Q.mad(P, top, h).mad(right, -h);
         verts->set(Q, c, 0.f, 0.f);
         verts++;
         Q.mad(P, top, h).mad(right, h);
         verts->set(Q, c, 1.f, 0.f);
+        verts++;
+        Q.mad(P, top, -h).mad(right, -h);
+        verts->set(Q, c, 0.f, 1.f);
+        verts++;
+        Q.mad(P, top, -h).mad(right, h);
+        verts->set(Q, c, 1.f, 1.f);
         verts++;
     }
     const u32 vCount = u32(verts - start);
@@ -434,9 +436,9 @@ void dxRainRender::RenderFlakes(CEffect_Rain& owner, u32 items, u32 flakes, floa
 
     if (vCount)
     {
-        RCache.set_CullMode(CULL_NONE);
         RCache.set_xform_world(Fidentity);
         RCache.set_Shader(SH_Flake ? SH_Flake : SH_Rain);
+        RCache.set_CullMode(CULL_NONE);
         RCache.set_Geometry(hGeom_Rain);
         RCache.Render(D3DPT_TRIANGLELIST, vOffset, 0, vCount, 0, vCount / 2);
         RCache.set_CullMode(CULL_CCW);

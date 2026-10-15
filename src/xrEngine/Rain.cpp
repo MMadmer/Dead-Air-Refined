@@ -205,7 +205,7 @@ void CEffect_Rain::Born(Item& dest, float radius, const Fvector& wind_v)
     // real.
     Fvector& view = Device.vCameraPosition;
     const float angle = ::Random.randF(0, PI_MUL_2);
-    const float dist = _sqrt(::Random.randF()) * radius;
+    const float dist = _sqrt(::Random.randF()) * radius * (dest.flake && !dest.drift ? da_rain::flake_radius_share : 1.f);
     Fvector land;
     land.set(view.x + dist * _cos(angle), view.y - below_eye, view.z + dist * _sin(angle));
 
@@ -558,6 +558,23 @@ void CEffect_Rain::OnFrame()
     }
 }
 
+void CEffect_Rain::QaReport() const
+{
+    u32 flakes = 0, drifts = 0, sheltered = 0, alive = 0;
+    for (const Item& one : items)
+    {
+        flakes += one.flake ? 1 : 0;
+        drifts += one.drift ? 1 : 0;
+        sheltered += one.sheltered ? 1 : 0;
+        alive += one.dwTime_Life ? 1 : 0;
+    }
+    const CEnvironment& env = g_pGamePersistent->Environment();
+    Msg("[qa] rain_state %s density %.3f drift %.3f liquid %.2f snow_rate %.3f | items %u alive %u flakes %u drifts %u "
+        "sheltered %u | cover %.2f exposure %.2f",
+        state == stWorking ? "working" : "idle", env.CurrentEnv.rain_density, da_rain_drift(), da_precip().liquid,
+        da_precip().snow_rate, u32(items.size()), alive, flakes, drifts, sheltered, cover_factor, rain_exposure);
+}
+
 void CEffect_Rain::Render()
 {
 #ifndef _EDITOR
@@ -589,7 +606,7 @@ void CEffect_Rain::HitItem(Item& src)
 
 float da_rain_drift()
 {
-    if (!g_pGamePersistent || !da_climate_enabled() || g_pGamePersistent->Environment().IsWFXPlaying())
+    if (!g_pGamePersistent || !da_climate_outdoors() || g_pGamePersistent->Environment().IsWFXPlaying())
         return 0.f;
     return da_rain::drift_density * clampr(da_climate_state().drift, 0.f, 1.f);
 }

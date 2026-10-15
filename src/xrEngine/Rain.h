@@ -108,9 +108,12 @@ constexpr float flake_flutter_min = 0.05f;
 constexpr float flake_flutter_max = 0.20f;
 constexpr float flake_flutter_rate_min = 1.f;
 constexpr float flake_flutter_rate_max = 3.f;
-// Half the width of a flake's quad (a flake is 1.5-3 cm across).
-constexpr float flake_half_min = 0.0075f;
-constexpr float flake_half_max = 0.015f;
+// Half the width of a flake's quad (a falling aggregate is 2-4.5 cm across).
+constexpr float flake_half_min = 0.011f;
+constexpr float flake_half_max = 0.022f;
+// Flakes land in the inner share of the sheet's disc: past some 8 m one is under a pixel, and the sheet's count
+// is better spent where it reads.
+constexpr float flake_radius_share = 0.6f;
 // A visor gets wet from snow too: the flakes melt on the glass, at this share of what rain would do.
 constexpr float flake_visor_share = 0.3f;
 // Blowing snow (docs/dead-air/WEATHER.md): a wind over loose dry snow lifts it - low, nearly level streams of fine
@@ -272,6 +275,8 @@ public:
 
     float GetVolume() { return rain_volume; }
     float GetExposure() const { return rain_exposure; }
+    // qa_rain_state: the sheet as it stands (state, items, flakes, drifts, sheltered, cover).
+    void QaReport() const;
     float GetCover() const { return cover_factor; }
     struct CoverRay
     {

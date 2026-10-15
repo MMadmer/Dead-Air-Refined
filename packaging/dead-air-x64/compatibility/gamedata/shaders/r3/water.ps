@@ -192,8 +192,9 @@ float4 main( vf I ) : SV_Target
 	// Frozen water carries no wave, ripple, ring, caustic, foam or film; liq scales every one of them.
 	const float  ice_cover = da_water_ice( Pw.xz, d_field > 0.001f, shore );
 	// Frozen from half the cover on, as gameplay takes it (CEnvironment::ice_at under 0.5 is water) and as
-	// the snow grid's sheet over the ice begins: the front is the outer half of the cover.
-	const float  ice = saturate( ice_cover * 2.0f );
+	// the snow grid's sheet over the ice begins: a quarter metre of the front fades it in, no more, so no ice is
+	// drawn where a man sinks.
+	const float  ice = saturate( ( ice_cover - 0.375f ) * 8.0f );
 	const float  liq = 1.0f - ice;
 
 	// ---- the surface ---------------------------------------------------------------------

@@ -657,7 +657,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 		[branch] if (grid && Pw.y > base.x - 0.02)
 		{
 			const float2 ice = da_sn_ice_at(Pw.xz);
-			[branch] if (ice.x > 0.35)
+			[branch] if (ice.x > 0.5)
 			{
 				da_sn_sheet(o, P, Pw, ice, footprint, 0.0);
 				[branch] if (dbg > 0)
