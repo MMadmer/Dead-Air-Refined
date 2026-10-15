@@ -61,7 +61,7 @@ Get-ChildItem -LiteralPath (Join-Path $Source "database") -File | ForEach-Object
 }
 Copy-Item -LiteralPath (Join-Path $Source "fsgame.ltx") -Destination $Rig
 Copy-Item -LiteralPath (Join-Path $Source "appdata\user.ltx") -Destination (Join-Path $Rig "appdata")
-Copy-Item -LiteralPath (Join-Path $Source "appdata\shaders_cache_xfr") -Destination (Join-Path $Rig "appdata") -Recurse
+Copy-Item -LiteralPath (Join-Path $Source "appdata\shaders_cache_grizzly") -Destination (Join-Path $Rig "appdata") -Recurse
 foreach ($file in "content-manifest.txt", "content-state.txt") {
     Copy-Item -LiteralPath (Join-Path $Source ".dead-air-x64\$file") -Destination (Join-Path $Rig ".dead-air-x64")
 }
@@ -185,7 +185,7 @@ Stop-RigProcesses
 if ($desktop -ne [IntPtr]::Zero) { [QaDesktop.Native]::CloseDesktop($desktop) | Out-Null }
 
 # ---- the verdict ------------------------------------------------------------------------------
-$logs = @(Get-ChildItem -LiteralPath (Join-Path $Rig "appdata\logs") -Filter "xfined-ray_admin*" -ErrorAction SilentlyContinue |
+$logs = @(Get-ChildItem -LiteralPath (Join-Path $Rig "appdata\logs") -Filter "grizzly_admin*" -ErrorAction SilentlyContinue |
     ForEach-Object { Get-Content -LiteralPath $_.FullName -ErrorAction SilentlyContinue })
 $deltaLine = $logs | Where-Object { $_ -match '\* Update delta: ' } | Select-Object -First 1
 Write-Host "  log: $deltaLine"

@@ -14,7 +14,7 @@ These points supersede the text below where they differ (ids refer to `PLAN.md` 
 - **C1**: DXC is **1.9.2607**, one copy in `Externals/dxc` vendored by `core` (K1); not 1.8.2502.
 - **C2**: `da_dxc` belongs to the `dxc` lane (`dxc.md`): the loader is the layer service
   `d12_dxc.cpp`, RT shaders compile through `da_dxc_compile_native` (HLSL 2021, FS include handler),
-  cached under `shaders_cache_xfr/r5_dxil/<tag>/native/rt/...`, not `r5/rt/`. This lane owns no
+  cached under `shaders_cache_grizzly/r5_dxil/<tag>/native/rt/...`, not `r5/rt/`. This lane owns no
   compiler code.
 - **C7**: `r__caps` keys are `rt` (RT usable this session: tier >= 11, DXC service up, RT device init
   ok, no MSAA, no `-dx12_no_rt`; from this lane's `da_rt_available()`) and `rt_tier` (infra; on DX11
@@ -358,7 +358,7 @@ greyed" pattern), nodes `ui_mm_opt.xml:267-439` / `ui_mm_opt_16.xml`, strings
   `da_rt_live(RtEffect)`), lifecycle hooks, `da_rt` constant values. DX11: stubs returning "off".
 - `da_dxc.h/.cpp` - owned by `dxc.md` (PLAN C2): RT compiles through `da_dxc_compile_native`
   (include handler through `FS`, so the overlay and mods work; cache
-  `appdata/shaders_cache_xfr/r5_dxil/<tag>/native/rt/...`).
+  `appdata/shaders_cache_grizzly/r5_dxil/<tag>/native/rt/...`).
 - `da_rt_device.cpp` - DXR availability, RT root signature and PSOs through infra's caches, bindless
   slots, per-pass descriptor/upload spans and lifetimes through infra's helpers (PLAN C8).
 - `da_rt_scene.cpp` - level walk, BLAS/TLAS build and compaction, geometry/material/instance tables.
@@ -590,7 +590,7 @@ tonemap copies of combine_1), `rt_sun_shadow.hlsl`, `rt_temporal.hlsl`, `rt_atro
 `rt_ao.hlsl`, `rt_ao_upsample.hlsl`, `rt_reflections.hlsl`, `rt_skin.hlsl` (phase 5),
 `rt_debug.hlsl`. FXC (existing tree): `water_rtreq.ps`, `da_water_rtreq.s`,
 `da_puddle_refl_req.ps`, edits listed in section 4. `Check-ShaderLinkage.py` covers the new FXC
-pass pairs; `Test-Shaders.ps1` skips `r3/rt/`. New C++ files carry the XFined-Ray MIT header;
+pass pairs; `Test-Shaders.ps1` skips `r3/rt/`. New C++ files carry the Grizzly MIT header;
 shader files follow the shader tree's convention.
 
 ## 7. UI (not in presets)

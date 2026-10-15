@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The snow grid's interpolants (da_snow_grid.vs/.ps). One struct for both stages, so the signatures link

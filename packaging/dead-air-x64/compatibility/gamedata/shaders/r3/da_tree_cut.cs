@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Trees, the view's GPU cut (docs/dead-air/TREES.md): one lane per element of the frame's candidate chunks (a group a

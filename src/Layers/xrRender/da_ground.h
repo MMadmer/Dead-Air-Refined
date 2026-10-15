@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The level's collision mesh on the GPU and the top-down products rasterised from it (docs/dead-air/SNOW.md):

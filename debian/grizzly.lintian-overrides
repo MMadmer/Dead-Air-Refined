@@ -1,0 +1,9 @@
+grizzly binary: embedded-library
+grizzly binary: shared-library-is-multi-arch-foreign
+grizzly binary: shared-library-lacks-version
+grizzly binary: package-name-doesnt-match-sonames
+grizzly binary: no-manual-page
+grizzly binary: copyright-without-copyright-notice
+grizzly binary: script-not-executable
+grizzly binary: unusual-interpreter
+grizzly binary: extended-description-line-too-long

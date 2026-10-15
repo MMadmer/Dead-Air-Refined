@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // xrD3D12: a native Direct3D 12 backend behind the Direct3D 11 interfaces the renderer is

@@ -1,9 +1,9 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 
 #pragma once
 
-// XMS - XFined Module System core.
+// XMS - eXtensible Module System core.
 // Module discovery, deterministic ordering, VFS overlay mounting with a
 // conflict ledger, and the persistent ns/id registry.
 // Design doc: docs/dead-air/XMS_ARCHITECTURE.md

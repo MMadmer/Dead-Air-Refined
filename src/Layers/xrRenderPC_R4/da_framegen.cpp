@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The frame generation manager (da_framegen.h): the registry of the backends (AMD FSR, NVIDIA

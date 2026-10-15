@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // DXC / Shader Model 6 engine glue (da_dxc.h, docs/dead-air/dx12-features/dxc.md 3.2-3.8). The
@@ -42,17 +42,17 @@ struct DaDxcSetup
     bool engine{};         // engine shaders through DXC this session
     u32 engine_model{};    // 0x60..0x66
     u32 native_model{};    // min(device, DXC), 0 = no service
-    u32 wave_lanes{};      // XFR_WAVE_LANES, 0 without wave ops
-    bool min16{};          // XFR_MIN16
-    bool plain{};          // -dxc_plain: engine shaders without XFR_WAVE_LANES / XFR_MIN16
+    u32 wave_lanes{};      // GRIZZLY_WAVE_LANES, 0 without wave ops
+    bool min16{};          // GRIZZLY_MIN16
+    bool plain{};          // -dxc_plain: engine shaders without GRIZZLY_WAVE_LANES / GRIZZLY_MIN16
     bool all_bound{};      // -dxc_all_bound: engine shaders with -all-resources-bound
     bool fp16{};           // native 16-bit types
     u32 flags{};           // xrd3d12::ShaderCompileFlags of every compile
     bool optimize{};       // -O3 (not in debug builds)
     string32 tag{};        // sm66-w32-m16-<crc>
     string64 cache_dir{};  // "r5_dxil\<tag>[-plain][-arb]\" while engine shaders are DXIL
-    string16 engine_sm{};  // XFR_SM of engine shaders ("66")
-    string16 wave{};       // XFR_WAVE_LANES value
+    string16 engine_sm{};  // GRIZZLY_SM of engine shaders ("66")
+    string16 wave{};       // GRIZZLY_WAVE_LANES value
 };
 DaDxcSetup g_dxc;
 
@@ -316,7 +316,7 @@ void da_dxc_selftest()
                                    "void main(uint3 id : SV_DispatchThreadID)\n"
                                    "{\n"
                                    "    float luminance = dot(float3(id), LUMINANCE_VECTOR);\n"
-                                   "#if defined(XFR_WAVE_LANES)\n"
+                                   "#if defined(GRIZZLY_WAVE_LANES)\n"
                                    "    luminance = WaveActiveSum(luminance);\n"
                                    "#endif\n"
                                    "    if (id.x == 0)\n"
@@ -552,7 +552,7 @@ bool da_dxc_compile_native(const DaDxcNative& request, xr_vector<u8>& bytecode, 
                 c = '\\';
         }
         string_path file;
-        xr_sprintf(file, "shaders_cache_xfr" DELIMITER "r5_dxil" DELIMITER "%s" DELIMITER "native" DELIMITER "%s.%s.%s" DELIMITER "%08x",
+        xr_sprintf(file, "shaders_cache_grizzly" DELIMITER "r5_dxil" DELIMITER "%s" DELIMITER "native" DELIMITER "%s.%s.%s" DELIMITER "%08x",
             g_dxc.tag, relative.c_str(), request.entry ? request.entry : "lib", request.target, key);
         FS.update_path(cache_file, "$app_data_root$", file);
     }
@@ -575,12 +575,12 @@ bool da_dxc_compile_native(const DaDxcNative& request, xr_vector<u8>& bytecode, 
         if (request.defines[i].name)
             defines.push_back({request.defines[i].name, request.defines[i].value});
     }
-    defines.push_back({"XFR_DXC", "1"});
-    defines.push_back({"XFR_SM", sm});
+    defines.push_back({"GRIZZLY_DXC", "1"});
+    defines.push_back({"GRIZZLY_SM", sm});
     if (g_dxc.wave_lanes)
-        defines.push_back({"XFR_WAVE_LANES", g_dxc.wave});
+        defines.push_back({"GRIZZLY_WAVE_LANES", g_dxc.wave});
     if (g_dxc.min16)
-        defines.push_back({"XFR_MIN16", "1"});
+        defines.push_back({"GRIZZLY_MIN16", "1"});
     defines.push_back({"SMAP_ARRAY", "1"});
 
     xr_vector<const wchar_t*> args(std::begin(k_native_args), std::end(k_native_args));
@@ -649,12 +649,12 @@ bool da_dxc_compile_engine(pcstr name, const void* source, size_t size, const D3
     xr_vector<D3D_SHADER_MACRO> defines;
     for (const D3D_SHADER_MACRO* macro = macros; macro && macro->Name; ++macro)
         defines.push_back(*macro);
-    defines.push_back({"XFR_DXC", "1"});
-    defines.push_back({"XFR_SM", g_dxc.engine_sm});
+    defines.push_back({"GRIZZLY_DXC", "1"});
+    defines.push_back({"GRIZZLY_SM", g_dxc.engine_sm});
     if (g_dxc.wave_lanes && !g_dxc.plain)
-        defines.push_back({"XFR_WAVE_LANES", g_dxc.wave});
+        defines.push_back({"GRIZZLY_WAVE_LANES", g_dxc.wave});
     if (g_dxc.min16 && !g_dxc.plain)
-        defines.push_back({"XFR_MIN16", "1"});
+        defines.push_back({"GRIZZLY_MIN16", "1"});
     defines.push_back({nullptr, nullptr});
     ID3DBlob* text = nullptr;
     ID3DBlob* messages = nullptr;

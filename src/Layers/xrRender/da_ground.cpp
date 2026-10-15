@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The level's collision mesh on the GPU and the near ground window (docs/dead-air/SNOW.md, da_ground.h).

@@ -12,7 +12,7 @@ finish-args:
   - --device=dri
 
 modules:
-  - name: XFined-Ray
+  - name: Grizzly
     buildsystem: cmake
     sources:
       - type: git
@@ -22,5 +22,5 @@ modules:
       - -D CMAKE_BUILD_TYPE=ReleaseMasterGold
       - -D CMAKE_UNITY_BUILD=ON
 
-#rename-icon: xfined-ray_cop.png
-rename-desktop-file: xfined-ray_cop.desktop
+#rename-icon: grizzly_cop.png
+rename-desktop-file: grizzly_cop.desktop

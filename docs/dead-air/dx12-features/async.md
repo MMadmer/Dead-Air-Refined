@@ -198,7 +198,7 @@ the code differs from sections 3-6 below:
   (`async-a4-verify`) found clouds0 346 of 518400 texels (max 2^-11, a half-float rounding flip),
   gtao_0 2493 of 2073600 (max 0.28: a last-bit tap coordinate picks the neighbouring
   point-sampled texel) and ssao_temp 2775; the ripple was already equal. The wrappers now store
-  through `DA_STAGE_EXACT` (`precise` under `XFR_DXC`, empty for FXC, defined in `gtao.h` and
+  through `DA_STAGE_EXACT` (`precise` under `GRIZZLY_DXC`, empty for FXC, defined in `gtao.h` and
   `da_clouds_march.h`); DXC then emits no `fast` flag in the body (0 of 223 float operations of
   `gtao_render.ps`). DirectX 11 and the DirectX 12 FXC fallback compile the same instructions as
   before. The cost is measured at A7 (the first runs, under machine load, showed no change of
@@ -778,7 +778,7 @@ fence through infra's join-before-Present invariant.
 | `tools/qa/water/async_check.lua` (new) | stand scenario (9.3) |
 | `docs/dead-air/DX12_RENDERER.md` | section 2 rows for the three console commands; section 4 a pointer here |
 
-New engine files (`da_async.*`, `scenarios_async.cpp`) start with the XFined-Ray/MIT header; shaders
+New engine files (`da_async.*`, `scenarios_async.cpp`) start with the Grizzly/MIT header; shaders
 follow the shader folder's convention (no header).
 
 ## 5. Data and resources

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Trees, the arguments of the GPU cut's draws (da_tree_cut.cs): a group a draw turns the words its list took into

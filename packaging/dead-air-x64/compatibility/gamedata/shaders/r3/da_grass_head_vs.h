@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Blade grass, the seed heads (docs/dead-air/GRASS.md): a second indirect draw of procedural micro-meshes

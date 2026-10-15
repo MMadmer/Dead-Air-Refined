@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // GPU-driven vegetation registry (da_gpu_trees.h, gpudriven.md 3.2-3.7).

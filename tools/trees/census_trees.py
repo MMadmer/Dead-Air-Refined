@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """The census of the stock level trees for the 1.6.0 tree upgrade (docs/dead-air/TREES.md, TREE_DATA.md): writes
 tools/trees/data/tree_kinds.json and tools/trees/data/tree_photo_colours.json, which tools/trees/make_trees.py reads.
@@ -43,7 +43,7 @@ DEF_INVENTORY = os.environ.get('DA_TREES_INVENTORY', os.path.join(SCRATCH, 'inve
 DEF_SPECIES = os.environ.get('DA_TREES_SPECIES', os.path.join(SCRATCH, 'species'))
 SHRUBS_LTX = os.path.join(REPO, 'packaging', 'dead-air-x64', 'compatibility', 'gamedata', 'configs',
                           'dead_air_x64_shrubs.ltx')
-DEF_LOG = os.environ.get('DA_GAME_LOG', r'D:\Games\Dead Air\appdata\logs\xfined-ray_admin.log')
+DEF_LOG = os.environ.get('DA_GAME_LOG', r'D:\Games\Dead Air\appdata\logs\grizzly_admin.log')
 OUT_KINDS = os.path.join(DATA, 'tree_kinds.json')
 OUT_COLOURS = os.path.join(DATA, 'tree_photo_colours.json')
 

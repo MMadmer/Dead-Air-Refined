@@ -67,7 +67,7 @@ Copy-Item (Join-Path $pack "configs/*.ltx") (Join-Path $Rig "gamedata/configs/")
 Copy-Item (Join-Path $pack "scripts/*.script") (Join-Path $Rig "gamedata/scripts/") -Force -ErrorAction SilentlyContinue
 
 if (-not $KeepShaderCache) {
-    foreach ($name in "shaders_cache_xfr", "shaders_cache_oxr") {
+    foreach ($name in "shaders_cache_grizzly", "shaders_cache_oxr") {
         $cache = Join-Path $Rig "appdata\$name"
         if (Test-Path -LiteralPath $cache) { Remove-Item -LiteralPath $cache -Recurse -Force }
     }
@@ -113,7 +113,7 @@ Get-ChildItem $shots -Filter "*.jpg" | Sort-Object LastWriteTime | ForEach-Objec
     Copy-Item $_.FullName (Join-Path $dest ("{0:d2}.jpg" -f $i)) -Force
     $i++
 }
-Copy-Item (Join-Path $Rig "appdata\logs\xfined-ray_admin.log") (Join-Path $dest "log.txt") -Force
+Copy-Item (Join-Path $Rig "appdata\logs\grizzly_admin.log") (Join-Path $dest "log.txt") -Force
 
 Write-Host "== repro $Label : $i frame(s) -> $dest"
 $log = Join-Path $dest "log.txt"

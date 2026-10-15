@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """The trees' leaves and needles as the texture generator draws them (docs/dead-air/TREES_TEXTURES.md): per tree
 species its leaf kind, the sizes (m) the layers are drawn at and the element sizes their squares are fitted to (the

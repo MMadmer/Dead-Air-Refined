@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural shrubs (docs/dead-air/SHRUBS.md): the generator of one bush of a species - its axes (stems,

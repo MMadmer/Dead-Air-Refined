@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Renders a list of shrub OBJs in one headless Blender session (gallery.py's jobs.json).
 

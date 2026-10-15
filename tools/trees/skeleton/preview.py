@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Rebuild a skeleton straight from its .dtsk file (FORMAT.md reconstruction) and render it: tubes by level,
 patches, card branch records, crown field. An independent check of what the engine will read.

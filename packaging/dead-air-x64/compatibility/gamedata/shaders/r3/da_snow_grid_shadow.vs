@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The near snow grid in the near sun cascade (da_snow.cpp): the surface da_snow_grid.vs draws, depth only, so

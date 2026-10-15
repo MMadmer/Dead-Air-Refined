@@ -93,7 +93,7 @@ $qaModules = Join-Path $qaRoot 'modules'
 $qaStaged = Join-Path $qaModules '.staged'
 $qaAssets = Join-Path $qaRoot 'fixture-assets'
 $qaEngine = Join-Path $qaRoot 'xrEngine.exe'
-$qaLog = Join-Path $qaAppData 'logs\xfined-ray_admin.log'
+$qaLog = Join-Path $qaAppData 'logs\grizzly_admin.log'
 
 $compatGameData = Join-Path $repositoryRoot 'packaging\dead-air-x64\compatibility\gamedata'
 $manifestPath = Join-Path $repositoryRoot 'packaging\dead-air-x64\installer\runtime-files.txt'
@@ -172,7 +172,7 @@ function New-QaRoot {
         $source = Join-Path $GameRoot ".dead-air-x64\$file"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $meta -Force }
     }
-    foreach ($cache in @('shaders_cache', 'shaders_cache_xfr', 'shaders_cache_oxr', 'render-hardware.cache')) {
+    foreach ($cache in @('shaders_cache', 'shaders_cache_grizzly', 'shaders_cache_oxr', 'render-hardware.cache')) {
         $source = Join-Path $GameRoot "appdata\$cache"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $qaAppData -Recurse -Force }
     }

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Variable rate shading, tier 2 (docs/dead-air/dx12-features/vrs.md 3.6): one rate image per frame

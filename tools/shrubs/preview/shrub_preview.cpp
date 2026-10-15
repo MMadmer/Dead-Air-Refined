@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The shrub generator outside the engine: builds bushes of a species of dead_air_x64_shrubs.ltx with the engine's

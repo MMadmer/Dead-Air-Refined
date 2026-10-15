@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Write the upgraded level trees' data (docs/dead-air/TREES.md): configs/dead_air_x64_trees.ltx and
 docs/dead-air/TREE_DATA.md (and the data section of TREES.md when that document exists).

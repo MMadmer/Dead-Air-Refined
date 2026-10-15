@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Shared helpers of the snow passes (da_snow_*.cs/.vs/.ps, docs/dead-air/SNOW.md): the level fields at

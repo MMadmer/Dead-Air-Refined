@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // AMD FSR 3.1.2 upscaler on DirectX 11 (docs/dead-air/DX12_RENDERER.md, 1 and 3): the MSVC build

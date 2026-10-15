@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Orthographic painter's-algorithm renderer for the report sheets (PIL only)."""
 import numpy as np

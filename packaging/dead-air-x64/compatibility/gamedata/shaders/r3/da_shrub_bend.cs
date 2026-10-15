@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural shrubs, the frame's bends (docs/dead-air/SHRUBS.md): one lane per slot of the frame's chunks (a group a

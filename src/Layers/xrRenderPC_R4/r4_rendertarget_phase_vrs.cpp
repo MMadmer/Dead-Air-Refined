@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The passes of variable rate shading (docs/dead-air/dx12-features/vrs.md 3.2, 5, 6): the luminance

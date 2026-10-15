@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The ice under the actor and under fire (docs/dead-air/WEATHER.md, ice). See da_ice_game.h.

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The shrub generator (da_shrub_gen.h). A rule-based branching model in the line of Weber and Penn (1995) and

@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """The .dtsk skeleton file, version 1 (tools/trees/FORMAT.md): writer, reader and validator.
 

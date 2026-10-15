@@ -8,7 +8,7 @@ every other shader file of the tree (compute shaders, unreferenced files, mod ov
 unique preprocessed shader:
 
   * DXC compile through Externals/dxc in process with the engine's setup (dxc.md 3.3): FXC's
-    preprocessor with the engine's includer and the XFR_* macros, then DXC on the self-contained
+    preprocessor with the engine's includer and the GRIZZLY_* macros, then DXC on the self-contained
     text with -HV 2018 -Zpr -O3 -flegacy-resource-reservation and the silenced legacy warnings
     (.ms/.as with -HV 2021);
   * FXC compile of the same permutation (d3dcompiler_47, the engine's flags, the X3523 retry);
@@ -402,7 +402,7 @@ class Auditor:
                 entry = legacy.decode()
                 break
         pairs = tuple(tuple(d.split("=", 1)) if "=" in d else (d, "1") for d in defines)
-        # FXC sees the engine's options; DXC also the XFR_* macros.
+        # FXC sees the engine's options; DXC also the GRIZZLY_* macros.
         text, err = self.fxc_compiler.preprocess(raw, list(pairs))
         dtext, derr = self.fxc_compiler.preprocess(raw, list(pairs) + self.xfr, f"{name}.{stage}".encode())
         digest = hashlib.sha1((text if text is not None else raw + repr(pairs).encode()) +
@@ -502,8 +502,8 @@ def main():
     ap.add_argument("--dxc-arg", action="append", default=[], help="extra DXC argument (repeatable)")
     ap.add_argument("--no-engine-args", dest="engine_args", action="store_false",
                     help="drop -flegacy-resource-reservation and the silenced warnings (plain -Zpr -O3)")
-    ap.add_argument("--wave-lanes", type=int, default=32, help="XFR_WAVE_LANES (0 = a device without wave ops)")
-    ap.add_argument("--no-min16", action="store_true", help="a device without 16-bit min precision (no XFR_MIN16)")
+    ap.add_argument("--wave-lanes", type=int, default=32, help="GRIZZLY_WAVE_LANES (0 = a device without wave ops)")
+    ap.add_argument("--no-min16", action="store_true", help="a device without 16-bit min precision (no GRIZZLY_MIN16)")
     ap.add_argument("--console-extras", action="store_true", help="also the console-only switches, one at a time")
     ap.add_argument("--preprocess", choices=("dxc", "fxc"), default="fxc", help="who expands includes and macros")
     ap.add_argument("--compare-raw", action="store_true", help="with --preprocess fxc: also compile the raw file, compare the DXIL")

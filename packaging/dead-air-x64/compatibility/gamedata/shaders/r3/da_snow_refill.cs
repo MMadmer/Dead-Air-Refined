@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Fresh snowfall fills the trails (da_snow.cpp): every carved surface rises by the snow that fell since

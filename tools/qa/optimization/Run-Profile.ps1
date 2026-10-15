@@ -74,7 +74,7 @@ finally {
     Remove-Item -LiteralPath (Join-Path $scriptDir "qa_profile.script") -Force -ErrorAction SilentlyContinue
 }
 
-$log = Join-Path $Rig "appdata\logs\xfined-ray_admin.log"
+$log = Join-Path $Rig "appdata\logs\grizzly_admin.log"
 $resultRoot = Join-Path $PSScriptRoot "profiles"
 New-Item -ItemType Directory -Force -Path $resultRoot | Out-Null
 $dest = Join-Path $resultRoot "$Label.txt"

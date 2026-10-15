@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Leaf texture layers of the procedural shrubs and trees (docs/dead-air/SHRUBS.md, docs/dead-air/TREES_TEXTURES.md;
 the shrubs' sizes from tools/shrubs/make_shrubs.py, the trees' from tree_leaf_botany.py).

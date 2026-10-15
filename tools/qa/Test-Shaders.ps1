@@ -18,7 +18,7 @@
 # (HLSL 2021, their own includes), not the engine shader path.
 #
 # -Dxc compiles what xrRender_R5 builds when its engine shaders are DXIL (dxc.md 3.3): FXC's
-# preprocessor with the engine's option set plus the XFR_* macros, then dxc.exe with the engine's
+# preprocessor with the engine's option set plus the GRIZZLY_* macros, then dxc.exe with the engine's
 # arguments at Shader Model -Sm; every permutation carries SMAP_ARRAY (the DirectX 12 module sets it),
 # and the DXC-only .ms/.as entry points are compiled too (HLSL 2021).
 #
@@ -76,8 +76,8 @@ Copy-Item (Join-Path $Loose "*") $tree -Recurse -Force
 # depth output at all.
 $always = @("SM_5=1", "SMAP_size=2048", "USE_HWSMAP=1")
 # The DirectX 12 module adds SMAP_ARRAY to every shader it compiles, and DXC mode exists only there;
-# the engine adds the XFR_* macros for DXC only (this device: 32 wave lanes, 16-bit min precision).
-if ($Dxc) { $always += @("SMAP_ARRAY=1", "XFR_DXC=1", "XFR_SM=$($Sm.Replace('_', ''))", "XFR_WAVE_LANES=32", "XFR_MIN16=1") }
+# the engine adds the GRIZZLY_* macros for DXC only (this device: 32 wave lanes, 16-bit min precision).
+if ($Dxc) { $always += @("SMAP_ARRAY=1", "GRIZZLY_DXC=1", "GRIZZLY_SM=$($Sm.Replace('_', ''))", "GRIZZLY_WAVE_LANES=32", "GRIZZLY_MIN16=1") }
 
 $perms = @(
     @{ Name = "Extreme"; Defines = @("USE_SOFT_WATER=1", "USE_REFLECTIONS=1", "SSR_QUALITY=4", "SSR_JITTER=1", "GBUFFER_OPTIMIZATION=1", "MSAA_SAMPLES=1") }

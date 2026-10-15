@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Mesh and curve helpers in numpy only: welding, topology, closest points on triangles through a hashed grid,
 plane sections, centripetal Catmull-Rom, monotone cubic radii, parallel transport."""

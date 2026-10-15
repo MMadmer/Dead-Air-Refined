@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Blade grass, the push field (docs/dead-air/GRASS.md): one thread per texel of the camera's toroidal

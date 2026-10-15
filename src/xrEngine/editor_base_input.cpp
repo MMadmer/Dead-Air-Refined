@@ -48,8 +48,8 @@ void ide::InitBackend()
     }
 
     ImGuiSettingsHandler ini_handler;
-    ini_handler.TypeName = "XFined-Ray";
-    ini_handler.TypeHash = ImHashStr("XFined-Ray");
+    ini_handler.TypeName = "Grizzly";
+    ini_handler.TypeHash = ImHashStr("Grizzly");
     ini_handler.UserData = this;
 
     ini_handler.ClearAllFn = [](ImGuiContext*, ImGuiSettingsHandler* handler)

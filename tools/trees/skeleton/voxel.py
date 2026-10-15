@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Fallback skeleton for wood the ring/level-set decomposition cannot read (welded or self-intersecting pieces,
 sculpted blobs): voxelise the piece (1-4 cm, at most ~4M cells), close it into a solid proxy (surface lattice,

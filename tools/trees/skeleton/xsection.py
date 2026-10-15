@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Ring cross-sections: the stock surface cut by the ring plane, its radial function and the Fourier profile
 r(th) = r0 * (1 + sum_k a_k cos k th + b_k sin k th), k <= 3.

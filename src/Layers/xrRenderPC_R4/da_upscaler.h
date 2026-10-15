@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The upscale slot of the frame (docs/dead-air/DX12_RENDERER.md, 3.1-3.2): the interface the SDK

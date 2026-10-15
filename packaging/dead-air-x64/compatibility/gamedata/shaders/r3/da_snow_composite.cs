@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The current snow depth of the fine window ($user$da_snow_fine, da_snow.cpp) over a list of 64 x 64

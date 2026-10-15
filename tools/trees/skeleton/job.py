@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """One skeleton end to end: stock axes and refit (or the synthetic axes of a procedural kind), patches, CFORM
 gate, card records and level-2 axes, crown field, the .dtsk file and the measurements for the report."""

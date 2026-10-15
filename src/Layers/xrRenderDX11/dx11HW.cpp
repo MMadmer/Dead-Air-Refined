@@ -205,7 +205,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         // Pipeline state objects are compiled from the shaders' content; the library keeps them
         // across runs next to the shader cache.
         string_path pipelineCache;
-        FS.update_path(pipelineCache, "$app_data_root$", "shaders_cache_xfr" DELIMITER "r5" DELIMITER "pipelines.bin");
+        FS.update_path(pipelineCache, "$app_data_root$", "shaders_cache_grizzly" DELIMITER "r5" DELIMITER "pipelines.bin");
         VerifyPath(pipelineCache);
         wchar_t pipelineCacheW[sizeof(string_path)]{};
         MultiByteToWideChar(CP_ACP, 0, pipelineCache, -1, pipelineCacheW, int(std::size(pipelineCacheW)));

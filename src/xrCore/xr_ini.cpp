@@ -6,7 +6,7 @@
 
 XRCORE_API CInifile const* pSettings = nullptr;
 XRCORE_API CInifile const* pSettingsAuth = nullptr;
-XRCORE_API CInifile const* pSettingsXFinedRay = nullptr;
+XRCORE_API CInifile const* pSettingsGrizzly = nullptr;
 
 #if !defined(XR_PLATFORM_WINDOWS)
 #include <stdint.h>

@@ -115,7 +115,7 @@ below where they differ (ids refer to `PLAN.md` section 1):
 ### 2.5 Engine shader/constant machinery
 - `CResourceManager::CreateShader` (`ShaderResourceTraits.h:616-700`) strips `(...)` from names
   (`:637-645`) and compiles through `CRender::shader_compile` (`r4_shaders.cpp:250`, FXC at `:653`,
-  `SMAP_ARRAY` on R5 at `:574`, cache `shaders_cache_xfr/r5/<name>.<ext>/<options>`).
+  `SMAP_ARRAY` on R5 at `:574`, cache `shaders_cache_grizzly/r5/<name>.<ext>/<options>`).
 - `R_constant_table::parse` (`dx11r_constants.cpp:288-330`) uses the reflection **index** of a
   cbuffer as its slot (`:316-325`) and accepts FLOAT/BOOL/INT variables only (`:43-49`);
   structured buffers are skipped (`:196`).
@@ -259,7 +259,7 @@ API, `Reflect` adapter):
   DXC mode). `CreateShader` strips the `#...` suffix for the file like `(...)`, picks `.ms`/`.as` and
   targets `ms_6_<m>`/`as_6_<m>` (engine SM, >= 6.5); `shader_compile` compiles them through the
   engine DXC path of `dxc.md` 3.3 (FXC preprocessing with the engine includer, `-Zpr -O3 -HV 2021`,
-  the same option macros and `SMAP_ARRAY`, `XFR_DXC=1`), cache `r5_dxil/<tag>/...` like every DXIL
+  the same option macros and `SMAP_ARRAY`, `GRIZZLY_DXC=1`), cache `r5_dxil/<tag>/...` like every DXIL
   engine shader, reflection blob kept.
 - **create_shader** (`r4_shaders.cpp:15-138`): DXIL VS/GS/PS skip `D3DGetInputSignatureBlob` and
   reflect through `xrd3d12::Reflect`. `R_constant_table::parse` takes the cbuffer slot from the

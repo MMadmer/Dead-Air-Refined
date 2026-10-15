@@ -43,7 +43,7 @@ void CRenderDevice::InitializeImGui()
     FS.update_path(fName, "$logs$", io.LogFilename);
     io.LogFilename = xr_strdup(fName);
 
-    io.BackendPlatformName = "XFined-Ray";
+    io.BackendPlatformName = "Grizzly";
 
     io.ConfigDebugIsDebuggerPresent = xrDebug::DebuggerIsPresent();
 #ifdef DEBUG

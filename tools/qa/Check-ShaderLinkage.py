@@ -30,7 +30,7 @@ every skinning mode; the signatures are read straight out of the bytecode.
     python tools\\qa\\Check-ShaderLinkage.py --compiler dxc    # the DirectX 12 module's DXC mode (dxc.md 3.3)
 
 --compiler dxc links what xrRender_R5 builds when its engine shaders are DXIL: FXC's preprocessor
-with the engine's includer, then DXC (Externals/dxc) with the engine's arguments and XFR_* macros,
+with the engine's includer, then DXC (Externals/dxc) with the engine's arguments and GRIZZLY_* macros,
 Shader Model --sm. A stage DXC refuses falls back to FXC and its whole pass is rebuilt as DXBC twins
 (a D3D12 pipeline never mixes DXIL and DXBC, dxc.md 3.6); such pipelines are listed, and linked as
 DXBC. Mesh pipelines (a "#ms" vertex slot, an optional "#as" geometry slot) exist only in DXC mode;
@@ -305,11 +305,11 @@ def dxc_target(stage, sm):
 
 def dxc_macros(sm, wave_lanes, min16):
     """The macros the engine adds for DXC only (dxc.md 3.3 step 5); FXC never sees them."""
-    out = [("XFR_DXC", "1"), ("XFR_SM", sm.replace("_", ""))]
+    out = [("GRIZZLY_DXC", "1"), ("GRIZZLY_SM", sm.replace("_", ""))]
     if wave_lanes:
-        out.append(("XFR_WAVE_LANES", str(wave_lanes)))
+        out.append(("GRIZZLY_WAVE_LANES", str(wave_lanes)))
     if min16:
-        out.append(("XFR_MIN16", "1"))
+        out.append(("GRIZZLY_MIN16", "1"))
     return out
 
 
@@ -1314,7 +1314,7 @@ def main():
     ap.add_argument("--sm", default="6_6", help="DXC mode: shader model of the engine shaders (6_0 .. 6_6)")
     ap.add_argument("--hv", default="2018", help="DXC mode: HLSL version of the legacy shader base")
     ap.add_argument("--dxc-dir", type=pathlib.Path, default=DEFAULT_DXC_DIR)
-    ap.add_argument("--wave-lanes", type=int, default=32, help="DXC mode: XFR_WAVE_LANES (0 = no wave ops)")
+    ap.add_argument("--wave-lanes", type=int, default=32, help="DXC mode: GRIZZLY_WAVE_LANES (0 = no wave ops)")
     ap.add_argument("--no-min16", action="store_true", help="DXC mode: a device without 16-bit min precision")
     args = ap.parse_args()
 

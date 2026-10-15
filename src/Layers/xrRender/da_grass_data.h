@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The grass and detail season data of dead_air_x64_seasons.ltx (docs/dead-air/SEASON_DATA.md), parsed once

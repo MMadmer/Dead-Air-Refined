@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // DirectStorage texture loading on R5 (docs/dead-air/dx12-features/dstorage.md 3.1): the runtime,

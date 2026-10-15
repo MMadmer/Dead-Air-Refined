@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Ray tracing scene (docs/dead-air/dx12-features/dxr.md 3.3-3.4, 3.8): the level walk, the

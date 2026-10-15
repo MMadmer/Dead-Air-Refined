@@ -1,4 +1,4 @@
-# XMS — XFined Module System
+# XMS — eXtensible Module System
 
 Modular modding architecture for Dead Air: Refined (x64) and the XFined editor.
 
@@ -66,7 +66,7 @@ Runtime implementation notes:
 |---|---|---|
 | **Legacy** | a mod as a `gamedata\` folder or `xtra_*.xdb0` | exactly as today: the last layer wins per file (the one reserved bundle name shape aside, §0). Plus — now it is visible who overrode whom |
 | **Module** | an XMS package (`mods/<id>/`) | additive composition, conflicts are declarative |
-| **Export** | building a module into a flat `gamedata\` | for those playing on vanilla DA. Works when the mod uses no XFined-only runtime |
+| **Export** | building a module into a flat `gamedata\` | for those playing on vanilla DA. Works when the mod uses no Grizzly-only runtime |
 
 Scripts detect the engine via `if xms then ... end` — a mod can degrade itself.
 
@@ -193,7 +193,7 @@ name          = Better Cordon
 version       = 1.2.0
 
 [requires]
-xfined.core   = >=1.0
+grizzly.core   = >=1.0
 
 [order]
 after         = someones.overhaul
@@ -763,7 +763,7 @@ P5–P6 are what a dedicated editor exists for in the first place.
 * **We do not build a second static CDB** — `rq_result.element` has no spare field for a model id,
   and that is ~57 places in the code.
 * **We do not hot-reload mods at runtime.** Composition happens at start and on save load.
-* **We do not guarantee vanilla export for XFined-only features** (the composite graph, overlays, the
+* **We do not guarantee vanilla export for Grizzly-only features** (the composite graph, overlays, the
   additive spawn). The editor says so openly, not quietly.
 * **We do not resolve semantic mod conflicts.** No runtime arbitration, no load blocking, no
   negotiation between mods. A deterministic order, a winner, a report line. Mod A killed an NPC that

@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """The reference reconstruction of an axis' tube from its rings, exactly as FORMAT.md defines it for the engine:
 

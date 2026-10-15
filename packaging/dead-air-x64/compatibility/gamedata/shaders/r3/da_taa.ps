@@ -80,7 +80,7 @@ float3 taa_history(float2 uv)
     return max(c / wsum, 0.0);
 }
 
-#ifdef XFR_WAVE_LANES
+#ifdef GRIZZLY_WAVE_LANES
 // The 3x3 neighbourhoods of a 2x2 quad cover a 4x4 block: each lane loads the three texels past its
 // own on its outer side and takes the other five from the lanes beside it (dxc.md 6.4). Quad-uniform
 // control flow only: every lane of the quad must reach this call.
@@ -110,7 +110,7 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
     // Without jitter (zw = 0) this is the texel itself.
     const float3 still = s_image.SampleLevel(smp_rtlinear, tc + da_taa_params.zw, 0).rgb;
 
-#ifdef XFR_WAVE_LANES
+#ifdef GRIZZLY_WAVE_LANES
     // The pass-through cases below, decided for the whole quad first: a quad with any pixel that
     // blends takes its neighbourhood here, while all four lanes still run.
     const bool pass = da_taa_params.y > 0.5 || gbd.P.z < 1.10 ||
@@ -177,7 +177,7 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
     // back within a frame or two. Clipping toward the mean (uniform scale) instead of a
     // per-component clamp keeps the hue - corner-of-the-box clamping tints the ghost.
     // The same box also bounds the cubic's ringing at hard edges.
-#ifndef XFR_WAVE_LANES
+#ifndef GRIZZLY_WAVE_LANES
     float3 m1 = current, m2 = current * current;
     [unroll]
     for (int dy = -1; dy <= 1; ++dy)

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Placed texture heaps of xrD3D12 (docs/dead-air/dx12-features/dstorage.md 3.6; lane `ds`): SRV-only

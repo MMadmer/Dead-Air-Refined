@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Skeleton of wood whose hop levels are no rings (coarse or irregular triangulations: one hop spans metres on one
 side of a limb and centimetres on the other). The piece is refined (every triangle cut into k x k), the geodesic

@@ -17,7 +17,7 @@
 // occlusion), in a value it flips the half-float rounding. precise on a stage's output keeps both
 // stages to the same operations. FXC (DirectX 11, the DirectX 12 fallback) is left as it was.
 #ifndef DA_STAGE_EXACT
-#ifdef XFR_DXC
+#ifdef GRIZZLY_DXC
 #define DA_STAGE_EXACT precise
 #else
 #define DA_STAGE_EXACT

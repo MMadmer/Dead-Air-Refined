@@ -5,16 +5,15 @@
      to the left or the right edge of the screen. -->
 <w>
     <main x="0" y="0" width="1024" height="768">
-        <auto_static x="226" y="6" width="572" height="760" shape="shadow"/>
-        <auto_static x="232" y="10" width="560" height="748" shape="panel"/>
-        <auto_static x="244" y="22" width="536" height="100" shape="card"/>
+        <auto_static x="232" y="10" width="560" height="748" shape="talk_panel"/>
+        <auto_static x="244" y="22" width="536" height="100" shape="talk_card"/>
         <auto_static x="673" y="33" width="98" height="66" shape="portrait_frame"/>
     </main>
 
     <left_character_icon x="244" y="22" width="536" height="100"/>
 
-    <frame_top x="244" y="130" width="536" height="390" shape="inset"/>
-    <frame_bottom x="244" y="528" width="536" height="176" shape="inset"/>
+    <frame_top x="244" y="130" width="536" height="390" shape="talk_inset"/>
+    <frame_bottom x="244" y="528" width="536" height="176" shape="talk_inset"/>
     <!-- relative to their frames -->
     <answers_list x="8" y="8" width="520" height="374" always_show_scroll="0" scroll_profile="thin" vert_interval="2"/>
     <questions_list x="8" y="8" width="520" height="160" always_show_scroll="0" scroll_profile="thin" vert_interval="2"/>

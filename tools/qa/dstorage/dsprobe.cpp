@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Offline DirectStorage probe (docs/dead-air/dx12-features/dstorage.md 2.4, 9): loads the .dds

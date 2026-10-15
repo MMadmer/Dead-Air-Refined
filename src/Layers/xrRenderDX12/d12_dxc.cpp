@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The DXC shader compiler service of xrD3D12 (docs/dead-air/dx12-features/dxc.md 3.1, 3.4): loads

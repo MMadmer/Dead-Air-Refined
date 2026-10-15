@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 
 // Smoke test of the vendored SDKs: FSR 3.1.2 DX11 static libraries (context create, three

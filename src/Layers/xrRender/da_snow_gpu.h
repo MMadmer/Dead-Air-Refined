@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Private GPU helpers of da_ground.cpp and da_snow.cpp (docs/dead-air/SNOW.md): named textures written

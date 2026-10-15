@@ -49,7 +49,7 @@ Get-ChildItem $shots -File -ErrorAction SilentlyContinue | Where-Object Extensio
 Get-ChildItem $shots -Directory -Filter "capture_*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 if (-not $KeepShaderCache) {
     # Not $name: PowerShell variables ignore case, and that one is the -Name of the run.
-    foreach ($cacheName in "shaders_cache_xfr", "shaders_cache_oxr") {
+    foreach ($cacheName in "shaders_cache_grizzly", "shaders_cache_oxr") {
         $cache = Join-Path $Rig "appdata\$cacheName"
         if (Test-Path -LiteralPath $cache) { Remove-Item -LiteralPath $cache -Recurse -Force }
     }
@@ -76,7 +76,7 @@ foreach ($ext in ".jpg", ".tga") {
 # r__capture sequences keep their folders.
 $captures = @(Get-ChildItem $shots -Directory -Filter "capture_*" -ErrorAction SilentlyContinue)
 $captures | ForEach-Object { Copy-Item $_.FullName (Join-Path $dest $_.Name) -Recurse -Force }
-Copy-Item (Join-Path $Rig "appdata\logs\xfined-ray_admin.log") (Join-Path $dest "log.txt") -Force
+Copy-Item (Join-Path $Rig "appdata\logs\grizzly_admin.log") (Join-Path $dest "log.txt") -Force
 
 Write-Output "$Name : $i frame(s), $tga lossless, $($captures.Count) capture(s) -> $dest"
 $log = Join-Path $dest "log.txt"

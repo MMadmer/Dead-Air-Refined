@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Renders shrub_preview.exe's OBJ in Blender (headless) to see a species' architecture.
 

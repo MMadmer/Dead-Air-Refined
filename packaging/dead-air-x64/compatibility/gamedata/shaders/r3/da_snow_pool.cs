@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The fine trail map (L0) handed down to the coarse one (L1) where deformers worked (da_snow.cpp): one

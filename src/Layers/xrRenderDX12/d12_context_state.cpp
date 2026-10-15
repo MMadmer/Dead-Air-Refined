@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Context, part 1: the D3D11 binding API (Set*/Get*), the D3D11 input/output hazard rules, and the

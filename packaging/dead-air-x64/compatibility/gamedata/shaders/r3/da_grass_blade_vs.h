@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Blade grass, the vertex shader of leaves and culms (docs/dead-air/GRASS.md): no vertex streams - the

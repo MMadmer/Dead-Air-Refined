@@ -5,7 +5,7 @@ It is not presented as an engine implementation created from an empty codebase.
 
 ## Engine foundation
 
-The engine of Dead Air: Refined is named **XFined-Ray**. The name is the
+The engine of Dead Air: Refined is named **Grizzly**. The name is the
 project's own and covers what the engine reports about itself - the log banner
 and file name, the crash dialog, the settings file, the shader cache, the
 packaging metadata. It does not restate authorship: the foundation, and the

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Blade grass, the ground (docs/dead-air/GRASS.md): a rectangle of the camera's toroidal window of grass

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Inside the ray tracing lane: the device part (da_rt_device.cpp) the scene and the passes build on.

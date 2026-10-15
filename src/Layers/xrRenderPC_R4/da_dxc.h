@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The engine side of DXC / Shader Model 6 on R5 (docs/dead-air/dx12-features/dxc.md 3.1-3.8): the
@@ -44,9 +44,9 @@ struct DaDxcNative
 
 // A native pass shader: HLSL 2021, row-major matrices like every engine shader, DXC's own preprocessor
 // with #include through the file system (relative to the including file first, then the shader
-// root), always defined XFR_DXC, XFR_SM (of the target), XFR_WAVE_LANES (with wave ops), XFR_MIN16
+// root), always defined GRIZZLY_DXC, GRIZZLY_SM (of the target), GRIZZLY_WAVE_LANES (with wave ops), GRIZZLY_MIN16
 // (with 16-bit min precision) and SMAP_ARRAY. Cached under
-// shaders_cache_xfr/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>. Thread-safe.
+// shaders_cache_grizzly/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>. Thread-safe.
 // false without the DXC service, for a target above da_dxc_native_model() or on a compile error
 // (logged with the first error). `reflection` receives DXC's reflection blob (xrd3d12::Reflect).
 bool da_dxc_compile_native(const DaDxcNative& request, xr_vector<u8>& bytecode, xr_vector<u8>* reflection = nullptr);
@@ -56,12 +56,12 @@ bool da_dxc_compile_native(pcstr path, pcstr entry, pcstr target, const DaDxcDef
 
 // ---- engine path (r4_shaders.cpp, CBlender_Compile::UnifyShaderFormats; RSC_FXC in ResourceManager.h) ----
 
-// "r5_dxil\<tag>\" under shaders_cache_xfr ("-plain" / "-arb" appended under -dxc_plain /
+// "r5_dxil\<tag>\" under shaders_cache_grizzly ("-plain" / "-arb" appended under -dxc_plain /
 // -dxc_all_bound), "" while engine shaders stay on FXC.
 pcstr da_dxc_cache_dir();
 
 // One engine shader through DXC (dxc.md 3.3): FXC's preprocessor with the engine's includer and
-// macros (plus the XFR_* macros), then DXC with the engine's arguments. `target` is the engine's
+// macros (plus the GRIZZLY_* macros), then DXC with the engine's arguments. `target` is the engine's
 // ("vs_5_0", "ms_6_5"): the stage letters are kept, the model becomes the session's. Mesh and
 // amplification shaders compile at HLSL 2021, everything else at 2018. On failure `error` holds the
 // first error line.

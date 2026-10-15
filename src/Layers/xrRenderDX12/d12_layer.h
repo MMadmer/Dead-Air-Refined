@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Internal declarations of xrD3D12 (see d12_api.h and docs/dead-air/DX12_RENDERER.md).

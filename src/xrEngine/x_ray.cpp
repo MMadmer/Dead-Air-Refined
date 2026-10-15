@@ -11,6 +11,7 @@
 #include "x_ray.h"
 
 #include "embedded_resources_management.h"
+#include "grizzly_splash.h"
 
 #include "xrCore/Threading/TaskManager.hpp"
 #include "xrCore/XMS/xms_catalog.h"
@@ -31,7 +32,9 @@
 #endif
 
 #ifdef XR_PLATFORM_WINDOWS
+#include <filesystem>
 #include <locale>
+#include <thread>
 
 #include "DiscordGameSDK/discord.h"
 #define USE_DISCORD_INTEGRATION
@@ -198,13 +201,25 @@ void InitSettings()
 
     InitConfig(pSettings, "system.ltx");
     // The engine settings file was named after the engine, so it is renamed with it. An
-    // installation or an addon that still ships the old name keeps working: the new name is
-    // preferred, the old one is read when it is the only one there.
+    // installation or an addon that still ships an old name keeps working: the new name is
+    // preferred, then the old ones, newest first.
     {
+        pcstr engineIni = GRIZZLY_INI_FILE;
         string_path fname;
-        FS.update_path(fname, "$game_config$", XFINEDRAY_INI_FILE);
-        pcstr engineIni = FS.exist(fname) ? XFINEDRAY_INI_FILE : XFINEDRAY_INI_FILE_LEGACY;
-        InitConfig(pSettingsXFinedRay, engineIni, false, true, true, false);
+        FS.update_path(fname, "$game_config$", GRIZZLY_INI_FILE);
+        if (!FS.exist(fname))
+        {
+            for (pcstr legacy : GRIZZLY_INI_FILE_LEGACY)
+            {
+                FS.update_path(fname, "$game_config$", legacy);
+                if (FS.exist(fname))
+                {
+                    engineIni = legacy;
+                    break;
+                }
+            }
+        }
+        InitConfig(pSettingsGrizzly, engineIni, false, true, true, false);
     }
     InitConfig(pGameIni, "game.ltx");
 
@@ -252,7 +267,7 @@ void InitSettings()
         set_free_mode();
     else
     {
-        pcstr gameMode = READ_IF_EXISTS(pSettingsXFinedRay, r_string, "compatibility", "game_mode", "cop");
+        pcstr gameMode = READ_IF_EXISTS(pSettingsGrizzly, r_string, "compatibility", "game_mode", "cop");
         if (xr_strcmpi("cop", gameMode) == 0)
             set_cop_mode();
         else if (xr_strcmpi("cs", gameMode) == 0)
@@ -307,7 +322,7 @@ void destroySettings()
     auto sa = const_cast<CInifile**>(&pSettingsAuth);
     xr_delete(*sa);
 
-    auto so = const_cast<CInifile**>(&pSettingsXFinedRay);
+    auto so = const_cast<CInifile**>(&pSettingsGrizzly);
     xr_delete(*so);
 
     xr_delete(pGameIni);
@@ -336,7 +351,7 @@ constexpr pcstr FRAME_MARK_APPLICATION_RUN = "Application run";
 
 CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array<RendererModule*, 2>& modules)
 {
-    TracySetProgramName("XFined-Ray");
+    TracySetProgramName("Grizzly");
     Threading::SetCurrentThreadName("Primary thread");
     FrameMarkStart(FRAME_MARK_APPLICATION_STARTUP);
 
@@ -388,8 +403,33 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const std::array
         sscanf(strstr(commandLine, fsltx) + sz, "%[^ ] ", fsgame);
     }
 
-    Core.Initialize("XFined-Ray", commandLine, true, *fsgame ? fsgame : nullptr);
+    Core.Initialize("Grizzly", commandLine, true, *fsgame ? fsgame : nullptr);
     StartupProfileCheckpoint("Filesystem initialized");
+
+    // The shader caches under the engine's old names (as OpenXRay, as XFined-Ray) are read by nothing any more:
+    // they go in the background, hundreds of megabytes a player would never find to delete.
+    {
+        xr_vector<std::filesystem::path> stale;
+        for (pcstr name : { "shaders_cache_oxr", "shaders_cache_xfr" })
+        {
+            string_path dir;
+            FS.update_path(dir, "$app_data_root$", name);
+            std::error_code ec;
+            if (std::filesystem::is_directory(dir, ec))
+                stale.emplace_back(dir);
+        }
+        if (!stale.empty())
+        {
+            std::thread([stale]
+            {
+                for (const auto& dir : stale)
+                {
+                    std::error_code ec;
+                    std::filesystem::remove_all(dir, ec);
+                }
+            }).detach();
+        }
+    }
 
     InitSettings();
     StartupProfileCheckpoint("Settings initialized");
@@ -602,40 +642,29 @@ void CApplication::ShowSplash(bool topmost)
 
     ZoneScoped;
 
-    m_surface = std::move(ExtractSplashScreen());
-    if (!m_surface)
-    {
-        Log("~ Couldn't create surface from image:", SDL_GetError());
-        return;
-    }
-
     Uint32 flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN;
 
     if (topmost)
         flags |= SDL_WINDOW_ALWAYS_ON_TOP;
 
-    m_window = SDL_CreateWindow("XFined-Ray", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_surface->w, m_surface->h, flags);
+    // The emblem is drawn at the window's own resolution (grizzly_splash.cpp): the window is sized by the desktop.
+    int width, height;
+    grizzly_splash_size(width, height);
+    m_window = SDL_CreateWindow("Grizzly", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, flags);
+    if (!m_window)
+    {
+        Log("~ Couldn't create the splash window:", SDL_GetError());
+        return;
+    }
     SDL_ShowWindow(m_window);
 
     m_splash_thread = Threading::RunThread("Splash Thread", &CApplication::SplashProc, this);
     SDL_PumpEvents();
 }
 
-constexpr u32 SPLASH_FRAMERATE = 30;
-
 void CApplication::SplashProc()
 {
-    {
-        ZoneScopedN("Update splash image");
-        const auto current = SDL_GetWindowSurface(m_window);
-        SDL_BlitSurface(m_surface, nullptr, current, nullptr);
-        SDL_UpdateWindowSurface(m_window);
-    }
-    while (!m_should_exit.load(std::memory_order_acquire))
-    {
-        UpdateDiscordStatus(false);
-        Sleep(SPLASH_FRAMERATE);
-    }
+    grizzly_splash_run(m_window, m_should_exit, [this] { UpdateDiscordStatus(false); });
 }
 
 void CApplication::HideSplash()
@@ -650,8 +679,6 @@ void CApplication::HideSplash()
 
     SDL_DestroyWindow(m_window);
     m_window = nullptr;
-
-    SDL_FreeSurface(m_surface);
 }
 
 void CApplication::InitializeDiscord()

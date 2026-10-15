@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The render-target side of ray tracing (docs/dead-air/dx12-features/dxr.md 5): its targets behind

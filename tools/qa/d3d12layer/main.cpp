@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Entry point of the xrD3D12 differential tests: creates a Direct3D 11 device and a layer device on

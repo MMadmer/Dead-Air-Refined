@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Topology of the stock wood: welded bark mesh -> connected components -> roots and parents -> hop levels from each
 root -> level-set nodes (rings, or fragments at junctions) -> axes (level 0 trunks, level 1 modelled limbs).

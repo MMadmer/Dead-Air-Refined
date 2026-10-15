@@ -6,9 +6,15 @@
 #include "xrCore/XML/XMLDocument.hpp"
 #include "xrCore/XMS/xms_core.h"
 
-// The engine's own string file, under the name it has now and the one it had as OpenXRay.
-constexpr pcstr ENGINE_XML = "xfined-ray.xml";
-constexpr pcstr ENGINE_XML_LEGACY = "openxray.xml";
+// The engine's own string file, under the name it has now and the ones it had as XFined-Ray and as OpenXRay.
+constexpr pcstr ENGINE_XML[] = { "grizzly.xml", "xfined-ray.xml", "openxray.xml" };
+static bool is_engine_xml(pcstr name)
+{
+    for (pcstr n : ENGINE_XML)
+        if (!xr_stricmp(name, n))
+            return true;
+    return false;
+}
 
 namespace
 {
@@ -134,7 +140,7 @@ void CStringTable::Init()
         // overrides what it defines, however the names sort.
         std::stable_partition(files.begin(), files.end(), [](const LocalizationFile& f)
         {
-            return !xr_stricmp(f.name.c_str(), ENGINE_XML) || !xr_stricmp(f.name.c_str(), ENGINE_XML_LEGACY);
+            return is_engine_xml(f.name.c_str());
         });
 
         // fold order: base layer first, then modules by load order; overrides
@@ -182,7 +188,7 @@ void CStringTable::Init()
         !translate("ui_st_money_descr", pData->m_sCurrency) && // OGSR
         !translate("ui_st_money_regional", pData->m_sCurrency)) // xp-dev
     {
-        pData->m_sCurrency = pSettingsXFinedRay->read_if_exists<pcstr>("gameplay", "currency", "RU");
+        pData->m_sCurrency = pSettingsGrizzly->read_if_exists<pcstr>("gameplay", "currency", "RU");
     }
 
 #ifndef MASTER_GOLD
@@ -230,8 +236,7 @@ void CStringTable::FillLanguageToken()
 
             // Skip folder that carries nothing but the engine's own string file
             // It's important to have 'else if' instead of simple 'if'
-            else if (files->size() == 1 && (xr_strcmp(files->at(0), ENGINE_XML) == 0 ||
-                                               xr_strcmp(files->at(0), ENGINE_XML_LEGACY) == 0))
+            else if (files->size() == 1 && is_engine_xml(files->at(0)))
                 shouldSkip = true;
 
             // Don't forget to close opened folder

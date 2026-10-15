@@ -147,7 +147,7 @@ end
 -- A destination is always WALKED as a patrol path, because that is what the stock
 -- schemes walk. When the author drew one, that is it. For anything else - a ref,
 -- an object, a role, a smart, a restrictor, a position, the player - the engine
--- registers a one-point runtime path at the place (xms.patrol_point, XFined-Ray)
+-- registers a one-point runtime path at the place (xms.patrol_point, Grizzly)
 -- and the same walker/camper walks to it: no movement code lives here.
 --
 -- Runtime paths are POOLED. A name is a slot ("xms_rt_<n>"); a step keeps the slot

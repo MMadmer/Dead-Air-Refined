@@ -1,4 +1,4 @@
--- Copyright (c) 2026 XFined-Ray
+-- Copyright (c) 2026 Grizzly
 -- Released under the MIT licence, see License.txt
 
 -- Snowflakes (dxRainRender::RenderFlakes, the snow mode of the rain sheet; docs/dead-air/WINTER.md).

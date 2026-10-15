@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // NVIDIA DLSS frame generation through Streamline (sl.dlss_g), DirectX 12 only: the IFrameGen

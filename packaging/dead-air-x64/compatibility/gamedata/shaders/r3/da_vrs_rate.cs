@@ -252,7 +252,7 @@ void main(uint3 group : SV_GroupID, uint3 local : SV_GroupThreadID, uint index :
 
 	//	The tile of this thread's block: a quarter of the group (4x4 threads) with two tiles per axis.
 	const uint slot = per_axis > 1u ? (local.x >> 2) + 2u * (local.y >> 2) : 0u;
-#if defined(XFR_WAVE_LANES)
+#if defined(GRIZZLY_WAVE_LANES)
 	//	Each wave reduces per tile it holds, one lane of it contributes per tile.
 	[unroll]
 	for (uint s = 0u; s < 4u; ++s)

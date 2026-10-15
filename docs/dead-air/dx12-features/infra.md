@@ -20,10 +20,10 @@ below where they differ (ids refer to `PLAN.md` section 1):
 - **C2/C3, DXC**: the compiler service is `dxc.md`'s. `d12_dxc.cpp` (this lane) implements
   `dxc.md` 3.1 in full: absolute-path loader, self-check PSO, SEH-guarded `CompileShader`,
   `Reflect(bytecode, size, REFIID, void**)` returning `ID3D12ShaderReflection` for DXBC and DXIL (no
-  `ID3D11ShaderReflection` adapter), `Disassemble`, `IsDxil`. The `//xfr:dxil` opt-in, the `#dxil`
+  `ID3D11ShaderReflection` adapter), `Disassemble`, `IsDxil`. The `//grizzly:dxil` opt-in, the `#dxil`
   variants and `da_shader_dxc.cpp` are dropped: R5 compiles every engine shader with DXC in the
   session's mode and unifies mixed passes to DXBC twins (`dxc.md` 3.6). Native/self-test shaders go
-  through `da_dxc_compile_native` (`dxc` lane), cache under `shaders_cache_xfr/r5_dxil/<tag>/native/`.
+  through `da_dxc_compile_native` (`dxc` lane), cache under `shaders_cache_grizzly/r5_dxil/<tag>/native/`.
   Headers come from the Windows SDK; `Externals/dxc` has no `inc/` (vendored by `core`, C1).
 - **I1 order**: caps and the whole DXC service land together, with the layer's DXIL acceptance
   (`Shader::Reflect` via `Reflect`, `ProgramType` for DXIL incl. mesh/amplification kinds,
@@ -523,16 +523,16 @@ These let features change how the engine's existing draws execute without native
 - **Native pass shaders** live in `gamedata/shaders/r3/native/*.hlsl` (RT: `r3/rt/`; overlay,
   moddable like the rest), compiled through `da_dxc_compile_native` of `da_dxc.cpp` (`dxc` lane, PLAN
   C2): FS include handler (relative to the includer first, then the r3 root), cache
-  `appdata/shaders_cache_xfr/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>`
+  `appdata/shaders_cache_grizzly/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>`
   with header {magic, DXC version, `getFileCrc32` of source + includes, DXIL crc}. Always defined:
-  `XFR_DXC=1`, `XFR_SM=<sm>`, `XFR_WAVE_LANES=<lanes>`, `SMAP_ARRAY=1`. Flags: `-HV 2021 -O3`,
+  `GRIZZLY_DXC=1`, `GRIZZLY_SM=<sm>`, `GRIZZLY_WAVE_LANES=<lanes>`, `SMAP_ARRAY=1`. Flags: `-HV 2021 -O3`,
   `-enable-16bit-types` only on request and with `fp16=1`, reflection stripped for native passes.
   Shared headers (`da_wind_*.h`, `tree_instance.h`) must compile under both FXC and DXC, so an RT or
   compute pre-transform pass animates vegetation with the very same wind code as the shadow and
   G-buffer vertex shaders (plant shadows keep swaying in every technique).
 - **SM 6 for existing D3D11-path shaders**: superseded by `dxc.md` (PLAN C2). There is no opt-in
   marker: R5 compiles every engine shader with DXC in the session's mode, guards SM 6 code with
-  `#if XFR_DXC`, and a pass whose stages ended up in different formats is unified to DXBC twins
+  `#if GRIZZLY_DXC`, and a pass whose stages ended up in different formats is unified to DXBC twins
   (`dxc.md` 3.6); the layer's mix guard logs any mixed PSO by name.
 
 ### 3.7 Self-test
@@ -576,7 +576,7 @@ or the first failure.
 | `tools/qa/d3d12layer/scenarios_native.cpp` (new), `scenarios_api.cpp` list | scenarios (9.1) |
 | `tools/qa/water/native_check.lua` (new) | stand scenario (9.3) |
 
-New engine files start with the XFined-Ray/MIT header; `Externals/dxc` keeps Microsoft's files as
+New engine files start with the Grizzly/MIT header; `Externals/dxc` keeps Microsoft's files as
 they are.
 
 ## 5. Data and resources
@@ -586,7 +586,7 @@ they are.
   `computeFence`, `copyFence`); an async timestamp heap of 128 slots + readback.
 - Command signatures: 3 at init (draw, draw indexed, dispatch), count variants share them.
 - Caches: native root signatures (tens), stream PSOs in `pipelines.bin`, DXIL files under
-  `shaders_cache_xfr/r5/native` and the `dxil` permutations of engine shaders.
+  `shaders_cache_grizzly/r5/native` and the `dxil` permutations of engine shaders.
 - Files: `render-caps-d3d12.cache` next to `render-hardware-d3d12.cache`.
 - Binaries: `dxcompiler.dll` (28 MB) + `dxil.dll` (3.8 MB) of DXC 1.9.2607 in the game's bin folder.
 
@@ -594,7 +594,7 @@ they are.
 
 Infra itself adds only the embedded self-test HLSL and no shader under `gamedata`. It defines the
 conventions features follow: native shaders in `shaders/r3/native/`, DXC targets up to `sm` from
-`r__caps`, bindless through `space100` unbounded SRV tables, static samplers, `#if XFR_DXC` guards in
+`r__caps`, bindless through `space100` unbounded SRV tables, static samplers, `#if GRIZZLY_DXC` guards in
 headers shared with FXC, the DXIL/DXBC pairing rule (3.6).
 
 ## 7. UI and presets
@@ -617,7 +617,7 @@ consumes:
 - **DX12 without a capability**: the key is 0 and features stay off (rows disabled). No DXR 1.1 ->
   `rt=0`; VRS tier 1 -> `vrs_tier=1` (per-draw rate only; the VRS feature needs 2); no mesh shaders
   -> `ms=0`.
-- **No DXC** (DLL missing or load failure): `sm=50`, `rt=0`, `ms=0`; `//xfr:dxil` shaders compile
+- **No DXC** (DLL missing or load failure): `sm=50`, `rt=0`, `ms=0`; `//grizzly:dxil` shaders compile
   with FXC; one log line.
 - **No compute queue / `-dx12_no_async`**: jobs run in order on the direct queue (`acq=0`).
 - **Bindless full**: `AllocateBindless` returns `~0u`, log once; the feature degrades.

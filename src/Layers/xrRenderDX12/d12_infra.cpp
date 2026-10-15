@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Infrastructure of xrD3D12: logging, hashing, format helpers, the d3d12.dll loader, fences,

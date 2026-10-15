@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Blade grass, the vertex side (docs/dead-air/GRASS.md): the record of a blade as the generation wrote it,

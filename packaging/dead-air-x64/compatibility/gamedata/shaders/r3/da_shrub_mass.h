@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural shrubs: the leaves of a cluster or a blob quad (docs/dead-air/SHRUBS.md), shared by the G-buffer and

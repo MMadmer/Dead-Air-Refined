@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Trees, the billboard atlas's fill (docs/dead-air/TREES.md, da_trees.cpp pre_render): a template's eight cells copied

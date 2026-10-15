@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Stage 5: the crown field. The stock cards' opaque texels (alpha >= 0.5) splatted into a model-space grid
 (0.25-0.5 m cells), occupancy = 1 - exp(-opaque card area in the cell / cell^2), closed (3x3x3), inner cavities

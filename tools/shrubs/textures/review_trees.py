@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Review sheets of the trees' texture layers against photo packs (docs/dead-air/TREES_TEXTURES.md).
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Material codes of the packed G-buffer above the stock range (docs/dead-air/GRASS.md, SNOW.md).

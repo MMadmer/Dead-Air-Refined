@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Stage 4: the stock crown cards (flora\\leaf_wave parts) as branch records and level-2 axes.
 

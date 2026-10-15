@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Stage 6: out/report/fit.csv (one row per stock axis), out/report/skeletons.csv (one row per skeleton) and
 out/report/README.md (totals, gate by class, patch share, worst cases)."""

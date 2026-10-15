@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // CHW::native and the DirectX 12 keys of r__caps (da_native_caps.h). One caps hook fills every new

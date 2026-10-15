@@ -1,6 +1,6 @@
 # Human NPC AI
 
-Active specification of the human NPC AI of Dead Air: Refined (engine XFined-Ray). Mutants are untouched: every
+Active specification of the human NPC AI of Dead Air: Refined (engine Grizzly). Mutants are untouched: every
 change is gated on the human stalker path, and monster code runs bit for bit as before. Zombified stalkers are
 stalkers: they perceive and remember by the new rules, with a "dumb" profile and no speech.
 

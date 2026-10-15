@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 
 #include "stdafx.h"
@@ -734,7 +734,7 @@ private:
         WNDCLASSEXW wc{ sizeof(wc) };
         wc.lpfnWndProc = window_proc;
         wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = L"XFinedRayLoadingScreen";
+        wc.lpszClassName = L"GrizzlyLoadingScreen";
         wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
         RegisterClassExW(&wc);
         // Not owned by the game's window: an owner on another thread would tie this thread's messages to that

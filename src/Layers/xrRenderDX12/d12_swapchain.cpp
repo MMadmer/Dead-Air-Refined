@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Swap chain of xrD3D12: a flip-model DXGI swap chain on the device's direct queue behind the

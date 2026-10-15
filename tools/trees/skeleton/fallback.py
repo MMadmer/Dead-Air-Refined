@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Second opinion for stock wood pieces the level-set decomposition reads badly (most of the piece ends up as
 patches): the voxel skeleton of voxel.py gives new axes for the piece, the stations are fitted on the stock

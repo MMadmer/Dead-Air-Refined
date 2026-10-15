@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural shrubs, the G-buffer pixel shader of the leaves (docs/dead-air/SHRUBS.md): the species' leaf texture

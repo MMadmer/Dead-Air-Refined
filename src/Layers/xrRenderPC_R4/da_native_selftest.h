@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // r__native_selftest (docs/dead-air/dx12-features/infra.md 3.7): the native D3D12 paths of the

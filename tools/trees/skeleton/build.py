@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Skeleton files of the 1.6.0 tree upgrade (tools/trees/FORMAT.md, CONTRACT section 4).
 

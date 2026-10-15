@@ -21,7 +21,7 @@ are listed in 7.3 with the reason; nothing is parked "for later".
 - No commits, no git worktrees, no `git checkout/stash/reset/clean`, no reformatting of whole files.
   The tree carries other uncommitted work (1.5.0, options pages): never revert or touch a file
   outside your lane's ownership (2.2).
-- Every **new** engine source file starts with `// Copyright (c) 2026 XFined-Ray` and
+- Every **new** engine source file starts with `// Copyright (c) 2026 Grizzly` and
   `// Released under the MIT licence, see License.txt`. Not in ported files, build files, `.def`
   files or modified upstream files. Shaders follow the shader folder's convention (no header).
 - Code comments in English, brief, only where the code is not self-explanatory. Language sugar where
@@ -219,7 +219,7 @@ each, plus inline fixes of the statements they replace).
 | Id | Docs | Conflict or gap | Resolution |
 |---|---|---|---|
 | C1 | dxr / infra, dxc, mesh | `dxr.md` vendors DXC 1.8.2502 (~20 MB), the others 1.9.2607 | One copy: DXC **1.9.2607** in `Externals/dxc` (bin + licences + README with hashes; headers from the Windows SDK 10.0.26100, no `inc/`), vendored by `core` at K1 |
-| C2 | infra 3.6, dxr 3.2, dxc 3.1, mesh 3.6 | Three compiler paths: infra's `d12_dxc.cpp` + `da_shader_dxc.cpp` + `//xfr:dxil` opt-in; dxr's own `da_dxc` loader and `r5/rt` cache; dxc.md's single service | `dxc.md` model everywhere: layer service `d12_dxc.cpp` (implemented by `infra` to `dxc.md` 3.1: absolute-path load, self-check PSO, SEH-guarded `CompileShader`, `Reflect`, `Disassemble`, `IsDxil`), engine glue `da_dxc.h/.cpp` (`dxc` lane). `da_shader_dxc.cpp`, `//xfr:dxil`, `#dxil` are dropped. Native passes, RT and the self-test compile through `da_dxc_compile_native` (HLSL 2021, DXC preprocessor, FS include handler, cache `shaders_cache_xfr/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>`) |
+| C2 | infra 3.6, dxr 3.2, dxc 3.1, mesh 3.6 | Three compiler paths: infra's `d12_dxc.cpp` + `da_shader_dxc.cpp` + `//grizzly:dxil` opt-in; dxr's own `da_dxc` loader and `r5/rt` cache; dxc.md's single service | `dxc.md` model everywhere: layer service `d12_dxc.cpp` (implemented by `infra` to `dxc.md` 3.1: absolute-path load, self-check PSO, SEH-guarded `CompileShader`, `Reflect`, `Disassemble`, `IsDxil`), engine glue `da_dxc.h/.cpp` (`dxc` lane). `da_shader_dxc.cpp`, `//grizzly:dxil`, `#dxil` are dropped. Native passes, RT and the self-test compile through `da_dxc_compile_native` (HLSL 2021, DXC preprocessor, FS include handler, cache `shaders_cache_grizzly/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>`) |
 | C3 | infra 3.6 / dxc 3.4 | Reflection through an `ID3D11ShaderReflection` adapter vs `ID3D12ShaderReflection` aliases | `dxc.md` wins: `Reflect(bytecode, size, REFIID, void**)` returns `ID3D12ShaderReflection` for DXBC and DXIL; R5 aliases the engine's reflection types (`CommonTypes.h`); no adapter object |
 | C4 | gpudriven 6, async 6, vrs 6 | New engine-path shaders declared "FXC SM 5.0 only" / "cs_5_0 like every engine shader", while R5 compiles every engine shader with DXC | New engine-path shaders are written as SM 5.0-compatible HLSL (FXC for R4 and the FXC fallback, DXC on R5) and are created through `CResourceManager`, so their format follows the session's mode; graphics passes are unified by `UnifyShaderFormats`, compute pipelines stand alone. The GD VS variants pair with DXIL pixel shaders on R5 |
 | C5 | mesh 3.6-3.7 / dxc 3.6 | Mesh grass names its PS `#dxil` (forced DXIL) while dxc.md makes every R5 engine shader DXIL and unifies mixed passes to DXBC twins (impossible for MS/AS) | `#dxil` dropped. `mesh_ready` additionally requires `dxc=1` (engine shaders are DXIL this session). A pass with a mesh or amplification stage is exempt from `UnifyShaderFormats`; if its PS fell back to FXC the mesh element is unavailable and the session uses the vertex path (one log line, verdict stored). `.ms` and `.as` go through the engine compile path (FXC preprocessing, engine includes) with `-HV 2021` (new-only extensions); the shared `da_detail_common.h` compiles under FXC, HLSL 2018 and 2021 |
@@ -320,7 +320,7 @@ Shaders (`packaging/dead-air-x64/compatibility/gamedata/shaders/r3`):
 
 ### 2.3 New files and who creates them
 
-Stubs (header + empty or "off" bodies, XFined-Ray/MIT header on engine files) are created by the
+Stubs (header + empty or "off" bodies, Grizzly/MIT header on engine files) are created by the
 creator at the milestone named, listed in the build files at once, and then belong to the owner.
 A lane that starts before the stub exists creates the file itself and tells `core`.
 
@@ -735,7 +735,7 @@ files.
   refused = gated set; `Check-ShaderLinkage.py` (FXC both APIs, DXC): 0 refused;
   `Test-Shaders.ps1` all modes: 0 FAIL; `Check-OptionHints.py` clean.
 - Greps: `git grep -n "r__rt\|rtao" -- "*rspec_*.ltx"` empty; no `r__rt*` or `da_rt` inside
-  `xrRender_sync_preset_derived`; every new engine file (2.3) has the XFined-Ray/MIT header and no
+  `xrRender_sync_preset_derived`; every new engine file (2.3) has the Grizzly/MIT header and no
   ported/build/.def file got one; no other mod's name in new code or data; `xrCore.def` ordinals
   unique; `dumpbin /imports xrRender_R4.dll` unchanged against Gate 0; no `TODO`/`FIXME` in owned
   files.

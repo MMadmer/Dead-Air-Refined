@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural vegetation (docs/dead-air/SHRUBS.md, TREES.md): what the vegetation vertex shaders share - the layouts

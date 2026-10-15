@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The Streamline side the DLSS backends share (da_upscaler_dlss.cpp, da_framegen_dlss.cpp): the

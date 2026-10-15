@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 
 // The FSR3 DX11 host headers next to ffx-api and Streamline. ffx_framegeneration.h cannot join them:

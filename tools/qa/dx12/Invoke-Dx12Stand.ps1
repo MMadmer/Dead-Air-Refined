@@ -94,7 +94,7 @@ try {
         Stop-Process -Id $engine.ProcessId -Force -ErrorAction SilentlyContinue
         Wait-Process -Id $engine.ProcessId -Timeout 15 -ErrorAction SilentlyContinue
     }
-    $rigLog = Join-Path $Rig 'appdata\logs\xfined-ray_admin.log'
+    $rigLog = Join-Path $Rig 'appdata\logs\grizzly_admin.log'
     for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $rigLog); $i++) {
         try { [IO.File]::Open($rigLog, 'Open', 'ReadWrite', 'None').Dispose(); break } catch { Start-Sleep -Seconds 2 }
     }

@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$log = Join-Path $Rig "appdata\logs\xfined-ray_admin.log"
+$log = Join-Path $Rig "appdata\logs\grizzly_admin.log"
 $idFile = Join-Path ([IO.Path]::GetTempPath()) "dar-probe-engine.pid"
 $capture = Join-Path $PSScriptRoot "Capture-HiddenDesktopWindow.ps1"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null

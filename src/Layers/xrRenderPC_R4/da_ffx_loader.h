@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The AMD FSR SDK 2.3 loader (amd_fidelityfx_loader_dx12.dll, ffx-api), shared by FSR upscaling

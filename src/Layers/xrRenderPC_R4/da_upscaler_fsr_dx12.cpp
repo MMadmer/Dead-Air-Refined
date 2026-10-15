@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // AMD FSR upscaling on DirectX 12 (docs/dead-air/DX12_RENDERER.md, 1 and 3) through the AMD FSR

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Reed beds (docs/dead-air/GRASS.md, reed beds). See da_reeds.h.

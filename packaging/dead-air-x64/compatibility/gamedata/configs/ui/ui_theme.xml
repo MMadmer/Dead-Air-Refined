@@ -55,6 +55,10 @@
     <style name="portrait_frame" fill="#00000000" line="$panel_edge" border="1" radius="2"/>
     <style name="blocker" fill="#0B0908D9" line="$inset_edge" border="1" radius="2"/>
     <style name="slot_highlight" fill="$accent_soft" line="$accent" border="1" radius="3"/>
+    <!-- the dialog window: see-through like Dead Air's own, the partner stays in sight behind it -->
+    <style name="talk_panel" fill="#15120F8C" line="$panel_edge" border="1" radius="4"/>
+    <style name="talk_card" fill="#1D19154D" line="$inset_edge" border="1" radius="3"/>
+    <style name="talk_inset" fill="#0D0B0940" line="$inset_edge" border="1" radius="3"/>
     <style name="slot_glyph" kind="trefoil" fill="#E6D8BF1F"/>
 
     <!-- buttons: a plain one, the one that does the window's business, a square tool -->

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural shrubs (docs/dead-air/SHRUBS.md). The level's stock bushes are placements: where one stands, a

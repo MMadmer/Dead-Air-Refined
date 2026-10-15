@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Stage 3a: rings of every stock axis, the refit tubes and the patches of original triangles.
 

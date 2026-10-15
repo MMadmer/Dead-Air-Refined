@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Report sheet of one skeleton (REPORT_PNG/<skel>.png): stock wood with rings, axes and patches; the refit tubes
 coloured by their distance to the stock; the tubes against the tree_trunk collision of a sampled placement; the

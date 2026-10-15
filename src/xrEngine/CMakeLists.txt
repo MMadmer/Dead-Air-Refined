@@ -42,6 +42,9 @@ target_sources_grouped(
     FILES
     da_loading_presenter.cpp
     da_loading_presenter.h
+    grizzly_emblem.inl
+    grizzly_splash.cpp
+    grizzly_splash.h
     da_media.cpp
     da_media.h
     da_climate.cpp

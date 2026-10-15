@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 
 #include "StdAfx.h"
@@ -143,7 +143,7 @@ public:
         else if (0 == xr_stricmp(what, "talk"))
         {
             // the nearest trader's dialog, as if the use key had been pressed at him: the actor first stands a step
-            // in front of him (a partner's scripts end a talk across the map)
+            // in front of him (a partner's scripts end a talk across the map; at 2.5 m they refuse it already)
             if (IGameObject* object = open(Wanted::Trader, what))
             {
                 Fvector dir = Fvector().sub(actor->Position(), object->Position());

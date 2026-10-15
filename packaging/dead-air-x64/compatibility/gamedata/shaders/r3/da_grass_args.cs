@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Blade grass, the indirect draw arguments (docs/dead-air/GRASS.md; the GoT "compute 2"): one thread per

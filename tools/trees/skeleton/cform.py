@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """level.cform and gamemtl.xr readers, and the collision of sampled placements of a kind.
 

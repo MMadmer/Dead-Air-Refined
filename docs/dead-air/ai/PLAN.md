@@ -27,7 +27,7 @@ distance and occlusion; and all such small details. Faction lore drives everythi
 - No commits, no git worktrees, no `git checkout/stash/reset/clean`, no reformatting of whole files.
   The tree carries other uncommitted work (mod catalog, options pages, animation scripts, shader
   work): never revert or touch a file outside your lane's ownership (3.2-3.4).
-- Every **new** engine source file starts with `// Copyright (c) 2026 XFined-Ray` and
+- Every **new** engine source file starts with `// Copyright (c) 2026 Grizzly` and
   `// Released under the MIT licence, see License.txt` (after a BOM if the file has one). Not in
   modified upstream files, build files or `.def` files. Lua and ltx files follow the overlay's
   convention (no licence header; an ltx starts with a `;` comment saying what it is).
@@ -1022,7 +1022,7 @@ per-NPC trait, and an item needs a new model and icon, 1.2).
 
 1. Every lane reports done; no lock held. `Invoke-Ninja` with no target (full Release, warnings as
    errors), then an incremental build that finds no work.
-2. Static checks: `git diff --check`; every new engine file has the XFined-Ray/MIT header and no
+2. Static checks: `git diff --check`; every new engine file has the Grizzly/MIT header and no
    modified upstream/build file got one; `git grep` finds no DAR2-specific name in new code (data
    files only); no `TODO`/`FIXME`/temporary logs in owned files; K3's enemy-`Position()` list is
    empty or justified; the planner wiring equals 2.7; `Check-AiLtx.py` clean; the compatibility archive script

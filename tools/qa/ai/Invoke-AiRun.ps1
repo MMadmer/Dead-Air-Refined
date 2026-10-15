@@ -92,7 +92,7 @@ try {
             Remove-Item -LiteralPath $optionsBackup -Force -ErrorAction SilentlyContinue
         }
         New-Item -ItemType Directory -Force -Path $dest | Out-Null
-        Copy-Item (Join-Path $Rig 'appdata\logs\xfined-ray_admin.log') (Join-Path $dest 'log.txt') -Force
+        Copy-Item (Join-Path $Rig 'appdata\logs\grizzly_admin.log') (Join-Path $dest 'log.txt') -Force
     } else {
         & (Join-Path $repo 'tools\qa\Run-WaterQa.ps1') -Name $Name -Scenario $Scenario -Save $Save -Seconds $Seconds `
             -KeepShaderCache -ExtraArgs $ExtraArgs -PreCommands $PreCommands -Globals $Globals -Overlay $overlay `

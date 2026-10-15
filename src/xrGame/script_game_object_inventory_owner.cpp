@@ -1512,7 +1512,7 @@ CScriptGameObject* CScriptGameObject::item_in_slot(u32 slot_id) const
         return (0);
     }
 
-    if (pSettingsXFinedRay->read_if_exists<bool>("compatibility", "minus_one_slot_ordering", ShadowOfChernobylMode || ClearSkyMode))
+    if (pSettingsGrizzly->read_if_exists<bool>("compatibility", "minus_one_slot_ordering", ShadowOfChernobylMode || ClearSkyMode))
         ++slot_id;
 
     CInventoryItem* result = inventory_owner->inventory().ItemFromSlot((u16)slot_id);

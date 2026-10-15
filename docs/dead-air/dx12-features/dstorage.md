@@ -335,7 +335,7 @@ submission in which they are drawn. Details and the gate in 13 (S9).
 | `tools/qa/dstorage/` (new), `tools/qa/water/texture_load.lua` (new), `tools/qa/d3d12layer` | probe, stand scenario, layer scenario |
 | `docs/dead-air/DX12_RENDERER.md`, `DEPENDENCIES.md` | DS section, dependency row and obligations |
 
-New engine files carry the XFined-Ray/MIT header; the vendored Microsoft files stay as they are.
+New engine files carry the Grizzly/MIT header; the vendored Microsoft files stay as they are.
 
 ## 5. Data and resources
 

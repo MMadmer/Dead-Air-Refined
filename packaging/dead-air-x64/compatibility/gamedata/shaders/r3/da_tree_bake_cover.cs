@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The billboards' bake (da_trees_bake.cpp): each cell's alpha factor of each level, so the billboards' alpha test at

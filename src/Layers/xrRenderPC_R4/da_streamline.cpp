@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // NVIDIA Streamline core (da_streamline.h, da_streamline_sl.h). Manual hooking: the engine keeps

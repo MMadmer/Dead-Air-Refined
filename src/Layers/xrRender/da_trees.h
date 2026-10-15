@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The upgraded level trees (docs/dead-air/TREES.md). A stock level tree of a kind the data knows (its FLOD of tree

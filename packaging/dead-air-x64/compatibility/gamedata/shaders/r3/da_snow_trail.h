@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The trail maps (da_snow.cpp): R32_UINT, toroidal (world texel modulo the map size), high 16 bits the

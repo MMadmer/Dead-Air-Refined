@@ -58,8 +58,8 @@ function New-DeadAirCompatibilityArchive {
     # first, so the game's files override whatever both define, and a language folder holding
     # nothing but this file is not offered as a language.
     $engineTextRoot = Join-Path $RepositoryRoot "res\gamedata\configs\text"
-    foreach ($engineText in Get-ChildItem -LiteralPath $engineTextRoot -Recurse -File -Filter "xfined-ray.xml") {
-        $destinationPath = Join-Path $compatibilityStageGameRoot "configs\text\$($engineText.Directory.Name)\xfined-ray.xml"
+    foreach ($engineText in Get-ChildItem -LiteralPath $engineTextRoot -Recurse -File -Filter "grizzly.xml") {
+        $destinationPath = Join-Path $compatibilityStageGameRoot "configs\text\$($engineText.Directory.Name)\grizzly.xml"
         New-Item -ItemType Directory -Path (Split-Path -Parent $destinationPath) -Force | Out-Null
         Copy-Item -LiteralPath $engineText.FullName -Destination $destinationPath -Force
     }

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The texels the fine trail map (L0) scrolls into take the coarse map's trails (L1): a path walked an

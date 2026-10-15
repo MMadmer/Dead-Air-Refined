@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Differential tests of xrD3D12 (src/Layers/xrRenderDX12): every scenario runs on a real

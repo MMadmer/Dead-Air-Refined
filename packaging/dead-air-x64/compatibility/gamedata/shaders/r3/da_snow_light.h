@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Lighting of snow pixels (material code 31, docs/dead-air/SNOW.md). lmodel.h calls it for every

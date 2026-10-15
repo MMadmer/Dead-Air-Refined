@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The season's ice on standing and running water (docs/dead-air/WINTER.md, SNOW.md), shared by water.ps

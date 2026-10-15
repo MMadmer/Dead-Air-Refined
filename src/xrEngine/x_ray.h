@@ -27,7 +27,6 @@ class ENGINE_API CApplication final
     std::thread m_splash_thread;
     std::atomic_bool m_should_exit;
 
-    SDL_Surface* m_surface;
 
 private:
     std::mutex m_discord_lock;

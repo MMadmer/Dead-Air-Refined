@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 
 // ResourceManager_ScriptGuard.h: containment boundary for shader-script (Lua) invocations.

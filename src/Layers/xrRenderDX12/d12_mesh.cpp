@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Mesh shader draws on the D3D11 path of xrD3D12 (docs/dead-air/dx12-features/mesh.md 3.5; lane

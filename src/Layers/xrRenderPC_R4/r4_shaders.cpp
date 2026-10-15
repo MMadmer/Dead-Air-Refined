@@ -285,7 +285,7 @@ static HRESULT compile_dxil(pcstr name, pcstr extension, pcstr sh_name, IReader*
     {
         strconcat(sizeof(shader_name), shader_name, "r5_dxil" DELIMITER, name, ".", extension, DELIMITER, sh_name);
         string_path file;
-        strconcat(sizeof(file), file, "shaders_cache_xfr" DELIMITER, da_dxc_cache_dir(), name, ".", extension,
+        strconcat(sizeof(file), file, "shaders_cache_grizzly" DELIMITER, da_dxc_cache_dir(), name, ".", extension,
             DELIMITER, sh_name);
         FS.update_path(cache_file, "$app_data_root$", file);
     }
@@ -685,7 +685,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     string_path file_name;
     {
         string_path file;
-        strconcat(sizeof(file), file, "shaders_cache_xfr" DELIMITER, filename, DELIMITER, sh_name.c_str());
+        strconcat(sizeof(file), file, "shaders_cache_grizzly" DELIMITER, filename, DELIMITER, sh_name.c_str());
         strconcat(sizeof(filename), filename, filename, DELIMITER, sh_name.c_str());
         FS.update_path(file_name, "$app_data_root$", file);
     }

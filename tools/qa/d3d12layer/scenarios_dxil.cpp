@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Layer scenarios of the `infra` lane for DXIL through the D3D11 path (infra.md 9.1 scenario 11,

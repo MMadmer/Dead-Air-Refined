@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Validation of the written skeletons: every upgradable kind (and every exact member key) has its file, every
 file parses, has the size FORMAT.md gives and passes dtsk.validate; no stray temp files.

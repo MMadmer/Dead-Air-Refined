@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The ice of the water for gameplay (docs/dead-air/WEATHER.md, ice). See da_ice.h.

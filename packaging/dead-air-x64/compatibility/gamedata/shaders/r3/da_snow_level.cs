@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The current snow depth of the whole level at 1 m ($user$da_snow_level, da_snow.cpp) over a

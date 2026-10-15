@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Trees, the vertex shader of the stock wood (docs/dead-air/TREES.md): the stock trunk's and limbs' tubes on the

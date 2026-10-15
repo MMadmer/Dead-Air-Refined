@@ -168,15 +168,19 @@ void CScriptIniFile::script_register(lua_State* luaState)
             {
                 return (CScriptIniFile*)pGameIni;
             }),
+            def("grizzly_ini", +[]()
+            {
+                return (CScriptIniFile*)pSettingsGrizzly;
+            }),
+            // The names this had while the engine was XFined-Ray and OpenXRay. A public Lua name is
+            // never withdrawn, so scripts written against them keep calling them.
             def("xfined_ray_ini", +[]()
             {
-                return (CScriptIniFile*)pSettingsXFinedRay;
+                return (CScriptIniFile*)pSettingsGrizzly;
             }),
-            // The name this had while the engine was OpenXRay. A public Lua name is never
-            // withdrawn, so scripts written against it keep calling it.
             def("openxray_ini", +[]()
             {
-                return (CScriptIniFile*)pSettingsXFinedRay;
+                return (CScriptIniFile*)pSettingsGrizzly;
             }),
 
             def("reload_system_ini", &reload_system_ini),

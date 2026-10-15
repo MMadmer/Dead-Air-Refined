@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The snow shells' interpolants (da_snow_shell.vs/.ps): one struct for both stages, so the signatures link the

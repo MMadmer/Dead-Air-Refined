@@ -1,6 +1,6 @@
 # Modding capabilities specific to Dead Air: Refined
 
-## XMS modules (XFined Module System)
+## XMS modules (eXtensible Module System)
 
 Additive mod packages that compose instead of overwriting each other. Full
 design: `XMS_ARCHITECTURE.md`. Quick authoring reference:
@@ -971,20 +971,21 @@ broken firing parts); the x86 0.98b build used 0.03 / 0.05 / 0.15 for the lesser
 difference is a 1.0 decision, not a porting defect, and durability never fed the misfire
 chance in either build: misfires come from the fault bits and the ammo's `misfire_chance`.
 
-## The engine is called XFined-Ray
+## The engine is called Grizzly
 
 The engine reports itself under that name, which changes a handful of names an addon or a tool
-may have hard-coded. Nothing was removed: every old name still works, so a mod written against
-the previous one keeps running.
+may have hard-coded. It was called XFined-Ray in 1.4 and 1.5 and OpenXRay before that. Nothing
+was removed: every old name still works, so a mod written against an earlier one keeps running.
 
-| What | Was | Is | If you used the old one |
+| What | Was (OpenXRay, then XFined-Ray) | Is | If you used an old one |
 | --- | --- | --- | --- |
-| Log banner and file | `OpenXRay ...`, `appdata\logs\openxray_<user>.log` | `XFined-Ray ...`, `appdata\logs\xfined-ray_<user>.log` | A tool that opens the log by name has to follow. The `_lua.log` and the profiler files carry the same prefix. |
-| Engine settings file | `configs\openxray.ltx` | `configs\xfined-ray.ltx` | Still read: the new name wins when both exist, the old one is used when it is the only one there. |
-| Engine string file | `configs\text\<lang>\openxray.xml` | `configs\text\<lang>\xfined-ray.xml` | Still recognised; either name counts as "the engine's own file" when the folder holds nothing else. |
-| Lua accessor for it | `openxray_ini()` | `xfined_ray_ini()` | Still exported and returns the same thing. A public Lua name is never withdrawn. |
-| Shader cache | `appdata\shaders_cache_oxr` | `appdata\shaders_cache_xfr` | The old folder is not read any more, so the first start after the update compiles shaders once. Nothing else uses it and it can be deleted by hand. |
-| RenderDoc captures | `appdata\captures\openxray` | `appdata\captures\xfined-ray` | A diagnostic path only. |
+| Log banner and file | `OpenXRay ...`, `XFined-Ray ...`; `appdata\logs\openxray_<user>.log`, `xfined-ray_<user>.log` | `Grizzly ...`, `appdata\logs\grizzly_<user>.log` | A tool that opens the log by name has to follow. The `_lua.log` and the profiler files carry the same prefix. |
+| Engine settings file | `configs\openxray.ltx`, `configs\xfined-ray.ltx` | `configs\grizzly.ltx` | Still read: the new name wins, then `xfined-ray.ltx`, then `openxray.ltx`. |
+| Engine string file | `configs\text\<lang>\openxray.xml`, `xfined-ray.xml` | `configs\text\<lang>\grizzly.xml` | Still recognised; any of the three counts as "the engine's own file" when the folder holds nothing else. |
+| Lua accessor for it | `openxray_ini()`, `xfined_ray_ini()` | `grizzly_ini()` | Still exported and return the same thing. A public Lua name is never withdrawn. |
+| Shader cache | `appdata\shaders_cache_oxr`, `shaders_cache_xfr` | `appdata\shaders_cache_grizzly` | The old folders are not read any more: the first start after the update compiles shaders once, and the engine deletes the old folders in the background. |
+| DXC macros of the DirectX 12 shaders | `XFR_DXC`, `XFR_SM`, `XFR_WAVE_LANES`, `XFR_MIN16` | `GRIZZLY_DXC`, `GRIZZLY_SM`, `GRIZZLY_WAVE_LANES`, `GRIZZLY_MIN16` | A shader of a mod that tested the old ones takes its FXC path under DirectX 12 until it tests the new ones. |
+| RenderDoc captures | `appdata\captures\openxray`, `captures\xfined-ray` | `appdata\captures\grizzly` | A diagnostic path only. |
 
 Unchanged on purpose: the `xray` C++ namespace and the `xr*` module names, because those are
 X-Ray rather than the fork; the upstream links in source comments; and the copyright headers of
@@ -1085,8 +1086,8 @@ DXC into DXIL at Shader Model 6.6 (lower when the GPU tops out lower); `dxcompil
   compiles it as HLSL 2018 with row-major matrices and `-flegacy-resource-reservation`, so explicit
   `register()` bindings keep the slots FXC gives them. The warnings FXC never printed (implicit
   truncation, `for`-scope redefinitions, `register(ps, ...)` effect syntax) stay silent.
-- Extra macros, never defined for FXC: `XFR_DXC=1`, `XFR_SM=66`, `XFR_WAVE_LANES=<n>` only where the
-  GPU has wave operations, `XFR_MIN16=1` only where it honours 16-bit minimum precision. Put Shader
+- Extra macros, never defined for FXC: `GRIZZLY_DXC=1`, `GRIZZLY_SM=66`, `GRIZZLY_WAVE_LANES=<n>` only where the
+  GPU has wave operations, `GRIZZLY_MIN16=1` only where it honours 16-bit minimum precision. Put Shader
   Model 6 code behind them, and the same file still builds for DirectX 11.
 - DXC refuses what FXC let through:
   - a second `SV_Position` input (a `float4 pos2d : SV_Position` parameter next to an input struct
@@ -1102,7 +1103,7 @@ DXC into DXIL at Shader Model 6.6 (lower when the GPU tops out lower); `dxcompil
   DXBC twins for vs (the ps fell back to FXC)`), because a D3D12 pipeline cannot mix DXIL and DXBC.
   It costs a second compile and shows in `* [dxc] shaders: ... N on FXC, M twins, K refused by DXC`.
   Fix the shader rather than lean on it: mesh and ray-tracing shaders have no FXC path.
-- Cache: `appdata\shaders_cache_xfr\r5_dxil\<tag>\` (DXIL) and `r5\` (the FXC fallback), both keyed
+- Cache: `appdata\shaders_cache_grizzly\r5_dxil\<tag>\` (DXIL) and `r5\` (the FXC fallback), both keyed
   by the source's CRC, so an edited file recompiles.
 - Check without the game: `tools\qa\Test-Shaders.ps1 -Dxc -Shader <name>` compiles a shader the way
   the DirectX 12 module does (`-Sm 6_0` for the oldest model the engine accepts);
@@ -2441,7 +2442,7 @@ Fresnel and the sea state cost nothing and there is no tier where being wrong is
 `settings_da_water.h` holds what is genuinely a look and has no physical value to derive it from -
 the detail layer's share, the rain and impact ripple amplitudes, the foam colour, the debris
 window, the refraction strength, and the SSR hand-over distances. It is compile-time on purpose:
-wiping `appdata/shaders_cache_xfr` applies a change without an engine rebuild.
+wiping `appdata/shaders_cache_grizzly` applies a change without an engine rebuild.
 
 ## Rain puddles, wet ground and the far fades
 
@@ -2926,7 +2927,7 @@ can rename it like any row (`kb_reload`, too long beside two cells), and its hin
 `<caption id>_hint` (`kb_jump_hint`, `ui_mm_save_game_hint`), so a mod that adds an action to
 `ui_keybinding.xml` adds its hint the same way. Keys a keyboard layout does not name - mouse and
 gamepad buttons - are shown by the string `st_key_<key>` where the text files have one (`st_key_mouse1`
-is "ЛКМ" / "LMB"; the engine's `xfined-ray.xml` carries the mouse ones), by the engine's English name
+is "ЛКМ" / "LMB"; the engine's `grizzly.xml` carries the mouse ones), by the engine's English name
 otherwise; the same names appear wherever the game prints a binding. The stock `CUIKeyBinding` list follows the same rule
 for addons that ship the stock page script; its rows offer their hints only while the cursor is over
 the visible part of the list, since a row scrolled out of sight still lies under the cursor somewhere
@@ -3006,7 +3007,7 @@ The loading screen draws a tip - header, "tip N:" caption, text - only when all 
 A missing one used to be drawn as its raw id: DAR2 replaces the tips and leaves the number caption
 out, so every load read "ls_tip_number2:". The original never drew these lines at all.
 
-The engine's own strings (`configs\text\<lang>\xfined-ray.xml`: loading stages, engine menu rows)
+The engine's own strings (`configs\text\<lang>\grizzly.xml`: loading stages, engine menu rows)
 ship in the compatibility archive and fold into the string table **first**, as defaults: every file
 of the game comes after and overrides whatever both define, however the names sort. A language
 folder holding nothing but this file is still not offered as a language.
@@ -3071,7 +3072,8 @@ Every window built from an XML layout can be drawn by the `xms_ui_shape` shader 
 rounded panels, borders, buttons with a look per state, segmented bars, item grids and pictograms,
 all computed per pixel at the screen's own resolution, so nothing blurs at 1440p or 4K. The actor
 menu (inventory, trade, loot, upgrade), its item hint, its context menu, the carcass window
-(`ui_mutant_loot`) and the save indicator are drawn this way; item icons and portraits stay textures.
+(`ui_mutant_loot`), the dialog window (`talk.xml`) and the save indicator are drawn this way; item icons
+and portraits stay textures.
 
 **A node takes a skin** with a `shape` attribute naming a look of the theme, a `<shape>` child, or
 both (the child's attributes go over the named look):
@@ -3153,18 +3155,26 @@ full bar, the full overload under which movement slows (`overweight_slowdown_*` 
 without them), `zone_tint` the strength of the tint, `hint_delay` the delay of its hint, which gives
 the weight and both limits in kilograms (`st_da_weight_hint`).
 
-The layouts of the actor menu and the carcass window are written by `tools\ui\actor_menu_layout.py`
-and `tools\ui\mutant_loot_layout.py` from one geometry for 4:3 and 16:9; the item hint
+The layouts of the actor menu, the carcass window and the dialog window are written by
+`tools\ui\actor_menu_layout.py`, `tools\ui\mutant_loot_layout.py` and `tools\ui\talk_layout.py` from one
+geometry for 4:3 and 16:9; the item hint
 (`actor_menu_item`, `af_params`, `booster_params`) by `tools\ui\item_info_from_da.py` from Dead Air's
 own files, node for node. The XML they write is what a mod edits; XMS module XML patches apply to it as
 to any other layout.
+
+The dialog window (`talk.xml`, the partner's card `talk_character.xml`) is see-through like Dead Air's own:
+its looks are the theme's `talk_panel`, `talk_card` and `talk_inset`, so a `ui_theme_<anything>.xml`
+changes how much of the world shows behind it. The player chooses where it stands in Options -> Game ->
+Interface -> "Dialog window": at the left edge, in the middle (the default) or at the right edge
+(`dar_dialog_position 0|1|2`, saved). The engine moves the whole window, so a mod's own `talk.xml` -
+laid out wherever its author put it - moves the same way: "in the middle" means "where the layout has it".
 
 Console commands for working on these windows (they open them on the nearest fitting object of the
 level, wherever it stands):
 
 | Command | What it does |
 | --- | --- |
-| `dar_ui_open inventory\|trade\|upgrade\|loot\|stash\|mutant` | opens the window; a trade or an upgrade does not close over distance until the menu does |
+| `dar_ui_open inventory\|trade\|talk\|upgrade\|loot\|stash\|mutant` | opens the window; a trade or an upgrade does not close over distance until the menu does; `talk` first walks the player up to the trader |
 | `dar_ui_cursor <x> <y>` | moves the cursor to a point of the 1024 x 768 layout space (a hint shows) |
 | `dar_ui_click left\|right\|middle [<x> <y>]` | clicks the top window there |
 | `dar_ui_cursor_item <section>` | moves the cursor onto the first cell of the actor menu holding such an item |

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Async compute of xrD3D12 (docs/dead-air/dx12-features/infra.md 3.3, async.md 3.3): the compute

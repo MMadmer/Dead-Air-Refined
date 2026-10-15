@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Mesh-shader grass on DirectX 12 (docs/dead-air/dx12-features/mesh.md): the frame's hooks into the

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The level's snow fields at 1 m (docs/dead-air/WINTER.md), baked once per level load from the

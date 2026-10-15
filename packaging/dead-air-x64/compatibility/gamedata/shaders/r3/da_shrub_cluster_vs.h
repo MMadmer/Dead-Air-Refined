@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural shrubs, the vertex shader of the middle and far distance (docs/dead-air/SHRUBS.md): a cluster (the

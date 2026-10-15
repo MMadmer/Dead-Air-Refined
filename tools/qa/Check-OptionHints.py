@@ -50,7 +50,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 OVERLAY = REPO / 'packaging' / 'dead-air-x64' / 'compatibility' / 'gamedata'
 ENGINE_GAMEDATA = REPO / 'res' / 'gamedata'
 LANGUAGES = ('rus', 'eng')
-ENGINE_TEXTS = ('xfined-ray.xml', 'openxray.xml')
+ENGINE_TEXTS = ('grizzly.xml', 'xfined-ray.xml', 'openxray.xml')
 MAX_NEW = 110
 # The groups of checks that are hints, not captions.
 HINT_GROUPS = ('video', 'sound', 'controls', 'keys', 'game', 'weather', 'xml')

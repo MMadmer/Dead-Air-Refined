@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Layer scenarios of the `mesh` lane (docs/dead-air/dx12-features/mesh.md 9.1). Scenarios() appends this list.

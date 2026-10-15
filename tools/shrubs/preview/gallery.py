@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """A contact sheet of the shrub species as the engine's generator grows them (tools/shrubs/preview).
 

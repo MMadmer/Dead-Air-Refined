@@ -6,7 +6,6 @@
 #define IDI_ICON_COP                    111
 #define IDI_ICON_CS                     112
 #define IDI_ICON_SOC                    113
-#define IDB_SPLASH                      116
 #define IDC_LIST                        1000
 #define IDC_FILE                        1001
 #define IDC_LINE                        1002

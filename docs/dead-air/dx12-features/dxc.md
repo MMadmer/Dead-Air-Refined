@@ -15,7 +15,7 @@ zip SHA-256 `a1dfb116...cd241`). Probe sources, audit script, patches and raw ou
 `<scratchpad>` is `C:\Users\admin\AppData\Local\Temp\claude\D--Games-Dead-Air-DeadAir-x64\663ffd4e-302f-4d92-9244-b15c665cf3ee\scratchpad`.
 
 Relation to the other feature designs: `infra.md` 3.6 (loader, `CompileShader`, native shaders,
-opt-in `//xfr:dxil`) and `dxr.md` 3.2 (`da_dxc`) describe parts of the same compiler path. This
+opt-in `//grizzly:dxil`) and `dxr.md` 3.2 (`da_dxc`) describe parts of the same compiler path. This
 document owns it; where it differs from them it says so (3.1, 3.4, 3.6) and the difference wins.
 
 ## Integration amendments (PLAN.md)
@@ -30,7 +30,7 @@ These points supersede the text below where they differ (ids refer to `PLAN.md` 
   `core` pre-places. This lane owns `da_dxc.*`, the engine compile path, reflection aliases, twins,
   the shader fixes, the audit tools, `Test-Shaders.ps1` and `Check-ShaderLinkage.py`.
 - **D3a before D3b**: `da_dxc_compile_native` and its cache
-  (`shaders_cache_xfr/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>`) land first, right
+  (`shaders_cache_grizzly/r5_dxil/<tag>/native/<path>.<entry>.<target>/<defines hash>`) land first, right
   after I1, because the RT lane waits for them.
 - **C5, mesh shaders**: `.ms` and `.as` files go through the engine compile path (FXC preprocessing,
   engine includes, the option macros, `SMAP_ARRAY`) with `-HV 2021` - they are new-only extensions
@@ -79,7 +79,7 @@ These points supersede the text below where they differ (ids refer to `PLAN.md` 
 - `CRender::shader_compile` (250-712): builds the macro list (`options`, 253-575: external
   `m_ShaderOptions` from `addShaderOption`, then preset/HW options, `SMAP_ARRAY=1` under `XR_D3D12`
   at 570-575) and the permutation name `sh_name`; cache path
-  `appdata/shaders_cache_xfr/r5/<name>.<ext>/<sh_name>` (583-609, `r5` under `XR_D3D12`); `fileCrc` of
+  `appdata/shaders_cache_grizzly/r5/<name>.<ext>/<sh_name>` (583-609, `r5` under `XR_D3D12`); `fileCrc` of
   the file and its includes (`getFileCrc32`, 611-616); cache read (618-642: u32 dx9compat, u32
   fileCrc, u32 bytecodeCrc, bytecode); `HW.D3DCompile` with the `includer` (644-667, X3523 retry with
   `D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY`); cache write (669-692); failure log with every define
@@ -222,8 +222,8 @@ active and the flags do not carry `RSC_FXC` (3.6):
      `register(ps,..)`/effect syntax - all legacy idioms FXC accepts silently.
    - `D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY` has no DXC equivalent; no shipped shader needs it
      (the audit's X3523 list is empty), a mod shader that does falls back to FXC.
-5. **Macros**: the `options` list unchanged, plus `XFR_DXC=1`, `XFR_SM=<66>` (as `infra.md`),
-   `XFR_WAVE_LANES=<waveLanesMin>` only when wave ops are supported, `XFR_MIN16=1` only when the device
+5. **Macros**: the `options` list unchanged, plus `GRIZZLY_DXC=1`, `GRIZZLY_SM=<66>` (as `infra.md`),
+   `GRIZZLY_WAVE_LANES=<waveLanesMin>` only when wave ops are supported, `GRIZZLY_MIN16=1` only when the device
    honours 16-bit min precision. Shaders guard SM 6 code with these; FXC never sees them.
 6. **Output**: stripped object (to the layer) + `DXC_OUT_REFLECTION` (to the engine). A compile
    failure or a failed reflection: one log line with the first error, the define dump as today, then
@@ -255,7 +255,7 @@ active and the flags do not carry `RSC_FXC` (3.6):
 
 ### 3.5 Cache
 
-- Directory `appdata/shaders_cache_xfr/r5_dxil/<tag>/<name>.<ext>/<sh_name>` with
+- Directory `appdata/shaders_cache_grizzly/r5_dxil/<tag>/<name>.<ext>/<sh_name>` with
   `<tag> = sm66-w32-m16-<crc32 of DXC version string + the fixed argument list, 8 hex>`; the FXC cache
   (`r5/`) is untouched, so switching `r__dxc` or updating DXC never serves stale bytecode and never
   deletes the other format.
@@ -280,7 +280,7 @@ active and the flags do not carry `RSC_FXC` (3.6):
     HS/DS, rebuilding the table from scratch - no `r_Constant` has run yet; `PassSET_Shaders`
     reordered to create first, merge after): if the pass mixes formats, every DXIL stage is replaced by `_CreateX(source, RSC_FXC)`.
     Log: `! [dxc] pass deffer_base_bump/deffer_base_bump: DXBC twins for vs (the ps fell back to FXC)`.
-  - This is the generic form of `infra.md`'s `//xfr:dxil` pairing plumbing; the marker is not
+  - This is the generic form of `infra.md`'s `//grizzly:dxil` pairing plumbing; the marker is not
     needed, since all R5 engine shaders are DXIL.
 - Layer guard: `PipelineCache::Graphics` checks the stages' `dxil` flags before
   `CreateGraphicsPipelineState`; a mix is logged once with the shader names
@@ -311,7 +311,7 @@ e.g. `* [dxc] shaders: 412 compiled (23.1 s), 2051 cached, 0 on FXC, 0 twins` at
 
 | File | Change |
 |---|---|
-| `src/Layers/xrRenderDX12/d12_dxc.cpp` (new, XFined-Ray/MIT header) | loader, caps, `CompileShader`, `Reflect`, `Disassemble`, `IsDxil` |
+| `src/Layers/xrRenderDX12/d12_dxc.cpp` (new, Grizzly/MIT header) | loader, caps, `CompileShader`, `Reflect`, `Disassemble`, `IsDxil` |
 | `src/Layers/xrRenderDX12/d12_api.h` | declarations (3.1); `NativeCaps.minPrecision16` |
 | `src/Layers/xrRenderDX12/d12_objects.cpp` 1982-2035 | `Shader::Reflect` through `xrd3d12::Reflect` (D3D12 descs), `Shader::dxil` |
 | `src/Layers/xrRenderDX12/d12_device.cpp` 216-226 | `ProgramType` for the `DXIL` part |
@@ -376,12 +376,12 @@ layer's root signature layout and reports refusals with the debug layer's reason
 
 In the tree (D1): the defaults are the engine's setup of 3.3 - `Externals/dxc`, FXC preprocessing with
 the engine's includer, `-HV 2018 -Zpr -O3 -flegacy-resource-reservation -Qstrip_debug -Qstrip_reflect`
-with the three legacy warnings silenced, the `XFR_*` macros of a 32-lane / min16 device (`--wave-lanes`,
+with the three legacy warnings silenced, the `GRIZZLY_*` macros of a 32-lane / min16 device (`--wave-lanes`,
 `--no-min16`); `--preprocess dxc`, `--no-engine-args`, `--dxc-arg` for experiments. The DXC wrapper
 itself lives in `Check-ShaderLinkage.py` (one copy of the arguments for both tools). `.ms`/`.as` files
 compile at HLSL 2021 from SM 6.5 on; `r3/rt/` and `r3/native/` are left out (they compile through
 `da_dxc_compile_native`). Exit code 1 on a DXC-only failure, a new reflection problem or a pipeline
-outside the gated set that does not link. `tools/qa/dxc/pso_probe.cpp` (XFined-Ray/MIT header) and
+outside the gated set that does not link. `tools/qa/dxc/pso_probe.cpp` (Grizzly/MIT header) and
 `tools/qa/dxc/Run-DxcAudit.ps1 [-Sm 6_6] [-ConsoleExtras] [-Loose <overlay>]` build the probe with cl.exe
 into `build\qa\dxc`, run the audit with `--out` and the probe; the probe has graphics, compute and mesh
 root signatures shaped like the layer's (mesh: the VS parameters at MESH, the GS parameters at
@@ -393,7 +393,7 @@ linkage rule for an `ms` producer has no register check.
 
 The two everyday tools (D2, PLAN C25): `tools/qa/Test-Shaders.ps1` compiles the overlay's top-level
 `.vs/.ps/.cs` (and `.gs/.hs/.ds`), `-Dxc [-Sm 6_6]` the way R5 does (fxc `/P` with the engine's options,
-`SMAP_ARRAY` and the `XFR_*` macros, then `dxc.exe` of the vendored release with the engine's
+`SMAP_ARRAY` and the `GRIZZLY_*` macros, then `dxc.exe` of the vendored release with the engine's
 arguments; `.ms/.as` at HLSL 2021 from SM 6.5), skips `rt\` and `native\`, and uses one temp tree per
 process (lanes run it in parallel). `tools/qa/Check-ShaderLinkage.py --compiler dxc [--sm 6_6]` links
 the R5 pipelines with DXIL signatures: a stage DXC refuses falls back to FXC and the pass is linked (and
@@ -482,7 +482,7 @@ Frame at 2560x1440 Extreme, DX12, this GPU (`_work/dx12-perf-20260927/qa/q4-r5c`
 sun 4.5 (cascades + accumulation), clouds march 1.85, lights 0.45, combine 5.35 (AO 1.57, forward 1.31,
 AA 0.71, post 1.09). Candidates (`<scratchpad>/dxc/payoff-candidates.patch`; each compiles on FXC with
 the guards off and on DXC 6.6 with them on, verified):
-1. **`da_taa.ps` 3x3 neighbourhood through quad reads** (`#ifdef XFR_WAVE_LANES`): each lane samples
+1. **`da_taa.ps` 3x3 neighbourhood through quad reads** (`#ifdef GRIZZLY_WAVE_LANES`): each lane samples
    the three texels on its outer side (`o = (pixel & 1) * 2 - 1`), the other five come from
    `QuadReadAcrossX/Y/Diagonal` - 3 samples instead of 8; the pass-through tests (history reset, PDA
    box, `P.z < 1.10`) are first decided for the whole quad so the quad reads run with all four lanes.
@@ -492,7 +492,7 @@ the guards off and on DXC 6.6 with them on, verified):
    from `QuadReadAcrossX/Y(P.z)` read before the sky early-out, one sample per axis instead of two:
    7 -> 5 sample instructions, bit-exact.
 3. **`shadow.h` PCSS (SUN_QUALITY 4) in `min16float`** (`da_h*` types in `common_defines.h`,
-   `min16float` only under `XFR_DXC && XFR_MIN16`, `float` elsewhere): the 0/1 comparison masks
+   `min16float` only under `GRIZZLY_DXC && GRIZZLY_MIN16`, `float` elsewhere): the 0/1 comparison masks
    `v1[]/v0[]`, the kernel weights `Fw()` and the fraction terms; depths, blocker average and the
    final sum stay 32-bit. The Extreme `accum_sun_near` DXIL goes from 0 to 917 half-precision
    lines.
@@ -510,7 +510,7 @@ the guards off and on DXC 6.6 with them on, verified):
   with null descriptors).
 
 **D5 result (28.09.2026, numbers in 9 "D5 result").** The four candidates went in together, each behind
-`XFR_WAVE_LANES` or `XFR_MIN16`, and were measured in one batch against `-dxc_plain` (section 7), which
+`GRIZZLY_WAVE_LANES` or `GRIZZLY_MIN16`, and were measured in one batch against `-dxc_plain` (section 7), which
 compiles the same tree without those two macros. Offline first (`_work/dx12-features-20260928/dxc/d5/`):
 `Test-Shaders.ps1` FXC / `-Dxc` / `-Dxc -Sm 6_0` on every touched pass and `Check-DxcShaders.py --sm 6_6
 --filter accum_sun` (SUN_QUALITY 4 included): 0 failures; `identity.py` over 55600 permutations (every
@@ -557,7 +557,7 @@ the march 45.
 - `r__dxc` (console, saved, default 1, applies at the next start): engine shaders through DXC.
   `-dx12_no_sm6` (`infra.md`) turns every SM 6 path off for the run; `-dxc_debug` embeds debug info.
   `-dxc_plain` (start-up switch, D5) keeps DXC but compiles the engine shaders without
-  `XFR_WAVE_LANES` / `XFR_MIN16`, i.e. without the wave, quad and min16 paths of 6.4, into their own
+  `GRIZZLY_WAVE_LANES` / `GRIZZLY_MIN16`, i.e. without the wave, quad and min16 paths of 6.4, into their own
   cache folder (`r5_dxil\<tag>-plain\`); native passes keep both macros. It is the A/B of those paths
   inside one binary and the way around a driver that mishandles them. `-dxc_all_bound` (start-up
   switch, D5, QA only until the final A/B of 6.4 decides it) compiles the engine shaders with
@@ -612,7 +612,7 @@ Stand (hidden desktop, `Invoke-Stand`, `-ExtraArgs '-r5 -always_active'`, short 
    (b) an overlay copy of `da_taa.ps` with a duplicate `SV_Position` parameter -> `! [dxc]` fallback
    line, `DXBC twins` line for its pass, TAA capture valid, no refused pipeline; (c) `r__dxc 0` in
    `user.ltx` -> FXC. Restore the rig after each.
-10. Cold compile time: back up `appdata/shaders_cache_xfr` of the rig, run render_check once with an
+10. Cold compile time: back up `appdata/shaders_cache_grizzly` of the rig, run render_check once with an
     empty `r5_dxil/` and once with an empty `r5/` (`-dx12_no_sm6`), restore the backup. Pass: time from
     start to the first FPS line with DXC <= FXC; the statistics line gives the DXC compile seconds.
 11. DX11 regression: `Invoke-Stand -Name dx11-render -Scenario render_check` (no `-r5`). Pass: no new
@@ -730,7 +730,7 @@ Analysis `_work/dx12-features-20260928/dxc/d4/analyze_d4.py` (`analyze_d4.txt`).
 **D5 result (test 12 for the payoff edits, 28.09.2026).** One `Invoke-Dx12Perf` batch
 (`dxc-d5-perf-foliage`, `foliage`, 2560x1440 Extreme TAA, `-Pairs 3`, pair 0 warm-up), one R5 binary and
 one overlay with every candidate of 6.4 in it: A = `-r5 -always_active -dxc_plain` (the DXIL without
-`XFR_WAVE_LANES` / `XFR_MIN16`, byte-identical to the pre-D5 shaders, below), B = the payoff paths. Both
+`GRIZZLY_WAVE_LANES` / `GRIZZLY_MIN16`, byte-identical to the pre-D5 shaders, below), B = the payoff paths. Both
 variants add `r__gpu_log 5` (a `[gpu]` line every 5 frames: 90-110 frames in each run's FPS window
 instead of 2) and `r__async_compute st_async_off` (GTAO and the cloud march as the pixel passes the
 edits target). `foliage` rather than D4's `qa_pedro`: the march (0.14 ms on qa_pedro after the early-out)
@@ -822,8 +822,8 @@ way; no measured run compiled a shader (`0 compiled, 206 cached`). The helper's 
   adds `-WX`, `-log_shader_warnings` logs DXC's warnings.
 - `da_dxc_compile_native(DaDxcNative, bytecode, reflection*)`: a file under the shader root or an
   embedded `source`; HLSL 2021, `-Zpr -O3`, DXC's preprocessor with the file system include handler
-  (includer's folder, then the root through `-I .`), macros `XFR_DXC`, `XFR_SM` (of the target),
-  `XFR_WAVE_LANES`, `XFR_MIN16`, `SMAP_ARRAY`, optional `-enable-16bit-types` where the device has
+  (includer's folder, then the root through `-I .`), macros `GRIZZLY_DXC`, `GRIZZLY_SM` (of the target),
+  `GRIZZLY_WAVE_LANES`, `GRIZZLY_MIN16`, `SMAP_ARRAY`, optional `-enable-16bit-types` where the device has
   native fp16; cache `r5_dxil/<tag>/native/<path>.<entry>.<target>/<crc of target, entry, defines>`
   validated by the CRC of the source and of every include it resolves.
 - DXC's `DXC_OUT_REFLECTION` is a bare `STAT` part (fourcc, size, module), not a container:
@@ -831,7 +831,7 @@ way; no measured run compiled a shader (`0 compiled, 206 cached`). The helper's 
   fails (the first self-test run reported 0 bindings). `da_dxc` wraps every reflection blob into a
   one-part container before it is cached or handed out (`da_dxc_contain`), which both reflectors take.
 - Statistics at the end of `level_Load` and in `CHW::DestroyDevice`; an embedded self-test at init
-  (a cs_6_0 with an include, a wave op under `XFR_WAVE_LANES` and one UAV) logs
+  (a cs_6_0 with an include, a wave op under `GRIZZLY_WAVE_LANES` and one UAV) logs
   `* [dxc] native self-test: native/dxc_selftest.hlsl cs_6_0 compiled, 1684 bytes of DXIL, 1 binding, 17.3 ms`.
 
 **D3b - the engine path.**
@@ -844,8 +844,8 @@ way; no measured run compiled a shader (`0 compiled, 206 cached`). The helper's 
   `name#ms` (vertex slot) / `name#as` (geometry slot) open `name.ms` / `name.as` with targets
   `ms_6_5` / `as_6_5` and no `stub_default` stand-in (a failure leaves `sh` null for the caller).
 - `r4_shaders.cpp`: `compile_dxil` under `XR_D3D12` when `da_dxc_active()` and no `RSC_FXC`: cache
-  `shaders_cache_xfr/r5_dxil/<tag>/<name>.<ext>/<sh_name>`, else `da_dxc_compile_engine` (FXC's
-  preprocessor with the engine includer and macros + the `XFR_*` macros, target letters of the
+  `shaders_cache_grizzly/r5_dxil/<tag>/<name>.<ext>/<sh_name>`, else `da_dxc_compile_engine` (FXC's
+  preprocessor with the engine includer and macros + the `GRIZZLY_*` macros, target letters of the
   engine's target with the session's model, HLSL 2018 or 2021 for `.ms/.as`, the arguments of 3.3);
   a failure logs `! [dxc] <shader>: <first error>` and the defines and falls through to FXC
   (`ms`/`as` have no FXC path). `create_shader` takes the reflection object (DXIL: the reflection
@@ -875,11 +875,11 @@ way; no measured run compiled a shader (`0 compiled, 206 cached`). The helper's 
   DX11 frames equal to Gate 0.
 
 **D5 - payoff (28.09.2026).**
-- `da_dxc.cpp`: `-dxc_plain` (`DaDxcSetup::plain`): `da_dxc_compile_engine` leaves `XFR_WAVE_LANES` and
-  `XFR_MIN16` out, the engine cache folder gets a `-plain` suffix, one setup line; native compiles
+- `da_dxc.cpp`: `-dxc_plain` (`DaDxcSetup::plain`): `da_dxc_compile_engine` leaves `GRIZZLY_WAVE_LANES` and
+  `GRIZZLY_MIN16` out, the engine cache folder gets a `-plain` suffix, one setup line; native compiles
   unchanged. `-dxc_all_bound` (`DaDxcSetup::all_bound`): `-all-resources-bound` on every engine compile,
   cache suffix `-arb`, one setup line; native compiles unchanged.
-- `da_taa.ps`: under `XFR_WAVE_LANES` the pass-through tests are decided per quad first
+- `da_taa.ps`: under `GRIZZLY_WAVE_LANES` the pass-through tests are decided per quad first
   (`QuadReadAcrossX/Y/Diagonal` of the lane's flag), a quad with any blending pixel builds its 3x3
   moments in `taa_moments` (three own samples on the lane's outer side, five from the quad), and the
   8-sample loop is compiled only without the macro. FXC, DirectX 11 and `-dxc_plain` compile the loop.

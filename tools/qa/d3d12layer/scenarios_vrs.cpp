@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Layer scenarios of the `vrs` lane (docs/dead-air/dx12-features/vrs.md 9.2). Scenarios() appends this list.

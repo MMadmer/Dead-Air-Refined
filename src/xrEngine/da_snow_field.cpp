@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The world side of the season snow (docs/dead-air/WINTER.md): the level's baked snow field, the snow

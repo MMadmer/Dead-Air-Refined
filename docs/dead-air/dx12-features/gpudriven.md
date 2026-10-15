@@ -687,7 +687,7 @@ defaults), `forced1` (`r__gpu_driven 1`, `r__grass_mesh 1`), `auto2` (both -1); 
 | `src/Layers/xrRenderPC_R4/da_offload.h/.cpp` (new, 3.13) | the auto choice of `r__gpu_driven`/`r__grass_mesh`: frame timing from the engine's markers, `OwnFrameLimit` and the sync point's wait (`D3DXRenderBase.cpp`, `r2_R_render.cpp`), the decision, `r__offload_*` |
 | `src/Layers/xrRender/r__dsgraph_structure.h`, `src/Layers/xrRender_R2/r2_R_lights.cpp` (3.13) | `o.local_light`, set by `calc_lights`: `da_gpu_trees_view_begin` answers `cpu` |
 
-New engine files start with the XFined-Ray/MIT header.
+New engine files start with the Grizzly/MIT header.
 
 ## 5. Data and resources
 

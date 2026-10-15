@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Tileable bark texture sets of the procedural shrubs (docs/dead-air/SHRUBS.md, tools/shrubs/make_shrubs.py).
 

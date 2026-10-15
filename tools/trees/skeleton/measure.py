@@ -1,4 +1,4 @@
-# Copyright (c) 2026 XFined-Ray
+# Copyright (c) 2026 Grizzly
 # Released under the MIT licence, see License.txt
 """Stage 3b: the refit measured against the stock mesh, refinement, patches and per-ring errors."""
 import collections

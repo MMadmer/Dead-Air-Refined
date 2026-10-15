@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Layer scenarios of the `infra` lane (docs/dead-air/dx12-features/infra.md 9.1). Scenarios() appends

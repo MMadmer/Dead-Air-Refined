@@ -107,7 +107,7 @@ u32 GetATIGpuNum()
         /*.SDKVersion     =*/ D3D11_SDK_VERSION,
     };
 
-    AGSDX11ExtensionParams extensionParams{ L"XFined-Ray", L"XFined-Ray Engine", 1602, 1602 };
+    AGSDX11ExtensionParams extensionParams{ L"Grizzly", L"Grizzly Engine", 1602, 1602 };
     extensionParams.crossfireMode = AGS_CROSSFIRE_MODE_EXPLICIT_AFR; // don't mess drivers
 
     AGSDX11ReturnedParams returnedParams{};

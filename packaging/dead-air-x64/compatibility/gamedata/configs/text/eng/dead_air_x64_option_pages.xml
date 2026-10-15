@@ -220,7 +220,7 @@
 	<string id="kb_console_hint">
 		<text>Open the console.</text>
 	</string>
-	<!-- The game's own captions on the video page have no English text: English only. The engine's own strings (xfined-ray.xml) give the rest. -->
+	<!-- The game's own captions on the video page have no English text: English only. The engine's own strings (grizzly.xml) give the rest. -->
 	<string id="ui_mm_resolution">
 		<text>Resolution</text>
 	</string>

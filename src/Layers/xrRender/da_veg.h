@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The vegetation core (docs/dead-air/TREES.md, SHRUBS.md): one module for the procedural shrubs (da_shrubs.cpp) and

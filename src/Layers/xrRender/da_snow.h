@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Volumetric seasonal snow (docs/dead-air/SNOW.md): the level fields on the GPU, the trail maps stamped by

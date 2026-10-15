@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Deformer stamps into a trail map (da_snow.cpp; RotTR packing): one group per stamp (feet, bodies,

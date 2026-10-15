@@ -1,8 +1,9 @@
 # Writes configs\ui\talk.xml and talk_character.xml (4:3) and their _16 twins (16:9) of the compatibility overlay:
 # the dialog window (CUITalkDialogWnd) in the look of the inventory, the trade and the carcass - one panel, the
 # partner's card on top as the trade shows it, the conversation and the player's phrases in insets, the trade
-# button under them. Lengths are screen units, as in actor_menu_layout.py: 768 to the screen's height, x squeezed
-# by 0.75 into a 16:9 file.
+# button under them, all of it see-through as the stock window was, so the partner stays in sight behind it (the
+# talk_* looks of ui_theme.xml). Lengths are screen units, as in actor_menu_layout.py: 768 to the screen's height,
+# x squeezed by 0.75 into a 16:9 file.
 #
 # The panel is laid out in the middle of the screen; dar_dialog_position moves the whole window to the left or
 # the right edge at show time (CUITalkDialogWnd::Show), so a mod's own talk.xml moves the same way.
@@ -61,9 +62,9 @@ class Layout:
         w('     to the left or the right edge of the screen. -->')
         w('<w>')
         w('    <main x="0" y="0" width="1024" height="768">')
-        w('        <auto_static %s shape="shadow"/>' % self.rect(self.x0 - 6, self.y0 - 4, self.W + 12, self.H + 12))
-        w('        <auto_static %s shape="panel"/>' % self.rect(self.x0, self.y0, self.W, self.H))
-        w('        <auto_static %s shape="card"/>' % self.rect(L, card_y, self.inner, self.card_h))
+        # see-through like the stock window (the talk_* looks of ui_theme.xml): the partner stays in sight behind it
+        w('        <auto_static %s shape="talk_panel"/>' % self.rect(self.x0, self.y0, self.W, self.H))
+        w('        <auto_static %s shape="talk_card"/>' % self.rect(L, card_y, self.inner, self.card_h))
         # the portrait's frame, a hair outside the picture
         w('        <auto_static %s shape="portrait_frame"/>' % self.rect(
             L + self.inner - self.portrait[0] - 11, card_y + 11, self.portrait[0] + 2, self.portrait[1] + 2))
@@ -72,8 +73,8 @@ class Layout:
         # the partner: CUICharacterInfo of talk_character.xml over the card
         w('    <left_character_icon %s/>' % self.rect(L, card_y, self.inner, self.card_h))
         w()
-        w('    <frame_top %s shape="inset"/>' % self.rect(L, answers_y, self.inner, self.answers_h))
-        w('    <frame_bottom %s shape="inset"/>' % self.rect(L, questions_y, self.inner, self.questions_h))
+        w('    <frame_top %s shape="talk_inset"/>' % self.rect(L, answers_y, self.inner, self.answers_h))
+        w('    <frame_bottom %s shape="talk_inset"/>' % self.rect(L, questions_y, self.inner, self.questions_h))
         w('    <!-- relative to their frames -->')
         w('    <answers_list %s always_show_scroll="0" scroll_profile="thin" vert_interval="2"/>' % self.rect(
             self.list_pad, self.list_pad, list_w, self.answers_h - 2 * self.list_pad))

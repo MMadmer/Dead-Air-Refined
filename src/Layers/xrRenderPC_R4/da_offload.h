@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // The automatic choice of the GPU offloads (docs/dead-air/dx12-features/gpudriven.md 3.13): the

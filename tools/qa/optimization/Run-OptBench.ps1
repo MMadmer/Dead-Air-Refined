@@ -59,7 +59,7 @@ Set-Content -LiteralPath (Join-Path $Rig "gamedata\scripts\qa_optbench.script") 
 
 foreach ($pair in $parked) { Move-Item -LiteralPath $pair[0] -Destination $pair[1] -Force }
 
-$log = Join-Path $Rig "appdata\logs\xfined-ray_admin.log"
+$log = Join-Path $Rig "appdata\logs\grizzly_admin.log"
 $resultRoot = Join-Path $PSScriptRoot "results"
 New-Item -ItemType Directory -Force -Path $resultRoot | Out-Null
 $dest = Join-Path $resultRoot "$Label.txt"

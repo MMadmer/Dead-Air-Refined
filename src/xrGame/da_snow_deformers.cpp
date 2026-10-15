@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Everything that presses the snow (docs/dead-air/WINTER.md), as stamps for the renderer's trail maps

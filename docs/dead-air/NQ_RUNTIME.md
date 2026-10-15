@@ -1029,7 +1029,7 @@ mounted none of it runs.
 | `xms.dialog_unregister` | `(dialog_id)` | Removes it. |
 | `xms.dialog_invalidate` | `(dialog_id) → bool` | Drops the cached phrase graph so the next conversation rebuilds it. **Returns false while a talk window is open** (the open dialog holds pointers into that graph); the runtime retries on `actor_on_leave_dialog`. |
 | `xms.save_data` / `xms.load_data` | `("xms.nq", blob)` | The core pseudo-namespace, resolved before any module id. |
-| `xms.patrol_point` | `(name, x, y, z) → bool` | **XFined-Ray.** Registers the one-point runtime patrol path `name` at the navmesh cell nearest to the position, or moves it there when it exists already. `name` must start with `xms_rt_`; a path the level shipped is never touched. `false` without a level graph, or when no walkable cell lies within 15 m. See section 15.4. |
+| `xms.patrol_point` | `(name, x, y, z) → bool` | **Grizzly.** Registers the one-point runtime patrol path `name` at the navmesh cell nearest to the position, or moves it there when it exists already. `name` must start with `xms_rt_`; a path the level shipped is never touched. `false` without a level graph, or when no walkable cell lies within 15 m. See section 15.4. |
 
 ### 12.2 The `dialogs_for` hook
 

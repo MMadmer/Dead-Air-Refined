@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Clears a rectangle of a toroidal R32_UINT map (world texel modulo its size): the strips the near

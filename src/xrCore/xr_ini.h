@@ -13,10 +13,10 @@
 #include "xrCommon/xr_hash_map.h"
 #include "xrCommon/xr_vector.h"
 
-// The engine settings file, and the name it had while the engine was OpenXRay: an
-// installation or an addon that still ships the old one is read from it.
-constexpr pcstr XFINEDRAY_INI_FILE = "xfined-ray.ltx";
-constexpr pcstr XFINEDRAY_INI_FILE_LEGACY = "openxray.ltx";
+// The engine settings file, and the names it had before (as XFined-Ray, as OpenXRay): an installation or an
+// addon that still ships an old one is read from it.
+constexpr pcstr GRIZZLY_INI_FILE = "grizzly.ltx";
+constexpr pcstr GRIZZLY_INI_FILE_LEGACY[] = { "xfined-ray.ltx", "openxray.ltx" };
 
 // refs
 class CInifile;
@@ -327,6 +327,6 @@ public:
 // Main configuration file
 extern XRCORE_API CInifile const* pSettings;
 extern XRCORE_API CInifile const* pSettingsAuth;
-extern XRCORE_API CInifile const* pSettingsXFinedRay;
+extern XRCORE_API CInifile const* pSettingsGrizzly;
 
 #endif //__XR_INI_H__

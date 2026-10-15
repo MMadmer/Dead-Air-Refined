@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Procedural shrubs (docs/dead-air/SHRUBS.md): the shrubs' population of the vegetation core (da_veg.cpp).

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // API scenarios: queries, staging maps, copies, dynamic and updated textures, the D3D11 hazard

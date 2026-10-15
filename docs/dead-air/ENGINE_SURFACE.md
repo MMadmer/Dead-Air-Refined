@@ -1,4 +1,4 @@
-# What is XFined-Ray's and what is still OpenXRay's
+# What is Grizzly's and what is still OpenXRay's
 
 This file answers two questions with the same measurement.
 

@@ -655,7 +655,7 @@ shots against two references of the same run (noise floor), performance only at 
   (tile 8: 16x16 px, tile 16: 32x32 px; tile 32: one tile), a thread 2x2 or 4x4 px; the depth apron
   comes in by `GatherRed` (a quarter of the loads); the motion vector and the previous rate are loaded
   before the first barrier, so a group waits on memory twice (depth, contrast); per-tile reduction by
-  wave ops under XFR_WAVE_LANES (a device with wave ops, not under `-dxc_plain`; one lane per tile and
+  wave ops under GRIZZLY_WAVE_LANES (a device with wave ops, not under `-dxc_plain`; one lane per tile and
   wave contributes), groupshared atomics otherwise. The
   luma CS covers 32x32 px per group, a thread 4x4 px, and sums its 8x8 blocks from a per-thread
   groupshared array instead of atomics.
@@ -784,9 +784,9 @@ gone).
   qa_pedro (C30).
 
 Fix phase (review findings, code + build only, no runs):
-- DXC-R1: the rate CS's wave reduction is guarded by `XFR_WAVE_LANES`, not `XFR_DXC` (dxc.md 3.3 step
+- DXC-R1: the rate CS's wave reduction is guarded by `GRIZZLY_WAVE_LANES`, not `GRIZZLY_DXC` (dxc.md 3.3 step
   5): a device without wave ops or `-dxc_plain` gets the groupshared-atomics path, whose DXIL needs no
-  wave feature. This machine defines `XFR_WAVE_LANES`, so its DXIL is unchanged.
+  wave feature. This machine defines `GRIZZLY_WAVE_LANES`, so its DXIL is unchanged.
 - VRS-1: `r__vrs_log` maps the staging slot it is about to overwrite (copied three frames back, which
   the layer's EndFrame has already waited for) before the frame's copy, so the line is never dropped by
   `DO_NOT_WAIT`; it prints the mode of the frame the histogram belongs to.

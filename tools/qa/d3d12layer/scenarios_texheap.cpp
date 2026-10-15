@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Layer scenarios of the `ds` lane (placed texture heaps: dstorage.md 3.6, 9). Scenarios() appends this list.

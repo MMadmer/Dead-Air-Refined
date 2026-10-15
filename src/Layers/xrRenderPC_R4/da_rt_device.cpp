@@ -1,4 +1,4 @@
-// Copyright (c) 2026 XFined-Ray
+// Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
 // Ray tracing device part (docs/dead-air/dx12-features/dxr.md 3.2, PLAN.md C8): DXR availability, the
