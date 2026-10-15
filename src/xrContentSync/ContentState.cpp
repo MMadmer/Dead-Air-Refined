@@ -94,29 +94,6 @@ std::uint64_t FileTime(const std::filesystem::path& path)
         attributes.ftLastWriteTime.dwLowDateTime;
 }
 
-std::string LoadContentId(const std::filesystem::path& path)
-{
-    std::ifstream input(path, std::ios::binary);
-    if (!input)
-        return {};
-
-    std::string line;
-    if (!std::getline(input, line))
-        return {};
-    strip_eol(line);
-    if (line != std::string("schema=") + ContentManifest::SchemaState)
-        return {};
-
-    if (!std::getline(input, line))
-        return {};
-    strip_eol(line);
-
-    constexpr std::string_view prefix = "content-id=";
-    if (line.compare(0, prefix.size(), prefix) != 0)
-        return {};
-    return line.substr(prefix.size());
-}
-
 Cache LoadCache(const std::filesystem::path& path)
 {
     Cache cache;

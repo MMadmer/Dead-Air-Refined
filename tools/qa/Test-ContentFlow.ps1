@@ -1,9 +1,9 @@
 # Install-time content flow, against a real binary and a real server.
 #
 # Everything here runs the shipped DeadAirUpdater.exe in its content modes against a scratch
-# installation and the asset mock, because the interesting failures are not in any one function
-# - they are in what a resumed part file, a dropped connection or a server that ignores Range
-# leaves behind for the next stage to find.
+# installation and the release mock (tools\qa\release-mock, Go), because the interesting failures
+# are not in any one function - they are in what a resumed part file, a dropped connection or a
+# server that ignores Range leaves behind for the next stage to find.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Updater,
@@ -19,8 +19,18 @@ $ErrorActionPreference = "Stop"
 if (-not $WorkRoot) {
     $WorkRoot = Join-Path ([IO.Path]::GetTempPath()) "dar-content-flow"
 }
-$mockScript = Join-Path $PSScriptRoot "Start-ContentAssetMock.ps1"
 $failures = [Collections.Generic.List[string]]::new()
+
+# The mock is built from source next to the work root, never kept as a binary in the repository.
+$toolRoot = "$WorkRoot-tools"
+New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null
+$mockExe = Join-Path $toolRoot "release-mock.exe"
+Push-Location (Join-Path $PSScriptRoot "release-mock")
+try {
+    & go build -o $mockExe .
+    if ($LASTEXITCODE -ne 0) { throw "the release mock did not build" }
+}
+finally { Pop-Location }
 
 function New-Installation {
     Remove-Item -LiteralPath $WorkRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -30,24 +40,18 @@ function New-Installation {
 }
 
 function Start-Mock {
-    param([hashtable]$Options = @{}, [string]$LogPath)
-    if (-not $LogPath) { $LogPath = Join-Path $WorkRoot "mock.log" }
-    $errorPath = "$LogPath.err"
+    param([hashtable]$Options = @{}, [string]$LogPath, [string]$Content = $AssetRoot)
+    if (-not $LogPath) { $LogPath = Join-Path $toolRoot "mock.jsonl" }
+    $arguments = @("-listen", "127.0.0.1:$Port", "-content", "`"$Content`"", "-log", "`"$LogPath`"", "-timeout", "10m")
+    if ($Options.NoRange) { $arguments += "-norange" }
+    if ($Options.DropAfter) { $arguments += @("-drop-after", $Options.DropAfter) }
+    if ($Options.Throttle) { $arguments += @("-throttle", $Options.Throttle) }
+    if ($Options.ExpireAfter) { $arguments += @("-expire-after", $Options.ExpireAfter) }
+    $process = Start-Process -FilePath $mockExe -ArgumentList $arguments -PassThru -WindowStyle Hidden
 
-    # Quote every path: Start-Process does not quote array elements, and both the script and the
-    # asset root normally sit under "Dead Air".
-    $arguments = @("-NoProfile", "-File", "`"$mockScript`"", "-AssetRoot", "`"$AssetRoot`"",
-        "-Port", $Port, "-TimeoutSeconds", 300)
-    foreach ($key in $Options.Keys) {
-        $arguments += "-$key"
-        if ($Options[$key] -isnot [switch] -and $Options[$key] -ne $true) { $arguments += $Options[$key] }
-    }
-    $process = Start-Process -FilePath "pwsh" -ArgumentList $arguments -PassThru -NoNewWindow `
-        -RedirectStandardOutput $LogPath -RedirectStandardError $errorPath
-
-    # Poll the port rather than sleeping. pwsh takes an unpredictable second or two to start, and
-    # a fixed wait produces failures that look like downloader bugs and are not.
-    for ($attempt = 0; $attempt -lt 150; $attempt++) {
+    # Poll the port rather than sleeping: a fixed wait produces failures that look like
+    # downloader bugs and are not.
+    for ($attempt = 0; $attempt -lt 100; $attempt++) {
         if ($process.HasExited) { break }
         try {
             $probe = [Net.Sockets.TcpClient]::new()
@@ -55,27 +59,14 @@ function Start-Mock {
             $probe.Close()
             return $process
         }
-        catch { Start-Sleep -Milliseconds 100 }
+        catch { Start-Sleep -Milliseconds 50 }
     }
-    Get-Content -LiteralPath $LogPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  mock: $_" }
-    Get-Content -LiteralPath $errorPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  mock: $_" }
-    throw "the asset mock did not start listening on port $Port"
+    throw "the release mock did not start listening on port $Port"
 }
 
 function Stop-Mock {
     param($Process)
-    if ($Process) { $Process | Stop-Process -Force -ErrorAction SilentlyContinue }
-    # The port has to be free before the next case starts, or its poll succeeds against a
-    # socket that is already closing.
-    for ($attempt = 0; $attempt -lt 100; $attempt++) {
-        try {
-            $probe = [Net.Sockets.TcpClient]::new()
-            $probe.Connect("127.0.0.1", $Port)
-            $probe.Close()
-            Start-Sleep -Milliseconds 100
-        }
-        catch { return }
-    }
+    if ($Process) { $Process | Stop-Process -Force -ErrorAction SilentlyContinue; $Process.WaitForExit(5000) | Out-Null }
 }
 
 function Invoke-Updater {
@@ -95,6 +86,17 @@ function Get-Result {
     return (Get-Content -LiteralPath $path -Raw)
 }
 
+# What the mock actually sent for one asset, over every request.
+function Get-Served {
+    param([string]$LogPath, [string]$Name)
+    $total = 0L
+    foreach ($line in Get-Content -LiteralPath $LogPath -ErrorAction SilentlyContinue) {
+        $entry = $line | ConvertFrom-Json
+        if ($entry.path.EndsWith("/$Name") -and $entry.status -in 200, 206) { $total += [long]$entry.bytes }
+    }
+    return $total
+}
+
 function Assert-Case {
     param([string]$Name, [bool]$Condition, [string]$Detail = "")
     if ($Condition) {
@@ -106,15 +108,8 @@ function Assert-Case {
     }
 }
 
-# A mock left behind by an interrupted run holds the port and every case then fails as though
-# the downloader were at fault.
-Get-Process pwsh -ErrorAction SilentlyContinue | ForEach-Object {
-    $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)" -ErrorAction SilentlyContinue).CommandLine
-    if ($commandLine -like "*Start-ContentAssetMock*") { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
-}
-
 $env:DAR_QA_CONTENT_BASE = "http://127.0.0.1:$Port"
-$expected = Get-ChildItem -LiteralPath $AssetRoot -Filter "xtra_dead_air_x64_content_*"
+$expected = Get-ChildItem -LiteralPath $AssetRoot -Filter "xtra_dead_air_x64_content_*.xdb0"
 
 Write-Host "clean fetch and commit"
 New-Installation
@@ -140,7 +135,7 @@ finally { Stop-Mock $mock }
 Write-Host "a server that keeps dropping is walked through by resume"
 New-Installation
 $largest = $expected | Sort-Object Length -Descending | Select-Object -First 1
-$mockLog = Join-Path $WorkRoot "drop-mock.log"
+$mockLog = Join-Path $toolRoot "drop-mock.jsonl"
 $mock = Start-Mock @{ DropAfter = [long]($largest.Length / 4) } $mockLog
 try {
     $code = Invoke-Updater @("--content-fetch", "--game-dir", $WorkRoot)
@@ -151,8 +146,9 @@ finally { Stop-Mock $mock }
 # The proof that it resumed rather than restarted: the server saw Range requests from a
 # non-zero offset. Without that the case would pass on a downloader that simply retried from
 # the beginning every time.
-$resumed = (Select-String -LiteralPath $mockLog -Pattern 'range=[1-9]' -ErrorAction SilentlyContinue)
-Assert-Case "it resumed instead of restarting" ($resumed -and $resumed.Count -gt 0)
+$resumed = @(Get-Content -LiteralPath $mockLog -ErrorAction SilentlyContinue |
+    Where-Object { ($_ | ConvertFrom-Json).range -match '^bytes=[1-9]' })
+Assert-Case "it resumed instead of restarting" ($resumed.Count -gt 0)
 
 $mock = Start-Mock
 try {
@@ -189,125 +185,148 @@ try {
 }
 finally { Stop-Mock $mock }
 
-Write-Host "a changed bundle arrives as a delta, not as a whole bundle"
-# Two revisions of one bundle, a published delta between them, and an installation sitting on
-# the older one. The point of the case is not that the bytes come out right - the applier is
-# tested directly elsewhere - it is that the client CHOOSES the delta: the resolver has to find
-# a base among the files it is about to call obsolete, and the downloader has to fetch and apply
-# the chain instead of the bundle.
-$deltaTool = Join-Path $PSScriptRoot "..\..\bin\x64\Release\DarDelta.exe"
-if (-not (Test-Path -LiteralPath $deltaTool -PathType Leaf)) {
+# ---- rebuilds from chunk maps -------------------------------------------------------------------
+# A second revision of the largest bundle with a small edit in the middle, its chunk map, and an
+# installation sitting on the first revision. The client has to choose the rebuild - find the
+# revision it holds, fetch the map, ask only for the changed runs - from every place a previous
+# revision can be, and fall back to the whole bundle whenever the rebuild cannot work.
+$chunkTool = Join-Path $PSScriptRoot "..\..\bin\x64\Release\DarDelta.exe"
+if (-not (Test-Path -LiteralPath $chunkTool -PathType Leaf)) {
     # A case that cannot run is not a case that passed. This suite is a release gate, and a run
-    # that quietly drops the only delta coverage and still prints "all cases passed" is worse
-    # than one that fails: it is a green light for something nobody looked at.
-    $failures.Add("the delta case did not run: DarDelta.exe is not built (build it with tools\build\build_x64.ps1)")
-    Write-Host "  FAIL the delta case did not run: DarDelta.exe is not built" -ForegroundColor Red
+    # that quietly drops the rebuild coverage and still prints "all cases passed" is worse than
+    # one that fails: it is a green light for something nobody looked at.
+    $failures.Add("the rebuild cases did not run: DarDelta.exe is not built (build it with tools\build\build_x64.ps1)")
+    Write-Host "  FAIL the rebuild cases did not run: DarDelta.exe is not built" -ForegroundColor Red
 }
 else {
     # Beside the work root, not inside it: New-Installation wipes the work root, and the fixture
     # has to survive being installed onto.
-    $deltaRoot = "$WorkRoot-delta"
-    if (Test-Path -LiteralPath $deltaRoot) { Remove-Item -LiteralPath $deltaRoot -Recurse -Force }
-    New-Item -ItemType Directory -Force -Path $deltaRoot | Out-Null
-    Copy-Item (Join-Path $AssetRoot "*") $deltaRoot -Force
+    $v2Root = "$WorkRoot-v2"
+    if (Test-Path -LiteralPath $v2Root) { Remove-Item -LiteralPath $v2Root -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $v2Root | Out-Null
+    Copy-Item (Join-Path $AssetRoot "xtra_dead_air_x64_content_*.xdb0") $v2Root -Force
 
-    # Pick the biggest bundle, since a delta is only taken when it is decisively smaller.
-    $victim = Get-ChildItem $deltaRoot -Filter "xtra_dead_air_x64_content_*" |
-        Sort-Object Length -Descending | Select-Object -First 1
+    $victim = Get-ChildItem $v2Root -Filter "xtra_dead_air_x64_content_*.xdb0" | Sort-Object Length -Descending | Select-Object -First 1
     $slot = [regex]::Match($victim.Name, '^xtra_dead_air_x64_content_(.+)_[0-9a-f]{16}\.xdb0$').Groups[1].Value
-
-    # A small edit, which is what a delta exists for.
-    $bytes = [IO.File]::ReadAllBytes($victim.FullName)
-    $middle = [int]($bytes.Length / 2)
-    for ($i = 0; $i -lt 4096; $i++) { $bytes[$middle + $i] = [byte]((($i * 29) + 7) % 256) }
-    $newBytes = $bytes
-    $newHash = [BitConverter]::ToString(
-        [Security.Cryptography.SHA256]::HashData($newBytes)).Replace("-", "").ToLower()
-    $newName = "xtra_dead_air_x64_content_${slot}_" + $newHash.Substring(0, 16) + ".xdb0"
-    [IO.File]::WriteAllBytes((Join-Path $deltaRoot $newName), $newBytes)
-
     $oldHash = (Get-FileHash -Algorithm SHA256 $victim.FullName).Hash.ToLower()
-    $patchName = "content_${slot}_" + $oldHash.Substring(0, 16) + "_to_" + $newHash.Substring(0, 16) + ".darpatch"
-    & $deltaTool $victim.FullName (Join-Path $deltaRoot $newName) (Join-Path $deltaRoot $patchName) | Out-Null
-    $patch = Get-Item (Join-Path $deltaRoot $patchName)
 
-    # The v2 manifest: the same bundles with one replaced, plus the edge between the two.
-    $lines = [Collections.Generic.List[string]]::new()
-    $bundleRows = [Collections.Generic.List[string]]::new()
+    # Two small edits far apart, which is what a rebuild exists for - and two runs to fetch, so the
+    # storage URL of the first is reused for the second.
+    $bytes = [IO.File]::ReadAllBytes($victim.FullName)
+    foreach ($at in [int]($bytes.Length / 4), [int]($bytes.Length * 3 / 4)) {
+        for ($i = 0; $i -lt 4096; $i++) { $bytes[$at + $i] = [byte]((($i * 29) + 7) % 256) }
+    }
+    $newHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLower()
+    $newName = "xtra_dead_air_x64_content_${slot}_" + $newHash.Substring(0, 16) + ".xdb0"
+    [IO.File]::WriteAllBytes((Join-Path $v2Root $newName), $bytes)
+    Remove-Item -LiteralPath $victim.FullName -Force
+    $newSize = $bytes.Length
+    & $chunkTool --chunk-map (Join-Path $v2Root $newName) (Join-Path $v2Root "$newName.chunks") | Out-Null
+    Assert-Case "the chunk map is cut" ($LASTEXITCODE -eq 0 -and (Test-Path (Join-Path $v2Root "$newName.chunks")))
+
+    # The v2 manifest: the same bundles with one replaced.
+    $header = [Collections.Generic.List[string]]::new()
+    $rows = [Collections.Generic.List[string]]::new()
     $inBundles = $false
     foreach ($line in [IO.File]::ReadAllLines($Manifest)) {
         if ($line -eq "[bundles]") { $inBundles = $true; continue }
         if ($line -eq "[deltas]") { $inBundles = $false; continue }
         if (-not $inBundles) {
-            if ($line.StartsWith("content-id=")) { continue }
-            $lines.Add($line)
+            if ($line -and -not $line.StartsWith("content-id=")) { $header.Add($line) }
             continue
         }
         if (-not $line.Trim()) { continue }
         $f = $line -split "`t"
-        if ($f[2] -eq $victim.Name) {
-            $bundleRows.Add($newHash + "`t" + $newBytes.Length + "`t" + $newName + "`t" + $f[3])
-        }
-        else { $bundleRows.Add($line) }
+        if ($f[2] -eq $victim.Name) { $rows.Add($newHash + "`t" + $newSize + "`t" + $newName + "`t" + $f[3]) }
+        else { $rows.Add($line) }
     }
-
-    $ordered = $bundleRows | Sort-Object { ($_ -split "`t")[2] }
+    $ordered = [Linq.Enumerable]::ToArray([Linq.Enumerable]::OrderBy([string[]]$rows,
+        [Func[string, string]] { param($r) ($r -split "`t")[2] }, [StringComparer]::Ordinal))
     $idInput = [Text.StringBuilder]::new()
-    foreach ($row in $ordered) {
-        $f = $row -split "`t"
-        [void]$idInput.Append($f[2]).Append("`n").Append($f[0]).Append("`n")
-    }
-    $contentId = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData(
-        [Text.Encoding]::UTF8.GetBytes($idInput.ToString()))).Replace("-", "").ToLower()
-
+    foreach ($row in $ordered) { $f = $row -split "`t"; [void]$idInput.Append($f[2]).Append("`n").Append($f[0]).Append("`n") }
+    $contentId = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+        [Text.Encoding]::UTF8.GetBytes($idInput.ToString()))).ToLower()
     $out = [Collections.Generic.List[string]]::new()
-    $out.Add($lines[0])
-    $out.Add($lines[1])
-    $out.Add("content-id=$contentId")
-    $out.Add($lines[2])
+    $out.Add($header[0]); $out.Add($header[1]); $out.Add("content-id=$contentId"); $out.Add($header[2])
     $out.Add("[bundles]")
     foreach ($row in $ordered) { $out.Add($row) }
     $out.Add("[deltas]")
-    $out.Add((Get-FileHash -Algorithm SHA256 $patch.FullName).Hash.ToLower() + "`t" + $patch.Length +
-        "`t" + $patchName + "`t" + "content-1.4.0" + "`t" + $victim.Name + "`t" + $oldHash +
-        "`t" + $victim.Length + "`t" + $newHash)
-    $manifestV2 = Join-Path $deltaRoot "content-manifest-v2.txt"
+    $manifestV2 = Join-Path $v2Root "content-manifest-v2.txt"
     [IO.File]::WriteAllText($manifestV2, [string]::Join("`n", $out) + "`n", [Text.UTF8Encoding]::new($false))
 
-    # Install v1, then hand the installation the v2 manifest.
-    New-Installation
-    $mock = Start-Mock
-    try {
-        Invoke-Updater @("--content-fetch", "--game-dir", $WorkRoot) | Out-Null
-        Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot) | Out-Null
+    # Installs v1 from the original assets, then hands the installation the v2 manifest.
+    function Install-V1 {
+        New-Installation
+        $mock = Start-Mock
+        try {
+            Invoke-Updater @("--content-fetch", "--game-dir", $WorkRoot) | Out-Null
+            Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot) | Out-Null
+        }
+        finally { Stop-Mock $mock }
+        Copy-Item -LiteralPath $manifestV2 -Destination (Join-Path $WorkRoot ".dead-air-x64\content-manifest.txt") -Force
     }
-    finally { Stop-Mock $mock }
 
-    Copy-Item -LiteralPath $manifestV2 -Destination (Join-Path $WorkRoot ".dead-air-x64\content-manifest.txt") -Force
-    # The mock has to serve the v2 assets, so point it at the directory that holds them.
-    $deltaLog = Join-Path $deltaRoot "delta-mock.log"
-    $savedRoot = $AssetRoot
-    $AssetRoot = $deltaRoot
-    $mock = Start-Mock @{} $deltaLog
-    try {
-        $code = Invoke-Updater @("--content-fetch", "--game-dir", $WorkRoot)
-        Assert-Case "the upgrade fetch succeeds" ($code -eq 0) "exit $code, $(Get-Result)"
-
-        $served = Get-Content -LiteralPath $deltaLog -ErrorAction SilentlyContinue
-        $tookDelta = $served | Where-Object { $_ -like "*$patchName*" }
-        $tookBundle = $served | Where-Object { $_ -like "*$newName*" }
-        Assert-Case "it fetched the delta" ([bool]$tookDelta)
-        Assert-Case "it did not fetch the whole bundle" (-not $tookBundle)
-
-        $code = Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot)
-        Assert-Case "the rebuilt bundle commits" ($code -eq 0) "exit $code, $(Get-Result)"
-        Assert-Case "the rebuilt bundle is installed" `
-            (Test-Path (Join-Path $WorkRoot "database\$newName"))
+    function Invoke-V2Fetch {
+        param([string]$Label, [hashtable]$Options = @{})
+        $log = Join-Path $toolRoot "$Label.jsonl"
+        $mock = Start-Mock $Options $log $v2Root
+        try { $code = Invoke-Updater @("--content-fetch", "--game-dir", $WorkRoot) }
+        finally { Stop-Mock $mock }
+        return [pscustomobject]@{ Code = $code; Served = (Get-Served $log $newName); Map = (Get-Served $log "$newName.chunks"); Log = $log }
     }
-    finally {
-        Stop-Mock $mock
-        $AssetRoot = $savedRoot
-    }
+
+    Write-Host "a changed bundle is rebuilt from the revision in database\, not downloaded whole"
+    Install-V1
+    $run = Invoke-V2Fetch "rebuild"
+    Assert-Case "the rebuild fetch succeeds" ($run.Code -eq 0) "exit $($run.Code), $(Get-Result)"
+    Assert-Case "it read the chunk map" ($run.Map -gt 0)
+    Assert-Case "it fetched a small part of the bundle" ($run.Served -gt 0 -and $run.Served -lt $newSize / 4) "$($run.Served) of $newSize bytes"
+    $code = Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot)
+    Assert-Case "the rebuilt bundle commits" ($code -eq 0) "exit $code, $(Get-Result)"
+    Assert-Case "the rebuilt bundle is installed" (Test-Path (Join-Path $WorkRoot "database\$newName"))
+    Assert-Case "the old revision is retired into the cache" ((-not (Test-Path (Join-Path $WorkRoot "database\$($victim.Name)"))) -and
+        (Test-Path (Join-Path $WorkRoot ".dead-air-x64\content-cache\$oldHash")))
+    Write-Host "    fetched $($run.Served) of $newSize bytes"
+
+    Write-Host "a revision an older client retired into the cache is rebuilt from"
+    Install-V1
+    # What a 1.4-1.5 commit leaves after an update whose content did not arrive: the old revision
+    # renamed into the cache under its hash, its name only in content-state.txt.
+    Move-Item -LiteralPath (Join-Path $WorkRoot "database\$($victim.Name)") `
+        -Destination (Join-Path $WorkRoot ".dead-air-x64\content-cache\$oldHash") -Force
+    $run = Invoke-V2Fetch "retired"
+    Assert-Case "the fetch succeeds" ($run.Code -eq 0) "exit $($run.Code), $(Get-Result)"
+    Assert-Case "it rebuilt from the cache" ($run.Served -gt 0 -and $run.Served -lt $newSize / 4) "$($run.Served) of $newSize bytes"
+    $code = Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot)
+    Assert-Case "and commits" ($code -eq 0) "exit $code, $(Get-Result)"
+
+    Write-Host "a rebuild walks through dropped connections"
+    Install-V1
+    $run = Invoke-V2Fetch "rebuild-drop" @{ DropAfter = 20000 }
+    Assert-Case "the dropped rebuild completes" ($run.Code -eq 0) "exit $($run.Code), $(Get-Result)"
+    Assert-Case "and still fetched a small part" ($run.Served -lt $newSize / 4) "$($run.Served) of $newSize bytes"
+
+    Write-Host "a storage URL that expires sends the next request back through the redirect"
+    Install-V1
+    $run = Invoke-V2Fetch "rebuild-expire" @{ ExpireAfter = 1 }
+    $refused = @(Get-Content -LiteralPath $run.Log | Where-Object { ($_ | ConvertFrom-Json).status -eq 403 })
+    Assert-Case "the fetch succeeds" ($run.Code -eq 0) "exit $($run.Code), $(Get-Result)"
+    Assert-Case "an expired URL was refused and the rebuild went on" ($refused.Count -gt 0 -and $run.Served -lt $newSize / 4) "$($refused.Count) refusal(s), $($run.Served) bytes"
+
+    Write-Host "a rebuild against a server that ignores Range falls back to the whole bundle"
+    Install-V1
+    $run = Invoke-V2Fetch "rebuild-norange" @{ NoRange = $true }
+    Assert-Case "the fetch still succeeds" ($run.Code -eq 0) "exit $($run.Code), $(Get-Result)"
+    $code = Invoke-Updater @("--content-commit", "--game-dir", $WorkRoot)
+    Assert-Case "and commits" ($code -eq 0) "exit $code, $(Get-Result)"
+
+    Write-Host "a bundle without a chunk map is downloaded whole"
+    Install-V1
+    Move-Item -LiteralPath (Join-Path $v2Root "$newName.chunks") -Destination "$v2Root.chunks-aside" -Force
+    try { $run = Invoke-V2Fetch "nomap" }
+    finally { Move-Item -LiteralPath "$v2Root.chunks-aside" -Destination (Join-Path $v2Root "$newName.chunks") -Force }
+    Assert-Case "the fetch succeeds" ($run.Code -eq 0) "exit $($run.Code), $(Get-Result)"
+    Assert-Case "it fetched the whole bundle" ($run.Served -ge $newSize) "$($run.Served) of $newSize bytes"
 }
 
 Write-Host ""

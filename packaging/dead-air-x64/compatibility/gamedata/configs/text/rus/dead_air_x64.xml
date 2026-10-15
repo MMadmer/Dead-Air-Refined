@@ -148,25 +148,61 @@
         <text>Скорость курсора в меню и инвентаре. 1.00 - как у системного курсора.</text>
     </string>
     <string id="st_content_caption">
-        <text>Контент мода неполный</text>
+        <text>Требуется загрузка файлов</text>
+    </string>
+    <string id="st_content_caption_checking">
+        <text>Проверка файлов</text>
+    </string>
+    <string id="st_content_caption_repaired">
+        <text>Загрузка завершена</text>
+    </string>
+    <string id="st_content_caption_recovery">
+        <text>Требуется переустановка мода</text>
     </string>
     <string id="st_content_message">
-        <text>Часть игрового контента отсутствует или повреждена, поэтому запускать игру нельзя.\nПереустановите мод или дождитесь встроенного восстановления контента.\n\nПодробности ниже и в файле журнала.</text>
+        <text>Для запуска игры необходимо загрузить недостающие файлы мода.</text>
     </string>
-    <string id="st_content_message_recovery">
-        <text>Установка не может сказать, какой контент ей нужен: файл манифеста отсутствует\nили повреждён. Переустановите мод поверх текущей папки.\n\nПодробности ниже и в файле журнала.</text>
+    <string id="st_content_message_checking">
+        <text>Идёт проверка файлов мода. Это может занять несколько минут.</text>
     </string>
     <string id="st_content_message_repairing">
-        <text>Идёт восстановление контента. Не закрывайте игру.\n\nПосле завершения игру нужно будет перезапустить.</text>
+        <text>Идёт загрузка недостающих файлов. Если выйти из игры, загруженная часть сохранится и загрузку можно будет продолжить при следующем запуске.</text>
     </string>
     <string id="st_content_message_repaired">
-        <text>Контент восстановлен.\n\nФайловая система читает архивы один раз при запуске, поэтому перезапустите игру, чтобы загруженный контент заработал.</text>
+        <text>Недостающие файлы установлены. Для продолжения перезапустите игру.</text>
+    </string>
+    <string id="st_content_message_recovery">
+        <text>Не удалось определить состав установленного мода. Переустановите мод в ту же папку.</text>
+    </string>
+    <string id="st_content_size">
+        <text>Размер загрузки: до %.1f МБ</text>
+    </string>
+    <string id="st_content_stage_check">
+        <text>Проверка установленных файлов...</text>
+    </string>
+    <string id="st_content_stage_plan">
+        <text>Подготовка загрузки...</text>
+    </string>
+    <string id="st_content_stage_install">
+        <text>Установка файлов...</text>
+    </string>
+    <string id="st_content_fail_check">
+        <text>Не удалось проверить файлы мода. Повторите попытку.</text>
+    </string>
+    <string id="st_content_fail_space">
+        <text>Недостаточно места на диске: для загрузки и установки требуется %.1f ГБ, свободно %.1f ГБ. Освободите место и повторите попытку.</text>
+    </string>
+    <string id="st_content_fail_download">
+        <text>Не удалось загрузить файлы. Проверьте подключение к интернету и повторите попытку.</text>
+    </string>
+    <string id="st_content_fail_install">
+        <text>Не удалось установить загруженные файлы. Повторите попытку.</text>
     </string>
     <string id="st_content_repair">
-        <text>Восстановить контент</text>
+        <text>Загрузить</text>
     </string>
-    <string id="st_content_repairing">
-        <text>Восстановление...</text>
+    <string id="st_content_retry">
+        <text>Повторить</text>
     </string>
     <string id="st_content_restart">
         <text>Перезапустить игру</text>
@@ -174,32 +210,23 @@
     <string id="st_content_exit">
         <text>Выйти из игры</text>
     </string>
-    <string id="st_content_activity_verify">
-        <text>Проверка установленного контента...</text>
-    </string>
-    <string id="st_content_activity_download">
-        <text>Загрузка контента...</text>
-    </string>
-    <string id="st_content_activity_install">
-        <text>Установка контента...</text>
-    </string>
-    <string id="st_content_activity_repaired">
-        <text>Контент восстановлен. Требуется перезапуск игры.</text>
-    </string>
-    <string id="st_content_fail_verify">
-        <text>Не удалось проверить контент: %s</text>
-    </string>
-    <string id="st_content_fail_space">
-        <text>Не хватает места на диске: нужно %llu МБ, доступно %llu МБ</text>
-    </string>
-    <string id="st_content_fail_download">
-        <text>Не удалось загрузить контент: %s</text>
-    </string>
-    <string id="st_content_fail_install">
-        <text>Не удалось установить контент: %s</text>
-    </string>
     <string id="ui_mm_content_incomplete">
-        <text>Контент мода неполный: играть нельзя</text>
+        <text>Для запуска игры требуется загрузить недостающие файлы мода</text>
+    </string>
+    <string id="ui_mm_content_restart">
+        <text>Для завершения установки перезапустите игру</text>
+    </string>
+    <string id="ui_mm_content_downloading">
+        <text>Идёт загрузка недостающих файлов мода</text>
+    </string>
+    <string id="ui_mm_content_reinstall">
+        <text>Для запуска игры требуется переустановить мод</text>
+    </string>
+    <string id="st_content_fail_restart">
+        <text>Не удалось перезапустить игру. Запустите её вручную.</text>
+    </string>
+    <string id="st_content_caption_repairing">
+        <text>Загрузка файлов</text>
     </string>
     <string id="ui_mm_gtao">
         <text>GTAO</text>

@@ -49,6 +49,7 @@
 #include "ui/UIActorMenu.h"
 #include "ui/ContentService.h"
 #include "ui/ModUpdateService.h"
+#include "ui/UpdateService.h"
 #include "ui/ModCatalog.h"
 #include "ui/UIModsWnd.h"
 #include "xrCore/XMS/xms_catalog.h"
@@ -1209,6 +1210,30 @@ public:
     CCC_ContentState(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
     virtual void Execute(LPCSTR) { ContentService::LogState(); }
     virtual void Info(TInfo& I) { xr_strcpy(I, "dump the content installation state to the log"); }
+};
+
+// dar_update download | install | state: the update window's two buttons and its picture, for a
+// run with no one to click them.
+class CCC_Update : public IConsole_Command
+{
+public:
+    CCC_Update(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; }
+    virtual void Execute(LPCSTR args)
+    {
+        if (0 == xr_stricmp(args, "download"))
+            Msg("* dar_update download: %s", UpdateService::StartDownload() ? "started" : "nothing to download");
+        else if (0 == xr_stricmp(args, "install"))
+            Msg("* dar_update install: %s", UpdateService::RestartAndApply() ? "restarting" : "nothing ready to install");
+        else
+        {
+            const UpdateService::Snapshot snapshot = UpdateService::GetSnapshot();
+            Msg("* dar_update state=%u version=%s payload=%u %llu of %llu byte(s) %s", static_cast<u32>(snapshot.state),
+                snapshot.version.c_str(), static_cast<u32>(snapshot.payload),
+                static_cast<unsigned long long>(snapshot.downloadedBytes), static_cast<unsigned long long>(snapshot.totalBytes),
+                snapshot.message.c_str());
+        }
+    }
+    virtual void Info(TInfo& I) { xr_strcpy(I, "download | install | state of the offered update"); }
 };
 
 class CCC_ClearLog : public IConsole_Command
@@ -3906,6 +3931,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_ContentVerify, "dar_content_verify");
     CMD1(CCC_ContentRepair, "dar_content_repair");
     CMD1(CCC_ContentState, "dar_content_state");
+    CMD1(CCC_Update, "dar_update");
 
     CMD1(CCC_FlushLog, "flush"); // flush log
     CMD1(CCC_QaSnowShot, "qa_snow_shot");

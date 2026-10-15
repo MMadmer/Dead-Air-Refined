@@ -75,8 +75,8 @@ $updaterObject = Join-Path $launcherOutputRoot "DeadAirUpdater.obj"
 # toolset and CRT settings for no benefit.
 $contentSyncRoot = Join-Path $repositoryRoot "src\xrContentSync"
 $contentSyncSources = @(
+    "ContentChunks.cpp"
     "ContentCommit.cpp"
-    "ContentDelta.cpp"
     "ContentDownload.cpp"
     "ContentHash.cpp"
     "ContentManifest.cpp"

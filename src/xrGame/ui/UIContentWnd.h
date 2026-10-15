@@ -9,17 +9,16 @@
 
 class CUIStatic;
 class CUI3tButton;
-class CUIScrollView;
 class CUIProgressBar;
 
 // Shown when the installation is missing content it declares.
 //
-// Two ways out: repair, or quit. There is no "play anyway" - with content unmounted a level
-// load is a missing-asset crash, so offering it would only trade a clear message for an
-// unexplained one. The window lists what is actually wrong, in the same words as the log and
-// the diagnostic report, so a player can paste something useful into a bug report.
+// Two ways out: download what is missing, or quit. There is no "play anyway" - with content
+// unmounted a level load is a missing-asset crash, so offering it would only trade a clear
+// message for an unexplained one. The window says what to do and how much it costs; which
+// bundle is missing and why goes to the log and the diagnostic report, where it helps.
 //
-// A completed repair ends in a relaunch rather than resuming play: the filesystem indexes its
+// A completed download ends in a relaunch rather than resuming play: the filesystem indexes its
 // archives once, at startup, so bundles that arrive during a session are not usable in it.
 class CUIContentWnd final : public CUIDialogWnd, public CUIWndCallback
 {
@@ -47,12 +46,15 @@ private:
 
     CUIStatic* m_caption{};
     CUIStatic* m_message{};
-    CUIScrollView* m_problems{};
-    CUIStatic* m_problemsText{};
+    CUIStatic* m_size{};
     CUIStatic* m_progressText{};
     CUIProgressBar* m_progress{};
+    CUIStatic* m_error{};
     CUI3tButton* m_action{};
     CUI3tButton* m_exit{};
+    float m_exitX{};
     bool m_repairFinished{};
+    // The relaunch after a finished download could not start: the player is told to start the game.
+    bool m_relaunchFailed{};
     std::optional<ContentService::Snapshot> m_preview;
 };

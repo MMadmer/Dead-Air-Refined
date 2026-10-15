@@ -10,7 +10,6 @@
 #include "xrEngine/XR_IOConsole.h"
 #include "xrUICore/Buttons/UI3tButton.h"
 #include "xrUICore/ProgressBar/UIProgressBar.h"
-#include "xrUICore/ScrollView/UIScrollView.h"
 #include "xrUICore/Static/UIStatic.h"
 
 #include <algorithm>
@@ -18,6 +17,7 @@
 namespace
 {
 float mebibytes(u64 bytes) { return static_cast<float>(bytes) / (1024.f * 1024.f); }
+float gibibytes(u64 bytes) { return static_cast<float>(bytes) / (1024.f * 1024.f * 1024.f); }
 }
 
 CUIContentWnd::CUIContentWnd() : CUIDialogWnd(CUIContentWnd::GetDebugType()) { m_bWorkInPause = true; }
@@ -34,15 +34,13 @@ bool CUIContentWnd::Init()
     UIHelper::CreateStatic(xml, "main:background", this);
     m_caption = UIHelper::CreateStatic(xml, "main:caption", this);
     m_message = UIHelper::CreateStatic(xml, "main:message", this);
-    m_problems = UIHelper::CreateScrollView(xml, "main:problems", this);
-    m_problemsText = xr_new<CUIStatic>("Content problems");
-    CUIXmlInit::InitStatic(xml, "main:problems_text", 0, m_problemsText);
-    m_problemsText->SetWidth(m_problems->GetDesiredChildWidth());
-    m_problems->AddWindow(m_problemsText, true);
+    m_size = UIHelper::CreateStatic(xml, "main:size", this);
     m_progressText = UIHelper::CreateStatic(xml, "main:progress_text", this);
     m_progress = UIHelper::CreateProgressBar(xml, "main:progress", this);
+    m_error = UIHelper::CreateStatic(xml, "main:error", this);
     m_action = UIHelper::Create3tButton(xml, "main:action", this);
     m_exit = UIHelper::Create3tButton(xml, "main:exit", this);
+    m_exitX = m_exit->GetWndPos().x;
 
     m_action->SetWindowName("action");
     m_exit->SetWindowName("exit");
@@ -71,90 +69,138 @@ void CUIContentWnd::Preview(const ContentService::Snapshot& snapshot)
 void CUIContentWnd::Update()
 {
     inherited::Update();
-    if (m_preview)
-        return;
-
-    // A repair moves; the dialog has to move with it, or the player is left staring at a frozen
+    // A download moves; the window has to move with it, or the player is left staring at a frozen
     // window through a download that can take an hour.
-    if (ContentService::RepairRunning() || m_repairFinished != (ContentService::GetSnapshot().state ==
-        ContentService::State::Repaired))
-    {
+    if (!m_preview)
         Refresh();
-    }
 }
 
 void CUIContentWnd::Refresh() { Refresh(m_preview ? *m_preview : ContentService::GetSnapshot()); }
 
 void CUIContentWnd::Refresh(const ContentService::Snapshot& snapshot)
 {
-    m_repairFinished = snapshot.state == ContentService::State::Repaired;
+    using ContentService::Failure;
+    using ContentService::Stage;
+    using ContentService::State;
 
+    m_repairFinished = snapshot.state == State::Repaired;
+    const bool repairing = snapshot.state == State::Repairing;
+    // A download cannot help an installation without a manifest, nor one whose archives the
+    // engine reads from somewhere else: both are a reinstall.
+    const bool recovery = snapshot.state == State::Recovery || (snapshot.state == State::Incomplete && !snapshot.repairable);
+    const bool checking = !repairing && !m_repairFinished && !recovery && snapshot.checking;
+    const bool failed = snapshot.state == State::Incomplete && snapshot.failure != Failure::None && !checking && !recovery;
+
+    pcstr caption = "st_content_caption";
     pcstr message = "st_content_message";
-    switch (snapshot.state)
+    if (recovery)
     {
-    // Recovery means the installation cannot even say what content it should have, which is a
-    // different repair from "three bundles are missing" - name it separately so a bug report
-    // carries the distinction.
-    case ContentService::State::Recovery: message = "st_content_message_recovery"; break;
-    case ContentService::State::Repairing: message = "st_content_message_repairing"; break;
-    case ContentService::State::Repaired: message = "st_content_message_repaired"; break;
-    default: break;
+        caption = "st_content_caption_recovery";
+        message = "st_content_message_recovery";
     }
-    m_message->SetText(StringTable().translate(message).c_str());
-
-    // The same progress line and bar as the update window, so a download reads the same
-    // wherever it runs. Before the first byte and after a failure the line carries the stage
-    // name or the reason instead, which is how a failed repair stays explained on screen.
-    const bool repairing = snapshot.state == ContentService::State::Repairing;
-    m_progress->Show(repairing);
-    m_progressText->Show(repairing || !snapshot.activity.empty());
-    if (repairing && snapshot.repairTotal)
-    {
-        string128 line{};
-        xr_sprintf(line, sizeof(line), StringTable().translate("st_update_progress").c_str(),
-            mebibytes(snapshot.repairDone), mebibytes(snapshot.repairTotal));
-        m_progressText->SetText(line);
-        m_progress->ForceSetProgressPos(std::clamp(
-            100.f * static_cast<float>(snapshot.repairDone) / static_cast<float>(snapshot.repairTotal), 0.f, 100.f));
-    }
-    else
-    {
-        m_progressText->SetText(snapshot.activity.c_str());
-        m_progress->ForceSetProgressPos(0.f);
-    }
-
-    // The text control takes its line breaks as the two-character sequence, not the control
-    // character: joined with a real newline the list came out as one run-on line.
-    string4096 text{};
-    for (const auto& problem : snapshot.problems)
-    {
-        if (text[0])
-            xr_strcat(text, sizeof(text), "\\n");
-        xr_strcat(text, sizeof(text), problem.c_str());
-    }
-    m_problemsText->SetText(text);
-    m_problemsText->AdjustHeightToText();
-    m_problems->ScrollToBegin();
-
-    // One primary action, and what it is depends on where the repair got to. Recovery has none:
-    // without a manifest there is nothing to repair against, and offering a button that cannot
-    // work would be worse than not offering one.
-    pcstr caption = "st_content_repair";
-    bool enabled = true;
-    if (snapshot.state == ContentService::State::Repaired)
-        caption = "st_content_restart";
     else if (repairing)
     {
-        caption = "st_content_repairing";
-        enabled = false;
+        caption = "st_content_caption_repairing";
+        message = "st_content_message_repairing";
     }
-    else if (snapshot.state == ContentService::State::Recovery)
+    else if (m_repairFinished)
     {
-        enabled = false;
+        caption = "st_content_caption_repaired";
+        message = "st_content_message_repaired";
+    }
+    else if (checking)
+    {
+        caption = "st_content_caption_checking";
+        message = "st_content_message_checking";
+    }
+    m_caption->SetText(StringTable().translate(caption).c_str());
+    m_message->SetText(StringTable().translate(message).c_str());
+
+    // The most the download can cost: what the missing bundles weigh whole. Rebuilt bundles cost
+    // less, which the progress line shows once the download knows it.
+    // Not beside a disk-space error: that one names what the download and the install need
+    // together, and two different sizes one above the other read as a contradiction.
+    const bool offer = !repairing && !m_repairFinished && !recovery && !checking && snapshot.missingBytes &&
+        !(failed && snapshot.failure == Failure::Space);
+    m_size->Show(offer);
+    if (offer)
+    {
+        string128 line{};
+        xr_sprintf(line, sizeof(line), StringTable().translate("st_content_size").c_str(), mebibytes(snapshot.missingBytes));
+        m_size->SetText(line);
     }
 
-    m_action->SetText(StringTable().translate(caption).c_str());
-    m_action->Enable(enabled);
+    // The same progress line and bar as the update window, so a download reads the same wherever
+    // it runs; around the download itself the line names the stage instead.
+    string128 progress{};
+    float position = 0.f;
+    bool bar = false;
+    if (repairing)
+    {
+        switch (snapshot.stage)
+        {
+        case Stage::Planning: xr_strcpy(progress, StringTable().translate("st_content_stage_plan").c_str()); break;
+        case Stage::Downloading:
+            xr_sprintf(progress, sizeof(progress), StringTable().translate("st_update_progress").c_str(),
+                mebibytes(snapshot.repairDone), mebibytes(std::max(snapshot.repairTotal, snapshot.repairDone)));
+            position = snapshot.repairTotal ? 100.f * static_cast<float>(snapshot.repairDone) / static_cast<float>(snapshot.repairTotal) : 0.f;
+            bar = true;
+            break;
+        case Stage::Installing:
+        case Stage::Done:
+            xr_strcpy(progress, StringTable().translate("st_content_stage_install").c_str());
+            position = 100.f;
+            bar = true;
+            break;
+        default: xr_strcpy(progress, StringTable().translate("st_content_stage_check").c_str()); break;
+        }
+    }
+    m_progressText->Show(repairing);
+    m_progressText->SetText(progress);
+    m_progress->Show(bar);
+    m_progress->ForceSetProgressPos(std::clamp(position, 0.f, 100.f));
+
+    // What went wrong, in what the player can do about it. The reason itself is in the log.
+    m_error->Show((failed && !repairing) || (m_repairFinished && m_relaunchFailed));
+    if (m_repairFinished && m_relaunchFailed)
+        m_error->SetText(StringTable().translate("st_content_fail_restart").c_str());
+    else if (failed && !repairing)
+    {
+        string256 line{};
+        switch (snapshot.failure)
+        {
+        case Failure::Space:
+            xr_sprintf(line, sizeof(line), StringTable().translate("st_content_fail_space").c_str(),
+                gibibytes(snapshot.spaceRequired), gibibytes(snapshot.spaceFree));
+            break;
+        case Failure::Check: xr_strcpy(line, StringTable().translate("st_content_fail_check").c_str()); break;
+        case Failure::Install: xr_strcpy(line, StringTable().translate("st_content_fail_install").c_str()); break;
+        default: xr_strcpy(line, StringTable().translate("st_content_fail_download").c_str()); break;
+        }
+        m_error->SetText(line);
+    }
+
+    // One primary action, and what it is depends on where the repair got to. Recovery has none:
+    // without a manifest there is nothing to download against, and a button that cannot work is
+    // worse than none. Exit stays throughout - a download left halfway resumes next time.
+    const bool primary = !repairing && !recovery && !checking;
+    pcstr action = "st_content_repair";
+    if (m_repairFinished)
+        action = "st_content_restart";
+    else if (failed)
+        action = "st_content_retry";
+    m_action->SetText(StringTable().translate(action).c_str());
+    m_action->Show(primary);
+    m_action->Enable(primary);
+
+    // Exit stays except while the files are being moved into place: quitting then would only make
+    // the game wait for the move with no window on screen.
+    const bool installing = repairing && (snapshot.stage == Stage::Installing || snapshot.stage == Stage::Done);
+    m_exit->Show(!installing);
+    m_exit->Enable(!installing);
+    Fvector2 position2 = m_exit->GetWndPos();
+    position2.x = primary ? m_exitX : (GetWidth() - m_exit->GetWidth()) * 0.5f;
+    m_exit->SetWndPos(position2);
 }
 
 void CUIContentWnd::SendMessage(CUIWindow* window, s16 message, void* data)
@@ -190,6 +236,8 @@ void CUIContentWnd::OnAction(CUIWindow*, void*)
         // what was just installed.
         if (ContentService::Relaunch())
             Console->Execute("quit");
+        else
+            m_relaunchFailed = true;
         return;
     }
 

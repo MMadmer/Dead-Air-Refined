@@ -19,12 +19,15 @@ enum class State : u8
     ApplyFailed
 };
 
-// Which asset the offer is going to pull. A patch only carries the files that differ from the
-// previous release; the applier reconstructs the rest from the installation.
+// What the offer is going to pull. A delta is the files of the full archive this installation
+// does not hold, fetched by range whatever version it is on (UpdateDelta.h); a patch is the
+// published archive of what differs from the previous release, kept for the releases that still
+// carry one. The applier reconstructs the rest of either from the installation.
 enum class Payload : u8
 {
     Full,
-    Patch
+    Patch,
+    Delta
 };
 
 struct Snapshot
@@ -38,6 +41,8 @@ struct Snapshot
     xr_string themeRu;
     xr_string changesEn;
     xr_string changesRu;
+    // The whole download: the update itself and the content its version adds, which is fetched
+    // before the update is armed.
     u64 downloadedBytes{};
     u64 totalBytes{};
     Payload payload{Payload::Full};

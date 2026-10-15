@@ -3,9 +3,10 @@
 
 #include "ContentCommit.h"
 
-#include "ContentDelta.h"
 #include "ContentHash.h"
 #include "ContentState.h"
+
+#include <algorithm>
 
 #define WIN32_LEAN_AND_MEAN
 // std::min / std::max are used throughout; the windows.h macros of the same name would
@@ -106,8 +107,29 @@ Result Run(const ContentManifest::Manifest& manifest, const ContentResolver::Pla
     // Phase 2: demote. Only now, and by rename into the cache under the file's own hash, so a
     // bundle removed by mistake is still on disk and costs a move rather than a download to
     // put back.
+    //
+    // Except the previous revision of a slot whose replacement did not arrive: that file is what
+    // the repair rebuilds the slot from, chunk by chunk, and in the cache under a bare hash
+    // nothing could tell which slot it was. The mount gate refuses it meanwhile, as a notice.
+    const auto pending = [&](const std::string& name)
+    {
+        ContentManifest::BundleName stale;
+        if (!ContentManifest::SplitBundleName(name, stale))
+            return false;
+        return std::ranges::any_of(plan.jobs, [&](const ContentResolver::Job& job)
+        {
+            ContentManifest::BundleName wanted;
+            return !job.cached && ContentManifest::SplitBundleName(job.bundle.name, wanted) &&
+                wanted.group == stale.group && wanted.shard == stale.shard;
+        });
+    };
     for (const std::string& name : plan.obsolete)
     {
+        if (pending(name))
+        {
+            log("kept " + name + " until its replacement arrives");
+            continue;
+        }
         const std::filesystem::path installed = paths.Database() / name;
         const std::string hash = ContentHash::File(installed.wstring(), g_never);
         if (hash.empty())
@@ -137,13 +159,6 @@ Result Run(const ContentManifest::Manifest& manifest, const ContentResolver::Pla
     // nothing: the resolver trusts a matching (size, mtime) entry and would then skip that
     // bundle forever, so a corrupt file would be vouched for by a record invented from the very
     // manifest it fails to match.
-    // A delta blacklisted for the previous release says nothing about this one: the base it was
-    // wrong against may not even be part of the new content set. Read before the state file is
-    // rewritten, because rewriting it is what erases the answer.
-    const std::string previousId = ContentState::LoadContentId(paths.State());
-    if (!previousId.empty() && previousId != manifest.contentId)
-        ContentDelta::ClearRejected(paths.RejectedDeltas());
-
     ContentState::Cache state = ContentState::LoadCache(paths.State());
     for (const auto& entry : verified)
         state[entry.first] = entry.second;

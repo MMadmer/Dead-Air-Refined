@@ -270,77 +270,14 @@ bool Parse(std::string_view text, Manifest& manifest, std::string& error)
             continue;
         }
 
-        if (!split_tabs(line, fields, 8))
-        {
-            error = "a [deltas] row needs exactly 8 tab-separated fields";
-            return false;
-        }
-        Delta delta;
-        delta.hash.assign(fields[0]);
-        delta.name.assign(fields[2]);
-        delta.releaseTag.assign(fields[3]);
-        delta.baseName.assign(fields[4]);
-        delta.baseHash.assign(fields[5]);
-        delta.targetHash.assign(fields[7]);
-        if (!IsSha256Hex(delta.hash) || !parse_u64(fields[1], delta.size) ||
-            !parse_u64(fields[6], delta.baseSize) || delta.name.empty() ||
-            delta.releaseTag.empty() || !IsBundleName(delta.baseName) ||
-            !IsSha256Hex(delta.baseHash) || !IsSha256Hex(delta.targetHash) ||
-            delta.baseHash == delta.targetHash || delta.size == 0 || delta.baseSize == 0)
-        {
-            error = "invalid [deltas] row: " + std::string(line);
-            return false;
-        }
-        const bool duplicate = std::ranges::any_of(parsed.deltas, [&](const Delta& other)
-        {
-            return other.baseHash == delta.baseHash && other.targetHash == delta.targetHash;
-        });
-        if (duplicate)
-        {
-            error = "duplicate delta edge for " + delta.baseName;
-            return false;
-        }
-        parsed.deltas.push_back(std::move(delta));
+        // The rows of the published deltas chunk maps replaced. The schema is frozen, so the
+        // section is still read; nothing acts on what it lists.
     }
 
     if (parsed.bundles.empty())
     {
         error = "manifest declares no bundles";
         return false;
-    }
-
-    // Every delta must lead somewhere - but "somewhere" is a live bundle OR another delta that
-    // continues towards one, because the edge list is cumulative and multi-hop. A bundle that
-    // has changed twice publishes r1->r2 and r2->r3 while only r3 is live, and r2 exists
-    // solely as an intermediate. Reachability is a property of the graph, so it cannot be
-    // decided row by row while the section streams in: walk it backwards from the live
-    // bundles until the reachable set stops growing.
-    std::vector<std::string_view> reachable;
-    reachable.reserve(parsed.bundles.size() + parsed.deltas.size());
-    for (const Bundle& bundle : parsed.bundles)
-        reachable.push_back(bundle.hash);
-
-    for (bool grew = true; grew;)
-    {
-        grew = false;
-        for (const Delta& delta : parsed.deltas)
-        {
-            if (std::ranges::find(reachable, delta.targetHash) == reachable.end())
-                continue;
-            if (std::ranges::find(reachable, delta.baseHash) != reachable.end())
-                continue;
-            reachable.push_back(delta.baseHash);
-            grew = true;
-        }
-    }
-
-    for (const Delta& delta : parsed.deltas)
-    {
-        if (std::ranges::find(reachable, delta.targetHash) == reachable.end())
-        {
-            error = "delta leads nowhere - no chain from " + delta.name + " reaches a declared bundle";
-            return false;
-        }
     }
 
     manifest = std::move(parsed);

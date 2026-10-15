@@ -148,25 +148,61 @@
         <text>Cursor speed in the menus and the inventory. 1.00 is the speed of the system cursor.</text>
     </string>
     <string id="st_content_caption">
-        <text>The mod's content is incomplete</text>
+        <text>Files need to be downloaded</text>
+    </string>
+    <string id="st_content_caption_checking">
+        <text>Checking the files</text>
+    </string>
+    <string id="st_content_caption_repaired">
+        <text>Download complete</text>
+    </string>
+    <string id="st_content_caption_recovery">
+        <text>The mod has to be reinstalled</text>
     </string>
     <string id="st_content_message">
-        <text>Some of the game content is missing or damaged, so the game cannot be started.\nReinstall the mod or wait for the built-in content repair.\n\nDetails are below and in the log file.</text>
+        <text>Some of the mod's files have to be downloaded before the game can be started.</text>
     </string>
-    <string id="st_content_message_recovery">
-        <text>The installation cannot tell which content it needs: the manifest file is missing\nor damaged. Reinstall the mod over the current folder.\n\nDetails are below and in the log file.</text>
+    <string id="st_content_message_checking">
+        <text>The mod's files are being checked. This may take a few minutes.</text>
     </string>
     <string id="st_content_message_repairing">
-        <text>The content is being repaired. Do not close the game.\n\nThe game will have to be restarted afterwards.</text>
+        <text>The missing files are being downloaded. If you exit the game, the part already downloaded is kept and the download can be continued on the next launch.</text>
     </string>
     <string id="st_content_message_repaired">
-        <text>The content has been repaired.\n\nThe file system reads the archives once at start-up, so restart the game for the downloaded content to take effect.</text>
+        <text>The missing files have been installed. Restart the game to continue.</text>
+    </string>
+    <string id="st_content_message_recovery">
+        <text>The contents of the installed mod could not be determined. Reinstall the mod into the same folder.</text>
+    </string>
+    <string id="st_content_size">
+        <text>Download size: up to %.1f MB</text>
+    </string>
+    <string id="st_content_stage_check">
+        <text>Checking the installed files...</text>
+    </string>
+    <string id="st_content_stage_plan">
+        <text>Preparing the download...</text>
+    </string>
+    <string id="st_content_stage_install">
+        <text>Installing the files...</text>
+    </string>
+    <string id="st_content_fail_check">
+        <text>The mod's files could not be checked. Please try again.</text>
+    </string>
+    <string id="st_content_fail_space">
+        <text>Not enough disk space: %.1f GB is needed to download and install the files, %.1f GB is free. Free up some space and try again.</text>
+    </string>
+    <string id="st_content_fail_download">
+        <text>The files could not be downloaded. Check the internet connection and try again.</text>
+    </string>
+    <string id="st_content_fail_install">
+        <text>The downloaded files could not be installed. Please try again.</text>
     </string>
     <string id="st_content_repair">
-        <text>Repair content</text>
+        <text>Download</text>
     </string>
-    <string id="st_content_repairing">
-        <text>Repairing...</text>
+    <string id="st_content_retry">
+        <text>Retry</text>
     </string>
     <string id="st_content_restart">
         <text>Restart the game</text>
@@ -174,32 +210,23 @@
     <string id="st_content_exit">
         <text>Exit the game</text>
     </string>
-    <string id="st_content_activity_verify">
-        <text>Checking the installed content...</text>
-    </string>
-    <string id="st_content_activity_download">
-        <text>Downloading content...</text>
-    </string>
-    <string id="st_content_activity_install">
-        <text>Installing content...</text>
-    </string>
-    <string id="st_content_activity_repaired">
-        <text>The content has been repaired. The game needs a restart.</text>
-    </string>
-    <string id="st_content_fail_verify">
-        <text>The content could not be checked: %s</text>
-    </string>
-    <string id="st_content_fail_space">
-        <text>Not enough disk space: %llu MB needed, %llu MB available</text>
-    </string>
-    <string id="st_content_fail_download">
-        <text>The content could not be downloaded: %s</text>
-    </string>
-    <string id="st_content_fail_install">
-        <text>The content could not be installed: %s</text>
-    </string>
     <string id="ui_mm_content_incomplete">
-        <text>The mod's content is incomplete: the game cannot be played</text>
+        <text>The mod's missing files have to be downloaded before playing</text>
+    </string>
+    <string id="ui_mm_content_restart">
+        <text>Restart the game to finish the installation</text>
+    </string>
+    <string id="ui_mm_content_downloading">
+        <text>The mod's missing files are being downloaded</text>
+    </string>
+    <string id="ui_mm_content_reinstall">
+        <text>The mod has to be reinstalled before playing</text>
+    </string>
+    <string id="st_content_fail_restart">
+        <text>The game could not be restarted. Please start it manually.</text>
+    </string>
+    <string id="st_content_caption_repairing">
+        <text>Downloading files</text>
     </string>
     <string id="ui_mm_gtao">
         <text>GTAO</text>

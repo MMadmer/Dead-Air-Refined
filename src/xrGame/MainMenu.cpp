@@ -941,6 +941,14 @@ void CMainMenu::CheckUpdateDialog()
 {
     const UpdateService::Snapshot snapshot = UpdateService::GetSnapshot();
 
+    // QA (-qa_update_auto, beside -qa_update): the offer is taken and installed with nobody at the
+    // keyboard, through the same calls the window's buttons make.
+    static const bool automatic = Core.Params && strstr(Core.Params, "-qa_update_auto");
+    if (automatic && snapshot.state == UpdateService::State::Available)
+        UpdateService::StartDownload();
+    else if (automatic && snapshot.state == UpdateService::State::Ready)
+        UpdateService::RestartAndApply();
+
     // A release from a higher major line is announced first and separately - it is not an
     // update this build can install. The ordinary offer, if any, waits its turn: a player can
     // legitimately have both (a fix inside their own major line, and a new major elsewhere).
@@ -1054,7 +1062,8 @@ void CMainMenu::DrawModOptOutNotice()
 
 void CMainMenu::DrawContentNotice()
 {
-    if (!ContentService::PlayBlocked())
+    // The window says it all while it is up; the banner is for the menu behind other windows.
+    if (!ContentService::PlayBlocked() || (m_contentDialog && m_contentDialog->IsShown()))
         return;
 
     CGameFont* font = UI().Font().pFontGraffiti19Russian;
@@ -1066,7 +1075,15 @@ void CMainMenu::DrawContentNotice()
     // between them would overlap the version glyph by most of its height. This one goes above.
     font->SetAligment(CGameFont::alCenter);
     font->SetColor(color_rgba(220, 60, 50, 255));
-    font->OutI(0.0f, 0.870f, "%s", CStringTable().translate("ui_mm_content_incomplete").c_str());
+    const ContentService::Snapshot snapshot = ContentService::GetSnapshot();
+    pcstr text = "ui_mm_content_incomplete";
+    if (snapshot.state == ContentService::State::Recovery || !snapshot.repairable)
+        text = "ui_mm_content_reinstall";
+    else if (snapshot.state == ContentService::State::Repairing)
+        text = "ui_mm_content_downloading";
+    else if (snapshot.state == ContentService::State::Repaired)
+        text = "ui_mm_content_restart";
+    font->OutI(0.0f, 0.870f, "%s", CStringTable().translate(text).c_str());
     font->SetAligment(CGameFont::alRight);
 }
 

@@ -43,10 +43,10 @@ Code, one implementation per job:
 
 | Component | Role |
 | --- | --- |
-| `src/xrContentSync/*` | The shared core: manifest parser, hashing, state files, resolver, downloader, commit, deltas. A static library with no xrCore dependency, compiled into xrCore, into xrGame, and straight into `DeadAirUpdater.exe` by the packaging script. |
+| `src/xrContentSync/*` | The shared core: manifest parser, hashing, state files, resolver, downloader, commit, chunk maps. A static library with no xrCore dependency, compiled into xrCore, into xrGame, and straight into `DeadAirUpdater.exe` by the packaging script. |
 | `src/xrCore/Content/ContentPin.{h,cpp}` | The mount gate. Lives in xrCore because it runs inside `CLocatorAPI::_initialize`, before the game DLL exists. |
 | `src/xrGame/ui/ContentService.{h,cpp}` | Verification, repair, the play gate's answer, the console commands. |
-| `src/xrGame/ui/UIContentWnd.{h,cpp}` | The repair dialog. |
+| `src/xrGame/ui/UIContentWnd.{h,cpp}` | The download dialog. |
 | `packaging/dead-air-x64/installer/DeadAirUpdater.cpp` | `--content-plan`, `--content-fetch`, `--content-commit`. The same binary is shipped as `DeadAirContent.exe` to the installer. |
 | `tools/package/dead_air_x64_content_bundles.ps1` | The bundle builder and manifest writer. |
 
@@ -173,8 +173,7 @@ on its authority, so a typo must fail at build time rather than be interpreted a
 | `version=` | Three numeric components, `MAJOR.MINOR.PATCH`. |
 | Hashes | Exactly 64 hex, **lowercase enforced on parse**. Consumers compare with `==`, so tolerating uppercase would produce a value that matches nothing and reports itself as a corrupt bundle. |
 | `[bundles]` row | Exactly 4 tab-separated fields. Name must satisfy the bundle-name shape; size non-zero; duplicate names rejected. |
-| `[deltas]` row | Exactly 8 fields. `base-size` is mandatory and comes from the delta record, not from `[bundles]`: a player who skipped releases often does not have the base in their own manifest, and eligibility has to be decidable anyway. Duplicate `(base-sha256, target-sha256)` pairs rejected. |
-| Reachability | Every delta edge must reach a declared bundle, possibly through other edges. Checked by walking backwards from the live bundles until the reachable set stops growing — it is a property of the graph and cannot be decided row by row. |
+| `[deltas]` | The section of the retired published deltas. Accepted once, written empty by the builder; whatever rows it carries are skipped. |
 | Bounds | `MaximumBundles = 4096`, `MaximumManifestBytes = 4 MiB` (`ContentManifest.h`). Beyond these a manifest is corrupt or hostile, not ambitious. |
 | `content-id` | SHA-256 over `<name>\n<sha256>\n` per bundle, sorted by name **ordinally**. The builder sorts with `StringComparer::Ordinal` for the same reason: a culture-aware sort disagrees with `std::string` comparison on underscores and digits, and the two only have to differ once for every installed player to be told their manifest was tampered with. |
 | `repo=` | **Informational only.** The download host is pinned in shipped code (`AssetsRepository` in both `ContentService.cpp` and `DeadAirUpdater.cpp`); taking it from a file that was downloaded would let whoever wrote that file choose where the next gigabytes come from. Changing the mirror is a code change. |
@@ -184,9 +183,9 @@ declared one. Both the game (`run_initial_pass`) and the updater (`open_content_
 that check before acting on anything: a manifest whose own id does not match has been edited
 by hand, and every claim in it is then worth nothing.
 
-`[deltas]` is **cumulative** — every edge ever published for a bundle that still exists stays
-listed, so a player who skipped releases can be walked from whatever revision they actually
-hold. Publishing cost does not change: one delta per changed bundle per release.
+`[deltas]` is the section of the published binary deltas chunk maps replaced (*Retired: published
+deltas* below). The schema is frozen, so the section stays: every parser accepts and validates
+it, the builder writes it empty, and a client from 1.6.0 ignores whatever rows it might carry.
 
 The manifest lives in three places for one version: inside the Setup payload, installed at
 `{app}\.dead-air-x64\content-manifest.txt`, and published on the game release as
@@ -351,7 +350,10 @@ loudly instead of half-succeeding at five gigabytes.
 ### Fetch
 
 `ContentDownload::Fetch` downloads every job that is not already cached, verifies it, and
-leaves it at `content-cache\<sha256>`. It installs nothing.
+leaves it at `content-cache\<sha256>`. It installs nothing. Before the first byte it works out
+what each job will actually move - a bundle with a local revision of its slot is rebuilt rather
+than downloaded (*Chunk maps* below) - so the total it reports is the real one; while it works
+that out it reports `planning` instead of a byte count.
 
 - URL: `https://github.com/<pinned repo>/releases/download/<release-tag>/<asset>`. No
   `api.github.com` call at all, which sidesteps the API response cap, the request budget and
@@ -412,6 +414,12 @@ punish the player for someone else's mess.
 A bundle that cannot be read is left where it is (renaming it to something the collector does
 not recognise would strand it), and a demotion that fails is logged, not fatal.
 
+One exception: the previous revision of a slot whose replacement did not arrive stays in
+`database\`. It is what the next repair rebuilds that slot from, and in the cache, under a bare
+hash, nothing would say which slot it was; the mount gate refuses it meanwhile, as a notice. A
+commit by a client before 1.6.0 has no such exception, which is why a rebuild also looks for
+retired revisions in the cache through the state file (*Chunk maps*).
+
 Afterwards the state cache is updated with what this pass actually read, and the latch is
 cleared only if a fresh hashing resolve says there is nothing outstanding.
 
@@ -433,59 +441,73 @@ predecessor, so a reverted update costs nothing to put back.
 The cache directory carries a `README.txt` in both the installer's and the fetcher's wording,
 so an abandoned install does not orphan gigabytes in a directory nobody can identify.
 
-## Deltas
+## Chunk maps
 
-A content release usually changes a handful of files inside one large bundle. Without deltas
-every player re-downloads the whole bundle for a small edit, which at gigabytes of content is
-the difference between an update people take and one they skip.
+A content release usually changes a handful of files inside one large bundle. Without some form
+of delta every player re-downloads the whole bundle for a small edit, which at gigabytes of
+content is the difference between an update people take and one they skip. From 1.6.0 the
+client builds that delta itself, out of the published bundle, by HTTP range: nothing is published
+per pair of releases, and a player who skipped five releases downloads what differs between the
+revision they hold and the one they want - not five deltas, and not the whole bundle.
 
-The apply path lives in `src/xrContentSync/ContentDelta.{h,cpp}`, the chain selection in
-`ContentResolver::plan_deltas`, the chain walk in `ContentDownload::apply_chain`, and the
-builder in `DarDelta.exe` (`src/utils/DarDelta/DarDelta.cpp`).
-
-### `.darpatch` v1
+Every bundle is published with its chunk map, `<bundle>.chunks`, under the same release tag
+(`src/xrContentSync/ContentChunks.{h,cpp}`):
 
 ```text
-u8[8] "DARPATCH" | u32 version = 1
-u8[32] baseSha256   | u64 baseSize
-u8[32] targetSha256 | u64 targetSize
-u64 opCount
-opCount × { u8 kind; COPY: u64 baseOffset, u64 length | INSERT: u64 length, u8[length] }
+u8[8] "DARCHUNK" | u32 version = 1 | u32 minimum, average, maximum chunk
+u8[32] target SHA-256 | u64 target size | u64 chunk count
+count x { u32 length; u8[16] first half of the chunk's SHA-256 }
 ```
 
-`kind` is `0` for COPY and `1` for INSERT. Everything is little-endian, there is no padding, and
-there is no compression and no dictionary: bundles are already compressed archives, so the
-interesting redundancy is between two revisions of the same file rather than inside one, and a
-compressor would buy nothing while adding a way to fail.
+The bundle is cut with content-defined chunking (below), in one function,
+`ContentChunks::NextBoundary`, that the builder and every client share. Chunks average about
+40 KiB - the boundary search starts 8 KiB in - so the 930 MB `textures_03` of 1.6.0 maps to
+460 KiB.
 
-Every claim in the header is validated before a single output byte is written. The magic and
-`version` must match exactly, `targetSize` must be non-zero, `opCount` must be non-zero, and
-both sizes are bounded by `MaximumSize` = 8 GiB, `opCount` by `MaximumOps` = 8 Mi, and each
-INSERT by `MaximumInsert` = 256 MiB (`ContentDelta.h`). Those bounds exist because a malformed
-header must not be able to make the process allocate its way out of memory before anything has
-had the chance to reject it.
+A job is rebuilt when its slot has a local revision: a bundle-shaped file in `database\` with the
+same group and shard - the previous revision an update has not retired yet, or a damaged copy
+under the wanted name, most of which is usually still right - or a retired one in the cache. The
+cache names a retired revision by its hash alone; `content-state.txt` still says which bundle a
+hash was, since it records every bundle a pass has read, and a revision is taken from there when
+the file is present at the recorded size. That is the path after an update by a client before
+1.6.0, whose commit retires the old revisions even when the new ones did not arrive.
 
-Per operation, a COPY is checked **before** the seek — `baseOffset <= baseSize`,
-`length <= baseSize - baseOffset` and `length <= targetSize - produced` — because an operation
-that reaches past the base is a malformed delta and finding that out by reading garbage would be
-too late. An INSERT is bounded the same way against what is left of the target. Finally the op
-lengths must sum to exactly `targetSize`.
+The local revisions are cut the same way and every chunk of the map is looked up by its key and
+length. The target is then laid down in order as runs: copied out of a local file, or fetched by
+`Range` from the published bundle. Fetched runs closer together than 64 KiB are merged, gap and
+all, and that gap is widened until a bundle needs at most 256 requests. The storage URL the first
+request was redirected to is reused for the rest. A rebuild is taken only when it fetches less
+than 80 % of what is left of the bundle; past that one streaming request is simpler and barely
+larger.
 
-### How a delta is cut
+The rebuild writes the same `content-cache\<sha256>.part` in the same order the streaming path
+does, and feeds the same running digest, so everything after it is unchanged: resume (a part is a
+prefix of the target however it was produced), the length check, the hash check, the rename. A
+local file that changed under the plan, or a server that answers a ranged request with `200`,
+hands the rest of the bundle to the streaming path from where the rebuild stopped. A rebuilt
+bundle whose hash does not match is retried once, streamed whole.
 
-`DarDelta.exe <base.xdb0> <target.xdb0> <out.darpatch>` maps both files and cuts them with
-**content-defined chunking**. Fixed boundaries would work only until something changed length,
-after which every later boundary shifts and nothing matches; a rolling hash puts the boundaries
-where the *data* says, so an insertion perturbs the chunk it lands in and leaves the rest
-recognisable.
+The map is neither trusted nor named by the manifest. It only says where to look: a wrong or
+hostile map costs a wasted download, never a file that gets installed, because what is installed
+is what matched the manifest's hash. A missing map - every bundle published before 1.6.0 - means
+the bundle is fetched whole, as it always was. What a base yields is kept per process by path,
+size and write time, so the update check's estimate (`ContentDownload::Estimate`) and the fetch
+that follows it read each base once.
 
-The rolling hash is gear-style — `hash = (hash << 1) + gear[byte]` — over a 256-entry table
+### Content-defined chunking
+
+Fixed boundaries would work only until something changed length, after which every later
+boundary shifts and nothing matches; a rolling hash puts the boundaries where the *data* says, so
+an insertion perturbs the chunk it lands in and leaves the rest recognisable.
+
+The rolling hash is gear-style - `hash = (hash << 1) + gear[byte]` - over a 256-entry table
 generated at run time from a fixed linear congruential sequence seeded with
 `0x9e3779b97f4a7c15`, rather than shipped as a literal block: the only properties that matter
 are that the values are well distributed and identical on every machine, and a seeded generator
 says that more clearly than 256 magic numbers would. A boundary is declared when the hash has
-the low bits of `BoundaryMask = AverageChunk - 1` clear, which over random data happens on
-average once per average chunk, and the search is clamped to a window:
+the low bits of `AverageChunk - 1` clear, which over random data happens once per 32 KiB of
+searched bytes - about 40 KiB per chunk, since the search starts at the minimum - and the
+search is clamped to a window:
 
 | Parameter | Value |
 | --- | --- |
@@ -493,102 +515,23 @@ average once per average chunk, and the search is clamped to a window:
 | `AverageChunk` | 32 KiB |
 | `MaximumChunk` | 128 KiB |
 
-The average sets the index's granularity. Smaller chunks match more precisely across an edit but
-cost more index entries and more per-chunk overhead in the output; 32 KiB against bundles of
-tens to hundreds of megabytes keeps the index in the low hundreds of thousands of entries while
-still catching a small edit inside a large archive.
+The average sets the granularity. Smaller chunks match more precisely across an edit but cost
+more map entries and more range requests; 32 KiB against bundles of hundreds of megabytes keeps a
+map well under a megabyte while still catching a small edit inside a large archive. The three
+values are written into every map, and a client refuses a map cut with others rather than half
+matching it.
 
-Base chunks are indexed by SHA-256. The target is then chunked the same way: a hit becomes a
-COPY, merged with the previous COPY whenever it continues where that one ended, so a whole
-unchanged region costs one operation instead of thousands; a miss extends a pending INSERT, so a
-run of changed chunks costs one operation instead of one each. The builder checks that its own
-operations reconstruct the target before it writes the file — a builder that can emit a delta it
-knows is wrong will eventually publish one — and it deliberately does **not** decide whether the
-delta is worth publishing. That is a ratio, and a ratio is policy.
+## Retired: published deltas
 
-### The three gates
-
-1. **Eligibility (`ContentResolver::plan_deltas`).** The base is recognised by **name and size
-   only**: either `database\<base-bundle>` is present at the delta record's `base-size`, or
-   `content-cache\<base-sha256>` is. Nothing is hashed. That is the point — this pass walks the
-   whole cumulative edge list on every resolve, and hashing gigabytes merely to decide which
-   edges are worth *considering* would cost far more than deltas save. `base-size` comes from
-   the delta record rather than from an installed `[bundles]` row, because a player who skipped
-   releases often does not have the base in their own manifest at all. Ineligible means the full
-   bundle, silently, with no marker.
-
-   Splitting the cheap gate from the real one is safe because a wrong base cannot produce a
-   target that hashes correctly. The worst a name-and-size match can cost is a rebuild that gate
-   3 throws away — never a wrong file. (The name already carries the first 16 hex of the base's
-   own hash, so the gate is not quite as thin as it looks, but nothing rests on that.)
-2. **Re-hash immediately before applying (`ContentDelta::Apply`).** The base is hashed in full
-   and must equal the header's `baseSha256`, and its size must equal the header's `baseSize`.
-   Time passes between deciding and doing, and a delta is meaningless against the wrong base. A
-   mismatch here is **transient**, not an accusation: the file on disk changed, which says
-   nothing about the published asset.
-3. **Authoritative.** The output is hashed as it is written and must equal both the header's
-   `targetSha256` and the manifest's `[bundles]` hash before it is renamed from
-   `content-cache\<target-sha256>.rebuilt` into `content-cache\<target-sha256>`. A delta can
-   therefore be wrong, truncated or hostile and still only ever cost a wasted download: it can
-   never produce a file that gets installed, because the commit only ever renames a
-   hash-verified cache file.
-
-### Integrity versus transient
-
-Every failure inside `Apply` is classified, and the classification is what decides whether the
-delta is remembered as bad or simply retried later. Getting it wrong is expensive in both
-directions: blacklisting a good delta upgrades a 20 MB download into a 400 MB one forever, and
-retrying a genuinely corrupt one loops.
-
-**Integrity** means the delta itself is wrong with every I/O call having succeeded: bad magic or
-version, a header outside the bounds, a delta that ends early, an operation that copies from
-outside the base or inserts more than the target can hold, an opcode this build does not
-understand, ops that do not sum to `targetSize`, or output that does not match the delta's
-**own** header hash.
-
-**Transient** means something outside the delta went wrong: a file that could not be opened, a
-disk that filled up, a read or write that failed, a cancellation, or a base that is not what the
-header expects.
-
-The subtle one is the last check of all. Output that matches the header's `targetSha256` but not
-the hash the *caller* asked for is classified **transient**, because the delta did exactly what
-it said it would and it is the chain that was assembled wrongly. Blaming the asset there would
-blacklist a good file and turn a small download into a large one permanently.
-
-**Blacklisting is integrity-only.** `rejected-deltas.txt` receives one line per rejected asset
-name, and only on an `Integrity` verdict — otherwise one bad afternoon costs the player a full
-bundle on every future release. The resolver consults it while walking the edge graph, so a
-rejected edge is skipped rather than re-fetched to reach the same conclusion.
-
-It is cleared by `ContentCommit::Run` when the content-id recorded in `content-state.txt`
-differs from the one in the manifest being committed. The read happens **before** the state file
-is rewritten, because rewriting it is what erases the answer. On a first install there is no
-previous id recorded and nothing is cleared — correctly, since there is no previous release for
-a stale verdict to have come from. Otherwise: a delta that was wrong for one release says
-nothing about the next, whose content set may not even contain the base it was wrong against.
-
-### Cumulative edges and the chain walk
-
-`[deltas]` is cumulative, so a player who skipped releases can be walked forward from whatever
-revision they actually hold. The base of a chain is normally one of the *obsolete* files: an
-update renames a bundle whose bytes changed, so the previous revision is still sitting in
-`database\` under its own name while the new one is missing. That is what the chain starts from.
-
-`plan_deltas` first collects every base hash the installation can already produce, then runs a
-**Dijkstra over the edge graph** for each job and takes the chain whose total **asset bytes** are
-smallest. Cheapest rather than shortest: two small hops beat one large one, and bytes are what
-the player pays. A chain is taken only when it is decisively cheaper — under
-`DeltaSkipRatio = 0.35` of the target bundle's size (`ContentResolver.cpp`), the same ratio the
-builder applies when deciding whether to publish an edge at all
-(`dead_air_x64_content_bundles.ps1`). Below that the saving does not pay for the base re-hash,
-the apply pass, the doubled peak cache use and the extra way to fail.
-
-`ContentDownload::apply_chain` walks the hops in order. Each hop's base is whatever the previous
-hop produced, or — for the first — the revision the installation already holds, in `database\`
-or in the cache. As soon as a hop's output verifies, its delta asset and the previous
-intermediate are both deleted, so peak cache use is two bundles at once rather than the whole
-path. Delta assets are named
-`content_<group>_<shard2>_<baseHash16>_to_<targetHash16>.darpatch`.
+1.4.0 shipped `.darpatch` deltas between two revisions of a bundle, published per pair of
+releases and walked as a chain by the client. Chunk maps replaced them in 1.6.0 and the code that
+built and applied them is gone. None was ever published: the first content release had nothing
+to diff against, and the clients that read deltas (1.4.x-1.5.0) never fetched content during an
+update at all - their prefetch asked for the target manifest with a declared size of zero and
+refused its first byte - so on those clients the new content has always arrived through the
+download dialog of the new version, which rebuilds from chunk maps. What remains is the empty
+`[deltas]` section of the frozen schema, and `rejected-deltas.txt`, which the uninstaller still
+removes from an installation an older version left one in.
 
 ## The game side
 
@@ -633,21 +576,24 @@ the way every other start failure does — clearing `net_start_result_total` and
 queued, which would leave the process with the menu already off, a level object created and
 nothing to destroy it.
 
-The dialog (`CUIContentWnd`, layout `gamedata/configs/ui/ui_content.xml`, shipped inside
-`xtra_dead_air_x64.xdb0` and never inside a bundle) offers **Repair** or **Exit**. There is no
-"play anyway". `CMainMenu::CheckContentDialog` sits above `CheckCrashReportDialog` in the
+The dialog (`CUIContentWnd`, layout `gamedata/configs/ui/ui_content.xml`, written by
+`tools/ui/system_windows_layout.py` like the other system windows, shipped inside
+`xtra_dead_air_x64.xdb0` and never inside a bundle) offers **Download** or **Exit**. There is no
+"play anyway". It tells the player what to do and what it costs at most - the missing bundles
+weighed whole - and never which bundle is missing or why: that is for the log and the diagnostic
+report, which still get every problem line. While a repair runs it names the stage (checking,
+preparing, the download in mebibytes over a bar, installing); a repair that stopped says what
+the player can do about it - check the connection, free the disk space it names - next to
+**Try again**; a finished one asks for the restart. `CMainMenu::CheckContentDialog` sits above `CheckCrashReportDialog` in the
 `OnFrame` precedence chain, and `DrawContentNotice` keeps a persistent banner
 (`ui_mm_content_incomplete`) while play is blocked. Strings live in
 `configs/text/rus/dead_air_x64.xml` as `st_content_*` - every word the window shows,
-including the repair stage names and the failure reasons the service produces. The
-service resolves those on the main thread in `StartRepair` before its worker starts:
-the table is cp1251 and the UI draws cp1251, while a Cyrillic literal in the UTF-8
-source reached the screen as mojibake in the first 1.4.0 runtime. The window shows the
+including the repair stages and the failure kinds. The service reports a stage and a failure
+kind (`ContentService::Stage`, `ContentService::Failure`) rather than text, and the window looks
+the words up on the main thread: the table is cp1251 and the UI draws cp1251, while a Cyrillic
+literal in the UTF-8 source reached the screen as mojibake in the first 1.4.0 runtime. The window shows the
 download the way the update window does - `st_update_progress` with the mebibyte
-count over the same bar - and lists the problems one per line; the text control breaks
-lines on the two-character `
-` sequence, not on a newline character, which is why the
-first runtime showed the list as one run-on line.
+count over the same bar.
 
 **Repair always ends in a mandatory relaunch.** This is not a UX preference: the filesystem
 indexes archives once at startup, and `CLocatorAPI::unload_archive` is broken — it erases a
@@ -809,14 +755,17 @@ plus the manifest:
 dead_air_x64_content_bundles.ps1 -SourceRoot <tree> -BundleCache <dir> `
     -OutputManifest <path> -PortVersion 1.4.0 -ReleaseTag content-1.4.0 `
     [-GroupsFile <path>] [-DisjointFrom <compat archive>] [-AllowRepack] `
-    [-PreviousManifest <path>] [-DeltaTool <path>]
+    [-DeltaTool <path>]
 ```
 
 It hashes the source in parallel, assigns each first-level directory to a group and shard
 (appending new ones to `groups.ltx`), computes the content digest per bundle, and reuses the
 cached bundle when that digest already has one. Reuse is what keeps an unchanged bundle free
 across releases; `-AllowRepack` forces packing and exists for diagnosis only, because a repack
-may produce different bytes and force every player to re-download identical content.
+may produce different bytes and force every player to re-download identical content. Every
+bundle's chunk map is cut once, by `DarDelta.exe --chunk-map` (`-DeltaTool`, built by the
+ordinary engine build into `bin\x64\Release\`), and kept in the cache beside it as
+`<bundle>.chunks`.
 
 **Never delete the bundle cache.** It is what makes an unchanged bundle free, and losing it
 while a release is unreachable forces a repack that may not reproduce the published bytes.
@@ -908,10 +857,11 @@ renames bundles and costs every installed player a full re-download.
 `tools/qa/Test-ContentScale.ps1` exists to keep that projection honest — it runs the real
 layout policy over a synthetic 5 GB tree.
 
-QA: `tools/qa/Start-ContentAssetMock.ps1` serves the `releases/download/<tag>/<asset>` shape on
-loopback with `-NoRange`, `-DropAfter` and `-Throttle` modes; `tools/qa/Test-ContentFlow.ps1`
-drives the real updater binary against it (fetch, resume, a 200 answer to a ranged request, a
-tampered cache file, commit, latch, and one end-to-end delta);
+QA: `tools/qa/release-mock` (Go) serves the assets on loopback, ranged and through a storage
+redirect, with `-norange`, `-drop-after` and `-throttle` modes and a request log;
+`tools/qa/Test-ContentFlow.ps1` drives the real updater binary against it (fetch, resume, a 200
+answer to a ranged request, a tampered cache file, commit, latch, and the rebuilds from chunk
+maps with their fallbacks);
 `tools/qa/Test-ContentGate.ps1` boots the real engine on
 the QA rig for the gate cases — missing, truncated, corrupt index, flipped byte, stale and
 unrecognised leftovers, no manifest, leftover latch. `docs/dead-air/TEST_MATRIX.md` carries the
@@ -928,7 +878,7 @@ something specific.
 2. **A bundle's filename carries the SHA-256 of the packed file.** Name and bytes are 1:1
    forever, which is what makes an unchanged bundle free and a replaced asset unrecoverable.
 3. **Bundles enter `database\` only by renaming a cache file whose hash already matched.**
-   Nothing writes into `database\` directly, so a partial file or a delta output cannot
+   Nothing writes into `database\` directly, so a partial file or a half-rebuilt bundle cannot
    acquire a bundle name — structurally, not by a check somebody could remove.
 4. **Add before delete, always.** Obsolete bundles are demoted to the cache after the
    replacements are in place, never deleted inside a commit. Too many bundles is a tidy-up;

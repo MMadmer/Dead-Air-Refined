@@ -14,6 +14,11 @@
 // can never continue the wrong revision, and a finished file is renamed to
 // `content-cache\<sha256>` only after its hash matches. Nothing partial can ever acquire a
 // bundle name, which is what makes the mount gate's job possible.
+//
+// A bundle whose slot the installation already holds in another revision is rebuilt rather than
+// downloaded: its chunk map (ContentChunks.h) says which runs are already on disk, and only the
+// rest is fetched, by range, out of the published bundle. The rebuild writes the same part file
+// in the same order, so resume and verification are the ones above.
 
 #include "ContentManifest.h"
 #include "ContentPaths.h"
@@ -30,7 +35,8 @@ struct Progress
 {
     std::uint64_t done{};
     std::uint64_t total{};
-    std::string current;
+    // Still working out what to fetch: chunk maps, and the revisions already on disk being cut.
+    bool planning{};
 };
 
 struct Options
@@ -70,4 +76,9 @@ std::string QaBaseUrl();
 // hash, and leaves the verified files in `content-cache\<sha256>`. Installs nothing: putting
 // bytes into `database\` is the commit's job and only ever happens by rename.
 Result Fetch(const ContentResolver::Plan& plan, const ContentPaths::Layout& paths, const Options& options);
+
+// What Fetch would move over the network for `plan`, rebuilds counted at what they fetch. Reads
+// the chunk maps and cuts the local revisions, so it costs a few small requests and a read of
+// the bases; what it cut is kept for the Fetch that usually follows.
+std::uint64_t Estimate(const ContentResolver::Plan& plan, const ContentPaths::Layout& paths, const Options& options);
 }

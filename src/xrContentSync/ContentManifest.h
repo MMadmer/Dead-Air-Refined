@@ -34,28 +34,12 @@ struct Bundle
     std::uint64_t size{};
 };
 
-// A published binary delta from one revision of a bundle to another. Cumulative: every edge
-// ever published for a bundle that still exists stays listed, so a player who skipped
-// releases can still be walked from whatever revision they actually hold.
-struct Delta
-{
-    std::string hash;        // SHA-256 of the delta asset itself
-    std::string name;        // delta asset file name
-    std::string releaseTag;
-    std::string baseName;    // bundle file name the delta applies to
-    std::string baseHash;
-    std::string targetHash;  // a Bundle::hash, or the base of another delta that continues the chain
-    std::uint64_t size{};
-    std::uint64_t baseSize{};
-};
-
 struct Manifest
 {
     std::string version;
     std::string contentId;
     std::string repo;
     std::vector<Bundle> bundles;
-    std::vector<Delta> deltas;
 
     const Bundle* FindByName(std::string_view name) const;
     const Bundle* FindByHash(std::string_view hash) const;

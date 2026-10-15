@@ -1169,10 +1169,19 @@ int finish_update(const Arguments& arguments)
     if (!command)
         return 21;
     const std::filesystem::path gameDirectory = arguments.cache.parent_path().parent_path().parent_path();
+    // The cache holds programs that ran a moment ago, and a real-time scanner still reading one of
+    // them is the usual reason it will not go at once. It is the update's leftovers, not the
+    // update: one that will not go after a few seconds is left for the next one, and the player
+    // gets the restart either way.
     std::error_code error;
-    std::filesystem::remove_all(arguments.cache, error);
-    if (error)
-        return 22;
+    for (unsigned attempt = 0; attempt < 10; ++attempt)
+    {
+        error.clear();
+        std::filesystem::remove_all(arguments.cache, error);
+        if (!error)
+            break;
+        Sleep(500);
+    }
     std::filesystem::remove(arguments.cache.parent_path(), error);
     error.clear();
     return launch_command(*command, gameDirectory) ? 0 : 23;
@@ -1218,25 +1227,38 @@ int apply_update(const Arguments& arguments)
     if (error)
         return 12;
 
+    // A patch that cannot be applied is not a failure of the release - the full archive still
+    // applies. Leave a note so the client takes the full archive for this version next time
+    // instead of looping the player through the same refusal. That holds for a patch the client
+    // wrote itself out of the full archive as much as for a published one, whatever refused it.
+    const std::wstring archiveName = arguments.archive.filename().wstring();
+    const auto refuse_patch = [&]
+    {
+        std::error_code markerError;
+        std::filesystem::create_directories(arguments.gameDirectory / L".dead-air-x64", markerError);
+        write_text(arguments.gameDirectory / L".dead-air-x64" / L"patch-rejected.txt", wide_to_utf8(arguments.version));
+    };
+    const bool namedPatch = archiveName.ends_with(L"-Update_Patch.zip") || archiveName.ends_with(L"-Update_Delta.zip");
+
     std::set<std::wstring, std::less<>> extracted;
     if (!extract_archive(arguments.archive, stage, extracted))
+    {
+        if (namedPatch)
+            refuse_patch();
         return 13;
+    }
     const auto manifest = parse_manifest(stage / L"update-manifest.txt");
     bool unpatchable = false;
     if (!manifest || manifest->version != arguments.version ||
         !verify_stage(stage, arguments.gameDirectory, *manifest, extracted, unpatchable))
     {
-        // A patch that does not fit this installation is not a failure of the release - the
-        // full archive still applies. Leave a note so the client stops offering the patch for
-        // this version instead of looping the player through the same rejection.
         if (unpatchable)
         {
-            std::error_code markerError;
-            std::filesystem::create_directories(arguments.gameDirectory / L".dead-air-x64", markerError);
-            write_text(arguments.gameDirectory / L".dead-air-x64" / L"patch-rejected.txt",
-                wide_to_utf8(arguments.version));
+            refuse_patch();
             return 24;
         }
+        if (namedPatch || (manifest && manifest->patch))
+            refuse_patch();
         return 14;
     }
 

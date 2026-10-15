@@ -51,6 +51,7 @@ private:
     UpdateService::State m_lastState{UpdateService::State::Idle};
     xr_string m_lastVersion;
     xr_string m_lastChanges;
+    u64 m_lastTotal{~0ull};
     std::optional<UpdateService::Snapshot> m_preview;
 
     UpdateService::Snapshot Current() const { return m_preview ? *m_preview : UpdateService::GetSnapshot(); }

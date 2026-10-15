@@ -37,6 +37,8 @@ struct ServiceState
     std::atomic<ContentService::State> state{ContentService::State::Unknown};
     std::atomic_bool stopRequested{};
     std::atomic_bool verifyStarted{};
+    // Set by the initial pass for what a download cannot fix (see Snapshot::repairable).
+    std::atomic_bool unrepairable{};
     // Set when the cheap pass found nothing wrong but a previous run left the latch behind.
     // That is the one case where a hash pass may run while the state is still Incomplete.
     std::atomic_bool latchedOnly{};
@@ -48,17 +50,12 @@ struct ServiceState
     xr_vector<xr_string> notices;
     u32 present{};
     u64 missingBytes{};
-    xr_string activity;
-    // The window's wording for the repair stages, resolved from the string table on the main
-    // thread before the worker starts: the table is cp1251 and the UI draws cp1251, while a
-    // literal in this UTF-8 source reaches the screen as mojibake.
-    struct
-    {
-        xr_string verify, download, install, repaired;
-        xr_string failVerify, failSpace, failDownload, failInstall;
-    } texts;
+    std::atomic<ContentService::Stage> stage{ContentService::Stage::None};
+    std::atomic<ContentService::Failure> failure{ContentService::Failure::None};
     std::atomic<u64> repairDone{};
     std::atomic<u64> repairTotal{};
+    std::atomic<u64> spaceRequired{};
+    std::atomic<u64> spaceFree{};
     // How many entries of `problems` came from the initial pass. A verify pass owns everything
     // after that mark and rewrites it; what came before is not its to retract.
     size_t initialProblems{};
@@ -170,6 +167,10 @@ void verify_worker(bool ignoreCache)
         // installation is fine on the strength of a pass that never finished.
         Msg("* [content] verification cancelled");
         instance.verifyStarted.store(false, std::memory_order_release);
+        // Ended without a verdict, and not because the game is closing: the window offers to try
+        // again instead of saying "checking" for the rest of the session.
+        if (!instance.stopRequested.load(std::memory_order_acquire))
+            instance.failure.store(ContentService::Failure::Check, std::memory_order_release);
         instance.state.store(ContentService::State::Incomplete, std::memory_order_release);
         return;
     }
@@ -206,6 +207,10 @@ void verify_worker(bool ignoreCache)
             instance.problems.end());
         for (const ContentResolver::Job& job : plan.jobs)
             add_problem(instance, describe(job));
+        // What a repair would download, now including what only hashing could find.
+        instance.missingBytes = 0;
+        for (const ContentResolver::Job& job : plan.jobs)
+            instance.missingBytes += job.bundle.size;
         clean = instance.problems.empty();
     }
 
@@ -233,20 +238,11 @@ constexpr pcstr AssetsRepository = "MMadmer/Dead-Air-Refined_Assets";
 // an update that is reverted costs nothing to put back.
 constexpr u64 ContentCacheCapBytes = 6ull * 1024 * 1024 * 1024;
 
-void set_activity(ServiceState& instance, const xr_string& line)
-{
-    std::lock_guard guard(instance.dataMutex);
-    instance.activity = line;
-}
-
 void repair_worker()
 {
+    using ContentService::Failure;
+    using ContentService::Stage;
     ServiceState& instance = service();
-    const auto texts = [&]
-    {
-        std::lock_guard guard(instance.dataMutex);
-        return instance.texts;
-    }();
 
     ContentPaths::Layout paths;
     ContentManifest::Manifest manifest;
@@ -256,13 +252,20 @@ void repair_worker()
         manifest = instance.manifest;
     }
 
-    const auto fail = [&](const xr_string& line)
+    const auto fail = [&](Failure failure, const xr_string& reason)
     {
+        // Quitting the game in the middle of a download is the player's choice, not a failure: the
+        // parts stay in the cache and the next repair resumes them.
+        if (instance.stopRequested.load(std::memory_order_acquire))
         {
-            std::lock_guard guard(instance.dataMutex);
-            instance.activity = line;
+            Msg("* [content] repair interrupted");
+            instance.stage.store(Stage::None, std::memory_order_release);
+            instance.state.store(ContentService::State::Incomplete, std::memory_order_release);
+            return;
         }
-        Msg("! [content] repair failed: %s", line.c_str());
+        Msg("! [content] repair failed: %s", reason.c_str());
+        instance.failure.store(failure, std::memory_order_release);
+        instance.stage.store(Stage::None, std::memory_order_release);
         instance.state.store(ContentService::State::Incomplete, std::memory_order_release);
     };
 
@@ -272,7 +275,7 @@ void repair_worker()
     if (!ContentState::WriteLatch(paths.Latch(), manifest.version, ContentState::Reason::RepairCommit))
         Msg("! [content] could not write content-incomplete.txt - this state will not survive a restart");
 
-    set_activity(instance, texts.verify);
+    instance.stage.store(Stage::Checking, std::memory_order_release);
     ContentResolver::Options options;
     options.verifyHashes = true;
     options.cancel = &instance.stopRequested;
@@ -281,7 +284,7 @@ void repair_worker()
     std::string error;
     if (!ContentResolver::Resolve(manifest, paths, options, plan, error))
     {
-        fail(format(texts.failVerify.c_str(), error.c_str()));
+        fail(Failure::Check, format("the installed content could not be checked: %s", error.c_str()));
         return;
     }
 
@@ -289,18 +292,19 @@ void repair_worker()
     const u64 free = ContentResolver::FreeBytes(paths.root);
     if (free && free < required)
     {
-        fail(format(texts.failSpace.c_str(),
-            static_cast<unsigned long long>(required / (1024 * 1024)),
-            static_cast<unsigned long long>(free / (1024 * 1024))));
+        instance.spaceRequired.store(required, std::memory_order_release);
+        instance.spaceFree.store(free, std::memory_order_release);
+        fail(Failure::Space, format("not enough disk space: %llu bytes needed, %llu available",
+            static_cast<unsigned long long>(required), static_cast<unsigned long long>(free)));
         return;
     }
 
-    instance.repairTotal.store(plan.bytesToFetch, std::memory_order_release);
+    instance.repairTotal.store(0, std::memory_order_release);
     instance.repairDone.store(0, std::memory_order_release);
 
     if (plan.bytesToFetch)
     {
-        set_activity(instance, texts.download);
+        instance.stage.store(Stage::Planning, std::memory_order_release);
 
         ContentDownload::Options download;
         download.repo = AssetsRepository;
@@ -308,27 +312,30 @@ void repair_worker()
         download.cancel = &instance.stopRequested;
         download.onProgress = [&](const ContentDownload::Progress& progress)
         {
+            if (progress.planning)
+                return;
             instance.repairDone.store(progress.done, std::memory_order_release);
             instance.repairTotal.store(progress.total, std::memory_order_release);
+            instance.stage.store(Stage::Downloading, std::memory_order_release);
         };
         download.onLog = [](const std::string& line) { Msg("* [content] %s", line.c_str()); };
 
         const ContentDownload::Result result = ContentDownload::Fetch(plan, paths, download);
         if (!result.ok)
         {
-            fail(format(texts.failDownload.c_str(), result.error.c_str()));
+            fail(Failure::Download, format("the content could not be downloaded: %s", result.error.c_str()));
             return;
         }
     }
 
-    set_activity(instance, texts.install);
+    instance.stage.store(Stage::Installing, std::memory_order_release);
 
     // Re-resolved after the download so the commit works from what is actually in the cache
     // now, rather than from a plan made before any of it arrived.
     ContentResolver::Plan ready;
     if (!ContentResolver::Resolve(manifest, paths, options, ready, error))
     {
-        fail(format(texts.failVerify.c_str(), error.c_str()));
+        fail(Failure::Check, format("the downloaded content could not be checked: %s", error.c_str()));
         return;
     }
 
@@ -337,14 +344,14 @@ void repair_worker()
     const ContentCommit::Result committed = ContentCommit::Run(manifest, ready, paths, commit);
     if (!committed.ok)
     {
-        fail(format(texts.failInstall.c_str(), committed.error.c_str()));
+        fail(Failure::Install, format("the content could not be installed: %s", committed.error.c_str()));
         return;
     }
 
     ContentResolver::CollectCache(paths, manifest, ready, ContentCacheCapBytes);
 
     Msg("* [content] repair installed %u bundle(s), retired %u", committed.installed, committed.demoted);
-    set_activity(instance, texts.repaired);
+    instance.stage.store(Stage::Done, std::memory_order_release);
     instance.state.store(ContentService::State::Repaired, std::memory_order_release);
 }
 
@@ -362,6 +369,7 @@ void run_initial_pass(ServiceState& instance)
     instance.notices.clear();
     instance.present = 0;
     instance.missingBytes = 0;
+    instance.unrepairable.store(false, std::memory_order_release);
 
     // An installation that cannot record its own incompleteness will present as healthy after a
     // crash, so a latch that will not write is itself worth reporting.
@@ -409,6 +417,7 @@ void run_initial_pass(ServiceState& instance)
     {
         fail("$arch_dir$ is not defined, so content bundles have nowhere to live",
             ContentState::Reason::VerifyFailed, State::Incomplete);
+        instance.unrepairable.store(true, std::memory_order_release);
         return;
     }
     if (!same_directory(mounted, instance.paths.Database()))
@@ -419,6 +428,7 @@ void run_initial_pass(ServiceState& instance)
         add_problem(instance, format("$arch_dir$ points at %s instead of %s - content cannot be repaired there",
             mounted.string().c_str(), instance.paths.Database().string().c_str()));
         latch(ContentState::Reason::VerifyFailed);
+        instance.unrepairable.store(true, std::memory_order_release);
         instance.state.store(State::Incomplete, std::memory_order_release);
         return;
     }
@@ -437,6 +447,7 @@ void run_initial_pass(ServiceState& instance)
         add_problem(instance, format("the content installation could not be examined: %s",
             resolveError.c_str()));
         latch(ContentState::Reason::VerifyFailed);
+        instance.unrepairable.store(true, std::memory_order_release);
         instance.state.store(State::Incomplete, std::memory_order_release);
         return;
     }
@@ -470,8 +481,11 @@ void run_initial_pass(ServiceState& instance)
         // manifest does not declare is a leftover: it is not mounted, nothing wants it, and
         // refusing to start the game over a stray file would be punishing the player for the
         // installer's mess. The cleanup pass deletes it; the game plays.
-        if (instance.manifest.FindByName(name.c_str()))
+        if (const ContentManifest::Bundle* declared = instance.manifest.FindByName(name.c_str()))
+        {
             add_problem(instance, line);
+            instance.missingBytes += declared->size;
+        }
         else
             add_notice(instance, line);
     }
@@ -533,6 +547,7 @@ void ContentService::StartVerify()
         return;
     if (instance.verifyStarted.exchange(true, std::memory_order_acq_rel))
         return;
+    instance.failure.store(ContentService::Failure::None, std::memory_order_release);
 
     // A latched installation stays Incomplete while the pass runs behind it: the gate stays
     // shut, the dialog stays up, and when the pass comes back clean the state flips and the
@@ -563,6 +578,7 @@ void ContentService::ForceVerify()
     // player to do.
     instance.state.store(State::Unknown, std::memory_order_release);
     instance.latchedOnly.store(false, std::memory_order_release);
+    instance.failure.store(Failure::None, std::memory_order_release);
     run_initial_pass(instance);
     instance.initialProblems = instance.problems.size();
 
@@ -595,25 +611,21 @@ void ContentService::StartRepair()
         Msg("! [content] no usable manifest - the installation has to be reinstalled");
         return;
     }
+    if (instance.unrepairable.load(std::memory_order_acquire))
+    {
+        // A download into a folder the engine does not read would end "repaired" and come back
+        // incomplete on every launch.
+        Msg("! [content] the content cannot be repaired here - the installation has to be reinstalled");
+        return;
+    }
 
     instance.stopRequested.store(true, std::memory_order_release);
     if (instance.worker.joinable())
         instance.worker.join();
     instance.stopRequested.store(false, std::memory_order_release);
 
-    {
-        // Main thread: the string table is not for a worker to read.
-        std::lock_guard guard(instance.dataMutex);
-        auto& texts = instance.texts;
-        texts.verify = StringTable().translate("st_content_activity_verify").c_str();
-        texts.download = StringTable().translate("st_content_activity_download").c_str();
-        texts.install = StringTable().translate("st_content_activity_install").c_str();
-        texts.repaired = StringTable().translate("st_content_activity_repaired").c_str();
-        texts.failVerify = StringTable().translate("st_content_fail_verify").c_str();
-        texts.failSpace = StringTable().translate("st_content_fail_space").c_str();
-        texts.failDownload = StringTable().translate("st_content_fail_download").c_str();
-        texts.failInstall = StringTable().translate("st_content_fail_install").c_str();
-    }
+    instance.failure.store(Failure::None, std::memory_order_release);
+    instance.stage.store(Stage::Checking, std::memory_order_release);
     instance.state.store(State::Repairing, std::memory_order_release);
     instance.worker = std::thread(repair_worker);
 }
@@ -663,10 +675,16 @@ ContentService::Snapshot ContentService::GetSnapshot()
         snapshot.missingBytes = instance.missingBytes;
         snapshot.problems = instance.problems;
         snapshot.notices = instance.notices;
-        snapshot.activity = instance.activity;
     }
+    snapshot.checking = instance.latchedOnly.load(std::memory_order_acquire) &&
+        instance.verifyStarted.load(std::memory_order_acquire) && snapshot.problems.empty();
+    snapshot.repairable = !instance.unrepairable.load(std::memory_order_acquire);
+    snapshot.stage = instance.stage.load(std::memory_order_acquire);
+    snapshot.failure = instance.failure.load(std::memory_order_acquire);
     snapshot.repairDone = instance.repairDone.load(std::memory_order_acquire);
     snapshot.repairTotal = instance.repairTotal.load(std::memory_order_acquire);
+    snapshot.spaceRequired = instance.spaceRequired.load(std::memory_order_acquire);
+    snapshot.spaceFree = instance.spaceFree.load(std::memory_order_acquire);
     return snapshot;
 }
 

@@ -99,6 +99,7 @@ q\module-commands` - `cmd_qa` declares five commands plus a stock name (`xms_lis
 | Saved-game preservation | Fresh install without `appdata` plus repeat install with an existing save sentinel | Pass, `appdata\savedgames` created and sentinel SHA-256 unchanged |
 | External updater | Isolated installed root, backup, apply, maintenance, cleanup | Pass, in-flight snapshot created, obsolete sentinel removed, cache deleted, uninstaller regenerated. The snapshot is a transaction rollback for the update that is running and is deleted once the apply succeeds, so nothing is retained afterwards |
 | Empty release list | Isolated update response with no valid stable release | Pass, accepted without an update candidate or blocking the menu |
+| Update delta, end to end | `tools/qa/Test-UpdateDelta.ps1` (15.10.2026, 1.6.0-dev): a rig built from the worktree, a release 1.6.1 whose `Update.zip` is the rig's payload with one file changed, one added and one dropped, served by the release mock with GitHub's storage redirect; the game started with `-qa_update -qa_update_auto` | Pass: `2 of 63 file(s) differ, 127 of 248717113 byte(s) to fetch`, 69 KB of the 249 MB archive served in all (the tail, the manifest, the two records), the storage URL reused after the first download request; the installed updater applied the written patch, the dropped file is gone, every other file is the release's, and the game came back up. The rig holds its hidden desktop for the whole run: when the launcher let go of it, the updater's cleanup instance started as its parent exited found no desktop and died before its first line, which looked like a finish stage that never ran |
 | Final package smoke | Latest x86 save, 22,958 spawn points / 27,198 objects | Pass |
 | Manual diagnostic report | Loaded `async_benchmark_1`, hidden desktop | Pass, valid anonymous ZIP with system, hardware, runtime, content, log, configuration, and minidump data |
 | Automatic crash report | Gated release QA access violation | Pass, exception code, module RVA, anonymous stack, and valid `MDMP` attachment captured |
@@ -292,13 +293,18 @@ cannot point a shipped build at an arbitrary server.
 | Stale and unrecognised leftovers | A copy under a wrong hash in a slot the manifest knows, plus a copy in a group it does not have | Pass, `stale bundle` and `unrecognised bundle-shaped archive` respectively; both are refused and reported as notices, and neither blocks play |
 | Absent manifest | `content-manifest.txt` moved aside | Pass, `manifest unavailable`, `state=recovery`, play refused - not a silent boot with every bundle unmounted |
 | Leftover latch on an intact installation | Hand-written `content-incomplete.txt` on a correct installation | Pass, startup reports the latch and keeps the gate shut, and the background hash pass clears it without a restart |
-| Clean fetch | `Test-ContentFlow.ps1`, `--content-fetch` against the asset mock | Pass, every declared bundle lands in `.dead-air-x64\content-cache` under its own SHA-256 |
+| Clean fetch | `Test-ContentFlow.ps1`, `--content-fetch` against the release mock (`tools/qa/release-mock`, Go) | Pass, every declared bundle lands in `.dead-air-x64\content-cache` under its own SHA-256 |
 | Commit | `--content-commit` over that cache | Pass, every bundle is installed into `database\` and the latch is removed |
 | Plan against a complete installation | `--content-plan` after the commit | Pass, `missing=0` - an installation that already matches its manifest fetches nothing |
 | Resume through repeated drops | Mock closing the socket every quarter of the largest bundle | Pass, the transfer completes, and the mock's log shows `Range` requests from non-zero offsets, so it resumed rather than restarting from zero each time |
-| Server that ignores `Range` | `-NoRange` mock answering 200 to a range request over an existing part file | Pass, the part is truncated and refetched from zero instead of having a second copy of the head appended |
+| Server that ignores `Range` | `-norange` mock answering 200 to a range request over an existing part file | Pass, the part is truncated and refetched from zero instead of having a second copy of the head appended |
 | Tampered cache entry | One byte flipped in a finished cache file before the commit | Pass, the commit exits non-zero and nothing enters `database\` |
-| Upgrade by delta | `Test-ContentFlow.ps1`, a v2 manifest whose `[deltas]` section carries one real `.darpatch` edge for the largest bundle, mock serving the v2 assets | Pass, the fetch pulls the patch and never the whole v2 bundle, and the locally rebuilt file survives the commit and lands in `database\` under its v2 name. Recorded as a failure when `bin\x64\Release\DarDelta.exe` is not built, because a case that cannot run is not a case that passed |
+| Rebuild from the revision in `database\` | `Test-ContentFlow.ps1` (15.10.2026, 1.6.0-dev): 4 KiB rewritten in the middle of the largest synthetic bundle, its chunk map cut by `DarDelta.exe --chunk-map`, v1 installed, the v2 manifest handed over | Pass: the map was read, 88 760 of 8 602 024 bytes fetched, the rebuilt bundle committed under its v2 name and the old revision retired into the cache. Recorded as a failure when `DarDelta.exe` is not built |
+| Rebuild from a revision retired into the cache | The same, with the v1 bundle moved into `content-cache\<sha256>` the way a 1.4-1.5 commit leaves it | Pass, found through `content-state.txt`, rebuilt for the same few kilobytes, committed |
+| Rebuild through dropped connections | `-drop-after 20000` during the rebuild | Pass, completes, still a small fraction of the bundle |
+| Rebuild against a server that ignores `Range` | `-norange` | Pass, falls back to streaming the bundle, verifies and commits |
+| Bundle without a chunk map | The map withheld | Pass, the whole bundle is fetched |
+| What a 1.5.0 player would fetch of the 1.6.0 content | Chunk maps of the 26 bundles of 1.6.0 against the 1.4.0 revisions of their slots, both cut by `DarDelta.exe` | 6 125 of 6 633 MB (92 %): 1.6.0 replaced nearly every texture set, and eight slots are new. `textures_05` costs 1.3 of 334 MB, `meshes_00` 13 of 51 MB, `textures_13` 106 of 182 MB |
 | Install-time fetch outlasting the start grace | `Test-InstallerContentFetch.ps1`: silent `Setup.exe` over a skeleton of an original installation, asset mock throttled to 512 KB/s so the fetch runs well past the wizard's ten-second start grace | Case 3 passed on the 1.4.1-labelled build of this code; cases 1 and 2 were refused by Setup's own game mutex because a probe engine was up at the time, and the rerun was not made - the user's own installer runs stand in for them |
 | Fetcher left by an earlier attempt | The same Setup started while a fetcher holds the liveness mutex mid-download | Not rerun, see the row above |
 | Second fetcher declines | `--content-fetch` started beside a running one | Pass, exit 26 naming the running download; the first one kept going and stopped on its own cancel flag |
@@ -405,45 +411,11 @@ equally unproven: the only content step on the update path is the
 something else filled, and no run has taken an installation across two content
 sets.
 
-Binary deltas have shipped. `src/xrContentSync/ContentDelta.{h,cpp}` applies
-them, `src/utils/DarDelta` builds them, `dead_air_x64_content_bundles.ps1` emits
-the `[deltas]` section whenever it is given `-PreviousManifest`, and the manifest
-parser validates the cumulative edges. One end-to-end case exercises the healthy
-path: `Test-ContentFlow.ps1` overwrites 4 KiB in the middle of the largest
-bundle, builds a real `.darpatch` with `DarDelta.exe`, writes a v2 manifest
-carrying that single edge with a recomputed `content-id`, installs v1 for real,
-then repoints the mock at the v2 assets and fetches. It asserts that the fetch
-succeeds, that the mock's log shows the `.darpatch` requested, that it never
-shows the whole v2 bundle requested, and that the locally rebuilt file passes the
-commit and lands in `database\`. That is one hop on a healthy disk and nothing
-else. When `bin\x64\Release\DarDelta.exe` is not built the case is recorded
-as a failure rather than skipped, so a run that dropped the only delta
-coverage cannot end by reporting that every case passed.
-
-The failure modes are all still uncovered, and they are a pre-release blocker,
-because the apply path is the only place in the system where the client
-manufactures bytes it never downloaded. A corrupt patch has to be shown falling
-back to the whole bundle for every malformed shape `ContentDelta::Apply`
-distinguishes - bad magic or version, a body that ends early, a COPY reaching
-outside the base, an INSERT larger than the target can hold, an unknown opcode,
-and ops that all complete but produce the wrong length - every one of which is an
-`Integrity` verdict. A patch applied against the wrong base is deliberately not
-one of them: the base is re-hashed immediately before the apply rather than
-trusted from the plan, and a mismatch is `Transient`, so it has to fall back
-silently and must not be remembered. A cancel mid-apply is untested in both
-halves: there is no cancel check inside the COPY and INSERT byte loops, only
-between ops, so a single op over a large base sets the worst-case latency, and
-the partial output has to be gone afterwards. The blacklist round trip has never
-been walked: `rejected-deltas.txt` takes an entry only for an `Integrity`
-verdict, while a disk that filled mid-apply, a cancel, a wrong base, and an
-output that matches the `.darpatch` header's target hash but not the manifest's
-are all retried instead, because a permanent blacklist turns a 20 MB delta into a
-400 MB download for good - and neither the resolver dropping a blacklisted edge
-nor `ContentCommit` clearing the file when the content-id changes has been
-exercised. And no multi-hop chain has ever been built: each intermediate is freed
-only once the next hop's apply returns, so peak cache use is two bundles plus the
-hop's delta asset rather than the whole path, and a chain that does not end at
-the bundle the manifest wants must be refused rather than committed.
+Published `.darpatch` deltas are gone (1.6.0); chunk maps replaced them, and the cases above
+cover the rebuild's healthy path and its fallbacks. What is not covered yet: a map whose keys
+lie (a rebuilt bundle that fails its hash and has to be streamed again on the second pass), a
+cancel in the middle of a rebuild followed by a resume that continues by streaming, and a fetch
+against the real GitHub storage redirect - the mock imitates it, nothing published has a map yet.
 
 Also untested: a disk that fills during a fetch or a commit; the installer's
 free-space refusal on the directory page; a bundle that cannot be deleted during

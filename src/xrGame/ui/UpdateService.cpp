@@ -4,6 +4,7 @@
 #include "StdAfx.h"
 #include "UpdateService.h"
 #include "ModOptOut.h"
+#include "UpdateDelta.h"
 
 #include "xrCore/ProductVersion.h"
 #include "xrEngine/Engine.h"
@@ -47,12 +48,18 @@ namespace
 constexpr std::wstring_view ReleasesUrl =
     L"https://api.github.com/repos/MMadmer/Dead-Air-Refined/releases?per_page=30";
 constexpr pcstr UpdateAssetPrefix = "Dead-Air-Refined-";
-// The complete payload, for a manual install or for a player who cannot take the patch. The
-// name is the one every client since 1.0 has looked for; it is what keeps an installation on
-// any earlier 1.x build able to find the next release at all, so it is not renamed.
+// The complete payload, for a manual install and for every update: a client reads the files it
+// lacks out of it by range (UpdateDelta.h). The name is the one every client since 1.0 has looked
+// for; it is what keeps an installation on any earlier 1.x build able to find the next release
+// at all, so it is not renamed.
 constexpr pcstr FullAssetSuffix = "-Update.zip";
-// Only the files that differ from the previous release.
+// Only the files that differ from the previous release. Published up to 1.6.0, for the clients
+// that cannot read the full archive by range; a client that can prefers that.
 constexpr pcstr PatchAssetSuffix = "-Update_Patch.zip";
+// What the client writes the delta into, next to where a downloaded archive would land.
+constexpr pcstr DeltaArchiveSuffix = "-Update_Delta.zip";
+// A delta that would fetch most of the archive anyway is not worth its extra requests.
+constexpr double DeltaWorthRatio = 0.9;
 // The target version's content manifest, published alongside the installers. It is the one
 // asset a client reads before deciding anything, which is why it cannot live only inside a
 // payload the client has not applied yet.
@@ -104,7 +111,12 @@ struct ServiceState
     std::atomic_bool started{};
     std::atomic_bool stopRequested{};
     std::atomic_bool majorDismissed{};
+    // The updater is on its way and the game is quitting: a second click must not try to copy
+    // over an updater that is already running and report the update as failed.
+    std::atomic_bool applying{};
     std::atomic<UpdateService::Payload> payload{UpdateService::Payload::Full};
+    // Asked to stop measuring the content: the player took the offer before the estimate was done.
+    std::atomic_bool estimateStop{};
     std::mutex dataMutex;
     xr_string version;
     xr_string message;
@@ -115,6 +127,17 @@ struct ServiceState
     xr_string assetName;
     xr_string contentManifestUrl;
     xr_string contentManifestDigest;
+    u64 contentManifestSize{};
+    // The full archive behind a delta: what the delta reads from, and what a delta that cannot be
+    // built falls back to.
+    xr_string fullUrl;
+    xr_string fullDigest;
+    xr_string fullName;
+    u64 fullSize{};
+    UpdateDelta::Plan delta;
+    // The update itself and the content of its version, which add up to the total shown.
+    u64 payloadBytes{};
+    u64 contentBytes{};
     xr_string themeEn;
     xr_string themeRu;
     xr_string majorVersion;
@@ -952,6 +975,8 @@ const Release* select_major(const xr_vector<Release>& releases, const SemanticVe
     return selected;
 }
 
+u64 estimate_content(const std::filesystem::path& root, const ReleaseAsset& manifestAsset, const xr_string& version);
+
 void set_state(UpdateService::State state, xr_string message = {})
 {
     ServiceState& instance = service();
@@ -984,6 +1009,16 @@ void check_worker()
 
     ServiceState& instance = service();
 
+    // What earlier updates left in the update cache: the finish stage leaves a folder a scanner
+    // would not let go of, and a check that measured content leaves the target's folder. Nothing
+    // in there is in use while the game runs - the update in flight is always the one this
+    // session downloads.
+    if (const std::filesystem::path root = game_directory(); !root.empty())
+    {
+        std::error_code sweepError;
+        std::filesystem::remove_all(root / L".dead-air-x64" / L"update-cache", sweepError);
+    }
+
     // The major notice is decided on its own and survives a "no update" verdict: the two
     // answers are independent.
     if (const Release* major = select_major(releases, *current))
@@ -1015,6 +1050,35 @@ void check_worker()
         return;
     }
 
+    UpdateChoice choice = *update;
+    const std::filesystem::path root = game_directory();
+    const ReleaseAsset* full = find_asset(choice.release, FullAssetSuffix);
+
+    // The delta: what this installation lacks of the full archive, read by range. A patch that the
+    // applier refused for this version (patch-rejected.txt) rules the delta out too - both are
+    // patches to it, and the full archive is the answer to either.
+    UpdateDelta::Plan delta;
+    if (full && !root.empty() && patch_rejected_version() != choice.release.tag)
+    {
+        ModHttp::Session session;
+        xr_string deltaError;
+        if (UpdateDelta::Prepare(session, utf8_to_wide(full->url), full->size, choice.release.tag, root, delta,
+                deltaError, instance.stopRequested))
+        {
+            Msg("* Update delta: %zu of %u file(s) differ, %llu of %llu byte(s) to fetch", delta.missing.size(),
+                delta.files, static_cast<unsigned long long>(delta.downloadBytes),
+                static_cast<unsigned long long>(full->size));
+            if (delta.downloadBytes < DeltaWorthRatio * static_cast<double>(full->size) &&
+                delta.downloadBytes < choice.asset.size)
+            {
+                choice.payload = UpdateService::Payload::Delta;
+            }
+        }
+        else
+            Msg("* Update delta not available (%s), the whole archive will be fetched", deltaError.c_str());
+    }
+    const u64 payloadBytes = choice.payload == UpdateService::Payload::Delta ? delta.downloadBytes : choice.asset.size;
+
     {
         std::lock_guard lock(instance.dataMutex);
         instance.version = update->release.tag;
@@ -1024,22 +1088,43 @@ void check_worker()
         instance.changesEn = extract_release_changes(update->release.body, "## EN", "## Changes", "## Theme");
         instance.changesRu = utf8_to_windows_1251(
             extract_release_changes(update->release.body, "## RU", "## Изменения", "## Тема"));
-        instance.downloadUrl = update->asset.url;
-        instance.digest = update->asset.digest;
-        instance.assetName = update->asset.name;
-        instance.contentManifestUrl = update->contentManifest.url;
-        instance.contentManifestDigest = update->contentManifest.digest;
+        instance.downloadUrl = choice.asset.url;
+        instance.digest = choice.asset.digest;
+        instance.assetName = choice.asset.name;
+        instance.contentManifestUrl = choice.contentManifest.url;
+        instance.contentManifestDigest = choice.contentManifest.digest;
+        instance.contentManifestSize = choice.contentManifest.size;
+        instance.fullUrl = full ? full->url : xr_string{};
+        instance.fullDigest = full ? full->digest : xr_string{};
+        instance.fullName = full ? full->name : xr_string{};
+        instance.fullSize = full ? full->size : 0;
+        instance.delta = std::move(delta);
+        instance.payloadBytes = payloadBytes;
+        instance.contentBytes = 0;
         instance.message.clear();
     }
-    instance.payload.store(update->payload, std::memory_order_release);
-    instance.totalBytes.store(update->asset.size, std::memory_order_release);
+    instance.payload.store(choice.payload, std::memory_order_release);
+    instance.totalBytes.store(payloadBytes, std::memory_order_release);
     instance.downloadedBytes.store(0, std::memory_order_release);
-    Msg("* Update available: %s -> %s, %s (%llu bytes)", DeadAirRefined::Version,
-        update->release.tag.c_str(), update->asset.name.c_str(),
-        static_cast<unsigned long long>(update->asset.size));
+    Msg("* Update available: %s -> %s, %s, %llu byte(s) of update", DeadAirRefined::Version, choice.release.tag.c_str(),
+        choice.payload == UpdateService::Payload::Delta ? "delta of the full archive" : choice.asset.name.c_str(),
+        static_cast<unsigned long long>(payloadBytes));
     Msg("* Update changelog: EN %zu bytes, RU %zu bytes",
         instance.changesEn.size(), instance.changesRu.size());
     instance.state.store(UpdateService::State::Available, std::memory_order_release);
+
+    // The content the new version adds is measured after the offer is up, not before it: on a
+    // release that changed a large bundle that reads the revision on disk, which takes seconds.
+    // The window shows the size grow when it is known; taking the offer first stops it.
+    const u64 contentBytes = root.empty() ? 0 : estimate_content(root, choice.contentManifest, choice.release.tag);
+    if (contentBytes && !instance.estimateStop.load(std::memory_order_acquire))
+    {
+        {
+            std::lock_guard lock(instance.dataMutex);
+            instance.contentBytes = contentBytes;
+        }
+        instance.totalBytes.store(payloadBytes + contentBytes, std::memory_order_release);
+    }
 }
 
 class Sha256
@@ -1097,8 +1182,10 @@ private:
     xr_vector<u8> m_object;
 };
 
+// `progressBase` is what the download before this one already counted towards the total; a
+// small download that is not part of what the player waits for passes `report` false.
 bool download_update(const xr_string& url, const xr_string& digest, u64 expectedSize,
-    const std::filesystem::path& destination, xr_string& error)
+    const std::filesystem::path& destination, xr_string& error, u64 progressBase = 0, bool report = true)
 {
     HttpRequest request;
     if (!request.Open(utf8_to_wide(url), error))
@@ -1152,7 +1239,8 @@ bool download_update(const xr_string& url, const xr_string& digest, u64 expected
             break;
         }
         total += received;
-        service().downloadedBytes.store(total, std::memory_order_release);
+        if (report)
+            service().downloadedBytes.store(progressBase + total, std::memory_order_release);
         if (total > expectedSize)
         {
             error = "The update archive is larger than declared";
@@ -1185,6 +1273,52 @@ bool download_update(const xr_string& url, const xr_string& digest, u64 expected
     return success;
 }
 
+// What the incoming version's content adds to the download: its manifest, against what is in
+// database\ now, rebuilds counted at what they fetch. Zero when nothing is missing, or when the
+// question cannot be answered now - the download then simply finds out.
+u64 estimate_content(const std::filesystem::path& root, const ReleaseAsset& manifestAsset, const xr_string& version)
+{
+    if (manifestAsset.url.empty())
+        return 0;
+
+    ContentPaths::Layout paths;
+    paths.root = root;
+    const std::filesystem::path manifestPath = root / L".dead-air-x64" / L"update-cache" / utf8_to_wide(version) /
+        L"content-manifest.txt";
+    xr_string error;
+    if (!download_update(manifestAsset.url, manifestAsset.digest, manifestAsset.size, manifestPath, error, 0, false))
+    {
+        Msg("* Update: the content of %s could not be measured: %s", version.c_str(), error.c_str());
+        return 0;
+    }
+
+    ContentManifest::Manifest manifest;
+    std::string parseError;
+    const bool parsed = ContentManifest::ParseFile(manifestPath.wstring(), manifest, parseError) &&
+        manifest.ContentIdMatches();
+    std::error_code removeError;
+    std::filesystem::remove(manifestPath, removeError);
+    if (!parsed)
+        return 0;
+
+    ContentResolver::Options options;
+    options.verifyHashes = false;
+    options.cancel = &service().estimateStop;
+    ContentResolver::Plan plan;
+    std::string resolveError;
+    if (!ContentResolver::Resolve(manifest, paths, options, plan, resolveError) || plan.Complete())
+        return 0;
+
+    ContentDownload::Options download;
+    download.repo = AssetsRepository;
+    download.qaBaseUrl = ContentDownload::QaBaseUrl();
+    download.cancel = &service().estimateStop;
+    const u64 bytes = ContentDownload::Estimate(plan, paths, download);
+    Msg("* Update: the content of %s adds %llu byte(s) in %zu bundle(s)", version.c_str(),
+        static_cast<unsigned long long>(bytes), plan.jobs.size());
+    return bytes;
+}
+
 // Puts the incoming version's content into the cache before the update is armed.
 //
 // Only into the CACHE. Installing it here would mean moving files the running game has mapped,
@@ -1196,7 +1330,7 @@ bool download_update(const xr_string& url, const xr_string& digest, u64 expected
 // Failure is not fatal to the update. The worst case is the installation the player would have
 // had anyway: it comes up incomplete and offers to repair.
 void prefetch_content(const std::filesystem::path& root, const xr_string& manifestUrl,
-    const xr_string& manifestDigest, const xr_string& version)
+    const xr_string& manifestDigest, u64 manifestSize, const xr_string& version, u64 progressBase)
 {
     if (manifestUrl.empty())
     {
@@ -1212,7 +1346,7 @@ void prefetch_content(const std::filesystem::path& root, const xr_string& manife
     const std::filesystem::path pending = paths.Cache() / L"pending-manifest.txt";
 
     xr_string error;
-    if (!download_update(manifestUrl, manifestDigest, 0, pending, error))
+    if (!download_update(manifestUrl, manifestDigest, manifestSize, pending, error, 0, false))
     {
         Msg("! Update: could not fetch the target content manifest: %s", error.c_str());
         return;
@@ -1257,6 +1391,15 @@ void prefetch_content(const std::filesystem::path& root, const xr_string& manife
     download.qaBaseUrl = ContentDownload::QaBaseUrl();
     download.cancel = &service().stopRequested;
     download.onLog = [](const std::string& line) { Msg("* [content] %s", line.c_str()); };
+    // The same bar as the update: the player waits for both, so both fill it.
+    download.onProgress = [progressBase](const ContentDownload::Progress& progress)
+    {
+        if (progress.planning)
+            return;
+        // The total first: a window reading between the two stores must not see more done than due.
+        service().totalBytes.store(progressBase + std::max(progress.total, progress.done), std::memory_order_release);
+        service().downloadedBytes.store(progressBase + progress.done, std::memory_order_release);
+    };
 
     const ContentDownload::Result result = ContentDownload::Fetch(plan, paths, download);
     if (!result.ok)
@@ -1279,6 +1422,13 @@ void download_worker()
     xr_string assetName;
     xr_string manifestUrl;
     xr_string manifestDigest;
+    u64 manifestSize{};
+    xr_string fullUrl;
+    xr_string fullDigest;
+    xr_string fullName;
+    u64 fullSize{};
+    u64 contentBytes{};
+    UpdateDelta::Plan delta;
     {
         std::lock_guard lock(instance.dataMutex);
         url = instance.downloadUrl;
@@ -1287,6 +1437,13 @@ void download_worker()
         assetName = instance.assetName;
         manifestUrl = instance.contentManifestUrl;
         manifestDigest = instance.contentManifestDigest;
+        manifestSize = instance.contentManifestSize;
+        fullUrl = instance.fullUrl;
+        fullDigest = instance.fullDigest;
+        fullName = instance.fullName;
+        fullSize = instance.fullSize;
+        contentBytes = instance.contentBytes;
+        delta = instance.delta;
     }
 
     const std::filesystem::path root = game_directory();
@@ -1296,27 +1453,80 @@ void download_worker()
         return;
     }
 
-    // Cache under the asset's own name: full and patch archives of one version must not
-    // collide, and a leftover from a rejected patch must not be mistaken for the full one.
-    const std::filesystem::path archive = root / L".dead-air-x64" / L"update-cache" /
-        utf8_to_wide(version) / utf8_to_wide(assetName);
+    const std::filesystem::path cache = root / L".dead-air-x64" / L"update-cache" / utf8_to_wide(version);
     xr_string error;
-    if (!download_update(url, digest, instance.totalBytes.load(std::memory_order_acquire), archive, error))
+    std::filesystem::path archive;
+    if (instance.payload.load(std::memory_order_acquire) == UpdateService::Payload::Delta)
     {
-        Msg("! Update download failed: %s", error.c_str());
-        set_state(UpdateService::State::DownloadFailed, std::move(error));
-        return;
+        archive = cache / utf8_to_wide(xr_string(UpdateAssetPrefix) + version + DeltaArchiveSuffix);
+        ModHttp::Session session;
+        xr_string built;
+        if (UpdateDelta::Build(session, utf8_to_wide(fullUrl), delta, DeadAirRefined::Version, archive, built,
+                instance.downloadedBytes, error, instance.stopRequested))
+        {
+            digest = "sha256:" + built;
+            Msg("* Update delta written: %zu file(s), %llu byte(s) fetched", delta.missing.size(),
+                static_cast<unsigned long long>(instance.downloadedBytes.load(std::memory_order_acquire)));
+        }
+        else if (instance.stopRequested.load(std::memory_order_acquire) || fullUrl.empty())
+        {
+            Msg("! Update download failed: %s", error.c_str());
+            set_state(UpdateService::State::DownloadFailed, std::move(error));
+            return;
+        }
+        else
+        {
+            // The whole archive is always the answer: same files, one request, its own digest.
+            Msg("! Update delta failed (%s) - fetching the whole archive", error.c_str());
+            error.clear();
+            url = fullUrl;
+            digest = fullDigest;
+            assetName = fullName;
+            {
+                // Kept for a retry: a failed full download must be retried as the full download.
+                std::lock_guard lock(instance.dataMutex);
+                instance.downloadUrl = fullUrl;
+                instance.digest = fullDigest;
+                instance.assetName = fullName;
+                instance.payloadBytes = fullSize;
+            }
+            instance.payload.store(UpdateService::Payload::Full, std::memory_order_release);
+            instance.totalBytes.store(fullSize + contentBytes, std::memory_order_release);
+            instance.downloadedBytes.store(0, std::memory_order_release);
+        }
+    }
+
+    if (instance.payload.load(std::memory_order_acquire) != UpdateService::Payload::Delta)
+    {
+        // Cache under the asset's own name: full and patch archives of one version must not
+        // collide, and a leftover from a rejected patch must not be mistaken for the full one.
+        archive = cache / utf8_to_wide(assetName);
+        const u64 expected = assetName == fullName ? fullSize : [&]
+        {
+            std::lock_guard lock(instance.dataMutex);
+            return instance.payloadBytes;
+        }();
+        if (!download_update(url, digest, expected, archive, error))
+        {
+            Msg("! Update download failed: %s", error.c_str());
+            set_state(UpdateService::State::DownloadFailed, std::move(error));
+            return;
+        }
     }
 
     // The payload is in hand; now the content it will want. Done before the update is offered
     // as ready so the player takes one restart, not a restart and then a download.
-    prefetch_content(root, manifestUrl, manifestDigest, version);
+    prefetch_content(root, manifestUrl, manifestDigest, manifestSize, version,
+        instance.downloadedBytes.load(std::memory_order_acquire));
 
     {
         std::lock_guard lock(instance.dataMutex);
         instance.archivePath = archive;
+        instance.digest = digest;
         instance.message.clear();
     }
+    // Whatever the estimate said, the bar ends full.
+    instance.totalBytes.store(instance.downloadedBytes.load(std::memory_order_acquire), std::memory_order_release);
     Msg("* Update download ready: %s", version.c_str());
     instance.state.store(UpdateService::State::Ready, std::memory_order_release);
 }
@@ -1401,6 +1611,8 @@ bool UpdateService::StartDownload()
     const State current = instance.state.load(std::memory_order_acquire);
     if (current != State::Available && current != State::DownloadFailed)
         return false;
+    // The check thread may still be measuring the content; the download measures it again anyway.
+    instance.estimateStop.store(true, std::memory_order_release);
     if (instance.worker.joinable())
         instance.worker.join();
 
@@ -1420,7 +1632,7 @@ bool UpdateService::RestartAndApply()
 {
     ServiceState& instance = service();
     const State current = instance.state.load(std::memory_order_acquire);
-    if (current != State::Ready && current != State::ApplyFailed)
+    if ((current != State::Ready && current != State::ApplyFailed) || instance.applying.exchange(true))
         return false;
     if (instance.worker.joinable())
         instance.worker.join();
@@ -1445,6 +1657,7 @@ bool UpdateService::RestartAndApply()
     {
         Msg("! Update process preparation failed");
         set_state(State::ApplyFailed, "Could not prepare the update process");
+        instance.applying.store(false);
         return false;
     }
 
@@ -1469,6 +1682,7 @@ bool UpdateService::RestartAndApply()
     {
         Msg("! Update process launch failed: Windows error %u", GetLastError());
         set_state(State::ApplyFailed, "Could not start the update process");
+        instance.applying.store(false);
         return false;
     }
     CloseHandle(process.hThread);
@@ -1529,6 +1743,7 @@ UpdateService::Snapshot UpdateService::GetSnapshot()
 void UpdateService::Shutdown()
 {
     ServiceState& instance = service();
+    instance.estimateStop.store(true, std::memory_order_release);
     instance.stopRequested.store(true, std::memory_order_release);
     if (instance.worker.joinable())
         instance.worker.join();

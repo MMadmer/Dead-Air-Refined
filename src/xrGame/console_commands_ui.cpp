@@ -302,7 +302,8 @@ public:
     }
 };
 
-// dar_ui_dialog update [available|downloading|ready|failed] | update_major | bug_report | content [repairing]
+// dar_ui_dialog update [available|downloading|ready|failed] | update_major | bug_report
+// | content [planning|repairing|installing|repaired|failed|space|checking|recovery]
 // | crash_prompt | loading [<per cent>]: one of the game's dialogs over whatever is on screen, the update
 // windows over a made-up release - for their layouts.
 class CCC_DarUiDialog final : public IConsole_Command
@@ -375,10 +376,39 @@ public:
         else if (0 == xr_stricmp(what, "content"))
         {
             ContentService::Snapshot content;
-            content.state = 0 == xr_stricmp(state, "repairing") ? ContentService::State::Repairing : ContentService::State::Incomplete;
-            content.problems = { "textures_03: missing", "sounds_00: damaged (sha mismatch)", "meshes_00: missing" };
-            content.repairTotal = 734003200;
-            content.repairDone = 293601280;
+            content.state = ContentService::State::Incomplete;
+            content.missingBytes = 734003200;
+            content.repairTotal = 41943040;
+            content.repairDone = 16777216;
+            if (0 == xr_stricmp(state, "repairing"))
+            {
+                content.state = ContentService::State::Repairing;
+                content.stage = ContentService::Stage::Downloading;
+            }
+            else if (0 == xr_stricmp(state, "planning"))
+            {
+                content.state = ContentService::State::Repairing;
+                content.stage = ContentService::Stage::Planning;
+            }
+            else if (0 == xr_stricmp(state, "installing"))
+            {
+                content.state = ContentService::State::Repairing;
+                content.stage = ContentService::Stage::Installing;
+            }
+            else if (0 == xr_stricmp(state, "repaired"))
+                content.state = ContentService::State::Repaired;
+            else if (0 == xr_stricmp(state, "failed"))
+                content.failure = ContentService::Failure::Download;
+            else if (0 == xr_stricmp(state, "space"))
+            {
+                content.failure = ContentService::Failure::Space;
+                content.spaceRequired = 6442450944;
+                content.spaceFree = 2147483648;
+            }
+            else if (0 == xr_stricmp(state, "checking"))
+                content.checking = true;
+            else if (0 == xr_stricmp(state, "recovery"))
+                content.state = ContentService::State::Recovery;
             static std::unique_ptr<CUIContentWnd> window;
             if (!window)
             {
@@ -414,7 +444,7 @@ public:
             window->ShowDialog(true);
         }
         else
-            Msg("! dar_ui_dialog update [available|downloading|ready|failed] | update_major | bug_report | content [repairing] | crash_prompt | loading [<per cent>]");
+            Msg("! dar_ui_dialog update [available|downloading|ready|failed] | update_major | bug_report | content [planning|repairing|installing|repaired|failed|space|checking|recovery] | crash_prompt | loading [<per cent>]");
     }
 
     void Save(IWriter*) override {}

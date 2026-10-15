@@ -2580,6 +2580,8 @@ target_sources(xrGame PRIVATE
     ui/UIModsDialogs.cpp
     ui/UIModsDialogs.h
     ui/UIModsWnd.h
+    ui/UpdateDelta.cpp
+    ui/UpdateDelta.h
     ui/UpdateService.cpp
     ui/UpdateService.h
 )

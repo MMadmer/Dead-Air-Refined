@@ -19,6 +19,11 @@ Two hashes, two jobs, and confusing them is the classic way to break this system
 Reuse ladder: a cache hit on the content digest is reused verbatim, otherwise the bundle is
 packed. Reuse is what keeps an unchanged bundle free across releases; without it a repack
 could produce different bytes and force every player to re-download identical content.
+
+Every bundle also gets its chunk map, <bundle>.chunks, cut by DarDelta and kept in the cache
+beside it. Published with the bundle, it lets a client rebuild the bundle from whatever revision
+of its slot it already holds and fetch only the rest by range - from any earlier release, with
+nothing published per pair of releases.
 #>
 [CmdletBinding()]
 param(
@@ -38,12 +43,7 @@ param(
     [string]$DisjointFrom,
     # Force packing even when the cache could satisfy the bundle. Diagnostic only.
     [switch]$AllowRepack,
-    # The previous release's content manifest. Given it, a delta is built for every bundle whose
-    # bytes changed, and every edge that manifest already carried is carried forward - the delta
-    # list is cumulative so a player who skipped releases can still be walked from whatever
-    # revision they actually hold. Without it only whole bundles are published, which is correct
-    # for the first content release.
-    [string]$PreviousManifest,
+    # The chunk map cutter, built by the ordinary engine build.
     [string]$DeltaTool = (Join-Path $PSScriptRoot "..\..\bin\x64\Release\DarDelta.exe"),
     # Report the shard layout and stop, without packing anything. A shard assignment is
     # permanent the moment it is published, so being able to look at one first is worth a
@@ -64,6 +64,22 @@ if (-not $GroupsFile) {
 }
 if (-not $WorkRoot) {
     $WorkRoot = Join-Path $repositoryRoot "build\content"
+}
+
+# A chunk map as the client will read it: the whole file, not just its header. A map that does not
+# parse is published once and then downloaded for nothing forever, so it is caught here.
+function Test-ChunkMap {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Hash, [Parameter(Mandatory)][long]$Size)
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 72 -or [Text.Encoding]::ASCII.GetString($bytes, 0, 8) -ne "DARCHUNK") { return $false }
+    if ([BitConverter]::ToUInt32($bytes, 8) -ne 1 -or [BitConverter]::ToUInt32($bytes, 12) -ne 8KB -or
+        [BitConverter]::ToUInt32($bytes, 16) -ne 32KB -or [BitConverter]::ToUInt32($bytes, 20) -ne 128KB) { return $false }
+    if ([Convert]::ToHexString($bytes, 24, 32).ToLowerInvariant() -ne $Hash -or [BitConverter]::ToUInt64($bytes, 56) -ne $Size) { return $false }
+    $count = [BitConverter]::ToUInt64($bytes, 64)
+    if ($bytes.Length -ne 72 + $count * 20) { return $false }
+    $total = 0L
+    for ($i = 0; $i -lt $count; $i++) { $total += [BitConverter]::ToUInt32($bytes, 72 + $i * 20) }
+    return $total -eq $Size
 }
 
 function Read-GroupsFile {
@@ -269,30 +285,6 @@ foreach ($directory in $directories.Values) {
     foreach ($entry in $directory.Entries) { $buckets[$bucketKey].Add($entry) }
 }
 
-function Read-ContentManifest {
-    param([Parameter(Mandatory)][string]$Path)
-
-    $bundles = [Collections.Generic.List[object]]::new()
-    $deltas = [Collections.Generic.List[object]]::new()
-    $section = ""
-    foreach ($line in [IO.File]::ReadAllLines($Path)) {
-        if ($line -eq "[bundles]") { $section = "bundles"; continue }
-        if ($line -eq "[deltas]") { $section = "deltas"; continue }
-        if (-not $line.Trim()) { continue }
-        $f = $line -split "`t"
-        if ($section -eq "bundles" -and $f.Count -eq 4) {
-            $bundles.Add([pscustomobject]@{ Hash = $f[0]; Size = [int64]$f[1]; Name = $f[2]; Tag = $f[3] })
-        }
-        elseif ($section -eq "deltas" -and $f.Count -eq 8) {
-            $deltas.Add([pscustomobject]@{
-                Hash = $f[0]; Size = [int64]$f[1]; Name = $f[2]; Tag = $f[3]
-                BaseName = $f[4]; BaseHash = $f[5]; BaseSize = [int64]$f[6]; TargetHash = $f[7]
-            })
-        }
-    }
-    return [pscustomobject]@{ Bundles = $bundles; Deltas = $deltas }
-}
-
 if ($LayoutOnly) {
     $report = [Collections.Generic.List[object]]::new()
     foreach ($bucketKey in $buckets.Keys) {
@@ -401,70 +393,21 @@ level_ver = $contentDigest
     })
 }
 
-# ---- deltas --------------------------------------------------------------------------------
-# A delta is published for every bundle whose bytes changed since the previous release, and only
-# when it is decisively smaller than the whole bundle: below that the saving does not pay for the
-# base re-hash, the apply pass, the doubled peak cache use and the extra way to fail. The engine
-# applies the same ratio when it decides whether to use one.
-$deltaSkipRatio = 0.35
-$deltas = [Collections.Generic.List[object]]::new()
-
-if ($PreviousManifest) {
-    if (-not (Test-Path -LiteralPath $PreviousManifest -PathType Leaf)) {
-        throw "The previous content manifest was not found: $PreviousManifest"
-    }
-    if (-not (Test-Path -LiteralPath $DeltaTool -PathType Leaf)) {
-        throw "DarDelta.exe was not found: $DeltaTool. Build the x64 Release tools first."
-    }
-
-    $previous = Read-ContentManifest -Path $PreviousManifest
-
-    # Carried forward verbatim. An edge published two releases ago is what lets a player who
-    # skipped a release be walked forward in two hops instead of downloading everything, and
-    # dropping it would silently cost exactly the bandwidth this feature exists to save.
-    foreach ($edge in $previous.Deltas) {
-        $stillWanted = $bundles | Where-Object { $_.Hash -eq $edge.TargetHash }
-        $leadsOn = $previous.Deltas | Where-Object { $_.BaseHash -eq $edge.TargetHash }
-        if ($stillWanted -or $leadsOn) { $deltas.Add($edge) }
-    }
-
-    foreach ($bundle in $bundles) {
-        $slot = $bundle.Name -replace '^xtra_dead_air_x64_content_(.+)_[0-9a-f]{16}\.xdb0$', '$1'
-        $before = $previous.Bundles | Where-Object {
-            ($_.Name -replace '^xtra_dead_air_x64_content_(.+)_[0-9a-f]{16}\.xdb0$', '$1') -eq $slot
-        } | Select-Object -First 1
-        if (-not $before -or $before.Hash -eq $bundle.Hash) { continue }
-
-        $basePath = Join-Path $BundleCache $before.Name
-        if (-not (Test-Path -LiteralPath $basePath -PathType Leaf)) {
-            # The cache is what makes a delta possible at all: without the previous bytes there
-            # is nothing to diff against. Say so rather than silently publishing whole bundles.
-            Write-Host "  delta: skipped $($bundle.Name) - $($before.Name) is not in the bundle cache"
-            continue
+# ---- chunk maps ----------------------------------------------------------------------------
+# Cut once per bundle and kept beside it: a bundle's bytes never change under its name, so neither
+# does its map.
+if (-not (Test-Path -LiteralPath $DeltaTool -PathType Leaf)) {
+    throw "DarDelta.exe was not found: $DeltaTool. Build the x64 Release tools first."
+}
+$chunkMaps = 0
+foreach ($bundle in $bundles) {
+    $mapPath = Join-Path $BundleCache ($bundle.Name + ".chunks")
+    if (-not (Test-Path -LiteralPath $mapPath -PathType Leaf) -or -not (Test-ChunkMap -Path $mapPath -Hash $bundle.Hash -Size $bundle.Size)) {
+        & $DeltaTool --chunk-map (Join-Path $BundleCache $bundle.Name) $mapPath | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-ChunkMap -Path $mapPath -Hash $bundle.Hash -Size $bundle.Size)) {
+            throw "DarDelta could not cut the chunk map of $($bundle.Name)"
         }
-
-        $deltaName = "content_" + $slot + "_" + $before.Hash.Substring(0, 16) + "_to_" +
-            $bundle.Hash.Substring(0, 16) + ".darpatch"
-        $deltaPath = Join-Path $BundleCache $deltaName
-        if (-not (Test-Path -LiteralPath $deltaPath -PathType Leaf)) {
-            & $DeltaTool $basePath (Join-Path $BundleCache $bundle.Name) $deltaPath | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "DarDelta failed for $($bundle.Name)" }
-        }
-
-        $deltaSize = (Get-Item -LiteralPath $deltaPath).Length
-        $share = [math]::Round(100.0 * $deltaSize / $bundle.Size, 1)
-        if ($deltaSize -ge $deltaSkipRatio * $bundle.Size) {
-            Remove-Item -LiteralPath $deltaPath -Force
-            Write-Host "  delta: skipped $($bundle.Name) - $share% of the bundle, not worth it"
-            continue
-        }
-
-        $deltas.Add([pscustomobject]@{
-            Hash = (Get-Sha256 -Path $deltaPath); Size = $deltaSize; Name = $deltaName; Tag = $ReleaseTag
-            BaseName = $before.Name; BaseHash = $before.Hash; BaseSize = $before.Size
-            TargetHash = $bundle.Hash
-        })
-        Write-Host "  delta: $deltaName ($([math]::Round($deltaSize / 1MB, 2)) MB, $share% of the bundle)"
+        $chunkMaps++
     }
 }
 
@@ -506,11 +449,8 @@ $manifest.Add("content-id=$contentId")
 $manifest.Add("repo=$AssetsRepo")
 $manifest.Add("[bundles]")
 foreach ($b in $sorted) { $manifest.Add($b.Hash + "`t" + $b.Size + "`t" + $b.Name + "`t" + $b.Tag) }
+# The schema keeps the section of the published deltas that chunk maps replaced; it stays empty.
 $manifest.Add("[deltas]")
-foreach ($d in $deltas) {
-    $manifest.Add($d.Hash + "`t" + $d.Size + "`t" + $d.Name + "`t" + $d.Tag + "`t" +
-        $d.BaseName + "`t" + $d.BaseHash + "`t" + $d.BaseSize + "`t" + $d.TargetHash)
-}
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputManifest) -Force | Out-Null
 [IO.File]::WriteAllText($OutputManifest, [string]::Join("`n", $manifest) + "`n", [Text.UTF8Encoding]::new($false))
@@ -522,7 +462,7 @@ $totalBytes = ($sorted | Measure-Object Size -Sum).Sum
     Bundles           = $sorted.Count
     Packed            = $packed
     Reused            = $reused
-    Deltas            = $deltas.Count
+    ChunkMapsCut      = $chunkMaps
     SourceFiles       = $hashed.Count
     TotalMB           = [math]::Round($totalBytes / 1MB, 2)
     GroupsFileChanged = $assignChanged

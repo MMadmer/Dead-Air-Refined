@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Publishes content bundles and deltas to the assets repository.
+Publishes content bundles and their chunk maps to the assets repository.
 
 .DESCRIPTION
 Every asset this uploads is permanent. A bundle's name carries the hash of its bytes, so a name
@@ -41,6 +41,22 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "The GitHub CLI (gh) is required to publish content assets."
 }
 
+# A chunk map as the client will read it: the whole file, not just its header. A map that does not
+# parse is published once and then downloaded for nothing forever, so it is caught here.
+function Test-ChunkMap {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Hash, [Parameter(Mandatory)][long]$Size)
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 72 -or [Text.Encoding]::ASCII.GetString($bytes, 0, 8) -ne "DARCHUNK") { return $false }
+    if ([BitConverter]::ToUInt32($bytes, 8) -ne 1 -or [BitConverter]::ToUInt32($bytes, 12) -ne 8KB -or
+        [BitConverter]::ToUInt32($bytes, 16) -ne 32KB -or [BitConverter]::ToUInt32($bytes, 20) -ne 128KB) { return $false }
+    if ([Convert]::ToHexString($bytes, 24, 32).ToLowerInvariant() -ne $Hash -or [BitConverter]::ToUInt64($bytes, 56) -ne $Size) { return $false }
+    $count = [BitConverter]::ToUInt64($bytes, 64)
+    if ($bytes.Length -ne 72 + $count * 20) { return $false }
+    $total = 0L
+    for ($i = 0; $i -lt $count; $i++) { $total += [BitConverter]::ToUInt32($bytes, 72 + $i * 20) }
+    return $total -eq $Size
+}
+
 function Get-Sha256 {
     param([Parameter(Mandatory)][string]$Path)
     $stream = [IO.File]::OpenRead($Path)
@@ -64,12 +80,28 @@ foreach ($line in [IO.File]::ReadAllLines($Manifest)) {
     if ($section -eq "bundles" -and $f.Count -eq 4) {
         $assets.Add([pscustomobject]@{ Hash = $f[0]; Size = [int64]$f[1]; Name = $f[2]; Tag = $f[3]; Kind = "bundle" })
     }
-    elseif ($section -eq "deltas" -and $f.Count -eq 8) {
-        $assets.Add([pscustomobject]@{ Hash = $f[0]; Size = [int64]$f[1]; Name = $f[2]; Tag = $f[3]; Kind = "delta" })
+    elseif ($section -eq "deltas") {
+        throw "The manifest carries [deltas] rows. Chunk maps replaced published deltas; rebuild the manifest."
     }
 }
 if (-not $version -or -not $contentId) { throw "The manifest has no version or content-id." }
 if ($assets.Count -eq 0) { throw "The manifest names no assets." }
+
+# Every bundle travels with its chunk map, under the same tag. The manifest does not name maps -
+# a client trusts a map for nothing, since what it rebuilds is checked against the bundle's hash -
+# so they are checked here instead: present, and describing exactly the bundle beside them.
+foreach ($bundle in @($assets | Where-Object Kind -eq "bundle")) {
+    $mapName = $bundle.Name + ".chunks"
+    $mapPath = Join-Path $BundleCache $mapName
+    if (-not (Test-Path -LiteralPath $mapPath -PathType Leaf)) {
+        throw "$mapName is not in the bundle cache. Cut it with dead_air_x64_content_bundles.ps1."
+    }
+    if (-not (Test-ChunkMap -Path $mapPath -Hash $bundle.Hash -Size $bundle.Size)) {
+        throw "$mapName does not describe $($bundle.Name). Cut it again with dead_air_x64_content_bundles.ps1."
+    }
+    $mapInfo = Get-Item -LiteralPath $mapPath
+    $assets.Add([pscustomobject]@{ Hash = (Get-Sha256 -Path $mapPath); Size = $mapInfo.Length; Name = $mapName; Tag = $bundle.Tag; Kind = "chunks" })
+}
 
 # The digest the engine recomputes at every launch. Verifying it here means a manifest that
 # would be rejected as tampered is caught before its assets are uploaded, not after.
@@ -85,7 +117,7 @@ if ($computed -ne $contentId) {
 }
 
 Write-Host "content $version, id $contentId"
-Write-Host "$($sorted.Count) bundle(s), $(($assets | Where-Object Kind -eq 'delta').Count) delta(s)"
+Write-Host "$($sorted.Count) bundle(s) with chunk maps"
 
 # ---- verify every asset locally before touching the network --------------------------------
 foreach ($asset in $assets) {

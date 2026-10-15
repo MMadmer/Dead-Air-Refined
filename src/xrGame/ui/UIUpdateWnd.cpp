@@ -75,6 +75,7 @@ void CUIUpdateWnd::Show(bool status)
         m_lastState = UpdateService::State::Idle;
         m_lastVersion.clear();
         m_lastChanges.clear();
+        m_lastTotal = ~0ull;
         Refresh(Current());
     }
     else
@@ -93,6 +94,7 @@ void CUIUpdateWnd::Preview(const UpdateService::Snapshot& snapshot)
     m_lastState = UpdateService::State::Idle;
     m_lastVersion.clear();
     m_lastChanges.clear();
+    m_lastTotal = ~0ull;
     Refresh(snapshot);
 }
 
@@ -165,9 +167,6 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
             xr_sprintf(text, sizeof(text), StringTable().translate("st_update_available_message").c_str(),
                 DeadAirRefined::Version, snapshot.version.c_str());
             m_message->SetText(text);
-            xr_sprintf(text, sizeof(text), StringTable().translate("st_update_size").c_str(),
-                mebibytes(snapshot.totalBytes));
-            m_size->SetText(text);
             m_action->SetText(StringTable().translate("st_update_download").c_str());
             m_theme->SetText(theme.c_str());
             m_changesText->SetText(changes.c_str());
@@ -200,6 +199,15 @@ void CUIUpdateWnd::Refresh(const UpdateService::Snapshot& snapshot)
             position.x = m_cancel->IsShown() ? m_actionTwoButtonX : (GetWidth() - m_action->GetWidth()) * 0.5f;
             m_action->SetWndPos(position);
         }
+    }
+
+    // The size grows once the check has measured the content the new version adds.
+    if (available && snapshot.totalBytes != m_lastTotal)
+    {
+        m_lastTotal = snapshot.totalBytes;
+        string128 text{};
+        xr_sprintf(text, sizeof(text), StringTable().translate("st_update_size").c_str(), mebibytes(snapshot.totalBytes));
+        m_size->SetText(text);
     }
 
     if (downloading || ready)

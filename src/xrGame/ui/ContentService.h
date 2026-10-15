@@ -42,6 +42,27 @@ enum class State : u8
     Recovery
 };
 
+// Where a repair is. The window words each one itself, from the string table on the main thread.
+enum class Stage : u8
+{
+    None,
+    Checking,    // hashing what is installed
+    Planning,    // chunk maps and the revisions already on disk
+    Downloading,
+    Installing,
+    Done
+};
+
+// Why the last repair stopped. The technical reason goes to the log; the player is told what to do.
+enum class Failure : u8
+{
+    None,
+    Check,
+    Space,
+    Download,
+    Install
+};
+
 struct Snapshot
 {
     State state{State::Unknown};
@@ -49,16 +70,27 @@ struct Snapshot
     xr_string contentId;
     u32 declared{};
     u32 present{};
+    // What the missing bundles weigh whole - the most a repair downloads.
     u64 missingBytes{};
-    // One line per problem, already human-readable, for the dialog, the log and the crash
-    // report. Ordered as found, so the first line is the most useful one to show. Every entry
-    // here blocks play.
+    // One line per problem, in the words of the log and the crash report. Ordered as found, so
+    // the first line is the most useful one. Every entry here blocks play. The window does not
+    // show them: a player is told what to do, a bug report gets the details.
     xr_vector<xr_string> problems;
+    // Nothing is known to be wrong, but a previous run left the latch: a hash pass is deciding.
+    bool checking{};
+    // False when downloading cannot help: the engine reads its archives from somewhere other than
+    // the folder the content is installed into, or the installation could not be examined at all.
+    // The window then asks for a reinstall, as for Recovery.
+    bool repairable{true};
 
-    // What a running repair is doing, and how far along it is. Both zero when none is running.
-    xr_string activity;
+    // How far a running repair is. Both zero when none is running.
+    Stage stage{Stage::None};
     u64 repairDone{};
     u64 repairTotal{};
+    Failure failure{Failure::None};
+    // For Failure::Space.
+    u64 spaceRequired{};
+    u64 spaceFree{};
 
     // Wrong on disk but harmless to a session - a leftover bundle from an older revision that
     // is not mounted and not needed. Reported and cleaned up, never a reason to refuse a game.

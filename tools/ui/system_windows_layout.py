@@ -1,6 +1,6 @@
 # Writes the layouts of the game's own windows over the menus - the update (ui_update.xml), the major
-# release (ui_update_major.xml), the bug report (ui_bug_report.xml) and the content repair
-# (ui_content.xml) - each for 4:3 and as its _16 twin, from one geometry. They wear the palette of
+# release (ui_update_major.xml), the bug report (ui_bug_report.xml) and the download of missing
+# content (ui_content.xml) - each for 4:3 and as its _16 twin, from one geometry. They wear the palette of
 # the Mods window (the sys_* looks and colours of ui_theme.xml), not the in-game one. Lengths are
 # screen units, as in actor_menu_layout.py: 768 to the screen's height, x squeezed by 0.75 into a
 # 16:9 file.
@@ -158,13 +158,16 @@ def bug_report(wide):
 
 
 def content(wide):
-    d = Dialog(wide, 560, 470, 'The repair of the mod\'s content (UIContentWnd).')
+    d = Dialog(wide, 560, 250, 'The download of the mod\'s missing files (UIContentWnd).')
     w = d.w_
     d.caption('st_content_caption')
-    d.text('message', 24, 62, w - 48, 92, valign='t', complex_mode=True)
-    d.scroll_list('problems', 'problems_text', 160, 150)
-    d.text('progress_text', 24, 318, w - 48, 30, align='c', color='$sys_muted', complex_mode=True)
-    d.progress(352)
+    d.text('message', 24, 64, w - 48, 48, valign='t', complex_mode=True)
+    d.text('size', 24, 114, w - 48, 22, color='$sys_muted')
+    # the download under the message, where the size was; the reason a download stopped under the
+    # size - never both at once
+    d.text('progress_text', 24, 118, w - 48, 24, align='c', color='$sys_muted')
+    d.progress(150)
+    d.text('error', 24, 138, w - 48, 38, align='c', color='$sys_bad', complex_mode=True)
     d.buttons('action', 'st_content_repair', 'exit', 'st_content_exit', primary_w=220, secondary_w=180)
     return d.finish()
 

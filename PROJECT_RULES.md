@@ -157,20 +157,24 @@ the process described here.
   JSGME and XMS modules override them, and so does an archive that sorts after
   them — a mod overriding content is a mod working. Do not give the content
   system a privileged mount position to protect its own assets.
-- A binary delta is an optimisation and never a requirement. An ineligible base,
-  a missing edge, or a failed apply falls back to the full bundle silently, and
-  the result is committed only after it hashes to the bundle the manifest
-  declares. A delta is recorded as rejected only when its output fails that
-  check with every I/O call having succeeded: a full disk, a read error, or a
-  cancellation is retryable, and blacklisting one would permanently turn a small
-  download into a large one for that installation.
+- A delta is an optimisation and never a requirement - a bundle rebuilt from
+  its chunk map and the local revision of its slot, an update built from the
+  records of the full archive the installation lacks alike. A missing map, a
+  server without ranges or a local file that changed under the plan falls back
+  to the whole file silently, and the result is committed only after it hashes
+  to what the manifest declares. Nothing is published per pair of releases: the
+  client works out its own delta from the release, whatever version it is on. A
+  patch the applier refused, published or written by the client, is remembered
+  for that version and the full archive is taken instead.
 - Add before delete. A commit installs everything the manifest declares and only
   then demotes what it no longer declares back into the cache; obsolete bundles
   are never removed as part of installing their replacements. An interrupted
   commit leaves an installation with too many bundles instead of one with too
   few: the extra ones are refused by the mount gate, reported as a notice rather
   than a fault, and demoted by the next commit — the next update, install or
-  repair. Too few bundles is a broken game; too many is untidy.
+  repair. The one it keeps on purpose is the previous revision of a slot whose
+  replacement has not arrived: that file is what the next repair rebuilds the
+  slot from. Too few bundles is a broken game; too many is untidy.
 - Content bundles are never managed files. They must not appear in
   `managed-files.txt`, in `runtime-files.txt`, in an update manifest, in the
   installer's file table, or in a backup scope. That list decides what is backed
@@ -416,10 +420,12 @@ The full binary contract and evolution rules are described in
   documentation.
 - A release contains alternative installation options and the user needs
   exactly one of them: `Dead-Air-Refined-VERSION-Setup.exe` is the recommended
-  path and the only one that installs content on a machine that has none,
+  path and the only one that installs content on a machine that has none, and
   `Dead-Air-Refined-VERSION-Update.zip` is the same runtime payload for a
-  manual installation, and `Dead-Air-Refined-VERSION-Update_Patch.zip` carries
-  only what changed since the previous version. None of them contains content
+  manual installation - and the archive the in-game update reads its delta
+  from. 1.6.0 also carries `Dead-Air-Refined-VERSION-Update_Patch.zip`, only
+  what changed since 1.5.0, for the clients that cannot read a delta out of the
+  full archive; no release after it does. None of them contains content
   bundles, so a manual archive upgrades an installation that already has its
   content and does not create one from nothing. All of them carry the content
   manifest, which is what lets an installation that was updated by hand say what
@@ -428,8 +434,7 @@ The full binary contract and evolution rules are described in
   the asset every client since 1.0 looks for, and a release without it is
   invisible to every installation in the field. Beyond those, a release carries
   the content manifest `Dead-Air-Refined-VERSION-content-manifest.txt` as the
-  published record of which bundles that version pins. The patch is cut only
-  when there is a previous release to cut it against.
+  published record of which bundles that version pins.
 - The Update ZIP must contain an empty `appdata/savedgames`, and the manifest
   must not contain a single save file. The installer and uninstaller do not
   delete existing saves.
@@ -477,8 +482,8 @@ The full binary contract and evolution rules are described in
   installation instruction.
 - In `Changes` list only the user-visible outcome: fixes, improvements, and
   compatibility. If a category is empty, do not add it.
-- In `Installation` state explicitly that Setup, the manual ZIP and the patch
-  ZIP are alternatives and only one is needed; the ZIP is allowed for manual
+- In `Installation` state explicitly that Setup and the manual ZIP are
+  alternatives and only one is needed; the ZIP is allowed for manual
   installation. Warn separately that existing saves must not be clobbered.
 - Before publishing run a clean build if one has not been done yet, and verify
   the version number, the asset names, and the text against the actually built
@@ -517,9 +522,8 @@ list, never before it.
 Choose one option:
 
 * **Setup** — recommended guided installation.
-* **Update ZIP** — the complete payload for manual installation.
-* **Update_Patch ZIP** — only what changed since the previous version; the
-  in-game updater picks it automatically when it fits.
+* **Update ZIP** — the complete payload for manual installation. The in-game
+  updater downloads only what changed, whatever version is installed.
 
 Setup downloads [N] GB of game content and needs [N] GB free on the target
 drive. Do not install both. Existing saves are preserved.
@@ -536,9 +540,8 @@ drive. Do not install both. Existing saves are preserved.
 Выберите один вариант:
 
 * **Setup** — рекомендуемая пошаговая установка.
-* **Update ZIP** — полный архив для ручной установки.
-* **Update_Patch ZIP** — только изменения относительно прошлой версии;
-  встроенное обновление выбирает его само, когда он подходит.
+* **Update ZIP** — полный архив для ручной установки. Встроенное обновление
+  загружает только изменившиеся файлы, какая бы версия ни была установлена.
 
 Установщик загружает [N] ГБ игрового контента и требует [N] ГБ свободного
 места на выбранном диске. Не устанавливайте оба варианта. Существующие сохранения

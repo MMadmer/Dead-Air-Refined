@@ -8,18 +8,19 @@ Version in `MAJOR.MINOR.PATCH` form. The release contains these assets:
 - `Dead-Air-Refined-MAJOR.MINOR.PATCH-Setup.exe` for the recommended guided
   installation;
 - `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update.zip` — the complete runtime
-  payload, for manual extraction and as the update every installation can
-  always take. It deliberately carries no content bundles. The name is fixed
-  for the whole 1.x line: it is the one asset every client since 1.0 looks
-  for, and a release without it is invisible to every installation in the
-  field (a rename to `Setup_Manual.zip` was tried and reverted for exactly that
-  reason);
-- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update_Patch.zip` — optional. Carries only
-  the files that differ from the previous release, so an up-to-date player
-  downloads a fraction of the full archive. Only a client that knows the patch
-  (1.4.0 and later) selects it; older clients take the full archive, and the
-  updater that applies a patch is the one already installed, so the first
-  release whose patch is ever used is the one after 1.4.0;
+  payload, for manual extraction and as the source of every update: a client
+  from 1.6.0 on reads only the files it lacks out of it by HTTP range (see
+  *Delta updates* below), whatever version it is on. It deliberately carries no
+  content bundles. The name is fixed for the whole 1.x line: it is the one
+  asset every client since 1.0 looks for, and a release without it is
+  invisible to every installation in the field (a rename to `Setup_Manual.zip`
+  was tried and reverted for exactly that reason);
+- `Dead-Air-Refined-MAJOR.MINOR.PATCH-Update_Patch.zip` — **1.6.0 only**. The
+  files that differ from the previous release, for the clients 1.4.0-1.5.0:
+  they cannot read the full archive by range and take a patch only when it was
+  cut against the version they run. From 1.6.1 on no patch is published - the
+  clients that would need one no longer exist on the 1.6 line, and every newer
+  client builds its own from the full archive;
 - `Dead-Air-Refined-MAJOR.MINOR.PATCH-content-manifest.txt` — the content
   manifest of that version: the same file the payload installs as
   `.dead-air-x64\content-manifest.txt`. It is published on its own so a player
@@ -94,21 +95,66 @@ Only that notice can be switched off, by the checkbox inside it or by
 other. With it off the check still runs and still offers updates within the
 installed major line.
 
-When a release publishes a patch and the installed version is the release
-immediately below it, the client downloads the patch instead of the full
-archive. The applier verifies the result either way (see below); a patch that
+The client downloads a delta of the full archive (below) whenever it can: the
+files of the release this installation does not hold as the release wants them.
+It takes the whole archive instead when the delta cannot be read, when it would
+be most of the archive anyway (90 % or more), or when the applier refused a
+patch for this version before. A published `Update_Patch.zip` cut against the
+installed version is taken when it is smaller than the delta or when the delta
+cannot be read - which, from 1.6.0, only the 1.6.0 release itself publishes. The applier verifies the result either way (see below); a patch that
 does not fit is refused without touching the installation, and the refusal is
 recorded in `.dead-air-x64/patch-rejected.txt` so the client falls back to the
 full archive rather than offering the same patch again.
 
 When a newer version is available, the native C++ dialog displays the installed
 version, available version, download size and the release changes in a scroll
-view. It selects Russian changes only when the active string-table language is
-`rus` or `ru`; every other language uses the English section. Declining the
-offer dismisses it until the next game launch. During download, the dialog
-displays transferred and total mebibytes together with a progress bar.
-Installation remains unavailable until the complete archive has passed size
-and SHA-256 verification.
+view. The size is the whole wait: the update - the delta, when there is one -
+plus the content the new version adds, which is fetched before the update is
+armed (see *Content and the update*). It selects Russian changes only when the
+active string-table language is `rus` or `ru`; every other language uses the
+English section. Declining the offer dismisses it until the next game launch.
+During download, the dialog displays transferred and total mebibytes together
+with a progress bar that the update and its content fill together. Installation
+remains unavailable until everything downloaded has passed its verification:
+the full archive its size and SHA-256 digest, a delta every file it carries.
+
+## Delta updates
+
+A release is one complete archive, and the distance between the installed
+version and the released one does not matter: one version behind or ten, the
+download is what actually differs, and nobody publishes a patch per pair of
+versions. `UpdateDelta` (`src/xrGame/ui/UpdateDelta.cpp`) does it in two steps.
+
+**Prepare**, during the update check. The end of `Update.zip` - the end of
+central directory record, then the central directory, ZIP64 included - is read
+with HTTP `Range` requests; so is the record of `update-manifest.txt`, which is
+unpacked and checked against its archive CRC. Every row of that manifest is
+compared with the installation by size and SHA-256 - nothing installed is taken
+on trust - and what differs or is missing becomes the delta: the local records
+of those files, merged into one request wherever two lie less than 256 KiB
+apart. Their total is the size the dialog shows. The archive has to describe
+itself the way the applier needs it to: every manifest row present in the
+directory at its declared size, no encrypted entry, nothing packed other than
+stored or deflated, nothing past 4 GiB. Anything else, and the client takes
+the whole archive.
+
+**Build**, when the player accepts. The records are downloaded and each file is
+unpacked as it arrives and checked against the manifest - size, CRC and
+SHA-256 - while its stored bytes are copied untouched into a patch archive of
+schema `/2` (see *Archive manifest*): the release's own records with new
+offsets, the directory entries, and a manifest that declares the release's full
+file set with `base=` the installed version. A dropped connection resumes at the
+byte it stopped at, inside a record if need be; five failed attempts in a row
+end the delta. The storage URL the first request was redirected to is reused for
+the next ones, saving a redirect per request, and dropped when it refuses. The
+SHA-256 of the archive written is handed to the updater as its `--digest`.
+
+The installed updater applies that archive exactly as it would a published
+patch, which is the point: the applier, its verification, its rollback and its
+refusal marker are the ones every release since 1.4.0 has exercised. A delta
+that cannot be built - a server that answers a ranged request with `200`, a
+record that does not unpack to its manifest hash, a release folder deleted
+mid-download - falls back to the whole archive in the same download.
 
 Two other dialogs outrank the update offer, in this order. The main menu tries
 the content repair dialog first, the unhandled-crash report prompt second, and
@@ -152,7 +198,16 @@ The updater then:
 7. commits content, when the command line carried `--content-commit`;
 8. deletes the snapshot;
 9. starts a cleanup instance, removes the downloaded cache and restarts the
-   original game command line.
+   original game command line. The cache holds programs that ran a moment
+   earlier, and a real-time scanner still reading one is the usual reason it
+   will not go at once: removal is tried for five seconds, and a cache that
+   still will not go is left behind rather than costing the player the restart;
+   the next update check sweeps it.
+
+A patch the applier refuses - unreadable, not matching its manifest, or cut
+against files this installation does not hold - is recorded in
+`patch-rejected.txt` whether it was published or written by the client, and the
+next check takes the full archive for that version.
 
 If payload application, the maintenance pass or the consistency check after it
 fails, the saved snapshot is restored. On success the snapshot is deleted. It
@@ -195,10 +250,17 @@ reinstalled rather than repaired, because fetching the manifest itself is a
 reinstall and not a repair. Content bundles are the exact opposite on every
 count: never payload, never managed, never in the snapshot.
 
-Acquisition happens either before an update — the installer's own fetch, or a
-repair the player already ran — or after it, through the repair dialog on the
-next launch. The update flow itself downloads the runtime archive and nothing
-else. What the update does do with content is commit it: `RestartAndApply`
+Acquisition happens before an update is armed - the installer's own fetch, a
+repair the player already ran, or the update's prefetch, which stages the new
+version's content in the cache right after the update itself and fills the same
+progress bar - or after it, through the download dialog on the next launch. A
+bundle whose slot the installation holds in another revision is rebuilt from it
+rather than downloaded whole (`CONTENT_BUNDLES.md`, *Chunk maps*), so a release
+that touched a few files of a large bundle costs those files. (The prefetch of
+the 1.4.x-1.5.0 clients never ran: it asked for the manifest with a declared size
+of zero and refused the first byte. On those clients the new content arrives
+through the download dialog after the restart.) What the update does do with
+content is commit it: `RestartAndApply`
 always appends `--content-commit` to the updater's command line. An updater
 from before the content system ignores the unknown token, which is what lets an
 installation still on an older build apply a content-bearing payload; a newer
@@ -292,7 +354,8 @@ refuses.
 Both schemas are frozen. The updater that applies an archive is the one already
 installed, so an older updater must keep working on the full archive it
 downloads; only patches use `/2`, and only a client new enough to choose a
-patch will ever hand one to an updater new enough to read it. The content
+patch - or, from 1.6.0, to write one out of the full archive - will ever hand
+one to an updater new enough to read it. The content
 system changes neither of them: content has its own manifest under its own
 schema, and its entire footprint in the update format is one more payload file
 and one more command-line flag.
@@ -307,9 +370,9 @@ default at all, and a manifest that is missing or declares no bundles is a hard
 failure rather than a Setup that installs no content. The declared bundle sizes
 plus a tenth become the installer's disk-space requirement, so the wizard cannot
 ask for 200 MB and then die an hour into a multi-gigabyte fetch. Pass
-`-PreviousFullArchive <path to the previous Update.zip>` to cut the patch, and
-`-PatchOnly` to re-cut a patch against a different base without rebuilding the
-release. `-ArtifactDirectory` sends the installer, the archives and the payload
+`-PreviousFullArchive <path to the previous Update.zip>` to cut the patch - for
+the 1.6.0 release and no later one, see the release contract - and `-PatchOnly`
+to re-cut a patch against a different base without rebuilding the release. `-ArtifactDirectory` sends the installer, the archives and the payload
 trees somewhere other than `artifacts\`, which is how a QA build against a
 synthetic manifest avoids overwriting a release build of the same version. The
 native-helpers step compiles the updater against the static CRT, with the zlib
@@ -326,11 +389,11 @@ compatibility archive so the build fails if any virtual path exists in both.
 is no switch that skips content. `-BundleCache` is what makes an unchanged
 bundle free across releases — it is not build output and must never be deleted.
 
-The same script also cuts the deltas, and there is no separate step for them.
-Given `-PreviousManifest <the previous release's content-manifest.txt>` it
-diffs every bundle whose bytes changed against the previous revision in the
-cache, carries forward every edge that manifest already listed, and writes the
-`[deltas]` section itself. It shells out to `DarDelta.exe`, which it expects at
+The same script cuts every bundle's chunk map, `<bundle>.chunks`, and keeps it
+in the cache beside the bundle; that map is what a client rebuilds a bundle
+from (`CONTENT_BUNDLES.md`, *Chunk maps*), so there is no switch that skips it,
+and nothing is cut per pair of releases. It shells out to `DarDelta.exe`, which
+it expects at
 `bin\x64\Release\DarDelta.exe` and which `-DeltaTool` points elsewhere for any
 other configuration. `DarDelta` is a CMake target at `src/utils/DarDelta`, so
 the ordinary engine build (`tools\build\build_x64.ps1`) produces it under
@@ -342,11 +405,14 @@ and the content fetcher, and nothing else.
 names. `-Manifest` and `-BundleCache` are mandatory; `-AssetsRepo` defaults to
 `MMadmer/Dead-Air-Refined_Assets`, `-AssetsClone` to
 `D:\Games\Dead-Air-Refined_Assets`, and `-DryRun` reports what would be uploaded
-and touches nothing. Every check it makes exists because a published content
-asset can never be taken back: it recomputes the content-id from the bundle rows
-and refuses a manifest whose id does not match, hashes every named asset in the
-cache against the manifest before it opens a connection, and refuses outright to
-replace a name already published at a different size. It writes the release
+and touches nothing. Every bundle goes up with its chunk map under the same tag;
+the manifest does not name maps, so the script checks each one describes its
+bundle - hash and size in its header - before anything is uploaded. Every check
+it makes exists because a published content asset can never be taken back: it
+recomputes the content-id from the bundle rows and refuses a manifest whose id
+does not match, hashes every named asset in the cache against the manifest
+before it opens a connection, and refuses outright to replace a name already
+published at a different size. It writes the release
 ledger into `index\` in the assets clone but does not commit it, and it never
 touches the game release.
 
@@ -354,17 +420,30 @@ QA scripts, all under `tools/qa`:
 
 - `Test-UpdatePatchFlow.ps1` exercises the applier end to end on a synthetic
   installation;
+- `release-mock` (Go, stdlib) serves the release list, the release downloads
+  through a storage redirect the way github.com does, and the content assets,
+  all ranged, with `-norange`, `-drop-after` and `-throttle` for the failures a
+  healthy connection never reaches; every request is logged with its range and
+  the bytes sent, which is how a test measures a delta. The tests build it from
+  source;
+- `Test-UpdateDelta.ps1` takes the real game and the real updater through an
+  update delta on a rig built from the worktree: a release whose full archive
+  differs from the rig by three files, found with `-qa_update`, taken with
+  `-qa_update_auto` (the window's buttons with nobody to press them), applied,
+  and the game back up - and checks that only the missing records were fetched;
 - `Start-UpdateApiMock.ps1` serves a fake release list on loopback for the
-  in-game flow (`-qa_update` plus `DAR_QA_UPDATE_API`);
-- `Start-ContentAssetMock.ps1` serves bundle downloads on loopback in the
-  `releases/download/<tag>/<asset>` shape, with `-NoRange`, `-DropAfter` and
-  `-Throttle` to produce the failures a healthy connection never reaches;
-- `Test-ContentFlow.ps1` drives the shipped updater's content modes against
-  that mock on a scratch installation: a clean fetch and commit, a complete
+  in-game dialogs (`-qa_update` plus `DAR_QA_UPDATE_API`);
+- `Start-ContentAssetMock.ps1` serves bundle downloads on loopback for the
+  installer fetch test, with `-NoRange`, `-DropAfter` and `-Throttle`;
+- `Test-ContentFlow.ps1` drives the shipped updater's content modes against the
+  release mock on a scratch installation: a clean fetch and commit, a complete
   installation that plans no work, a repeatedly dropped transfer that still
   completes, proof that it resumed rather than restarted (the mock saw `Range`
   requests from a non-zero offset), a clean restart when the server answers a
-  ranged request with `200`, and a commit that refuses a tampered cache file;
+  ranged request with `200`, a commit that refuses a tampered cache file, and
+  the rebuilds from chunk maps: from the revision in `database\`, from one
+  retired into the cache, through dropped connections, against a server that
+  ignores ranges, and without a map;
 - `Test-ContentGate.ps1` boots the real engine on the QA rig once per case and
   checks that the mount gate, the verifier, the latch and the play gate agree:
   a healthy install, a second launch served from the state cache, a missing
@@ -393,28 +472,18 @@ purpose.
 1. Clean build, with `src/xrCore/ProductVersion.h` bumped. The installer build
    refuses to run when `-PortVersion` disagrees with it. The same build produces
    `bin\x64\Release\DarDelta.exe`, which the next step needs.
-2. `dead_air_x64_content_bundles.ps1` — new bundles, the deltas and the new
+2. `dead_air_x64_content_bundles.ps1` — new bundles, their chunk maps and the new
    `content-manifest.txt`. Review the `groups.ltx` diff before anything else:
    the builder appends an `[assign]` line for every new content directory, and
    such a line is a permanent commitment. Editing one later moves files between
    bundles, changes both bundles' bytes, changes both filenames, and makes
-   every installed player re-download both. Pass `-PreviousManifest` pointing at
-   the previous release's `content-manifest.txt` and the script cuts the deltas
-   and writes the `[deltas]` rows itself: one edge per bundle whose bytes
-   changed, skipped whenever the delta is not below 0.35 of its target, because
-   below that the saving does not pay for the base re-hash, the apply pass and
-   the extra way to fail — the resolver in the engine weighs a delta by the same
-   ratio. Delta rows are cumulative: every edge ever published for a bundle that
-   still exists stays listed, so an installation that skipped releases is walked
-   from whatever revision it actually holds instead of being handed the full
-   bundle. Omit `-PreviousManifest` and the release simply ships no delta edges,
-   which is correct for the first content release and means a whole-bundle
-   re-download for every installed player on any release after it. A delta also
-   needs the previous bundle in `-BundleCache` to diff against; when it is not
-   there the script says so and publishes the whole bundle instead.
-3. `build_dead_air_x64_installer.ps1`, with `-ContentManifest` from step 2 and
-   `-PreviousFullArchive` pointing at the previous `Update.zip`. This
-   produces Setup, `Update.zip`, the patch and `SHA256SUMS.txt`.
+   every installed player re-download both. A client rebuilds a changed bundle
+   from whatever revision of its slot it holds, so nothing is cut per pair of
+   releases.
+3. `build_dead_air_x64_installer.ps1`, with `-ContentManifest` from step 2. This
+   produces Setup, `Update.zip` and `SHA256SUMS.txt`. **For 1.6.0 only** also
+   `-PreviousFullArchive` pointing at the previous `Update.zip`, which adds the
+   patch the clients up to 1.5.0 take.
    `SHA256SUMS.txt` covers the distribution files only —
    bundles are covered by the per-bundle SHA-256 in the content manifest and by
    the hash check step 5 runs before it uploads anything, and structurally
@@ -431,8 +500,8 @@ purpose.
    `publish_dead_air_x64_content.ps1 -Manifest <the manifest from step 2>
    -BundleCache <the cache step 2 packed into>`. It creates the
    `content-MAJOR.MINOR.PATCH` tag in the assets repository when it is missing
-   and uploads one asset per bundle and per delta, so there is nothing to do by
-   hand. Before it opens a connection it recomputes the content-id from the
+   and uploads one asset per bundle and per chunk map, so there is nothing to do
+   by hand. Before it opens a connection it recomputes the content-id from the
    bundle rows and refuses a manifest whose id does not match — a manifest every
    client would reject as tampered is better caught here than after its assets
    exist — and it hashes every named asset in the cache against the manifest.

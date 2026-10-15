@@ -8,10 +8,10 @@
 add_library(xrContentSync STATIC)
 
 target_sources(xrContentSync PRIVATE
+    ContentChunks.cpp
+    ContentChunks.h
     ContentCommit.cpp
     ContentCommit.h
-    ContentDelta.cpp
-    ContentDelta.h
     ContentDownload.cpp
     ContentDownload.h
     ContentHash.cpp
