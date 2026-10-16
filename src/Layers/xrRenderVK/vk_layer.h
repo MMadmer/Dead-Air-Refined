@@ -22,6 +22,7 @@
 
 #include "vk_api.h"
 #include "vk_loader.h"
+#include "../xrRender/present_pacing.h"
 
 #include <array>
 #include <atomic>
@@ -1745,6 +1746,7 @@ public:
 private:
     SwapChain() = default;
     HRESULT CreateNative(UINT syncInterval);
+    friend bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive);
     void DestroyNative();
     HRESULT CreateBackBuffer();
     bool Acquire();
@@ -1758,7 +1760,10 @@ private:
     VkFormat m_vkFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkExtent2D m_extent{};
     VkPresentModeKHR m_mode = VK_PRESENT_MODE_FIFO_KHR;
+    VkPresentModeKHR m_vsyncMode = VK_PRESENT_MODE_FIFO_KHR;   // vsync on: FIFO, FIFO_RELAXED when adaptive
     VkPresentModeKHR m_tearingMode = VK_PRESENT_MODE_FIFO_KHR; // vsync off
+    bool m_adaptive = false;
+    bool m_relaxedSupported = false;
     bool m_switchModes = false;        // VK_EXT_swapchain_maintenance1: the mode changes per present
     bool m_mutable = false;
     bool m_minimized = false;
@@ -1772,6 +1777,8 @@ private:
     u32 m_current = 0;
     UINT m_presentCount = 0;
     u64 m_presentId = 0;
+    u64 m_chainFirstId = 1; // the first present id of the current VkSwapchainKHR
+    xrpacing::PresentClock m_clock;
     // Acquire semaphores rotate per frame; each image has the semaphore its present waits for.
     VkSemaphore m_acquire[kFramesInFlight + 1]{};
     u32 m_acquireIndex = 0;

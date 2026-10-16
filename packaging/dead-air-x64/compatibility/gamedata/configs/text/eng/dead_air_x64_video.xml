@@ -79,6 +79,9 @@
 	<string id="st_opt_renderer_r5">
 		<text>DirectX 12</text>
 	</string>
+	<string id="st_opt_renderer_r6">
+		<text>Vulkan</text>
+	</string>
 	<string id="st_opt_st_aa_off">
 		<text>Off</text>
 	</string>
@@ -162,7 +165,7 @@
 	</string>
 	<!-- Hints of the video tab: st_da_x64_video_hint_<row>, and the reasons a row is greyed out. -->
 	<string id="st_da_x64_video_hint_renderer">
-		<text>DirectX 11 or DirectX 12: the same picture and effects. Frame generation needs DirectX 12. Takes effect after a game restart.</text>
+		<text>DirectX 11, DirectX 12 or Vulkan: the same picture and effects. Frame generation needs DirectX 12. Takes effect after a game restart.</text>
 	</string>
 	<string id="st_da_x64_video_hint_renderer_no_dx12">
 		<text>The GPU or its driver does not support DirectX 12 the way the game needs it, so only DirectX 11 is available.</text>
@@ -176,8 +179,17 @@
 	<string id="st_da_x64_video_hint_fps_limit">
 		<text>Frame rate cap. Spares the GPU when more frames are not needed.</text>
 	</string>
+	<string id="st_opt_st_vsync_off">
+		<text>Off</text>
+	</string>
+	<string id="st_opt_st_vsync_on">
+		<text>On</text>
+	</string>
+	<string id="st_opt_st_vsync_adaptive">
+		<text>Adaptive</text>
+	</string>
 	<string id="st_da_x64_video_hint_vsync">
-		<text>Syncs frames to the monitor's refresh rate: no tearing, at the cost of a little input lag.</text>
+		<text>Syncs frames to the monitor's refresh rate. On: no tearing, at the cost of a little input lag; a frame rate below the refresh rate is not cut down further. Adaptive: synced while the frame rate keeps up with the monitor, tearing instead of stutter when it falls below.</text>
 	</string>
 	<string id="st_da_x64_video_hint_preset">
 		<text>Overall graphics quality: draw and shadow distances, grass, reflections and effects. Anti-aliasing is a setting of its own. Higher is heavier on the GPU. On DirectX 12 the two highest presets shade flat and dark areas at a reduced rate.</text>

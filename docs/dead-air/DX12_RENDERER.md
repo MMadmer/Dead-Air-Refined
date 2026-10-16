@@ -240,20 +240,37 @@ While an upscaler is active the scene samplers get `log2(render/display) - 1` ad
   frame was rounded up to whole refresh intervals: at 165 Hz, 12.5 ms of GPU work came out every
   18.2 ms, and DirectX 12 ran at two thirds of DirectX 11's frame rate on the player's machine
   while the stand, which presents without a display, never showed it.
-- Vsync pacing (`d12_pacing.h`): the native chain is created frame-latency-waitable, and a vsync'd
-  Present waits until every earlier present has left the queue (the object is released exactly
-  once per present, also across `ResizeBuffers` and while minimized); without vsync it only counts,
+- Vsync pacing (`src/Layers/xrRender/present_pacing.h`, shared with DirectX 11 and Vulkan): the native
+  chain is created frame-latency-waitable, and a vsync'd Present waits until no more earlier presents are
+  queued than the frame rate allows (the object is released exactly once per present, also across
+  `ResizeBuffers` and while minimized); without vsync the CPU is only kept within three queued presents,
   so tearing stays uncapped. DXGI itself bounds a vsync'd flip chain only by its buffers: N buffers
   accept N - 1 queued presents. Behind the NVIDIA Optimus copy to the integrated GPU (hybrid
   laptops: `xrEngine.exe` exports `NvOptimusEnablement`, and the driver profile the exe name
   matches enables it too; DXGI then reports the panel on the NVIDIA adapter) a buffer is free once
   it has been copied, so N - 1 presents leave the queue every refresh: with three buffers vsync
-  let the game run at twice the refresh (330 fps at 165 Hz, half of it never shown), while DirectX
-  11 with two buffers was capped. Measured on the player's RTX 3070 Laptop with a probe under the
-  exe name: 330 -> 165 presents/s plain and through the FSR swap chain, FSR generating 165 -> 82.5
-  rendered/s; GPU-bound rates unchanged (136 and 109 fps at 7.3 and 9.2 ms a frame). The FSR
-  provider paces FFX's real chain from its present callback (3.7) and strips the flag from its own;
-  DLSS-G's chain is left to Streamline.
+  let the game run at twice the refresh (330 fps at 165 Hz, half of it never shown). Measured on the
+  player's RTX 3070 Laptop with a probe under the exe name: 330 -> 165 presents/s plain and through the
+  FSR swap chain, FSR generating 165 -> 82.5 rendered/s. The FSR provider paces FFX's real chain from
+  its present callback (3.7) and strips the flag from its own; DLSS-G's chain is left to Streamline.
+- How many presents may wait: none while frames keep up with the refresh (the cap above), one while
+  they come slower than it (the refresh of the window's monitor, read once a second; hysteresis 1.08 /
+  1.02 of the period). Waiting for the previous present held the CPU to the display: the frame recorded
+  after the wait reached the GPU late and the GPU idled for up to a refresh. Frames slower than the
+  refresh never complete two within one, so the queue of one skips none. Same save, weather pinned,
+  DLSS Balanced, vsync on, the stand: Vulkan 55.2 -> 56.8 fps, DirectX 12 54.1 -> 57.2, DirectX 12
+  with FSR frame generation 40.9 -> 42.7 rendered/s (vsync off: 58.0, 55.6, 42.5); DirectX 11 within
+  noise. `-vsync_strict` brings back the wait for the previous present, for such comparisons.
+- `rs_vsync`: off, on, adaptive (DOOM Eternal's set without its double-buffered mode, which only loses
+  frames). Adaptive keeps vsync while frames keep up with the refresh and tears the late ones: Vulkan
+  creates the chain FIFO_RELAXED where the surface has it (plain vsync where not: a mode switch there
+  may recreate the chain), DXGI chooses per present from the same frame rate measure. Under frame
+  generation adaptive is plain vsync. `rs_v_sync on|off` is still accepted (older configs, the original
+  video page) and never saved.
+- DirectX 11 has the same: a flip chain of three buffers, waitable, on the same pacer (two buffers made
+  a vsync'd frame slower than the refresh wait a whole refresh for the buffer still on the display).
+  Direct3D 11 does not take the waitable flag in exclusive fullscreen, so a switch to it makes the chain
+  again as the copy model, and a switch back makes the paced flip chain.
 - Submission: `ExecuteCommandList` does not submit. The immediate list so far and the deferred list
   are queued (`Context::m_queued`) and go to the queue in one `ExecuteCommandLists` at the next real
   submission (Present, `Flush`, an event query, a staging `Map` that has to wait, `GetData` without

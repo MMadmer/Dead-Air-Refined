@@ -99,9 +99,6 @@
 	<string id="ui_mm_fps_limit">
 		<text>Обмеження FPS у грі</text>
 	</string>
-	<string id="ui_mm_fps_limit_in_menu">
-		<text>Обмеження FPS в меню</text>
-	</string>
 	<string id="ui_mm_shader_preset">
 		<text>Режим графіки</text>
 	</string>

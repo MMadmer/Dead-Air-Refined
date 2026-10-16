@@ -64,4 +64,14 @@ struct DeviceMode
 ENGINE_API extern DeviceMode psDeviceMode;
 ENGINE_API extern Flags32 psDeviceFlags;
 
+// rs_vsync. On is triple buffered with one present queued behind the shown one; adaptive keeps vsync while frames
+// keep up with the refresh and tears the late ones. rsVSync mirrors "not off".
+enum VSyncMode : u32
+{
+    VSyncOff = 0,
+    VSyncOn = 1,
+    VSyncAdaptive = 2,
+};
+ENGINE_API extern u32 psVSyncMode;
+
 #include "Common/FSMacros.hpp"

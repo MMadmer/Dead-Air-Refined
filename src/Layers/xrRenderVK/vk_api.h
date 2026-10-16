@@ -93,6 +93,11 @@ HRESULT CreateSwapChainForHwnd(ID3D11Device* device, IDXGIFactory2* factory, HWN
     const DXGI_SWAP_CHAIN_DESC1* desc, const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreen,
     IDXGISwapChain1** swapChain);
 
+// Adaptive vsync (rs_vsync): the vsync'd presents of a swap chain of this library go out FIFO_RELAXED, which
+// tears a frame that missed its refresh; a change recreates the chain at the next present. False when the
+// surface has no such mode (or the chain is not this library's): the caller tears late frames itself.
+bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive);
+
 // Whether the adapter can run the Vulkan renderer: a Vulkan 1.3 device with the features the layer needs.
 // Creates and destroys a throw-away instance and device; `reason` gets a short text when it cannot.
 bool ProbeAdapter(const LUID& adapterLuid, char* reason, size_t reasonSize);

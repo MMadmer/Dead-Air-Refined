@@ -8,7 +8,7 @@
 // between the back buffer and its hudless copy, so it is composed onto the generated frames too.
 // Per frame: ffxConfigure -> PrepareV2 (here) -> the generation dispatch inside Present, through
 // the swap chain's callback. Every present FFX makes goes through our present callback, which
-// paces it to the refresh under vsync on FFX's real swap chain (d12_pacing.h).
+// paces it to the refresh under vsync on FFX's real swap chain (present_pacing.h).
 
 #include "stdafx.h"
 
@@ -16,7 +16,7 @@
 #include "da_framegen.h"
 #include "da_ffx_loader.h"
 #include "da_streamline.h"
-#include "Layers/xrRenderDX12/d12_pacing.h"
+#include "Layers/xrRender/present_pacing.h"
 
 #include <ffx_framegeneration.h>
 #include <dx12/ffx_api_framegeneration_dx12.h>
@@ -183,10 +183,10 @@ class fsr_swapchain_provider final : public xrd3d12::SwapChainProvider
     DXGI_SWAP_CHAIN_DESC1 m_desc{};
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC m_fullscreen{};
     // Every present of the proxy, rendered or generated, ends on FFX's real swap chain; the present
-    // callback paces them on its waitable object (d12_pacing.h). The callback runs on the thread
+    // callback paces them on its waitable object (present_pacing.h). The callback runs on the thread
     // that presents: the render thread without generation, FFX's presenter thread with it.
     IDXGISwapChain2* m_real{};
-    xrd3d12::PresentPacer m_pacer;
+    xrpacing::PresentPacer m_pacer;
     std::atomic<bool> m_vsync{};
 
     // The context through a factory that keeps the real swap chain.
@@ -284,8 +284,9 @@ public:
         m_chain = chain;
         *swapChain = chain;
         // FFX always makes the real swap chain a waitable one.
-        if (m_real)
-            m_pacer.Attach(m_real->GetFrameLatencyWaitableObject());
+        HWND window = nullptr;
+        if (m_real && SUCCEEDED(m_real->GetHwnd(&window)))
+            m_pacer.Attach(m_real->GetFrameLatencyWaitableObject(), window);
         if (!m_pacer.Attached())
             Msg("! [FSR FG] the real swap chain is out of reach: vsync does not pace its presents");
         return S_OK;

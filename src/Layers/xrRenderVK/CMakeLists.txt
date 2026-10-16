@@ -17,6 +17,7 @@ target_sources(xrVulkan PRIVATE
     vk_context_ops.cpp
     vk_swapchain.cpp
     vk_native.cpp
+    ../xrRender/present_pacing.h
 )
 
 target_include_directories(xrVulkan

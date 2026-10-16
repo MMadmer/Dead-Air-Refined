@@ -99,9 +99,6 @@
 	<string id="ui_mm_fps_limit">
 		<text>Ограничение FPS в игре</text>
 	</string>
-	<string id="ui_mm_fps_limit_in_menu">
-		<text>Ограничение FPS в меню</text>
-	</string>
   <string id="cze">
     <text>Чешский (Czech)</text>
   </string>

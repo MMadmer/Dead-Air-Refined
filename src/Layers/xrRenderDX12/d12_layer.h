@@ -27,7 +27,7 @@
 #pragma once
 
 #include "d12_api.h"
-#include "d12_pacing.h"
+#include "../xrRender/present_pacing.h"
 
 #include <d3dcompiler.h>
 
@@ -1918,8 +1918,8 @@ private:
     u32 m_current = 0;
     UINT m_presentCount = 0;
     // Vsync pacing on the native chain's waitable object; a provider that paces itself strips the
-    // flag from its chain (d12_pacing.h).
-    PresentPacer m_pacer;
+    // flag from its chain (present_pacing.h).
+    xrpacing::PresentPacer m_pacer;
 };
 
 // ============================================================================================

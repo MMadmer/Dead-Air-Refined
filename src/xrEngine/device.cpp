@@ -35,8 +35,6 @@ string512 g_sBenchmarkName;
 
 // 0 means no limit at all, which is what the "off" position of the FPS lock option selects.
 int ps_fps_limit = 0;
-// Retained for existing user.ltx files; frame pacing uses the global limit in every game state.
-int ps_fps_limit_in_menu = 60;
 // QA: periodic average-FPS log line, seconds between lines (xr_ioc_cmd.cpp).
 extern ENGINE_API int ps_r__fps_log;
 extern int g_pause_in_background;

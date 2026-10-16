@@ -6,7 +6,7 @@ add_library(xrD3D12 STATIC)
 target_sources(xrD3D12 PRIVATE
     d12_api.h
     d12_layer.h
-    d12_pacing.h
+    ../xrRender/present_pacing.h
     d12_infra.cpp
     d12_device.cpp
     d12_objects.cpp

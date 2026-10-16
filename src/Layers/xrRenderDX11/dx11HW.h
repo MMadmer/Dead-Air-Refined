@@ -4,6 +4,7 @@
 
 #include "Layers/xrRender/HWCaps.h"
 #include "Layers/xrRender/stats_manager.h"
+#include "Layers/xrRender/present_pacing.h"
 
 #include <SDL.h>
 
@@ -78,6 +79,11 @@ private:
     // Set when the swap chain was created with DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, which every
     // windowed present without vsync then has to repeat.
     bool m_tearingSupported{};
+    // Vsync pacing of the flip chain on its frame latency object (present_pacing.h). Direct3D 11 only: the
+    // Direct3D 12 and Vulkan layers pace their own chains.
+    xrpacing::PresentPacer m_pacer;
+    // Adaptive vsync where the swap chain cannot tear late frames by itself: decided from the present rate.
+    xrpacing::PresentClock m_adaptiveClock;
 
     bool ThisInstanceIsGlobal() const;
 

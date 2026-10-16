@@ -22,5 +22,7 @@ Flags32 psDeviceFlags =
    rsDrawStatic | rsDrawDynamic | rsDrawDetails | rsDrawParticles | mtSound | mtNetwork
 };
 
+u32 psVSyncMode = VSyncOff;
+
 // textures
 int psTextureLOD = 1;

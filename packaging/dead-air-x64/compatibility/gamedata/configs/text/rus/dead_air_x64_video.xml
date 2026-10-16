@@ -75,6 +75,9 @@
 	<string id="st_opt_renderer_r5">
 		<text>DirectX 12</text>
 	</string>
+	<string id="st_opt_renderer_r6">
+		<text>Vulkan</text>
+	</string>
 	<string id="st_opt_st_aa_off">
 		<text>Отключено</text>
 	</string>
@@ -158,7 +161,7 @@
 	</string>
 	<!-- Hints of the video tab: st_da_x64_video_hint_<row>, and the reasons a row is greyed out. -->
 	<string id="st_da_x64_video_hint_renderer">
-		<text>DirectX 11 или DirectX 12: картинка и эффекты те же. Генерация кадров есть только на DirectX 12. Меняется после перезапуска игры.</text>
+		<text>DirectX 11, DirectX 12 или Vulkan: картинка и эффекты те же. Генерация кадров есть только на DirectX 12. Меняется после перезапуска игры.</text>
 	</string>
 	<string id="st_da_x64_video_hint_renderer_no_dx12">
 		<text>Видеокарта или драйвер не поддерживают DirectX 12 в нужном игре объёме, поэтому доступен только DirectX 11.</text>
@@ -172,8 +175,17 @@
 	<string id="st_da_x64_video_hint_fps_limit">
 		<text>Потолок частоты кадров. Разгружает видеокарту, когда больше кадров не нужно.</text>
 	</string>
+	<string id="st_opt_st_vsync_off">
+		<text>Отключено</text>
+	</string>
+	<string id="st_opt_st_vsync_on">
+		<text>Включено</text>
+	</string>
+	<string id="st_opt_st_vsync_adaptive">
+		<text>Адаптивно</text>
+	</string>
 	<string id="st_da_x64_video_hint_vsync">
-		<text>Подстраивает кадры под частоту монитора: убирает разрывы картинки, но добавляет небольшую задержку управления.</text>
+		<text>Подстраивает кадры под частоту монитора. Включено: без разрывов картинки, ценой небольшой задержки управления; частота кадров ниже частоты монитора дополнительно не урезается. Адаптивно: синхронизация, пока частота кадров не ниже частоты монитора, а ниже неё разрывы вместо подёргиваний.</text>
 	</string>
 	<string id="st_da_x64_video_hint_preset">
 		<text>Качество графики целиком: дальности прорисовки и теней, трава, отражения и эффекты. Сглаживание выбирается отдельно. Чем выше, тем тяжелее для видеокарты. На DirectX 12 два старших пресета затеняют ровные и тёмные участки в пониженном разрешении.</text>

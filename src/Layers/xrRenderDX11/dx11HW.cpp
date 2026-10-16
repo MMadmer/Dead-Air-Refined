@@ -739,8 +739,14 @@ bool CHW::CreateSwapChain2(HWND hwnd)
             _RELEASE(pFactory5);
         }
 #endif
+        // Three buffers: with two, a vsync'd frame slower than the refresh waits a whole refresh for the
+        // buffer the display still shows. Paced on the frame latency object, so the third one never queues
+        // more than the frame rate allows (present_pacing.h).
         desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        desc.BufferCount = 2;
+        desc.BufferCount = 3;
+#ifndef XR_NATIVE
+        desc.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+#endif
 #ifdef HAS_DXGI1_5
         if (m_tearingSupported)
             desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
@@ -791,9 +797,6 @@ bool CHW::CreateSwapChain2(HWND hwnd)
 #ifdef XR_NATIVE
     flipModel = true;
 #endif
-    if (ThisInstanceIsGlobal())
-        Msg("* Presentation: %s%s", flipModel ? "flip" : "copy (legacy)",
-            m_tearingSupported ? ", tearing allowed" : "");
 
     m_pSwapChain = swapchain;
 
@@ -813,6 +816,15 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     }
 
     m_pSwapChain->QueryInterface(__uuidof(IDXGISwapChain2), reinterpret_cast<void**>(&m_pSwapChain2));
+
+#ifndef XR_NATIVE
+    // Null for a chain without the flag (the copy model).
+    if (ThisInstanceIsGlobal() && flipModel && m_pSwapChain2)
+        m_pacer.Attach(m_pSwapChain2->GetFrameLatencyWaitableObject(), hwnd);
+#endif
+    if (ThisInstanceIsGlobal())
+        Msg("* Presentation: %s%s%s", flipModel ? "flip" : "copy (legacy)",
+            m_tearingSupported ? ", tearing allowed" : "", m_pacer.Attached() ? ", vsync paced" : "");
 
     if (!UpdateChainDesc())
     {
@@ -858,6 +870,8 @@ void CHW::DestroyDevice()
     //  Must switch to windowed mode to release swap chain
     if (!m_ChainDesc.Windowed && m_pSwapChain)
         m_pSwapChain->SetFullscreenState(FALSE, NULL);
+    m_pacer.Detach();
+    m_adaptiveClock.Reset();
 #ifdef HAS_DX11_2
     _RELEASE(m_pSwapChain2);
 #endif
@@ -896,12 +910,36 @@ void CHW::Reset()
     DXGI_SWAP_CHAIN_DESC& cd = m_ChainDesc;
     const bool bWindowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
 
+#ifndef XR_NATIVE
+    // The chain a fresh start would make for the new window mode: a paced flip chain windowed, the copy model
+    // in exclusive fullscreen (Direct3D 11 does not take the frame latency object there, so SetFullscreenState
+    // failed on the flip chain). Nothing holds the back buffer here: ResizeBuffers below needs that as well.
+    const bool flipWanted = bWindowed && !strstr(Core.Params, "-no_flip") && !strstr(Core.Params, "-no_dx11_2");
+    if (ThisInstanceIsGlobal() && outputWindow && flipWanted != UsingFlipPresentationModel())
+    {
+        // A chain is released windowed; only the copy model can be in exclusive fullscreen here.
+        if (!UsingFlipPresentationModel())
+            m_pSwapChain->SetFullscreenState(FALSE, nullptr);
+        m_pacer.Detach();
+        m_adaptiveClock.Reset();
+        _RELEASE(m_pSwapChain2);
+        _RELEASE(m_pSwapChain);
+        if (!CreateSwapChain2(outputWindow) && !CreateSwapChain(outputWindow))
+            FATAL("Failed to create the swap chain for the new window mode.");
+    }
+#endif
+
     // An occupied output, an unsupported mode or a rendering adapter without outputs all make this
-    // fail; swallowing the result leaves the engine convinced it is exclusive when it is not.
-    const HRESULT fullscreenResult = m_pSwapChain->SetFullscreenState(!bWindowed, nullptr);
-    if (FAILED(fullscreenResult))
-        Msg("! [%s] failed to %s exclusive fullscreen: 0x%08x", __FUNCTION__,
-            bWindowed ? "leave" : "enter", fullscreenResult);
+    // fail; swallowing the result leaves the engine convinced it is exclusive when it is not. A chain
+    // already in the state is left alone: a waitable one refuses even the call that changes nothing.
+    BOOL fullscreenNow{};
+    if (FAILED(m_pSwapChain->GetFullscreenState(&fullscreenNow, nullptr)) || !fullscreenNow != bWindowed)
+    {
+        const HRESULT fullscreenResult = m_pSwapChain->SetFullscreenState(!bWindowed, nullptr);
+        if (FAILED(fullscreenResult))
+            Msg("! [%s] failed to %s exclusive fullscreen: 0x%08x", __FUNCTION__,
+                bWindowed ? "leave" : "enter", fullscreenResult);
+    }
 
 #ifdef HAS_DXGI1_5
     // A chain that was born windowed may now be going exclusive fullscreen, where the tearing
@@ -977,7 +1015,20 @@ void CHW::EndScene() { }
 
 void CHW::Present()
 {
-    const bool bUseVSync = psDeviceFlags.test(rsVSync);
+    // rs_vsync. Adaptive keeps vsync while frames keep up with the refresh and tears the late ones: Vulkan's
+    // FIFO_RELAXED where the surface has it (else plain vsync: a mode switch there may recreate the chain),
+    // DXGI decided here from the present rate. Frame generation paces its own presents: adaptive is vsync there.
+    bool bUseVSync = psDeviceFlags.test(rsVSync);
+    const bool adaptive = bUseVSync && psVSyncMode == VSyncAdaptive;
+#ifdef XR_VULKAN
+    xrvk::SetAdaptiveVsync(m_pSwapChain, adaptive);
+#else
+    if (adaptive && Device.dwFramesPerRender <= 1)
+    {
+        m_adaptiveClock.Tick(outputWindow);
+        bUseVSync = !m_adaptiveClock.Slower();
+    }
+#endif
 
     UpdateBackgroundPreview();
 
@@ -989,6 +1040,8 @@ void CHW::Present()
     if (!bUseVSync && m_tearingSupported && m_ChainDesc.Windowed)
         presentFlags |= DXGI_PRESENT_ALLOW_TEARING;
 #endif
+
+    m_pacer.BeforePresent(bUseVSync);
 
     switch (m_pSwapChain->Present(bUseVSync ? 1 : 0, presentFlags))
     {

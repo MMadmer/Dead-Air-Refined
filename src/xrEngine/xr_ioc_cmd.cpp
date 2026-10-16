@@ -902,7 +902,6 @@ ENGINE_API int ps_r__puddle_fill = 1;
 ENGINE_API int ps_r__rain_quality = 2;
 
 extern int ps_fps_limit;
-extern int ps_fps_limit_in_menu;
 
 class CCC_VidFpsLimit final : public CCC_Token
 {
@@ -966,6 +965,44 @@ public:
     }
 
     // rs_fps_limit is the persisted variable; saving this alias too would fight with it.
+    void Save(IWriter*) override {}
+};
+
+class CCC_VSync final : public CCC_Token
+{
+    inline static xr_token tokens[] =
+    {
+        { "st_vsync_off", VSyncOff },
+        { "st_vsync_on", VSyncOn },
+        { "st_vsync_adaptive", VSyncAdaptive },
+        { nullptr, 0 },
+    };
+
+public:
+    explicit CCC_VSync(pcstr name) : CCC_Token(name, &psVSyncMode, tokens) {}
+
+    void Execute(pcstr args) override
+    {
+        CCC_Token::Execute(args);
+        psDeviceFlags.set(rsVSync, psVSyncMode != VSyncOff);
+    }
+};
+
+// rs_v_sync: the on/off switch of older configs and of the original video page. Never saved: rs_vsync is.
+class CCC_VSyncSwitch final : public CCC_Mask
+{
+public:
+    explicit CCC_VSyncSwitch(pcstr name) : CCC_Mask(name, &psDeviceFlags, rsVSync) {}
+
+    void Execute(pcstr args) override
+    {
+        CCC_Mask::Execute(args);
+        if (!psDeviceFlags.test(rsVSync))
+            psVSyncMode = VSyncOff;
+        else if (psVSyncMode == VSyncOff)
+            psVSyncMode = VSyncOn;
+    }
+
     void Save(IWriter*) override {}
 };
 
@@ -1052,14 +1089,14 @@ void CCC_Register()
     CMD1(CCC_Editor, "rs_editor");
 
     CMD4(CCC_Integer, "rs_fps_limit", &ps_fps_limit, 0, 501); // 0 = unlimited
-    CMD4(CCC_Integer, "rs_fps_limit_in_menu", &ps_fps_limit_in_menu, 30, 501);
     CMD4(CCC_Integer, "g_pause_in_background", &g_pause_in_background, 0, 1);
     // the loading screen drawn by a presenter of its own, a thread, a device and a window (da_loading_presenter.h)
     CMD4(CCC_Integer, "loading_screen_async", &psLoadingScreenAsync, 0, 1);
     CMD4(CCC_Integer, "loading_screen_capture", &psLoadingScreenCapture, 0, 400);
     CMD1(CCC_VidFpsLimit, "vid_fps_limit");
     CMD3(CCC_Mask, "rs_always_active", &psDeviceFlags, rsAlwaysActive);
-    CMD3(CCC_Mask, "rs_v_sync", &psDeviceFlags, rsVSync);
+    CMD1(CCC_VSync, "rs_vsync");
+    CMD1(CCC_VSyncSwitch, "rs_v_sync");
     // CMD3(CCC_Mask, "rs_disable_objects_as_crows",&psDeviceFlags, rsDisableObjectsAsCrows );
     CMD1(CCC_Fullscreen, "rs_fullscreen");
     CMD3(CCC_Mask, "rs_stats", &psDeviceFlags, rsStatistic);

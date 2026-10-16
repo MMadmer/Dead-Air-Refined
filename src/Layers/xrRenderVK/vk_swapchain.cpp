@@ -7,8 +7,8 @@
 // frame recorded after a lazy acquire stalled whole until vsync freed an image. Three images under vsync
 // (two cost DX12 a frame of throughput), the present mode switches without a new swap chain where
 // VK_EXT_swapchain_maintenance1 allows it, and with present_wait a vsync'd present is queued only after the
-// previous one reached the display: one present per refresh on every path (the DX12 pacer's job, see
-// d12_pacing.h).
+// previous one reached the display, or the one before it while frames come slower than the refresh (the pacing
+// of every API, ../xrRender/present_pacing.h).
 #include "vk_layer.h"
 
 #include <algorithm>
@@ -199,7 +199,9 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
     // newest frame without tearing.
     m_tearingMode = has(VK_PRESENT_MODE_IMMEDIATE_KHR) ? VK_PRESENT_MODE_IMMEDIATE_KHR :
         has(VK_PRESENT_MODE_MAILBOX_KHR) ? VK_PRESENT_MODE_MAILBOX_KHR : VK_PRESENT_MODE_FIFO_KHR;
-    m_mode = syncInterval ? VK_PRESENT_MODE_FIFO_KHR : m_tearingMode;
+    m_relaxedSupported = has(VK_PRESENT_MODE_FIFO_RELAXED_KHR);
+    m_vsyncMode = m_adaptive && m_relaxedSupported ? VK_PRESENT_MODE_FIFO_RELAXED_KHR : VK_PRESENT_MODE_FIFO_KHR;
+    m_mode = syncInterval ? m_vsyncMode : m_tearingMode;
     m_syncInterval = syncInterval;
 
     u32 images = (std::max)(3u, caps.minImageCount);
@@ -234,10 +236,10 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
         info.pNext = &formatList;
     }
     // Both present modes up front: vsync switches per present without a new swap chain.
-    VkPresentModeKHR switchable[2] = {VK_PRESENT_MODE_FIFO_KHR, m_tearingMode};
+    VkPresentModeKHR switchable[2] = {m_vsyncMode, m_tearingMode};
     VkSwapchainPresentModesCreateInfoEXT modesInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_EXT};
     m_switchModes = false;
-    if (dev->swapchainMaintenance && m_tearingMode != VK_PRESENT_MODE_FIFO_KHR)
+    if (dev->swapchainMaintenance && m_tearingMode != m_vsyncMode)
     {
         VkSurfacePresentModeEXT surfaceMode{VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_EXT};
         surfaceMode.presentMode = m_mode;
@@ -251,7 +253,7 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
         if (g_vk.vkGetPhysicalDeviceSurfaceCapabilities2KHR &&
             g_vk.vkGetPhysicalDeviceSurfaceCapabilities2KHR(dev->physical, &surfaceInfo, &caps2) == VK_SUCCESS)
         {
-            const VkPresentModeKHR other = m_mode == VK_PRESENT_MODE_FIFO_KHR ? m_tearingMode : VK_PRESENT_MODE_FIFO_KHR;
+            const VkPresentModeKHR other = m_mode == m_vsyncMode ? m_tearingMode : m_vsyncMode;
             for (u32 i = 0; i < compat.presentModeCount; ++i)
                 m_switchModes |= compatible[i] == other;
         }
@@ -280,6 +282,8 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
     // The old chain is retired: its images go with the wrappers.
     DestroyNative();
     m_swapchain = created;
+    m_chainFirstId = m_presentId + 1;
+    m_clock.Reset();
     m_mutable = (info.flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) != 0;
     m_extent = info.imageExtent;
 
@@ -314,7 +318,8 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
     m_acquired = false;
     m_outOfDate = false;
     Log("* swap chain: %ux%u, %u images, %s, %s", m_extent.width, m_extent.height, count,
-        m_mode == VK_PRESENT_MODE_FIFO_KHR ? "vsync" : m_mode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "tearing" : "mailbox",
+        m_mode == VK_PRESENT_MODE_FIFO_KHR ? "vsync" : m_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR ? "adaptive vsync" :
+        m_mode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "tearing" : "mailbox",
         m_switchModes ? "mode switches in place" : "mode switches recreate it");
     return S_OK;
 }
@@ -512,9 +517,12 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
     m_pendingAcquire = VK_NULL_HANDLE;
     const u64 value = imm->Submit(acquired, done);
 
-    // One present per refresh with vsync: the previous present has to reach the display first.
-    if (dev->caps.presentWait && m_syncInterval && m_presentId)
-        g_vk.vkWaitForPresentKHR(dev->vk, m_swapchain, m_presentId, kPresentWaitNs);
+    // One present per refresh with vsync: the previous present has to reach the display first, or the one
+    // before it while frames come slower than the refresh (present_pacing.h).
+    m_clock.Tick(m_hwnd);
+    const u64 queued = m_clock.Slower() && !xrpacing::StrictVsync() ? 1 : 0;
+    if (dev->caps.presentWait && m_syncInterval && m_presentId > queued && m_presentId - queued >= m_chainFirstId)
+        g_vk.vkWaitForPresentKHR(dev->vk, m_swapchain, m_presentId - queued, kPresentWaitNs);
 
     VkPresentInfoKHR info{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     info.waitSemaphoreCount = 1;
@@ -530,7 +538,7 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
         presentId.pPresentIds = &id;
         info.pNext = &presentId;
     }
-    const VkPresentModeKHR mode = m_syncInterval ? VK_PRESENT_MODE_FIFO_KHR : m_tearingMode;
+    const VkPresentModeKHR mode = m_syncInterval ? m_vsyncMode : m_tearingMode;
     VkSwapchainPresentModeInfoEXT modeInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT};
     if (m_switchModes)
     {
@@ -757,6 +765,28 @@ HRESULT STDMETHODCALLTYPE SwapChain::GetRotation(DXGI_MODE_ROTATION* rotation)
 // ================================================================================================
 // Public API
 // ================================================================================================
+
+bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive)
+{
+    if (!chain)
+        return false;
+    ID3D11Device* device = nullptr;
+    chain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device));
+    const bool ours = IsLayerDevice(device);
+    if (device)
+        device->Release();
+    if (!ours)
+        return false;
+    SwapChain* s = static_cast<SwapChain*>(static_cast<IDXGISwapChain1*>(chain));
+    if (s->m_adaptive != adaptive)
+    {
+        s->m_adaptive = adaptive;
+        // FIFO_RELAXED switches with no other mode in place.
+        if (s->m_relaxedSupported)
+            s->m_outOfDate = true;
+    }
+    return s->m_relaxedSupported;
+}
 
 HRESULT CreateSwapChainForHwnd(ID3D11Device* device, IDXGIFactory2* factory, HWND hwnd, const DXGI_SWAP_CHAIN_DESC1* desc,
     const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreen, IDXGISwapChain1** swapChain)

@@ -93,9 +93,6 @@
 	<string id="ui_mm_fps_limit">
 		<text>Limit FPS ve høe</text>
 	</string>
-	<string id="ui_mm_fps_limit_in_menu">
-		<text>Limit FPS v menu</text>
-	</string>
 	<string id="ui_mm_shader_preset">
 		<text>Grafický režim</text>
 	</string>

@@ -225,7 +225,7 @@ HRESULT SwapChain::CreateNative()
     fullscreen.Windowed = TRUE;
     const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreenPtr = m_hasFullscreenDesc ? &fullscreen : nullptr;
 
-    // Waitable for the vsync pacing (d12_pacing.h). A provider that paces its presents itself strips
+    // Waitable for the vsync pacing (present_pacing.h). A provider that paces its presents itself strips
     // the flag from its chain; ReadActualDesc then takes what the chain really has.
     m_desc.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
@@ -255,7 +255,7 @@ HRESULT SwapChain::CreateNative()
 void SwapChain::AttachPacer()
 {
     const bool waitable = m_native && (m_desc.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
-    m_pacer.Attach(waitable ? m_native->GetFrameLatencyWaitableObject() : nullptr);
+    m_pacer.Attach(waitable ? m_native->GetFrameLatencyWaitableObject() : nullptr, m_hwnd);
 }
 
 void SwapChain::AcquireBuffers()

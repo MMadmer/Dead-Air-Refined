@@ -353,9 +353,14 @@
 			</text_color>
 		</list_fps_limit>
 
-		<check_vsync x="255" y="1" width="30" height="21">
-			<options_item entry="rs_v_sync" group="mm_opt_video" depend="runtime"/>
-		</check_vsync>
+		<list_vsync x="125" y="1" width="160" height="21" list_length="3" always_show_scroll="0">
+			<options_item entry="rs_vsync" group="mm_opt_video" depend="runtime"/>
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_vsync>
 
 		<list_preset x="125" y="1" width="160" height="21" list_length="5" always_show_scroll="0">
 			<options_item entry="_preset" group="mm_opt_video_preset" depend="restart"/>
