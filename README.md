@@ -53,6 +53,10 @@ upstream, and where the untouched code that actually runs is.
 - A DirectX 12 renderer next to DirectX 11, selectable in the video options:
   every effect of the DirectX 11 renderer, with the grass of the scene
   recorded in parallel and a persistent pipeline cache.
+- A Vulkan renderer as the third choice: the same effects, upscalers and
+  look, on Vulkan 1.3 with pipeline libraries and a persistent pipeline cache.
+- Vertical sync off, on or adaptive on every renderer, without the frame-rate
+  loss it used to cost below the monitor's refresh rate.
 - DirectX 12-only features on GPUs that support them: shaders compiled for
   Shader Model 6.6, trees culled and drawn by the GPU, mesh-shader grass,
   texture and level loading through DirectStorage, variable rate shading on
@@ -62,8 +66,8 @@ upstream, and where the untouched code that actually runs is.
   reflections on water and puddles, sun shadows and ambient occlusion, with
   three quality levels. No quality preset turns it on; it needs DirectX 12 and
   a GPU with DXR 1.1 (GeForce RTX, Radeon RX 6000 and newer, Intel Arc).
-- AMD FSR (DirectX 11 and 12) and NVIDIA DLSS / DLAA (DirectX 11 and 12, on
-  supported GPUs) upscaling, anti-aliasing as its own setting (off, FXAA, SMAA,
+- AMD FSR and NVIDIA DLSS / DLAA (on supported GPUs) upscaling on DirectX 11,
+  DirectX 12 and Vulkan, anti-aliasing as its own setting (off, FXAA, SMAA,
   TAA), and frame generation through AMD FSR or NVIDIA DLSS on DirectX 12.
 - Human NPCs that perceive and communicate like people, without cheating:
   each stalker knows only what it saw, heard or was told, needs time to spot
@@ -337,9 +341,11 @@ SDK port that brings FSR 3.1 to DirectX 11; and to **NVIDIA** and
 DLSS Frame Generation and Reflex.
 
 To **Microsoft**, for the
-**[DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler)**
-and **[DirectStorage](https://github.com/microsoft/DirectStorage)**, which the
-DirectX 12 renderer ships.
+**[DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler)**,
+which the DirectX 12 and Vulkan renderers ship, and
+**[DirectStorage](https://github.com/microsoft/DirectStorage)**, which the
+DirectX 12 renderer ships; and to the **Khronos Group** and **LunarG**, for
+Vulkan and its SDK.
 
 To **Manuel (ascii1457)** and **Screen Space Shaders for Anomaly**, for a
 rendering technique reimplemented here.
