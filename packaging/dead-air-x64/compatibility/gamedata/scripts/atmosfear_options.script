@@ -651,6 +651,13 @@ end
 
 function af_options_dialog:Update()
 	CUIScriptWnd.Update(self)
+	-- Under the climate's weather a level's periods choose nothing (a level whose two periods are "Heavy fog" keeps its
+	-- fog): their lists grey out, and their hint says why, as soon as the box is ticked.
+	local climate = self.check_season_weather ~= nil and self.check_season_weather:GetCheck()
+	if (climate ~= self.periods_under_climate) then
+		self.periods_under_climate = climate
+		self.dlg_weather:SetClimate(self, climate)
+	end
 end
 
 --######################################################################################################################
@@ -755,6 +762,7 @@ function af_opt_weather:InitControls(x, y, xml, handler)
 		return a.name < b.name
 	end)
 
+	self.level_ids = {}
 	for _, level_info in ipairs(levels) do
 		local id = level_info.id
 		local row = list.new_row(self, xml, id, "periods", id, HINTS .. "period", "weather_page:cap_level", "weather_page:templ_level")
@@ -762,6 +770,19 @@ function af_opt_weather:InitControls(x, y, xml, handler)
 		handler:RegisterPeriodCombo(xml, "weather_page", id .. "_period_bad", "periods", row.wnd, "list_period_bad")
 		row.ctrl, row.kind = handler["list_" .. id .. "_period_good"], "list"
 		list.commit_row(self, xml, row)
+		self.level_ids[#self.level_ids + 1] = id
+	end
+end
+
+-- The climate's weather on or off (the seasons page's box, before Accept): the levels' period lists greyed out or not.
+function af_opt_weather:SetClimate(handler, on)
+	local list = dead_air_x64_option_list
+	for _, id in ipairs(self.level_ids) do
+		list.set_state(self, id, not on, HINTS .. "period_climate")
+		local bad = handler["list_" .. id .. "_period_bad"]
+		if (bad) then
+			bad:Enable(not on)
+		end
 	end
 end
 

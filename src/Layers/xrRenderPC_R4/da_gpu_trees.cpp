@@ -1489,13 +1489,11 @@ void wind_pass(CBackend& cmd_list, u32 frame)
     float dt = Device.fTimeDelta;
     if (dt <= 0.f || dt > 0.25f)
         dt = 0.016f;
-    float speed, speed_prev;
-    FTreeVisual::FrameSpeeds(speed, speed_prev);
     const u32 roots = u32(g_gd.roots.size());
     compute(cmd_list, g_gd.s_wind, (roots + 63) / 64, 1, {g_gd.root_static_srv}, {g_gd.root_uav, g_gd.wind_dbg_uav}, [&] {
         cmd_list.set_c("gd_wind0", env.eff_wind_field_ofs.x, env.eff_wind_field_ofs.y, env.eff_wind_gust_event,
             env.eff_wind_freeze ? 1.f : 0.f);
-        cmd_list.set_c("gd_wind1", dt, da_history_reset() ? 1.f : 0.f, speed, speed_prev);
+        cmd_list.set_c("gd_wind1", dt, da_history_reset() ? 1.f : 0.f, 0.f, 0.f);
         cmd_list.set_c("gd_wind2", float(roots), float(frame & kFrameMask), 0.f, ps_e_wind_dbg ? 1.f : 0.f);
     });
 }

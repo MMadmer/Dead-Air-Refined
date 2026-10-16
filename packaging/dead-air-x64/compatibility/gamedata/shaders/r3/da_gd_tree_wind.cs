@@ -11,7 +11,7 @@
 
 // x, y = the gust field's scroll (eff_wind_field_ofs), z = gust event, w = wind frozen (QA)
 uniform float4 gd_wind0;
-// x = time step (clamped as the CPU does), y = history reset, z = tree speed, w = previous tree speed
+// x = time step (clamped as the CPU does), y = history reset, z, w unused
 uniform float4 gd_wind1;
 // x = roots, y = frame (24 bits), z = the root wind_dbg watches, w = 1 while wind_dbg is on
 uniform float4 gd_wind2;
@@ -67,10 +67,10 @@ void main(uint3 id : SV_DispatchThreadID)
 	}
 	q = clamp(q, 0.35f, 1.6f);
 
-	const float freq_k = clamp(omega / gd_wind1.z, 0.4f, 6.0f);
-	const float freq_k_prev = clamp(omega / gd_wind1.w, 0.4f, 6.0f);
+	// (the sway phase advances one radian a second: the factor is the crown's own frequency)
+	const float freq_k = clamp(omega, 0.4f, 6.0f);
 	now = float4(q, freq_k, gust, dev);
-	prev = continuous ? float4(q_last, freq_k_prev, gust_last, dev_last) : float4(q, freq_k_prev, gust, dev);
+	prev = continuous ? float4(q_last, freq_k, gust_last, dev_last) : float4(q, freq_k, gust, dev);
 	gd_root_state.Store4(a, asuint(now));
 	gd_root_state.Store4(a + 16, asuint(prev));
 	gd_root_state.Store4(a + 32, uint4(asuint(s0.w), asuint(foliage), asuint(qd), frame));

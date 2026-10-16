@@ -595,6 +595,15 @@ void da_snow_frame_update()
         lut_at(*field, day, f.S, f.Mc);
         if (dynamic)
         {
+            // Under the crowns lies the share of the open's snow the calendar's own picture gives them (bare
+            // crowns in January let through much as the open gets). The early winter's picture a thin pack
+            // borrows keeps its first snows' bare tree wells: under a January pack every trunk stood in a few
+            // centimetres of see-through snow, dark blotches round it in a pale sheet.
+            Fvector4 S_cal, Mc_cal;
+            lut_at(*field, D, S_cal, Mc_cal);
+            const float open_cal = std::max(S_cal.x - Mc_cal.x, 0.f);
+            const float trees_share = open_cal > 1e-4f ? clampr(std::max(S_cal.y - Mc_cal.y, 0.f) / open_cal, 0.f, 1.f) : 0.f;
+            f.S.y = std::max(f.S.y, trees_share * std::max(f.S.x - f.Mc.x, 0.f));
             f.S.set(f.S.x * ratio + fresh * fresh_share[0], f.S.y * ratio + fresh * fresh_share[1],
                 f.S.z * ratio + fresh * fresh_share[2], f.S.w * ratio + fresh * fresh_share[3]);
             f.Mc.mul(ratio * whiten);

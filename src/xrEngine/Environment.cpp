@@ -2114,14 +2114,12 @@ void CEnvironment::wind_tick(float delta)
     eff_cloud_run = fmodf(eff_cloud_run + std::max(eff_wind_aloft_ms, 0.4f) * delta, 1.e6f);
 
     // ---- Tree sway phase. ------------------------------------------------------------------
-    // Integrated with the weather's CURRENT tree speed (the mixer lerps it smoothly) at a
-    // CONSTANT rate: a tree is a damped harmonic oscillator swinging at its own natural
-    // frequency, set by mass and stiffness - wind changes how FAR it leans, not how fast it
-    // swings (the earlier gust "whip-up" factor was right for grass, wrong for trees; grass
-    // keeps its own whip in the detail manager). Accumulated, never time*speed - a varying
-    // speed times absolute time jumps the phase. The consumer divides by 2*pi (FTreeVisual);
+    // A CONSTANT rate, whatever the weather: a tree is a damped harmonic oscillator swinging at
+    // its own natural frequency, set by mass and stiffness - wind changes how FAR it leans, not
+    // how fast it swings (the earlier gust "whip-up" factor was right for grass, wrong for trees;
+    // grass keeps its own whip in the detail manager). The consumer divides by 2*pi (FTreeVisual);
     // wrapping at 1024 * 2*pi keeps a whole number of wave periods.
-    eff_tree_phase = fmodf(eff_tree_phase + delta * CurrentEnv.m_fTreeSpeed, 1024.f * PI_MUL_2);
+    eff_tree_phase = fmodf(eff_tree_phase + delta, 1024.f * PI_MUL_2);
 
     // ---- Puddle ripple travel. -------------------------------------------------------------
     // Two accumulated path lengths in noise-space units (world m x 12): rain drives downhill

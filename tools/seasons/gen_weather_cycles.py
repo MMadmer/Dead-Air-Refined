@@ -14,7 +14,8 @@ sky through the day, built from Dead Air's own keys:
 
 Each comes as af3_day_<state>.ltx (the day keys) and af3_<night>_<state>[_<moon>].ltx for the four night
 brightnesses AtmosFear offers (slight, bright, medium, dark), whose night keys come from the stock file of the same
-brightness (and moon phase). How much falls, its phase and the wind are the climate's whatever a cycle says.
+brightness (and moon phase). How much falls, its phase and the wind are the climate's whatever a cycle says, and
+the plants sway by the wind alone: the stock tree keys are left out.
 
     python tools/seasons/gen_weather_cycles.py --src <dir> [--src <dir> ...] [--out <dir>]
 
@@ -97,6 +98,10 @@ def put(kv, key, value):
     kv.append((key, value))
 
 
+def drop(kv, key):
+    kv[:] = [(k, v) for k, v in kv if k != key]
+
+
 def scale(kv, key, mul, add=0.0, lo=0.0, hi=1.0, keep_w=True):
     v = get(kv, key)
     if v is None:
@@ -163,7 +168,6 @@ def rain_steady(items, night=False):
         put(kv, 'rain_density', '0.600000')
         put(kv, 'thunderbolt_collection', '')
         put(kv, 'wind_velocity', '150.000000')
-        put(kv, 'tree_amplitude_intensity', '0.050000')
         amb = get(kv, 'ambient') or ''
         put(kv, 'ambient', 'rain_night' if (night or 'night' in amb) else 'rain_day')
     return items
@@ -189,7 +193,6 @@ def snow(items, night=False):
         put(kv, 'rain_color', '0.850000, 0.870000, 0.900000')
         put(kv, 'thunderbolt_collection', '')
         put(kv, 'wind_velocity', '120.000000')
-        put(kv, 'tree_amplitude_intensity', '0.030000')
         amb = get(kv, 'ambient') or ''
         put(kv, 'ambient', 'tuman_night' if (night or 'night' in amb) else 'tuman_day')
     return items
@@ -211,7 +214,6 @@ def blizzard(items, night=False):
         put(kv, 'rain_color', '0.850000, 0.870000, 0.900000')
         put(kv, 'thunderbolt_collection', '')
         put(kv, 'wind_velocity', '500.000000')
-        put(kv, 'tree_amplitude_intensity', '0.120000')
         amb = get(kv, 'ambient') or ''
         put(kv, 'ambient', 'storm_night' if (night or 'night' in amb) else 'storm_day')
     return items
@@ -226,6 +228,10 @@ def main():
     made = []
 
     def emit(name, items, include=None):
+        # (The engine takes a plant's sway from the wind service alone.)
+        for t, kv, _ in items:
+            if t:
+                drop(kv, 'tree_amplitude_intensity')
         write(os.path.join(a.out, name), items, include)
         made.append(name)
 

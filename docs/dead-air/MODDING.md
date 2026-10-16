@@ -1280,6 +1280,14 @@ that says a treetop feels more wind than the grass, evaluated at the deck's alti
 The shader-side maths and the C++ maths are one header (`shaders/r3/da_wind_core.h`), so a
 blade of grass, a particle and a cloud shadow agree on what the wind is doing at a spot.
 
+Plants take the wind's strength from this service alone: a weather cycle decides how hard it
+blows (its profile below, its rain, the climate's wind), never how far a plant bends. The stock
+tree keys of a cycle (`trees_amplitude`, `tree_amplitude_intensity`, `trees_speed`,
+`trees_rotation`, `trees_wave`) are not read - Dead Air's own cycles left them out or at zero for
+hours, and a gale on such a sky left every crown still. A crown bends with the wind's strength to
+the power of 1.4 (drag, less what a crown streamlining in the wind takes off) and swings at its own
+natural frequency.
+
 Configuration lives in `configs/dead_air_x64_wind.ltx` (the compatibility archive; a mod
 overrides it like any other config):
 

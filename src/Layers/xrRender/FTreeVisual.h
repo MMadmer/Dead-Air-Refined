@@ -84,9 +84,6 @@ protected:
 public:
     bool NeedsWindUpdate() const;
     static void PrepareWind(const xr_vector<FTreeVisual*>& visuals);
-    // The weather's tree speed this frame and as the previous frame drew with it (the frequency factor
-    // of every crown divides by it; the GPU-driven trees' wind pass takes both).
-    static void FrameSpeeds(float& now, float& previous);
     // The frame-wide sway every tree shader takes - the wave (its phase in w) and the wind's heading times its amplitude
     // - now and as the previous frame drew with it: the upgraded trees' trunk sway on the stock roots (da_trees.cpp).
     static void FrameWind(Fvector4& wave, Fvector4& wind, Fvector4& wave_prev, Fvector4& wind_prev);

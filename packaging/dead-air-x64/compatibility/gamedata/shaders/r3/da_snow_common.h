@@ -47,6 +47,13 @@ uniform float4 da_snow_Mc;
 uniform float4 da_snow_S_prev;
 uniform float4 da_snow_Mc_prev;
 
+// The sky term of snow on the ground, the grid's and the layer's alike: open snow sees nearly all the sky,
+// snow under the crowns (their class weight) much less. (0.95 at most: a hemi of 1 marks a shell's pixel.)
+float da_sn_sky(float trees)
+{
+	return lerp(0.95, 0.5, trees);
+}
+
 uint da_sn_u16(float v)
 {
 	return uint(saturate(v / da_snow_misc.x) * 65535.0 + 0.5);

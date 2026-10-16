@@ -517,6 +517,9 @@
 	<string id="st_da_x64_weather_hint_period">
 		<text>Weather on the level: left in the good period, right in the bad one. The periods take turns.</text>
 	</string>
+	<string id="st_da_x64_weather_hint_period_climate">
+		<text>The weather follows the Exclusion Zone's climate ("Weather by the Zone's climate" on the Seasons tab): the levels' periods do not apply. A level whose two periods are both "Heavy fog" keeps its fog.</text>
+	</string>
 	<!-- The seasons page of the weather dialog: the time of year the world shows (r__season), the
 	     computer's calendar or the 15th of a month. -->
 	<string id="st_cap_af_season_options">

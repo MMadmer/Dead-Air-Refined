@@ -587,6 +587,13 @@ void fill_holes(int nx, int nz, xr_vector<float>& v, const xr_vector<u8>& valid)
 }
 
 // 2D value noise on a hashed lattice (smooth-step fade), -1..1, a pure function of the world position.
+// Hermite step of x from a to b, 0..1.
+float smooth_step(float a, float b, float x)
+{
+    const float t = clampr((x - a) / (b - a), 0.f, 1.f);
+    return t * t * (3.f - 2.f * t);
+}
+
 float value_noise2(float x, float z, u32 seed)
 {
     const float fx = std::floor(x), fz = std::floor(z);
@@ -1150,7 +1157,10 @@ void da_snow_bake_level()
                         }
                     }
                 const size_t i = g.at(x, z);
-                lee[i] = T[i] >= P.canopy_lee_cut ? 0.f : l;
+                // Crowns calm the drifting snow under them by their density: a lone tree a little, a wood
+                // all of it. (Cut off at one T, the drift behind a fence ended along the crown's contour in a
+                // 15 cm step: under every yard tree a flat sheet in a hard outline.)
+                lee[i] = l * (1.f - smooth_step(P.canopy_lee_cut, 1.f, T[i]));
                 toe[i] = t;
             }
         });
@@ -1462,7 +1472,10 @@ void da_snow_bake_level()
                 const float slope = clampr((ny - P.slope_lo) / (P.slope_hi - P.slope_lo), 0.f, 1.f);
                 const float can = 1.f - P.canopy_snow * T[i];
                 const float A = clampr(slope * drift * dep * can, 0.f, 2.f);
-                const float well = (T[i] > P.well_lo && T[i] < P.well_hi) ? 1.f : 0.f;
+                // The well round a trunk rises and falls smoothly across its band: a step in M cut a ring of
+                // bare ground into a thin snow in hard outlines.
+                const float wt = clampr((T[i] - P.well_lo) / std::max(P.well_hi - P.well_lo, 1e-3f), 0.f, 1.f);
+                const float well = _sqr(1.f - _sqr(2.f * wt - 1.f));
                 const float M = clampr(1.f + P.melt_sun * nrm.dotproduct(sun) + P.melt_treewell * well -
                         P.melt_lee * clampr(lee[i], 0.f, 1.f) - P.melt_road * (road[i] ? 1.f : 0.f),
                     P.floor_m, 2.f);

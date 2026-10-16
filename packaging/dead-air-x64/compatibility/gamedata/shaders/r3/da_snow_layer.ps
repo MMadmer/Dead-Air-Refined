@@ -503,15 +503,19 @@ float da_sn_glint_cell(float3 pw, float cell, float2 hs, float grain, uint salt)
 	return b * (1.0 - e) * (1.0 - e) * 3.0;
 }
 
-// The packed (or plain) G-buffer words of a changed pixel.
-void da_sn_write(inout da_sn_layer_out o, float4 P, float3 N, float mtl_out, bool keep_mtl, float3 albedo, float gloss)
+// The packed (or plain) G-buffer words of a changed pixel, with its sky term.
+void da_sn_write(inout da_sn_layer_out o, float4 P, float3 N, float mtl_out, bool keep_mtl, float3 albedo, float gloss, float hemi)
 {
 	const float3 Nout = normalize(mul((float3x3)da_sn_w2v, N));
 #ifdef GBUFFER_OPTIMIZATION
-	const float wout = keep_mtl ? asfloat(asuint(P.w) & ~USABLE_BIT_1) : gbuf_pack_hemi_mtl(gbuf_unpack_hemi(P.w), mtl_out);
+	// A kept material word stays bit for bit but for the sky term's seven bits and the ground flag (it goes under snow).
+	const float wout = keep_mtl ? asfloat((asuint(P.w) & ~(USABLE_BIT_1 | (127u << 14))) | (uint(saturate(hemi) * 127.9) << 14))
+		: gbuf_pack_hemi_mtl(hemi, mtl_out);
 	o.g0 = float4(gbuf_pack_normal(Nout), 1.0, wout);
 #else
-	o.g0 = float4(Nout, keep_mtl ? abs(P.w) : mtl_out);
+	// (the plain layout has no channel left for the sky term: it rides on the normal's length, 1 + hemi, and
+	// da_snow_apply.ps takes them apart)
+	o.g0 = float4(Nout * (1.0 + saturate(hemi)), keep_mtl ? abs(P.w) : mtl_out);
 #endif
 	o.g1 = float4(da_sn_to_encoded(albedo), gloss);
 }
@@ -520,7 +524,7 @@ void da_sn_write(inout da_sn_layer_out o, float4 P, float3 N, float mtl_out, boo
 // thin snow letting the ice through as it lets the ground through elsewhere; the snow wears the pack's own
 // texture (da_sn_pack_detail), the bare ice stays flat. `bank` 1 = the bank's own snow running on over the
 // ice at the waterline, 0 = the ice's own.
-void da_sn_sheet(inout da_sn_layer_out o, float4 P, float3 Pw, float2 ice, float footprint, float bank)
+void da_sn_sheet(inout da_sn_layer_out o, float4 P, float3 Pw, float2 ice, float footprint, float bank, float hemi)
 {
 	const float age = saturate(da_snow_surf.x - 0.5 * da_sn_layer2.x);
 	const float wet = saturate(da_snow_surf.z);
@@ -549,7 +553,7 @@ void da_sn_sheet(inout da_sn_layer_out o, float4 P, float3 Pw, float2 ice, float
 	const float rough = dot(da_snow_state, float4(0.80, 0.70, 0.55, 0.45)) + slush * 0.4;
 	const float gloss = lerp(bare.a, saturate(1.0 - rough) * DA_SN_GLOSS * da_sn_sheen(), k);
 	const bool snow = k > 0.5;
-	da_sn_write(o, P, N, snow ? da_mtl_from_code(DA_MTL_SNOW) : DA_SN_ICE_MTL, false, lerp(bare.rgb, A, k), gloss);
+	da_sn_write(o, P, N, snow ? da_mtl_from_code(DA_MTL_SNOW) : DA_SN_ICE_MTL, false, lerp(bare.rgb, A, k), gloss, hemi);
 }
 
 da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
@@ -600,7 +604,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	{
 		const float v4 = frac(((dbg == 4) ? base.x : D) / 0.05);
 		const float3 c4 = float3(v4, v4, v4);
-		da_sn_write(o, P, Nw, 0.0, true, c4, 0.0);
+		da_sn_write(o, P, Nw, 0.0, true, c4, 0.0, hemi_in);
 		return o;
 	}
 	// r__dbg_snow 3: the window's texels over everything - red where the snow tapers to a cliff, green a cover (its
@@ -615,7 +619,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 			min(s_da_ground_base.Load(int3(da_sn_wrap(t3 + int2(0, 1), n3), 0)).x,
 			s_da_ground_base.Load(int3(da_sn_wrap(t3 - int2(0, 1), n3), 0)).x));
 		const float3 c3 = float3(1.0 - saturate(abs(base.y)), (b3.w - b3.x > 0.3) ? 1.0 : 0.0, (b3.x - lo3 > 0.35) ? 1.0 : 0.0);
-		da_sn_write(o, P, Nw, 0.0, true, lerp(float3(0.5, 0.5, 0.5), c3, 0.8) * (grid ? float3(0.7, 1.0, 0.7) : float3(1.0, 1.0, 1.0)), 0.0);
+		da_sn_write(o, P, Nw, 0.0, true, lerp(float3(0.5, 0.5, 0.5), c3, 0.8) * (grid ? float3(0.7, 1.0, 0.7) : float3(1.0, 1.0, 1.0)), 0.0, hemi_in);
 		return o;
 	}
 	// A snow shell (da_snow_shell.ps marks it with a hemi of 1): the snow on a roof or a vehicle. It is deep snow;
@@ -648,7 +652,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 			{
 				const float bank = saturate((0.75 - waterline.y) * 4.0);
 				ice.y = max(ice.y, D * bank);
-				da_sn_sheet(o, P, Pw, ice, footprint, bank);
+				da_sn_sheet(o, P, Pw, ice, footprint, bank, hemi_in);
 				[branch] if (dbg > 0)
 					o.g1.rgb = (waterline.z > 0.5) ? float3(0.1, 0.25, 1.0) : float3(0.0, 0.9, 0.9);
 				return o;
@@ -664,7 +668,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 			const float2 ice = da_sn_ice_at(Pw.xz);
 			[branch] if (ice.x > 0.5)
 			{
-				da_sn_sheet(o, P, Pw, ice, footprint, 0.0);
+				da_sn_sheet(o, P, Pw, ice, footprint, 0.0, hemi_in);
 				[branch] if (dbg > 0)
 					o.g1.rgb = float3(0.1, 0.25, 1.0);
 				return o;
@@ -673,7 +677,7 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 		[branch] if (!grid && Pw.y < base.x - 0.03)
 		{
 			[branch] if (dbg > 0)
-				da_sn_write(o, P, Nw, 0.0, true, float3(0.9, 0.0, 0.9), C.a);
+				da_sn_write(o, P, Nw, 0.0, true, float3(0.9, 0.0, 0.9), C.a, hemi_in);
 			return o;
 		}
 	}
@@ -1018,7 +1022,11 @@ da_sn_layer_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 	}
 	[branch] if (dbg > 0 && shell && alb_out.g > 0.2)
 		alb_out = float3(0.65, 0.35, 1.0);
-	da_sn_write(o, P, N, da_mtl_from_code(glint ? DA_MTL_GLINT : DA_MTL_SNOW), !snow_code, alb_out, gloss_out);
+	// The ground's snow takes the grid's sky term by its cover (left the ground's, the thin snow under a crown, where
+	// the grid stops, stood out of the grid's darker snow round it as a pale sheet in a hard outline); bare ground
+	// and a dusted object above the snow keep their own, the grid and the shells theirs.
+	const float hemi_out = grid ? hemi_in : lerp(hemi_in, da_sn_sky(w.y), k * (1.0 - above));
+	da_sn_write(o, P, N, da_mtl_from_code(glint ? DA_MTL_GLINT : DA_MTL_SNOW), !snow_code, alb_out, gloss_out, hemi_out);
 	// a stock material under little snow keeps its word bit for bit (the ground flag goes under snow)
 	[branch] if (!snow_code && k <= 0.1)
 		o.g0.w = P.w;

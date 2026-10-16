@@ -3059,6 +3059,17 @@ void da_trees_probe(pcstr args)
             "%u leaves), %s%s%s",
             u32(k), (unsigned long long)T.kind, g_data.species[I.species - kShrubSpecies].name.c_str(), d, I.bound.P.x, I.box.vMin.y,
             I.bound.P.z, I.tree_h, I.youth, I.tmpl, T.bucket, T.count[kKindLeaf], tier, I.dead ? ", dead" : "", I.red ? ", red needles" : "");
+        // The trunk's sway this frame: the stock root's oscillator and the push per metre the shader takes.
+        if (I.wind)
+        {
+            const FTreeVisualWind s = I.wind->wind_state();
+            const Latch& L = latch();
+            const Fvector2 push = trunk_push(s.now, L.tree_wave, L.tree_wind, L.wind_field, Fvector{I.row[0][3], I.row[1][3], I.row[2][3]}, s.gate);
+            Msg("* [trees] probe %2u: wind root, gate %.0f, q %.2f, freq %.2f, field %.2f, push %.3f per m, climbable to %.1f m", u32(k),
+                s.gate, s.now.x, s.now.y, L.wind_field.z, std::sqrt(push.x * push.x + push.y * push.y), I.climb_top);
+        }
+        else
+            Msg("* [trees] probe %2u: no wind root - the trunk stands still", u32(k));
         if (ray)
             Msg("* [trees] probe %2u: %u clusters (r %.2f m), %u blobs (r %.2f m), leaf area %.0f m2, scale %.2f, tiers "
                 "%.0f %.0f %.0f %.0f m, R %.0f m",

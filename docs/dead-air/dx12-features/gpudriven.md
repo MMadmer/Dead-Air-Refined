@@ -337,8 +337,8 @@ Total VRAM about 4 MB.
   `da_wind_core.h` at the root, target `(0.60 + 0.65 g)(1 + 0.6 gust_event)`, settle on the first
   frame, semi-implicit Euler with `steps = dt*omega*4 + 1`, zeta 0.30, clamp 0.35..1.6, previous
   values, continuity broken by `da_history_reset()`, the same `dt` clamp; `freq_k =
-  clamp(omega / speed, 0.4, 6)` for the current and the previous `m_fTreeSpeed`
-  (`wind_state_row` `:415-425`, `wind_prev_row` `:427-435`).
+  clamp(omega, 0.4, 6)` (the sway clock runs at one radian a second whatever the weather:
+  `wind_state_row`, `wind_prev_row`).
 - Every root integrates every frame (the CPU integrates only roots drawn this frame): a crown
   entering the view no longer resumes from a stale state.
 - `wind_dbg 1`: the watched root's state goes to a small readback buffer and is printed two frames

@@ -39,7 +39,7 @@ is open with its slope taking the snow off):
   hollows, yards near buildings and fences.
 
 Accumulation `A = SlopeF * DriftF(lee) * DepressionF * (1 - canopy_shield T)`, melt
-`M = 1 + a dot(N, noon sun) + b tree_well - c lee - d road` (clamped to `floor`..2), a two-octave value
+`M = 1 + a dot(N, noon sun) + b tree_well - c lee - d road` (clamped to `floor`..2; `tree_well` a smooth bump of T over its band, the lee fading out under crowns from `canopy_lee` to a wood, so neither draws a hard outline), a two-octave value
 noise. Depth of a class at a texel, the formula the renderer evaluates as well:
 
 ```

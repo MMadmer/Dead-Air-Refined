@@ -776,26 +776,31 @@ void	shrub_bend	(inout float3 q, inout float3 n, inout float3 t, uint slot, uint
 // A tree's trunk sway (docs/dead-air/TREES.md): the stock tree's bend (da_tree_bend.h) on its root's oscillator - the
 // downwind push per metre that the CPU takes from FTreeVisual's wind state (da_trees.cpp record_tail) times the
 // point's height and its share of the tree's (the stock trunk's profile), the tree rule's motors, the stock soft cap at
-// half the height and the drop that keeps the length. On the climbable stock wood the sway is held to a few
-// centimetres in a breeze (its collision does not move: a climber's handholds), the wood above it swaying on from
-// there. h: the point's rest height above the root (world), q: its bent position; the same in every pass.
+// half the height and the drop that keeps the length. While the player may be in the tree, its climbable stock wood
+// is held to a few centimetres (its collision does not move: a climber's handholds), the wood above it swaying on
+// from there. h: the point's rest height above the root (world), q: its bent position; the same in every pass.
 float3	shrub_tree_sway	(float3 q, shrub_inst I, float h, bool prev)
 {
 	const float2 push = prev ? I.tpush_prev : I.tpush;
 	const float H = max(I.tree_h, 1.0f);
 	const float hh = max(h, 0.0f);
 	float2 d = push * (hh * saturate(hh / H));
-	[branch] if (I.climb_top > 0.0f)
+	// The climbable wood holds still only while the player may be on it - the camera within a few metres of the trunk
+	// and up off the ground there; seen from the ground the tree sways whole, as the stock trees did. (Held always, a
+	// tree whose stock wood is climbable most of its height stood still in a gale.)
+	const float3 root = float3(I.xf[0].w, I.xf[1].w, I.xf[2].w);
+	const float climber = (1.0f - smoothstep(4.0f, 8.0f, length(da_shrub_cam.xz - root.xz))) * smoothstep(2.2f, 3.0f, da_shrub_cam.y - root.y);
+	[branch] if (I.climb_top > 0.0f && climber > 0.0f)
 	{
 		const float hc = min(hh, I.climb_top);
 		const float2 dc = push * (hc * saturate(hc / H));
 		const float wind_k = saturate(prev ? da_wind_field_prev.z : da_wind_field.z);
 		const float cap = 0.03f * (1.0f + 4.0f * wind_k * wind_k);
 		const float lc = length(dc);
-		d += (lc > 1e-4f ? dc * (cap * tanh(lc / cap) / lc) : dc) - dc;
+		d += ((lc > 1e-4f ? dc * (cap * tanh(lc / cap) / lc) : dc) - dc) * climber;
 	}
 	[branch] if (da_wm_count(prev) > 0)
-		d += da_tree_motors_bend_ex(q, float3(I.xf[0].w, I.xf[1].w, I.xf[2].w), hh, H, saturate(hh / H), prev);
+		d += da_tree_motors_bend_ex(q, root, hh, H, saturate(hh / H), prev);
 	const float len = length(d);
 	const float lim = max(hh * 0.5f, 1e-3f);
 	[branch] if (len > 0.001f)

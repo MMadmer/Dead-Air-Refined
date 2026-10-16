@@ -3,8 +3,8 @@
 //
 // The full-screen snow layer, second pass (da_snow.cpp): da_snow_layer.ps's scratch targets back into
 // the G-buffer, only where it changed something. The blender's write masks keep the depth (packed
-// layout) or the position and the sky term (plain layout); the packed material word is copied bit for
-// bit, never re-packed from a float.
+// layout) or the position (plain layout); the packed material word is copied bit for bit, never re-packed
+// from a float.
 
 #ifdef USE_MSAA
 Texture2DMS<float4, MSAA_SAMPLES> s_da_sn_tmp0;
@@ -41,9 +41,11 @@ da_sn_apply_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position
 #else
 	[branch] if (g0.w == 0.0)
 		discard;
-	o.t0 = float4(0.0, 0.0, 0.0, g0.w);  // position target, only the material
-	o.t1 = float4(g0.xyz, 0.0);          // normal target, the sky term is masked off
-	o.t2 = g1;                           // albedo, gloss
+	// the normal's length carries the sky term, 1 + hemi (da_sn_write)
+	const float len = length(g0.xyz);
+	o.t0 = float4(0.0, 0.0, 0.0, g0.w);           // position target, only the material
+	o.t1 = float4(g0.xyz / len, saturate(len - 1.0)); // normal target, the sky term
+	o.t2 = g1;                                    // albedo, gloss
 #endif
 	return o;
 }

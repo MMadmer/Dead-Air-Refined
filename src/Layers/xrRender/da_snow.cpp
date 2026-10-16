@@ -232,8 +232,7 @@ public:
         IBlender::Compile(C);
         const bool packed = RImplementation.o.gbuffer_opt;
         constexpr u32 all = D3D_COLOR_WRITE_ENABLE_ALL;
-        constexpr u32 r = D3DCOLORWRITEENABLE_RED, g = D3DCOLORWRITEENABLE_GREEN, b = D3DCOLORWRITEENABLE_BLUE,
-                      a = D3DCOLORWRITEENABLE_ALPHA;
+        constexpr u32 r = D3DCOLORWRITEENABLE_RED, g = D3DCOLORWRITEENABLE_GREEN, a = D3DCOLORWRITEENABLE_ALPHA;
         switch (C.iElement)
         {
         case 0:
@@ -272,11 +271,11 @@ public:
             C.r_StencilRef(0x01);
             C.r_CullMode(D3DCULL_NONE);
             // packed: position (normal xy and the material word; the depth stays), albedo
-            // plain: position (the material only), normal (the sky term stays), albedo
+            // plain: position (the material only), normal and the sky term, albedo
             // (independent blend: else the albedo would take the position's mask and keep its old blue)
             C.RS.SetRS(XRDX11RS_INDEPENDENTBLEND, TRUE);
             C.RS.SetRS(D3DRS_COLORWRITEENABLE, packed ? (r | g | a) : a);
-            C.RS.SetRS(D3DRS_COLORWRITEENABLE1, packed ? all : (r | g | b));
+            C.RS.SetRS(D3DRS_COLORWRITEENABLE1, all);
             C.RS.SetRS(D3DRS_COLORWRITEENABLE2, packed ? 0u : all);
             C.RS.SetRS(D3DRS_COLORWRITEENABLE3, 0u);
             C.r_dx11Texture("s_da_sn_tmp0", r2_RT_accum);

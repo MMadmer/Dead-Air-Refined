@@ -490,16 +490,8 @@ void CEnvDescriptor::load(CEnvironment& environment, const CInifile& config, pcs
     m_fWaterIntensity = config.read_if_exists<float>(identifier, "water_intensity", 1.0);
     set_sun_reflection(*this, config.read_if_exists<float>(identifier, "sun_reflection", 0.0f));
 
-    m_fTreeAmplitude = 0.005f;
-    if (config.line_exist(identifier, "trees_amplitude")) // Lost Alpha config
-        m_fTreeAmplitude = config.r_float(identifier, "trees_amplitude");
-    else if (config.line_exist(identifier, "tree_amplitude_intensity")) // Call of Chernobyl config
-        m_fTreeAmplitude = config.r_float(identifier, "tree_amplitude_intensity");
-
-    m_fTreeSpeed    = config.read_if_exists<float>(identifier, "trees_speed",    1.0f);
-    m_fTreeRotation = config.read_if_exists<float>(identifier, "trees_rotation", 10.0f);
-
-    m_fTreeWave = config.read_if_exists<Fvector>(identifier, "trees_wave", { .1f, .01f, .11f });
+    // (The trees' keys of a cycle - trees_amplitude, tree_amplitude_intensity, trees_speed, trees_rotation,
+    // trees_wave - are not read: every plant sways by the wind service alone, FTreeVisual.cpp.)
 
     C_CHECK(clouds_color);
     C_CHECK(sky_color);
@@ -695,12 +687,6 @@ void CEnvDescriptorMixer::lerp(CEnvironment& parent, CEnvDescriptor& A, CEnvDesc
     const SPrecipState& precip = da_precip();
     current_wetness.store(wetness * clampr(precip.liquid, 0.f, 1.f), std::memory_order_relaxed);
     current_snow_factor.store(std::max(snow_factor, precip.snow_rate), std::memory_order_relaxed);
-
-    // trees
-    m_fTreeAmplitude = fi * A.m_fTreeAmplitude + f * B.m_fTreeAmplitude;
-    m_fTreeSpeed = fi * A.m_fTreeSpeed + f * B.m_fTreeSpeed;
-    m_fTreeRotation = fi * A.m_fTreeRotation + f * B.m_fTreeRotation;
-    m_fTreeWave.lerp(A.m_fTreeWave, B.m_fTreeWave, f);
 
     // colors
     //. sky_color.lerp (A.sky_color,B.sky_color,f).add(Mdf.sky_color).mul(modif_power);

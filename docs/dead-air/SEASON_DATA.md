@@ -275,8 +275,8 @@ Lengths in m, heights above the hole-filled ground, angles in degrees, materials
 | `slope` | `SlopeF = saturate((ny - a) / b)` |
 | `crown_h`, `crown` | passable crown materials at least `crown_h` above ground are canopy |
 | `tree_disc` | tree visuals add a disc of a x the bbox half-width at weight b |
-| `canopy_blur`, `canopy_class`, `canopy_lee`, `canopy_shield` | T = blur(canopy); under_trees where T >= class; lee only where T < lee; A *= 1 - shield T |
-| `tree_well` | M += c where a < T < b |
+| `canopy_blur`, `canopy_class`, `canopy_lee`, `canopy_shield` | T = blur(canopy); under_trees where T >= class; lee x (1 - smoothstep(lee, 1, T)) (a lone tree calms the drift a little, a wood all of it); A *= 1 - shield T |
+| `tree_well` | a smooth bump over a < T < b, 1 in the middle (`melt` b weighs it) |
 | `forest_area` | connected crowns of at least this many m2 act as a drift obstacle |
 | `obstacle_h`, `obstacle_cap`, `obstacle_area`, `wall_ny`, `trunk` | obstacles: at least `obstacle_h` high, height capped, blobs under `obstacle_area` m2 and trunks dropped; walls are \|ny\| < `wall_ny` |
 | `wind_from`, `wind_weight` | winter wind directions (compass degrees it blows from) and weights |

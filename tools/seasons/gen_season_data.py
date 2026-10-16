@@ -672,9 +672,9 @@ def bake_section(ltx):
         ('tree_disc', '0.8, 0.7'),        # tree visuals: disc of a x bbox half-width at weight b
         ('canopy_blur', '3'),
         ('canopy_class', '0.5'),          # under_trees where T >= this
-        ('canopy_lee', '0.3'),            # lee counts only where T < this
+        ('canopy_lee', '0.3'),            # lee fades out from T = this to T = 1 (a wood)
         ('canopy_shield', '0.45'),        # A *= 1 - a T
-        ('tree_well', '0.2, 0.6, 0.4'),   # M += c where a < T < b
+        ('tree_well', '0.2, 0.6'),        # M += melt b x a smooth bump over a < T < b
         ('forest_area', '300'),           # connected crowns at least this (m2) make a drift obstacle
         ('obstacle_h', '0.8'),
         ('obstacle_cap', '2.5'),

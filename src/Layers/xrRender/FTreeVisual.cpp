@@ -226,38 +226,33 @@ struct FTreeVisual_setup
     float scale;
     Fvector4 wave;
     Fvector4 wind;
-    // The weather's tree speed: the frequency factor of every tree divides by it.
-    float speed;
 
-    FTreeVisual_setup(): dwFrame(0), scale(0), speed(1.f) {}
+    FTreeVisual_setup(): dwFrame(0), scale(0) {}
 
     void calculate()
     {
         dwFrame = Device.dwFrame;
         auto& env = g_pGamePersistent->Environment();
-        CEnvDescriptor& desc = env.CurrentEnv;
-        speed = std::max(desc.m_fTreeSpeed, 0.2f);
 
-        // The wind heading used to spin full circle every m_fTreeRotation seconds - crowns leaned
-        // east, then north, then west on a windless noon. Now it comes from the effective-wind
-        // service (weather heading + bounded wander).
+        // The heading comes from the effective-wind service (weather heading + bounded wander).
         const float dir = env.eff_wind_dir;
         wind.set(_sin(dir), 0, _cos(dir), 0);
         wind.normalize();
-        // The authored per-weather amplitude is tiny (DA weathers sit at ~0.05 rad, an
-        // imperceptible 3 degrees), so the service envelope has to overshoot hard. What it must
-        // NOT do is overshoot at the bottom: the curve used to start at half strength, so a
-        // tree kept swaying at literally zero wind and a calm morning ran at 85 per cent of
-        // nominal. It starts near nothing now and climbs faster, which leaves a storm where it
-        // was and makes calm actually calm. The shader caps the total bend at 0.50*H, so storm
-        // weathers that author amplitude 0.10 still cannot fold a crown over.
-        wind.mul(desc.m_fTreeAmplitude * (0.04f + 3.60f * env.eff_wind_norm));
+        // The bend is the wind's alone: the service's strength (gusts and the climate's wind
+        // included), never a weather cycle's tree amplitude - Dead Air's cycles leave it out (a
+        // cloudy or a partly sunny sky fell back to 0.005, a twentieth of a storm's) or zero it
+        // for hours (the storm's own keys), so a gale on such a cycle left every crown still.
+        // Drag bends a tree with the square of the speed; its crown streamlining as it bends
+        // brings that down to about the power of 1.4 (the Vogel exponent of trees): calm nearly
+        // still, a storm (strength 1) where the old curve put it with a storm cycle's 0.10. The
+        // shader caps the total bend at 0.50*H, so a gale cannot fold a crown over.
+        wind.mul(0.004f + 0.36f * powf(std::max(env.eff_wind_norm, 0.f), 1.4f));
 
         scale = 1.f / float(FTreeVisual_quant);
 
-        // setup constants: the wave phase comes from the service accumulator, which advances
-        // faster in strong wind (crowns whip quicker in a gust, they do not just lean further).
-        wave.set(desc.m_fTreeWave.x, desc.m_fTreeWave.y, desc.m_fTreeWave.z, env.eff_tree_phase); // wave
+        // setup constants: the wave over the level is fixed, its phase the service accumulator's
+        // (a constant clock: a crown swings at its own natural frequency).
+        wave.set(.1f, .01f, .11f, env.eff_tree_phase);
         wave.div(PI_MUL_2);
     }
 };
@@ -293,13 +288,6 @@ static FTreeVisual_frame& GetTreeVisualFrame()
         }
     }
     return f;
-}
-
-void FTreeVisual::FrameSpeeds(float& now, float& previous)
-{
-    const FTreeVisual_frame& frame = GetTreeVisualFrame();
-    now = frame.current.speed;
-    previous = frame.previous.speed;
 }
 
 void FTreeVisual::FrameWind(Fvector4& wave, Fvector4& wind, Fvector4& wave_prev, Fvector4& wind_prev)
@@ -435,12 +423,11 @@ void FTreeVisual::UpdateWindState() const
 Fvector4 FTreeVisual::wind_state_row(float s) const
 {
     UpdateWindState();
-    // The shader's sway phase advances at the weather's tree speed; the factor turns that
-    // into this tree's own natural frequency.
-    const float speed = std::max(g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.m_fTreeSpeed : 1.f, 0.2f);
+    // The shader's sway phase advances one radian a second; the factor turns that into this
+    // tree's own natural frequency.
     const float omega = m_shared ? m_shared->omega : 0.f;
     const float q = m_shared ? m_shared->q : 0.f; // 0 = no state, the shader falls back to the field
-    const float freq_k = omega > 0.f ? clampr(omega / speed, 0.4f, 6.f) : 0.f;
+    const float freq_k = omega > 0.f ? clampr(omega, 0.4f, 6.f) : 0.f;
     return Fvector4{s * c_scale.sun, s * c_bias.sun, q, freq_k};
 }
 
@@ -449,8 +436,7 @@ Fvector4 FTreeVisual::wind_prev_row() const
     if (!m_shared)
         return Fvector4{0.f, 0.f, 0.f, 0.f};
     const TreeWindShared& s = *m_shared;
-    const float speed = GetTreeVisualFrame().previous.speed;
-    const float freq_k = s.omega > 0.f ? clampr(s.omega / speed, 0.4f, 6.f) : 0.f;
+    const float freq_k = s.omega > 0.f ? clampr(s.omega, 0.4f, 6.f) : 0.f;
     return Fvector4{s.q_prev, freq_k, s.gust_prev, s.deviation_prev};
 }
 

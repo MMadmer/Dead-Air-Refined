@@ -521,8 +521,10 @@ pattern) from 30 m on.
   is an integer one (the sine hash took a quarter-rate sine a call).
 - **Wind**: the trunk sways on its stock root's oscillator (the root's state, frequency factor, gust and deviation,
   the frame's wave and wind: `da_tree_bend_ex` on the CPU, the downwind push per metre of height now and a frame back
-  in the record): `d = push h saturate(h / H)`, capped at half the height by a tanh, the length kept by the drop; the
-  climbable wood moves a few centimetres at most (3 cm times 1 + 4 wind^2) up to its top and the rest on from there;
+  in the record): `d = push h saturate(h / H)`, capped at half the height by a tanh, the length kept by the drop; while
+  the player may be in the tree (the camera within 4-8 m of the trunk and 2.2-3 m up over its root) the climbable wood
+  moves a few centimetres at most (3 cm times 1 + 4 wind^2) up to its top and the rest on from there - held always, a
+  tree whose stock wood is climbable most of its height stood still in a gale;
   the tree motors as the stock trees'; the grafted axes bend on top through their chain. The same in the view, every
   shadow map and the motion vectors - their wind a frame back only within 15 m of view depth (`SHRUB_MV_NEAR`: past it
   a leaf's or a twig's sway is under a tenth of a pixel a frame, and the second bend and flutter were a third of the
@@ -639,7 +641,8 @@ youth, dead, red, the hemisphere ratio) and `da_trees_bb_mark` (cleared: its cel
 - `r__trees_species_pin <name|off>` (QA): every tree grows that species, from the next level load.
 - `r__trees_kind_pin <kind key|off>` (QA): only that stock kind is upgraded, from the next level load.
 - `r__trees_probe` (QA): the ten trees nearest the camera - kind, species, distance, position, height, youth,
-  template (its bucket and leaves), tier, dead, red.; `r__trees_probe ray` the ten the view's
+  template (its bucket and leaves), tier, dead, red, and its trunk's wind (the stock root's oscillator, the wind's
+  strength, the push per metre of height, how high its climbable wood goes); `r__trees_probe ray` the ten the view's
   ray passes through, nearest first, with their templates' clusters and blobs (their radii), leaf area, scale and
   tier distances; `r__trees_probe templates` every template's species, height, width, leaf area, parts and how many trees
   wear it (one's position).

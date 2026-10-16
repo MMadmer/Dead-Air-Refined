@@ -269,6 +269,9 @@
 	<string id="st_da_x64_weather_hint_period">
 		<text>Погода на локации: слева - в хороший период, справа - в плохой. Периоды сменяют друг друга.</text>
 	</string>
+	<string id="st_da_x64_weather_hint_period_climate">
+		<text>Погодой управляет климат Зоны отчуждения («Погода по климату ЧЗО» во вкладке «Времена года»): периоды локаций не действуют. Локация, у которой оба периода - «Сильный туман», сохраняет свой туман.</text>
+	</string>
 	<!-- The seasons page of the weather dialog: the time of year the world shows (r__season), the
 	     computer's calendar or the 15th of a month. -->
 	<string id="st_cap_af_season_options">
