@@ -235,7 +235,9 @@ void CRenderTarget::phase_luminance()
 #endif
         RImplementation.Vertex.Unlock(4, g_bloom_filter->vb_stride);
 
-        f_luminance_adapt = .9f * f_luminance_adapt + .1f * Device.fTimeDelta * ps_r2_tonemap_adaptation;
+        // The share of the way to the new exposure this frame covers: 1 - exp(-dt * rate) is the same
+        // adaptation at any frame rate and never overshoots on a hitch (dt * rate went past 1 there).
+        f_luminance_adapt = 1.f - std::exp(-std::min(Device.fTimeDelta, 0.25f) * ps_r2_tonemap_adaptation);
         float amount = ps_r2_ls_flags.test(R2FLAG_TONEMAP) ? ps_r2_tonemap_amount : 0;
         Fvector3 _none, _full, _result;
         _none.set(1, 0, 1);
