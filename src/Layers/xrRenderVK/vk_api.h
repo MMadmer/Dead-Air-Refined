@@ -177,7 +177,11 @@ bool QueryVideoMemory(ID3D11Device* device, UINT64& budget, UINT64& usage);
 // without Map): writes are not synchronized, the caller never touches bytes the GPU may still copy from.
 void* PersistentData(ID3D11Buffer* buffer);
 
-// ---- native work of an SDK on the immediate context (DLSS) ---------------------------------------------
+// ---- native work of an SDK on the immediate context (DLSS, FSR) ------------------------------------------
+
+// The device's native objects (queue indices 0: the layer's own queues) and the vkGetDeviceProcAddr it
+// resolved its calls through. False for another device.
+bool GetNativeDevice(ID3D11Device* device, NativeDeviceInfo& out, void** getDeviceProcAddr);
 
 // A texture as an SDK takes it: Vulkan handles as pointers, the rest as their Vulkan values.
 struct NativeImage

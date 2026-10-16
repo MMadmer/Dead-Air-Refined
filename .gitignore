@@ -11,6 +11,7 @@
 # Vendored SDK runtime DLLs, staged next to the executable by the build.
 !Externals/streamline/bin/
 !Externals/fidelityfx-sdk/bin/
+!Externals/fidelityfx-vk/bin/
 !Externals/dxc/bin/
 !Externals/DirectStorage/bin/
 [Bb]uild*/

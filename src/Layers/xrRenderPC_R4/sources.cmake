@@ -216,6 +216,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/da_upscaler.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_upscaler_fsr_dx11.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_upscaler_fsr_dx12.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_upscaler_fsr_vk.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_ffx_loader.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_framegen.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_framegen_fsr.cpp"

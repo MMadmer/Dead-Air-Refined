@@ -128,9 +128,10 @@ so the installer ships them and the uninstaller removes them.
 | NVIDIA Reflex | through `sl.reflex` / `sl.pcl` of Streamline 2.14.1 | `Externals/streamline` | Streamline MIT; Reflex SDK licence (`reflex.license.txt`) | included above |
 | AMD FSR SDK (ffx-api) | 2.3.0: upscaler 4.1.1 (FSR 3.1.5 / FSR 4 providers), frame generation 3.1.6 / swap chain 3.1.7 | `Externals/fidelityfx-sdk` | MIT section of `license.md` (every file taken is in its MIT list), `3rdpartynotice.md` | `amd_fidelityfx_loader_dx12.dll`, `amd_fidelityfx_upscaler_dx12.dll`, `amd_fidelityfx_framegeneration_dx12.dll`: 68,874,016 bytes |
 | FidelityFX-SDK-DX11 (FSR 3.1.2 upscaler, DX11 backend) | optiscaler fork, commit `9b04fa49a` + `fidelityfx-sdk-dx11-msvc.patch` | `Externals/fidelityfx-dx11` | MIT (AMD, `LICENSE.txt`); `md5.c` under the RSA Data Security MD5 licence | none: static libraries, about 3.4 MB inside the module that links them |
+| FidelityFX SDK 1.1.4 ffx-api for Vulkan (FSR 3.1 upscaler) | tag `v1.1.4`, prebuilt signed DLL | `Externals/fidelityfx-vk` | MIT (AMD, `LICENSE.txt`) | `amd_fidelityfx_vk.dll` 9,332,432 bytes |
 
-The package grows by 138,595,072 bytes (132.2 MiB) of SDK DLLs, uncompressed, plus
-`xrRender_R5.dll` and the FSR 3.1 DX11 code inside `xrRender_R4.dll`.
+The package grows by 147,927,504 bytes (141.1 MiB) of SDK DLLs, uncompressed, plus
+`xrRender_R5.dll`, `xrRender_R6.dll` and the FSR 3.1 DX11 code inside `xrRender_R4.dll`.
 
 CMake targets: `NVIDIA::Streamline` (headers, `sl.interposer.lib` delay-loaded),
 `NVIDIA::StreamlineHeaders` (headers only, for `LoadLibrary` + `GetProcAddress`), `AMD::FidelityFXAPI`

@@ -105,6 +105,9 @@ if (WIN32)
         "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_loader_dx12.dll"
         "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_upscaler_dx12.dll"
         "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_framegeneration_dx12.dll"
+        # FSR 3.1 on Vulkan: the signed ffx-api runtime of FidelityFX SDK 1.1.4 (Externals/fidelityfx-vk/README.md),
+        # loaded by its absolute path by the Vulkan module only; its headers are on that module's include path.
+        "${CMAKE_SOURCE_DIR}/Externals/fidelityfx-vk/bin/amd_fidelityfx_vk.dll"
     )
 
     # FSR 3.1.2 upscaler with a DX11 backend, static libraries built with MSVC from

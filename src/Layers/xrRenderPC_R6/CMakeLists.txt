@@ -25,6 +25,9 @@ target_include_directories(xrRenderPC_R6
     "${CMAKE_SOURCE_DIR}/sdk/include"
     "${CMAKE_SOURCE_DIR}/sdk/include/DirectXMesh"
     "${CMAKE_SOURCE_DIR}/sdk/include/nvapi"
+    # ffx-api of FidelityFX SDK 1.1.4 for FSR on Vulkan, included as <ffx_api/...> (the DX12 module's SDK 2.3
+    # headers keep their own names).
+    "${CMAKE_SOURCE_DIR}/Externals/fidelityfx-vk/include"
 )
 
 target_link_libraries(xrRenderPC_R6

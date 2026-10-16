@@ -111,6 +111,22 @@ void UavBarrier(ID3D11DeviceContext* context, ID3D11Resource* /*resource*/)
     c->applied.computeHazardsDirty = true;
 }
 
+bool GetNativeDevice(ID3D11Device* device, NativeDeviceInfo& out, void** getDeviceProcAddr)
+{
+    out = {};
+    if (!IsLayerDevice(device))
+        return false;
+    const Device* d = static_cast<const Device*>(device);
+    out.instance = d->instance;
+    out.physicalDevice = d->physical;
+    out.device = d->vk;
+    out.graphicsFamily = d->graphicsFamily;
+    out.computeFamily = d->computeFamily != ~0u ? d->computeFamily : d->graphicsFamily;
+    if (getDeviceProcAddr)
+        *getDeviceProcAddr = reinterpret_cast<void*>(g_vk.vkGetDeviceProcAddr);
+    return true;
+}
+
 bool PrepareNativeImage(ID3D11DeviceContext* context, ID3D11Resource* resource, bool write, NativeImage& out)
 {
     out = {};
