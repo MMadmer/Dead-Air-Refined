@@ -92,6 +92,13 @@ come and gone, and the climate's sky lerps back in after it). An underground lev
 precipitation, drift or climate wind there. The engine's precipitation fog does the rest: a heavy snowfall
 closes the view to some 600 m, and blowing snow adds `10 drift^2` per km - a blizzard is a couple of hundred metres.
 
+**Snowfall and blizzard as periods.** The two skies of the climate's own are also in AtmosFear's period lists
+(Options -> Weather options -> weather by level: "Snow", "Blizzard"; `snowy` / `blizzard` in the config, the graphs
+`atmosfear_snowy` and `atmosfear_blizzard` of `dynamic_weather_graphs.ltx`, the metro's too). With the climate off
+they are a level's sky like any other period's; what falls is still the season's (a summer snowfall's sky rains).
+With the climate on it chooses the sky, as for every period. A settings file of an older version gets the two
+entries added (`atmosfear_options.script`).
+
 **Design fog.** A level whose two AtmosFear periods are both `veryfoggy` keeps its own weather in every season: that
 is how Dead Air designs its fog levels (Rostok, the Red Forest). What falls there is still the climate's.
 

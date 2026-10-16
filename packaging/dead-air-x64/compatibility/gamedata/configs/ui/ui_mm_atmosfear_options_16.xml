@@ -297,14 +297,14 @@
 		<cap_period_bad x="150" y="32" width="135" height="20">
 			<text align="l" font="letterica16" r="120" g="120" b="120" x="2">ui_mm_af_period_bad</text>
 		</cap_period_bad>
-		<list_period_good x="10" y="25" width="135" height="21" list_length="6" always_show_scroll="0">
+		<list_period_good x="10" y="25" width="135" height="21" list_length="8" always_show_scroll="0">
 			<list_font r="170" g="170" b="170" font="letterica16"/>
 			<text_color>
 				<e r="170" g="170" b="170"/>
 				<d r="70" g="70" b="70"/>
 			</text_color>
 		</list_period_good>
-		<list_period_bad x="150" y="25" width="135" height="21" list_length="6" always_show_scroll="0">
+		<list_period_bad x="150" y="25" width="135" height="21" list_length="8" always_show_scroll="0">
 			<list_font r="170" g="170" b="170" font="letterica16"/>
 			<text_color>
 				<e r="170" g="170" b="170"/>

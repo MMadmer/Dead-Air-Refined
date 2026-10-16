@@ -329,4 +329,11 @@
 	<string id="st_da_x64_weather_hint_season_weather">
 		<text>Небо, осадки, ветер, снежный покров и лёд следуют климату Зоны отчуждения в выбранное время года: долгота дня, снегопады, метели, оттепели, туманы и грозы с их настоящей частотой; снег копится только в снегопад, лёд нарастает в морозы. Если выключено, погоду выбирает AtmosFear по периодам локаций.</text>
 	</string>
+	<!-- the climate's snowfall and blizzard as AtmosFear periods (atmosfear_options.script) -->
+	<string id="st_list_periods_snowy">
+		<text>Снег</text>
+	</string>
+	<string id="st_list_periods_blizzard">
+		<text>Метель</text>
+	</string>
 </string_table>

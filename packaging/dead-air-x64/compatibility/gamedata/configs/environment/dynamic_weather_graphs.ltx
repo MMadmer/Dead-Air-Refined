@@ -1,0 +1,74 @@
+;dynamic weather graphs
+;AtmosFear 3 by Cromm Cruac
+
+[atmosfear_clear]  --clear
+;clear = 1
+clear 		= 0.6
+cloudy 	= 0.2
+foggy 		= 0.1
+rain 		= 0.1
+
+[atmosfear_cloudy]  --cloudy
+;cloudy = 1
+cloudy 	= 0.6
+rain 		= 0.2
+clear		= 0.1
+foggy		= 0.1
+
+[atmosfear_foggy]  --foggy
+;foggy = 1
+foggy 		= 0.6
+veryfoggy 	= 0.2
+cloudy 	= 0.1
+clear 		= 0.1
+
+[atmosfear_veryfoggy]  --veryfoggy
+veryfoggy 	= 1
+
+[atmosfear_rainy]  --rain
+;rain = 1
+rain 		= 0.6
+storm 		= 0.2
+cloudy 	= 0.1
+foggy 		= 0.1
+
+[atmosfear_stormy]  --stormy
+;storm = 1
+storm 		= 0.6
+rain 		= 0.2
+cloudy 	= 0.1
+veryfoggy 	= 0.1
+
+; The climate's skies of its own as periods (docs/dead-air/WEATHER.md): a snowfall and a blizzard. What falls is the
+; season's: in summer the snowfall's sky rains.
+[atmosfear_snowy]  --snow
+snow 		= 0.6
+cloudy 	= 0.2
+blizzard 	= 0.1
+foggy 		= 0.1
+
+[atmosfear_blizzard]  --blizzard
+blizzard 	= 0.6
+snow 		= 0.3
+cloudy 	= 0.1
+
+[atmosfear_transition]
+cloudy		 		= 1
+
+[atmosfear_pre_blowout]
+cloudy_no_sun 		= 1
+
+[dof_kernels]
+clear 				= 4
+foggy 				= 7
+veryfoggy   		= 10
+cloudy 				= 5
+rain 				= 4
+storm 				= 7
+foggy_no_sun 		= 7
+cloudy_no_sun 		= 5
+snow 				= 6
+blizzard 			= 8
+
+
+[dynamic_default]:atmosfear_clear

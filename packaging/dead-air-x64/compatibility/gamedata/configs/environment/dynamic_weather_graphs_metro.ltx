@@ -1,0 +1,51 @@
+;dynamic weather graphs
+;AtmosFear 3 by Cromm Cruac
+
+[atmosfear_clear]
+foggy 			= 0.5
+foggy_no_sun 	= 0.5
+
+[atmosfear_cloudy]
+cloudy_no_sun 	= 0.5
+cloudy 			= 0.5
+
+[atmosfear_foggy]
+foggy 			= 0.5
+foggy_no_sun 	= 0.5
+
+[atmosfear_veryfoggy]
+veryfoggy   	= 1.0
+
+[atmosfear_rainy]
+storm 			= 1.0
+
+[atmosfear_stormy]
+storm 			= 1.0
+
+; The snowfall and blizzard periods (docs/dead-air/WEATHER.md) as the metro's own skies.
+[atmosfear_snowy]
+cloudy_no_sun 	= 0.5
+cloudy 			= 0.5
+
+[atmosfear_blizzard]
+storm 			= 1.0
+
+[atmosfear_transition]
+foggy 			= 0.5
+foggy_no_sun 	= 0.5
+
+[atmosfear_pre_blowout]
+foggy 			= 0.5
+foggy_no_sun 	= 0.5
+
+[dof_kernels]
+clear 				= 4
+foggy 				= 7
+veryfoggy   		= 10
+cloudy 				= 5
+rain 				= 4
+storm 				= 7
+foggy_no_sun 		= 7
+cloudy_no_sun 		= 5
+
+[dynamic_default]:atmosfear_clear

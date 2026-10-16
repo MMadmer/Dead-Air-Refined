@@ -168,6 +168,19 @@ function af_options_dialog:__init() super()
 		need_save = true
 	end
 
+	-- The climate's two skies of their own (docs/dead-air/WEATHER.md) as periods too: a snowfall and a blizzard. The
+	-- settings file an older version wrote already has its lists, so they are added where they are missing.
+	for key, value in pairs({ snowy = 7, blizzard = 8 }) do
+		if (not self.default_settings:line_exist("list_periods", "list_periods_" .. key)) then
+			self.default_settings:w_value("list_periods", "list_periods_" .. key, value)
+			need_save = true
+		end
+		if (not self.default_settings:line_exist("atmosfear_option_names", key)) then
+			self.default_settings:w_value("atmosfear_option_names", key, "st_list_periods_" .. key)
+			need_save = true
+		end
+	end
+
 	if (need_save) then
 		self.default_settings:save()
 	end
