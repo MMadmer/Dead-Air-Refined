@@ -21,8 +21,9 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
   engine's TAA otherwise. **AMD FSR frame generation** through the same runtime (section 7).
 - **Ray tracing** (the RTX section: reflections, sun shadows, occlusion) as on DirectX 12, from the same scene
   and pass code (section 8).
-- Not on Vulkan yet: NVIDIA DLSS frame generation, async compute and NVIDIA Reflex (section 9). Their settings
-  are kept for the renderers that have them.
+- **NVIDIA Reflex** and its PC latency stats through Streamline's Vulkan path (`VK_NV_low_latency2`, section 9).
+- Not on Vulkan: NVIDIA DLSS frame generation and async compute (section 9). Their settings are kept for the
+  renderers that have them.
 
 ## 2. xrVulkan architecture (details in `vk_layer.h`)
 
@@ -172,11 +173,19 @@ on water and puddles and of glossy surfaces (dxr.md 3.9, after DOOM Eternal), mo
   occlusion 2/255 (1.5/255 with a character in front of the camera, its self-occlusion included), reflections on
   the marsh 7/255 (the ripples' timing). Validation (`-vkdebug -vksync`) reports nothing of the lane.
 
-## 9. Not on Vulkan yet
+## 9. Reflex, and what Vulkan does not have
 
-- Async compute (`r__async_compute`): DirectX 12 only (`da_async.cpp`).
-- Streamline is asked for DLSS only on Vulkan, so neither DLSS frame generation nor Reflex
-  (`VK_NV_low_latency2`) is wired.
+- **Reflex.** Streamline loads `sl.reflex` and `sl.pcl` on Vulkan too, and the device asks for what they require
+  (`VK_NV_low_latency2`, merged with DLSS's requirements). The layer's swap chain calls go through Streamline's
+  interposer (the `deviceProc` of the device), so the Reflex plugin puts the latency mode on every chain
+  (`VkSwapchainLatencyCreateInfoNV`) and sleeps the frame on it; the presents carry the frame token's id
+  (`xrvk::SetNextPresentId`), so the latency markers name the frames they belong to. The low latency mode is
+  what DLSS frame generation turns on on DirectX 12; on Vulkan the sleep and the stats run with it off.
+- **DLSS frame generation** is not wired on Vulkan: the stand's GPU (RTX 3070, Ampere) cannot run it, so no
+  Vulkan path for it could be verified. AMD FSR frame generation runs on every GPU (section 7).
+- **Async compute** (`r__async_compute`) stays on DirectX 12 (`da_async.cpp`): its auto rule picks the pixel
+  passes on NVIDIA (a loss on Ampere, `dx12-features/async.md`), and the AMD and Intel GPUs it helps are not on
+  the stand to verify a Vulkan path across two queues.
 
 ## 10. Measured (16.10.2026, RTX 3070 Laptop, 2560x1440 Extreme, DLSS Balanced)
 

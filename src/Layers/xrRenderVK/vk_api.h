@@ -138,6 +138,10 @@ void* NativeQueue(ID3D11Device* device, Queue queue);
 // surface has no such mode (or the chain is not this library's): the caller tears late frames itself.
 bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive);
 
+// The id the next present of a swap chain of this library carries (VkPresentIdKHR), when it is above the last one:
+// an SDK that pairs its latency markers with the presents (Streamline's Reflex on VK_NV_low_latency2) names the frame.
+void SetNextPresentId(IDXGISwapChain* chain, UINT64 id);
+
 // Whether the adapter can run the Vulkan renderer: a Vulkan 1.3 device with the features the layer needs.
 // Creates and destroys a throw-away instance and device; `reason` gets a short text when it cannot.
 bool ProbeAdapter(const LUID& adapterLuid, char* reason, size_t reasonSize);

@@ -1778,6 +1778,7 @@ private:
     SwapChain() = default;
     HRESULT CreateNative(UINT syncInterval);
     friend bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive);
+    friend void SetNextPresentId(IDXGISwapChain* chain, UINT64 id);
     friend bool SetSwapChainProvider(IDXGISwapChain* chain, SwapChainProvider* provider);
     // `last`: the chain's provider makes none after it.
     void DestroyNative(bool last = false);
@@ -1812,6 +1813,7 @@ private:
     u32 m_current = 0;
     UINT m_presentCount = 0;
     u64 m_presentId = 0;
+    u64 m_requestedPresentId = 0; // SetNextPresentId
     u64 m_chainFirstId = 1; // the first present id of the current VkSwapchainKHR
     xrpacing::PresentClock m_clock;
     // Acquire semaphores rotate per frame; each image has the semaphore its present waits for.

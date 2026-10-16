@@ -510,12 +510,10 @@ void da_streamline_init(IDXGIAdapter1* adapter)
     static const sl::Feature features[] =
     {
         sl::kFeatureDLSS,
-#ifndef XR_VULKAN
-        // Reflex and its latency stats on Vulkan live in Streamline's swap chain proxies, which the layer's
-        // own swap chain does not go through.
+        // On Vulkan the layer's swap chain calls go through Streamline's interposer, so its Reflex plugin sees
+        // them: it puts the latency mode on the chain (VK_NV_low_latency2), the presents carry its frame ids.
         sl::kFeatureReflex,
         sl::kFeaturePCL,
-#endif
 #ifdef XR_D3D12
         sl::kFeatureDLSS_G,
 #endif
@@ -642,25 +640,37 @@ void da_streamline_vk_requirements(xrvk::ExternalRequirements& out)
 {
     if (!g_sl.initialised)
         return;
-    sl::FeatureRequirements requirements{};
-    const sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS, requirements);
-    if (result != sl::Result::eOk)
-    {
-        da_sl_report("slGetFeatureRequirements(DLSS)", result);
-        return;
-    }
-    // The names stay valid while Streamline is loaded: the layer reads them while it creates the device.
+    // The names stay valid while Streamline is loaded: the layer reads them while it creates the device. A name
+    // two features ask for is asked once.
     const auto append = [](std::vector<const char*>& to, u32 count, const char** names)
     {
         for (u32 i = 0; i < count; ++i)
-            to.push_back(names[i]);
+        {
+            if (std::none_of(to.begin(), to.end(), [&](const char* n) { return !strcmp(n, names[i]); }))
+                to.push_back(names[i]);
+        }
     };
-    append(out.instanceExtensions, requirements.vkNumInstanceExtensions, requirements.vkInstanceExtensions);
-    append(out.deviceExtensions, requirements.vkNumDeviceExtensions, requirements.vkDeviceExtensions);
-    append(out.features12, requirements.vkNumFeatures12, requirements.vkFeatures12);
-    append(out.features13, requirements.vkNumFeatures13, requirements.vkFeatures13);
-    out.graphicsQueues += requirements.vkNumGraphicsQueuesRequired;
-    out.computeQueues += requirements.vkNumComputeQueuesRequired;
+    const std::pair<sl::Feature, pcstr> features[] = {
+        {sl::kFeatureDLSS, "DLSS"}, {sl::kFeatureReflex, "Reflex"}, {sl::kFeaturePCL, "PC latency stats"}};
+    for (const auto& [feature, name] : features)
+    {
+        sl::FeatureRequirements requirements{};
+        const sl::Result result = slGetFeatureRequirements(feature, requirements);
+        if (result != sl::Result::eOk)
+        {
+            string128 what;
+            xr_sprintf(what, "slGetFeatureRequirements(%s)", name);
+            da_sl_report(what, result);
+            continue;
+        }
+        append(out.instanceExtensions, requirements.vkNumInstanceExtensions, requirements.vkInstanceExtensions);
+        append(out.deviceExtensions, requirements.vkNumDeviceExtensions, requirements.vkDeviceExtensions);
+        append(out.features12, requirements.vkNumFeatures12, requirements.vkFeatures12);
+        append(out.features13, requirements.vkNumFeatures13, requirements.vkFeatures13);
+        // The queues Streamline records on are its own, whatever feature asks.
+        out.graphicsQueues = std::max(out.graphicsQueues, requirements.vkNumGraphicsQueuesRequired);
+        out.computeQueues = std::max(out.computeQueues, requirements.vkNumComputeQueuesRequired);
+    }
 }
 
 void da_streamline_vk_device_created(const xrvk::NativeDeviceInfo& device)
@@ -788,7 +798,14 @@ void da_streamline_frame_marker(IRender::FrameMarker marker)
     case Marker::SimulationEnd: sl_marker(sl::PCLMarker::eSimulationEnd); break;
     case Marker::RenderSubmitStart: sl_marker(sl::PCLMarker::eRenderSubmitStart); break;
     case Marker::RenderSubmitEnd: sl_marker(sl::PCLMarker::eRenderSubmitEnd); break;
-    case Marker::PresentStart: sl_marker(sl::PCLMarker::ePresentStart); break;
+    case Marker::PresentStart:
+#ifdef XR_VULKAN
+        // The latency markers name the frame by its token: the present carries the same id.
+        if (g_sl.reflex && g_sl.token && HW.m_pSwapChain)
+            xrvk::SetNextPresentId(HW.m_pSwapChain, u64(uint32_t(*g_sl.token)));
+#endif
+        sl_marker(sl::PCLMarker::ePresentStart);
+        break;
     case Marker::PresentEnd: sl_marker(sl::PCLMarker::ePresentEnd); break;
     }
 }

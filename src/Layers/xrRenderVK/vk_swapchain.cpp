@@ -562,7 +562,9 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
     info.swapchainCount = 1;
     info.pSwapchains = &m_swapchain;
     info.pImageIndices = &m_current;
-    const u64 id = m_presentId + 1;
+    // An SDK's frame id when it named one (present ids only grow).
+    const u64 id = (std::max)(m_presentId + 1, m_requestedPresentId);
+    m_requestedPresentId = 0;
     VkPresentIdKHR presentId{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};
     if (dev->caps.presentWait && !m_chainProvider)
     {
@@ -832,6 +834,12 @@ bool SetSwapChainProvider(IDXGISwapChain* chain, SwapChainProvider* provider)
     s->m_provider = nullptr;
     s->CreateNative(s->m_syncInterval);
     return false;
+}
+
+void SetNextPresentId(IDXGISwapChain* chain, UINT64 id)
+{
+    if (SwapChain* s = LayerChain(chain))
+        s->m_requestedPresentId = id;
 }
 
 bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive)
