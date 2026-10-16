@@ -453,6 +453,7 @@ public:
     // The upscale slot (r4_rendertarget_phase_upscale.cpp).
     bool upscale_ready() const; // the targets and shaders it needs exist
     void phase_reactive(); // rt_Reactive from the opaque scene grab against the finished scene
+    bool m_taa_reactive = false; // this frame's reactive mask is there for native TAA
     void phase_upscale(); // generic0 -> rt_Upscaled through the backend, then the depth upscale
     void phase_upscale_identity(); // the identity backend: a bilinear stretch into rt_Upscaled
     void phase_depth_upscale(); // the render-size scene depth into the display-size base depth

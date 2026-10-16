@@ -71,6 +71,7 @@ float4 main (v2p I) : SV_Target
 	// The fire under the plume base.
 	col += float3(1.0, 0.5, 0.18) * glow * saturate(0.4 - 0.8 * N.y) * (0.4 + 0.6 * n);
 
-	a *= I.fog * I.fog;
+	// Fogged like the scene: the plume takes the fog's colour with distance instead of fading out of it.
+	col = lerp(col, fog_color.rgb, 1.0 - saturate(I.fog));
 	return float4(col, a);
 }

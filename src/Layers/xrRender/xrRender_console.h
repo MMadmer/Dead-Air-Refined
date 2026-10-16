@@ -333,6 +333,9 @@ extern ECORE_API float ps_r2_GI_clip; // EPS
 extern ECORE_API float ps_r2_GI_refl; // .9f
 extern ECORE_API float ps_r2_ls_depth_scale; // 1.0f
 extern ECORE_API float ps_r2_ls_depth_bias; // -0.0001f
+// Hardware depth bias of the shadow casters (slope-scaled: grazing surfaces get more, contact keeps tight).
+extern ECORE_API float ps_r__smap_slope_bias;
+extern ECORE_API int ps_r__smap_depth_bias;
 extern ECORE_API float ps_r2_ls_squality; // 1.0f
 extern ECORE_API float ps_r2_sun_near; // 10.0f
 extern ECORE_API float ps_r2_sun_near_border; // 1.0f

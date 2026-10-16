@@ -46,6 +46,8 @@ void CRenderTarget::phase_taa(const Fmatrix& reproject, bool smaa_in_generic)
     RCache.set_Geometry(g_combine);
     RCache.set_c("m_taa_previous", reproject);
     RCache.set_c("da_taa_params", velocity ? 1.f : 0.f, da_history_reset() ? 1.f : 0.f, jitter_u, jitter_v);
+    // x: the reactive mask was drawn this frame.
+    RCache.set_c("da_taa_reactive", m_taa_reactive ? 1.f : 0.f, 0.f, 0.f, 0.f);
     RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
     m_taa_history_in_resolve = !m_taa_history_in_resolve;
 

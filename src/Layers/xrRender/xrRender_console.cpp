@@ -710,6 +710,8 @@ float ps_r2_GI_clip = EPS_L; // EPS
 float ps_r2_GI_refl = .9f; // .9f
 float ps_r2_ls_depth_scale = 1.00001f; // 1.00001f
 float ps_r2_ls_depth_bias = -0.0003f; // -0.0001f
+float ps_r__smap_slope_bias = 2.0f;
+int ps_r__smap_depth_bias = 1;
 float ps_r2_ls_squality = 1.0f; // 1.00f
 float ps_r2_sun_tsm_projection = 0.3f; // 0.18f
 float ps_r2_sun_tsm_bias = -0.2f;
@@ -2103,6 +2105,8 @@ void xrRender_initconsole()
 
     CMD4(CCC_Float, "r2_ls_depth_scale", &ps_r2_ls_depth_scale, 0.5, 1.5);
     CMD4(CCC_Float, "r2_ls_depth_bias", &ps_r2_ls_depth_bias, -0.5, +0.5);
+    CMD4(CCC_Float, "r__smap_slope_bias", &ps_r__smap_slope_bias, 0.f, 8.f);
+    CMD4(CCC_Integer, "r__smap_depth_bias", &ps_r__smap_depth_bias, 0, 256);
 
     CMD4(CCC_Float, "r2_parallax_h", &ps_r2_df_parallax_h, .0f, .5f);
     //  CMD4(CCC_Float,     "r2_parallax_range",    &ps_r2_df_parallax_range,   5.0f,   175.0f  );

@@ -31,6 +31,21 @@ uniform float4 da_taa_params;
 // display while moving. Inside the box the current frame passes through untouched. Empty
 // (min > max) when no device is up.
 uniform float4 pda_taa_bbox;
+// The pixels the forward passes painted over the opaque scene (smoke, fire, glass, water, rain: no motion
+// vectors of their own), x: 1 when the mask was drawn this frame.
+Texture2D s_reactive;
+uniform float4 da_taa_reactive;
+
+// View depth for the motion vector dilation; the sky (cleared to 0) is the farthest of all.
+float taa_depth(float2 uv)
+{
+#ifdef USE_MSAA
+    const float z = s_position.Load(int2(uv * screen_res.xy), 0).z;
+#else
+    const float z = s_position.SampleLevel(smp_nofilter, uv, 0).z;
+#endif
+    return z > 0.0 ? z : 1e9;
+}
 
 struct taa_out
 {
@@ -97,6 +112,15 @@ void taa_moments(float2 tc, float2 pos2d, float3 current, out float3 m1, out flo
 }
 #endif
 
+// The sky (P = 0) accumulates like any pixel once the motion vectors carry it (the sky velocity pass): passed
+// through, its silhouettes against canopies, wires and roofs flipped between resolved and raw every frame.
+// Without the vectors there is no depth to reproject it by. The HUD (closer than 1.1 m) always passes.
+bool taa_passes(float z)
+{
+    const bool sky = z <= 0.0001;
+    return sky ? da_taa_params.x < 0.5 : z < 1.10;
+}
+
 // Exactly what da_fullscreen.vs outputs, in its order: D3D12 refuses a pipeline whose pixel
 // shader asks for an input the vertex shader does not write.
 taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
@@ -113,7 +137,7 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
 #ifdef GRIZZLY_WAVE_LANES
     // The pass-through cases below, decided for the whole quad first: a quad with any pixel that
     // blends takes its neighbourhood here, while all four lanes still run.
-    const bool pass = da_taa_params.y > 0.5 || gbd.P.z < 1.10 ||
+    const bool pass = da_taa_params.y > 0.5 || taa_passes(gbd.P.z) ||
         (tc.x >= pda_taa_bbox.x && tc.y >= pda_taa_bbox.y && tc.x <= pda_taa_bbox.z && tc.y <= pda_taa_bbox.w);
     const bool quad_blends = !pass || !QuadReadAcrossX(pass) || !QuadReadAcrossY(pass) || !QuadReadAcrossDiagonal(pass);
     float3 m1 = current, m2 = current * current;
@@ -131,10 +155,7 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
         tc.y <= pda_taa_bbox.w)
         return taa_write(still);
 
-    // Sky pixels have no meaningful reprojection depth; the clamp would pass anyway, but
-    // skipping keeps cloud motion crisp. Same convention as gtao_render: the position
-    // target is cleared to zero, so view-z below epsilon means sky.
-    // The other end of the same test is the HUD: hands and whatever is in them move with the
+    // The sky and the HUD (taa_passes). The HUD: hands and whatever is in them move with the
     // player, not the world - the camera reprojection is simply wrong for them, and running
     // history over the barrel doubles it on every turn and every bob step, which reads as
     // cracks and a wireframe across the weapon. 0.65 m covered the hands and left a rifle's
@@ -142,7 +163,7 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
     // World geometry this close to the eye is a surface being leant against; losing TAA on it
     // for a moment is invisible.
     [branch]
-    if (gbd.P.z < 1.10)
+    if (taa_passes(gbd.P.z))
         return taa_write(still);
 
     float2 prev_uv;
@@ -150,8 +171,23 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
     [branch]
     if (da_taa_params.x > 0.5)
     {
-        // The motion vector of this pixel's surface: where it was, in the history's grid.
-        const float2 v = s_da_taa_velocity.SampleLevel(smp_nofilter, tc, 0).xy;
+        // The motion vector of the nearest surface among the pixel and its four diagonals (DOOM Eternal's
+        // dilation): an edge of something moving over a still background follows the thing, not the
+        // background, so a walking NPC or a swaying branch does not drag a trail of old history.
+        float2 nearest = tc;
+        float nearest_z = taa_depth(tc);
+        [unroll]
+        for (int d = 0; d < 4; ++d)
+        {
+            const float2 uv = tc + float2(d & 1 ? 1.0 : -1.0, d & 2 ? 1.0 : -1.0) * screen_res.zw;
+            const float z = taa_depth(uv);
+            if (z < nearest_z)
+            {
+                nearest_z = z;
+                nearest = uv;
+            }
+        }
+        const float2 v = s_da_taa_velocity.SampleLevel(smp_nofilter, nearest, 0).xy;
         prev_uv = tc - v * float2(0.5, -0.5);
     }
     else
@@ -202,10 +238,11 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
     if (t > 1.0)
         history = m1 + dist / t;
 
-    // Blend weight backs off with reprojection distance: fast pans keep the image crisp,
-    // a still or slowly turning camera converges to a stable field.
+    // Blend weight: 16 jittered frames converge at ~0.94 (DOOM Eternal 0.92-0.97), backing off with the
+    // reprojection distance - a sub-pixel move already costs some history (DOOM's velocity term), fast pans
+    // keep the image crisp.
     float motion_px = length((prev_uv - tc) * screen_res.xy);
-    float w = 0.88 * saturate(1.0 - motion_px / 24.0);
+    float w = (0.94 - 0.06 * saturate(motion_px * motion_px)) * saturate(1.0 - motion_px / 32.0);
 
     // How far the history had to be pulled to fit the current distribution is also how much
     // it DISAGREES with it, and clipping alone still blends the pulled value in at full
@@ -217,6 +254,12 @@ taa_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
     // down by the same number, a moving leaf keeps its own pixel while everything that
     // reprojects honestly (t <= 1, the whole static world) keeps its history untouched.
     w *= saturate(1.0 - (t - 1.0) * 0.5);
+
+    // Smoke, fire, glass and rain move on their own: the more the forward passes changed a pixel, the more
+    // of the current frame it keeps.
+    [branch]
+    if (da_taa_reactive.x > 0.5)
+        w *= 1.0 - 0.6 * saturate(s_reactive.SampleLevel(smp_nofilter, tc, 0).x);
 
     return taa_write(lerp(current, history, w));
 }

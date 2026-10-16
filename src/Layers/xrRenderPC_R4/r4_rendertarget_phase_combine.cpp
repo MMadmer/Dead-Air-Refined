@@ -390,10 +390,12 @@ void CRenderTarget::phase_combine()
     // the march.
     const bool puddles_read_grab = ps_r__puddles && ps_r__puddles_refl >= 2 &&
         ps_r__puddles_refl_power > 0.f && g_da_rain_wetness >= 0.01f;
-    // The upscaler's reactive mask is this grab against the finished scene, water or not.
+    // The upscaler's reactive mask is this grab against the finished scene, water or not. Native TAA
+    // weighs its history by the same mask (smoke, fire, glass and rain carry no motion vectors).
     const bool upscaling = da_upscaler_active();
+    const bool taa_reactive = !upscaling && ps_r__taa && s_taa && s_upscale && rt_Reactive && !_menu_pp;
     if (rt_SSR && (g_da_level_has_water || ps_r_water_reflection > 0 || puddles_read_grab || upscaling ||
-        da_rt_wants_scene_grab()))
+        taa_reactive || da_rt_wants_scene_grab()))
     {
         PIX_EVENT(scene_grab_for_SSLR);
         // rt_Generic_0(_r) is still bound from the combine above; D3D11 will not copy from a
@@ -461,8 +463,9 @@ void CRenderTarget::phase_combine()
 
     // Everything the upscaler cannot track with motion vectors is on the scene by now (the
     // forward passes and the volumetric light); what follows is screen-space post.
-    if (upscaling)
+    if (upscaling || (taa_reactive && rt_SSR))
         phase_reactive();
+    m_taa_reactive = taa_reactive && rt_SSR;
 
     // Perform blooming filter and distortion if needed
     RCache.set_Stencil(FALSE);

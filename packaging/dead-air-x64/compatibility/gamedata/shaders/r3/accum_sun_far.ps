@@ -86,7 +86,7 @@ float4 main ( v2p_volume I ) : SV_Target
 	float4 	PS	= mul( m_shadow, P4 );
 	float 	s 	= sunmask( P4 );
 	#if defined	(USE_SJITTER) || SUN_QUALITY==2 // Hight quality
-			s 	*= shadow_high(PS); //shadowtest_sun( PS, float4(0,0,0,0) );
+			s 	*= shadow_pcf5(PS); // the 9-tap tent: as soft as the jittered 8 taps, without their noise
 	#else
 #ifdef SM_MINMAX
 		#ifdef USE_SJITTER

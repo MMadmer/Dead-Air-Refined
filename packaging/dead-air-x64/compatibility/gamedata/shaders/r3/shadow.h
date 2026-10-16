@@ -73,6 +73,38 @@ float shadow_hw( float4 tc )
 	return	(s0+s1+s2+s3)/4.h;
 }
 
+// A 5x5 tent from 9 bilinear compare taps (the optimized PCF of The Witness, DOOM Eternal's filter for
+// every light): smooth and deterministic, nothing for TAA to resolve.
+float shadow_pcf5(float4 tc)
+{
+	tc.xyz /= tc.w;
+	static const float size = float(SMAP_size);
+	static const float inv = 1.0 / float(SMAP_size);
+	const float2 uv = tc.xy * size + 0.5;
+	const float2 base = floor(uv);
+	const float2 s = uv - base;
+	const float2 origin = (base - 0.5) * inv;
+
+	const float2 w0 = 4.0 - 3.0 * s;
+	const float2 w1 = 7.0;
+	const float2 w2 = 1.0 + 3.0 * s;
+	const float2 o0 = (3.0 - 2.0 * s) / w0 - 2.0;
+	const float2 o1 = (3.0 + s) / w1;
+	const float2 o2 = s / w2 + 2.0;
+
+	float sum = 0.0;
+	sum += w0.x * w0.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o0.x, o0.y) * inv), tc.z).x;
+	sum += w1.x * w0.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o1.x, o0.y) * inv), tc.z).x;
+	sum += w2.x * w0.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o2.x, o0.y) * inv), tc.z).x;
+	sum += w0.x * w1.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o0.x, o1.y) * inv), tc.z).x;
+	sum += w1.x * w1.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o1.x, o1.y) * inv), tc.z).x;
+	sum += w2.x * w1.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o2.x, o1.y) * inv), tc.z).x;
+	sum += w0.x * w2.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o0.x, o2.y) * inv), tc.z).x;
+	sum += w1.x * w2.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o1.x, o2.y) * inv), tc.z).x;
+	sum += w2.x * w2.y * s_smap.SampleCmpLevelZero(smp_smap, SMAP_TC(origin + float2(o2.x, o2.y) * inv), tc.z).x;
+	return sum / 144.0;
+}
+
 float shadow_hw_projected(float3 tc)
 {
 	float4 samples;
@@ -768,12 +800,8 @@ float shadow( float4 tc )
 		return shadow_hw_hq( tc );
 #	endif
 #else
-#	if SUN_QUALITY>=2 // Hight quality
-		//return shadowtest_sun 	( tc, float4(0,0,0,0) );			// jittered sampling;
-		return shadow_hw		(tc);
-#	else
-		return shadow_hw		(tc);
-#	endif
+		// The local lights: the 9-tap tent instead of the stock 4-tap box.
+		return shadow_pcf5		(tc);
 #endif
 }
 

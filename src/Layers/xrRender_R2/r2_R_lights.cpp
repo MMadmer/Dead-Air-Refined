@@ -199,6 +199,7 @@ void CRender::render_lights(light_Package& LP)
                 Stats.s_merged++;
                 L_spot_s.push_back(L);
                 Target->phase_smap_spot(dsgraph.cmd_list, L);
+                dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
                 dsgraph.cmd_list.set_xform_world(Fidentity);
                 dsgraph.cmd_list.set_xform_view(L->X.S.view);
                 dsgraph.cmd_list.set_xform_project(L->X.S.project);
@@ -217,6 +218,7 @@ void CRender::render_lights(light_Package& LP)
                     PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHTS_RENDER_SORTED);
                     dsgraph.render_sorted(); // strict-sorted geoms
                 }
+                dsgraph.cmd_list.StateManager.OverrideDepthBias(false);
             }
             else
             {

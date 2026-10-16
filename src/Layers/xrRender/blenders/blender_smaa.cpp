@@ -60,6 +60,8 @@ void CBlender_taa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_position", r2_RT_P);
         // The motion vectors of the velocity pass (read only when they were made this frame).
         C.r_dx11Texture("s_da_taa_velocity", "$user$velocity");
+        // The pixels the forward passes painted over the opaque scene (phase_reactive).
+        C.r_dx11Texture("s_reactive", r2_RT_reactive);
         C.r_dx11Sampler("smp_nofilter");
         C.r_dx11Sampler("smp_rtlinear");
         C.r_End();

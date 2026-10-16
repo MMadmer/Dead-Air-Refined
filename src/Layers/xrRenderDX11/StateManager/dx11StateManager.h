@@ -45,9 +45,12 @@ public:
     //	Functions which override value even if new state was set up.
     //	Reset value to current state's value if override is disabled.
     void OverrideScissoring(bool bOverride = true, BOOL bValue = TRUE);
+    //	Hardware depth bias on every rasterizer state while shadow casters draw (off = the states' own).
+    void OverrideDepthBias(bool bOverride, INT bias = 0, float slope = 0.f, float clamp = 0.f);
 
 private:
     void ValidateRDesc();
+    void ApplyDepthBias();
     void ValidateDSDesc();
     void ValidateBDesc();
 
@@ -88,6 +91,10 @@ private:
 
     bool m_bOverrideScissoring;
     BOOL m_bOverrideScissoringValue;
+    bool m_bOverrideDepthBias;
+    INT m_iDepthBias;
+    float m_fSlopeDepthBias;
+    float m_fDepthBiasClamp;
     u32 m_uiSampleMask;
 
     CBackend& cmd_list;

@@ -50,6 +50,10 @@ void dx11StateManager::Reset()
 
     m_bOverrideScissoring = false;
     m_bOverrideScissoringValue = FALSE;
+    m_bOverrideDepthBias = false;
+    m_iDepthBias = 0;
+    m_fSlopeDepthBias = 0.f;
+    m_fDepthBiasClamp = 0.f;
     m_uiSampleMask = 0xffffffff;
 }
 
@@ -69,6 +73,8 @@ void dx11StateManager::SetRasterizerState(ID3DRasterizerState* pRState)
 
     if (m_bOverrideScissoring)
         EnableScissoring(m_bOverrideScissoringValue);
+    if (m_bOverrideDepthBias)
+        ApplyDepthBias();
 }
 
 void dx11StateManager::SetDepthStencilState(ID3DDepthStencilState* pDSState)
@@ -425,6 +431,30 @@ void dx11StateManager::EnableScissoring(BOOL bEnable)
         m_bRSChanged = true;
         m_RDesc.ScissorEnable = bEnable;
     }
+}
+
+void dx11StateManager::ApplyDepthBias()
+{
+    ValidateRDesc();
+    const INT bias = m_bOverrideDepthBias ? m_iDepthBias : 0;
+    const float slope = m_bOverrideDepthBias ? m_fSlopeDepthBias : 0.f;
+    const float clamp = m_bOverrideDepthBias ? m_fDepthBiasClamp : 0.f;
+    if (m_RDesc.DepthBias != bias || m_RDesc.SlopeScaledDepthBias != slope || m_RDesc.DepthBiasClamp != clamp)
+    {
+        m_bRSChanged = true;
+        m_RDesc.DepthBias = bias;
+        m_RDesc.SlopeScaledDepthBias = slope;
+        m_RDesc.DepthBiasClamp = clamp;
+    }
+}
+
+void dx11StateManager::OverrideDepthBias(bool bOverride, INT bias, float slope, float clamp)
+{
+    m_bOverrideDepthBias = bOverride;
+    m_iDepthBias = bias;
+    m_fSlopeDepthBias = slope;
+    m_fDepthBiasClamp = clamp;
+    ApplyDepthBias();
 }
 
 void dx11StateManager::OverrideScissoring(bool bOverride, BOOL bValue)

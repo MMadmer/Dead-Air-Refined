@@ -193,8 +193,25 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 //	hdiffuse*=(D.rgb*0.8 + 0.2h);	// rise texture contrast for diffuse lighting
 //	hdiffuse = 0.8;
 //	hdiffuse *= (occ*(D.rgb + .1h));
-	hdiffuse *= occ;
-	hspecular *= occ;
+	// The occlusion as it reaches each term (DOOM Eternal darkens its reflections by the AO the same way).
+	// Diffuse: multi-bounce of the surface's own albedo (Jimenez 2016), so bright surfaces light their creases
+	// back instead of going grey. Sky specular: the occlusion of the reflection cone (Lagarde 2014) - the
+	// glossier the surface, the narrower the cone, the less a crease darkens what faces the eye.
+	{
+#ifdef USE_GAMMA_22
+		const float3 albedo = D.rgb;
+#else
+		const float3 albedo = D.rgb * D.rgb;
+#endif
+		const float3 a = 2.0404f * albedo - 0.3324f;
+		const float3 b = -4.7951f * albedo + 0.6417f;
+		const float3 c = 2.7552f * albedo + 0.6903f;
+		hdiffuse *= max( occ.xxx, ( ( occ * a + b ) * occ + c ) * occ );
+		// The sky's G-buffer holds P = 0: no normalize of a zero vector.
+		const float NdotV = saturate( dot( N.xyz, -P.xyz * rsqrt( max( dot( P.xyz, P.xyz ), 1e-8f ) ) ) );
+		const float roughness = 1.0f - saturate( D.w );
+		hspecular *= saturate( pow( NdotV + occ, exp2( -16.0f * roughness - 1.0f ) ) - 1.0f + occ );
+	}
 
 	// Snow takes the eye's white balance (da_snow_light.h): the sun and the lights by the sun's colour, the
 	// sky term by its own. Its lights came divided by the albedo's cool cast (DA_SNOW_TINT) so the sunlit

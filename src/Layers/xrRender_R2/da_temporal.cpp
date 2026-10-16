@@ -118,6 +118,10 @@ void da_temporal_frame_begin()
     const bool taa = !upscaler && ps_r__taa && target && !RImplementation.o.msaa && target->rt_taa_history &&
         target->rt_taa_history->pRT && target->rt_taa_resolve && target->rt_taa_resolve->pRT;
     g_da_frame.active = !menu && (upscale || taa);
+    // Native TAA blends ~16 jittered frames: textures take half a mip sharper (with at least 8x
+    // anisotropy, as under the upscalers, so the ground does not shimmer). The upscalers set their own.
+    if (!upscaler)
+        SSManager.SetSceneMipBias(taa ? -0.5f : 0.f, taa ? 8u : 0u);
     // Frame generation and the ray traced effects' histories read the vectors even without a
     // temporal filter.
     g_da_frame.motion = g_da_frame.active || (!menu && (da_framegen_running() || da_rt_wants_motion()));
@@ -129,9 +133,10 @@ void da_temporal_frame_begin()
         return;
 
     // AMD's phase count: enough samples to cover a display pixel at the upscale ratio, 8 at the
-    // least (DLSS asks for as many). Halton index 0 is (0, 0) in both bases, hence the + 1.
+    // least (DLSS asks for as many). Native TAA takes 16 (DOOM Eternal 32): its slower blend sees
+    // them all. Halton index 0 is (0, 0) in both bases, hence the + 1.
     const float ratio = float(Device.dwWidth) / float(rw);
-    const u32 phases = std::max(8u, u32(std::ceil(8.f * ratio * ratio)));
+    const u32 phases = upscale ? std::max(8u, u32(std::ceil(8.f * ratio * ratio))) : 16u;
     const u32 index = Device.dwFrame % phases + 1;
     g_da_frame.jitter_px.set(da_halton(index, 2) - 0.5f, da_halton(index, 3) - 0.5f);
     g_da_frame.jitter_clip.set(2.f * g_da_frame.jitter_px.x / float(rw), -2.f * g_da_frame.jitter_px.y / float(rh));

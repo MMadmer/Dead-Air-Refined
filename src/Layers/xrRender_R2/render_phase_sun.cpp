@@ -442,6 +442,7 @@ void render_sun::render()
             if (bNormal || bSpecial || renderDetails || grassBlades || shrubs || snow)
             {
                 RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, cascade_ind);
+                dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
                 dsgraph.cmd_list.set_xform_world(Fidentity);
                 dsgraph.cmd_list.set_xform_view(Fidentity);
                 dsgraph.cmd_list.set_xform_project(sun->X.D[cascade_ind].combine);
@@ -473,6 +474,7 @@ void render_sun::render()
                     dsgraph.render_graph(1); // normal level, secondary priority
                     dsgraph.render_sorted(); // strict-sorted geoms
                 }
+                dsgraph.cmd_list.StateManager.OverrideDepthBias(false);
             }
             else
             {

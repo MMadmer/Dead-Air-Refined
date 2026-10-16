@@ -53,7 +53,19 @@ float4 main( v2p I ) : SV_Target
 	//result.rgb /= 2;
 	//result.rgb = Vibrance(result.rgb,2.0);
 
-	result.a	*= I.fog*I.fog; // skyloader: fog fix
+	// The scene's fog, in-scattered by how the particle blends (DOOM Eternal's way) instead of fading it
+	// out: a blended particle takes the fog's colour with distance and stays a shape in the murk, an additive
+	// one loses its light (nothing glows through fog), a multiplying one turns neutral.
+	const float fog = 1.0f - saturate( I.fog );
+#if defined(DA_PARTICLE_ADD)
+	result.rgb *= 1.0f - fog;
+#elif defined(DA_PARTICLE_MUL)
+	result.rgb = lerp( result.rgb, 1.0f, fog );
+#elif defined(DA_PARTICLE_MUL2)
+	result.rgb = lerp( result.rgb, 0.5f, fog );
+#else
+	result.rgb = lerp( result.rgb, fog_color.rgb, fog );
+#endif
 	
 	return	result;
 }

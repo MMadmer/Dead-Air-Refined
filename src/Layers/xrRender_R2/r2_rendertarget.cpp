@@ -452,9 +452,9 @@ CRenderTarget::CRenderTarget()
             rt_taa_history.create(r2_RT_taa_history, w, h, D3DFMT_A2B10G10R10, 1);
             rt_taa_resolve.create(r2_RT_taa_resolve, w, h, D3DFMT_A2B10G10R10, 1);
         }
-        // The upscale slot (da_upscaler.h): the reactive mask at render size, the upscaler's
-        // output, and the display-size frame combine_2 and the flares draw into for phase_pp.
-        if (upscale)
+        // The reactive mask at render size: the upscalers read it, and native TAA too (the pixels the
+        // forward passes painted over the opaque scene take the current frame's weight).
+        if (upscale || !RImplementation.o.msaa)
         {
 #ifdef XR_VULKAN
             // Streamline's Vulkan side has no R8_UNORM among the formats it describes images by.
@@ -462,6 +462,11 @@ CRenderTarget::CRenderTarget()
 #else
             rt_Reactive.create(r2_RT_reactive, w, h, D3DFMT_L8, 1);
 #endif
+        }
+        // The upscale slot (da_upscaler.h): the upscaler's output, and the display-size frame combine_2
+        // and the flares draw into for phase_pp.
+        if (upscale)
+        {
             rt_Upscaled.create(r2_RT_upscaled, dw, dh, D3DFMT_A16B16G16R16F, 1, { CRT::CreateUAV });
             rt_PostDisplay.create(r2_RT_post_display, dw, dh, D3DFMT_A8R8G8B8, 1);
         }
@@ -926,7 +931,8 @@ CRenderTarget::CRenderTarget()
         // The upscale slot's passes and combine_2 over the upscaler's output. The shaders ship with
         // the content: an install whose archive is older than the binaries has none, compiling a
         // missing file is fatal, and without them no upscaler starts (da_upscaler_create).
-        if (da_upscaler_active())
+        // The reactive mask pass serves native TAA as well (single-sampled only).
+        if (da_upscaler_active() || !RImplementation.o.msaa)
         {
             bool shaders_exist = true;
             for (pcstr shader : { "da_upscale_identity.ps", "da_depth_upscale.ps", "da_reactive.ps" })
@@ -939,8 +945,11 @@ CRenderTarget::CRenderTarget()
             {
                 CBlender_da_upscale b_upscale;
                 s_upscale.create(&b_upscale, "r2" DELIMITER "da_upscale");
-                CBlender_combine b_combine_display{ r2_RT_upscaled };
-                s_combine_display.create(&b_combine_display, "r2" DELIMITER "combine");
+                if (da_upscaler_active())
+                {
+                    CBlender_combine b_combine_display{ r2_RT_upscaled };
+                    s_combine_display.create(&b_combine_display, "r2" DELIMITER "combine");
+                }
             }
         }
 #endif
