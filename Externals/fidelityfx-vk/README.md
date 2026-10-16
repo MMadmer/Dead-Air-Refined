@@ -17,7 +17,6 @@ ffx-api. Plain vendor drop, not a submodule; nothing here is modified.
 | --- | --- | ---: | --- |
 | `LICENSE.txt` | `LICENSE.txt` | 1,115 | `82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a` |
 | `bin/amd_fidelityfx_vk.dll` | `PrebuiltSignedDLL/amd_fidelityfx_vk.dll` | 9,332,432 | `a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78` |
-| `lib/amd_fidelityfx_vk.lib` | `PrebuiltSignedDLL/amd_fidelityfx_vk.lib` | 2,726 | `dc8a08f7f7ce6b74a3305c3c287a856c5ed53978de961b5ac7a64ab0f5c213d6` |
 | `include/ffx_api/ffx_api.h` | `ffx-api/include/ffx_api/ffx_api.h` | 7,623 | `408b4203545e8299ed188fbb1d9ddfe0932b73ea6e8b14fe10edcf1f45771561` |
 | `include/ffx_api/ffx_api.hpp` | `ffx-api/include/ffx_api/ffx_api.hpp` | 4,999 | `42470189c0241feca12eed959cf90ade15806bb9ecc578b65f8c20ca9365c34d` |
 | `include/ffx_api/ffx_api_loader.h` | `ffx-api/include/ffx_api/ffx_api_loader.h` | 2,022 | `7be51b7bf1e640b84c0c7f22a9db50a6816debce3755b51224e56c89501659c3` |
@@ -32,5 +31,5 @@ ffx-api. Plain vendor drop, not a submodule; nothing here is modified.
 `src/Layers/xrRenderPC_R4/da_upscaler_fsr_vk.cpp` (Vulkan module only) loads `amd_fidelityfx_vk.dll` by its absolute
 path next to the executable, takes the ffx-api entry points through `ffxLoadFunctions()` and creates the upscaler
 with the `ffxCreateBackendVKDesc` of the renderer's own device (`xrvk::GetNativeDevice`). The headers are included
-as `<ffx_api/...>`, so they never meet the SDK 2.3 headers of the DirectX 12 module. The import library is not
-linked; it is kept with the DLL for completeness.
+as `<ffx_api/...>`, so they never meet the SDK 2.3 headers of the DirectX 12 module. Nothing links against the
+DLL, so the SDK's import library is not taken.
