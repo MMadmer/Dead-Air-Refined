@@ -17,9 +17,11 @@ TextureCube		sky_s1;
 uniform float4	env_color;        // color.w  = lerp factor
 uniform float3x4	m_v2w;
 
-void hmodel
+// The specular term in its two factors: the sky's cube in the mirror direction (env_s) and its weight by the
+// material and the gloss (hspecular = env_s * spec_w). combine_1 puts the traced reflection in place of the cube.
+void hmodel_parts
 (
-	out float3 hdiffuse, out float3 hspecular,
+	out float3 hdiffuse, out float3 env_s, out float spec_w,
 	float m, float h, float s, float3 Pnt, float3 normal
 )
 {
@@ -54,9 +56,21 @@ void hmodel
 	vreflect.y      = vreflect.y*2-1;	// fake remapping
 	float3	e0s		= env_s0.SampleLevel( smp_rtlinear, vreflect, 0 );
 	float3	e1s		= env_s1.SampleLevel( smp_rtlinear, vreflect, 0 );
-	float3	env_s	= env_color.xyz * lerp( e0s, e1s, env_color.w);
+			env_s	= env_color.xyz * lerp( e0s, e1s, env_color.w);
 			env_s	*=env_s;	// contrast
-		hspecular	= env_s*light.w*s;                //*h*m*s        ;        //env_s        *light.w         * s;
+			spec_w	= light.w*s;
+}
+
+void hmodel
+(
+	out float3 hdiffuse, out float3 hspecular,
+	float m, float h, float s, float3 Pnt, float3 normal
+)
+{
+	float3	env_s;
+	float	spec_w;
+	hmodel_parts( hdiffuse, env_s, spec_w, m, h, s, Pnt, normal );
+		hspecular	= env_s*spec_w;                //*h*m*s        ;        //env_s        *light.w         * s;
 }
 
 #endif

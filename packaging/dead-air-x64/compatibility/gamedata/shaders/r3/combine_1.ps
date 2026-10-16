@@ -76,6 +76,9 @@ struct	_out
 {
 	float4	low		: SV_Target0;
 	float4	high	: SV_Target1;
+	// The linear colour before the tonemap, for the next frame's glossy reflections (bound only while they run;
+	// alpha 0 passes it through the combine's sky blend unchanged).
+	float4	scene	: SV_Target2;
 };
 
 //	TODO:	DX10: Replace Sample with Load
@@ -187,7 +190,18 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 			occ = lerp( 1.0f, occ, 0.1f );
 	}
 	
-	hmodel	(hdiffuse, hspecular, mtl, N.w, D.w, P.xyz, N.xyz);
+	{
+		float3 env_s;
+		float spec_w;
+		hmodel_parts( hdiffuse, env_s, spec_w, mtl, N.w, D.w, P.xyz, N.xyz );
+		// The traced mirror image of a glossy surface in place of the sky's cube (rt_gloss*.hlsl; premultiplied).
+		[branch] if ( da_rt.x > 1.5f )
+		{
+			const float4 traced = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) );
+			env_s = env_s * ( 1.0f - traced.a ) + traced.rgb;
+		}
+		hspecular = env_s * spec_w;
+	}
 //      hmodel		(hdiffuse, hspecular, mtl, 1, D.w, P.xyz, N.xyz);
 //	hdiffuse*=hdiffuse;			//. high contrast hemi
 //	hdiffuse*=(D.rgb*0.8 + 0.2h);	// rise texture contrast for diffuse lighting
@@ -318,6 +332,7 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 //		color = occ; // holger test
 		//color = gbd.N;
         _out        	o;
+        o.scene        	= float4( color, 0.0f );
         tonemap        	(o.low, o.high, color, tm_scale )	;
                         o.low.a         = skyblend	;
 						o.high.a		= skyblend	;

@@ -519,6 +519,34 @@ No denoiser; TAA/DLSS resolve aliasing; water is already high in the reactive ma
   `FSkinnedTypes.h`) into a per-instance position buffer, BLAS `PREFER_FAST_BUILD|ALLOW_UPDATE`,
   refit every frame, rebuild every 30 frames; mask `SKINNED`, reflections and AO only.
 
+### 3.9 RT reflections of glossy surfaces (17.10.2026, after DOOM Eternal)
+DOOM Eternal traces a mirror ray for every glossy pixel its screen-space reflections cannot answer
+(`raygenreflections`), at half resolution with a per-frame offset in each 2x2 block, and rebuilds the full
+resolution with a temporal upscale (`computereflectionstemporalupscale`); its composite puts the result in
+place of the probes in the specular term. Here the engine's opaque surfaces reflected only the sky's cube
+(`hmodel.h`, `env_s`), indoors and under trees too; with Medium and High they reflect the traced world:
+- **Order:** after the AO slot, before `combine_1` (`da_rt_gloss_pass`), on DirectX 12 and Vulkan.
+- **Trace** (`rt/rt_gloss.hlsl`, half resolution): one pixel of each 2x2 block per frame, the four in turn;
+  pixels with a G-buffer gloss of 0.03 and more (full weight from 0.12; the rain's wetness patch raises the
+  gloss of wet surfaces), not foliage, not snow, not the HUD. The mirror direction spread by the roughness
+  (cone tangent 0.35 * (1 - gloss)^2, the temporal pass averages it), 250 m at most, no alpha-tested crowns
+  (the march finds those on screen; with them the pass cost 3.4 ms on a wet road, without 0.7). Then as the
+  water's rays (`rt/rt_reflect.hlsli`, shared): a screen-space march short of the traced hit, the hit from the
+  screen where the frame shows it, else shaded off screen with the sun ray of High - but linear: the frame's
+  colour is the previous frame's linear `combine_1` output (its third target, `$user$rt_gloss_scene`, bound
+  only while the pass runs), reprojected, and the off-screen shading skips the tonemap. Output premultiplied
+  by the confidence, with the hit distance.
+- **Temporal upscale** (`rt/rt_gloss_temporal.hlsl`, full resolution): the 3x3 blocks around a pixel weighted
+  by distance (Gaussian), depth and normal, in a tonemapped space (x / (1 + max x)); their mean and spread clip
+  the history (1.5 sigmas), which follows the hit's parallax on a coplanar surface (the mirror image behind it)
+  and the surface elsewhere; a pixel next to a fresh sample takes it (0.85 of the peak weight), others keep at
+  least 10 % fresh. History pair `$user$rt_gloss_hist0/1`, result `$user$rt_gloss`.
+- **Consumer:** `combine_1` (`hmodel_parts`): `env_s = env_s * (1 - a) + rgb` while `da_rt.x` is 2, so the
+  material's specular weight, the specular occlusion and the fog apply to the traced image as they did to the
+  cube. A miss keeps the cube.
+- **Cost** (RTX 3070 Laptop, DLSS Balanced, rain): 0.5 ms on DirectX 12, 0.7 ms on Vulkan on a wet road
+  outdoors, 0.26 ms in an interior. `r__rt_debug 5` shows the result (dark blue: the cube stays).
+
 ## 4. Integration points (edits in existing files)
 
 | File | Change |
@@ -554,7 +582,7 @@ No denoiser; TAA/DLSS resolve aliasing; water is already high in the reactive ma
 | `r__rt_shadows` | integer 0/1 | default 0 | `depend="vid"` |
 | `r__rtao` | integer 0/1 | default 0 | `depend="vid"` |
 | `r__rt_quality` | token | `st_rt_low` 0, `st_rt_medium` 1, `st_rt_high` 2; default medium | `depend="vid"` |
-| `r__rt_debug` | runtime integer 0..4 | 0 off, 1 sun mask, 2 AO, 3 reflections, 4 primary-ray albedo vs G-buffer | QA diagnostic, not saved |
+| `r__rt_debug` | runtime integer 0..5 | 0 off, 1 sun mask, 2 AO, 3 reflections, 4 primary-ray albedo vs G-buffer, 5 glossy reflections | QA diagnostic, not saved |
 | `r__caps` | + `rt=` (RT usable this session), `rt_tier=` (device/adapter DXR tier, PLAN C7) | | |
 `-dx12_no_rt` on the command line masks the capability and skips RT initialisation (troubleshooting;
 `-no_rt` is dropped, PLAN C7).

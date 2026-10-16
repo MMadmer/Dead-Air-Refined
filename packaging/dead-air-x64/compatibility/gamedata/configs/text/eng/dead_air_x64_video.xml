@@ -246,7 +246,7 @@
 		<text>DirectStorage could not start on this system (its files are missing or Windows refused it): textures load the usual way.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_reflections">
-		<text>Water and rain puddles reflect the world traced by the GPU's ray tracing cores: also what is off screen or hidden, out to the far shore.</text>
+		<text>Water and rain puddles reflect the world traced by the GPU's ray tracing cores: also what is off screen or hidden, out to the far shore. From Medium quality, wet and glossy surfaces reflect what surrounds them instead of the sky.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_shadows">
 		<text>Sun shadows of buildings, terrain and other static objects are traced: exact at any distance, with soft edges. Trees, grass, characters and moving objects keep their shadow maps, so their shadows still sway in the wind.</text>
@@ -255,7 +255,7 @@
 		<text>Ambient occlusion from ray tracing instead of the screen-space one: contact shading also from what the screen does not show.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_quality">
-		<text>Resolution and reach of the ray traced effects. Low: hard shadows, half-resolution occlusion, shorter reflections. High: full resolution and the farthest reflections.</text>
+		<text>Resolution and reach of the ray traced effects. Low: hard shadows, half-resolution occlusion, shorter reflections, no reflections on glossy surfaces. High: full resolution and the farthest reflections.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_dx11">
 		<text>Ray tracing needs DirectX 12 or Vulkan: choose one of them under Renderer and restart the game.</text>

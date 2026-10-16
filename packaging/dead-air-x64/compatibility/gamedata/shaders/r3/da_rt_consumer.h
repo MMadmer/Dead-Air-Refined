@@ -1,11 +1,16 @@
 #ifndef	da_rt_consumer_h_included
 #define	da_rt_consumer_h_included
 
-// What the engine shaders read of the ray tracing passes (docs/dead-air/dx12-features/dxr.md 3.5-3.7).
-// da_rt: x reflections, y sun shadows, z ambient occlusion live this frame (0/1), w quality. It is
-// zero on DirectX 11 and whenever an effect is off, and every consumer branches on it at run time:
-// no permutation, no restart, and the frame without ray tracing is the frame it always was.
+// What the engine shaders read of the ray tracing passes (docs/dead-air/dx12-features/dxr.md 3.5-3.9).
+// da_rt: x reflections (1 water and puddles, 2 glossy surfaces too), y sun shadows, z ambient occlusion live
+// this frame (0/1), w quality. It is zero on DirectX 11 and whenever an effect is off, and every consumer
+// branches on it at run time: no permutation, no restart, and the frame without ray tracing is the frame it
+// always was.
 uniform float4		da_rt;
+
+// The traced mirror image of glossy surfaces for combine_1's specular term: linear rgb premultiplied by a,
+// the confidence (0 = the sky's cube).
+Texture2D			s_rt_gloss;
 
 // The traced sun visibility of the render pixel (1 = lit), filtered.
 Texture2D<float>	s_rt_sun;

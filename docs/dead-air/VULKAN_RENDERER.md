@@ -141,7 +141,7 @@ AMD FSR frame generation (`r__framegen st_fg_fsr`, `da_framegen_fsr_vk.cpp`), th
 ## 8. Ray tracing
 
 The RTX section of DirectX 12 (`docs/dead-air/dx12-features/dxr.md`): sun shadows, ambient occlusion, reflections
-on water and puddles, moving objects and pre-skinned characters, traced by inline ray queries in compute passes
+on water and puddles and of glossy surfaces (dxr.md 3.9, after DOOM Eternal), moving objects and pre-skinned characters, traced by inline ray queries in compute passes
 (`VK_KHR_ray_query`, `VK_KHR_acceleration_structure`).
 - **One scene and pass code for both APIs.** `da_rt_scene.cpp` and `da_rt_passes.cpp` work through the lane's
   objects (`da_rt_native.cpp`, `da_rt_device.h`): native buffers, acceleration structures, builds with their

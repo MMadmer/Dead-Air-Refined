@@ -63,7 +63,8 @@ upstream, and where the untouched code that actually runs is.
   the High and Extreme presets, and async compute where the GPU gains from it
   (off/auto/on).
 - Hardware ray tracing in its own "RTX" section of the video options:
-  reflections on water and puddles, sun shadows and ambient occlusion, with
+  reflections on water, puddles and glossy or wet surfaces, sun shadows and
+  ambient occlusion, with
   three quality levels. No quality preset turns it on; it needs DirectX 12 or
   Vulkan and a GPU with hardware ray tracing (GeForce RTX, Radeon RX 6000 and
   newer, Intel Arc).

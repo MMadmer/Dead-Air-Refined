@@ -56,6 +56,7 @@ struct DaRtTier
     u32 skinned_max; // nearest characters pre-skinned per frame
     u32 blas_per_frame; // new moving-object structures built per frame
     u32 refl_steps; // screen-space steps of a reflection ray before its traced hit, at most
+    bool gloss; // glossy surfaces reflect the traced world (dxr.md 3.9), else the sky's cube
 };
 const DaRtTier& da_rt_tier(); // this frame's (latched)
 const DaRtTier& da_rt_tier_of(u32 quality);
@@ -130,6 +131,14 @@ struct DaRtTargets
     u32 ao_width{}, ao_height{};
     // Reflections: the requests and the traced result.
     ref_rt refl_req, refl;
+    // Glossy reflections: the half-resolution trace (colour, distance), the history pair, the result combine_1
+    // reads, the previous frame's linear colour; which history this frame writes, the frame that wrote the other,
+    // the frame of the colour copy.
+    ref_rt gloss_raw, gloss_dist, gloss_hist[2], gloss, gloss_scene;
+    u32 gloss_width{}, gloss_height{};
+    u32 gloss_current{}, gloss_frame{u32(-2)}, gloss_scene_frame{u32(-2)};
+    // The frame the glossy reflections ran in (combine_1 then reads them).
+    u32 gloss_ran{u32(-2)};
     ref_shader s_puddle_req, s_water_req, s_water_req_b;
     // r__rt_debug, made on first use.
     ref_rt debug;
@@ -175,6 +184,8 @@ class DaRtSection;
 void da_rt_require_geometry(DaRtSection& section);
 // The pre-skinning pipeline (rt/rt_skin.hlsl), null when it failed.
 DaRtPipeline da_rt_skin_pipeline();
+// The glossy reflections ran this frame (combine_1 reads them; the `da_rt` constant says so).
+bool da_rt_gloss_ran();
 
 // ---- the lane's GPU objects (da_rt_native.cpp) --------------------------------------------------
 

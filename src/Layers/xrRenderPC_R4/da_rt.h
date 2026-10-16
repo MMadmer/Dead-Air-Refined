@@ -63,6 +63,9 @@ void da_rt_textures_replaced();
 void da_rt_frame_scene(CBackend& cmd_list); // before async fork A: acceleration structures
 void da_rt_sun_pass(CBackend& cmd_list);    // before the sun accumulation
 bool da_rt_ao_pass(CBackend& cmd_list);     // the AO slot: true = RTAO ran instead of GTAO/SSAO
+void da_rt_gloss_pass(CBackend& cmd_list);  // after the AO slot, before combine_1: glossy reflections
+// combine_1's third target this frame: its linear colour for the next frame's glossy reflections (null: none).
+const ref_rt* da_rt_gloss_scene_target();
 void da_rt_reflections_pass(CBackend& cmd_list); // after the scene grab, before the puddles
 
 // What the rest of the frame has to do for it.

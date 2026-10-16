@@ -134,6 +134,14 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 // Ray traced reflections: the requests the water and puddle passes write, and the traced result.
 #define r2_RT_rt_refl_req "$user$rt_refl_req"
 #define r2_RT_rt_refl "$user$rt_refl"
+// Ray traced reflections of glossy surfaces: the half-resolution trace (colour, hit distance), the history pair,
+// the full-resolution result combine_1 reads and the previous frame's linear colour the trace reuses.
+#define r2_RT_rt_gloss_raw "$user$rt_gloss_raw"
+#define r2_RT_rt_gloss_dist "$user$rt_gloss_dist"
+#define r2_RT_rt_gloss_hist0 "$user$rt_gloss_hist0"
+#define r2_RT_rt_gloss_hist1 "$user$rt_gloss_hist1"
+#define r2_RT_rt_gloss "$user$rt_gloss"
+#define r2_RT_rt_gloss_scene "$user$rt_gloss_scene"
 // [dx12:rt] end names
 
 #define     r2_base             "$user$base"

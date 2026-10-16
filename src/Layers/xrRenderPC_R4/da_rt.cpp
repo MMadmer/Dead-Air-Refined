@@ -84,7 +84,9 @@ Fvector4 da_rt_constants()
 {
 #if defined(DA_RT_LANE)
     const auto flag = [](RtEffect effect) { return da_rt_live(effect) ? 1.f : 0.f; };
-    return {flag(RtEffect::Reflections), flag(RtEffect::Shadows), flag(RtEffect::AO), float(g_rt_latch.quality)};
+    // 2: the glossy surfaces' reflections ran too (combine_1 reads them).
+    const float reflections = flag(RtEffect::Reflections) * (da_rt_gloss_ran() ? 2.f : 1.f);
+    return {reflections, flag(RtEffect::Shadows), flag(RtEffect::AO), float(g_rt_latch.quality)};
 #else
     return {0.f, 0.f, 0.f, 0.f};
 #endif

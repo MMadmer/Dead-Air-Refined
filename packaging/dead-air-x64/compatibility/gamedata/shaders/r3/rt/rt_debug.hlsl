@@ -1,6 +1,7 @@
 // r__rt_debug views (dxr.md 4.1): 1 the sun mask, 2 the occlusion, 3 the reflections, 4 the albedo a
 // primary ray finds against the G-buffer's own (left half traced, right half G-buffer), which is
-// what proves the vertex and texture decode of the hit shading.
+// what proves the vertex and texture decode of the hit shading, 5 the glossy surfaces' reflections
+// (tonemapped; where the sky's cube stays, dark blue).
 
 #include "rt_geometry.hlsli"
 
@@ -15,6 +16,7 @@ Texture2D<float>	dbg_ao		: register( t1 );
 Texture2D<float4>	dbg_refl	: register( t2 );
 Texture2D<float>	dbg_depth	: register( t3 );
 Texture2D<float4>	dbg_albedo	: register( t4 );
+Texture2D<float4>	dbg_gloss	: register( t5 );
 
 RWTexture2D<float4>	dbg_out		: register( u0 );
 
@@ -78,6 +80,12 @@ void main( uint3 id : SV_DispatchThreadID )
 	{
 		const float4 r = dbg_refl.Load( int3( id.xy, 0 ) );
 		c = r.rgb * r.a;
+		break;
+	}
+	case 5u:
+	{
+		const float4 r = dbg_gloss.Load( int3( id.xy, 0 ) );
+		c = r.rgb / ( 1.0f + r.rgb ) + ( 1.0f - r.a ) * float3( 0.0f, 0.0f, 0.15f );
 		break;
 	}
 	default:

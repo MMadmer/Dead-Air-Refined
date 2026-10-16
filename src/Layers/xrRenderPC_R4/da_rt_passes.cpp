@@ -3,7 +3,8 @@
 //
 // Ray tracing passes (docs/dead-air/dx12-features/dxr.md 3.5-3.7): sun shadows (trace, temporal,
 // two a-trous passes), ambient occlusion (trace, temporal, depth-aware upsample into the GTAO target,
-// the GTAO guided filter), reflections (requests, trace with on-screen reuse), the pre-skinning of
+// the GTAO guided filter), reflections (requests, trace with on-screen reuse), the reflections of glossy surfaces
+// (half-resolution trace, temporal upscale; before combine_1, which reads them), the pre-skinning of
 // characters and the r__rt_debug views. Every pass is a compute dispatch in a section on the
 // immediate context (da_rt_device.h, DirectX 12 and Vulkan); the per-frame latch (da_rt.cpp) decides
 // which run.
@@ -44,6 +45,8 @@ struct DaRtPasses
     DaRtPipeline ao_half{};
     DaRtPipeline ao_upsample{};
     DaRtPipeline reflections{};
+    DaRtPipeline gloss{};
+    DaRtPipeline gloss_temporal{};
     DaRtPipeline skin{};
     DaRtPipeline debug{};
 #endif
@@ -110,12 +113,32 @@ struct DaRtDebugConstants
     DaRtView view;
     u32 debug[4];
 };
+struct DaRtGlossConstants
+{
+    DaRtView view;
+    DaRtShade shade;
+    Fvector4 refl;
+    u32 mask[4];
+    Fvector4 gloss;
+};
+struct DaRtGlossTemporalConstants
+{
+    DaRtView view;
+    Fvector4 temporal, temporal2;
+};
+
+// The glossy reflections (dxr.md 3.9): the lowest gloss traced, the gloss of the full weight, the spread of a
+// rough surface's rays (tangent per roughness squared), the history clip in sigmas, the least fresh share.
+constexpr float kGlossMin = 0.03f, kGlossFull = 0.12f, kGlossSpread = 0.35f, kGlossClip = 1.5f, kGlossFresh = 0.1f;
+// The glossy rays' reach in metres and their screen-space steps at most.
+constexpr float kGlossReach = 250.f;
+constexpr u32 kGlossSteps = 16u;
 
 // The tiers of r__rt_quality (dxr.md 10): Low, Medium, High.
 constexpr DaRtTier kTiers[3] = {
-    {false, false, true, 1.0f, 16.f, 250.f, false, false, 40.f, 20.f, 6u, 4u, 16u},
-    {true, true, true, 1.5f, 32.f, 400.f, true, true, 60.f, 30.f, 12u, 8u, 24u},
-    {true, true, false, 2.0f, 32.f, 1000.f, true, true, 60.f, 30.f, 16u, 8u, 32u},
+    {false, false, true, 1.0f, 16.f, 250.f, false, false, 40.f, 20.f, 6u, 4u, 16u, false},
+    {true, true, true, 1.5f, 32.f, 400.f, true, true, 60.f, 30.f, 12u, 8u, 24u, true},
+    {true, true, false, 2.0f, 32.f, 1000.f, true, true, 60.f, 30.f, 16u, 8u, 32u, true},
 };
 
 ID3D11ShaderResourceView* da_rt_srv(const ref_rt& rt) { return rt && rt->pTexture ? rt->pTexture->get_SRView() : nullptr; }
@@ -229,8 +252,8 @@ void da_rt_debug_pass(CBackend& cmd_list, CRenderTarget& t, DaRtTargets& rt)
     DaRtDebugConstants c{};
     c.view = da_rt_view(0);
     c.debug[0] = u32(ps_r__rt_debug);
-    ID3D11ShaderResourceView* inputs[5] = {da_rt_srv(rt.sun), da_rt_srv(DaRtAccess::ao_target(t)), da_rt_srv(rt.refl),
-        da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_Color)};
+    ID3D11ShaderResourceView* inputs[6] = {da_rt_srv(rt.sun), da_rt_srv(DaRtAccess::ao_target(t)), da_rt_srv(rt.refl),
+        da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_Color), da_rt_srv(rt.gloss)};
     ID3D11UnorderedAccessView* output = rt.debug->pUAView;
     const DaRtSceneBinding& scene = da_rt_scene_binding();
     DaRtDispatch d;
@@ -239,7 +262,7 @@ void da_rt_debug_pass(CBackend& cmd_list, CRenderTarget& t, DaRtTargets& rt)
     d.constants_size = sizeof(c);
     d.scene = scene.tlas;
     d.inputs = inputs;
-    d.input_count = 5;
+    d.input_count = 6;
     d.outputs = &output;
     d.output_count = 1;
     for (u32 i = 0; i < da_rt_max_tables; ++i)
@@ -263,6 +286,12 @@ void da_rt_debug_pass(CBackend& cmd_list, CRenderTarget& t, DaRtTargets& rt)
 const DaRtTier& da_rt_tier_of(u32 quality) { return kTiers[std::min(quality, 2u)]; }
 
 DaRtPipeline da_rt_skin_pipeline() { return g_rt_passes.skin; }
+
+bool da_rt_gloss_ran()
+{
+    const DaRtTargets* rt = da_rt_targets();
+    return rt && rt->gloss_ran == Device.dwFrame;
+}
 #endif
 
 void da_rt_passes_create()
@@ -284,14 +313,16 @@ void da_rt_passes_create()
     p.ao_half = da_rt_pipeline("rt/rt_ao.hlsl", "main", &half, 1);
     p.ao_upsample = da_rt_pipeline("rt/rt_ao_upsample.hlsl", "main");
     p.reflections = da_rt_pipeline("rt/rt_reflections.hlsl", "main");
+    p.gloss = da_rt_pipeline("rt/rt_gloss.hlsl", "main");
+    p.gloss_temporal = da_rt_pipeline("rt/rt_gloss_temporal.hlsl", "main");
     p.skin = da_rt_pipeline("rt/rt_skin.hlsl", "main");
     p.debug = da_rt_pipeline("rt/rt_debug.hlsl", "main");
     p.ready[u32(RtEffect::Shadows)] = p.sun && p.sun_direct && p.temporal && p.atrous_first && p.atrous_last;
     p.ready[u32(RtEffect::AO)] = p.ao && p.ao_half && p.temporal && p.ao_upsample;
     p.ready[u32(RtEffect::Reflections)] = p.reflections;
-    Msg("* [rt] passes: reflections %s, sun shadows %s, occlusion %s, characters %s",
-        p.ready[u32(RtEffect::Reflections)] ? "ok" : "failed", p.ready[u32(RtEffect::Shadows)] ? "ok" : "failed",
-        p.ready[u32(RtEffect::AO)] ? "ok" : "failed", p.skin ? "ok" : "failed");
+    Msg("* [rt] passes: reflections %s (glossy surfaces %s), sun shadows %s, occlusion %s, characters %s",
+        p.ready[u32(RtEffect::Reflections)] ? "ok" : "failed", p.gloss && p.gloss_temporal ? "ok" : "failed",
+        p.ready[u32(RtEffect::Shadows)] ? "ok" : "failed", p.ready[u32(RtEffect::AO)] ? "ok" : "failed", p.skin ? "ok" : "failed");
 #endif
 }
 
@@ -455,6 +486,113 @@ bool da_rt_ao_pass(CBackend& cmd_list)
 #else
     UNUSED(cmd_list);
     return false;
+#endif
+}
+
+#if defined(DA_RT_LANE)
+namespace
+{
+// The glossy reflections run this frame: Medium and High, the renderer started with their targets.
+bool da_rt_gloss_wanted(const DaRtTargets* rt)
+{
+    return rt && rt->gloss && rt->gloss_scene && da_rt_live(RtEffect::Reflections) && da_rt_tier().gloss &&
+        g_rt_passes.gloss && g_rt_passes.gloss_temporal;
+}
+} // namespace
+#endif
+
+const ref_rt* da_rt_gloss_scene_target()
+{
+#if defined(DA_RT_LANE)
+    DaRtTargets* rt = da_rt_targets();
+    if (!da_rt_gloss_wanted(rt))
+        return nullptr;
+    rt->gloss_scene_frame = Device.dwFrame;
+    return &rt->gloss_scene;
+#else
+    return nullptr;
+#endif
+}
+
+void da_rt_gloss_pass(CBackend& cmd_list)
+{
+    UNUSED(cmd_list);
+#if defined(DA_RT_LANE)
+    DaRtTargets* rt = da_rt_targets();
+    const u32 frame = Device.dwFrame;
+    // The previous frame's linear colour is what the screen answers with: without it the frame keeps the cube.
+    if (!da_rt_gloss_wanted(rt) || rt->gloss_scene_frame + 1 != frame)
+        return;
+    CRenderTarget& t = *RImplementation.Target;
+    const DaRtTier& tier = da_rt_tier();
+    const DaRtSceneBinding& scene = da_rt_scene_binding();
+    const bool history = rt->gloss_frame + 1 == frame && !da_history_reset();
+    const u32 cur = rt->gloss_current, prev = cur ^ 1u;
+
+    DaRtGlossConstants c{};
+    c.view = da_rt_view(0);
+    c.shade = da_rt_shade();
+    const float pixel_angle = 2.f * c.view.proj.z * c.view.size.w;
+    // A glossy surface's image is blurred by its roughness: a shorter reach, no alpha-tested crowns in the rays (the
+    // screen-space march still finds those on screen) and a shorter march than the water's mirror needs.
+    c.refl.set(std::min({tier.refl_tmax, kGlossReach, std::max(c.shade.fog_params.z, 50.f)}), pixel_angle, 8.f,
+        tier.refl_sun_rays ? 1.f : 0.f);
+    c.mask[0] = 0xFBu;
+    c.mask[1] = std::min(tier.refl_steps, kGlossSteps);
+    c.mask[2] = rt->gloss_width;
+    c.mask[3] = rt->gloss_height;
+    c.gloss.set(kGlossMin, kGlossFull, kGlossSpread, 1.f);
+    ID3D11ShaderResourceView* normal = RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal);
+    ID3D11ShaderResourceView* trace_in[9] = {da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_Position), normal, da_rt_srv(t.rt_Color),
+        da_rt_srv(rt->gloss_scene), da_rt_srv(rt->t_env0), da_rt_srv(rt->t_env1), da_rt_srv(rt->t_sky0), da_rt_srv(rt->t_sky1)};
+    ID3D11UnorderedAccessView* trace_out[2] = {rt->gloss_raw->pUAView, rt->gloss_dist->pUAView};
+
+    DaRtGlossTemporalConstants tc{};
+    tc.view = da_rt_view(history ? kViewHistoryValid : 0u);
+    tc.temporal.set(float(rt->gloss_width), float(rt->gloss_height), kGlossMin, kGlossClip);
+    tc.temporal2.set(kGlossFresh, 0.f, 0.f, 0.f);
+    ID3D11ShaderResourceView* temporal_in[7] = {da_rt_srv(rt->gloss_raw), da_rt_srv(rt->gloss_dist), da_rt_srv(rt->gloss_hist[prev]),
+        da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_Position), normal, da_rt_srv(t.rt_Color)};
+    ID3D11UnorderedAccessView* temporal_out[2] = {rt->gloss_hist[cur]->pUAView, rt->gloss->pUAView};
+
+    bool done;
+    {
+        dx11GpuTimerScope gpu(dx11GpuTimers::RtGloss);
+        DaRtSection section;
+        if (!section)
+            return;
+        da_rt_require_geometry(section);
+        DaRtDispatch d;
+        d.pipeline = g_rt_passes.gloss;
+        d.constants = &c;
+        d.constants_size = sizeof(c);
+        d.scene = scene.tlas;
+        d.inputs = trace_in;
+        d.input_count = 9;
+        d.outputs = trace_out;
+        d.output_count = 2;
+        for (u32 i = 0; i < da_rt_max_tables; ++i)
+            d.tables[i] = scene.tables[i];
+        d.groups_x = da_rt_groups(rt->gloss_width);
+        d.groups_y = da_rt_groups(rt->gloss_height);
+        done = section.dispatch(d);
+        DaRtDispatch u;
+        u.pipeline = g_rt_passes.gloss_temporal;
+        u.constants = &tc;
+        u.constants_size = sizeof(tc);
+        u.inputs = temporal_in;
+        u.input_count = 7;
+        u.outputs = temporal_out;
+        u.output_count = 2;
+        u.groups_x = da_rt_groups(Device.dwRenderWidth);
+        u.groups_y = da_rt_groups(Device.dwRenderHeight);
+        done = done && section.dispatch(u);
+    }
+    if (!done)
+        return;
+    rt->gloss_frame = frame;
+    rt->gloss_current = prev;
+    rt->gloss_ran = frame;
 #endif
 }
 

@@ -166,6 +166,18 @@ void da_rt_targets_create(CRenderTarget& target)
     {
         rt->refl_req.create(r2_RT_rt_refl_req, w, h, D3DFMT_A16B16G16R16F, 1);
         rt->refl.create(r2_RT_rt_refl, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+        // The glossy surfaces' (dxr.md 3.9), for the quality the renderer started with.
+        if (da_rt_tier_of(ps_r__rt_quality).gloss)
+        {
+            rt->gloss_width = (w + 1) / 2;
+            rt->gloss_height = (h + 1) / 2;
+            rt->gloss_raw.create(r2_RT_rt_gloss_raw, rt->gloss_width, rt->gloss_height, D3DFMT_A16B16G16R16F, 1, uav);
+            rt->gloss_dist.create(r2_RT_rt_gloss_dist, rt->gloss_width, rt->gloss_height, D3DFMT_R16F, 1, uav);
+            rt->gloss_hist[0].create(r2_RT_rt_gloss_hist0, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+            rt->gloss_hist[1].create(r2_RT_rt_gloss_hist1, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+            rt->gloss.create(r2_RT_rt_gloss, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+            rt->gloss_scene.create(r2_RT_rt_gloss_scene, w, h, D3DFMT_A16B16G16R16F, 1);
+        }
     }
     rt->t_env0.create(r2_T_envs0);
     rt->t_env1.create(r2_T_envs1);
