@@ -117,7 +117,8 @@ helicopters' `is_night`) and the NPCs' torches (`sr_light`) ask the sky's hour; 
 
 ## Snow
 
-The snowpack of open ground (`SDaClimateState`): water equivalent, density, the loose top of the last fall.
+The snowpack of open ground (`SDaClimateState`): water equivalent, density, the loose top of the last fall, the
+water it held at most since it lay down.
 
 - **Accumulation** only from what falls: snow and half of sleet, at fresh density 50-200 kg/m3 by the air's
   temperature (Hedstrom and Pomeroy), packed denser by a wind over 6 m/s.
@@ -125,13 +126,20 @@ The snowpack of open ground (`SDaClimateState`): water equivalent, density, the 
 - **Settling** towards 260 kg/m3 dry, 450 wet; the loose top settles into the pack over a day and melts first.
 - **Blowing snow** (`drift`): a wind over 6 m/s lifting loose dry snow, full in a blizzard.
 
-The picture: the level's snow LUT (WINTER.md) of the season day whose open mean depth the pack has - on the way in
-(1 Nov - 15 Feb) a winter that has come that far, on the way out (15 Feb - 15 May) a spring that melted that far, past
-the deepest key the same picture deeper - with the fresh fall laid over it (S += fresh, the bare patches whitened by
-`exp(-fresh / 2 cm)`). Under the crowns lies at least the share of the open's snow the calendar day's own picture
-gives them (`S_trees >= (S_trees - Mc_trees) / (S_open - Mc_open)` of the day `D` times the open's `S - Mc`): a thin
-January pack borrows an early-December picture, whose first snows left the ground under every crown nearly bare, and
-drew dark see-through blotches round every trunk. Quantised to 2 mm, so the composites rerun only when the picture moves by a step they can
+The picture (the level's snow LUT, WINTER.md, scaled to the pack's depth):
+- **Winter** (the open ground's cover key of the day over 0.6-0.9, December to February): the month's own picture,
+  only as deep as the pack - snow that fell on frozen ground and stayed is a whole cover, thinner or deeper. (The
+  first rounds showed a thin January pack as the first snows of November lay - half thawed, bare patches ringed with
+  see-through brown round every trunk and bush.)
+- **The first snows** (November): the picture of a winter that has come that far (the season day whose open mean
+  depth the pack has, 1 Nov - 15 Feb): a warm ground melts them in patches.
+- **A thaw**: the pack keeps its peak since it lay down (`peak`, mm of water; about 5 mm of new snow covers what melted
+  since); the share a thaw took (`1 - swe / peak`, from 0.15 to 0.6) brings in the picture of a spring that melted
+  that far - bare first on the south faces, round the trunks and on the roads.
+- **Spring** (15 Feb - 15 May): a spring that melted that far.
+
+Past a branch's deepest key the same picture deeper; the fresh fall laid over it (S += fresh, the bare patches
+whitened by `exp(-fresh / 2 cm)`). Quantised to 2 mm, so the composites rerun only when the picture moves by a step they can
 store. The trails refill from the fall and from what the wind carries (4 cm an hour at full drift). Without snowfall
 nothing grows; a thaw rains or melts it away; the grass shows through what the pack leaves.
 

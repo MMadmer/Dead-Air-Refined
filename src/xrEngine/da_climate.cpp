@@ -677,12 +677,15 @@ void step(SDaClimateState& st, const SDaClimateSample& w, float D, float hours)
     const float swe = st.swe + snow_mm;
     melt = std::min(melt, swe);
     st.melt = hours > 0.f ? melt / hours : 0.f;
+    // A thaw's patches lie under what falls on them: about 5 mm of water (5 cm of new snow) covers them over.
+    st.peak = swe + std::max(std::max(st.peak, st.swe) - swe, 0.f) * std::exp(-snow_mm / 5.f);
     if (swe - melt <= 0.01f)
     {
         st.swe = 0.f;
         st.rho = 100.f;
         st.depth = 0.f;
         st.fresh = 0.f;
+        st.peak = 0.f;
     }
     else
     {
@@ -840,9 +843,9 @@ pcstr da_climate_state_save()
         return text.c_str();
     const SDaClimateState& s = s_state;
     string512 buf;
-    xr_sprintf(buf, "1 %.9f %.4f %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g", s_state_day,
+    xr_sprintf(buf, "2 %.9f %.4f %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g %.6g", s_state_day,
         s_state_D, s.swe, s.rho, s.depth, s.fresh, s.water_t[0], s.water_t[1], s.ice[0], s.ice[1], s.ice_rot[0],
-        s.ice_rot[1], s.ice_snow[0], s.ice_snow[1], s.ice_cover[0], s.ice_cover[1]);
+        s.ice_rot[1], s.ice_snow[0], s.ice_snow[1], s.ice_cover[0], s.ice_cover[1], s.peak);
     text = buf;
     return text.c_str();
 }
@@ -853,14 +856,19 @@ bool da_climate_state_load(pcstr text)
     double day = 0.0;
     float D = 0.f;
     SDaClimateState s;
-    if (!text || sscanf(text, "%d %lf %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", &version, &day, &D, &s.swe, &s.rho,
-                     &s.depth, &s.fresh, &s.water_t[0], &s.water_t[1], &s.ice[0], &s.ice[1], &s.ice_rot[0],
-                     &s.ice_rot[1], &s.ice_snow[0], &s.ice_snow[1], &s.ice_cover[0], &s.ice_cover[1]) != 17 ||
-        version != 1 || !std::isfinite(day) || !std::isfinite(s.swe) || s.rho < 1.f)
+    // (Version 1, before the pack's peak was kept: the pack as it lies, nothing melted off it.)
+    const int read = text ? sscanf(text, "%d %lf %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", &version, &day, &D, &s.swe,
+                                &s.rho, &s.depth, &s.fresh, &s.water_t[0], &s.water_t[1], &s.ice[0], &s.ice[1], &s.ice_rot[0],
+                                &s.ice_rot[1], &s.ice_snow[0], &s.ice_snow[1], &s.ice_cover[0], &s.ice_cover[1], &s.peak) : 0;
+    if (!((version == 1 && read == 17) || (version == 2 && read == 18)) || !std::isfinite(day) || !std::isfinite(s.swe) ||
+        s.rho < 1.f)
     {
         Msg("! [climate] the saved snowpack and ice are unreadable: the history runs");
         return false;
     }
+    if (version == 1)
+        s.peak = s.swe;
+    s.peak = std::max(s.peak, s.swe);
     s_state = s;
     s_state_day = day;
     s_state_D = D;
@@ -1081,8 +1089,8 @@ public:
             da_climate_enabled() ? "on" : "off", s_seed, da_season_day(), now, da_sky_name(w.sky),
             da_climate_sky_driven() ? " (driven)" : "", w.t_air, w.t_day, w.cloud, w.precip, phase_name[w.phase],
             w.glaze ? ", glaze" : "", w.wind_ms, w.fog);
-        Msg("[qa] climate pack swe %.1f mm rho %.0f depth %.3f m fresh %.3f m melt %.2f mm/h drift %.2f", st.swe, st.rho,
-            st.depth, st.fresh, st.melt, st.drift);
+        Msg("[qa] climate pack swe %.1f mm (peak %.1f) rho %.0f depth %.3f m fresh %.3f m melt %.2f mm/h drift %.2f", st.swe,
+            st.peak, st.rho, st.depth, st.fresh, st.melt, st.drift);
         Msg("[qa] climate ice still %.3f m (water %.1f C, rot %.1f, snow %.3f) running %.3f m (water %.1f C, rot %.1f, "
             "snow %.3f)",
             st.ice[0], st.water_t[0], st.ice_rot[0], st.ice_snow[0], st.ice[1], st.water_t[1], st.ice_rot[1],
@@ -1161,6 +1169,7 @@ public:
         s_state.rho = depth > 0.f ? std::max(s_state.rho, 150.f) : 100.f;
         s_state.depth = depth;
         s_state.swe = depth * s_state.rho;
+        s_state.peak = s_state.swe;
         s_state.fresh = clampr(fresh, 0.f, depth);
         Msg("[qa] snowpack depth %.3f m fresh %.3f m (rho %.0f)", depth, s_state.fresh, s_state.rho);
     }

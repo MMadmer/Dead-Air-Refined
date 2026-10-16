@@ -355,6 +355,13 @@ SPrecipRuntime s_rt;
 int s_qa_phase = -1;
 float s_qa_air = flt_max;
 
+// Hermite step of x from a to b, 0..1.
+float smooth_step(float a, float b, float x)
+{
+    const float t = clampr((x - a) / (b - a), 0.f, 1.f);
+    return t * t * (3.f - 2.f * t);
+}
+
 void lut_at(const SSnowField& f, float day, Fvector4& S, Fvector4& Mc)
 {
     const float d = da_season_wrap(day);
@@ -435,11 +442,10 @@ const SPackBranch& pack_branch(bool melting)
     return melting ? out : in;
 }
 
-// The season day whose picture the pack shows, and the factor the picture deepens by past the deepest key.
-void pack_day(float old_depth, float D, float& day, float& ratio)
+// The day on the way in (melting = false) or out whose picture has the pack's open mean depth, and the factor the
+// picture deepens by past the branch's deepest key.
+void pack_day(float old_depth, bool melting, float& day, float& ratio)
 {
-    const float d = da_season_wrap(D);
-    const bool melting = d >= 45.5f && d < 150.f;
     const SPackBranch& br = pack_branch(melting);
     constexpr int last = SPackBranch::n - 1;
     ratio = 1.f;
@@ -579,34 +585,64 @@ void da_snow_frame_update()
     // The climate's snowpack (docs/dead-air/WEATHER.md); the season keys while it is off or a QA sweep drives D.
     const bool dynamic = da_climate_enabled() && !qa;
     const SDaClimateState& pack = da_climate_state();
-    float day = D, ratio = 1.f, fresh = 0.f;
+    float fresh = 0.f;
+    // The picture of the pack: up to three season days' pictures, each scaled to the pack's depth, and their weights.
+    struct SPicture
+    {
+        float day, ratio, weight;
+    };
+    SPicture pics[3]{{D, 1.f, 1.f}, {D, 1.f, 0.f}, {D, 1.f, 0.f}};
     if (dynamic)
     {
         // Quantised to 2 mm: the composites rerun only when the picture moves by a step they can store.
         constexpr float q = 0.002f;
         fresh = std::round(pack.fresh / q) * q;
         const float old = std::max(std::round(pack.depth / q) * q - fresh, 0.f);
-        pack_day(old, D, day, ratio);
+        const float d = da_season_wrap(D);
+        if (d >= 45.5f && d < 150.f)
+            // The spring's: a pack melting out lies as a spring that melted that far.
+            pack_day(old, true, pics[0].day, pics[0].ratio);
+        else
+        {
+            // A winter's pack lies the way the month's own picture lies, only as deep as it is: snow that fell on
+            // frozen ground and stayed is a whole cover, thinner or deeper. Only the first snows of November (a warm
+            // ground melts them in patches) take the picture of a winter that has come that far. (A thin January pack
+            // shown as the first snows lay half thawed, its bare patches ringed with see-through brown.)
+            const float open_cal = open_mean(k, D);
+            const float w_cal = open_cal > 1e-3f ? smooth_step(0.6f, 0.9f, k.targets.cover_at(da_snow_open, D)) : 0.f;
+            pack_day(old, false, pics[0].day, pics[0].ratio);
+            pics[0].weight = 1.f - w_cal;
+            pics[1] = {D, open_cal > 1e-3f ? old / open_cal : 1.f, w_cal};
+            // What a thaw took off the pack since it lay down lies bare in the patches a spring melts first, until
+            // a snowfall covers them.
+            const float swe = pack.depth * pack.rho;
+            const float melted = pack.peak > 0.1f ? clampr(1.f - swe / pack.peak, 0.f, 1.f) : 0.f;
+            const float w_melt = smooth_step(0.15f, 0.6f, melted);
+            pack_day(old, true, pics[2].day, pics[2].ratio);
+            pics[2].weight = w_melt;
+            pics[0].weight *= 1.f - w_melt;
+            pics[1].weight *= 1.f - w_melt;
+        }
     }
     const float whiten = std::exp(-fresh / fresh_whiten);
 
     if (field)
     {
-        lut_at(*field, day, f.S, f.Mc);
+        f.S.set(0.f, 0.f, 0.f, 0.f);
+        f.Mc.set(0.f, 0.f, 0.f, 0.f);
+        for (const SPicture& p : pics)
+            if (p.weight > 0.f)
+            {
+                Fvector4 S, Mc;
+                lut_at(*field, p.day, S, Mc);
+                const float w = p.weight * p.ratio;
+                f.S.add(Fvector4().set(S.x * w, S.y * w, S.z * w, S.w * w));
+                f.Mc.add(Fvector4().set(Mc.x * w, Mc.y * w, Mc.z * w, Mc.w * w));
+            }
         if (dynamic)
         {
-            // Under the crowns lies the share of the open's snow the calendar's own picture gives them (bare
-            // crowns in January let through much as the open gets). The early winter's picture a thin pack
-            // borrows keeps its first snows' bare tree wells: under a January pack every trunk stood in a few
-            // centimetres of see-through snow, dark blotches round it in a pale sheet.
-            Fvector4 S_cal, Mc_cal;
-            lut_at(*field, D, S_cal, Mc_cal);
-            const float open_cal = std::max(S_cal.x - Mc_cal.x, 0.f);
-            const float trees_share = open_cal > 1e-4f ? clampr(std::max(S_cal.y - Mc_cal.y, 0.f) / open_cal, 0.f, 1.f) : 0.f;
-            f.S.y = std::max(f.S.y, trees_share * std::max(f.S.x - f.Mc.x, 0.f));
-            f.S.set(f.S.x * ratio + fresh * fresh_share[0], f.S.y * ratio + fresh * fresh_share[1],
-                f.S.z * ratio + fresh * fresh_share[2], f.S.w * ratio + fresh * fresh_share[3]);
-            f.Mc.mul(ratio * whiten);
+            f.S.add(Fvector4().set(fresh * fresh_share[0], fresh * fresh_share[1], fresh * fresh_share[2], fresh * fresh_share[3]));
+            f.Mc.mul(whiten);
             const bool same_field = s_last_valid && s_last_stamp == da_snow_field_stamp();
             f.S_prev = same_field ? s_last_S : f.S;
             f.Mc_prev = same_field ? s_last_Mc : f.Mc;
@@ -625,13 +661,17 @@ void da_snow_frame_update()
     float cover[da_snow_classes], depth[da_snow_classes];
     for (u32 c = 0; c < da_snow_classes; ++c)
     {
-        cover[c] = k.targets.cover_at(c, day);
-        depth[c] = k.targets.depth_at(c, day);
+        cover[c] = depth[c] = 0.f;
+        for (const SPicture& p : pics)
+        {
+            cover[c] += p.weight * k.targets.cover_at(c, p.day);
+            depth[c] += p.weight * p.ratio * k.targets.depth_at(c, p.day);
+        }
         if (dynamic)
         {
             // A fresh fall whitens the bare patches; the picture deepens with the pack.
             cover[c] = 1.f - (1.f - cover[c]) * whiten;
-            depth[c] = std::min(depth[c] * ratio + fresh * fresh_share[c], k.targets.cap);
+            depth[c] = std::min(depth[c] + fresh * fresh_share[c], k.targets.cap);
         }
     }
     f.cover.set(cover[0], cover[1], cover[2], cover[3]);

@@ -53,6 +53,8 @@ struct SDaClimateState
     float rho = 100.f;    // kg/m3, its mean density
     float depth = 0.f;    // m, swe / rho
     float fresh = 0.f;    // m of the last snowfall still lying loose on top (part of depth)
+    float peak = 0.f;     // mm of water the pack held at most since it lay down; a snowfall covers what melted since
+                          // (1 - swe / peak: the share a thaw took, whose patches the picture shows)
     float melt = 0.f;     // mm/h melting now
     float drift = 0.f;    // 0..1 snow the wind lifts and carries now (a blizzard, a ground blizzard)
     float water_t[2]{8.f, 8.f}; // C of standing and running water under no ice
