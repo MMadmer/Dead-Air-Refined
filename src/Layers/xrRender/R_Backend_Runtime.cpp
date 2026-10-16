@@ -7,8 +7,8 @@
 #if defined(USE_DX11)
 #include <DirectXMath.h>
 #endif
-#if defined(XR_D3D12)
-#include "Layers/xrRenderDX12/d12_api.h"
+#if defined(XR_NATIVE)
+#include "Layers/xrRenderDX11/dx11Native.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -83,8 +83,8 @@ void CBackend::Invalidate()
     ds = 0;
     cs = 0;
 #endif
-#if defined(XR_D3D12)
-    // DirectX 12 refuses a pipeline whose stages do not link, so a stage is never left to a stale bind.
+#if defined(XR_NATIVE)
+    // DirectX 12 and Vulkan refuse a pipeline whose stages do not link, so a stage is never left to a stale bind.
     m_stagesUnknown = 0x3f;
 #endif
     ctable = nullptr;
@@ -135,7 +135,7 @@ void CBackend::Invalidate()
     // Unknown until set again: the next set_InstanceStream / set_ShadingRate always reaches the context.
     m_instanceStream = nullptr;
     m_instanceStride = u32(-1);
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     m_shadingRateValid = false;
 #endif
 
@@ -197,8 +197,8 @@ void CBackend::RenderIndirect(ID3D11Buffer* args, u32 offset, u32 maxCount)
         return;
     StateManager.Apply();
     constants.flush();
-#if defined(XR_D3D12)
-    xrd3d12::DrawIndexedIndirectCount(HW.get_context(context_id), args, offset, maxCount, nullptr, 0);
+#if defined(XR_NATIVE)
+    xrnative::DrawIndexedIndirectCount(HW.get_context(context_id), args, offset, maxCount);
 #else
     // D3D11 has no draw count: one indirect draw per record.
     constexpr u32 record_size = 5 * sizeof(u32);
@@ -209,7 +209,7 @@ void CBackend::RenderIndirect(ID3D11Buffer* args, u32 offset, u32 maxCount)
 }
 #endif
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 void CBackend::set_ShadingRate(u8 base, u8 combiner, ID3D11Texture2D* image)
 {
     if (m_shadingRateValid && base == m_shadingRateBase && combiner == m_shadingRateCombiner &&
@@ -221,8 +221,7 @@ void CBackend::set_ShadingRate(u8 base, u8 combiner, ID3D11Texture2D* image)
     m_shadingRateBase = base;
     m_shadingRateCombiner = combiner;
     m_shadingRateImage = image;
-    xrd3d12::SetShadingRate(HW.get_context(context_id), D3D12_SHADING_RATE(base),
-        D3D12_SHADING_RATE_COMBINER_PASSTHROUGH, D3D12_SHADING_RATE_COMBINER(combiner), image);
+    xrnative::SetShadingRate(HW.get_context(context_id), base, combiner, image);
 }
 
 bool CBackend::RenderMesh(u32 x, u32 y, u32 z)
@@ -233,7 +232,7 @@ bool CBackend::RenderMesh(u32 x, u32 y, u32 z)
     StateManager.Apply();
     //  State manager may alter constants
     constants.flush();
-    return xrd3d12::DispatchMesh(HW.get_context(context_id), x, y, z);
+    return xrnative::DispatchMesh(HW.get_context(context_id), x, y, z);
 }
 #endif
 
@@ -634,7 +633,7 @@ void CBackend::OnDeviceCreate()
 #if defined(USE_DX11)
     HW.get_context(context_id)->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), reinterpret_cast<void**>(&pAnnotation));
 #endif
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     m_annotationContext = context_id;
 #endif
 
@@ -645,7 +644,7 @@ void CBackend::OnDeviceCreate()
     Invalidate();
 }
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 // A pooled backend drawing on the immediate context (alloc_context(false)) marks that context: markers left
 // on its own deferred context would sit in a list nobody executes (and block an async job's recording).
 void CBackend::rebind_annotation()

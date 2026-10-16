@@ -75,8 +75,9 @@ struct da_upscaler_registrar
 // hooks the SDK and frame generation stages register (all 0 until they do).
 struct UpscalerCaps
 {
-    u32 api{};         // 11 or 12: the running renderer module
+    u32 api{};         // 11, 12 or 13 (Vulkan): the running renderer module
     bool dx12{};       // the adapter can run the DX12 renderer
+    bool vk{};         // the adapter can run the Vulkan renderer
     bool dlss{};       // DLSS Super Resolution / DLAA
     bool dlssg{};      // DLSS frame generation
     u32 dlssg_max{};   // frames DLSS can generate per rendered frame (1 = 2x, 3 = 4x)
@@ -106,7 +107,7 @@ UpscalerCaps da_upscaler_caps();
 // Whether the adapter runs this kind on the running API: 1 yes, 0 no, -1 unknown (no backend of
 // that kind is registered for this API, so nothing can tell - the setting is then allowed).
 int da_upscaler_support(UpscalerKind kind);
-// The running renderer's API: 11 or 12.
+// The running renderer's API: 11, 12 or 13 (Vulkan).
 u32 da_render_api();
 
 // The ratios of the quality tokens when a backend does not answer itself (FSR 1.0/1.5/1.7/2.0/3.0,

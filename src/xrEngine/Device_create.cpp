@@ -51,8 +51,9 @@ void CRenderDevice::Create()
     StartupProfileCheckpoint("Renderer resources created");
     m_imgui_render = GEnv.RenderFactory->CreateImGuiRender();
     // ImGui windows dragged out of the game window need D3D11 swap chains of their own, which the
-    // D3D12 device cannot back: on DirectX 12 they stay inside the main window.
-    if (GEnv.Render->GetBackendAPI() == IRender::BackendAPI::D3D12)
+    // D3D12 and Vulkan devices cannot back: there they stay inside the main window.
+    if (GEnv.Render->GetBackendAPI() == IRender::BackendAPI::D3D12 ||
+        GEnv.Render->GetBackendAPI() == IRender::BackendAPI::Vulkan)
         ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
     m_imgui_render->OnDeviceCreate(GetImGuiContext());
     Statistic->OnDeviceCreate();

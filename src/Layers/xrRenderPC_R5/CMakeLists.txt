@@ -62,6 +62,7 @@ target_compile_definitions(xrRenderPC_R5
     RENDER_NAMESPACE=render_r5
     USE_DX11
     XR_D3D12
+    XR_NATIVE
 )
 
 set_target_properties(xrRenderPC_R5 PROPERTIES

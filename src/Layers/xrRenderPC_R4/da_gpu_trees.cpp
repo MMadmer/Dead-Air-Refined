@@ -29,7 +29,7 @@
 #include "da_gpu_trees.h"
 #include "da_offload.h"
 
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
 #include "Layers/xrRender/FHierrarhyVisual.h"
 #include "Layers/xrRender/FLOD.h"
 #include "Layers/xrRender/FTreeVisual.h"
@@ -38,7 +38,7 @@
 #include "Layers/xrRender/r__dsgraph_types.h"
 #include "Layers/xrRender/da_temporal.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
-#include "Layers/xrRenderDX12/d12_api.h"
+#include "Layers/xrRenderDX11/dx11Native.h"
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
 
@@ -53,7 +53,7 @@ extern ENGINE_API int ps_e_wind_dbg;
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
 extern float r_ssaDISCARD, r_ssaVEG_DISCARD, r_ssaLOD_A;
 extern float r_ssaGLOD_start, r_ssaGLOD_end;
 extern float r_dtex_range;
@@ -1502,7 +1502,7 @@ void wind_pass(CBackend& cmd_list, u32 frame)
 
 bool da_gpu_trees_live()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     return g_gd.applied;
 #else
     return false;
@@ -1511,7 +1511,7 @@ bool da_gpu_trees_live()
 
 void da_gpu_trees_level_load()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     destroy_registry();
     g_build_tried = false;
     g_level_ready = !RImplementation.o.oldshadowcascades;
@@ -1527,7 +1527,7 @@ void da_gpu_trees_level_load()
 
 void da_gpu_trees_level_unload()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     destroy_registry();
     g_level_ready = false;
 #endif
@@ -1535,7 +1535,7 @@ void da_gpu_trees_level_unload()
 
 void da_gpu_trees_apply_switch()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // The frame's CPU stats slot starts here, before any view: the sun and rain views count from
     // worker tasks that run ahead of Render's frame_begin.
     FrameStats& stats = g_gd.stats_cpu[Device.dwFrame & 3];
@@ -1564,7 +1564,7 @@ void da_gpu_trees_apply_switch()
 
 void da_gpu_trees_frame_begin(CBackend& cmd_list)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     const u32 frame = Device.dwFrame;
     print_stats(frame);
     if (!g_gd.applied)
@@ -1604,7 +1604,7 @@ void da_gpu_trees_frame_begin(CBackend& cmd_list)
 
 void da_gpu_trees_refresh_flags()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // Ray traced sun shadows take the static casters of the near cascades; a swaying root never is one.
     bool changed = false;
     for (Instance& instance : g_gd.instances)
@@ -1633,7 +1633,7 @@ void da_gpu_trees_refresh_flags()
 
 bool da_gpu_trees_draws(const FTreeVisual* tree)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     return g_gd.applied && tree->gd_instance != u32(-1);
 #else
     UNUSED(tree);
@@ -1643,7 +1643,7 @@ bool da_gpu_trees_draws(const FTreeVisual* tree)
 
 bool da_gpu_trees_draw_pass(CBackend& cmd_list, SPass* pass, R_dsgraph::mapNormalItems& items, u32 phase)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     if (!g_gd.applied || items.empty())
         return false;
     const auto found = g_gd.pass_index.find(pass);
@@ -1782,7 +1782,7 @@ bool da_gpu_trees_draw_pass(CBackend& cmd_list, SPass* pass, R_dsgraph::mapNorma
 
 DaGpuTreeWalk da_gpu_trees_view_begin(R_dsgraph_structure& graph)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     graph.gd_view = 0;
     if (!gpu_cull() || graph.context_id >= R__NUM_CONTEXTS)
         return DaGpuTreeWalk::cpu;
@@ -1894,7 +1894,7 @@ DaGpuTreeWalk da_gpu_trees_view_begin(R_dsgraph_structure& graph)
 
 bool da_gpu_trees_view_listed(const R_dsgraph_structure& graph, u32 node)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     const View& view = g_gd.contexts[graph.context_id].view;
     return node < view.node_stamp.size() && view.node_stamp[node] == view.stamp;
 #else
@@ -1906,7 +1906,7 @@ bool da_gpu_trees_view_listed(const R_dsgraph_structure& graph, u32 node)
 
 bool da_gpu_trees_view_node(R_dsgraph_structure& graph, u32 node)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     View& view = g_gd.contexts[graph.context_id].view;
     if (!graph.gd_view || node >= view.node_stamp.size() || view.node_stamp[node] == view.stamp)
         return false;
@@ -1927,7 +1927,7 @@ bool da_gpu_trees_view_node(R_dsgraph_structure& graph, u32 node)
 
 void da_gpu_trees_view_end(R_dsgraph_structure& graph)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     if (!graph.gd_view || graph.context_id >= R__NUM_CONTEXTS)
         return;
     View& view = g_gd.contexts[graph.context_id].view;
@@ -1973,7 +1973,7 @@ void da_gpu_trees_view_end(R_dsgraph_structure& graph)
 
 void da_gpu_trees_view_render(R_dsgraph_structure& graph)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     const u32 serial = graph.gd_view;
     graph.gd_view = 0;
     if (!serial || !gpu_cull() || graph.context_id >= R__NUM_CONTEXTS)
@@ -1997,7 +1997,7 @@ void da_gpu_trees_view_render(R_dsgraph_structure& graph)
         context->UpdateSubresource(ctx.list, 0, &box, view.data.data(), 0, 0);
         const UINT zero[4]{};
         context->ClearUnorderedAccessViewUint(ctx.counts_uav, zero);
-        xrd3d12::UavBarrier(context, nullptr);
+        xrnative::UavBarrier(context, nullptr);
 
         const bool node_list = (view.flags & kFlagNodeList) != 0;
         float volume[5]{}, distance[5]{};
@@ -2040,7 +2040,7 @@ void da_gpu_trees_view_render(R_dsgraph_structure& graph)
 
 const DaGpuTreeSector* da_gpu_trees_sector(u32 sector_id)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     if (!g_gd.applied || sector_id >= g_gd.sectors.size())
         return nullptr;
     const DaGpuTreeSector& sector = g_gd.sectors[sector_id];
@@ -2053,7 +2053,7 @@ const DaGpuTreeSector* da_gpu_trees_sector(u32 sector_id)
 
 void da_gpu_trees_for_each_node(CSector* sector, DaGpuTreeNodeFn fn, void* user)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     if (!sector || !fn)
         return;
     if (const DaGpuTreeSector* nodes = da_gpu_trees_sector(u32(sector->unique_id)))

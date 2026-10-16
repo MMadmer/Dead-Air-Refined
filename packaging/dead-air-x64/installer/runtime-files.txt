@@ -51,6 +51,7 @@ xrParticles.dll
 xrPhysics.dll
 xrRender_R4.dll
 xrRender_R5.dll
+xrRender_R6.dll
 xrScriptEngine.dll
 xrSound.dll
 xrUICore.dll

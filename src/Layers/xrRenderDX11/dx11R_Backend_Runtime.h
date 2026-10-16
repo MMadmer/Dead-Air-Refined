@@ -136,7 +136,7 @@ ICF void CBackend::set_Format(SDeclaration* _decl)
 
 ICF bool CBackend::stage_forced([[maybe_unused]] u8 stage)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     const bool forced = m_stagesUnknown & stage;
     m_stagesUnknown &= ~stage;
     return forced;
@@ -948,7 +948,7 @@ IC void CBackend::get_ConstantDirect(const shared_str& n, size_t DataSize, void*
 
 IC void CBackend::gpu_mark_begin(const wchar_t* name)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     if (m_annotationContext != context_id)
         rebind_annotation();
 #endif
@@ -957,7 +957,7 @@ IC void CBackend::gpu_mark_begin(const wchar_t* name)
 
 IC void CBackend::gpu_mark_end()
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     if (m_annotationContext != context_id)
         rebind_annotation();
 #endif

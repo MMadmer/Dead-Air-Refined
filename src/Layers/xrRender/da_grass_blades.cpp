@@ -25,8 +25,8 @@
 #include "xrEngine/Environment.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 #include "Layers/xrRenderPC_R4/da_async.h"
-#if defined(XR_D3D12)
-#include "Layers/xrRenderDX12/d12_api.h"
+#if defined(XR_NATIVE)
+#include "Layers/xrRenderDX11/dx11Native.h"
 #endif
 
 #include <algorithm>
@@ -2393,8 +2393,8 @@ void da_grass_frame_prepare(CBackend& cmd)
 
     const UINT zero[4]{};
     ctx->ClearUnorderedAccessViewUint(g.counts_b.uav, zero);
-#if defined(XR_D3D12)
-    xrd3d12::UavBarrier(ctx, nullptr);
+#if defined(XR_NATIVE)
+    xrnative::UavBarrier(ctx, nullptr);
 #endif
     const Latch& L = g.latch;
     if (g.group_count)

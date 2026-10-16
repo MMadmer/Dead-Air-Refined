@@ -3,7 +3,7 @@
 
 #include "Blender_detail_still.h"
 #include "uber_deffer.h"
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 #include "Layers/xrRenderPC_R4/da_grass_mesh.h"
 #endif
 
@@ -119,7 +119,7 @@ void CBlender_Detail_Still::Compile(CBlender_Compile& C)
             C.RS.SetRS(D3DRS_ZFUNC, D3DCMP_EQUAL);
         C.r_End();
         break;
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     // Mesh-shader grass (mesh.md 3.6): elements 2 (wave) and 3 (still) are the vertex elements with
     // the grass mesh and amplification shaders; empty where the session has no mesh grass.
     case 2:

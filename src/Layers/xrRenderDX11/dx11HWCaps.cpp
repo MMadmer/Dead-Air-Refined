@@ -6,7 +6,7 @@
 
 #if !defined(_EDITOR)
 #include <nvapi.h>
-#if !defined(XR_D3D12)
+#if !defined(XR_NATIVE)
 #include <ags_lib/inc/amd_ags.h>
 #endif
 #endif
@@ -72,8 +72,8 @@ u32 GetNVGpuNum()
 
 u32 GetATIGpuNum()
 {
-#if defined(XR_D3D12)
-    // AGS counts CrossFire GPUs through a temporary D3D11 device; D3D12 has no CrossFire AFR.
+#if defined(XR_NATIVE)
+    // AGS counts CrossFire GPUs through a temporary D3D11 device; D3D12 and Vulkan have no CrossFire AFR.
     return 1;
 #else
     constexpr int AGS_VERSION = AGS_MAKE_VERSION(AMD_AGS_VERSION_MAJOR, AMD_AGS_VERSION_MINOR, AMD_AGS_VERSION_PATCH);

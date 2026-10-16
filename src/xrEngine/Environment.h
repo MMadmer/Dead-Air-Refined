@@ -52,6 +52,10 @@ namespace render_r5
 {
 class dxEnvironmentRender;
 }
+namespace render_r6
+{
+class dxEnvironmentRender;
+}
 } // namespace xray::render
 
 #define DAY_LENGTH 86400.f
@@ -249,6 +253,7 @@ class ENGINE_API CEnvironment : public xray::editor::ide_tool
     friend class xray::render::render_r4::dxEnvironmentRender;
     friend class xray::render::render_gl::dxEnvironmentRender;
     friend class xray::render::render_r5::dxEnvironmentRender;
+    friend class xray::render::render_r6::dxEnvironmentRender;
 
     struct str_pred
     {

@@ -4,8 +4,8 @@
 #include "xrCore/FileCRC32.h"
 #include "da_dxc.h"
 
-#ifdef XR_D3D12
-#include "Layers/xrRenderDX12/d12_api.h"
+#ifdef XR_NATIVE
+#include "Layers/xrRenderDX11/dx11Native.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -16,11 +16,12 @@ void CRender::addShaderOption(const char* name, const char* value)
     m_ShaderOptions.push_back(macro);
 }
 
-// The shader's reflection: R5 through the layer (DXBC and DXIL alike, D3D12 interfaces), R4 D3DReflect.
+// The shader's reflection: R5 and R6 through xrD3D12 (DXBC, DXIL and the Vulkan container's DXIL twin alike,
+// D3D12 interfaces), R4 D3DReflect.
 static HRESULT reflect_shader(const void* data, size_t size, ID3DShaderReflection** reflection)
 {
-#ifdef XR_D3D12
-    return xrd3d12::Reflect(data, size, IID_ID3DShaderReflection, reinterpret_cast<void**>(reflection));
+#ifdef XR_NATIVE
+    return xrnative::Reflect(data, size, IID_ID3DShaderReflection, reinterpret_cast<void**>(reflection));
 #else
     return D3DReflect(data, size, IID_ID3DShaderReflection, reinterpret_cast<void**>(reflection));
 #endif
@@ -38,8 +39,8 @@ static HRESULT create_shader(DWORD const* buffer, size_t const buffer_size, ID3D
         return E_FAIL;
     }
 
-    // The DirectX 12 layer names refused pipelines by these.
-#if defined(DEBUG) || defined(XR_D3D12)
+    // The DirectX 12 and Vulkan layers name refused pipelines by these.
+#if defined(DEBUG) || defined(XR_NATIVE)
     if (result->sh)
     {
         result->sh->SetPrivateData(WKPDID_D3DDebugObjectName, u32(xr_strlen(file_name)), file_name);
@@ -93,8 +94,14 @@ static HRESULT create_shader(LPCSTR const pTarget, DWORD const* buffer, size_t c
         if (SUCCEEDED(_result))
         {
             //	Store input signature (need only for VS); DXIL carries one too (ISG1, empty for a mesh shader)
+            // On Vulkan the signature is the container's DXIL twin's.
+            const void* signature_source = buffer;
+            size_t signature_size = buffer_size;
+#ifdef XR_NATIVE
+            xrnative::ShaderBytecode(signature_source, signature_size);
+#endif
             ID3DBlob* pSignatureBlob;
-            CHK_DX(D3DGetInputSignatureBlob(buffer, buffer_size, &pSignatureBlob));
+            CHK_DX(D3DGetInputSignatureBlob(signature_source, signature_size, &pSignatureBlob));
             VERIFY(pSignatureBlob);
 
             svs_result->signature = RImplementation.Resources->_CreateInputSignature(pSignatureBlob);
@@ -152,9 +159,12 @@ static HRESULT create_shader(LPCSTR const pTarget, DWORD const* buffer, size_t c
     {
         string_path dname;
         strconcat(sizeof(dname), dname, "disasm" DELIMITER, file_name, extension, dxil ? ".dxil.txt" : "");
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
         std::string text;
-        if (SUCCEEDED(xrd3d12::Disassemble(buffer, buffer_size, text)) && !text.empty())
+        const void* listing_source = buffer;
+        size_t listing_size = buffer_size;
+        xrnative::ShaderBytecode(listing_source, listing_size);
+        if (SUCCEEDED(xrd3d12::Disassemble(listing_source, listing_size, text)) && !text.empty())
         {
             IWriter* W = FS.w_open("$app_data_root$", dname);
             W->w(text.data(), text.size());
@@ -275,15 +285,22 @@ public:
     D3D_SHADER_MACRO* data() { return m_options; }
 };
 
-#ifdef XR_D3D12
-// An engine shader through DXC with its r5_dxil cache (dxc.md 3.3, 3.5).
+#ifdef XR_NATIVE
+#ifdef XR_VULKAN
+constexpr char k_native_cache_root[] = "r6_spirv";
+#else
+constexpr char k_native_cache_root[] = "r5_dxil";
+#endif
+// An engine shader through DXC with its r5_dxil cache (dxc.md 3.3, 3.5); on Vulkan a container of DXIL and
+// SPIR-V in r6_spirv.
 static HRESULT compile_dxil(pcstr name, pcstr extension, pcstr sh_name, IReader* fs, u32 fileCrc, pcstr entry,
     pcstr target, const D3D_SHADER_MACRO* options, bool disasm, void*& result)
 {
     // The name the layer reports refused pipelines by, and the cache file.
     string_path shader_name, cache_file;
     {
-        strconcat(sizeof(shader_name), shader_name, "r5_dxil" DELIMITER, name, ".", extension, DELIMITER, sh_name);
+        strconcat(sizeof(shader_name), shader_name, k_native_cache_root, DELIMITER, name, ".", extension, DELIMITER,
+            sh_name);
         string_path file;
         strconcat(sizeof(file), file, "shaders_cache_grizzly" DELIMITER, da_dxc_cache_dir(), name, ".", extension,
             DELIMITER, sh_name);
@@ -649,10 +666,10 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         sh_name.append(static_cast<u32>(0)); // DX10_1_NATIVE off
     }
 
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // D3D12 cannot view a slice past the first of the sun cascade array as a Texture2D, so the
-    // shaders read s_smap as an array (shadow.h). Every R5 shader has it: the cache directory
-    // below tells the permutations apart.
+    // shaders read s_smap as an array (shadow.h). Every R5 and R6 shader has it (one array view
+    // binds on Vulkan as well): the cache directory below tells the permutations apart.
     options.add("SMAP_ARRAY", "1");
 #endif
 
@@ -675,8 +692,10 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         renderer = "r4_level9" DELIMITER;
         R_ASSERT(!"Feature levels lower than 10.0 are unsupported");
     }
-#ifdef XR_D3D12
+#if defined(XR_D3D12)
     renderer = "r5" DELIMITER;
+#elif defined(XR_VULKAN)
+    renderer = "r6" DELIMITER;
 #endif
 
     string_path filename;
@@ -697,7 +716,16 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     getFileCrc32(fs, shadersFolder, fileCrc);
     fs->seek(0);
 
-#ifdef XR_D3D12
+#if defined(XR_VULKAN)
+    // Vulkan runs SPIR-V only: every shader is DXC's, there is no FXC to fall back to.
+    if (!da_dxc_active())
+    {
+        Msg("! %s: the Vulkan renderer compiles shaders only through DXC, which is not available", filename);
+        return E_FAIL;
+    }
+    return compile_dxil(name, extension, sh_name.c_str(), fs, fileCrc, pFunctionName, pTarget, options.data(), o.disasm,
+        result);
+#elif defined(XR_D3D12)
     // DXC for every engine shader but a DXBC twin (RSC_FXC). One DXC cannot build goes to FXC below and
     // its passes get DXBC twins (UnifyShaderFormats); mesh and amplification shaders have only DXC.
     const bool mesh_stage = (pTarget[0] == 'm' || pTarget[0] == 'a') && pTarget[1] == 's';
@@ -715,6 +743,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
         return E_FAIL;
     }
 #endif
+#ifndef XR_VULKAN
     Flags &= ~RSC_FXC;
 
     if (FS.exist(file_name))
@@ -810,5 +839,6 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     }
 
     return _result;
+#endif
 }
 } // namespace xray::render::RENDER_NAMESPACE

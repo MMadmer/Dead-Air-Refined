@@ -25,7 +25,7 @@
 
 #include "da_offload.h"
 
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #include "xrEngine/IGame_Persistent.h"
 
@@ -34,7 +34,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
 namespace
 {
 enum Path : u32
@@ -185,7 +185,7 @@ int da_offload_resolve(int setting)
 {
     if (setting != kOffloadAuto)
         return setting;
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     return g_auto.path == PathGpu ? 1 : 0;
 #else
     return 0;
@@ -194,7 +194,7 @@ int da_offload_resolve(int setting)
 
 bool da_offload_auto_possible()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     return GpuTimers.enabled();
 #else
     return false;
@@ -203,7 +203,7 @@ bool da_offload_auto_possible()
 
 void da_offload_level_load()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // The path stays (the bottleneck is mostly the machine and the settings); what was measured goes.
     Controller& c = g_auto;
     c.last_sample = 0;
@@ -215,7 +215,7 @@ void da_offload_level_load()
 
 void da_offload_frame_marker(IRender::FrameMarker marker)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     Controller& c = g_auto;
     switch (marker)
     {
@@ -244,7 +244,7 @@ void da_offload_frame_marker(IRender::FrameMarker marker)
 
 void da_offload_sync_wait(u64 ticks)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     g_auto.waited += ticks;
 #else
     UNUSED(ticks);
@@ -253,7 +253,7 @@ void da_offload_sync_wait(u64 ticks)
 
 void da_offload_frame_done()
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     Controller& c = g_auto;
     const u64 now = CPU::QPC();
     const u64 start = std::exchange(c.start, 0);

@@ -534,15 +534,23 @@ bool CompileShader(const ShaderCompile& request, ShaderOutput& output)
             text.push_back(L"-D");
             text.push_back(Widen(define.name) + L"=" + (define.value ? Widen(define.value) : std::wstring(L"1")));
         }
-        if (request.flags & CompileDebugInfo)
+        if (request.flags & CompileSpirv)
         {
-            text.push_back(L"-Zi");
-            text.push_back(L"-Qembed_debug");
+            if (request.flags & CompileDebugInfo)
+                text.push_back(L"-Zi");
         }
         else
-            text.push_back(L"-Qstrip_debug");
-        if (!(request.flags & CompileKeepReflection))
-            text.push_back(L"-Qstrip_reflect");
+        {
+            if (request.flags & CompileDebugInfo)
+            {
+                text.push_back(L"-Zi");
+                text.push_back(L"-Qembed_debug");
+            }
+            else
+                text.push_back(L"-Qstrip_debug");
+            if (!(request.flags & CompileKeepReflection))
+                text.push_back(L"-Qstrip_reflect");
+        }
         if (request.flags & Compile16BitTypes)
             text.push_back(L"-enable-16bit-types");
         if (request.flags & CompileWarningsAsErrors)

@@ -36,7 +36,7 @@ extern void da_water_field_update();
 
 namespace
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 // DirectX 12 records command lists truly in parallel: the G-buffer grass (a fifth of the render
 // thread on a grassy level) goes to contexts of its own - one per batch of hw_Render - while the
 // immediate one draws the level, and the lists execute exactly where the grass always drew.
@@ -419,7 +419,7 @@ void CRender::Render()
     // The G-buffer grass, once per frame, the mesh/vertex A/B tool around it: the stock detail
     // cards, then the blades, then the near snow grid over both (contract order, before
     // phase_scene_end).
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     parallel_details details_job;
     const auto render_details = [&] {
         // The procedural trees, their far billboards and the shrubs first (each under its own GPU timer), the grass after
@@ -467,7 +467,7 @@ void CRender::Render()
         PIX_EVENT(DEFER_PART0_NO_SPLIT);
         // level, DO NOT SPLIT
         Target->phase_scene_begin();
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
         details_job.start();
 #endif
         dsgraph.render_hud();
@@ -481,7 +481,7 @@ void CRender::Render()
         PIX_EVENT(DEFER_PART0_SPLIT);
         // level, SPLIT
         Target->phase_scene_begin();
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
         details_job.start();
 #endif
         dsgraph.render_graph(0);

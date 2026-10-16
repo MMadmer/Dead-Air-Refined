@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 // R5 reflects DXBC and DXIL through the D3D12 interfaces (xrd3d12::Reflect, dxc.md 3.4).
 #include <d3d12shader.h>
 #endif
@@ -245,7 +245,7 @@ constexpr auto D3D_UAV_DIMENSION_TEXTURE2D      = D3D11_UAV_DIMENSION_TEXTURE2D;
 constexpr auto D3D_UAV_DIMENSION_TEXTURE2DARRAY = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
 constexpr auto D3D_UAV_DIMENSION_TEXTURE3D      = D3D11_UAV_DIMENSION_TEXTURE3D;
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 using D3D_SHADER_DESC                           = D3D12_SHADER_DESC;
 using D3D_SHADER_BUFFER_DESC                    = D3D12_SHADER_BUFFER_DESC;
 using D3D_SHADER_VARIABLE_DESC                  = D3D12_SHADER_VARIABLE_DESC;

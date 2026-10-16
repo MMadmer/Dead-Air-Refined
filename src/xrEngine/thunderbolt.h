@@ -28,6 +28,10 @@ namespace render_r5
 {
 class dxThunderboltRender;
 }
+namespace render_r6
+{
+class dxThunderboltRender;
+}
 } // namespace xray::render
 
 struct ENGINE_API SThunderboltDesc
@@ -99,6 +103,7 @@ class ENGINE_API CEffect_Thunderbolt
     friend class xray::render::render_r4::dxThunderboltRender;
     friend class xray::render::render_gl::dxThunderboltRender;
     friend class xray::render::render_r5::dxThunderboltRender;
+    friend class xray::render::render_r6::dxThunderboltRender;
 
 protected:
     xr_vector<SThunderboltCollection*> collections;

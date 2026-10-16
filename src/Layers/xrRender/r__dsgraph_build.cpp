@@ -11,7 +11,7 @@
 #include "LightTrack.h"
 #include "ParticleGroup.h"
 #include "FTreeVisual.h"
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #endif
 
@@ -793,7 +793,7 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
 
 void R_dsgraph_structure::gd_node_main(u32 node, dxRender_Visual* visual)
 {
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // A tree listed through another frustum is done (insert_static's marker); an FLOD is visited again,
     // as add_static visits it (its impostor goes in once per frustum that sees it).
     const bool lod = visual->Type == MT_LOD;
@@ -828,7 +828,7 @@ void R_dsgraph_structure::gd_node_main(u32 node, dxRender_Visual* visual)
 void R_dsgraph_structure::add_static_sector(CSector* sector, const CFrustum& view)
 {
     dxRender_Visual* root = sector->root();
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // Shadow views leave the nodes to the GPU cull.
     const DaGpuTreeSector* gd =
         gd_walk != u8(DaGpuTreeWalk::skip) ? da_gpu_trees_sector(u32(sector->unique_id)) : nullptr;
@@ -963,7 +963,7 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
 
     // Traverse sector/portal structure
     PortalTraverser.traverse(Sectors[o.sector_id], o.view_frustum, o.view_pos, o.xform, o.portal_traverse_flags, context_id);
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // The GPU-driven trees' view over the sectors just visited.
     gd_walk = u8(da_gpu_trees_view_begin(*this));
 #endif
@@ -1010,7 +1010,7 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
             }
         }
     }
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     da_gpu_trees_view_end(*this);
 #endif
 

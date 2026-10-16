@@ -18,11 +18,11 @@
 #include "Layers/xrRenderPC_R4/da_grass_mesh.h"
 #include "Layers/xrRenderPC_R4/da_offload.h"
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 #include "Layers/xrRender/da_temporal.h"
 #include "Layers/xrRender/da_wind_history.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
-#include "Layers/xrRenderDX12/d12_api.h"
+#include "Layers/xrRenderDX11/dx11Native.h"
 #include "Layers/xrRenderPC_R4/da_dxc.h"
 #include "xrCore/ProductVersion.h"
 
@@ -33,7 +33,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 namespace detail_manager
 {
 extern const int quant;
@@ -202,7 +202,12 @@ u32 VerdictSignature()
     wchar_t path[MAX_PATH]{};
     const UINT length = GetSystemDirectoryW(path, MAX_PATH);
     WIN32_FILE_ATTRIBUTE_DATA data{};
-    if (length && length < MAX_PATH && wcscat_s(path, L"\\d3d12.dll") == 0 &&
+#if defined(XR_VULKAN)
+    constexpr wchar_t runtime[] = L"\\vulkan-1.dll";
+#else
+    constexpr wchar_t runtime[] = L"\\d3d12.dll";
+#endif
+    if (length && length < MAX_PATH && wcscat_s(path, runtime) == 0 &&
         GetFileAttributesExW(path, GetFileExInfoStandard, &data))
     {
         signature = crc32(&data.nFileSizeLow, sizeof(data.nFileSizeLow), signature);
@@ -213,7 +218,11 @@ u32 VerdictSignature()
 
 void VerdictPath(string_path& path)
 {
+#if defined(XR_VULKAN)
+    FS.update_path(path, "$app_data_root$", "render-grass-mesh-vulkan.cache");
+#else
     FS.update_path(path, "$app_data_root$", "render-grass-mesh.cache");
+#endif
 }
 
 bool VerdictRefused()
@@ -347,7 +356,11 @@ struct CDetailManager::MeshPath
     ID3D11ShaderResourceView* pool_srv{};
     ID3D11Buffer* list{};
     ID3D11ShaderResourceView* list_srv{};
+#if defined(XR_VULKAN)
+    ID3D11Buffer* ring{}; // STAGING, written through PersistentData
+#else
     ID3D12Resource* ring{};
+#endif
     u8* ring_cpu{};
 
     u32 pool_units{};
@@ -589,7 +602,7 @@ void CDetailManager::ms_Load()
 
     // Pool: from the adapter's memory budget (mesh.md 3.2).
     UINT64 budget = 0, usage = 0;
-    xrd3d12::QueryVideoMemory(HW.pDevice, budget, usage);
+    xrnative::QueryVideoMemory(HW.pDevice, budget, usage);
     constexpr UINT64 GB = 1ull << 30;
     const u32 pool_mb = budget && budget <= 4 * GB ? 24 : budget && budget <= 8 * GB ? 48 : 96;
     m->pool_units = pool_mb * (1u << 20) / (kUnitRows * kRowBytes);
@@ -646,6 +659,16 @@ void CDetailManager::ms_Load()
     ok = ok && structured(m->list_capacity, sizeof(u32), m->list, m->list_srv);
     if (ok)
     {
+#if defined(XR_VULKAN)
+        // A staging buffer the copies read from; its bytes stay mapped, the CPU never reads them.
+        D3D11_BUFFER_DESC desc{};
+        desc.ByteWidth = kRingSlots * kRingSlotBytes;
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        ok = SUCCEEDED(device->CreateBuffer(&desc, nullptr, &m->ring));
+        m->ring_cpu = ok ? static_cast<u8*>(xrvk::PersistentData(m->ring)) : nullptr;
+        ok = ok && m->ring_cpu;
+#else
         ok = SUCCEEDED(xrd3d12::CreateNativeBuffer(device, u64(kRingSlots) * kRingSlotBytes, D3D12_HEAP_TYPE_UPLOAD,
             D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ, L"grass mesh upload ring", &m->ring));
         // Persistently mapped; the CPU never reads it.
@@ -653,6 +676,7 @@ void CDetailManager::ms_Load()
         void* cpu = nullptr;
         ok = ok && SUCCEEDED(m->ring->Map(0, &none, &cpu)) && cpu;
         m->ring_cpu = static_cast<u8*>(cpu);
+#endif
     }
     m_mesh = m;
     if (!ok)
@@ -698,11 +722,16 @@ void CDetailManager::ms_Unload()
     SafeRelease(m->list);
     if (m->ring)
     {
+#if defined(XR_VULKAN)
+        // The layer destroys it once the GPU finished the copies recorded so far.
+        SafeRelease(m->ring);
+#else
         if (m->ring_cpu)
             m->ring->Unmap(0, nullptr);
         // After the GPU finished the copies recorded so far.
         xrd3d12::ReleaseNative(HW.pDevice, m->ring);
         m->ring = nullptr;
+#endif
     }
     xr_delete(m);
 }
@@ -887,6 +916,24 @@ void CDetailManager::ms_FramePrepare(CBackend& cmd_list)
         return;
     ZoneScoped;
     ID3D11DeviceContext* context = HW.get_context(cmd_list.context_id);
+#if defined(XR_VULKAN)
+    {
+        // D3D11 copies out of the staging ring: the layer orders them against the passes reading the pool.
+        const u32 ring_base = m->ring_slot * kRingSlotBytes;
+        for (const MeshPath::Upload& upload : m->uploads)
+        {
+            const u32 src = ring_base + upload.src_offset;
+            const D3D11_BOX box{src, 0, 0, src + upload.rows * kRowBytes, 1, 1};
+            context->CopySubresourceRegion(m->pool, 0, upload.dst_row * kRowBytes, 0, 0, m->ring, 0, &box);
+        }
+        if (!m->row_list.empty())
+        {
+            const u32 src = ring_base + m->list_offset;
+            const D3D11_BOX box{src, 0, 0, src + u32(m->row_list.size() * sizeof(u32)), 1, 1};
+            context->CopySubresourceRegion(m->list, 0, 0, 0, 0, m->ring, 0, &box);
+        }
+    }
+#else
     xrd3d12::NativeScope scope;
     xrd3d12::NativeBuffer pool, list;
     if (!xrd3d12::NativeBufferRange(m->pool, pool) || !xrd3d12::NativeBufferRange(m->list, list) ||
@@ -910,6 +957,7 @@ void CDetailManager::ms_FramePrepare(CBackend& cmd_list)
     }
     xrd3d12::RequireMany(context, targets, 2, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
     xrd3d12::EndNative(context, 0);
+#endif
     m->batch_pending = false;
     if (m->check.state == MeshPath::Check::Requested)
         CheckSnapshot(*this, cmd_list);

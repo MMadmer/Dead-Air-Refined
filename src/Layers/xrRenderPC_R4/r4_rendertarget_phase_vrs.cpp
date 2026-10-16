@@ -56,7 +56,7 @@ struct DaVrsTargets
     bool size_logged{};
 };
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 namespace
 {
 // The frame the contrast is measured on: the render-size frame after the anti-aliasing, or the
@@ -222,7 +222,7 @@ void da_vrs_log_stats(DaVrsTargets& s, CBackend& cmd_list, int mode)
 
 bool da_vrs_supported()
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     return !!da_vrs_state();
 #else
     return false;
@@ -231,7 +231,7 @@ bool da_vrs_supported()
 
 int da_vrs_frame_mode()
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     const DaVrsTargets* s = da_vrs_state();
     return s && s->state_frame.load(std::memory_order_acquire) == Device.dwFrame ? s->frame_mode : 0;
 #else
@@ -241,7 +241,7 @@ int da_vrs_frame_mode()
 
 ID3DTexture2D* da_vrs_frame_image()
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     const DaVrsTargets* s = da_vrs_state();
     return s && s->state_frame.load(std::memory_order_acquire) == Device.dwFrame ? s->frame_image : nullptr;
 #else
@@ -251,7 +251,7 @@ ID3DTexture2D* da_vrs_frame_image()
 
 void da_vrs_targets_create(CRenderTarget& target)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     const CHWNativeCaps& caps = HW.native;
     pcstr reason = nullptr;
     if (caps.vrsTier < 2)
@@ -369,7 +369,7 @@ void da_vrs_targets_destroy(CRenderTarget& target)
     xr_delete(s);
 }
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 namespace
 {
 // The rate image of this frame in the given mode, or null: without the previous frame's contrast
@@ -429,7 +429,7 @@ ID3DTexture2D* da_vrs_build_image(DaVrsTargets& s, CBackend& cmd_list, int mode)
 
 void da_vrs_rate_pass(CBackend& cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     DaVrsTargets* s = da_vrs_state();
     if (!s)
         return;
@@ -466,7 +466,7 @@ void da_vrs_rate_pass(CBackend& cmd_list)
 #endif
 }
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 namespace
 {
 void da_vrs_luma(CBackend& cmd_list, bool upscaled)
@@ -490,7 +490,7 @@ void da_vrs_luma(CBackend& cmd_list, bool upscaled)
 
 void da_vrs_luma_pass(CBackend& cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     da_vrs_luma(cmd_list, false);
 #else
     (void)cmd_list;
@@ -499,7 +499,7 @@ void da_vrs_luma_pass(CBackend& cmd_list)
 
 void da_vrs_luma_upscaled_pass(CBackend& cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     da_vrs_luma(cmd_list, true);
 #else
     (void)cmd_list;
@@ -508,7 +508,7 @@ void da_vrs_luma_upscaled_pass(CBackend& cmd_list)
 
 void da_vrs_debug_pass(CBackend& cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     if (!ps_r__vrs_debug)
         return;
     DaVrsTargets* s = da_vrs_state();

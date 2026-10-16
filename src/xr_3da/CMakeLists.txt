@@ -51,6 +51,7 @@ target_link_libraries(xr_3da
     xrEngine
     xrRenderPC_R4
     xrRenderPC_R5
+    xrRenderPC_R6
     xrGame
 )
 

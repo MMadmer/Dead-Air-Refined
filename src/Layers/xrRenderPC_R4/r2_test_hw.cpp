@@ -10,6 +10,9 @@
 #ifdef XR_D3D12
 #include "Layers/xrRenderDX12/d12_api.h"
 #endif
+#ifdef XR_VULKAN
+#include "Layers/xrRenderVK/vk_api.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -188,6 +191,7 @@ void render_caps_dx12(UpscalerCaps& caps)
     IConsole_Command::TInfo modes;
     renderer->Info(modes);
     caps.dx12 = strstr(modes, "renderer_r5") != nullptr;
+    caps.vk = strstr(modes, "renderer_r6") != nullptr;
 }
 
 const struct render_caps_dx12_registrar
@@ -383,6 +387,100 @@ bool xrRender_test_d3d12()
         if (result)
             SaveCapsCache(signature, caps);
     }
+    return result != FALSE;
+}
+#endif
+
+#ifdef XR_VULKAN
+namespace
+{
+// The Vulkan loader of the system; a driver update changes the hardware signature already.
+u32 GetVulkanRuntimeSignature(u32 signature)
+{
+    wchar_t path[MAX_PATH]{};
+    const UINT length = GetSystemDirectoryW(path, MAX_PATH);
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (length && length < MAX_PATH && wcscat_s(path, L"\\vulkan-1.dll") == 0 &&
+        GetFileAttributesExW(path, GetFileExInfoStandard, &data))
+    {
+        signature = crc32(&data.nFileSizeLow, sizeof(data.nFileSizeLow), signature);
+        signature = crc32(&data.ftLastWriteTime, sizeof(data.ftLastWriteTime), signature);
+    }
+    return signature;
+}
+
+// The Vulkan verdict next to the DirectX 12 one, keyed the same way (hardware, loader, game version).
+bool GetVulkanCache(string_path& cachePath, u32& signature)
+{
+    constexpr u32 VULKAN_CACHE_VERSION = 1;
+
+    FS.update_path(cachePath, "$app_data_root$", "render-hardware-vulkan.cache");
+    signature = 0;
+    GetHardwareSignature(signature);
+    signature = crc32(&VULKAN_CACHE_VERSION, sizeof(VULKAN_CACHE_VERSION), GetVulkanRuntimeSignature(signature));
+    signature = crc32(DAR_VERSION_STRING, sizeof(DAR_VERSION_STRING) - 1, signature);
+    return true;
+}
+
+bool ProbeVulkan(string256& reason)
+{
+    HMODULE dxgi = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    const auto createFactory = dxgi ?
+        reinterpret_cast<HRESULT(WINAPI*)(REFIID, void**)>(GetProcAddress(dxgi, "CreateDXGIFactory1")) :
+        nullptr;
+    IDXGIFactory1* factory{};
+    if (!createFactory || FAILED(createFactory(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory))))
+    {
+        xr_strcpy(reason, "no DXGI");
+        return false;
+    }
+    // Adapter 0, the one the renderer creates its device on (dx11HW.cpp CreateD3D): its Vulkan twin by LUID.
+    IDXGIAdapter1* adapter{};
+    bool supported = false;
+    DXGI_ADAPTER_DESC1 desc{};
+    if (SUCCEEDED(factory->EnumAdapters1(0, &adapter)) && adapter && SUCCEEDED(adapter->GetDesc1(&desc)))
+        supported = xrvk::ProbeAdapter(desc.AdapterLuid, reason, sizeof(reason));
+    else
+        xr_strcpy(reason, "no adapter");
+    if (adapter)
+        adapter->Release();
+    factory->Release();
+    return supported;
+}
+} // namespace
+
+// The device or its swap chain failed on hardware that passed the probe: the next start leaves Vulkan
+// off the mode list, so a saved choice falls back to DirectX 11 (Engine.cpp).
+void xrRender_vulkan_failed()
+{
+    string_path cachePath;
+    u32 signature;
+    if (GetVulkanCache(cachePath, signature))
+        SaveHardwareCache(cachePath, signature, FALSE);
+}
+
+bool xrRender_test_vulkan()
+{
+    ZoneScoped;
+
+    string_path cachePath;
+    u32 signature;
+    const bool signatureAvailable = GetVulkanCache(cachePath, signature);
+    BOOL result = FALSE;
+    if (signatureAvailable && LoadHardwareCache(cachePath, signature, result))
+    {
+        if (!result)
+            Msg("* Vulkan: not available on this system (cached)");
+        return result != FALSE;
+    }
+    string256 reason{};
+    result = ProbeVulkan(reason) ? TRUE : FALSE;
+    if (result)
+        Msg("* Vulkan: available");
+    else
+        Msg("* Vulkan: not available on this system: %s", reason[0] ? reason : "unknown reason");
+    if (signatureAvailable)
+        SaveHardwareCache(cachePath, signature, result);
     return result != FALSE;
 }
 #endif

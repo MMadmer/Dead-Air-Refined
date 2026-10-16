@@ -770,7 +770,7 @@ CRenderTarget::CRenderTarget()
     // GTAO's targets (below); ray traced AO writes into the same ones.
     const bool gtao_targets = (ps_r_ssao_mode == ssao_mode_gtao || da_rt_needs_ao_targets()) && !RImplementation.o.msaa;
 #endif
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     // The async GTAO filter writes the final AO through a UAV: R16F with one, made before the blur
     // branch below could make the target G16R16F without it.
     if (gtao_targets)
@@ -831,7 +831,7 @@ CRenderTarget::CRenderTarget()
         // x = linear view-z (the filter guide), y = raw AO. The donor packed the same
         // two halves into R32_UINT; our RT system has no uint formats and G16R16F
         // stores identical values. DirectX 12 adds the UAV of the async render pass.
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
         rt_gtao.create(r2_RT_gtao, gw, gh, D3DFMT_G16R16F, 1, { CRT::CreateUAV });
 #else
         rt_gtao.create(r2_RT_gtao, gw, gh, D3DFMT_G16R16F);
@@ -843,7 +843,7 @@ CRenderTarget::CRenderTarget()
 
         CBlender_gtao b_gtao;
         s_gtao.create(&b_gtao, "r2" DELIMITER "gtao");
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
         // The same two passes as compute shaders, for the async path.
         if (da_async_shader_exists("gtao_render.cs") && da_async_shader_exists("gtao_filter.cs"))
         {

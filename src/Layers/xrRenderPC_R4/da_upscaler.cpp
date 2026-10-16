@@ -116,7 +116,12 @@ void da_upscaler_register_caps_hook(UpscalerCapsHook hook)
 
 u32 da_render_api()
 {
-    return RImplementation.GetBackendAPI() == IRender::BackendAPI::D3D11 ? 11 : 12;
+    switch (RImplementation.GetBackendAPI())
+    {
+    case IRender::BackendAPI::D3D11: return 11;
+    case IRender::BackendAPI::Vulkan: return 13;
+    default: return 12;
+    }
 }
 
 int da_upscaler_support(UpscalerKind kind)
@@ -143,6 +148,7 @@ UpscalerCaps da_upscaler_caps()
         IConsole_Command::TInfo modes;
         renderer->Info(modes);
         caps.dx12 = caps.api == 12 || strstr(modes, "renderer_r5") != nullptr;
+        caps.vk = caps.api == 13 || strstr(modes, "renderer_r6") != nullptr;
     }
     for (size_t i = 0; i < g_da_caps_hook_count; ++i)
         g_da_caps_hooks[i](caps);
@@ -212,8 +218,14 @@ void da_update_render_size()
     }
     if (!backend)
     {
+#if defined(XR_VULKAN)
+        // A kind without a Vulkan backend renders at full size: the identity stretch would only blur the frame.
+        Msg("~ [upscaler] %s has no Vulkan backend: native rendering", da_kind_name(kind));
+        return;
+#else
         backend = xr_new<identity_upscaler>(kind);
         identity = true;
+#endif
     }
 
     const u32 dw = Device.dwWidth, dh = Device.dwHeight;

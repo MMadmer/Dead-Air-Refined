@@ -16,6 +16,9 @@
 
 #if defined(XR_D3D12)
 #include "Layers/xrRenderDX12/d12_api.h"
+#elif defined(XR_VULKAN)
+#include "Layers/xrRenderDX12/d12_api.h"
+#include "Layers/xrRenderVK/vk_api.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -117,6 +120,25 @@ void da_native_caps_on_device(ID3D11Device* device)
         caps.heapIndexing = native->heapIndexing;
         caps.enhancedBarriers = native->enhancedBarriers;
         caps.executeIndirectTier = native->executeIndirectTier;
+        caps.asyncCompute = native->asyncCompute;
+    }
+#elif defined(XR_VULKAN)
+    // The Vulkan device in the D3D12 terms the render code reads: attachment and pipeline rates are
+    // VRS tier 2, VK_EXT_mesh_shader is mesh tier 1.0, ray queries are DXR 1.1 (inline only).
+    if (const xrvk::NativeCaps* native = device ? xrvk::GetNativeCaps(device) : nullptr)
+    {
+        caps.raytracingTier = native->rayQuery ? 11 : 0;
+        caps.vrsTier = native->shadingRate ? 2 : 0;
+        caps.vrsTileSize = native->shadingRateTexel;
+        caps.vrsAdditionalRates = native->shadingRateLarge;
+        caps.meshShaderTier = native->meshShaders ? 10 : 0;
+        // DXC's SPIR-V back end takes SM 6.6 HLSL; the device side is Vulkan 1.3 with the layer's features.
+        caps.shaderModel = 0x66;
+        caps.dxcShaderModel = xrd3d12::DxcShaderModel();
+        caps.waveOps = native->subgroupArithmetic;
+        caps.waveLanesMin = native->subgroupSizeMin;
+        caps.waveLanesMax = native->subgroupSizeMax;
+        caps.native16Bit = native->float16 && native->int16;
         caps.asyncCompute = native->asyncCompute;
     }
 #else

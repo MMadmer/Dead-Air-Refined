@@ -60,6 +60,9 @@ public:
     virtual void ClearEnv() = 0;
 };
 
+// The renderer modules the executable links: R4 (DirectX 11), R5 (DirectX 12), R6 (Vulkan).
+using RendererModules = std::array<RendererModule*, 3>;
+
 class ENGINE_API CEngineAPI
 {
     xr_map<cpcstr, RendererModule*> renderModes;
@@ -78,7 +81,7 @@ public:
     ~CEngineAPI();
 
     // Call it in the main thread
-    void CreateRendererList(const std::array<RendererModule*, 2>& modules);
+    void CreateRendererList(const RendererModules& modules);
     void Initialize(GameModule* game);
     void Destroy();
 };

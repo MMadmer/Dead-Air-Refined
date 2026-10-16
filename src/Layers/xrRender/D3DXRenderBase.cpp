@@ -84,6 +84,19 @@ void accumulate_backend_stats(CBackend::_stats& destination, const CBackend::_st
 RENDERDOC_API_1_0_0* g_renderdoc_api;
 #endif
 
+// r__gpu_capture: the next frame into a RenderDoc capture, where RenderDoc runs in the process (QA scripts).
+bool da_renderdoc_capture()
+{
+#ifdef USE_RENDERDOC
+    if (!g_renderdoc_api)
+        return false;
+    g_renderdoc_api->TriggerCapture();
+    return true;
+#else
+    return false;
+#endif
+}
+
 void D3DXRenderBase::setGamma(float fGamma)
 {
     m_Gamma.Gamma(fGamma);
@@ -257,10 +270,11 @@ void D3DXRenderBase::Create(SDL_Window* hWnd, u32& dwWidth, u32& dwHeight, float
                 g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_AllowVSync, 0);
                 g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_DebugOutputMute, 0);
 
-                g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_RefAllResources, 1);
+                g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_RefAllResources, 0);
                 g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_CaptureCallstacks, 1);
-                g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_VerifyBufferAccess, 1);
-                g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_APIValidation, 1);
+                // Captures for timing replay: no API validation (it needs the validation layers on Vulkan).
+                g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_VerifyBufferAccess, 0);
+                g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_APIValidation, 0);
                 g_renderdoc_api->SetCaptureOptionU32(eRENDERDOC_Option_CaptureAllCmdLists, 1);
             }
         }

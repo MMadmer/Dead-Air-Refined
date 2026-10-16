@@ -13,6 +13,9 @@
 #ifdef XR_D3D12
 #include "Layers/xrRenderDX12/d12_api.h"
 #endif
+#ifdef XR_VULKAN
+#include "Layers/xrRenderVK/vk_api.h"
+#endif
 #include "Layers/xrRenderPC_R4/da_streamline.h"
 #include "Layers/xrRenderPC_R4/da_native_caps.h"
 #include "Layers/xrRenderPC_R4/da_dxc.h"
@@ -89,6 +92,37 @@ namespace xray::render::RENDER_NAMESPACE
 {
 #ifdef XR_D3D12
 void xrRender_d3d12_failed(); // r2_test_hw.cpp
+#endif
+#ifdef XR_VULKAN
+void xrRender_vulkan_failed(); // r2_test_hw.cpp
+// The -vk_no_* switches as the layer's NativeFeature bits: every fallback can be tested on hardware
+// that has everything.
+UINT xrRender_vulkan_disabled_features()
+{
+    struct Switch
+    {
+        pcstr key;
+        UINT bit;
+    };
+    static constexpr Switch switches[] = {
+        {"-vk_no_async", xrvk::NativeFeatureAsyncCompute},
+        {"-vk_no_transfer", xrvk::NativeFeatureTransferQueue},
+        {"-vk_no_eds3", xrvk::NativeFeatureDynamicState3},
+        {"-vk_no_vertex_input", xrvk::NativeFeatureVertexInput},
+        {"-vk_no_rebar", xrvk::NativeFeatureRebar},
+        {"-vk_no_vrs", xrvk::NativeFeatureShadingRate},
+        {"-vk_no_ms", xrvk::NativeFeatureMeshShaders},
+        {"-vk_no_gpl", xrvk::NativeFeaturePipelineLibrary},
+        {"-vk_no_multidraw", xrvk::NativeFeatureMultiDraw},
+    };
+    UINT bits = 0;
+    for (const Switch& s : switches)
+    {
+        if (strstr(Core.Params, s.key))
+            bits |= s.bit;
+    }
+    return bits;
+}
 #endif
 
 CHW HW;
@@ -189,7 +223,8 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
     Caps.id_vendor = Desc.VendorId;
     Caps.id_device = Desc.DeviceId;
 
-    // NVIDIA Streamline (DLSS, Reflex) is initialised before the device exists.
+    // NVIDIA Streamline (DLSS, Reflex) is initialised before the device exists; its Vulkan side hooks
+    // the instance and device the layer creates (da_streamline.cpp).
     if (ThisInstanceIsGlobal())
         da_streamline_init(m_pAdapter);
 
@@ -233,6 +268,34 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         info.copyQueueUploads = !strstr(Core.Params, "-dx12_no_copy_queue");
         // [dx12:infra] end create-info
         R = xrd3d12::CreateDevice(info, &pDevice, &pContext, &FeatureLevel);
+    }
+#elif defined(XR_VULKAN)
+    // Vulkan through xrVulkan: the device comes back behind the D3D11 interfaces like the DX12 one.
+    // -vkdebug: validation layer (needs the Vulkan SDK), -vksync: synchronization validation as well,
+    // -vkstats: the layer's work counters, -vklabels: debug labels for capture tools.
+    HRESULT R;
+    auto& pContext = d3d_contexts_pool[CHW::IMM_CTX_ID];
+    {
+        ZoneScopedN("CreateDevice");
+
+        // The driver's pipeline binaries persist next to the shader cache.
+        string_path pipelineCache;
+        FS.update_path(pipelineCache, "$app_data_root$", "shaders_cache_grizzly" DELIMITER "r6" DELIMITER "pipelines.bin");
+        VerifyPath(pipelineCache);
+        wchar_t pipelineCacheW[sizeof(string_path)]{};
+        MultiByteToWideChar(CP_ACP, 0, pipelineCache, -1, pipelineCacheW, int(std::size(pipelineCacheW)));
+
+        xrvk::DeviceCreateInfo info;
+        info.adapterLuid = Desc.AdapterLuid;
+        info.adapter = m_pAdapter;
+        info.validation = !!strstr(Core.Params, "-vkdebug");
+        info.syncValidation = !!strstr(Core.Params, "-vksync");
+        info.stats = !!strstr(Core.Params, "-vkstats");
+        info.labels = !!strstr(Core.Params, "-vklabels");
+        info.pipelineCachePath = ThisInstanceIsGlobal() ? pipelineCacheW : nullptr;
+        info.log = [](const char* line) { Msg("%s", line); };
+        info.disabledFeatures = xrRender_vulkan_disabled_features();
+        R = xrvk::CreateDevice(info, &pDevice, &pContext, &FeatureLevel);
     }
 #else
     u32 createDeviceFlags = 0;
@@ -315,7 +378,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 
     if (SUCCEEDED(R))
     {
-#ifndef XR_D3D12
+#ifndef XR_NATIVE
         if (createDeviceFlags & D3D_CREATE_DEVICE_DEBUG)
             dx11_debug_bind_info_queue(pDevice);
         if (ThisInstanceIsGlobal())
@@ -363,9 +426,18 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         if (ThisInstanceIsGlobal())
         {
             da_native_caps_on_device(pDevice);
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
             da_dxc_init(pDevice);
             da_native_caps_on_device(pDevice);
+#endif
+#ifdef XR_VULKAN
+            // Every Vulkan shader is DXC's SPIR-V: without the compiler the device is of no use.
+            if (!da_dxc_active())
+            {
+                _RELEASE(pContext);
+                _RELEASE(pDevice);
+                R = E_FAIL;
+            }
 #endif
         }
     }
@@ -383,6 +455,14 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
             "CreateDevice returned 0x%08x", R);
         xrDebug::DoExit("Failed to initialize DirectX 12.\nThe game will start with DirectX 11 next time.");
 #endif
+#ifdef XR_VULKAN
+        // The adapter passed the probe and still failed: the next start runs DirectX 11.
+        xrRender_vulkan_failed();
+        Msg("Failed to initialize Vulkan.\n"
+            "The game will start with DirectX 11 next time.\n"
+            "CreateDevice returned 0x%08x", R);
+        xrDebug::DoExit("Failed to initialize Vulkan.\nThe game will start with DirectX 11 next time.");
+#endif
         // Fatal error! Cannot create rendering device AT STARTUP !!!
         Msg("Failed to initialize graphics hardware.\n"
             "Please try to restart the game.\n"
@@ -392,7 +472,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 
     _SHOW_REF("* CREATE: DeviceREF:", pDevice);
 
-#ifndef XR_D3D12 // Tracy's D3D11 GPU zones need a real D3D11 device
+#ifndef XR_NATIVE // Tracy's D3D11 GPU zones need a real D3D11 device
     // Register immediate context in profiler
     if (ThisInstanceIsGlobal())
     {
@@ -430,7 +510,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 
     if (!CreateSwapChain2(hwnd))
     {
-#ifdef XR_D3D12
+#if defined(XR_D3D12)
         // D3D12 has no legacy DXGI 1.1 swap chain to fall back to.
         Valid = false;
         if (ThisInstanceIsGlobal())
@@ -439,6 +519,15 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
             Log("Failed to create the DirectX 12 swap chain.\n"
                 "The game will start with DirectX 11 next time.");
             xrDebug::DoExit("Failed to initialize DirectX 12.\nThe game will start with DirectX 11 next time.");
+        }
+#elif defined(XR_VULKAN)
+        Valid = false;
+        if (ThisInstanceIsGlobal())
+        {
+            xrRender_vulkan_failed();
+            Log("Failed to create the Vulkan swap chain.\n"
+                "The game will start with DirectX 11 next time.");
+            xrDebug::DoExit("Failed to initialize Vulkan.\nThe game will start with DirectX 11 next time.");
         }
 #else
         if (!CreateSwapChain(hwnd))
@@ -528,7 +617,7 @@ bool CHW::CreateSwapChain(HWND hwnd)
     const auto hr = m_pFactory->CreateSwapChain(pDevice, &sd, &m_pSwapChain);
     if (FAILED(hr))
         return false;
-#ifndef XR_D3D12
+#ifndef XR_NATIVE
     // sl.common sees every present through Streamline's proxy of the chain.
     if (ThisInstanceIsGlobal())
         da_streamline_d3d11_swapchain_created(m_pSwapChain);
@@ -561,7 +650,7 @@ bool CHW::UpdateChainDesc()
 
 bool CHW::CreateSwapChain2(HWND hwnd)
 {
-#ifndef XR_D3D12 // the only swap chain D3D12 has
+#ifndef XR_NATIVE // the only swap chain D3D12 and Vulkan have
     if (strstr(Core.Params, "-no_dx11_2"))
         return false;
 #endif
@@ -651,10 +740,14 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     }
 
     IDXGISwapChain1* swapchain{};
-#ifdef XR_D3D12
+#if defined(XR_D3D12)
     // The layer creates the chain on its command queue, always flip model: a copy-model
     // description (exclusive fullscreen at creation, -no_flip) becomes FLIP_DISCARD there.
     HRESULT result = xrd3d12::CreateSwapChainForHwnd(pDevice, pFactory2, hwnd, &desc,
+        fulldesc.Windowed ? nullptr : &fulldesc, &swapchain);
+#elif defined(XR_VULKAN)
+    // A VkSwapchainKHR of the window behind IDXGISwapChain1 (flip semantics, three images).
+    HRESULT result = xrvk::CreateSwapChainForHwnd(pDevice, pFactory2, hwnd, &desc,
         fulldesc.Windowed ? nullptr : &fulldesc, &swapchain);
 #else
     HRESULT result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
@@ -670,8 +763,11 @@ bool CHW::CreateSwapChain2(HWND hwnd)
         desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
         desc.BufferCount = 1;
         desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-#ifdef XR_D3D12
+#if defined(XR_D3D12)
         result = xrd3d12::CreateSwapChainForHwnd(pDevice, pFactory2, hwnd, &desc,
+            fulldesc.Windowed ? nullptr : &fulldesc, &swapchain);
+#elif defined(XR_VULKAN)
+        result = xrvk::CreateSwapChainForHwnd(pDevice, pFactory2, hwnd, &desc,
             fulldesc.Windowed ? nullptr : &fulldesc, &swapchain);
 #else
         result = pFactory2->CreateSwapChainForHwnd(pDevice, hwnd, &desc,
@@ -684,7 +780,7 @@ bool CHW::CreateSwapChain2(HWND hwnd)
     if (FAILED(result))
         return false;
 
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     flipModel = true;
 #endif
     if (ThisInstanceIsGlobal())
@@ -703,7 +799,7 @@ bool CHW::CreateSwapChain2(HWND hwnd)
             if (FAILED(xrd3d12::RecreateSwapChain(m_pSwapChain, provider)))
                 Msg("! [Streamline] the swap chain could not be made through Streamline: DLSS may leak memory");
         }
-#else
+#elif !defined(XR_VULKAN)
         da_streamline_d3d11_swapchain_created(m_pSwapChain);
 #endif
     }
@@ -904,7 +1000,7 @@ void CHW::Present()
 
     CurrentBackBuffer = (CurrentBackBuffer + 1) % BackBufferCount;
 
-#ifndef XR_D3D12
+#ifndef XR_NATIVE
     TracyD3D11Collect(profiler_ctx);
 #endif
 }

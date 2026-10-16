@@ -571,7 +571,7 @@ public:
     // draw prologue of RenderInstanced.
     void RenderIndirect(ID3D11Buffer* args, u32 offset, u32 maxCount);
 #endif
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     // The shading rate of the draws that follow: a D3D12_SHADING_RATE, the image combiner and the
     // rate image (null = none). Cached per context, forgotten by Invalidate.
     void set_ShadingRate(u8 base, u8 combiner, ID3D11Texture2D* image);
@@ -667,7 +667,7 @@ private:
     bool m_bVSPositionOnly{ false };
     ID3D11Buffer* m_instanceStream{};
     u32 m_instanceStride{};
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     ID3D11Texture2D* m_shadingRateImage{};
     u8 m_shadingRateBase{};
     u8 m_shadingRateCombiner{};

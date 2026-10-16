@@ -471,8 +471,10 @@ public:
     bool is_sun_static() override { return o.sunstatic; }
 
 #if defined(USE_DX11)
-#ifdef XR_D3D12
+#if defined(XR_D3D12)
     BackendAPI GetBackendAPI() const override { return IRender::BackendAPI::D3D12; }
+#elif defined(XR_VULKAN)
+    BackendAPI GetBackendAPI() const override { return IRender::BackendAPI::Vulkan; }
 #else
     BackendAPI GetBackendAPI() const override { return IRender::BackendAPI::D3D11; }
 #endif

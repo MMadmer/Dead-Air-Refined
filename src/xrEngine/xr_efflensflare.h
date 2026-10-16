@@ -23,6 +23,10 @@ namespace render_r5
 {
 class dxLensFlareRender;
 }
+namespace render_r6
+{
+class dxLensFlareRender;
+}
 } // namespace xray::render
 
 class ENGINE_API CLensFlareDescriptor
@@ -87,6 +91,7 @@ class ENGINE_API CLensFlare
     friend class xray::render::render_r4::dxLensFlareRender;
     friend class xray::render::render_gl::dxLensFlareRender;
     friend class xray::render::render_r5::dxLensFlareRender;
+    friend class xray::render::render_r6::dxLensFlareRender;
 
 public:
     enum

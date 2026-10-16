@@ -11,8 +11,12 @@
 #include "da_native_caps.h"
 #include "r2.h"
 
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
+// The DXC service of xrD3D12 serves both native modules; Vulkan reflects the DXIL twin of every shader.
 #include "Layers/xrRenderDX12/d12_api.h"
+#if defined(XR_VULKAN)
+#include "Layers/xrRenderVK/vk_api.h"
+#endif
 
 #include <d3d12shader.h>
 
@@ -23,9 +27,15 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 namespace
 {
+#if defined(XR_VULKAN)
+// The shader caches of the Vulkan module: containers (DXIL twin + SPIR-V + registers), not plain DXIL.
+constexpr char k_cache_root[] = "r6_spirv";
+#else
+constexpr char k_cache_root[] = "r5_dxil";
+#endif
 // Engine shaders never target more: 6.7+ brings nothing they use, and every model is a cache
 // directory and an audit run (dxc.md 3.2).
 constexpr u32 k_engine_model_cap = 0x66;
@@ -50,7 +60,7 @@ struct DaDxcSetup
     u32 flags{};           // xrd3d12::ShaderCompileFlags of every compile
     bool optimize{};       // -O3 (not in debug builds)
     string32 tag{};        // sm66-w32-m16-<crc>
-    string64 cache_dir{};  // "r5_dxil\<tag>[-plain][-arb]\" while engine shaders are DXIL
+    string64 cache_dir{};  // "r5_dxil\<tag>[-plain][-arb]\" while engine shaders are DXIL ("r6_spirv\..." on Vulkan)
     string16 engine_sm{};  // GRIZZLY_SM of engine shaders ("66")
     string16 wave{};       // GRIZZLY_WAVE_LANES value
 };
@@ -239,6 +249,98 @@ bool da_dxc_native_include(void* /*user*/, const char* file, std::string& text)
     return true;
 }
 
+#if defined(XR_VULKAN)
+// The registers the DXIL reflection gave every resource of space 0: the layer binds the SPIR-V twin's
+// resources of the same names there, so the engine's D3D11 slots mean the same for both.
+bool da_dxc_binding_table(const xr_vector<u8>& reflection, xr_vector<xrvk::ShaderBinding>& table)
+{
+    table.clear();
+    ID3D12ShaderReflection* shader = nullptr;
+    if (FAILED(xrd3d12::Reflect(reflection.data(), reflection.size(), __uuidof(ID3D12ShaderReflection),
+            reinterpret_cast<void**>(&shader))) ||
+        !shader)
+        return false;
+    D3D12_SHADER_DESC desc{};
+    shader->GetDesc(&desc);
+    for (UINT i = 0; i < desc.BoundResources; ++i)
+    {
+        D3D12_SHADER_INPUT_BIND_DESC b{};
+        if (FAILED(shader->GetResourceBindingDesc(i, &b)) || !b.Name || b.Space != 0 || !b.BindCount)
+            continue;
+        xrvk::ShaderBinding e{};
+        switch (b.Type)
+        {
+        case D3D_SIT_CBUFFER: e.cls = xrvk::ShaderBindingCB; break;
+        case D3D_SIT_SAMPLER: e.cls = xrvk::ShaderBindingSampler; break;
+        case D3D_SIT_UAV_RWTYPED:
+        case D3D_SIT_UAV_RWSTRUCTURED:
+        case D3D_SIT_UAV_RWBYTEADDRESS:
+        case D3D_SIT_UAV_APPEND_STRUCTURED:
+        case D3D_SIT_UAV_CONSUME_STRUCTURED:
+        case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
+        case D3D_SIT_UAV_FEEDBACKTEXTURE: e.cls = xrvk::ShaderBindingUAV; break;
+        default: e.cls = xrvk::ShaderBindingSRV; break;
+        }
+        strncpy_s(e.name, b.Name, sizeof(e.name) - 1);
+        e.reg = u16(b.BindPoint);
+        e.count = u8(std::min(b.BindCount, 255u));
+        table.push_back(e);
+    }
+    shader->Release();
+    return true;
+}
+
+// The SPIR-V twin of a DXIL compile (same source, defines and target) and the container the layer
+// takes: DXIL for the signature and reflection, SPIR-V for the device, the registers of the resources.
+bool da_dxc_spirv(const xrd3d12::ShaderCompile& base, const xr_vector<u8>& dxil, const xr_vector<u8>& reflection,
+    xr_vector<u8>& object, xr_string& error)
+{
+    xr_vector<xrvk::ShaderBinding> table;
+    if (!da_dxc_binding_table(reflection, table))
+    {
+        error = "the DXIL reflection of the shader cannot be read";
+        return false;
+    }
+    UINT spirv_count = 0;
+    const wchar_t* const* spirv_args = xrvk::SpirvCompileArgs(spirv_count);
+    xr_vector<const wchar_t*> args;
+    args.reserve(base.argCount + spirv_count);
+    for (UINT i = 0; i < base.argCount; ++i)
+    {
+        // DXIL-only switches: register reservation and resource binding assumptions mean nothing in SPIR-V.
+        if (base.args[i] && wcscmp(base.args[i], L"-flegacy-resource-reservation") &&
+            wcscmp(base.args[i], L"-all-resources-bound"))
+            args.push_back(base.args[i]);
+    }
+    args.insert(args.end(), spirv_args, spirv_args + spirv_count);
+    // RWTexture2D<float> is any single-channel UAV in D3D11 (R8, R16F, R32F...): storage images take the view's
+    // format. Image atomics need theirs in the shader: such a shader compiles again with the HLSL types' formats.
+    args.push_back(L"-fspv-use-unknown-image-format");
+    xrd3d12::ShaderCompile compile = base;
+    compile.args = args.data();
+    compile.argCount = UINT(args.size());
+    compile.flags = (compile.flags & ~u32(xrd3d12::CompileKeepReflection)) | xrd3d12::CompileSpirv;
+    xrd3d12::ShaderOutput output;
+    bool ok = xrd3d12::CompileShader(compile, output);
+    if (!ok && output.messages.find("OpImageTexelPointer") != std::string::npos)
+    {
+        compile.argCount = UINT(args.size() - 1);
+        ok = xrd3d12::CompileShader(compile, output);
+    }
+    if (!ok)
+    {
+        error = "SPIR-V: ";
+        error += da_dxc_first_error(output.messages);
+        return false;
+    }
+    std::vector<unsigned char> container;
+    xrvk::BuildShaderContainer(dxil.data(), dxil.size(), output.object.data(), output.object.size(), table.data(),
+        table.size(), container);
+    object.assign(container.begin(), container.end());
+    return true;
+}
+#endif
+
 // DXC_OUT_REFLECTION is a bare STAT part (fourcc, size, module). Wrapped into a one-part container
 // it is what xrd3d12::Reflect and every other reflector takes.
 void da_dxc_contain(xr_vector<u8>& reflection)
@@ -346,15 +448,27 @@ void da_dxc_selftest()
             bindings = desc.BoundResources;
         shader->Release();
     }
+#if defined(XR_VULKAN)
+    xrvk::ShaderContainerView view;
+    const bool dxil = xrvk::ParseShaderContainer(object.data(), object.size(), view) && view.dxil && view.spirv &&
+        xrd3d12::IsDxil(view.dxil, view.dxilSize);
+#else
     const bool dxil = xrd3d12::IsDxil(object.data(), object.size());
+#endif
     if (!dxil || bindings != 1)
     {
         Msg("! [dxc] native self-test: %s %s gave %s with %u binding(s)", request.path, request.target,
             dxil ? "DXIL" : "no DXIL", bindings);
         return;
     }
-    Msg("* [dxc] native self-test: %s %s %s, %u bytes of DXIL, %u binding, %.1f ms", request.path, request.target,
-        g_stats.native_cached != cached ? "from the cache" : "compiled", u32(object.size()), bindings, ms);
+    Msg("* [dxc] native self-test: %s %s %s, %u bytes of %s, %u binding, %.1f ms", request.path, request.target,
+        g_stats.native_cached != cached ? "from the cache" : "compiled", u32(object.size()),
+#if defined(XR_VULKAN)
+        "DXIL + SPIR-V",
+#else
+        "DXIL",
+#endif
+        bindings, ms);
 }
 } // namespace
 
@@ -362,12 +476,30 @@ void da_dxc_init(ID3D11Device* device)
 {
     g_dxc = DaDxcSetup{};
     const CHWNativeCaps& native = HW.native;
+#if defined(XR_VULKAN)
+    // No FXC on Vulkan: the compiler is the only way to SPIR-V, loaded here (the DX12 layer loads it
+    // with its device).
+    char load_reason[256]{};
+    const bool loaded = xrd3d12::LoadShaderCompiler(nullptr, load_reason, sizeof(load_reason));
+    const xrvk::NativeCaps* caps = device ? xrvk::GetNativeCaps(device) : nullptr;
+    if (loaded && caps)
+        g_dxc.native_model = std::min(k_engine_model_cap, xrd3d12::DxcShaderModel());
+    if (!loaded)
+        Msg("! [dxc] the shader compiler did not load: %s - the Vulkan renderer cannot build shaders", load_reason);
+#else
     const xrd3d12::NativeCaps* caps = device ? xrd3d12::GetNativeCaps(device) : nullptr;
     // HW.native carries the masks of the -dx12_no_* switches.
     if (native.shaderModel >= 0x60 && native.dxcShaderModel >= 0x60)
         g_dxc.native_model = std::min(native.shaderModel, native.dxcShaderModel);
+#endif
 
     pcstr reason = nullptr;
+#if defined(XR_VULKAN)
+    if (!caps)
+        reason = "not a Vulkan device";
+    else if (!loaded)
+        reason = "the DXC service is not up";
+#else
     if (da_native_disabled_features() & DaNativeDisableSM6)
         reason = "-dx12_no_sm6";
     else if (!caps)
@@ -378,6 +510,7 @@ void da_dxc_init(ID3D11Device* device)
         reason = "the device has no shader model 6";
     else if (!ps_r__dxc)
         reason = "r__dxc 0";
+#endif
 
     if (!g_dxc.native_model)
     {
@@ -387,7 +520,12 @@ void da_dxc_init(ID3D11Device* device)
 
     g_dxc.engine_model = std::min(g_dxc.native_model, k_engine_model_cap);
     g_dxc.wave_lanes = native.waveOps ? native.waveLanesMin : 0;
+#if defined(XR_VULKAN)
+    // min16float is RelaxedPrecision in SPIR-V: drivers keep full precision where 16 bits do not pay.
+    g_dxc.min16 = caps != nullptr;
+#else
     g_dxc.min16 = caps && caps->minPrecision16;
+#endif
     g_dxc.fp16 = native.native16Bit;
     g_dxc.optimize = true;
 #ifdef DEBUG
@@ -418,10 +556,26 @@ void da_dxc_init(ID3D11Device* device)
         crc = crc32(arg, u32(wcslen(arg) * sizeof(wchar_t)), crc);
     for (const wchar_t* arg : k_native_args)
         crc = crc32(arg, u32(wcslen(arg) * sizeof(wchar_t)), crc);
+#if defined(XR_VULKAN)
+    {
+        UINT spirv_count = 0;
+        const wchar_t* const* spirv_args = xrvk::SpirvCompileArgs(spirv_count);
+        for (UINT i = 0; i < spirv_count; ++i)
+            crc = crc32(spirv_args[i], u32(wcslen(spirv_args[i]) * sizeof(wchar_t)), crc);
+        const u32 container = xrvk::kShaderContainerVersion;
+        crc = crc32(&container, sizeof(container), crc);
+        constexpr char vulkan_define[] = "GRIZZLY_VULKAN -fspv-use-unknown-image-format";
+        crc = crc32(vulkan_define, sizeof(vulkan_define) - 1, crc);
+    }
+#endif
     crc = crc32(&g_dxc.flags, sizeof(g_dxc.flags), crc);
     xr_sprintf(g_dxc.tag, "sm%X-w%u-m%u-%08x", g_dxc.engine_model, g_dxc.wave_lanes, g_dxc.min16 ? 16 : 32, crc);
 
+#if defined(XR_VULKAN)
+    const u32 device_model = g_dxc.native_model;
+#else
     const u32 device_model = native.shaderModel;
+#endif
     if (reason)
     {
         Msg("* [dxc] engine shaders stay on FXC: %s (native passes: dxcompiler %s, SM %u.%u)", reason, version,
@@ -430,7 +584,7 @@ void da_dxc_init(ID3D11Device* device)
     else
     {
         g_dxc.engine = true;
-        xr_sprintf(g_dxc.cache_dir, "r5_dxil" DELIMITER "%s%s%s" DELIMITER, g_dxc.tag, g_dxc.plain ? "-plain" : "",
+        xr_sprintf(g_dxc.cache_dir, "%s" DELIMITER "%s%s%s" DELIMITER, k_cache_root, g_dxc.tag, g_dxc.plain ? "-plain" : "",
             g_dxc.all_bound ? "-arb" : "");
         if (g_dxc.wave_lanes)
         {
@@ -552,8 +706,8 @@ bool da_dxc_compile_native(const DaDxcNative& request, xr_vector<u8>& bytecode, 
                 c = '\\';
         }
         string_path file;
-        xr_sprintf(file, "shaders_cache_grizzly" DELIMITER "r5_dxil" DELIMITER "%s" DELIMITER "native" DELIMITER "%s.%s.%s" DELIMITER "%08x",
-            g_dxc.tag, relative.c_str(), request.entry ? request.entry : "lib", request.target, key);
+        xr_sprintf(file, "shaders_cache_grizzly" DELIMITER "%s" DELIMITER "%s" DELIMITER "native" DELIMITER "%s.%s.%s" DELIMITER "%08x",
+            k_cache_root, g_dxc.tag, relative.c_str(), request.entry ? request.entry : "lib", request.target, key);
         FS.update_path(cache_file, "$app_data_root$", file);
     }
 
@@ -576,6 +730,9 @@ bool da_dxc_compile_native(const DaDxcNative& request, xr_vector<u8>& bytecode, 
             defines.push_back({request.defines[i].name, request.defines[i].value});
     }
     defines.push_back({"GRIZZLY_DXC", "1"});
+#if defined(XR_VULKAN)
+    defines.push_back({"GRIZZLY_VULKAN", "1"});
+#endif
     defines.push_back({"GRIZZLY_SM", sm});
     if (g_dxc.wave_lanes)
         defines.push_back({"GRIZZLY_WAVE_LANES", g_dxc.wave});
@@ -617,6 +774,19 @@ bool da_dxc_compile_native(const DaDxcNative& request, xr_vector<u8>& bytecode, 
     bytecode.assign(output.object.begin(), output.object.end());
     xr_vector<u8> blob(output.reflection.begin(), output.reflection.end());
     da_dxc_contain(blob);
+#if defined(XR_VULKAN)
+    {
+        // Libraries (DXR state objects) have no Vulkan twin: the RT passes are compute shaders.
+        xr_string error;
+        if (!request.entry || !da_dxc_spirv(compile, bytecode, blob, bytecode, error))
+        {
+            ++g_stats.native_failed;
+            Msg("! [dxc] native %s %s: %s", path.c_str(), request.target, request.entry ? error.c_str() : "libraries have no SPIR-V twin");
+            bytecode.clear();
+            return false;
+        }
+    }
+#endif
     da_dxc_cache_write(cache_file, source_crc, bytecode, blob);
     if (reflection)
         *reflection = std::move(blob);
@@ -650,6 +820,10 @@ bool da_dxc_compile_engine(pcstr name, const void* source, size_t size, const D3
     for (const D3D_SHADER_MACRO* macro = macros; macro && macro->Name; ++macro)
         defines.push_back(*macro);
     defines.push_back({"GRIZZLY_DXC", "1"});
+#if defined(XR_VULKAN)
+    // What has no Vulkan equivalent (pow2 tessellation partitioning) picks its nearest under it.
+    defines.push_back({"GRIZZLY_VULKAN", "1"});
+#endif
     defines.push_back({"GRIZZLY_SM", g_dxc.engine_sm});
     if (g_dxc.wave_lanes && !g_dxc.plain)
         defines.push_back({"GRIZZLY_WAVE_LANES", g_dxc.wave});
@@ -700,20 +874,36 @@ bool da_dxc_compile_engine(pcstr name, const void* source, size_t size, const D3
 
     xrd3d12::ShaderOutput output;
     const bool ok = xrd3d12::CompileShader(compile, output);
-    _RELEASE(text);
-    g_stats.compile_us += da_dxc_now_us() - start;
     if (!ok || output.reflection.empty())
     {
+        _RELEASE(text);
+        g_stats.compile_us += da_dxc_now_us() - start;
         ++g_stats.failed;
         error = ok ? "no reflection" : da_dxc_first_error(output.messages);
         return false;
     }
     if (!output.messages.empty() && strstr(Core.Params, "-log_shader_warnings"))
         Msg("! [dxc] %s warnings:\n%s", name, output.messages.c_str());
-    ++g_stats.compiled;
     object.assign(output.object.begin(), output.object.end());
     reflection.assign(output.reflection.begin(), output.reflection.end());
     da_dxc_contain(reflection);
+#if defined(XR_VULKAN)
+    // The same preprocessed text once more, to SPIR-V; the container carries both.
+    const bool twin = da_dxc_spirv(compile, object, reflection, object, error);
+    _RELEASE(text);
+    g_stats.compile_us += da_dxc_now_us() - start;
+    if (!twin)
+    {
+        ++g_stats.failed;
+        object.clear();
+        reflection.clear();
+        return false;
+    }
+#else
+    _RELEASE(text);
+    g_stats.compile_us += da_dxc_now_us() - start;
+#endif
+    ++g_stats.compiled;
     return true;
 }
 

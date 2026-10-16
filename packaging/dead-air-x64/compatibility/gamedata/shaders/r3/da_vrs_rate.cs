@@ -12,6 +12,10 @@ Texture2D s_vrs_depth;			//	the hardware depth, render size, cleared to 1
 Texture2D s_vrs_contrast;		//	phase_vrs_luma of the previous frame, one texel per 8x8 pixels
 Texture2D s_vrs_velocity;		//	NDC(current) - NDC(previous), y up, when the G-buffer wrote it
 Texture2D<uint> s_vrs_prev;		//	the previous frame's rates
+#ifdef GRIZZLY_VULKAN
+// The shading rate image is R8_UINT; the stats image takes atomics, so this shader keeps typed image formats.
+[[vk::image_format("r8ui")]]
+#endif
 RWTexture2D<uint> u_vrs_rate : register(u0);
 RWTexture2D<uint> u_vrs_stats : register(u1);	//	tiles per rate, 7 bins (r__vrs_log)
 

@@ -353,6 +353,7 @@ enum ShaderCompileFlags : UINT
     CompileKeepReflection = 1u << 2,   // reflection stays in the object (it is also in ShaderOutput::reflection)
     CompileWarningsAsErrors = 1u << 3, // -WX
     CompileSkipOptimization = 1u << 4, // -Od
+    CompileSpirv = 1u << 5,            // a -spirv compile (xrVulkan): none of the DXIL container switches
 };
 struct ShaderDefine
 {

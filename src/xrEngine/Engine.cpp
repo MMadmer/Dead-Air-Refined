@@ -87,8 +87,18 @@ void CheckAndSetupRenderer()
     }
 
     // The -rgl key is gone together with the OpenGL renderer: the mode list is built from
-    // the renderer modules, R4 (DirectX 11) and R5 (DirectX 12).
-    if (strstr(Core.Params, "-r5"))
+    // the renderer modules, R4 (DirectX 11), R5 (DirectX 12) and R6 (Vulkan).
+    if (strstr(Core.Params, "-r6"))
+    {
+        if (IsRenderModeAvailable("renderer_r6"))
+            Console->Execute("renderer renderer_r6");
+        else
+        {
+            Msg("! -r6: Vulkan is not available on this system, starting DirectX 11");
+            ExecuteRenderMode(DefaultRenderMode());
+        }
+    }
+    else if (strstr(Core.Params, "-r5"))
     {
         if (IsRenderModeAvailable("renderer_r5"))
             Console->Execute("renderer renderer_r5");
@@ -134,7 +144,7 @@ void CheckAndSetupRenderer()
 
 extern void msCreate(pcstr name);
 
-void CEngine::Initialize(GameModule* game, const std::array<RendererModule*, 2>& modules)
+void CEngine::Initialize(GameModule* game, const RendererModules& modules)
 {
     ZoneScoped;
 #ifdef DEBUG

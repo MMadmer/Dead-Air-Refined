@@ -530,8 +530,10 @@ void da_streamline_init(IDXGIAdapter1* adapter)
     prefs.engine = sl::EngineType::eCustom;
     prefs.engineVersion = DAR_VERSION_STRING;
     prefs.projectId = da_sl_project_id;
-#ifdef XR_D3D12
+#if defined(XR_D3D12)
     prefs.renderAPI = sl::RenderAPI::eD3D12;
+#elif defined(XR_VULKAN)
+    prefs.renderAPI = sl::RenderAPI::eVulkan;
 #else
     prefs.renderAPI = sl::RenderAPI::eD3D11;
 #endif

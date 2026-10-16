@@ -8,8 +8,8 @@
 
 #include "da_vrs.h"
 
-#if defined(XR_D3D12)
-#include "Layers/xrRenderDX12/d12_api.h"
+#if defined(XR_NATIVE)
+#include "Layers/xrRenderDX11/dx11Native.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -19,7 +19,7 @@ float ps_r__vrs_edge = 1.f;
 
 namespace
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
 // The cap of a pass per mode (conservative, aggressive): the image rate is limited to it through
 // the MIN combiner. Without an image the pass shades flat at the cap (vrs.md 3.3). combine_1 is not a
 // VRS pass: it failed the aggressive quality gate (vrs.md 9.3: blockiness +92 %, limit 15 %); nor are
@@ -67,7 +67,7 @@ bool da_vrs_apply(CBackend& cmd_list, VrsPass pass)
 
 int da_vrs_preset_mode()
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     return ps_r__vrs;
 #else
     return 0;
@@ -78,7 +78,7 @@ int da_vrs_requested_mode() { return ps_r__vrs_override >= 0 ? ps_r__vrs_overrid
 
 void da_vrs_reset(CBackend& cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     if (da_vrs_supported())
         cmd_list.set_ShadingRate(D3D12_SHADING_RATE_1X1, D3D12_SHADING_RATE_COMBINER_PASSTHROUGH, nullptr);
 #else
@@ -88,7 +88,7 @@ void da_vrs_reset(CBackend& cmd_list)
 
 da_vrs_scope::da_vrs_scope(CBackend& cmd_list, VrsPass pass) : m_cmd_list(cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(XR_NATIVE)
     m_active = da_vrs_apply(cmd_list, pass);
 #else
     (void)pass;

@@ -28,6 +28,10 @@ namespace render_r5
 {
 class dxRainRender;
 }
+namespace render_r6
+{
+class dxRainRender;
+}
 } // namespace xray::render
 
 // The constants both halves of the system need. The simulation lives in Rain.cpp and the
@@ -137,6 +141,7 @@ class ENGINE_API CEffect_Rain
     friend class xray::render::render_r4::dxRainRender;
     friend class xray::render::render_gl::dxRainRender;
     friend class xray::render::render_r5::dxRainRender;
+    friend class xray::render::render_r6::dxRainRender;
 
 private:
     struct Item

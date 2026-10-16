@@ -8,7 +8,7 @@
 
 #include "stdafx.h"
 
-#ifndef XR_D3D12
+#ifndef XR_NATIVE
 #include "da_upscaler.h"
 
 #include <FidelityFX/host/ffx_fsr3upscaler.h>
@@ -337,4 +337,4 @@ const struct fsr_dx11_caps_registrar
 } s_fsr_dx11_caps;
 } // namespace
 } // namespace xray::render::RENDER_NAMESPACE
-#endif // !XR_D3D12
+#endif // !XR_NATIVE

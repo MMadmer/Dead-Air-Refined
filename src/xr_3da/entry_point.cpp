@@ -22,12 +22,13 @@ XR_EXPORT u32 NvOptimusEnablement = 0x00000001; // NVIDIA Optimus
 XR_EXPORT u32 AmdPowerXpressRequestHighPerformance = 0x00000001; // PowerXpress or Hybrid Graphics
 }
 
-// DirectX 11 (R4) and DirectX 12 (R5). The order is the mode list's order: R4 comes first and
-// stays the fallback. Keep the array size in sync with this list and with xrEngine.def.
-std::array<RendererModule*, 2> s_render_modules =
+// DirectX 11 (R4), DirectX 12 (R5) and Vulkan (R6). The order is the mode list's order: R4 comes first
+// and stays the fallback. RendererModules (EngineAPI.h) has this list's size; xrEngine.def names it.
+RendererModules s_render_modules =
 {
     xray::render::render_r4::GetRendererModule(),
     xray::render::render_r5::GetRendererModule(),
+    xray::render::render_r6::GetRendererModule(),
 };
 
 struct tracy_raii

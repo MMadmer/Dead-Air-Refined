@@ -13,7 +13,7 @@
 #if RENDER == R_R4
 #include "da_temporal.h"
 #endif
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #endif
 
@@ -366,7 +366,7 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                     if (item.pVisual->Type == MT_TREE_ST || item.pVisual->Type == MT_TREE_PM)
                     {
                         auto* tree = static_cast<FTreeVisual*>(item.pVisual);
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
                         // The GPU-driven trees integrate their roots at the frame's start.
                         if (da_gpu_trees_draws(tree))
                             continue;
@@ -385,7 +385,7 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 mapNormalItems& items = it->second;
                 items.ssa = 0;
 
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
                 // The registered trees of this pass through ExecuteIndirect; the rest as before.
                 if (da_gpu_trees_draw_pass(cmd_list, it->first, items, o.phase))
                 {
@@ -467,7 +467,7 @@ void R_dsgraph_structure::render_graph(u32 _priority)
         }
     }
 
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
     // The GPU-driven trees of this view after every CPU-drawn object of priority 0: the depth already
     // holds the occluders when the crowns rasterise (and when the main view's Hi-Z is built).
     if (_priority == 0 && gd_view)

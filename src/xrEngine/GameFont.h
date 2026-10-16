@@ -21,6 +21,10 @@ namespace render_r5
 {
 class dxFontRender;
 }
+namespace render_r6
+{
+class dxFontRender;
+}
 } // namespace xray::render
 
 class IFontRender;
@@ -30,6 +34,7 @@ class ENGINE_API CGameFont final : public IGameFont
     friend class xray::render::render_r4::dxFontRender;
     friend class xray::render::render_gl::dxFontRender;
     friend class xray::render::render_r5::dxFontRender;
+    friend class xray::render::render_r6::dxFontRender;
 
 private:
     struct String

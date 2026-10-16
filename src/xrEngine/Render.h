@@ -149,6 +149,7 @@ public:
         D3D11,
         OpenGL,
         D3D12, // xrRender_R5: the D3D11 render code on xrD3D12
+        Vulkan, // xrRender_R6: the D3D11 render code on xrVulkan
     };
 
     enum ScreenshotMode : u32

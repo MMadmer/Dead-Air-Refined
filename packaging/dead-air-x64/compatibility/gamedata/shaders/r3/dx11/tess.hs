@@ -49,7 +49,12 @@ HS_CONSTANT_DATA_OUTPUT PatchConstantsHS(
 }
 
 [domain("tri")]
+#ifdef GRIZZLY_VULKAN
+// Vulkan has no power-of-two partitioning: integer steps keep the factors whole as well.
+[partitioning("integer")]
+#else
 [partitioning("pow2")]
+#endif
 [outputtopology("triangle_ccw")]
 [outputcontrolpoints(3)]
 [patchconstantfunc("PatchConstantsHS")]

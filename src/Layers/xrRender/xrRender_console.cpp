@@ -953,6 +953,21 @@ public:
 
 // r__caps: what this adapter and module can do, for the options menu
 // (get_console():get_string("r__caps")). Read-only and never saved.
+bool da_renderdoc_capture(); // D3DXRenderBase.cpp
+
+class CCC_GpuCapture final : public IConsole_Command
+{
+public:
+    CCC_GpuCapture(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        if (da_renderdoc_capture())
+            Msg("* [renderdoc] the next frame is captured");
+        else
+            Msg("! [renderdoc] RenderDoc is not in the process");
+    }
+};
+
 class CCC_RenderCaps final : public IConsole_Command
 {
 public:
@@ -970,9 +985,9 @@ public:
         const UpscalerCaps caps = da_upscaler_caps();
         // snprintf: a status that grew past TStatus is cut and reported once, never a crash.
         const int length = std::snprintf(S, sizeof(TStatus),
-            "api=%u;dx12=%d;dlss=%d;dlssg=%d;dlssg_max=%u;fsr=%d;fsrfg=%d;hags=%d;rt=%d;rt_tier=%u;vrs_tier=%u;"
+            "api=%u;dx12=%d;vk=%d;dlss=%d;dlssg=%d;dlssg_max=%u;fsr=%d;fsrfg=%d;hags=%d;rt=%d;rt_tier=%u;vrs_tier=%u;"
             "vrs_tile=%u;vrs=%d;ms=%d;sm=%u;wave=%u;fp16=%d;eb=%d;acq=%d;dxc=%d;gd=%d;dstorage=%d",
-            caps.api, caps.dx12 ? 1 : 0, caps.dlss ? 1 : 0, caps.dlssg ? 1 : 0, caps.dlssg_max, caps.fsr ? 1 : 0,
+            caps.api, caps.dx12 ? 1 : 0, caps.vk ? 1 : 0, caps.dlss ? 1 : 0, caps.dlssg ? 1 : 0, caps.dlssg_max, caps.fsr ? 1 : 0,
             caps.fsrfg ? 1 : 0, caps.hags ? 1 : 0, caps.rt ? 1 : 0, caps.rt_tier, caps.vrs_tier, caps.vrs_tile,
             caps.vrs ? 1 : 0, caps.ms ? 1 : 0, caps.sm, caps.wave, caps.fp16 ? 1 : 0, caps.eb ? 1 : 0,
             caps.acq ? 1 : 0, caps.dxc ? 1 : 0, caps.gd ? 1 : 0, caps.dstorage ? 1 : 0);
@@ -2174,6 +2189,7 @@ void xrRender_initconsole()
     CMD3(CCC_Token, "r__framegen", &ps_r__framegen, qframegen_token);
     CMD4(CCC_Float, "r__upscale_sharpness", &ps_r__upscale_sharpness, 0.f, 1.f);
     CMD1(CCC_RenderCaps, "r__caps");
+    CMD1(CCC_GpuCapture, "r__gpu_capture");
 
     // DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.6): the same commands in both
     // modules, so user.ltx keeps the DirectX 12 choices across a DirectX 11 session. Nothing here is

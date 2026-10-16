@@ -790,12 +790,12 @@ void CRender::create()
     o.noshadows = (strstr(Core.Params, "-noshadows")) ? TRUE : FALSE;
     o.Tshadows = (strstr(Core.Params, "-tsh")) ? TRUE : FALSE;
     o.oldshadowcascades = must_enable_old_cascades() || ps_r2_ls_flags_ext.test(R2FLAGEXT_SUN_OLD);
-#ifdef XR_D3D12
-    // Their passes (stub_notransform_2uv into accum_sun_near/far) do not link, and DirectX 12
-    // validates a pipeline as a whole: without this there would be no sun at all.
+#ifdef XR_NATIVE
+    // Their passes (stub_notransform_2uv into accum_sun_near/far) do not link, and DirectX 12 and
+    // Vulkan validate a pipeline as a whole: without this there would be no sun at all.
     if (o.oldshadowcascades)
     {
-        Msg("! [render] the old sun cascades do not run on DirectX 12 - the current ones are used");
+        Msg("! [render] the old sun cascades do not run on DirectX 12 and Vulkan - the current ones are used");
         o.oldshadowcascades = false;
     }
 #endif

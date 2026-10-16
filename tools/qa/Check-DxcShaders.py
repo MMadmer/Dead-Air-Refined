@@ -22,6 +22,7 @@ unique preprocessed shader:
     python tools\\qa\\Check-DxcShaders.py --filter taa              # pipelines/files with this in a name
     python tools\\qa\\Check-DxcShaders.py --preprocess dxc          # DXC's own preprocessor + include handler
     python tools\\qa\\Check-DxcShaders.py --out DIR                 # DXIL blobs + pipelines.txt for pso_probe
+    python tools\\qa\\Check-DxcShaders.py --sm 6_6 --spirv          # + the SPIR-V twin of the Vulkan renderer (R6)
 
 tools\\qa\\dxc\\Run-DxcAudit.ps1 runs it with --out and creates every pipeline on the device.
 
@@ -174,6 +175,16 @@ class Dxc(L.Dxc):
         hr = vcall(self.utils(), 13, c_long, [POINTER(L.DxcBuffer), POINTER(L.GUID), POINTER(c_void_p)], byref(buf),
                    byref(IID_ID3D12ShaderReflection), byref(r))
         return r.value if hr >= 0 else None
+
+
+# The SPIR-V compile of the Vulkan renderer: xrRenderVK/vk_spirv.cpp kSpirvArgs after the engine's arguments
+# without the DXIL-only ones (da_dxc.cpp da_dxc_spirv).
+SPIRV_ARGS = ("-spirv", "-fspv-target-env=vulkan1.3", "-fvk-use-dx-layout", "-fvk-support-nonzero-base-vertex",
+              "-fvk-support-nonzero-base-instance", "-fvk-use-dx-position-w", "-fvk-b-shift", "0", "0", "-fvk-t-shift", "16", "0",
+              "-fvk-s-shift", "48", "0", "-fvk-u-shift", "64", "0", "-Wno-vk-ignored-features", "-Wno-vk-emulated-features")
+# First try: storage images take the view's format; image atomics need the HLSL type's (da_dxc.cpp retries without it).
+SPIRV_UNKNOWN_FORMAT = "-fspv-use-unknown-image-format"
+DXIL_ONLY_ARGS = ("-flegacy-resource-reservation", "-all-resources-bound", "-Qstrip_reflect")
 
 
 # ---- reflection -> plain data ---------------------------------------------------------------
@@ -332,7 +343,8 @@ CONSOLE_EXTRAS = (
 
 class Result:
     __slots__ = ("stage", "name", "entry", "ok", "error", "warnings", "fxc_ok", "fxc_error", "dx9", "problems", "diffs",
-                 "dxc_ms", "fxc_ms", "sig", "obj", "size_dxil", "size_dxbc", "hv2021", "same_as_raw")
+                 "dxc_ms", "fxc_ms", "sig", "obj", "size_dxil", "size_dxbc", "hv2021", "same_as_raw", "spv_ok", "spv_error",
+                 "spv_ms", "size_spv")
 
     def __init__(self, stage="", name="", entry="main"):
         self.stage, self.name, self.entry = stage, name, entry
@@ -340,8 +352,10 @@ class Result:
         self.error = self.fxc_error = self.warnings = ""
         self.problems, self.diffs = [], []
         self.dxc_ms = self.fxc_ms = 0.0
-        self.sig = self.obj = self.hv2021 = self.same_as_raw = None
-        self.size_dxil = self.size_dxbc = 0
+        self.sig = self.obj = self.hv2021 = self.same_as_raw = self.spv_ok = None
+        self.size_dxil = self.size_dxbc = self.size_spv = 0
+        self.spv_error = ""
+        self.spv_ms = 0.0
 
 
 class Auditor:
@@ -356,6 +370,8 @@ class Auditor:
         self.args = tuple(L.DXC_ENGINE_ARGS if args.engine_args else ("-Zpr", "-O3", "-Qstrip_debug", "-Qstrip_reflect")) + \
             tuple(args.dxc_arg)
         self.xfr = L.dxc_macros(args.sm, args.wave_lanes, not args.no_min16)
+        self.spirv = args.spirv
+        self.spirv_args = tuple(a for a in self.args if a not in DXIL_ONLY_ARGS) + SPIRV_ARGS
         self.lock = threading.Lock()
         self.by_input = {}
         self.by_text = {}
@@ -449,6 +465,15 @@ class Auditor:
         r.size_dxil = len(obj) if obj else 0
         r.error = "" if r.ok else L.first_dxc_error(msg)
         r.warnings = summarize_warnings(msg) if r.ok else ""
+        if self.spirv and r.ok and dtext is not None:
+            t = time.perf_counter()
+            spv, _, smsg = self.dxc.compile(dtext, file_name, entry, target, hv, self.spirv_args + (SPIRV_UNKNOWN_FORMAT,))
+            if spv is None and "OpImageTexelPointer" in smsg:
+                spv, _, smsg = self.dxc.compile(dtext, file_name, entry, target, hv, self.spirv_args)
+            r.spv_ms = (time.perf_counter() - t) * 1000.0
+            r.spv_ok = spv is not None
+            r.size_spv = len(spv) if spv else 0
+            r.spv_error = "" if r.spv_ok else L.first_dxc_error(smsg)
         if self.check2021 and hv != "2021" and dtext is not None:
             o2, _, m2 = self.dxc.compile(dtext, file_name, entry, target, "2021", self.args)
             r.hv2021 = "" if o2 is not None else L.first_dxc_error(m2)
@@ -507,6 +532,7 @@ def main():
     ap.add_argument("--console-extras", action="store_true", help="also the console-only switches, one at a time")
     ap.add_argument("--preprocess", choices=("dxc", "fxc"), default="fxc", help="who expands includes and macros")
     ap.add_argument("--compare-raw", action="store_true", help="with --preprocess fxc: also compile the raw file, compare the DXIL")
+    ap.add_argument("--spirv", action="store_true", help="also compile every DXIL shader to SPIR-V as the Vulkan renderer does")
     args = ap.parse_args()
 
     tree = L.Tree(args.unpack, args.loose)
@@ -606,6 +632,11 @@ def main():
     sz_d = sum(r.size_dxil for r in uniq if r.ok and r.fxc_ok)
     print(f"  bytecode: DXBC {sz_x / 1024:.0f} KB, DXIL (stripped) {sz_d / 1024:.0f} KB")
     print(f"  FXC failures {len(fxc_fail)}, DXC failures {len(dxc_fail)} (both {len(both_fail)}, DXC only {len(dxc_only_fail)})")
+    spv_fail = [r for r in uniq if r.spv_ok is False]
+    if args.spirv:
+        spv = [r for r in uniq if r.spv_ok is not None]
+        print(f"  SPIR-V: {len(spv) - len(spv_fail)} of {len(spv)} compiled, {sum(r.spv_ms for r in spv) / 1000:.1f} s, "
+              f"{sum(r.size_spv for r in spv) / 1024:.0f} KB")
     if args.compare_raw:
         cmp = [r for r in uniq if r.same_as_raw is not None]
         print(f"  DXIL from the FXC-preprocessed text equals DXIL from the raw file: {sum(1 for r in cmp if r.same_as_raw)} of {len(cmp)}")
@@ -622,6 +653,12 @@ def main():
             names = sorted({r.name for r in rs})
             print(f"  [{len(rs)}] {err}\n      in {', '.join(names[:12])}{' ...' if len(names) > 12 else ''}")
             print(f"      e.g. {rs[0].error}")
+    if spv_fail:
+        print("\n== SPIR-V refuses, DXIL compiles (by error)")
+        for err, rs in sorted(group(spv_fail, lambda r: re.sub(r"^.*?:\d+:\d+: ", "", r.spv_error)).items(), key=lambda kv: -len(kv[1])):
+            names = sorted({r.name for r in rs})
+            print(f"  [{len(rs)}] {err}\n      in {', '.join(names[:12])}{' ...' if len(names) > 12 else ''}")
+            print(f"      e.g. {rs[0].spv_error}")
     if both_fail:
         print("\n== Neither compiles (permutations the game does not build)")
         for n, rs in sorted(group(both_fail, lambda r: r.name).items()):
@@ -721,9 +758,10 @@ def main():
     if args.json:
         args.json.write_text(json.dumps([{"name": r.name, "ok": r.ok, "error": r.error, "fxc_ok": r.fxc_ok, "dxc_ms": r.dxc_ms,
                                           "fxc_ms": r.fxc_ms, "problems": r.problems, "diffs": r.diffs[:20]} for r in uniq], indent=1))
-    failed = bool(dxc_only_fail or probs or broken)
+    failed = bool(dxc_only_fail or probs or broken or spv_fail)
     print(f"\n{'FAIL' if failed else 'PASS'}: {len(dxc_only_fail)} DXC-only failure(s), {len(probs)} new reflection problem(s), "
-          f"{len(broken)} pipeline(s) not linking outside the legacy-switch set")
+          f"{len(broken)} pipeline(s) not linking outside the legacy-switch set" +
+          (f", {len(spv_fail)} SPIR-V failure(s)" if args.spirv else ""))
     return 1 if failed else 0
 
 
