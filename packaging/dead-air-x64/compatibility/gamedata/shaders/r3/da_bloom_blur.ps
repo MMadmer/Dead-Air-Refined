@@ -1,0 +1,25 @@
+#include "common.h"
+#include "da_bloom.h"
+
+// One direction of a level's Gaussian (da_bloom.h), times the level's weight; the vertical pass of every level but
+// the smallest (DA_BLOOM_UP, da_bloom_blur_up.ps) adds the finished level below it, upsampled.
+
+Texture2D s_bloom_src;
+#ifdef DA_BLOOM_UP
+Texture2D s_bloom_coarse;
+#endif
+
+struct v2p
+{
+	float2 tc0 : TEXCOORD0;
+	float4 hpos : SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	float3 c = da_bloom_gauss(s_bloom_src, I.tc0, da_bloom_step.xy) * da_bloom_step.z;
+#ifdef DA_BLOOM_UP
+	c += s_bloom_coarse.SampleLevel(smp_rtlinear, I.tc0, 0).rgb;
+#endif
+	return float4(c, 1.0f);
+}

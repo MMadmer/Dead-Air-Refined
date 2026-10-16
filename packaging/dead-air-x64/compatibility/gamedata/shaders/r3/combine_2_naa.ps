@@ -21,7 +21,8 @@ uniform float4		da_gamma;
 #include "da_water_under.h"
 #include "sweetfx.h"
 #include "blur.h"
-#include "mblur.h"
+#include "da_mblur.h"
+#include "da_bloom.h"
 #include "dof.h"
 #include "grain.h"
 #include "visor.h"
@@ -119,8 +120,16 @@ c2_out main( v2p_aa_AA I )
 	const float uw_dist = depth * length( float3( uw_ray, 1.0h ) );
 
 	float3 sceneColor = s_image.Sample(smp_rtlinear, center).rgb;
+#ifndef USE_MSAA
+	sceneColor = da_mblur_gather( s_image, center, sceneColor, I.Tex0 * da_mblur_size.xy );
+#endif
 	float3 img = sceneColor;
+	// The light the lens and the eye scatter round what is bright (da_bloom.h).
+	float3 glow = da_bloom_glow( center );
+#ifdef USE_DISTORT
+	// The stock bloom target stays the exposure meter's source; the distortion's blur reads it.
 	float4 bloom	= s_bloom.Sample( smp_rtlinear, center);
+#endif
 
 	// Beer-Lambert over the scene and over the bloom both. The bloom pyramid was built before
 	// this pass, so leaving it alone would let a bright bank shine through ten metres of pond
@@ -133,7 +142,10 @@ c2_out main( v2p_aa_AA I )
 		// does to the refracted background while the eye is still above the surface.
 		img *= lerp( 1.0f, da_uw_caustics_scene( float3( uw_ray, 1.0f ) * depth ), uw );
 		img = da_uw_medium( img, uw_dist, uw, uw_tier );
+		glow = da_uw_medium( glow, uw_dist, uw, uw_tier );
+#ifdef USE_DISTORT
 		bloom.rgb = da_uw_medium( bloom.rgb, uw_dist, uw, uw_tier );
+#endif
 		sceneColor = img;
 	}
 
@@ -145,12 +157,13 @@ c2_out main( v2p_aa_AA I )
 
 	img	= dof(img, center, centerDepth);
 
+	// Before the tone curve, which rolls the halo off with the light it surrounds instead of clipping it.
+	img += glow;
+
 	img = ACESFilm(img);
 
 	if (vibrance.x != 0)
 		img = Vibrance(img, vibrance+1);
-
-	bloom *= 0.2;
 
 	// Dirt on the visor glowing round bright light. It is a mask's, so it exists only while there
 	// is glass in front of the eye (lensdirt.y, from the engine). The texture is square and the
@@ -162,7 +175,7 @@ c2_out main( v2p_aa_AA I )
 		const float2 dirt_uv = float2(center.x, 0.5f + (center.y - 0.5f) * screen_res.y * screen_res.z);
 		float3 dirt = s_dirt.Sample( smp_rtlinear, dirt_uv);
 
-		float3 bloom_img = dirt*(bloom*4-img*2);
+		float3 bloom_img = dirt*(glow*4-img*2);
 		bloom_img = max(bloom_img,0);
 		bloom_img = lerp(bloom_img, 0, step(depth,EPSDEPTH));
 		bloom_img = Vibrance(bloom_img,2);
@@ -172,7 +185,7 @@ c2_out main( v2p_aa_AA I )
 	#endif // USE_LENS_DIRT
 
 	#ifdef 	USE_DISTORT
-		float3	blurred	= bloom*def_hdr	;
+		float3	blurred	= bloom*(0.2h*def_hdr);
 		img		= lerp	(img,blurred,distort.z);
 	#endif
 
@@ -186,7 +199,7 @@ c2_out main( v2p_aa_AA I )
 		img = TechnicolorPass(img);
 	#endif // USE_TECHICOLOR
 
-	float4 final = combine_bloom		(img,bloom);
+	float4 final = float4( img, 1.0h );
 
 	#ifdef USE_LENS_WATER
 		final.rgb = da_visor_water(s_image, center, final.rgb);

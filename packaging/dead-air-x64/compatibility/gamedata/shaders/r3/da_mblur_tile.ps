@@ -1,0 +1,35 @@
+#include "common.h"
+#include "da_mblur.h"
+
+// The longest half motion among the render pixels of one tile (da_mblur.h); the tile is da_mblur.y pixels square.
+
+struct v2p
+{
+	float2 tc0 : TEXCOORD0;
+	float4 hpos : SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	const int size = int(da_mblur.y);
+	const int2 first = int2(I.hpos.xy) * size;
+	const int2 last = int2(da_mblur_size.xy) - 1;
+	float2 best = 0.0f;
+	float best_l = 0.0f;
+	[loop]
+	for (int y = 0; y < size; ++y)
+	{
+		[loop]
+		for (int x = 0; x < size; ++x)
+		{
+			const float2 v = s_da_mblur_vz.Load(int3(min(first + int2(x, y), last), 0)).xy;
+			const float l = dot(v, v);
+			if (l > best_l)
+			{
+				best_l = l;
+				best = v;
+			}
+		}
+	}
+	return float4(best, 0.0f, 0.0f);
+}

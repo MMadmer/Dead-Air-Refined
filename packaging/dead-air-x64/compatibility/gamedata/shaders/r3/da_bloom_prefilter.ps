@@ -1,0 +1,100 @@
+#include "common.h"
+#include "da_bloom.h"
+
+// The bloom's bright pass at half the render size (da_bloom.h). The light is the exposed HDR of combine_1's second
+// target plus what the forward passes added to the scene after it (fire, muzzle flashes, glowing particles,
+// reflections): the finished scene against the opaque grab, both taken back through combine_1's tone curve. DOOM
+// Eternal's soft knee keeps what is bright, and its temporal stabilisation (the previous level reprojected and
+// clamped to this frame's neighbourhood) stops a glint that the jitter moves by a pixel from blinking the halo.
+
+Texture2D s_scene;			// rt_Generic_0 with the forward passes
+Texture2D s_da_opaque;		// the scene as combine_1 left it
+Texture2D s_bloom_hist;		// the previous frame's result
+Texture2D s_da_taa_velocity;	// NDC(current) - NDC(previous), y up
+
+// x, y: one source texel in uv; z: 1 when the opaque grab is this frame's; w: combine_1's white point.
+uniform float4 da_bloom_src;
+// x: threshold, y: knee width, z: 1 when the history and the motion vectors are this frame's, w: render width.
+uniform float4 da_bloom_knee;
+
+struct v2p
+{
+	float2 tc0 : TEXCOORD0;
+	float4 hpos : SV_Position;
+};
+
+struct out_bloom
+{
+	float4 level : SV_Target0;
+	float4 hist : SV_Target1;
+};
+
+// combine_1's curve, x (1 + x / W^2) / (1 + x) (tonemap(), the grade aside), solved for x.
+float3 da_bloom_untonemap(float3 t)
+{
+	const float w2 = da_bloom_src.w * da_bloom_src.w;
+	const float3 b = 1.0f - min(t, 0.999f);
+	return 0.5f * w2 * (sqrt(b * b + 4.0f * (1.0f - b) / w2) - b);
+}
+
+float3 da_bloom_light(float2 uv)
+{
+	float3 c = s_image.SampleLevel(smp_rtlinear, uv, 0).rgb * def_hdr;
+	[branch] if (da_bloom_src.z > 0.5f)
+	{
+		const float3 now = da_bloom_untonemap(s_scene.SampleLevel(smp_rtlinear, uv, 0).rgb);
+		const float3 before = da_bloom_untonemap(s_da_opaque.SampleLevel(smp_rtlinear, uv, 0).rgb);
+		c += max(now - before, 0.0f);
+	}
+	return c;
+}
+
+float3 da_bloom_knee_of(float3 c)
+{
+	const float peak = max(c.r, max(c.g, c.b));
+	return c * smoothstep(0.0f, 1.0f, saturate((peak - da_bloom_knee.x) / da_bloom_knee.y));
+}
+
+// The space the history blends in: a lone bright texel weighs no more than a dim one.
+float3 da_bloom_compress(float3 c) { return c / (1.0f + dot(c, LUMINANCE_VECTOR)); }
+float3 da_bloom_expand(float3 c) { return c / max(1.0f - dot(c, LUMINANCE_VECTOR), 1e-3f); }
+
+out_bloom main(v2p I)
+{
+	// The five taps, each weighed down by its brightness (Karis) so a single firefly cannot light a whole texel.
+	float3 sum = 0.0f, lo = 1e6f, hi = 0.0f;
+	float total = 0.0f;
+	[unroll]
+	for (int i = 0; i < 5; ++i)
+	{
+		// The centre last; FXC refuses even an unread index past the ring.
+		const float2 o = da_bloom_ring[min(i, 3)] * (i < 4 ? 1.0f : 0.0f);
+		const float3 c = da_bloom_knee_of(da_bloom_light(I.tc0 + o * da_bloom_src.xy));
+		const float w = 1.0f / (1.0f + dot(c, LUMINANCE_VECTOR));
+		sum += c * w;
+		total += w;
+		const float3 k = da_bloom_compress(c);
+		lo = min(lo, k);
+		hi = max(hi, k);
+	}
+	float3 result = sum / total;
+
+	[branch] if (da_bloom_knee.z > 0.5f)
+	{
+		const float2 v = s_da_taa_velocity.SampleLevel(smp_nofilter, I.tc0, 0).xy;
+		const float2 prev_uv = I.tc0 - v * float2(0.5f, -0.5f);
+		[branch] if (all(prev_uv == saturate(prev_uv)))
+		{
+			const float3 prev = clamp(da_bloom_compress(s_bloom_hist.SampleLevel(smp_rtlinear, prev_uv, 0).rgb), lo, hi);
+			// A fifth of this frame at rest, more while the image moves (DOOM's velocity term).
+			const float moved = length(v) * 0.5f * da_bloom_knee.w;
+			const float fresh = lerp(0.2f, 0.6f, saturate(moved * 0.25f));
+			result = da_bloom_expand(lerp(prev, da_bloom_compress(result), fresh));
+		}
+	}
+
+	out_bloom o;
+	o.level = float4(result, 1.0f);
+	o.hist = o.level;
+	return o;
+}

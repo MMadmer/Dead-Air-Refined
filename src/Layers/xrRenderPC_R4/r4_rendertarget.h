@@ -117,6 +117,16 @@ public:
     ref_rt rt_Bloom_2; // 32bit, dim/4	(r,g,b,?)
     ref_rt rt_LUM_64; // 64bit, 64x64,	log-average in all components
     ref_rt rt_LUM_8; // 64bit, 8x8,		log-average in all components
+    // The bloom pyramid (r4_rendertarget_phase_da_bloom.cpp, blender_da_bloom.h): RGBA16F levels from half the
+    // render size down to 1/64, the horizontal blur's targets, the bright pass's history pair. rt_Bloom_1/2 stay
+    // the exposure meter's source.
+    ref_rt rt_da_bloom[6];
+    ref_rt rt_da_bloom_temp[6];
+    ref_rt rt_da_bloom_hist[2];
+    // Motion blur (r4_rendertarget_phase_da_mblur.cpp): the longest motion of each tile, and of it and its neighbours.
+    ref_rt rt_da_mblur_vz;
+    ref_rt rt_da_mblur_tile;
+    ref_rt rt_da_mblur_near;
 
     ref_rt rt_LUM_pool[CHWCaps::MAX_GPUS * 2]; // 1xfp32,1x1,		exp-result -> scaler
     ref_texture t_LUM_src; // source
@@ -239,6 +249,8 @@ private:
     ref_shader s_fxaa;
     ref_shader s_smaa;
     ref_shader s_taa;
+    ref_shader s_da_bloom[4]; // six elements each (blender_da_bloom.h)
+    ref_shader s_da_mblur; // the motion blur's tile passes
     ref_shader s_sunshafts;
     ref_shader s_puddle_refl; // world reflections in rain puddles, fullscreen pass
     ref_shader s_water_ripple; // the ripple field's real-space step; created on first use by its phase
@@ -302,6 +314,11 @@ private:
     Fmatrix m_mblur_viewproj{};
     u32 m_mblur_frame{};
     bool m_mblur_history_valid{};
+    u32 m_da_bloom_frame{}; // the frame the bloom pyramid last ran (its history is the previous frame's)
+    u32 m_da_bloom_hist{}; // the history target the last bright pass wrote
+    bool m_da_bloom_ran{}; // the pyramid is this frame's: combine_2 adds it
+    bool m_da_mblur_ran{}; // the motion blur's tiles are this frame's: combine_2 gathers along them
+    Fmatrix m_da_mblur_prev{}; // this frame's view space to the previous frame's clip space
 
     // The frame the motion vectors were cleared and bound on (phase_scene_begin runs twice in a
     // split scene: only the first call clears).
@@ -426,6 +443,13 @@ public:
     void accum_volumetric(CBackend& cmd_list, light* L);
 
     void phase_bloom();
+    void da_bloom_create();
+    bool da_bloom_wanted() const; // the pyramid runs this frame (it wants the opaque scene grab)
+    void phase_da_bloom(bool opaque_grab);
+    void da_mblur_create();
+    // previous: this frame's view space to the previous frame's clip space (the camera's motion without vectors).
+    void phase_da_mblur(const Fmatrix& previous);
+    void set_da_mblur_constants(bool on);
     void phase_luminance();
     void phase_fxaa();
     // copy_back: the result into generic0; false leaves it in rt_Generic for the TAA after it.

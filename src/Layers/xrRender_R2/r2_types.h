@@ -47,6 +47,9 @@ namespace xray::render::RENDER_NAMESPACE
 #define     r2_RT_upscaled      "$user$upscaled"     // upscaler output, RGBA16F + UAV, display size
 #define     r2_RT_post_display  "$user$post_display" // combine_2 and the flares at display size, read by phase_pp
 #define     r2_RT_velocity      "$user$velocity"     // motion vectors, RG16F, render size: G-buffer MRT 2
+#define     r2_RT_da_mblur_vz   "$user$da_mblur_vz"   // motion blur: half motion and depth per render pixel, RGBA16F
+#define     r2_RT_da_mblur_tile "$user$da_mblur_tile" // motion blur: the longest motion of each tile, RG16F
+#define     r2_RT_da_mblur_near "$user$da_mblur_near" // motion blur: of each tile and its neighbours, RG16F
 
 #define     r2_RT_ssao_temp     "$user$ssao_temp"   // temporary rt for ssao calculation
 #define     r2_RT_half_depth    "$user$half_depth"  // temporary rt for ssao/hbao calculation

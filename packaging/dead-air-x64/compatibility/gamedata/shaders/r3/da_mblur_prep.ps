@@ -1,0 +1,18 @@
+#include "common.h"
+#include "da_mblur.h"
+
+// The half motion (render pixels) and the depth of every render pixel, for the tiles and combine_2's gather to read
+// in one fetch (da_mblur.h).
+
+struct v2p
+{
+	float2 tc0 : TEXCOORD0;
+	float4 hpos : SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	const float2 uv = I.hpos.xy * da_mblur_size.zw;
+	const float z = da_mblur_depth(uv);
+	return float4(da_mblur_motion(uv, z), z, 0.0f);
+}

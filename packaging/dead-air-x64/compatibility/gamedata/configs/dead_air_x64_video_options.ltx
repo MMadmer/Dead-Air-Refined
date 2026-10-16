@@ -54,6 +54,7 @@ sharp                = track, r2_lumasharpen, %.1f
 bloom                = track, r2_ls_bloom_kernel_scale, %.1f
 aberration           = track, r2_aberration_val, %.1f
 dof                  = check, r2_dof_enable
+motion_blur          = check, r__mblur
 technicolor          = check, r2_technicolor
 vignette             = check, r2_vignette
 color_r              = track, r__color_base_r, %.2f
@@ -81,7 +82,7 @@ rows = rt_reflections, rt_shadows, rtao, rt_quality
 rows = gamma, contrast, brightness, fov, hud_fov
 
 [group_effects]
-rows = detail_height, sun_shafts, sharp, bloom, aberration, dof, technicolor, vignette
+rows = detail_height, sun_shafts, sharp, bloom, aberration, dof, motion_blur, technicolor, vignette
 
 [group_color]
 rows = color_r, color_g, color_b, vibrance
@@ -100,6 +101,7 @@ rt_reflections    = ui_mm_da_rt_reflections
 rt_shadows        = ui_mm_da_rt_shadows
 rtao              = ui_mm_da_rtao
 rt_quality        = ui_mm_da_rt_quality
+motion_blur       = ui_mm_da_motion_blur
 sun_shafts        = ui_mm_r2_shafts_value
 aberration        = ui_mm_abberation
 

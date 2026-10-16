@@ -124,7 +124,9 @@ void da_temporal_frame_begin()
         SSManager.SetSceneMipBias(taa ? -0.5f : 0.f, taa ? 8u : 0u);
     // Frame generation and the ray traced effects' histories read the vectors even without a
     // temporal filter.
-    g_da_frame.motion = g_da_frame.active || (!menu && (da_framegen_running() || da_rt_wants_motion()));
+    // The motion blur follows moving objects by the vectors too (without them only the camera's motion).
+    g_da_frame.motion =
+        g_da_frame.active || (!menu && (da_framegen_running() || da_rt_wants_motion() || ps_r__mblur));
 
     g_da_frame.jitter_px = {};
     g_da_frame.jitter_clip = {};

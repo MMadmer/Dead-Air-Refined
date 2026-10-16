@@ -9,7 +9,8 @@ uniform float4		screen_res;
 // #defines a bare "px" and poisons that name in everything included after it.
 #include "da_water_under.h"
 #include "da_visor.h"
-#include "mblur.h"
+#include "da_mblur.h"
+#include "da_bloom.h"
 
 uniform float4 		e_barrier;	// x=norm(.8f), y=depth(.1f), z=clr
 uniform float4 		e_weights;	// x=norm, y=depth, z=clr
@@ -138,8 +139,11 @@ float4 main ( p_aa_AA I ) : SV_Target
 	float4	s2 	=  s_image.Sample( smp_rtlinear, offset + I.Tex3*w);
 	float4	s3 	=  s_image.Sample( smp_rtlinear, offset + I.Tex4*w);
 
-	float3 	final	=  mblur( center, dc, (s0+s1+s2+s3)/4.h );
-	float4	bloom	=  s_bloom.Sample( smp_rtlinear, I.Tex0);
+	float3 	final	=  ((s0+s1+s2+s3)/4.h).rgb;
+#ifndef USE_MSAA
+	final = da_mblur_gather( s_image, center, final, I.Tex0 * da_mblur_size.xy );
+#endif
+	float3	glow	=  da_bloom_glow( I.Tex0 );
 
 	// Beer-Lambert over the scene and over the bloom both: the bloom pyramid was built before
 	// this pass, so an untinted one lets a bright bank shine through ten metres of pond.
@@ -151,11 +155,10 @@ float4 main ( p_aa_AA I ) : SV_Target
 		// does to the refracted background while the eye is still above the surface.
 		final *= lerp( 1.0f, da_uw_caustics_scene( dc.xyz ), uw );
 		final = da_uw_medium( final, uw_dist, uw, uw_tier );
-		bloom.rgb = da_uw_medium( bloom.rgb, uw_dist, uw, uw_tier );
+		glow = da_uw_medium( glow, uw_dist, uw, uw_tier );
 	}
 
-//	return combine_bloom(final,tex2D	(s_bloom, I.tc0));
-	float4	out_c	= combine_bloom( final, bloom );
+	float4	out_c	= float4( final + glow, 1.0h );
 
 	// The water on the visor. Carried here as well as in combine_2_naa, and this is the second
 	// time that has had to be said in this file: the post stack lived in the non-AA one alone,

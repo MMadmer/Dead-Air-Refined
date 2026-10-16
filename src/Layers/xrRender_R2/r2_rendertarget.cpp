@@ -747,6 +747,10 @@ CRenderTarget::CRenderTarget()
             s_bloom_msaa.create(&b_bloom_msaa, "r2" DELIMITER "bloom");
         }
         f_bloom_factor = 0.5f;
+#if RENDER == R_R4
+        da_bloom_create();
+        da_mblur_create();
+#endif
     }
 
     // Check if SSAO Ultra is allowed

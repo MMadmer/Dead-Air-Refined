@@ -799,7 +799,6 @@ void CRender::create()
         o.oldshadowcascades = false;
     }
 #endif
-    o.mblur = (strstr(Core.Params, "-mblur")) ? TRUE : FALSE;
     o.distortion_enabled = (strstr(Core.Params, "-nodistort")) ? FALSE : TRUE;
     o.distortion = o.distortion_enabled;
     o.disasm = (strstr(Core.Params, "-disasm")) ? TRUE : FALSE;

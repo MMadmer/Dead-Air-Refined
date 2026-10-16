@@ -1,0 +1,38 @@
+#include "common.h"
+
+// The longest half motion of a tile and the eight round it (da_mblur.h): a pixel can be reached by motion from one
+// tile away at most, the tile being as large as the longest motion.
+
+Texture2D s_da_mblur_tile;
+
+struct v2p
+{
+	float2 tc0 : TEXCOORD0;
+	float4 hpos : SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	uint w, h;
+	s_da_mblur_tile.GetDimensions(w, h);
+	const int2 p = int2(I.hpos.xy);
+	float2 best = 0.0f;
+	float best_l = 0.0f;
+	[unroll]
+	for (int y = -1; y <= 1; ++y)
+	{
+		[unroll]
+		for (int x = -1; x <= 1; ++x)
+		{
+			const int2 q = clamp(p + int2(x, y), 0, int2(w, h) - 1);
+			const float2 v = s_da_mblur_tile.Load(int3(q, 0)).xy;
+			const float l = dot(v, v);
+			if (l > best_l)
+			{
+				best_l = l;
+				best = v;
+			}
+		}
+	}
+	return float4(best, 0.0f, 0.0f);
+}

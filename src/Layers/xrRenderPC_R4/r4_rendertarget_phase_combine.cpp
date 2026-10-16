@@ -235,23 +235,20 @@ void CRenderTarget::phase_combine()
     }
     //}
 
-    // calc m-blur matrices
-    Fmatrix m_previous, m_current;
-    Fvector2 m_blur_scale;
+    // This frame's view space to the previous frame's clip space: TAA's reprojection without motion vectors, and the
+    // camera's motion for the motion blur.
+    Fmatrix m_previous;
     {
         // (new-camera) -> (world) -> (old_viewproj)
         const bool historyValid = m_mblur_history_valid && m_mblur_frame + 1 == Device.dwFrame;
-        m_current.set(Device.mProject);
         if (historyValid)
             m_previous.mul(m_mblur_viewproj, Device.mInvView);
         else
-            m_previous.set(m_current);
+            m_previous.set(Device.mProject);
 
         m_mblur_viewproj.set(Device.mFullTransform);
         m_mblur_frame = Device.dwFrame;
         m_mblur_history_valid = true;
-        const float scale = historyValid ? ps_r2_mblur / 2.f : 0.f;
-        m_blur_scale.set(scale, -scale).div(12.f);
     }
 
     // Draw full-screen quad textured with our scene image
@@ -401,8 +398,10 @@ void CRenderTarget::phase_combine()
     // weighs its history by the same mask (smoke, fire, glass and rain carry no motion vectors).
     const bool upscaling = da_upscaler_active();
     const bool taa_reactive = !upscaling && ps_r__taa && s_taa && s_upscale && rt_Reactive && !_menu_pp;
-    if (rt_SSR && (g_da_level_has_water || ps_r_water_reflection > 0 || puddles_read_grab || upscaling ||
-        taa_reactive || da_rt_wants_scene_grab()))
+    // The bloom takes what the forward passes add to the scene from the same grab.
+    const bool opaque_grab = rt_SSR && (g_da_level_has_water || ps_r_water_reflection > 0 || puddles_read_grab ||
+        upscaling || taa_reactive || da_rt_wants_scene_grab() || da_bloom_wanted());
+    if (opaque_grab)
     {
         PIX_EVENT(scene_grab_for_SSLR);
         // rt_Generic_0(_r) is still bound from the combine above; D3D11 will not copy from a
@@ -487,6 +486,7 @@ void CRenderTarget::phase_combine()
     // for msaa we need a resolved color buffer - Holger
     GpuTimers.Begin(dx11GpuTimers::CombineBloom);
     phase_bloom(); // HDR RT invalidated here
+    phase_da_bloom(opaque_grab);
     GpuTimers.End(dx11GpuTimers::CombineBloom);
 
     // RImplementation.rmNormal();
@@ -558,6 +558,9 @@ void CRenderTarget::phase_combine()
     else if (da_temporal_active())
         RCache.set_xform_project(Device.mProject);
     da_vrs_luma_upscaled_pass(RCache); // [dx12:vrs] hook
+
+    // The motion blur's tiles, for combine_2's gather.
+    phase_da_mblur(m_previous);
 
     // PP enabled ?
     //	Render to RT texture to be able to copy RT even in windowed mode.
@@ -682,9 +685,7 @@ void CRenderTarget::phase_combine()
         RCache.set_c("e_barrier", ps_r2_aa_barier.x, ps_r2_aa_barier.y, ps_r2_aa_barier.z, 0.f);
         RCache.set_c("e_weights", ps_r2_aa_weight.x, ps_r2_aa_weight.y, ps_r2_aa_weight.z, 0.f);
         RCache.set_c("e_kernel", ps_r2_aa_kernel, ps_r2_aa_kernel, ps_r2_aa_kernel, 0.f);
-        RCache.set_c("m_current", m_current);
-        RCache.set_c("m_previous", m_previous);
-        RCache.set_c("m_blur", m_blur_scale.x, m_blur_scale.y, 0.f, 0.f);
+        set_da_mblur_constants(m_da_mblur_ran);
         RCache.set_c("aberration", ps_r2_aberration, ps_r2_aberration, ps_r2_aberration, ps_r2_aberration);
         RCache.set_c("vibrance", ps_r2_vibrance, ps_r2_vibrance, ps_r2_vibrance, ps_r2_vibrance);
         // Everything below that belongs to a mask - its dirt and the water on it - exists only
@@ -711,6 +712,9 @@ void CRenderTarget::phase_combine()
         else
             RCache.set_c("da_visor", 0.f, 1.f, 1.f, 1.f);
         RCache.set_c("lumasharpen", ps_r2_lumasharpen, 0.f, 0.f, 0.f);
+        // The menu's bloom slider scales the pyramid (0.7 is its default).
+        RCache.set_c("da_bloom_params", m_da_bloom_ran ? ps_r__bloom * ps_r2_ls_bloom_kernel_scale / 0.7f : 0.f, 0.f,
+            0.f, 0.f);
         RCache.set_c("temp", ps_r2_temp);
         Fvector3 dof;
         g_pGamePersistent->GetCurrentDof(dof);

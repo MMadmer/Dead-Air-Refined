@@ -228,7 +228,7 @@ any`, `sky = all`, `farDof = all pixels beyond the DoF far plane with >= 2 px bl
 tau      = s_mode * (L + 0.08) * r__vrs_threshold * (renderW / displayW)
            s_mode: 0.06 conservative, 0.15 aggressive (starting values, calibrated in 9.3)
 Ex_eff   = Ex / (1 + k_m * m)            k_m 0.05 cons / 0.10 aggr per px/frame, at most /2,
-                                          only while TAA, an upscaler or r2_mblur runs
+                                          only while TAA, an upscaler or r__mblur runs
 Ex_eff  /= prev_rate_x == 2 ? sqrt(2) : prev_rate_x == 4 ? 2 : 1
            (a block shaded at 2x shows zero inside, 2x the step at its borders: RMS grows by sqrt 2)
 half_ok  = Ex_eff        < tau * (prev_rate_x >= 2 ? 1.0 : 0.8)     (hysteresis 20 %)

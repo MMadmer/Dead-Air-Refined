@@ -63,6 +63,9 @@
 	<string id="ui_mm_da_rt_quality">
 		<text>Ray tracing quality</text>
 	</string>
+	<string id="ui_mm_da_motion_blur">
+		<text>Motion blur</text>
+	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
 	<string id="st_opt_renderer_r2">
 		<text>DirectX 10 (R2)</text>
@@ -301,6 +304,9 @@
 	</string>
 	<string id="st_da_x64_video_hint_dof">
 		<text>Blurs the distance: at the horizon, while reloading and when aiming without a scope.</text>
+	</string>
+	<string id="st_da_x64_video_hint_motion_blur">
+		<text>Blurs what moves fast across the screen, as a camera shutter does: turns of the view and moving objects, not the weapon in hand. A matter of taste: no quality preset changes it.</text>
 	</string>
 	<string id="st_da_x64_video_hint_technicolor">
 		<text>Technicolor filter: a film palette over the whole picture.</text>

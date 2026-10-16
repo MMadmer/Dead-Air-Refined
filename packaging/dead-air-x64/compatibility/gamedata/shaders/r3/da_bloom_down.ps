@@ -1,0 +1,21 @@
+#include "common.h"
+#include "da_bloom.h"
+
+// One level of the bloom pyramid from the one above it (da_bloom.h): DOOM's 13-texel downsample.
+
+Texture2D s_bloom_src;
+
+struct v2p
+{
+	float2 tc0 : TEXCOORD0;
+	float4 hpos : SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+	float3 c = s_bloom_src.SampleLevel(smp_rtlinear, I.tc0, 0).rgb;
+	[unroll]
+	for (int i = 0; i < 4; ++i)
+		c += s_bloom_src.SampleLevel(smp_rtlinear, I.tc0 + da_bloom_ring[i] * da_bloom_step.xy, 0).rgb;
+	return float4(c * 0.2f, 1.0f);
+}

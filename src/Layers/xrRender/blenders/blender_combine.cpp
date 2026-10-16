@@ -252,6 +252,9 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
@@ -285,6 +288,9 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
@@ -317,6 +323,9 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
@@ -350,6 +359,9 @@ void CBlender_combine::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", m_image);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
@@ -507,6 +519,9 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
@@ -540,6 +555,9 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
@@ -572,6 +590,9 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");
@@ -605,6 +626,9 @@ void CBlender_combine_msaa::Compile(CBlender_Compile& C)
         C.r_dx11Texture("s_normal", r2_RT_N);
         C.r_dx11Texture("s_image", r2_RT_generic0);
         C.r_dx11Texture("s_bloom", r2_RT_bloom1);
+        C.r_dx11Texture("s_da_bloom", "$user$da_bloom0");
+        C.r_dx11Texture("s_da_mblur_tiles", r2_RT_da_mblur_near);
+        C.r_dx11Texture("s_da_mblur_vz", r2_RT_da_mblur_vz);
         C.r_dx11Texture("s_distort", r2_RT_generic1_r);
         C.r_dx11Texture("s_dirt", "shaders" DELIMITER "s_dirt");
         C.r_dx11Texture("s_raindrops", "shaders" DELIMITER "s_raindrops");

@@ -428,7 +428,6 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     appendShaderOption(o.Tshadows, "USE_TSHADOWS", "1");
 
     // Motion blur
-    appendShaderOption(o.mblur, "USE_MBLUR", "1");
 
     // Sun filter
     appendShaderOption(o.sunfilter, "USE_SUNFILTER", "1");

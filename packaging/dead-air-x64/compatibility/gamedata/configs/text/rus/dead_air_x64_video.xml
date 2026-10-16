@@ -59,6 +59,9 @@
 	<string id="ui_mm_da_rt_quality">
 		<text>Качество трассировки</text>
 	</string>
+	<string id="ui_mm_da_motion_blur">
+		<text>Размытие в движении</text>
+	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
 	<string id="st_opt_renderer_r2">
 		<text>DirectX 10 (R2)</text>
@@ -297,6 +300,9 @@
 	</string>
 	<string id="st_da_x64_video_hint_dof">
 		<text>Размывает дальний план: у горизонта, при перезарядке и при прицеливании без оптики.</text>
+	</string>
+	<string id="st_da_x64_video_hint_motion_blur">
+		<text>Размывает то, что быстро движется по экрану, как затвор камеры: повороты взгляда и движущиеся объекты, но не оружие в руках. Дело вкуса: пресеты качества эту настройку не меняют.</text>
 	</string>
 	<string id="st_da_x64_video_hint_technicolor">
 		<text>Фильтр Technicolor: плёночная палитра для всей картинки.</text>

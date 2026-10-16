@@ -298,6 +298,16 @@ float ps_r__grade_sat = 0.9f;
 float ps_r__grade_green = 0.8f;
 float ps_r__grade_olive = 0.3f;
 float ps_r__grade_contrast = 1.05f;
+// The bloom pyramid (r4_rendertarget_phase_da_bloom.cpp): its share of the frame at the menu's bloom slider at its
+// default (r2_ls_bloom_kernel_scale 0.7, which scales it), the exposed brightness where it starts and the width over
+// which it reaches full weight. Look constants, re-applied by the preset sync.
+float ps_r__bloom = 0.3f;
+float ps_r__bloom_threshold = 0.5f;
+float ps_r__bloom_knee = 0.5f;
+// Motion blur (r4_rendertarget_phase_da_mblur.cpp): the option, a matter of taste that no preset touches, and the
+// share of a frame's motion it spans (a 180-degree shutter), a look constant.
+int ps_r__mblur = 0;
+float ps_r__mblur_shutter = 0.5f;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -703,7 +713,6 @@ float ps_r2_ls_bloom_threshold = .00001f; // r2-only
 Fvector ps_r2_aa_barier = {.8f, .1f, 0}; // r2-only
 Fvector ps_r2_aa_weight = {.25f, .25f, 0}; // r2-only
 float ps_r2_aa_kernel = .5f; // r2-only
-float ps_r2_mblur = .0f; // .5f
 int ps_r2_GI_depth = 1; // 1..5
 int ps_r2_GI_photons = 16; // 8..64
 float ps_r2_GI_clip = EPS_L; // EPS
@@ -1472,6 +1481,10 @@ void xrRender_sync_preset_derived()
     ps_r__grade_green = 0.8f;
     ps_r__grade_olive = 0.3f;
     ps_r__grade_contrast = 1.05f;
+    ps_r__bloom = 0.3f;
+    ps_r__bloom_threshold = 0.5f;
+    ps_r__bloom_knee = 0.5f;
+    ps_r__mblur_shutter = 0.5f;
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;
@@ -1983,6 +1996,11 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__grade_green", &ps_r__grade_green, 0.f, 2.f);
     CMD4(CCC_RuntimeFloat, "r__grade_olive", &ps_r__grade_olive, 0.f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__grade_contrast", &ps_r__grade_contrast, 0.5f, 2.f);
+    CMD4(CCC_RuntimeFloat, "r__bloom", &ps_r__bloom, 0.f, 4.f);
+    CMD4(CCC_RuntimeFloat, "r__bloom_threshold", &ps_r__bloom_threshold, 0.f, 8.f);
+    CMD4(CCC_RuntimeFloat, "r__bloom_knee", &ps_r__bloom_knee, 0.05f, 8.f);
+    CMD4(CCC_Integer, "r__mblur", &ps_r__mblur, 0, 1);
+    CMD4(CCC_RuntimeFloat, "r__mblur_shutter", &ps_r__mblur_shutter, 0.f, 1.f);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list
@@ -2080,7 +2098,6 @@ void xrRender_initconsole()
 
     CMD3(CCC_Mask, "r2_aa", &ps_r2_ls_flags, R2FLAG_AA);
     CMD4(CCC_Float, "r2_aa_kernel", &ps_r2_aa_kernel, 0.3f, 0.7f);
-    CMD4(CCC_Float, "r2_mblur", &ps_r2_mblur, 0.0f, 1.0f);
 
     CMD3(CCC_Mask, "r2_gi", &ps_r2_ls_flags, R2FLAG_GI);
     CMD4(CCC_Float, "r2_gi_clip", &ps_r2_GI_clip, EPS, 0.1f);
@@ -2357,7 +2374,6 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r__macro_relief", &ps_r__macro_relief, 0.f, 2.f);
     CMD4(CCC_Float, "r__terrain_blend", &ps_r__terrain_blend, 0.f, 1.f);
     CMD4(CCC_Float, "r__mask_jitter", &ps_r__mask_jitter, 0.f, 0.05f);
-    CMD4(CCC_Float, "r2_mblur_value", &ps_r2_mblur, 0.f, 1.f);
 
     //float ps_r2_dof_near = 0.f; // 0.f
     //float ps_r2_dof_focus = 1.4f; // 1.4f

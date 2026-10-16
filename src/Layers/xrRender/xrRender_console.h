@@ -98,6 +98,11 @@ extern ECORE_API float ps_r__grade_sat;
 extern ECORE_API float ps_r__grade_green;
 extern ECORE_API float ps_r__grade_olive;
 extern ECORE_API float ps_r__grade_contrast;
+extern ECORE_API float ps_r__bloom;
+extern ECORE_API float ps_r__bloom_threshold;
+extern ECORE_API float ps_r__bloom_knee;
+extern ECORE_API int ps_r__mblur;
+extern ECORE_API float ps_r__mblur_shutter;
 extern ECORE_API int ps_r__sun_cache_ms;
 
 extern ECORE_API float ps_r__Detail_l_ambient;
@@ -326,7 +331,6 @@ extern ECORE_API float ps_r2_ls_ssm_kernel; // r2-only
 extern ECORE_API Fvector ps_r2_aa_barier; // r2-only
 extern ECORE_API Fvector ps_r2_aa_weight; // r2-only
 extern ECORE_API float ps_r2_aa_kernel; // r2-only
-extern ECORE_API float ps_r2_mblur; // .5f
 extern ECORE_API int ps_r2_GI_depth; // 1..5
 extern ECORE_API int ps_r2_GI_photons; // 8..256
 extern ECORE_API float ps_r2_GI_clip; // EPS

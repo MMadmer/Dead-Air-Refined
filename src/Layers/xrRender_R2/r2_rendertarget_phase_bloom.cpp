@@ -7,6 +7,8 @@ namespace xray::render::RENDER_NAMESPACE
 {
 namespace phase_bloom
 {
+constexpr float kMeterKernelScale = 0.7f;
+
 #pragma pack(push, 4)
 struct v_build
 {
@@ -72,6 +74,8 @@ void CalcGauss_wave(
 }
 }
 
+// What it builds is the exposure meter's source (phase_luminance) and the distortion's blur; the glow on the screen is
+// the bloom pyramid's (r4_rendertarget_phase_da_bloom.cpp).
 void CRenderTarget::phase_bloom()
 {
     using namespace phase_bloom;
@@ -384,7 +388,9 @@ void CRenderTarget::phase_bloom()
             // Perform filtering
             Fvector4 w0, w1;
             float kernel = ps_r2_ls_bloom_kernel_g;
-            CalcGauss_wave(w0, w1, kernel, kernel / 3.f, ps_r2_ls_bloom_kernel_scale);
+            // The stock scale (0.7): this chain is the exposure meter's source now, the menu's bloom slider scales the
+            // pyramid (r4_rendertarget_phase_da_bloom.cpp) and must not move the exposure.
+            CalcGauss_wave(w0, w1, kernel, kernel / 3.f, kMeterKernelScale);
             u_setrt(RCache, rt_Bloom_2, 0, 0, 0); // No need for ZBuffer at all
             RCache.set_Element(s_bloom->E[1]);
             RCache.set_ca("weight", 0, w0);
@@ -516,7 +522,7 @@ void CRenderTarget::phase_bloom()
             // Perform filtering
             Fvector4 w0, w1;
             float kernel = ps_r2_ls_bloom_kernel_g * float(Device.dwRenderHeight) / float(Device.dwRenderWidth);
-            CalcGauss_wave(w0, w1, kernel, kernel / 3.f, ps_r2_ls_bloom_kernel_scale);
+            CalcGauss_wave(w0, w1, kernel, kernel / 3.f, kMeterKernelScale);
             u_setrt(RCache, rt_Bloom_1, 0, 0, 0); // No need for ZBuffer at all
             RCache.set_Element(s_bloom->E[2]);
             RCache.set_ca("weight", 0, w0);

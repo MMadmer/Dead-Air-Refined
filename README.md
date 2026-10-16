@@ -57,6 +57,9 @@ upstream, and where the untouched code that actually runs is.
   look, on Vulkan 1.3 with pipeline libraries and a persistent pipeline cache.
 - Vertical sync off, on or adaptive on every renderer, without the frame-rate
   loss it used to cost below the monitor's refresh rate.
+- Bloom rebuilt as a pyramid, a tight core and a wide halo round bright light,
+  fire and muzzle flashes, and motion blur as an option of its own that follows
+  moving objects and leaves the weapon sharp.
 - DirectX 12-only features on GPUs that support them: shaders compiled for
   Shader Model 6.6, trees culled and drawn by the GPU, mesh-shader grass,
   texture and level loading through DirectStorage, variable rate shading on
@@ -290,6 +293,8 @@ versions and compatibility pins are recorded in
 - [`UPSTREAM.md`](docs/dead-air/UPSTREAM.md) — source lineage and attribution.
 - [`ENGINE_SURFACE.md`](docs/dead-air/ENGINE_SURFACE.md) — how much of the
   engine is this project’s own, and the map of what is still stock.
+- [`BLOOM_MOTION_BLUR.md`](docs/dead-air/BLOOM_MOTION_BLUR.md) — the bloom
+  pyramid and the motion blur, their passes, knobs and costs.
 
 ## Credits
 

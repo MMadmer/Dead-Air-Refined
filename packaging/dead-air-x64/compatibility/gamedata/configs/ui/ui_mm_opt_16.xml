@@ -495,6 +495,10 @@
 			<options_item entry="r2_dof_enable" group="mm_opt_video_adv" depend="vid"/>
 		</check_dof>
 
+		<check_motion_blur x="255" y="1" width="30" height="21">
+			<options_item entry="r__mblur" group="mm_opt_video_adv"/>
+		</check_motion_blur>
+
 		<check_technicolor x="255" y="1" width="30" height="21">
 			<options_item entry="r2_technicolor" group="mm_opt_video_adv" depend="vid"/>
 		</check_technicolor>

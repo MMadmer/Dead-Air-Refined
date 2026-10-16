@@ -97,7 +97,8 @@ void CRenderTarget::phase_combine()
         m_mblur_viewproj.set(Device.mFullTransform);
         m_mblur_frame = Device.dwFrame;
         m_mblur_history_valid = true;
-        const float scale = historyValid ? ps_r2_mblur / 2.f : 0.f;
+        // The stock motion blur's r2_mblur is gone (the R4 renderers' is da_mblur.h).
+        const float scale = 0.f;
         m_blur_scale.set(scale, -scale).div(12.f);
     }
 
