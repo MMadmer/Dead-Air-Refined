@@ -14,6 +14,10 @@
 
 #include <nvapi.h>
 #include <sl_matrix_helpers.h>
+#ifdef XR_VULKAN
+#include <vulkan/vulkan.h>
+#include <sl_helpers_vk.h>
+#endif
 
 // Defines functions and globals: exactly one translation unit per module may include it. Its
 // secondary-signature check uses the Windows 8.1 WinTrust structures, above the engine's SDK level.
@@ -506,8 +510,12 @@ void da_streamline_init(IDXGIAdapter1* adapter)
     static const sl::Feature features[] =
     {
         sl::kFeatureDLSS,
+#ifndef XR_VULKAN
+        // Reflex and its latency stats on Vulkan live in Streamline's swap chain proxies, which the layer's
+        // own swap chain does not go through.
         sl::kFeatureReflex,
         sl::kFeaturePCL,
+#endif
 #ifdef XR_D3D12
         sl::kFeatureDLSS_G,
 #endif
@@ -548,6 +556,7 @@ void da_streamline_init(IDXGIAdapter1* adapter)
     Msg("* [Streamline] %d.%d.%d ready", SL_VERSION_MAJOR, SL_VERSION_MINOR, SL_VERSION_PATCH);
 }
 
+#ifndef XR_VULKAN
 namespace
 {
 bool sl_set_device(void* device)
@@ -566,6 +575,7 @@ bool sl_set_device(void* device)
     return true;
 }
 } // namespace
+#endif
 
 #ifdef XR_D3D12
 void da_streamline_d3d12_device_created(ID3D12Device* device)
@@ -626,6 +636,61 @@ xrd3d12::SwapChainProvider* da_streamline_dlssg_provider()
 {
     static sl_swapchain_provider provider{ true };
     return &provider;
+}
+#elif defined(XR_VULKAN)
+void da_streamline_vk_requirements(xrvk::ExternalRequirements& out)
+{
+    if (!g_sl.initialised)
+        return;
+    sl::FeatureRequirements requirements{};
+    const sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS, requirements);
+    if (result != sl::Result::eOk)
+    {
+        da_sl_report("slGetFeatureRequirements(DLSS)", result);
+        return;
+    }
+    // The names stay valid while Streamline is loaded: the layer reads them while it creates the device.
+    const auto append = [](std::vector<const char*>& to, u32 count, const char** names)
+    {
+        for (u32 i = 0; i < count; ++i)
+            to.push_back(names[i]);
+    };
+    append(out.instanceExtensions, requirements.vkNumInstanceExtensions, requirements.vkInstanceExtensions);
+    append(out.deviceExtensions, requirements.vkNumDeviceExtensions, requirements.vkDeviceExtensions);
+    append(out.features12, requirements.vkNumFeatures12, requirements.vkFeatures12);
+    append(out.features13, requirements.vkNumFeatures13, requirements.vkFeatures13);
+    out.graphicsQueues += requirements.vkNumGraphicsQueuesRequired;
+    out.computeQueues += requirements.vkNumComputeQueuesRequired;
+}
+
+void da_streamline_vk_device_created(const xrvk::NativeDeviceInfo& device)
+{
+    if (!g_sl.initialised)
+        return;
+    sl::VulkanInfo info{};
+    info.instance = static_cast<VkInstance>(device.instance);
+    info.physicalDevice = static_cast<VkPhysicalDevice>(device.physicalDevice);
+    info.device = static_cast<VkDevice>(device.device);
+    info.graphicsQueueFamily = device.graphicsFamily;
+    info.graphicsQueueIndex = device.graphicsQueueIndex;
+    info.computeQueueFamily = device.computeFamily;
+    info.computeQueueIndex = device.computeQueueIndex;
+    const sl::Result result = slSetVulkanInfo(info);
+    if (result != sl::Result::eOk)
+    {
+        Msg("! [Streamline] slSetVulkanInfo failed (%s): DLSS is off", sl_result_text(result));
+        return;
+    }
+    g_sl.device = true;
+    sl_device_ready();
+}
+
+void* da_streamline_vk_device_proc(const char* name)
+{
+    if (!g_sl.device)
+        return nullptr;
+    const HMODULE interposer = GetModuleHandleW(L"sl.interposer.dll");
+    return interposer ? reinterpret_cast<void*>(GetProcAddress(interposer, name)) : nullptr;
 }
 #else
 void da_streamline_d3d11_device_created(ID3D11Device* device) { sl_set_device(device); }
@@ -837,6 +902,21 @@ sl::Resource da_sl_texture(ID3D11Resource* resource, u32 d3d12State)
     texture.flags = 0;
     return texture;
 }
+
+#ifdef XR_VULKAN
+sl::Resource da_sl_texture(const xrvk::NativeImage& image)
+{
+    sl::Resource texture(sl::ResourceType::eTex2d, image.image, image.memory, image.view, image.layout);
+    texture.width = image.width;
+    texture.height = image.height;
+    texture.nativeFormat = image.format;
+    texture.mipLevels = image.mipLevels;
+    texture.arrayLayers = image.arrayLayers;
+    texture.flags = image.createFlags;
+    texture.usage = image.usage;
+    return texture;
+}
+#endif
 
 void da_sl_report(pcstr what, sl::Result result)
 {

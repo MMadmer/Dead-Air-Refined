@@ -111,6 +111,69 @@ void UavBarrier(ID3D11DeviceContext* context, ID3D11Resource* /*resource*/)
     c->applied.computeHazardsDirty = true;
 }
 
+bool PrepareNativeImage(ID3D11DeviceContext* context, ID3D11Resource* resource, bool write, NativeImage& out)
+{
+    out = {};
+    Context* c = ContextOf(context);
+    Resource* r = resource ? Resource::From(resource) : nullptr;
+    if (!c || c->IsDeferred() || !r || !r->IsImage() || !r->image || c->device()->lost)
+        return false;
+    // Clears folded into later load operations land now: none may follow the SDK's write.
+    c->EndRendering();
+    c->FlushPendingClears(nullptr);
+    const VkImageLayout layout = write ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    const VkAccessFlags2 access = write ? VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT :
+                                          VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+    c->RequireImageAll(r, layout, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, access);
+
+    if (!r->nativeView)
+    {
+        const bool depth = (r->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+        VkImageViewCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        info.image = r->image;
+        info.viewType = r->imageInfo.imageType == VK_IMAGE_TYPE_3D ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
+        info.format = r->imageInfo.format;
+        info.subresourceRange = {depth ? VkImageAspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT) : r->aspect, 0, 1, 0, 1};
+        if (g_vk.vkCreateImageView(c->device()->vk, &info, nullptr, &r->nativeView) != VK_SUCCESS)
+        {
+            r->nativeView = VK_NULL_HANDLE;
+            return false;
+        }
+    }
+    out.image = r->image;
+    out.memory = r->memory.memory;
+    out.view = r->nativeView;
+    out.layout = UINT(layout);
+    out.format = UINT(r->imageInfo.format);
+    out.width = r->width;
+    out.height = r->height;
+    out.mipLevels = r->mipLevels;
+    out.arrayLayers = r->imageInfo.arrayLayers;
+    out.createFlags = UINT(r->imageInfo.flags);
+    out.usage = UINT(r->imageInfo.usage);
+    return true;
+}
+
+void* BeginNative(ID3D11DeviceContext* context)
+{
+    Context* c = ContextOf(context);
+    if (!c || c->IsDeferred() || c->device()->lost)
+        return nullptr;
+    const VkCommandBuffer cmd = c->Cmd();
+    if (!cmd)
+        return nullptr;
+    c->EndRendering();
+    c->FlushPendingClears(nullptr);
+    c->FlushBarriers();
+    return cmd;
+}
+
+void EndNative(ID3D11DeviceContext* context)
+{
+    if (Context* c = ContextOf(context))
+        c->InvalidateApplied();
+}
+
 void* PersistentData(ID3D11Buffer* buffer)
 {
     if (!buffer)

@@ -114,6 +114,7 @@ UINT xrRender_vulkan_disabled_features()
         {"-vk_no_ms", xrvk::NativeFeatureMeshShaders},
         {"-vk_no_gpl", xrvk::NativeFeaturePipelineLibrary},
         {"-vk_no_multidraw", xrvk::NativeFeatureMultiDraw},
+        {"-vk_no_d24", xrvk::NativeFeatureDepth24},
     };
     UINT bits = 0;
     for (const Switch& s : switches)
@@ -295,6 +296,13 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         info.pipelineCachePath = ThisInstanceIsGlobal() ? pipelineCacheW : nullptr;
         info.log = [](const char* line) { Msg("%s", line); };
         info.disabledFeatures = xrRender_vulkan_disabled_features();
+        // DLSS through Streamline: its extensions and features go into the device, then it gets the device.
+        if (ThisInstanceIsGlobal())
+        {
+            info.externalRequirements = &da_streamline_vk_requirements;
+            info.deviceCreated = &da_streamline_vk_device_created;
+            info.deviceProc = &da_streamline_vk_device_proc;
+        }
         R = xrvk::CreateDevice(info, &pDevice, &pContext, &FeatureLevel);
     }
 #else

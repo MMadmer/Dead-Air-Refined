@@ -53,6 +53,11 @@ bool da_sl_constants(const StreamlineCamera& camera);
 // A texture as sl::Resource: the D3D11 resource with state 0 on the DX11 module, the native D3D12
 // resource with its current state on the DX12 module.
 sl::Resource da_sl_texture(ID3D11Resource* resource, u32 d3d12State);
+#ifdef XR_VULKAN
+// A texture of the Vulkan module as Streamline takes it: image, memory, view and the layout the layer put
+// it into for the evaluate (xrvk::PrepareNativeImage).
+sl::Resource da_sl_texture(const xrvk::NativeImage& image);
+#endif
 
 // Logs a failed call once per call site and result.
 void da_sl_report(pcstr what, sl::Result result);

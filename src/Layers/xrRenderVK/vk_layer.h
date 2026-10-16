@@ -122,7 +122,7 @@ VkFormat ViewFormat(DXGI_FORMAT format, bool readStencil);
 DXGI_FORMAT TypelessOf(DXGI_FORMAT format);
 bool IsDepthFormat(DXGI_FORMAT format);
 // Depth formats this device has (D24S8 is missing on AMD: D32S8 stands in).
-void InitFormatSupport(VkPhysicalDevice physical);
+void InitFormatSupport(VkPhysicalDevice physical, bool allowD24);
 
 // ============================================================================================
 // Synchronisation (vk_infra.cpp)
@@ -657,6 +657,8 @@ public:
 
     // The engine's shading rate image as a rate attachment (made on first use).
     VkImageView rateView = VK_NULL_HANDLE;
+    // Mip 0, layer 0 for an SDK's native work (PrepareNativeImage, made on first use).
+    VkImageView nativeView = VK_NULL_HANDLE;
 
     bool IsBuffer() const { return dimension == D3D11_RESOURCE_DIMENSION_BUFFER; }
     bool IsImage() const { return !IsBuffer(); }

@@ -17,6 +17,9 @@ namespace
 #ifdef XR_D3D12
 constexpr u32 da_dlss_api = 12;
 constexpr pcstr da_dlss_name = "DLSS (Streamline, DX12)";
+#elif defined(XR_VULKAN)
+constexpr u32 da_dlss_api = 13;
+constexpr pcstr da_dlss_name = "DLSS (Streamline, Vulkan)";
 #else
 constexpr u32 da_dlss_api = 11;
 constexpr pcstr da_dlss_name = "DLSS (Streamline, DX11)";
@@ -56,6 +59,8 @@ class dlss_upscaler final : public IUpscaler
     int m_quality{};
     u32 m_displayW{}, m_displayH{};
     bool m_ready{};
+    // The feature exists in Streamline only from the first evaluate on: freeing it before is refused.
+    bool m_evaluated{};
     // 1x1 R32F holding 1.0: the input is tonemapped. Without an exposure texture DLSS runs its own
     // auto-exposure, and one black first frame (a renderer reset) left it at NaN for good - the
     // output stayed black on D3D11 until the feature was created again.
@@ -99,12 +104,18 @@ class dlss_upscaler final : public IUpscaler
 #ifdef XR_D3D12
             // The GPU may still run the last evaluate on the feature's own resources.
             xrd3d12::Flush(HW.get_context(CHW::IMM_CTX_ID), true);
+#elif defined(XR_VULKAN)
+            xrvk::Flush(HW.get_context(CHW::IMM_CTX_ID), true);
 #endif
-            const sl::Result result = slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{ da_sl_viewport_id });
-            if (result != sl::Result::eOk)
-                da_sl_report("slFreeResources(DLSS)", result);
+            if (m_evaluated)
+            {
+                const sl::Result result = slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{ da_sl_viewport_id });
+                if (result != sl::Result::eOk)
+                    da_sl_report("slFreeResources(DLSS)", result);
+            }
         }
         m_ready = false;
+        m_evaluated = false;
         _RELEASE(m_exposure);
     }
 
@@ -194,21 +205,50 @@ public:
             xrd3d12::Require(immediate, input, D3D12_RESOURCE_STATES(read));
         xrd3d12::Require(immediate, frame.output, D3D12_RESOURCE_STATES(write));
         sl::CommandBuffer* command = list;
+#elif defined(XR_VULKAN)
+        // The layer puts the inputs into SHADER_READ_ONLY_OPTIMAL and the output into GENERAL for the
+        // evaluate's compute work; Streamline gets each image with that layout.
+        xrvk::NativeImage images[6]{};
+        ID3D11Resource* const sources[6] = { frame.color, frame.depth, frame.velocity, frame.output, m_exposure, frame.reactive };
+        for (u32 i = 0; i < std::size(sources); ++i)
+        {
+            if (sources[i] && !xrvk::PrepareNativeImage(immediate, sources[i], i == 3, images[i]))
+                return false;
+        }
+        sl::CommandBuffer* command = xrvk::BeginNative(immediate);
+        if (!command)
+            return false;
+        static bool formatsLogged = false;
+        if (!formatsLogged)
+        {
+            formatsLogged = true;
+            Msg("* [DLSS] Vulkan inputs: color %u, depth %u, motion %u, output %u, exposure %u, reactive %u (VkFormat)",
+                images[0].format, images[1].format, images[2].format, images[3].format, images[4].format, images[5].format);
+        }
 #else
         // D3D11 resources carry no states.
         constexpr u32 read = 0, write = 0;
         sl::CommandBuffer* command = immediate;
 #endif
 
+#ifdef XR_VULKAN
+        sl::Resource color = da_sl_texture(images[0]);
+        sl::Resource depth = da_sl_texture(images[1]);
+        sl::Resource motion = da_sl_texture(images[2]);
+        sl::Resource output = da_sl_texture(images[3]);
+        sl::Resource exposure = da_sl_texture(images[4]);
+        sl::Resource reactive = da_sl_texture(images[5]);
+#else
         sl::Resource color = da_sl_texture(frame.color, read);
         sl::Resource depth = da_sl_texture(frame.depth, read);
         sl::Resource motion = da_sl_texture(frame.velocity, read);
         sl::Resource output = da_sl_texture(frame.output, write);
         sl::Resource exposure = da_sl_texture(m_exposure, read);
         sl::Resource reactive = da_sl_texture(frame.reactive, read);
+#endif
         const sl::Extent renderExtent{ 0, 0, frame.renderW, frame.renderH };
         const sl::Extent displayExtent{ 0, 0, frame.displayW, frame.displayH };
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
         // Local tags: valid for this evaluate only, nothing is copied.
         constexpr auto lifecycle = sl::ResourceLifecycle::eValidUntilEvaluate;
 #else
@@ -228,7 +268,7 @@ public:
         const u32 tagCount = frame.reactive ? u32(std::size(tags)) : u32(std::size(tags)) - 1;
         const sl::BaseStructure* inputs[std::size(tags) + 1] = { &viewport };
         u32 inputCount = 1;
-#ifdef XR_D3D12
+#ifdef XR_NATIVE
         for (u32 i = 0; i < tagCount; ++i)
             inputs[inputCount++] = &tags[i];
 #else
@@ -245,6 +285,8 @@ public:
 #ifdef XR_D3D12
         // Streamline changed the list's bindings; the layer applies its own again.
         xrd3d12::EndNative(immediate);
+#elif defined(XR_VULKAN)
+        xrvk::EndNative(immediate);
 #else
         // D3D11: the output stays bound as a compute UAV after the evaluate, and D3D11 hands a
         // resource bound for writing to every later reader as zeros (the frame came out black).
@@ -265,6 +307,7 @@ public:
             da_sl_report("slEvaluateFeature(DLSS)", result);
             return false;
         }
+        m_evaluated = true;
         return true;
     }
 

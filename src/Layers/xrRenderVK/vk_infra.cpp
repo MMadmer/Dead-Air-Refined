@@ -541,14 +541,16 @@ DXGI_FORMAT TypelessOf(DXGI_FORMAT format)
     }
 }
 
-void InitFormatSupport(VkPhysicalDevice physical)
+void InitFormatSupport(VkPhysicalDevice physical, bool allowD24)
 {
     VkFormatProperties props{};
     g_vk.vkGetPhysicalDeviceFormatProperties(physical, VK_FORMAT_D24_UNORM_S8_UINT, &props);
     const bool d24 = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
-    g_d24Supported.store(d24, std::memory_order_relaxed);
+    g_d24Supported.store(d24 && allowD24, std::memory_order_relaxed);
     if (!d24)
         Log("* D24S8 depth is not supported by the device: D32S8 stands in");
+    else if (!allowD24)
+        Log("* D32S8 stands in for D24S8 depth");
 }
 
 // ============================================================================================

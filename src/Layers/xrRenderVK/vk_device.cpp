@@ -385,6 +385,64 @@ struct ExtensionList
     }
 };
 
+// The VkBool32 members of the 1.2 / 1.3 feature structures by name: what an SDK asks for (ExternalRequirements).
+struct FeatureField
+{
+    const char* name;
+    size_t offset;
+};
+#define XRVK_F12(n) {#n, offsetof(VkPhysicalDeviceVulkan12Features, n)}
+const FeatureField kFeatures12[] = {XRVK_F12(samplerMirrorClampToEdge), XRVK_F12(drawIndirectCount),
+    XRVK_F12(storageBuffer8BitAccess), XRVK_F12(uniformAndStorageBuffer8BitAccess), XRVK_F12(storagePushConstant8),
+    XRVK_F12(shaderBufferInt64Atomics), XRVK_F12(shaderSharedInt64Atomics), XRVK_F12(shaderFloat16), XRVK_F12(shaderInt8),
+    XRVK_F12(descriptorIndexing), XRVK_F12(shaderInputAttachmentArrayDynamicIndexing),
+    XRVK_F12(shaderUniformTexelBufferArrayDynamicIndexing), XRVK_F12(shaderStorageTexelBufferArrayDynamicIndexing),
+    XRVK_F12(shaderUniformBufferArrayNonUniformIndexing), XRVK_F12(shaderSampledImageArrayNonUniformIndexing),
+    XRVK_F12(shaderStorageBufferArrayNonUniformIndexing), XRVK_F12(shaderStorageImageArrayNonUniformIndexing),
+    XRVK_F12(shaderInputAttachmentArrayNonUniformIndexing), XRVK_F12(shaderUniformTexelBufferArrayNonUniformIndexing),
+    XRVK_F12(shaderStorageTexelBufferArrayNonUniformIndexing), XRVK_F12(descriptorBindingUniformBufferUpdateAfterBind),
+    XRVK_F12(descriptorBindingSampledImageUpdateAfterBind), XRVK_F12(descriptorBindingStorageImageUpdateAfterBind),
+    XRVK_F12(descriptorBindingStorageBufferUpdateAfterBind), XRVK_F12(descriptorBindingUniformTexelBufferUpdateAfterBind),
+    XRVK_F12(descriptorBindingStorageTexelBufferUpdateAfterBind), XRVK_F12(descriptorBindingUpdateUnusedWhilePending),
+    XRVK_F12(descriptorBindingPartiallyBound), XRVK_F12(descriptorBindingVariableDescriptorCount),
+    XRVK_F12(runtimeDescriptorArray), XRVK_F12(samplerFilterMinmax), XRVK_F12(scalarBlockLayout),
+    XRVK_F12(imagelessFramebuffer), XRVK_F12(uniformBufferStandardLayout), XRVK_F12(shaderSubgroupExtendedTypes),
+    XRVK_F12(separateDepthStencilLayouts), XRVK_F12(hostQueryReset), XRVK_F12(timelineSemaphore),
+    XRVK_F12(bufferDeviceAddress), XRVK_F12(bufferDeviceAddressCaptureReplay), XRVK_F12(bufferDeviceAddressMultiDevice),
+    XRVK_F12(vulkanMemoryModel), XRVK_F12(vulkanMemoryModelDeviceScope),
+    XRVK_F12(vulkanMemoryModelAvailabilityVisibilityChains), XRVK_F12(shaderOutputViewportIndex),
+    XRVK_F12(shaderOutputLayer), XRVK_F12(subgroupBroadcastDynamicId)};
+#undef XRVK_F12
+#define XRVK_F13(n) {#n, offsetof(VkPhysicalDeviceVulkan13Features, n)}
+const FeatureField kFeatures13[] = {XRVK_F13(robustImageAccess), XRVK_F13(inlineUniformBlock),
+    XRVK_F13(descriptorBindingInlineUniformBlockUpdateAfterBind), XRVK_F13(pipelineCreationCacheControl),
+    XRVK_F13(privateData), XRVK_F13(shaderDemoteToHelperInvocation), XRVK_F13(shaderTerminateInvocation),
+    XRVK_F13(subgroupSizeControl), XRVK_F13(computeFullSubgroups), XRVK_F13(synchronization2),
+    XRVK_F13(textureCompressionASTC_HDR), XRVK_F13(shaderZeroInitializeWorkgroupMemory), XRVK_F13(dynamicRendering),
+    XRVK_F13(shaderIntegerDotProduct), XRVK_F13(maintenance4)};
+#undef XRVK_F13
+
+// Turns the named member on in `enabled` where `supported` has it; false when the device lacks it.
+template <typename T, size_t N>
+bool EnableFeature(const FeatureField (&table)[N], const char* name, const T& supported, T& enabled)
+{
+    for (const FeatureField& f : table)
+    {
+        if (std::strcmp(f.name, name))
+            continue;
+        const VkBool32 have = *reinterpret_cast<const VkBool32*>(reinterpret_cast<const char*>(&supported) + f.offset);
+        if (have)
+            *reinterpret_cast<VkBool32*>(reinterpret_cast<char*>(&enabled) + f.offset) = VK_TRUE;
+        return have != VK_FALSE;
+    }
+    return false;
+}
+
+bool Listed(const std::vector<const char*>& names, const char* name)
+{
+    return std::any_of(names.begin(), names.end(), [name](const char* n) { return !std::strcmp(n, name); });
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT* data, void*)
 {
@@ -1392,6 +1450,10 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
         Log("! vulkan-1.dll is not available");
         return DXGI_ERROR_UNSUPPORTED;
     }
+    // An SDK sharing the device (Streamline) tells what the instance and the device must have.
+    ExternalRequirements external;
+    if (info.externalRequirements)
+        info.externalRequirements(external);
 
     // ---- instance ----
     u32 loaderVersion = VK_API_VERSION_1_0;
@@ -1427,6 +1489,15 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     debugUtils = instanceExtensions.Has(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     if (debugUtils)
         iext.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    for (const char* name : external.instanceExtensions)
+    {
+        if (Listed(iext, name))
+            continue;
+        if (instanceExtensions.Has(name))
+            iext.push_back(name);
+        else
+            Log("~ the Vulkan instance lacks %s (asked for by an SDK)", name);
+    }
     surfaceMaintenance = instanceExtensions.Has(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME) &&
         instanceExtensions.Has(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
@@ -1884,6 +1955,33 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     if (hasExecutables && info.validation)
         dext.push_back(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
 
+    // What an SDK sharing the device asked for. VK_EXT_buffer_device_address stays off: it may not be enabled
+    // with the core bufferDeviceAddress feature, which serves the SDK the same.
+    for (const char* name : external.deviceExtensions)
+    {
+        if (!std::strcmp(name, VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME))
+        {
+            f12.bufferDeviceAddress = s12.bufferDeviceAddress;
+            continue;
+        }
+        if (Listed(dext, name))
+            continue;
+        if (ext.Has(name))
+            dext.push_back(name);
+        else
+            Log("~ %s lacks %s (asked for by an SDK)", props.deviceName, name);
+    }
+    for (const char* name : external.features12)
+    {
+        if (!EnableFeature(kFeatures12, name, s12, f12))
+            Log("~ %s lacks the Vulkan 1.2 feature %s (asked for by an SDK)", props.deviceName, name);
+    }
+    for (const char* name : external.features13)
+    {
+        if (!EnableFeature(kFeatures13, name, s13, f13))
+            Log("~ %s lacks the Vulkan 1.3 feature %s (asked for by an SDK)", props.deviceName, name);
+    }
+
     // ---- queues ----
     u32 familyCount = 0;
     g_vk.vkGetPhysicalDeviceQueueFamilyProperties(physical, &familyCount, nullptr);
@@ -1909,21 +2007,38 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
         computeFamily = ~0u;
     if (disabledFeatures & NativeFeatureTransferQueue)
         transferFamily = ~0u;
-    // The graphics queue first, async compute equal (it should overlap, not starve), uploads below.
-    const float graphicsPriority = 1.0f, computePriority = 1.0f, transferPriority = 0.5f;
+    // The graphics queue first, async compute equal (it should overlap, not starve), uploads below. An SDK's
+    // extra queues follow the layer's own in their family (as many as the family has).
+    static constexpr float kPriorities[8] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    const float transferPriority = 0.5f;
     std::vector<VkDeviceQueueCreateInfo> queues;
-    auto addQueue = [&](u32 family, const float* priority) {
+    auto addQueue = [&](u32 family, u32 count, const float* priority) {
         VkDeviceQueueCreateInfo q{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
         q.queueFamilyIndex = family;
-        q.queueCount = 1;
+        q.queueCount = (std::min)({count, families[family].queueCount, u32(std::size(kPriorities))});
         q.pQueuePriorities = priority;
         queues.push_back(q);
+        return q.queueCount;
     };
-    addQueue(graphicsFamily, &graphicsPriority);
+    NativeDeviceInfo native;
+    native.graphicsFamily = native.computeFamily = graphicsFamily;
+    native.graphicsQueueIndex = 1;
+    // Without an async compute family the SDK's compute queues come after its graphics ones.
+    const u32 computeHome = computeFamily != ~0u ? computeFamily : graphicsFamily;
+    const u32 graphicsCount = addQueue(graphicsFamily,
+        1 + external.graphicsQueues + (computeHome == graphicsFamily ? external.computeQueues : 0), kPriorities);
     if (computeFamily != ~0u)
-        addQueue(computeFamily, &computePriority);
+    {
+        addQueue(computeFamily, 1 + external.computeQueues, kPriorities);
+        native.computeFamily = computeFamily;
+        native.computeQueueIndex = 1;
+    }
+    else
+        native.computeQueueIndex = 1 + external.graphicsQueues;
+    if (graphicsCount < 1 + external.graphicsQueues)
+        Log("~ the graphics family has %u queue(s): an SDK asked for %u more", graphicsCount, external.graphicsQueues);
     if (transferFamily != ~0u)
-        addQueue(transferFamily, &transferPriority);
+        addQueue(transferFamily, 1, &transferPriority);
 
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &features2};
     dci.queueCreateInfoCount = u32(queues.size());
@@ -1942,7 +2057,30 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
         g_vk.vkGetDeviceQueue(vk, computeFamily, 0, &computeQueue);
     if (transferFamily != ~0u)
         g_vk.vkGetDeviceQueue(vk, transferFamily, 0, &transferQueue);
-    InitFormatSupport(physical);
+    InitFormatSupport(physical, !(disabledFeatures & NativeFeatureDepth24));
+    if (info.deviceCreated)
+    {
+        native.instance = instance;
+        native.physicalDevice = physical;
+        native.device = vk;
+        info.deviceCreated(native);
+    }
+    if (info.deviceProc)
+    {
+        // An SDK's proxies in place of the driver's calls (they forward to the driver).
+        auto take = [&](const char* name, auto& fn) {
+            if (void* proc = info.deviceProc(name))
+                fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(proc);
+        };
+        take("vkCreateSwapchainKHR", g_vk.vkCreateSwapchainKHR);
+        take("vkDestroySwapchainKHR", g_vk.vkDestroySwapchainKHR);
+        take("vkGetSwapchainImagesKHR", g_vk.vkGetSwapchainImagesKHR);
+        take("vkAcquireNextImageKHR", g_vk.vkAcquireNextImageKHR);
+        take("vkQueuePresentKHR", g_vk.vkQueuePresentKHR);
+        take("vkDeviceWaitIdle", g_vk.vkDeviceWaitIdle);
+        take("vkCreateImage", g_vk.vkCreateImage);
+        take("vkDestroyImage", g_vk.vkDestroyImage);
+    }
 
     // ---- what the device enabled, as the rest of the layer reads it ----
     shaderFeatures.geometry = en.geometryShader;

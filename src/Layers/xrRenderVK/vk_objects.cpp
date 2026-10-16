@@ -343,17 +343,20 @@ void ReleaseResourceStorage(Device* device, Resource& r)
     const Allocation linearMemory = r.linearMemory;
     const bool ownsImage = image != VK_NULL_HANDLE;
     const VkImageView rateView = r.rateView;
-    r.rateView = VK_NULL_HANDLE;
+    const VkImageView nativeView = r.nativeView;
+    r.rateView = r.nativeView = VK_NULL_HANDLE;
     r.image = VK_NULL_HANDLE;
     r.buffer = VK_NULL_HANDLE;
     r.linear = VK_NULL_HANDLE;
     r.memory = {};
     r.linearMemory = {};
-    if (!ownsImage && !buffer && !linear && !memory.Valid() && !linearMemory.Valid() && !rateView)
+    if (!ownsImage && !buffer && !linear && !memory.Valid() && !linearMemory.Valid() && !rateView && !nativeView)
         return;
-    DeferAction(device, [device, image, buffer, linear, memory, linearMemory, ownsImage, rateView] {
+    DeferAction(device, [device, image, buffer, linear, memory, linearMemory, ownsImage, rateView, nativeView] {
         if (rateView)
             g_vk.vkDestroyImageView(device->vk, rateView, nullptr);
+        if (nativeView)
+            g_vk.vkDestroyImageView(device->vk, nativeView, nullptr);
         if (ownsImage)
             g_vk.vkDestroyImage(device->vk, image, nullptr);
         if (buffer)

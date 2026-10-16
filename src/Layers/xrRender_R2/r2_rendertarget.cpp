@@ -456,7 +456,12 @@ CRenderTarget::CRenderTarget()
         // output, and the display-size frame combine_2 and the flares draw into for phase_pp.
         if (upscale)
         {
+#ifdef XR_VULKAN
+            // Streamline's Vulkan side has no R8_UNORM among the formats it describes images by.
+            rt_Reactive.create(r2_RT_reactive, w, h, D3DFMT_R16F, 1);
+#else
             rt_Reactive.create(r2_RT_reactive, w, h, D3DFMT_L8, 1);
+#endif
             rt_Upscaled.create(r2_RT_upscaled, dw, dh, D3DFMT_A16B16G16R16F, 1, { CRT::CreateUAV });
             rt_PostDisplay.create(r2_RT_post_display, dw, dh, D3DFMT_A8R8G8B8, 1);
         }

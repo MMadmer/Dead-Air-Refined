@@ -38,6 +38,27 @@ enum NativeFeature : UINT
     NativeFeatureMeshShaders = 1u << 6,    // -vk_no_ms
     NativeFeaturePipelineLibrary = 1u << 7, // -vk_no_gpl: whole pipelines only
     NativeFeatureMultiDraw = 1u << 8,      // -vk_no_multidraw
+    NativeFeatureDepth24 = 1u << 9,        // -vk_no_d24: D32S8 for every D24S8 depth
+};
+
+// What an SDK sharing the device (NVIDIA Streamline) needs the instance and the device to have. Features are
+// member names of VkPhysicalDeviceVulkan12Features / VkPhysicalDeviceVulkan13Features; what the device lacks is
+// left out with a log line.
+struct ExternalRequirements
+{
+    std::vector<const char*> instanceExtensions, deviceExtensions, features12, features13;
+    UINT graphicsQueues = 0, computeQueues = 0; // extra queues the SDK records on
+};
+
+// The native objects of the device, for an SDK that records on them (Vulkan handles as pointers).
+struct NativeDeviceInfo
+{
+    void* instance = nullptr;       // VkInstance
+    void* physicalDevice = nullptr; // VkPhysicalDevice
+    void* device = nullptr;         // VkDevice
+    // The first of the extra queues made for the SDK (past the layer's own in the same family).
+    UINT graphicsFamily = 0, graphicsQueueIndex = 0;
+    UINT computeFamily = 0, computeQueueIndex = 0;
 };
 
 struct DeviceCreateInfo
@@ -51,6 +72,14 @@ struct DeviceCreateInfo
     const wchar_t* pipelineCachePath = nullptr; // file of the persistent pipeline cache, may be null
     LogSink log = nullptr;          // receives complete lines, no trailing newline
     UINT disabledFeatures = 0;      // NativeFeature bits
+    // An SDK sharing the device: asked for its requirements before the instance exists, told the native
+    // objects right after the device does (null = none).
+    void (*externalRequirements)(ExternalRequirements& out) = nullptr;
+    void (*deviceCreated)(const NativeDeviceInfo& device) = nullptr;
+    // The SDK's own entry points the layer calls instead of the driver's (by name, asked after deviceCreated):
+    // the swap chain calls, so it sees every present, and image creation, so it knows the images it is
+    // handed. Null result = the driver's.
+    void* (*deviceProc)(const char* name) = nullptr;
 };
 
 // Creates the Vulkan device and returns it behind ID3D11Device / ID3D11DeviceContext (immediate). The
@@ -147,6 +176,29 @@ bool QueryVideoMemory(ID3D11Device* device, UINT64& budget, UINT64& usage);
 // The persistently mapped bytes of a STAGING buffer with CPU_ACCESS_WRITE (an upload ring the caller fills
 // without Map): writes are not synchronized, the caller never touches bytes the GPU may still copy from.
 void* PersistentData(ID3D11Buffer* buffer);
+
+// ---- native work of an SDK on the immediate context (DLSS) ---------------------------------------------
+
+// A texture as an SDK takes it: Vulkan handles as pointers, the rest as their Vulkan values.
+struct NativeImage
+{
+    void* image = nullptr;  // VkImage
+    void* memory = nullptr; // VkDeviceMemory
+    void* view = nullptr;   // VkImageView of mip 0, layer 0 (the depth aspect of a depth texture)
+    UINT layout = 0;        // VkImageLayout it is in for the SDK's access
+    UINT format = 0;        // VkFormat
+    UINT width = 0, height = 0, mipLevels = 0, arrayLayers = 0;
+    UINT createFlags = 0;   // VkImageCreateFlags
+    UINT usage = 0;         // VkImageUsageFlags
+};
+// Puts a texture of the immediate context into the layout of a compute access (`write`: GENERAL storage,
+// else SHADER_READ_ONLY_OPTIMAL) and describes it. Call before BeginNative.
+bool PrepareNativeImage(ID3D11DeviceContext* context, ID3D11Resource* resource, bool write, NativeImage& out);
+// The immediate context's command buffer (VkCommandBuffer) with no rendering open and every pending barrier
+// recorded; null on another device or a lost one.
+void* BeginNative(ID3D11DeviceContext* context);
+// After the SDK recorded: the layer binds its own state again for the next draw or dispatch.
+void EndNative(ID3D11DeviceContext* context);
 
 // ---- shaders --------------------------------------------------------------------------------------
 

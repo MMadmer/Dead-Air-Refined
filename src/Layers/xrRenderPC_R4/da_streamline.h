@@ -13,6 +13,8 @@
 
 #ifdef XR_D3D12
 #include "Layers/xrRenderDX12/d12_api.h"
+#elif defined(XR_VULKAN)
+#include "Layers/xrRenderVK/vk_api.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -35,6 +37,14 @@ xrd3d12::SwapChainProvider* da_streamline_swapchain_provider();
 // (FSR frame generation with DLSS upscaling): Streamline's proxy, referenced, or null without
 // Streamline. DLSS frame generation is unloaded first: it would take any chain the proxy makes.
 IDXGIFactory2* da_streamline_factory(IDXGIFactory2* factory);
+#elif defined(XR_VULKAN)
+// xrvk::DeviceCreateInfo hooks (manual hooking): what DLSS needs the instance and the device to have, asked
+// before either exists, then slSetVulkanInfo on the native objects.
+void da_streamline_vk_requirements(xrvk::ExternalRequirements& out);
+void da_streamline_vk_device_created(const xrvk::NativeDeviceInfo& device);
+// Streamline's entry points (the interposer's exports) for the calls it has to see: the swap chain's
+// (every present) and image creation (the formats of the images it is handed). Null without Streamline.
+void* da_streamline_vk_device_proc(const char* name);
 #else
 void da_streamline_d3d11_device_created(ID3D11Device* device);
 // Replaces the swap chain by Streamline's proxy in place (sl.common hooks its Present).
