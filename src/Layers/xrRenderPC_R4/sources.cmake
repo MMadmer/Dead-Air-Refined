@@ -286,6 +286,7 @@ set(XRAY_RENDER_R4_SOURCES
     # [dx12:rt] begin sources
     "${CMAKE_CURRENT_LIST_DIR}/da_rt.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_rt_device.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_rt_native.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_rt_scene.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_rt_passes.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_rt.cpp"

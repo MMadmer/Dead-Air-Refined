@@ -23,9 +23,10 @@ local FRAMEGEN_FSR, FRAMEGEN_DLSS, FRAMEGEN_DLSS_X3, FRAMEGEN_DLSS_X4 = 1, 2, 3,
 
 -- The DirectX 12 rows (docs\dead-air\dx12-features\PLAN.md 2.6): always shown, greyed with the reason
 -- where the running renderer or the card cannot run them, like frame generation. The RTX rows are
--- ray tracing, a category of its own that no quality preset touches.
+-- ray tracing, a category of its own that no quality preset touches; they run on Vulkan too.
 local RT_EFFECTS = { "rt_reflections", "rt_shadows", "rtao" }
 local DX12_ROWS = { "async_compute", "dstorage", "rt_reflections", "rt_shadows", "rtao", "rt_quality" }
+local VULKAN_ROWS = { rt_reflections = true, rt_shadows = true, rtao = true, rt_quality = true }
 
 -- The stock ui_mm_opt_main.script fills the numbers beside these sliders by name, every frame.
 local LEGACY_READOUTS = {
@@ -142,7 +143,7 @@ function opt_video:InitStates()
 			return
 		end
 		row.dx11_hint = dx11_hint
-		if (caps.api ~= 12) then
+		if (caps.api ~= 12) and not (VULKAN_ROWS[id] and caps.api == 13) then
 			row.off_hint = dx11_hint
 		elseif not (available) then
 			row.off_hint = unavailable_hint
@@ -250,6 +251,7 @@ function opt_video:Refresh()
 	local renderer = self.rows.renderer
 	local chosen = (renderer ~= nil) and renderer.ctrl:CurrentID() or nil
 	local dx11_chosen = (chosen ~= nil) and (chosen ~= RENDERER_DX12)
+	local vulkan_chosen = (chosen == RENDERER_VK)
 	-- Frame generation runs on DirectX 12 and Vulkan.
 	local fg_renderer = (chosen == nil) or (chosen == RENDERER_DX12) or (chosen == RENDERER_VK)
 	local framegen = self.rows.framegen
@@ -267,7 +269,7 @@ function opt_video:Refresh()
 		local row = self.rows[id]
 		if (row) then
 			local off_hint = row.off_hint
-			if not (off_hint) and dx11_chosen then
+			if not (off_hint) and dx11_chosen and not (vulkan_chosen and VULKAN_ROWS[id]) then
 				off_hint = row.dx11_hint
 			end
 			if not (off_hint) and (id == "rt_quality") and not self:AnyRtEffect() then

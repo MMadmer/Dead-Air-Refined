@@ -1095,8 +1095,9 @@ bool CreateHostBuffer(Device* device, MemoryClass cls, VkDeviceSize size, VkBuff
     VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     info.size = size;
     info.usage = usage;
+    // The RT lane reads frame data by address (tables, bone palettes) and builds from it (instances).
     if (device->caps.rayQuery)
-        info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkResult result = g_vk.vkCreateBuffer(device->vk, &info, nullptr, &buffer);
     if (result != VK_SUCCESS)
@@ -2059,9 +2060,11 @@ const PipelineLayout* LayoutCache::Graphics(const SetLayout* const (&sets)[kGrap
     return layout;
 }
 
-const PipelineLayout* LayoutCache::Compute(const SetLayout* set)
+const PipelineLayout* LayoutCache::Compute(const SetLayout* set, bool bindless, u32 pushBytes)
 {
-    const u64 hash = HashCombine(0xc0u, set ? set->hash : 0);
+    // The RT lane's additions: the device's bindless set after the stage's, a push-constant range.
+    bindless = bindless && m_device->bindless.layout;
+    const u64 hash = HashCombine(HashCombine(0xc0u, set ? set->hash : 0), u64(bindless) | (u64(pushBytes) << 1));
     std::lock_guard lock(m_lock);
     if (const auto it = m_layouts.find(hash); it != m_layouts.end())
         return it->second;
@@ -2071,10 +2074,15 @@ const PipelineLayout* LayoutCache::Compute(const SetLayout* set)
     layout->sets[0] = set ? set : m_empty;
     layout->setCount = 1;
     layout->hash = hash;
-    VkDescriptorSetLayout handle = layout->sets[0]->layout;
+    VkDescriptorSetLayout handles[kComputeBindlessSet + 1] = {layout->sets[0]->layout};
+    if (bindless)
+        handles[kComputeBindlessSet] = m_device->bindless.layout;
+    const VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT, 0, pushBytes};
     VkPipelineLayoutCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    info.setLayoutCount = 1;
-    info.pSetLayouts = &handle;
+    info.setLayoutCount = bindless ? kComputeBindlessSet + 1 : 1;
+    info.pSetLayouts = handles;
+    info.pushConstantRangeCount = pushBytes ? 1 : 0;
+    info.pPushConstantRanges = &push;
     const VkResult result = g_vk.vkCreatePipelineLayout(m_device->vk, &info, nullptr, &layout->layout);
     if (result != VK_SUCCESS)
     {

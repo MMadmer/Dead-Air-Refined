@@ -3,8 +3,13 @@
 //
 // Ray tracing, the "RTX" category (docs/dead-air/dx12-features/dxr.md 3.2): the public surface the
 // frame calls at the points of PLAN.md 2.5. Never part of a quality preset. The R4 module compiles
-// every function as "off".
+// every function as "off"; R5 (DirectX 12) and R6 (Vulkan) trace.
 #pragma once
+
+// The modules whose device traces rays (the RT lane): DirectX 12 (xrD3D12) and Vulkan (xrVulkan).
+#if defined(XR_D3D12) || defined(XR_VULKAN)
+#define DA_RT_LANE 1
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {

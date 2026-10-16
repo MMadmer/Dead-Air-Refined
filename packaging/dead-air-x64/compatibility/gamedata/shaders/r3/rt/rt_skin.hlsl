@@ -8,17 +8,33 @@ cbuffer rt_skin_constants : register( b0 )
 	uint4	skin;		// x vertex count, y bones in the palette
 };
 
+#ifdef GRIZZLY_SPIRV
+// Vulkan: the source, the palette and the output by device address (DaRtDispatch tables 0-1 and
+// raw_output, the push constants of rt_common.hlsli).
+struct RtSkinAddresses
+{
+	uint64_t	table[ 4 ];
+	uint64_t	raw_output;
+};
+[[vk::push_constant]] RtSkinAddresses	skin_addresses;
+#define SKIN_SOURCE( type, offset )		vk::RawBufferLoad<type>( skin_addresses.table[ 0 ] + ( offset ) )
+#define SKIN_PALETTE( offset )			vk::RawBufferLoad<uint4>( skin_addresses.table[ 1 ] + ( offset ), 16 )
+#define SKIN_STORE( type, offset, value )	vk::RawBufferStore<type>( skin_addresses.raw_output + ( offset ), value )
+#else
 // 64 bytes a vertex: position, normal, texcoord, bones 0-1, bones 2-3 (16 bits each), four weights.
 ByteAddressBuffer	skin_source		: register( t0, space3 );
 // Three float4 rows a bone, as the engine uploads sbones_array: dot( row, float4( p, 1 ) ).
 ByteAddressBuffer	skin_palette	: register( t1, space3 );
 RWByteAddressBuffer	skin_out		: register( u0, space3 );
+#define SKIN_SOURCE( type, offset )		skin_source.Load<type>( offset )
+#define SKIN_PALETTE( offset )			skin_palette.Load4( offset )
+#define SKIN_STORE( type, offset, value )	skin_out.Store<type>( offset, value )
+#endif
 
 float3x4 skin_bone( uint bone )
 {
 	const uint o = min( bone, skin.y - 1u ) * 48u;
-	return float3x4( asfloat( skin_palette.Load4( o ) ), asfloat( skin_palette.Load4( o + 16u ) ),
-		asfloat( skin_palette.Load4( o + 32u ) ) );
+	return float3x4( asfloat( SKIN_PALETTE( o ) ), asfloat( SKIN_PALETTE( o + 16u ) ), asfloat( SKIN_PALETTE( o + 32u ) ) );
 }
 
 uint skin_oct16( float3 n )
@@ -37,11 +53,11 @@ void main( uint3 id : SV_DispatchThreadID )
 	if ( id.x >= skin.x )
 		return;
 	const uint src = id.x * 64u;
-	const float3 p = asfloat( skin_source.Load3( src ) );
-	const float3 n = asfloat( skin_source.Load3( src + 12u ) );
-	const float2 tc = asfloat( skin_source.Load2( src + 24u ) );
-	const uint2 bones = skin_source.Load2( src + 32u );
-	const float4 w = asfloat( skin_source.Load4( src + 40u ) );
+	const float3 p = asfloat( SKIN_SOURCE( uint3, src ) );
+	const float3 n = asfloat( SKIN_SOURCE( uint3, src + 12u ) );
+	const float2 tc = asfloat( SKIN_SOURCE( uint2, src + 24u ) );
+	const uint2 bones = SKIN_SOURCE( uint2, src + 32u );
+	const float4 w = asfloat( SKIN_SOURCE( uint4, src + 40u ) );
 
 	const uint b[4] = { bones.x & 0xFFFFu, bones.x >> 16, bones.y & 0xFFFFu, bones.y >> 16 };
 	float3 sp = 0.0f, sn = 0.0f;
@@ -56,7 +72,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 
 	const uint dst = id.x * 24u;
-	skin_out.Store3( dst, asuint( sp ) );
-	skin_out.Store( dst + 12u, skin_oct16( normalize( sn ) ) );
-	skin_out.Store2( dst + 16u, asuint( tc ) );
+	SKIN_STORE( uint3, dst, asuint( sp ) );
+	SKIN_STORE( uint, dst + 12u, skin_oct16( normalize( sn ) ) );
+	SKIN_STORE( uint2, dst + 16u, asuint( tc ) );
 }

@@ -1319,6 +1319,8 @@ bool Context::PrepareDispatch()
         {
             applied.computeLayout = cs->computeLayout;
             applied.computeSetBound = false;
+            applied.computeBindlessBound = false;
+            applied.computePushDirty = true;
         }
     }
     CheckConstantBuffers(sb);
@@ -1360,6 +1362,19 @@ bool Context::PrepareDispatch()
             sb.dynamicCount, sb.dynamicOffsets);
         applied.computeSet = sb.set;
         applied.computeSetBound = true;
+    }
+    // The RT lane: the device's bindless set and the push constants (vk_raytracing.cpp).
+    if (cs->iface.bindless && !applied.computeBindlessBound && dev->bindless.set)
+    {
+        g_vk.vkCmdBindDescriptorSets(m_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cs->computeLayout->layout, kComputeBindlessSet, 1,
+            &dev->bindless.set, 0, nullptr);
+        applied.computeBindlessBound = true;
+    }
+    if (cs->iface.pushConstants && applied.computePushDirty)
+    {
+        g_vk.vkCmdPushConstants(m_cmd, cs->computeLayout->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, cs->iface.pushConstants,
+            computePush);
+        applied.computePushDirty = false;
     }
     if (cs->iface.uavMask)
     {

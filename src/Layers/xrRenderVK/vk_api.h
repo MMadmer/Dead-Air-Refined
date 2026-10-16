@@ -222,6 +222,102 @@ bool QueryVideoMemory(ID3D11Device* device, UINT64& budget, UINT64& usage);
 // without Map): writes are not synchronized, the caller never touches bytes the GPU may still copy from.
 void* PersistentData(ID3D11Buffer* buffer);
 
+// ---- ray tracing: the renderer's RT lane (da_rt_*.cpp, docs/dead-air/VULKAN_RENDERER.md) --------------------
+// The lane's compute shaders bind like any other through the D3D11 calls, plus what D3D11 has no word for: the
+// bindless arrays in descriptor set kBindlessSet ([[vk::binding(0, 7)]] 2D textures, [[vk::binding(1, 7)]] raw
+// buffers, one index space for both), a push-constant block of at most kRtPushConstantBytes and the scene as an SRV
+// of an acceleration structure. Everything here needs GetNativeCaps()->rayQuery.
+
+constexpr UINT kBindlessSet = 7;
+constexpr UINT kBindlessInvalid = ~0u;
+constexpr UINT kRtPushConstantBytes = 64;
+
+// The device's bindless range (as xrD3D12's): contiguous; kBindlessInvalid when full. Thread-safe. A slot the GPU
+// may read this frame is never rewritten: allocate a new one and free the old.
+UINT AllocateBindless(ID3D11Device* device, UINT count);
+void WriteBindless(ID3D11Device* device, UINT index, ID3D11ShaderResourceView* view); // a 2D texture; null = none
+void WriteBindlessBuffer(ID3D11Device* device, UINT index, ID3D11Buffer* buffer);     // its bytes as a raw buffer
+void FreeBindless(ID3D11Device* device, UINT index, UINT count); // reusable after the frames in flight
+
+// The push constants of the following dispatches (context state, up to kRtPushConstantBytes).
+void SetComputePushConstants(ID3D11DeviceContext* context, const void* data, UINT size);
+
+// A device-local buffer of the lane: device address, build input, 256-byte aligned, readable and writable by
+// shaders through its address or a bindless slot; `data` fills it before the next submission (null: zeros).
+HRESULT CreateRtBuffer(ID3D11Device* device, UINT64 size, const void* data, const char* name, ID3D11Buffer** out);
+// The device address of a buffer's bytes; 0 for dynamic buffers (their bytes move) and without ray queries.
+UINT64 BufferAddress(ID3D11Buffer* buffer);
+// Upload memory of the context's frame with its device address (shader reads, build inputs), valid until the
+// frame's work completed.
+struct UploadSpan
+{
+    void* cpu = nullptr;
+    UINT64 address = 0;
+};
+UploadSpan AllocateUpload(ID3D11DeviceContext* context, UINT64 size, UINT64 alignment);
+// Textures (and GPU-written buffers) into the state compute shaders read them in, for reads the layer cannot see
+// (bindless slots).
+void RequireRead(ID3D11DeviceContext* context, ID3D11Resource* const* resources, UINT count);
+// Grows whenever texture contents may have changed outside render targets (copies, updates, mips) and when
+// textures are created or destroyed: bindless tables built from textures are refreshed when it moved.
+UINT64 TextureWriteGeneration(ID3D11Device* device);
+
+// Acceleration structures (VK_KHR_acceleration_structure), each in a buffer of its own.
+struct AccelTriangles
+{
+    UINT64 vertexAddress = 0; // float3 positions
+    UINT vertexStride = 0, vertexCount = 0;
+    UINT64 indexAddress = 0;  // 16-bit indices
+    UINT indexCount = 0;
+    bool opaque = true;       // false: any-hit candidates reach the shader's query loop, each once
+};
+// D3D12's build flag values, which Vulkan shares.
+enum AccelFlags : UINT
+{
+    AccelAllowUpdate = 0x1,
+    AccelCompaction = 0x2,
+    AccelFastTrace = 0x4,
+    AccelFastBuild = 0x8,
+};
+struct AccelSizes
+{
+    UINT64 result = 0, build = 0, update = 0;
+};
+// A bottom level over `count` meshes, or (geometry null) a top level of `count` instances.
+bool AccelBuildSizes(ID3D11Device* device, const AccelTriangles* geometry, UINT count, UINT flags, AccelSizes& out);
+class Accel;
+Accel* CreateAccel(ID3D11Device* device, bool top, UINT64 size, const char* name);
+void ReleaseAccel(Accel* accel); // once the GPU finished the work recorded so far
+UINT64 AccelAddress(const Accel* accel);
+// The scene as a pass binds it (an SRV slot). The view holds the structure's storage, not the structure: release the
+// view before the structure.
+HRESULT CreateAccelView(Accel* accel, ID3D11ShaderResourceView** view);
+// Records one build on the immediate context (no rendering open); nothing orders it after earlier work or before
+// later work but AccelBarrier. `instances`: VkAccelerationStructureInstanceKHR records (D3D12_RAYTRACING_INSTANCE_DESC's
+// layout), 16-byte aligned.
+struct AccelBuild
+{
+    Accel* dst = nullptr;
+    Accel* src = nullptr; // the structure an update refits (`update`)
+    const AccelTriangles* geometry = nullptr;
+    UINT count = 0;       // meshes, or instances of a top level
+    UINT64 instances = 0;
+    UINT flags = 0;
+    bool update = false;
+    UINT64 scratch = 0;   // aligned to 256
+};
+void BuildAccel(ID3D11DeviceContext* context, const AccelBuild& build);
+void CopyAccelCompact(ID3D11DeviceContext* context, Accel* dst, Accel* src);
+// Every write so far (shaders, copies, builds) before every access that follows, builds included.
+void AccelBarrier(ID3D11DeviceContext* context);
+// Compacted sizes of built structures (AccelCompaction), recorded after an AccelBarrier and read once the work
+// completed (Flush with wait).
+class AccelSizeQuery;
+AccelSizeQuery* CreateAccelSizeQuery(ID3D11Device* device, UINT count);
+void WriteCompactedSizes(ID3D11DeviceContext* context, AccelSizeQuery* query, Accel* const* accels, UINT first, UINT count);
+bool ReadCompactedSizes(AccelSizeQuery* query, UINT64* sizes, UINT count);
+void ReleaseAccelSizeQuery(AccelSizeQuery* query);
+
 // ---- native work of an SDK on the immediate context (DLSS, FSR) ------------------------------------------
 
 // The device's native objects (queue indices 0: the layer's own queues) and the vkGetDeviceProcAddr it

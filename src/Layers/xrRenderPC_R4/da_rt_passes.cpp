@@ -4,8 +4,9 @@
 // Ray tracing passes (docs/dead-air/dx12-features/dxr.md 3.5-3.7): sun shadows (trace, temporal,
 // two a-trous passes), ambient occlusion (trace, temporal, depth-aware upsample into the GTAO target,
 // the GTAO guided filter), reflections (requests, trace with on-screen reuse), the pre-skinning of
-// characters and the r__rt_debug views. Every pass is a compute dispatch in a native section on the
-// immediate context; the per-frame latch (da_rt.cpp) decides which run.
+// characters and the r__rt_debug views. Every pass is a compute dispatch in a section on the
+// immediate context (da_rt_device.h, DirectX 12 and Vulkan); the per-frame latch (da_rt.cpp) decides
+// which run.
 
 #include "stdafx.h"
 
@@ -13,7 +14,7 @@
 #include "da_rt_device.h"
 #include "da_dxc.h"
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 #include "Layers/xrRender/da_temporal.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
@@ -21,7 +22,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 // The combine's haze bounds (Blender_Recorder_StandartBinding.cpp).
 void da_rt_fog_bounds(float& near_m, float& far_m);
 #endif
@@ -32,24 +33,24 @@ namespace
 struct DaRtPasses
 {
     bool ready[u32(RtEffect::Count)]{};
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     bool made{};
-    ID3D12PipelineState* sun{};
-    ID3D12PipelineState* sun_direct{};
-    ID3D12PipelineState* temporal{};
-    ID3D12PipelineState* atrous_first{};
-    ID3D12PipelineState* atrous_last{};
-    ID3D12PipelineState* ao{};
-    ID3D12PipelineState* ao_half{};
-    ID3D12PipelineState* ao_upsample{};
-    ID3D12PipelineState* reflections{};
-    ID3D12PipelineState* skin{};
-    ID3D12PipelineState* debug{};
+    DaRtPipeline sun{};
+    DaRtPipeline sun_direct{};
+    DaRtPipeline temporal{};
+    DaRtPipeline atrous_first{};
+    DaRtPipeline atrous_last{};
+    DaRtPipeline ao{};
+    DaRtPipeline ao_half{};
+    DaRtPipeline ao_upsample{};
+    DaRtPipeline reflections{};
+    DaRtPipeline skin{};
+    DaRtPipeline debug{};
 #endif
 };
 DaRtPasses g_rt_passes;
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 // ---- constants shared with rt/rt_common.hlsli and rt/rt_material.hlsli ---------------------------
 
 constexpr u32 kViewGbufferPacked = 0x1, kViewHistoryValid = 0x2, kViewVelocity = 0x4;
@@ -258,15 +259,15 @@ void da_rt_debug_pass(CBackend& cmd_list, CRenderTarget& t, DaRtTargets& rt)
 #endif
 } // namespace
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 const DaRtTier& da_rt_tier_of(u32 quality) { return kTiers[std::min(quality, 2u)]; }
 
-ID3D12PipelineState* da_rt_skin_pipeline() { return g_rt_passes.skin; }
+DaRtPipeline da_rt_skin_pipeline() { return g_rt_passes.skin; }
 #endif
 
 void da_rt_passes_create()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     DaRtPasses& p = g_rt_passes;
     if (p.made)
         return;
@@ -301,7 +302,7 @@ bool da_rt_pass_ready(RtEffect effect) { return effect < RtEffect::Count && g_rt
 void da_rt_sun_pass(CBackend& cmd_list)
 {
     UNUSED(cmd_list);
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     if (!da_rt_live(RtEffect::Shadows))
         return;
     DaRtTargets* rt = da_rt_targets();
@@ -321,7 +322,7 @@ void da_rt_sun_pass(CBackend& cmd_list)
     ID3D11ShaderResourceView* position = da_rt_srv(t.rt_Position);
     ID3D11ShaderResourceView* normal = RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal);
     const u32 gx = da_rt_groups(Device.dwRenderWidth), gy = da_rt_groups(Device.dwRenderHeight);
-    const auto run = [&](ID3D12PipelineState* pipeline, const void* constants, u32 size, ID3D11ShaderResourceView* const* inputs,
+    const auto run = [&](DaRtPipeline pipeline, const void* constants, u32 size, ID3D11ShaderResourceView* const* inputs,
                          u32 input_count, ID3D11UnorderedAccessView* output, bool traces) {
         DaRtDispatch d;
         d.pipeline = pipeline;
@@ -385,7 +386,7 @@ void da_rt_sun_pass(CBackend& cmd_list)
 
 bool da_rt_ao_pass(CBackend& cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     if (!da_rt_live(RtEffect::AO))
         return false;
     DaRtTargets* rt = da_rt_targets();
@@ -406,7 +407,7 @@ bool da_rt_ao_pass(CBackend& cmd_list)
             return false;
         da_rt_require_geometry(section);
         ID3D11ShaderResourceView* depth = da_rt_srv(da_rt_depth(t));
-        const auto run = [&](ID3D12PipelineState* pipeline, const void* constants, u32 size, ID3D11ShaderResourceView* const* inputs,
+        const auto run = [&](DaRtPipeline pipeline, const void* constants, u32 size, ID3D11ShaderResourceView* const* inputs,
                              u32 input_count, ID3D11UnorderedAccessView* output, u32 w, u32 h, bool traces) {
             DaRtDispatch d;
             d.pipeline = pipeline;
@@ -459,7 +460,7 @@ bool da_rt_ao_pass(CBackend& cmd_list)
 
 void da_rt_reflections_pass(CBackend& cmd_list)
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     DaRtTargets* rt = da_rt_targets();
     if (!rt || !RImplementation.Target)
         return;

@@ -68,6 +68,7 @@ enum StorageClass : u32
     ScInput = 1,
     ScUniform = 2,
     ScOutput = 3,
+    ScPushConstant = 9,
     ScStorageBuffer = 12,
 };
 enum ExecutionModel : u32
@@ -467,10 +468,33 @@ bool PrepareSpirv(const u32* words, size_t count, Stage stage, const ShaderBindi
             continue;
         }
 
+        // The RT lane's push constants (the tables' addresses): one block in compute shaders.
+        if (storage == ScPushConstant)
+        {
+            if (stage != Stage::CS)
+            {
+                error = "push constants outside compute shaders";
+                return false;
+            }
+            iface.pushConstants = kRtPushConstantBytes;
+            continue;
+        }
         if (storage != ScUniformConstant && storage != ScUniform && storage != ScStorageBuffer)
             continue;
         if (!dec.bindingWord)
             continue;
+        // The RT lane's bindless arrays: the device's set, at the bindings they declare.
+        if (dec.setWord && out[dec.setWord] == kBindlessSet)
+        {
+            if (stage != Stage::CS)
+            {
+                error = "bindless arrays outside compute shaders";
+                return false;
+            }
+            out[dec.setWord] = kComputeBindlessSet;
+            iface.bindless = true;
+            continue;
+        }
 
         // Descriptor count of arrays.
         u32 arrayCount = 1;

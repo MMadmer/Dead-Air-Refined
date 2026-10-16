@@ -52,6 +52,49 @@ struct RtInstance
 #define RT_N_FLOAT3				2u
 #define RT_N_OCT16				3u			// two snorm16 octahedral (the scene's own vertices)
 
+#ifdef GRIZZLY_SPIRV
+// Vulkan: the tables by device address (rt_addresses: geometry, instances, their per-frame tables).
+RtGeometry rt_geometry_load( uint64_t address )
+{
+	const uint4 a = vk::RawBufferLoad<uint4>( address, 16 );
+	const uint4 b = vk::RawBufferLoad<uint4>( address + 16u, 16 );
+	RtGeometry g;
+	g.vb = a.x;
+	g.vb_offset = a.y;
+	g.ib = a.z;
+	g.ib_offset = a.w;
+	g.layout = b.x;
+	g.layout2 = b.y;
+	g.albedo = b.z;
+	g.flags = b.w;
+	return g;
+}
+
+RtInstance rt_instance_load( uint64_t address )
+{
+	const uint4 a = vk::RawBufferLoad<uint4>( address, 16 );
+	RtInstance i;
+	i.root_y = asfloat( a.x );
+	i.hemi_scale = asfloat( a.y );
+	i.hemi_bias = asfloat( a.z );
+	i.flags = a.w;
+	return i;
+}
+
+RtGeometry rt_geometry_of( uint instance_id, uint geometry_index )
+{
+	[branch] if ( instance_id & RT_INSTANCE_DYNAMIC )
+		return rt_geometry_load( rt_addresses.table[ 2 ] + uint64_t( ( instance_id & ~RT_INSTANCE_DYNAMIC ) + geometry_index ) * 32u );
+	return rt_geometry_load( rt_addresses.table[ 0 ] + uint64_t( instance_id + geometry_index ) * 32u );
+}
+
+RtInstance rt_instance_of( uint instance_index, RtView v )
+{
+	[branch] if ( instance_index >= v.scene.x )
+		return rt_instance_load( rt_addresses.table[ 3 ] + uint64_t( instance_index - v.scene.x ) * 16u );
+	return rt_instance_load( rt_addresses.table[ 1 ] + uint64_t( instance_index ) * 16u );
+}
+#else
 StructuredBuffer<RtGeometry>	rt_geometry			: register( t0, space3 );
 StructuredBuffer<RtInstance>	rt_instances		: register( t1, space3 );
 StructuredBuffer<RtGeometry>	rt_geometry_dyn		: register( t2, space3 );
@@ -70,6 +113,7 @@ RtInstance rt_instance_of( uint instance_index, RtView v )
 		return rt_instances_dyn[ instance_index - v.scene.x ];
 	return rt_instances[ instance_index ];
 }
+#endif
 
 uint rt_texture_index( RtGeometry g, RtView v )
 {

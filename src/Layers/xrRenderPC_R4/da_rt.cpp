@@ -20,7 +20,7 @@ struct DaRtLatch
 };
 DaRtLatch g_rt_latch;
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 bool da_rt_setting(RtEffect effect)
 {
     switch (effect)
@@ -36,7 +36,7 @@ bool da_rt_setting(RtEffect effect)
 
 bool da_rt_available()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     // The passes read single-sampled depth and G-buffer.
     return da_rt_device_ready() && !RImplementation.o.msaa;
 #else
@@ -51,7 +51,7 @@ void da_rt_reset_end() {}
 void da_rt_frame_begin()
 {
     DaRtLatch latch;
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     latch.quality = std::min(ps_r__rt_quality, 2u);
     const bool traceable = da_rt_available() && da_rt_scene_ready();
     for (u32 i = 0; i < u32(RtEffect::Count); ++i)
@@ -76,13 +76,13 @@ bool da_rt_ao_live() { return da_rt_live(RtEffect::AO); }
 
 u32 da_rt_quality() { return g_rt_latch.quality; }
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 const DaRtTier& da_rt_tier() { return da_rt_tier_of(g_rt_latch.quality); }
 #endif
 
 Fvector4 da_rt_constants()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     const auto flag = [](RtEffect effect) { return da_rt_live(effect) ? 1.f : 0.f; };
     return {flag(RtEffect::Reflections), flag(RtEffect::Shadows), flag(RtEffect::AO), float(g_rt_latch.quality)};
 #else
@@ -100,7 +100,7 @@ bool da_rt_wants_motion() { return da_rt_live(RtEffect::Shadows) || da_rt_live(R
 // Asked when the targets are created (renderer start, vid_restart), where the RTAO setting changes.
 bool da_rt_needs_ao_targets()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     return ps_r__rtao && da_rt_available() && da_rt_pass_ready(RtEffect::AO);
 #else
     return false;

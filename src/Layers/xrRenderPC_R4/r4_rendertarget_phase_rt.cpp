@@ -12,7 +12,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 // Accumulated ground wetness, published by the rain_params binder (r2.cpp).
 extern float g_da_rain_wetness;
 // The forward water surfaces of this frame (r4_rendertarget_phase_sky_water_velocity.cpp).
@@ -133,7 +133,7 @@ void da_rt_debug_blit(CBackend& cmd_list, CRenderTarget& target, DaRtTargets& rt
 
 void da_rt_targets_create(CRenderTarget& target)
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     da_rt_targets_destroy(target);
     if (!da_rt_available() || !(ps_r__rt_reflections || ps_r__rt_shadows || ps_r__rtao))
         return;
@@ -179,7 +179,7 @@ void da_rt_targets_create(CRenderTarget& target)
 
 void da_rt_targets_destroy(CRenderTarget& target)
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     xr_delete(target.m_da_rt);
 #else
     UNUSED(target);

@@ -204,6 +204,13 @@ namespace xrvk
     X(vkCmdDrawMultiIndexedEXT) \
     X(vkWaitForPresentKHR) \
     X(vkGetBufferDeviceAddress) \
+    X(vkCreateAccelerationStructureKHR) \
+    X(vkDestroyAccelerationStructureKHR) \
+    X(vkGetAccelerationStructureBuildSizesKHR) \
+    X(vkGetAccelerationStructureDeviceAddressKHR) \
+    X(vkCmdBuildAccelerationStructuresKHR) \
+    X(vkCmdCopyAccelerationStructureKHR) \
+    X(vkCmdWriteAccelerationStructuresPropertiesKHR) \
     X(vkGetPipelineExecutablePropertiesKHR) \
     X(vkGetPipelineExecutableStatisticsKHR)
 // clang-format on

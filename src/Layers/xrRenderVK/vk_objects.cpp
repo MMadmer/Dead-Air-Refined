@@ -438,9 +438,15 @@ HRESULT Buffer::Create(Device* device, const D3D11_BUFFER_DESC& desc, const D3D1
     if (device->caps.rayQuery)
     {
         info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-        // Vertex and index data feed bottom-level acceleration structures as they are.
+        // Vertex and index data feed bottom-level acceleration structures as they are, and the RT lane reads them as
+        // bindless raw buffers.
         if (desc.BindFlags & (D3D11_BIND_VERTEX_BUFFER | D3D11_BIND_INDEX_BUFFER | D3D11_BIND_SHADER_RESOURCE))
-            info.usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+            info.usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        // The RT lane's own buffers (vk_raytracing.cpp).
+        if (desc.MiscFlags & kMiscRtBuffer)
+            info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+        if (desc.MiscFlags & kMiscAccelStorage)
+            info.usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
     }
     u32 families[3];
     const bool staging = desc.Usage == D3D11_USAGE_STAGING;
@@ -459,6 +465,9 @@ HRESULT Buffer::Create(Device* device, const D3D11_BUFFER_DESC& desc, const D3D1
     }
     VkMemoryRequirements req{};
     g_vk.vkGetBufferMemoryRequirements(device->vk, b->buffer, &req);
+    // Structures, scratch and the lane's tables start at 256-byte addresses.
+    if (desc.MiscFlags & (kMiscRtBuffer | kMiscAccelStorage))
+        req.alignment = (std::max)(req.alignment, VkDeviceSize(256));
     const MemoryClass cls = !staging ? MemoryClass::Device :
         (desc.CPUAccessFlags & D3D11_CPU_ACCESS_READ) ? MemoryClass::Readback : MemoryClass::Staging;
     if (!device->memory.Allocate(req, cls, false, VK_NULL_HANDLE, b->buffer, b->memory) ||
@@ -481,9 +490,10 @@ HRESULT Buffer::Create(Device* device, const D3D11_BUFFER_DESC& desc, const D3D1
         else
             device->init.UploadBuffer(b->buffer, 0, data->pSysMem, desc.ByteWidth);
     }
-    else if (!staging)
+    else if (!staging && !(desc.MiscFlags & kMiscAccelStorage))
     {
-        // D3D11 buffers start zeroed; UAV counters and accumulation buffers rely on it.
+        // D3D11 buffers start zeroed; UAV counters and accumulation buffers rely on it (a structure's storage is
+        // written by its build).
         device->init.ZeroBuffer(b->buffer);
     }
     *out = b;
@@ -725,6 +735,7 @@ HRESULT Texture2D::Create(Device* device, const D3D11_TEXTURE2D_DESC& desc, cons
         return hr;
     }
     t->m_desc.MipLevels = t->mipLevels;
+    device->TextureWritten();
     *out = t;
     return S_OK;
 }
@@ -762,6 +773,8 @@ void Texture2D::Destroy()
 {
     if (m_swapChainImage)
         image = VK_NULL_HANDLE;
+    else
+        m_device->TextureWritten();
     ReleaseResourceStorage(m_device, *this);
     delete this;
 }

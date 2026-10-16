@@ -12,9 +12,15 @@ cbuffer rt_probe_constants : register( b0 )
 
 Texture2D<uint>		probe_in	: register( t0 );
 RWTexture2D<uint>	probe_out	: register( u0 );
+#ifdef GRIZZLY_SPIRV
+// Vulkan: the tables by device address (rt_common.hlsli).
+#define PROBE_TABLE( slot )	vk::RawBufferLoad<uint>( rt_addresses.table[ slot ] )
+#else
 ByteAddressBuffer	probe_geometry	: register( t0, space3 );
 ByteAddressBuffer	probe_instances	: register( t1, space3 );
 ByteAddressBuffer	probe_materials	: register( t2, space3 );
+#define PROBE_TABLE( slot )	( slot == 0 ? probe_geometry.Load( 0 ) : slot == 1 ? probe_instances.Load( 0 ) : probe_materials.Load( 0 ) )
+#endif
 
 [numthreads( 8, 8, 1 )]
 void main( uint3 id : SV_DispatchThreadID )
@@ -41,7 +47,7 @@ void main( uint3 id : SV_DispatchThreadID )
 		texel.x += rt_textures[ NonUniformResourceIndex( index ) ].SampleCmpLevelZero( rt_compare, uv, 0.5 );
 		value += asuint( texel.x + texel.y + texel.z + texel.w );
 		value += rt_buffers[ NonUniformResourceIndex( index ) ].Load( 0 );
-		value += probe_geometry.Load( 0 ) + probe_instances.Load( 0 ) + probe_materials.Load( 0 );
+		value += PROBE_TABLE( 0 ) + PROBE_TABLE( 1 ) + PROBE_TABLE( 2 );
 		value += asuint( gbuf_unpack_hemi( asfloat( value ) ) );
 	}
 	probe_out[ id.xy ] = value;

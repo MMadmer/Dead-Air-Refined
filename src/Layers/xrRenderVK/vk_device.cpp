@@ -711,6 +711,14 @@ HRESULT CreateShader(Device* device, Stage stage, const void* bytecode, SIZE_T s
                 shader->Release();
                 return E_INVALIDARG;
             }
+            // The RT lane's shaders need the bindless set (a device with ray queries).
+            if (shader->iface.bindless && !device->bindless.layout)
+            {
+                static constexpr char kFormat[] = "! a shader reads the bindless set the device lacks: refused";
+                LogOnce(&kFormat, kFormat);
+                shader->Release();
+                return E_INVALIDARG;
+            }
             const std::string missing = MissingCapabilities(device, shader->spirv);
             if (!missing.empty())
             {
@@ -732,7 +740,8 @@ HRESULT CreateShader(Device* device, Stage stage, const void* bytecode, SIZE_T s
                 return E_INVALIDARG;
             }
             if (stage == Stage::CS)
-                shader->computeLayout = device->layouts.Compute(shader->setLayout);
+                shader->computeLayout =
+                    device->layouts.Compute(shader->setLayout, shader->iface.bindless, shader->iface.pushConstants);
         }
         catch (...)
         {
@@ -1586,6 +1595,7 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     VkPhysicalDeviceFragmentShadingRatePropertiesKHR pVrs{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR};
     VkPhysicalDeviceMeshShaderPropertiesEXT pMesh{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT};
     VkPhysicalDeviceCustomBorderColorPropertiesEXT pBorder{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT};
+    VkPhysicalDeviceAccelerationStructurePropertiesKHR pAccel{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
     VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, &p13};
     void** tail = &p11.pNext;
     auto chainProps = [&](bool present, auto& s) {
@@ -1604,6 +1614,7 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     chainProps(hasVrs, pVrs);
     chainProps(hasMesh, pMesh);
     chainProps(hasBorder, pBorder);
+    chainProps(ext.Has(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME), pAccel);
     g_vk.vkGetPhysicalDeviceProperties2(physical, &props2);
     props = props2.properties;
     limits = props.limits;
@@ -1786,6 +1797,8 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     f13.computeFullSubgroups = s13.computeFullSubgroups;
     f13.shaderTerminateInvocation = s13.shaderTerminateInvocation;
     f13.shaderIntegerDotProduct = s13.shaderIntegerDotProduct;
+    // SDKs sharing the device keep their data on its objects (vkCreatePrivateDataSlot: AMD FidelityFX, Streamline).
+    f13.privateData = s13.privateData;
 
     // Extensions: what they bring minus what -vk_no_* switches off.
     std::vector<const char*> dext = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -1899,9 +1912,24 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     }
     else
         fMesh = VkPhysicalDeviceMeshShaderFeaturesEXT{fMesh.sType, fMesh.pNext};
-    const bool rayQuery = hasAccel && fAccel.accelerationStructure && fRayQuery.rayQuery && s12.bufferDeviceAddress;
+    // The RT lane binds by device address and through the bindless set (descriptor indexing with updates after bind).
+    const bool bindlessIndexing = s12.runtimeDescriptorArray && s12.descriptorBindingPartiallyBound &&
+        s12.descriptorBindingSampledImageUpdateAfterBind && s12.descriptorBindingStorageBufferUpdateAfterBind &&
+        s12.descriptorBindingUpdateUnusedWhilePending && s12.shaderSampledImageArrayNonUniformIndexing &&
+        s12.shaderStorageBufferArrayNonUniformIndexing && p12.maxPerStageDescriptorUpdateAfterBindSampledImages >= 4096 &&
+        p12.maxPerStageDescriptorUpdateAfterBindStorageBuffers >= 4096;
+    const bool rayQuery = hasAccel && fAccel.accelerationStructure && fRayQuery.rayQuery && s12.bufferDeviceAddress &&
+        en.shaderInt64 && bindlessIndexing && pAccel.minAccelerationStructureScratchOffsetAlignment <= 256;
     if (rayQuery)
     {
+        f12.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+        f12.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
+        f12.descriptorBindingPartiallyBound = VK_TRUE;
+        f12.runtimeDescriptorArray = VK_TRUE;
+        f12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+        f12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+        f12.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+        f12.descriptorIndexing = s12.descriptorIndexing;
         fAccel.accelerationStructureCaptureReplay = VK_FALSE;
         fAccel.accelerationStructureIndirectBuild = VK_FALSE;
         fAccel.accelerationStructureHostCommands = VK_FALSE;
@@ -2183,6 +2211,19 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
         return E_OUTOFMEMORY;
     if (!layouts.Init(this))
         return E_FAIL;
+    // The RT lane's bindless set (a device without it traces nothing).
+    if (caps.rayQuery)
+    {
+        bindless.capacity = (std::min)({65536u, p12.maxPerStageDescriptorUpdateAfterBindSampledImages,
+            p12.maxPerStageDescriptorUpdateAfterBindStorageBuffers, p12.maxDescriptorSetUpdateAfterBindSampledImages,
+            p12.maxDescriptorSetUpdateAfterBindStorageBuffers});
+        if (!InitBindless())
+        {
+            Log("! the bindless set could not be created: no ray tracing");
+            caps.rayQuery = false;
+            shaderFeatures.rayQuery = false;
+        }
+    }
     {
         const VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_SAMPLER, 1};
         VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -2272,6 +2313,7 @@ void Device::Shutdown()
         creationHeap = nullptr;
         releaser.Collect(true);
         queryPools.Shutdown();
+        ShutdownBindless();
         nulls.Shutdown(this);
         if (emptyPool)
             g_vk.vkDestroyDescriptorPool(vk, emptyPool, nullptr);

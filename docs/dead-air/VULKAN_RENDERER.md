@@ -19,8 +19,10 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
 - **Upscalers** as on the other renderers: NVIDIA DLSS / DLAA through Streamline's Vulkan path, AMD FSR
   3.1 through the signed Vulkan runtime of FidelityFX SDK 1.1.4 (`Externals/fidelityfx-vk`), the
   engine's TAA otherwise. **AMD FSR frame generation** through the same runtime (section 7).
-- Not on Vulkan yet: NVIDIA DLSS frame generation, the ray-traced effects of the RTX section, async compute
-  and NVIDIA Reflex (section 8). Their settings are kept for the renderers that have them.
+- **Ray tracing** (the RTX section: reflections, sun shadows, occlusion) as on DirectX 12, from the same scene
+  and pass code (section 8).
+- Not on Vulkan yet: NVIDIA DLSS frame generation, async compute and NVIDIA Reflex (section 9). Their settings
+  are kept for the renderers that have them.
 
 ## 2. xrVulkan architecture (details in `vk_layer.h`)
 
@@ -136,15 +138,47 @@ AMD FSR frame generation (`r__framegen st_fg_fsr`, `da_framegen_fsr_vk.cpp`), th
 - Measured (RTX 3070 Laptop, DLSS Balanced, vsync): 1213 presents for the first 600 generating frames; 52-53
   rendered frames per second with the generation against 61.6 without it, so about 105 on the screen.
 
-## 8. Not on Vulkan yet
+## 8. Ray tracing
 
-- The RTX section (`r__rt_reflections`, `r__rt_shadows`, `r__rtao`) runs on DirectX 12 only
-  (`da_rt_device.cpp`); the device reports ray query support, the passes are not ported.
+The RTX section of DirectX 12 (`docs/dead-air/dx12-features/dxr.md`): sun shadows, ambient occlusion, reflections
+on water and puddles, moving objects and pre-skinned characters, traced by inline ray queries in compute passes
+(`VK_KHR_ray_query`, `VK_KHR_acceleration_structure`).
+- **One scene and pass code for both APIs.** `da_rt_scene.cpp` and `da_rt_passes.cpp` work through the lane's
+  objects (`da_rt_native.cpp`, `da_rt_device.h`): native buffers, acceleration structures, builds with their
+  compacted sizes, compacting copies, bindless slots, upload memory by address. DirectX 12 runs them on
+  xrD3D12's native resources, Vulkan on xrVulkan's (`vk_raytracing.cpp`).
+- **Binding model.** The passes are compute dispatches of the D3D11 path, so the layer orders their inputs and
+  outputs like any other dispatch: inputs t0-t15, the scene at t16 (an SRV over the top level's storage),
+  outputs u0-u7, constants b0, the root signature's static samplers as sampler states s0-s3. What D3D11 has no
+  word for: the device's bindless set (descriptor indexing with updates after bind, 2D textures and raw buffers
+  in one index space), which the shaders declare at `[[vk::binding(n, 7)]]` and the layer moves to set 1 of the
+  compute layout; the geometry and instance tables and the skinning source, palette and output, read and
+  written by device address from a push-constant block (`GRIZZLY_SPIRV` in `rt/rt_common.hlsli`,
+  `vk::RawBufferLoad` / `RawBufferStore`).
+- **Synchronization.** What the passes read by address or through the bindless set the layer cannot see:
+  builds, compacting copies and the pre-skinning write are ordered by full barriers (`xrvk::AccelBarrier`), the
+  scene's textures go to their read layout when they changed (`xrvk::RequireRead`, `TextureWriteGeneration`).
+  A section takes the frame's render targets off while it runs and puts them back: the passes read the depth the
+  frame still has bound as its depth target, and D3D11's rules read an input bound for output as null (the
+  occlusion then took every pixel for sky and traced nothing; the native DirectX 12 section never sees the rule).
+- **Objects.** Every acceleration structure in a buffer of its own (256-byte aligned, as the scratch), compacted
+  sizes through a query pool, the empty scene a built top level without instances, frame data (instances,
+  per-frame tables, bone palettes) in the context's upload pages by address. Vertex and index buffers carry the
+  build-input and storage usages, so the level's own buffers feed the builds and the bindless slots as they are.
+- **Requirements:** ray query with acceleration structures, buffer device address, 64-bit integers, descriptor
+  indexing with updates after bind (partially bound, non-uniform indexing, 4096 slots at least); the bindless
+  set holds up to 65536 of each kind. `-dx12_no_rt` switches ray tracing off on both APIs.
+- **Parity with DirectX 12** (`r__rt_debug` views of the same frame, mean difference): sun visibility 0.9/255,
+  occlusion 2/255 (1.5/255 with a character in front of the camera, its self-occlusion included), reflections on
+  the marsh 7/255 (the ripples' timing). Validation (`-vkdebug -vksync`) reports nothing of the lane.
+
+## 9. Not on Vulkan yet
+
 - Async compute (`r__async_compute`): DirectX 12 only (`da_async.cpp`).
 - Streamline is asked for DLSS only on Vulkan, so neither DLSS frame generation nor Reflex
   (`VK_NV_low_latency2`) is wired.
 
-## 9. Measured (16.10.2026, RTX 3070 Laptop, 2560x1440 Extreme, DLSS Balanced)
+## 10. Measured (16.10.2026, RTX 3070 Laptop, 2560x1440 Extreme, DLSS Balanced)
 
 Scene: `qa160 - quicksave7`, July noon, wind frozen, weather pinned to `af3_slight_clear_steady_3`
 (`level.set_weather(..., true)` - an unpinned save loads a random weather, and a sunless one takes 4 ms
@@ -154,6 +188,12 @@ off the GPU frame), vsync off, 10 s of FPS; noise between runs about 1.5 FPS. Al
 | | DirectX 11 | Vulkan | DirectX 12 (RT off) | DirectX 12 (RT on) |
 | --- | ---: | ---: | ---: | ---: |
 | FPS | 62.5 | 58-59 | 57.9 | 55.6 |
+
+Ray tracing on Vulkan (17.10.2026, the same scene with every RTX effect on at High; the laptop ran in another
+power state that day, every API about a fifth slower than above): Vulkan 44.7 FPS with ray tracing, 46.4 without
+it, DirectX 12 44.4 with it. On the marsh (`bolota`, reflections on the water): Vulkan 33.5, DirectX 12 32.3. GPU
+passes on Vulkan: scene 0.28 ms, sun 0.6, occlusion 0.75, reflections 1.6-2.1 (DirectX 12: 0.42, 0.9, 0.86, 2.2
+on the marsh).
 
 Where Vulkan's GPU frame differs from DirectX 11's (engine timers, ms): grass generation +0.55 (SPIR-V
 code of the compute shader), local lights +0.2 (a rendering ends for every spot light's shadow map and

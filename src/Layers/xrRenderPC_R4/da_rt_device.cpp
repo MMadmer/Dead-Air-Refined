@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
-// Ray tracing device part (docs/dead-air/dx12-features/dxr.md 3.2, PLAN.md C8): DXR availability, the
-// RT root signature and pipelines through the layer's caches, the native sections of the passes with
-// their per-pass descriptor tables and constants, and the probe that proves the chain at start.
+// Ray tracing device part (docs/dead-air/dx12-features/dxr.md 3.2, PLAN.md C8): availability, the
+// RT root signature (DirectX 12) or the samplers, constants and stand-ins of the D3D11-path dispatches
+// (Vulkan), pipelines, the sections of the passes with their per-pass bindings and constants, and
+// the probe that proves the chain at start.
 
 #include "stdafx.h"
 
@@ -26,10 +27,22 @@ struct DaRtDevice
     // Stand in for the table SRVs and the raw UAV a pass does not use (root descriptors are never null).
     ID3D12Resource* empty_table{};
     ID3D12Resource* empty_uav{};
+#elif defined(XR_VULKAN)
+    // The root signature's static samplers and constant buffer, as D3D11 objects of the layer.
+    ID3D11SamplerState* samplers[4]{};
+    ID3D11Buffer* constants{};
+    // Bound where a pass has no scene: a built top level without instances (every ray misses).
+    DaRtAccel* empty_tlas{};
+    ID3D11ShaderResourceView* empty_scene{};
+    // Read where a pass has no table, written where it has no raw output (zeros).
+    DaRtBuffer* empty_table{};
+    DaRtBuffer* empty_uav{};
+#endif
+#if defined(DA_RT_LANE)
     struct Pipeline
     {
         xr_string key;
-        ID3D12PipelineState* state{}; // device-owned; null = failed
+        DaRtPipeline state{}; // DX12: device-owned; Vulkan: released with the device; null = failed
     };
     xr_vector<Pipeline> pipelines;
 #endif
@@ -45,11 +58,13 @@ void da_rt_refuse(pcstr format, ...)
     g_rt_device.ready = false;
 }
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 // What the probe writes where its ray misses the empty scene, plus the input texel.
 constexpr u32 da_rt_probe_magic = 0x52540000u;
 constexpr u32 da_rt_probe_size = 8;
+#endif
 
+#if defined(XR_D3D12)
 ID3D12RootSignature* da_rt_create_root_signature()
 {
     constexpr D3D12_DESCRIPTOR_RANGE_FLAGS pass_flags =
@@ -116,12 +131,71 @@ ID3D12RootSignature* da_rt_create_root_signature()
     desc.Desc_1_1.pStaticSamplers = samplers;
     return xrd3d12::RootSignature(HW.pDevice, desc, L"rt passes");
 }
+#elif defined(XR_VULKAN)
+// The root signature's static samplers (rt/rt_common.hlsli s0-s3), the constants' buffer, the empty
+// scene and the stand-ins.
+bool da_rt_create_bindings()
+{
+    D3D11_SAMPLER_DESC s{};
+    s.MipLODBias = 0.f;
+    s.MaxAnisotropy = 1;
+    s.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    s.BorderColor[0] = s.BorderColor[1] = s.BorderColor[2] = s.BorderColor[3] = 1.f;
+    s.MinLOD = 0.f;
+    s.MaxLOD = D3D11_FLOAT32_MAX;
+    const auto sampler = [&](u32 reg, D3D11_FILTER filter, D3D11_TEXTURE_ADDRESS_MODE address, u32 anisotropy,
+                             D3D11_COMPARISON_FUNC compare) {
+        s.Filter = filter;
+        s.AddressU = s.AddressV = s.AddressW = address;
+        s.MaxAnisotropy = anisotropy;
+        s.ComparisonFunc = compare;
+        return SUCCEEDED(HW.pDevice->CreateSamplerState(&s, &g_rt_device.samplers[reg]));
+    };
+    if (!sampler(0, D3D11_FILTER_ANISOTROPIC, D3D11_TEXTURE_ADDRESS_WRAP, 4, D3D11_COMPARISON_NEVER) ||
+        !sampler(1, D3D11_FILTER_MIN_MAG_MIP_POINT, D3D11_TEXTURE_ADDRESS_CLAMP, 1, D3D11_COMPARISON_NEVER) ||
+        !sampler(2, D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_TEXTURE_ADDRESS_CLAMP, 1, D3D11_COMPARISON_NEVER) ||
+        !sampler(3, D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT, D3D11_TEXTURE_ADDRESS_CLAMP, 1,
+            D3D11_COMPARISON_LESS_EQUAL))
+        return false;
+    D3D11_BUFFER_DESC cb{};
+    cb.ByteWidth = da_rt_max_constants;
+    cb.Usage = D3D11_USAGE_DYNAMIC;
+    cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    cb.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    if (FAILED(HW.pDevice->CreateBuffer(&cb, nullptr, &g_rt_device.constants)))
+        return false;
+    // 4 KB of zeros: a table a pass does not read, a raw output it does not write.
+    g_rt_device.empty_table = da_rt_buffer_create(4096, "rt empty table");
+    g_rt_device.empty_uav = da_rt_buffer_create(4096, "rt empty raw output");
+    DaRtSizes sizes;
+    if (!g_rt_device.empty_table || !g_rt_device.empty_uav || !da_rt_sizes(nullptr, 0, DaRtBuildFastTrace, sizes) ||
+        !(g_rt_device.empty_tlas = da_rt_accel_create(sizes.result, true, "rt empty scene")) ||
+        !(g_rt_device.empty_scene = da_rt_accel_view(g_rt_device.empty_tlas)))
+        return false;
+    DaRtBuffer* scratch = da_rt_buffer_create(std::max<u64>(sizes.build, 256), "rt empty scene scratch");
+    if (!scratch)
+        return false;
+    {
+        DaRtSection section;
+        DaRtBuild build;
+        build.dst = g_rt_device.empty_tlas;
+        build.instances = da_rt_address(g_rt_device.empty_table);
+        build.flags = DaRtBuildFastTrace;
+        build.scratch = da_rt_address(scratch);
+        section.build(build);
+        section.accel_barrier();
+    }
+    da_rt_release(scratch);
+    return true;
+}
+#endif
 
+#if defined(DA_RT_LANE)
 // The whole chain once at start: the probe traces the empty scene from a native section with every
 // kind of binding and adds the input texel to its miss value; the result is read back.
 bool da_rt_probe()
 {
-    ID3D12PipelineState* pipeline = da_rt_pipeline("rt/rt_probe.hlsl", "main");
+    const DaRtPipeline pipeline = da_rt_pipeline("rt/rt_probe.hlsl", "main");
     if (!pipeline)
     {
         da_rt_refuse("the probe pipeline rt/rt_probe.hlsl could not be built");
@@ -169,7 +243,7 @@ bool da_rt_probe()
     }
 
     // x: miss value, y: a bindless index the probe reads only when it is valid (never here).
-    const u32 constants[4] = {da_rt_probe_magic, xrd3d12::kBindlessInvalid, 0, 0};
+    const u32 constants[4] = {da_rt_probe_magic, da_rt_bindless_invalid, 0, 0};
     DaRtDispatch dispatch;
     dispatch.pipeline = pipeline;
     dispatch.constants = constants;
@@ -227,11 +301,18 @@ pcstr da_rt_device_reason() { return g_rt_device.ready ? "" : g_rt_device.reason
 
 #if defined(XR_D3D12)
 ID3D12RootSignature* da_rt_root_signature() { return g_rt_device.root; }
+#endif
 
-ID3D12PipelineState* da_rt_pipeline(pcstr file, pcstr entry, const DaDxcDefine* defines, u32 define_count)
+#if defined(DA_RT_LANE)
+DaRtPipeline da_rt_pipeline(pcstr file, pcstr entry, const DaDxcDefine* defines, u32 define_count)
 {
+#if defined(XR_D3D12)
     if (!g_rt_device.root)
         return nullptr;
+#else
+    if (!g_rt_device.constants)
+        return nullptr;
+#endif
     xr_string key = xr_string(file) + ":" + entry;
     for (u32 i = 0; i < define_count; ++i)
         key += xr_string(" ") + defines[i].name + "=" + (defines[i].value ? defines[i].value : "1");
@@ -248,19 +329,29 @@ ID3D12PipelineState* da_rt_pipeline(pcstr file, pcstr entry, const DaDxcDefine* 
     request.target = "cs_6_5";
     request.defines = defines;
     request.define_count = define_count;
-    xr_vector<u8> dxil;
-    if (!da_dxc_compile_native(request, dxil))
+    xr_vector<u8> code;
+    if (!da_dxc_compile_native(request, code))
     {
         Msg("! [rt] %s does not compile", key.c_str());
         return nullptr;
     }
+#if defined(XR_D3D12)
     wchar_t name[128];
     swprintf_s(name, L"rt %hs:%hs", file, entry);
-    pipeline.state = xrd3d12::ComputePipeline(HW.pDevice, g_rt_device.root, dxil.data(), dxil.size(), name);
+    pipeline.state = xrd3d12::ComputePipeline(HW.pDevice, g_rt_device.root, code.data(), code.size(), name);
+#else
+    // The container of the SPIR-V and its DXIL twin; the layer gives the bindless arrays and the push
+    // constants their places in the pipeline layout.
+    if (FAILED(HW.pDevice->CreateComputeShader(code.data(), code.size(), nullptr, &pipeline.state)))
+        pipeline.state = nullptr;
+#endif
     if (!pipeline.state)
         Msg("! [rt] the pipeline of %s was refused", key.c_str());
     return pipeline.state;
 }
+#endif
+
+#if defined(XR_D3D12)
 
 DaRtSection::DaRtSection()
 {
@@ -345,35 +436,107 @@ void DaRtSection::uav_barrier(ID3D11Resource* resource)
     if (m_open)
         xrd3d12::UavBarrier(m_context, resource);
 }
-
-void DaRtSection::transition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
+#elif defined(XR_VULKAN)
+DaRtSection::DaRtSection()
 {
-    if (!m_open || !resource || before == after)
+    m_context = HW.get_context(CHW::IMM_CTX_ID);
+    if (!g_rt_device.constants || !m_context)
         return;
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = resource;
-    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrier.Transition.StateBefore = before;
-    barrier.Transition.StateAfter = after;
-    m_scope.list->ResourceBarrier(1, &barrier);
+    m_open = true;
+    m_context->CSGetShader(&m_shader, nullptr, nullptr);
+    m_context->CSGetShaderResources(0, da_rt_max_inputs + 1, m_srvs);
+    m_context->CSGetUnorderedAccessViews(0, da_rt_max_outputs, m_uavs);
+    m_context->CSGetConstantBuffers(0, 1, &m_cb);
+    m_context->CSGetSamplers(0, 4, m_samplers);
+    m_context->CSSetSamplers(0, 4, g_rt_device.samplers);
+    // The passes read the depth and targets the frame still has bound for output: D3D11 would read such an input as
+    // null (the native DX12 section never sees the rule). The outputs come back when the section closes.
+    m_context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, m_rtvs, &m_dsv);
+    m_context->OMSetRenderTargets(0, nullptr, nullptr);
 }
 
-void DaRtSection::native_uav_barrier(ID3D12Resource* resource)
+DaRtSection::~DaRtSection()
 {
     if (!m_open)
         return;
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-    barrier.UAV.pResource = resource;
-    m_scope.list->ResourceBarrier(1, &barrier);
+    // Outputs first: a view the passes bound as an output may come back as an input.
+    m_context->CSSetUnorderedAccessViews(0, da_rt_max_outputs, m_uavs, nullptr);
+    m_context->CSSetShaderResources(0, da_rt_max_inputs + 1, m_srvs);
+    m_context->CSSetConstantBuffers(0, 1, &m_cb);
+    m_context->CSSetSamplers(0, 4, m_samplers);
+    m_context->CSSetShader(m_shader, nullptr, 0);
+    m_context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, m_rtvs, m_dsv);
+    const auto release = [](auto*& object) {
+        if (object)
+            object->Release();
+        object = nullptr;
+    };
+    release(m_shader);
+    release(m_cb);
+    release(m_dsv);
+    for (auto* view : m_srvs)
+        release(view);
+    for (auto* view : m_uavs)
+        release(view);
+    for (auto* sampler : m_samplers)
+        release(sampler);
+    for (auto* view : m_rtvs)
+        release(view);
+}
+
+bool DaRtSection::dispatch(const DaRtDispatch& d)
+{
+    if (!m_open || !d.pipeline || d.input_count > da_rt_max_inputs || d.output_count > da_rt_max_outputs ||
+        d.constants_size > da_rt_max_constants)
+        return false;
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (FAILED(m_context->Map(g_rt_device.constants, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+        return false;
+    const u32 constants_size = (std::max(d.constants_size, 16u) + 255u) & ~255u;
+    std::memset(mapped.pData, 0, constants_size);
+    if (d.constants_size)
+        std::memcpy(mapped.pData, d.constants, d.constants_size);
+    m_context->Unmap(g_rt_device.constants, 0);
+
+    // Outputs before inputs (D3D11 unbinds the input of a resource bound as an output); the scene
+    // follows the inputs at t16 (rt/rt_common.hlsli).
+    ID3D11UnorderedAccessView* outputs[da_rt_max_outputs]{};
+    for (u32 i = 0; i < d.output_count; ++i)
+        outputs[i] = d.outputs[i];
+    ID3D11ShaderResourceView* inputs[da_rt_max_inputs + 1]{};
+    for (u32 i = 0; i < d.input_count; ++i)
+        inputs[i] = d.inputs[i];
+    inputs[da_rt_max_inputs] = d.scene ? d.scene : g_rt_device.empty_scene;
+    // The tables and the raw output by address (the push constants of rt/rt_common.hlsli).
+    struct
+    {
+        DaRtAddress tables[da_rt_max_tables];
+        DaRtAddress raw_output;
+    } push;
+    const DaRtAddress empty = da_rt_address(g_rt_device.empty_table);
+    for (u32 i = 0; i < da_rt_max_tables; ++i)
+        push.tables[i] = d.tables[i] ? d.tables[i] : empty;
+    push.raw_output = d.raw_output ? d.raw_output : da_rt_address(g_rt_device.empty_uav);
+    m_context->CSSetShader(d.pipeline, nullptr, 0);
+    m_context->CSSetConstantBuffers(0, 1, &g_rt_device.constants);
+    m_context->CSSetUnorderedAccessViews(0, da_rt_max_outputs, outputs, nullptr);
+    m_context->CSSetShaderResources(0, da_rt_max_inputs + 1, inputs);
+    xrvk::SetComputePushConstants(m_context, &push, sizeof(push));
+    m_context->Dispatch(d.groups_x, d.groups_y, d.groups_z);
+    return true;
+}
+
+void DaRtSection::uav_barrier(ID3D11Resource* resource)
+{
+    if (m_open)
+        xrvk::UavBarrier(m_context, resource);
 }
 #endif
 
 void da_rt_device_create()
 {
     da_rt_device_destroy();
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     const CHWNativeCaps& caps = HW.native;
     const u32 model = da_dxc_native_model();
     CTimer timer;
@@ -381,13 +544,23 @@ void da_rt_device_create()
     g_rt_device.ready = true;
     if (da_native_disabled_features() & DaNativeDisableRT)
         da_rt_refuse("switched off by -dx12_no_rt");
+#if defined(XR_D3D12)
     else if (caps.raytracingTier < 11)
         da_rt_refuse("the GPU or its driver has no inline ray tracing (DXR tier %u.%u, 1.1 needed)", caps.raytracingTier / 10,
             caps.raytracingTier % 10);
+#else
+    else if (caps.raytracingTier < 11)
+        da_rt_refuse("the GPU or its driver has no Vulkan ray queries (VK_KHR_ray_query with acceleration structures and "
+                     "descriptor indexing)");
+#endif
     else if (!model)
         da_rt_refuse("no shader model 6 compiler (DXC)%s", da_native_disabled_features() & DaNativeDisableSM6 ? ": -dx12_no_sm6" : "");
     else if (model < 0x65)
         da_rt_refuse("native passes reach shader model %x.%x only, 6.5 needed", model >> 4, model & 0xF);
+#if defined(XR_VULKAN)
+    else if (!da_rt_create_bindings())
+        da_rt_refuse("the samplers, constants or the empty scene could not be created");
+#else
     else if (!xrd3d12::NativeDevice5(HW.pDevice))
         da_rt_refuse("the Direct3D 12 runtime has no ID3D12Device5");
     else if (!(g_rt_device.root = da_rt_create_root_signature()))
@@ -398,14 +571,20 @@ void da_rt_device_create()
         FAILED(xrd3d12::CreateNativeBuffer(HW.pDevice, 256, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_COMMON, L"rt empty raw output", &g_rt_device.empty_uav)))
         da_rt_refuse("the empty scene could not be created");
+#endif
     // The pass pipelines come with the targets of the first effect switched on (da_rt_targets_create).
     else
         da_rt_probe();
 
     if (g_rt_device.ready)
     {
+#if defined(XR_D3D12)
         Msg("* [rt] ready: DXR tier %u.%u, passes at cs_6_5 through DXC, probe ok (%.1f ms)", caps.raytracingTier / 10,
             caps.raytracingTier % 10, timer.GetElapsed_sec() * 1000.f);
+#else
+        Msg("* [rt] ready: Vulkan ray queries, passes at cs_6_5 through DXC (SPIR-V), probe ok (%.1f ms)",
+            timer.GetElapsed_sec() * 1000.f);
+#endif
         if (RImplementation.o.msaa)
             Msg("* [rt] inactive with MSAA: the passes read single-sampled depth");
     }
@@ -421,11 +600,11 @@ void da_rt_device_create()
         }
     }
 #else
-    da_rt_refuse("ray tracing needs DirectX 12");
+    da_rt_refuse("ray tracing needs DirectX 12 or Vulkan");
     static bool reported = false;
     if (!reported && (ps_r__rt_reflections || ps_r__rt_shadows || ps_r__rtao))
     {
-        Msg("~ [rt] ray tracing needs DirectX 12: the RTX settings are kept for it");
+        Msg("~ [rt] ray tracing needs DirectX 12 or Vulkan: the RTX settings are kept for them");
         reported = true;
     }
 #endif
@@ -442,6 +621,24 @@ void da_rt_device_destroy()
         xrd3d12::ReleaseNative(HW.pDevice, g_rt_device.empty_table);
     if (g_rt_device.empty_uav)
         xrd3d12::ReleaseNative(HW.pDevice, g_rt_device.empty_uav);
+#elif defined(XR_VULKAN)
+    for (DaRtDevice::Pipeline& pipeline : g_rt_device.pipelines)
+    {
+        if (pipeline.state)
+            pipeline.state->Release();
+    }
+    if (g_rt_device.empty_scene)
+        g_rt_device.empty_scene->Release();
+    da_rt_release(g_rt_device.empty_tlas);
+    da_rt_release(g_rt_device.empty_table);
+    da_rt_release(g_rt_device.empty_uav);
+    for (ID3D11SamplerState* sampler : g_rt_device.samplers)
+    {
+        if (sampler)
+            sampler->Release();
+    }
+    if (g_rt_device.constants)
+        g_rt_device.constants->Release();
 #endif
     g_rt_device = {};
 }

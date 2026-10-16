@@ -27,10 +27,28 @@
 #define RT_VIEW_HISTORY_VALID	0x2		// the histories hold the previous frame
 #define RT_VIEW_VELOCITY		0x4		// the motion vectors were drawn this frame
 
+#ifdef GRIZZLY_VULKAN
+// Vulkan: one register space, the scene after the passes' inputs (da_rt_device.cpp binds it at t16).
+RaytracingAccelerationStructure	rt_scene		: register( t16 );
+#else
 RaytracingAccelerationStructure	rt_scene		: register( t0, space2 );
+#endif
+#ifdef GRIZZLY_SPIRV
+// Vulkan: the device's bindless set (xrvk::kBindlessSet), one index space for both arrays, and the
+// tables and the raw output by device address (DaRtDispatch, the push constants).
+[[vk::binding( 0, 7 )]] Texture2D			rt_textures[];
+[[vk::binding( 1, 7 )]] ByteAddressBuffer	rt_buffers[];
+struct RtAddresses
+{
+	uint64_t	table[ 4 ];
+	uint64_t	raw_output;
+};
+[[vk::push_constant]] RtAddresses			rt_addresses;
+#else
 // Bindless: the layer's persistent range, indexed by the geometry tables.
 Texture2D						rt_textures[]	: register( t0, space100 );
 ByteAddressBuffer				rt_buffers[]	: register( t0, space101 );
+#endif
 
 SamplerState					rt_linear_wrap	: register( s0 );	// anisotropic 4
 SamplerState					rt_point_clamp	: register( s1 );

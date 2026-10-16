@@ -1,5 +1,8 @@
 # DXR ray tracing - the "RTX" category (DirectX 12)
 
+Since 17.10.2026 the same scene and passes run on Vulkan too, through the lane's API-neutral objects
+(`da_rt_native.cpp`); the Vulkan binding model and synchronization are in `VULKAN_RENDERER.md`, section 8.
+
 Status: implemented (28.09.2026). R0-R6 in the tree; the functional part of the final test phase
 passed (9.2: every effect reviewed, sway kept, level change under `-dxdebug`), the Perf phase read the
 cost of each effect from one run with everything on (9.3). RT stays outside the presets, in its own

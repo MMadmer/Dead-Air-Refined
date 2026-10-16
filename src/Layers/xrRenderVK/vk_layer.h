@@ -74,6 +74,12 @@ constexpr u32 kBindingSampler = 48; // s0..s15
 constexpr u32 kBindingUAV = 64;     // u0..u7
 constexpr u32 kBindingCounter = 72; // UAV counters, assigned by DXC above the UAVs
 constexpr u32 kBindingLimit = 96;
+// The RT lane (vk_raytracing.cpp): compute layouts of shaders with bindless arrays carry the device's bindless set
+// at this index (the shaders' kBindlessSet is moved here).
+constexpr u32 kComputeBindlessSet = 1;
+// Private MiscFlags of the lane's buffers (CreateRtBuffer, CreateAccel); no D3D11 caller sets these bits.
+constexpr UINT kMiscRtBuffer = 0x40000000u;     // device address, build input, storage, 256-byte aligned
+constexpr UINT kMiscAccelStorage = 0x80000000u; // acceleration structure storage
 
 // Descriptor sets of the graphics pipeline layout, one per stage; compute uses set 0.
 enum class Stage : u8
@@ -388,7 +394,8 @@ public:
     const SetLayout* Empty() const { return m_empty; }
     // partial: a pipeline library's layout (absent stages are null, independent sets).
     const PipelineLayout* Graphics(const SetLayout* const (&sets)[kGraphicsStages], bool partial = false);
-    const PipelineLayout* Compute(const SetLayout* set);
+    // bindless: the device's bindless set at kComputeBindlessSet; pushBytes: a push-constant range from 0.
+    const PipelineLayout* Compute(const SetLayout* set, bool bindless = false, u32 pushBytes = 0);
 
 private:
     Device* m_device = nullptr;
@@ -938,6 +945,8 @@ struct ShaderInterface
     std::vector<Var> outputs;   // PS: render targets
     u32 localSize[3]{1, 1, 1};  // compute / mesh / task workgroup size
     bool sampleShading = false; // reads SV_SampleIndex or interpolates at sample
+    bool bindless = false;      // compute: declares the device's bindless arrays (kBindlessSet)
+    u32 pushConstants = 0;      // compute: bytes of its push-constant block (kRtPushConstantBytes at most)
 };
 
 class Shader
@@ -1395,6 +1404,8 @@ public:
     UINT rateCombiner = 0;                          // D3D12_SHADING_RATE_COMBINER of the image
     ID3D11Resource* rateImage = nullptr;            // AddRef'd
     u32 uavOverlap = 0;                             // BeginUavOverlap depth
+    u8 computePush[kRtPushConstantBytes]{};         // SetComputePushConstants
+    u32 computePushSize = 0;
 
     // ---- applied Vulkan state (what the open command buffer has) ----
     struct Applied
@@ -1411,6 +1422,8 @@ public:
         bool setsBound = false;                     // the sets above are bound with `layout`
         VkDescriptorSet computeSet = VK_NULL_HANDLE;
         bool computeSetBound = false;
+        bool computeBindlessBound = false;          // the device's bindless set with computeLayout
+        bool computePushDirty = true;               // computePush not yet pushed with computeLayout
         bool vbDirty = true;
         VkBuffer vbBuffers[kMaxVBs]{};
         VkDeviceSize vbOffsets[kMaxVBs]{};
@@ -1614,6 +1627,23 @@ public:
     NullResources nulls;
     PipelineCache pipelines;
     QueryPoolSet queryPools;
+    // The RT lane (vk_raytracing.cpp): the bindless set (one index space for its texture and buffer arrays) and its
+    // free ranges; a freed range comes back after the frames in flight.
+    struct Bindless
+    {
+        VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        u32 capacity = 0;
+        std::mutex lock;
+        std::vector<std::pair<u32, u32>> free; // (first, count) sorted by first, coalesced
+    } bindless;
+    bool InitBindless();
+    void ShutdownBindless();
+    VkDeviceSize scratchAlignment = 256; // minAccelerationStructureScratchOffsetAlignment, at least 256
+    // TextureWriteGeneration (vk_api.h).
+    std::atomic<u64> textureWrites{1};
+    void TextureWritten() { textureWrites.fetch_add(1, std::memory_order_relaxed); }
     // Device features enabled (decide paths).
     bool eds3Blend = false, eds3Polygon = false, eds3SampleMask = false, eds3AlphaToCoverage = false,
          eds3DepthClamp = false, eds3Samples = false, eds3DepthClip = false;

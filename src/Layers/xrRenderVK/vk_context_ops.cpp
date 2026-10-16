@@ -1062,12 +1062,24 @@ void Context::FlushPendingClears(Resource* only)
 // Barriers
 // ================================================================================================
 
+namespace
+{
+// A texture's contents changed outside render target/depth/UAV output (TextureWriteGeneration).
+void NoteTextureWrite(Device* device, const Resource* r, VkAccessFlags2 access)
+{
+    constexpr UINT kOutputs = D3D11_BIND_RENDER_TARGET | D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_UNORDERED_ACCESS;
+    if (!(r->bindFlags & kOutputs) && IsWriteAccess(access))
+        device->TextureWritten();
+}
+} // namespace
+
 void Context::RequireImage(Resource* resource, const SubRange& range, VkImageLayout layout, VkPipelineStageFlags2 stages,
     VkAccessFlags2 access)
 {
     Resource* r = resource;
     if (!r->image)
         return;
+    NoteTextureWrite(m_device, r, access);
     tracker.Require(r, range, layout, stages, access, imageBarriers);
 }
 
@@ -1076,6 +1088,7 @@ void Context::RequireImageAll(Resource* resource, VkImageLayout layout, VkPipeli
     Resource* r = resource;
     if (!r->image)
         return;
+    NoteTextureWrite(m_device, r, access);
     tracker.Require(r, WholeRange(r), layout, stages, access, imageBarriers);
 }
 
@@ -1634,7 +1647,8 @@ void STDMETHODCALLTYPE Context::UpdateSubresource(ID3D11Resource* dst, UINT dstS
             if (d->usage == D3D11_USAGE_DYNAMIC || !PrepareTransfer(*this))
                 return;
             d->gpuWritten = true;
-            RequireBuffer(d, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+            // vkCmdUpdateBuffer runs at the clear stage, the staged copy at the copy stage.
+            RequireBuffer(d, VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
             FlushBarriers();
             const BufferBytes bytes = BytesOf(d);
             const VkDeviceSize size = to - from;

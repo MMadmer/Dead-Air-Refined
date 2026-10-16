@@ -10,14 +10,15 @@
 // compacted after one wait, one top-level structure over them. With every effect off neither exists.
 // While occlusion or reflections run, moving rigid objects and the nearest characters (pre-skinned
 // by a compute pass, refitted every frame, rebuilt every 30) join a top-level structure rebuilt every
-// frame. Shadow rays never see anything that moves or sways (instance masks).
+// frame. Shadow rays never see anything that moves or sways (instance masks). The same code runs on
+// DirectX 12 and Vulkan through the lane's objects (da_rt_native.cpp).
 
 #include "stdafx.h"
 
 #include "da_rt.h"
 #include "da_rt_device.h"
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 #include <unordered_map>
 #include <unordered_set>
 
@@ -42,7 +43,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 // The protected parts of the engine's visuals the scene reads (pointers to members named through a
 // derived class): the slide windows of a progressive mesh and the skinning data of a model part.
 struct DaRtProgressiveAccess : FProgressive
@@ -68,7 +69,7 @@ struct DaRtSkeletonAccess : CSkeletonX
 
 namespace
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 // ---- records shared with rt/rt_geometry.hlsli ---------------------------------------------------
 
 struct DaRtGeometryRecord
@@ -129,7 +130,8 @@ constexpr u64 kVramReserve = 512ull << 20;
 constexpr u32 kMaxDynamicInstances = 512;
 constexpr u32 kSkinRebuildFrames = 30;
 constexpr u32 kDynamicEvictFrames = 300;
-constexpr u64 kAsAlign = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT;
+// Structures and scratch regions start at 256 bytes (D3D12's alignment; Vulkan asks 256 at most).
+constexpr u64 kAsAlign = 256;
 
 u64 da_align(u64 value, u64 alignment) { return (value + alignment - 1) & ~(alignment - 1); }
 
@@ -359,48 +361,37 @@ bool da_rt_tree_mesh(FTreeVisual* tree, ShaderElement* element, DaRtMesh& mesh)
 // no surface on it (rt_alpha_solid).
 bool da_rt_mask_known(const DaRtMesh& mesh) { return !(mesh.flags & kGeomAlpha) || mesh.albedo; }
 
-D3D12_RAYTRACING_GEOMETRY_DESC da_rt_geometry_desc(D3D12_GPU_VIRTUAL_ADDRESS vb, u32 stride, u32 vertex_count,
-    D3D12_GPU_VIRTUAL_ADDRESS ib, u32 index_count, bool alpha)
+DaRtTriangles da_rt_triangles(DaRtAddress vb, u32 stride, u32 vertex_count, DaRtAddress ib, u32 index_count, bool alpha)
 {
-    D3D12_RAYTRACING_GEOMETRY_DESC g{};
-    g.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-    g.Flags = alpha ? D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION : D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-    g.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
-    g.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-    g.Triangles.IndexCount = index_count;
-    g.Triangles.VertexCount = vertex_count;
-    g.Triangles.IndexBuffer = ib;
-    g.Triangles.VertexBuffer.StartAddress = vb;
-    g.Triangles.VertexBuffer.StrideInBytes = stride;
-    return g;
+    DaRtTriangles t;
+    t.vb = vb;
+    t.stride = stride;
+    t.vertex_count = vertex_count;
+    t.ib = ib;
+    t.index_count = index_count;
+    t.alpha = alpha;
+    return t;
 }
 
-D3D12_GPU_VIRTUAL_ADDRESS da_rt_buffer_address(ID3D11Buffer* buffer)
+void da_rt_instance(DaRtInstanceDesc& d, const Fmatrix& m, u32 id, u8 mask, u32 flags, DaRtAddress blas)
 {
-    xrd3d12::NativeBuffer range;
-    return xrd3d12::NativeBufferRange(buffer, range) ? range.address : 0;
-}
-
-void da_rt_instance(D3D12_RAYTRACING_INSTANCE_DESC& d, const Fmatrix& m, u32 id, u8 mask, u32 flags,
-    D3D12_GPU_VIRTUAL_ADDRESS blas)
-{
-    d.Transform[0][0] = m._11;
-    d.Transform[0][1] = m._21;
-    d.Transform[0][2] = m._31;
-    d.Transform[0][3] = m._41;
-    d.Transform[1][0] = m._12;
-    d.Transform[1][1] = m._22;
-    d.Transform[1][2] = m._32;
-    d.Transform[1][3] = m._42;
-    d.Transform[2][0] = m._13;
-    d.Transform[2][1] = m._23;
-    d.Transform[2][2] = m._33;
-    d.Transform[2][3] = m._43;
-    d.InstanceID = id;
-    d.InstanceMask = mask;
-    d.InstanceContributionToHitGroupIndex = 0;
-    d.Flags = flags;
-    d.AccelerationStructure = blas;
+    d.transform[0][0] = m._11;
+    d.transform[0][1] = m._21;
+    d.transform[0][2] = m._31;
+    d.transform[0][3] = m._41;
+    d.transform[1][0] = m._12;
+    d.transform[1][1] = m._22;
+    d.transform[1][2] = m._32;
+    d.transform[1][3] = m._42;
+    d.transform[2][0] = m._13;
+    d.transform[2][1] = m._23;
+    d.transform[2][2] = m._33;
+    d.transform[2][3] = m._43;
+    d.id = id;
+    d.mask = mask;
+    d.contribution = 0;
+    d.flags = flags;
+    d.accel = blas;
 }
 
 u32 da_rt_oct16(Fvector n)
@@ -441,8 +432,8 @@ struct DaRtTreeItem
 
 struct DaRtBlas
 {
-    ID3D12Resource* as{}; // the structure traced (compacted once the sizes are back)
-    ID3D12Resource* uncompacted{};
+    DaRtAccel* as{}; // the structure traced (compacted once the sizes are back)
+    DaRtAccel* uncompacted{};
     u64 result_size{}, scratch_size{};
     u32 first_record{};
     xr_vector<u32> meshes; // DaRtScene::meshes
@@ -453,7 +444,7 @@ struct DaRtBlas
 // A rigid moving mesh's structure, built once and instanced with the object's world.
 struct DaRtDynBlas
 {
-    ID3D12Resource* as{};
+    DaRtAccel* as{};
     DaRtGeometryRecord record{};
     u32 last_frame{};
     bool built{};
@@ -463,7 +454,7 @@ struct DaRtDynBlas
 // pre-skinning source (skinned parts).
 struct DaRtModelBuffer
 {
-    ID3D12Resource* buffer{};
+    DaRtBuffer* buffer{};
     u32 vertices{};
     u32 bindless{kNone};
     u32 last_frame{};
@@ -477,9 +468,9 @@ struct DaRtModelBuffer
 // One character part on the GPU: its skinned vertices and its refitted structure.
 struct DaRtSkinned
 {
-    ID3D12Resource* out{};
+    DaRtBuffer* out{};
     u32 out_bindless{kNone};
-    ID3D12Resource* as{};
+    DaRtAccel* as{};
     u64 as_size{}, build_scratch{}, update_scratch{};
     u32 vertices{};
     u32 built_frame{};
@@ -524,13 +515,13 @@ struct DaRtScene
     bool refused{}; // over the memory budget or failed: effects stay off for this level
     xr_vector<DaRtMesh> meshes; // one geometry record each
     xr_vector<DaRtBlas> blases;
-    xr_vector<D3D12_RAYTRACING_INSTANCE_DESC> instances; // static + multiple-use, CPU copy
+    xr_vector<DaRtInstanceDesc> instances; // static + multiple-use, CPU copy
     xr_vector<DaRtInstanceRecord> instance_records;
     xr_vector<DaRtGeometryRecord> records;
-    ID3D12Resource* geometry_table{};
-    ID3D12Resource* instance_table{};
-    ID3D12Resource* tlas{};
-    ID3D12Resource* tlas_scratch{};
+    DaRtBuffer* geometry_table{};
+    DaRtBuffer* instance_table{};
+    DaRtAccel* tlas{};
+    DaRtBuffer* tlas_scratch{};
     ID3D11ShaderResourceView* tlas_view{};
     bool tlas_dynamic{}; // the top-level structure holds moving objects
 
@@ -552,7 +543,7 @@ struct DaRtScene
     std::unordered_map<CTexture*, DaRtDynTexture> dyn_textures;
     u64 upload_serial{}; // DaRtModelBuffer::serial
     bool dyn_textures_added{}; // a texture joined this frame: its read state is required
-    ID3D12Resource* dyn_scratch{};
+    DaRtBuffer* dyn_scratch{};
     u64 dyn_scratch_size{};
 
     DaRtSceneBinding binding;
@@ -562,27 +553,12 @@ DaRtScene g_scene;
 #endif
 } // namespace
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 namespace
 {
-void da_rt_release(IUnknown*& object)
-{
-    if (object)
-        xrd3d12::ReleaseNative(HW.pDevice, object);
-    object = nullptr;
-}
-
-template <typename T>
-void da_rt_release_native(T*& object)
-{
-    IUnknown* o = object;
-    da_rt_release(o);
-    object = nullptr;
-}
-
-// kNone when the range is full (not remembered: a later frame may find room). `moving`: a moving
-// object's buffer, referenced until da_rt_evict_dynamic lets it go.
-u32 da_rt_bindless_buffer(ID3D11Buffer* buffer, bool moving = false)
+// The bindless slot of an engine buffer; kNone when the range is full (not remembered: a later frame
+// may find room). `moving`: a moving object's buffer, referenced until da_rt_evict_dynamic lets it go.
+u32 da_rt_buffer_slot(ID3D11Buffer* buffer, bool moving = false)
 {
     if (!buffer)
         return kNone;
@@ -591,38 +567,29 @@ u32 da_rt_bindless_buffer(ID3D11Buffer* buffer, bool moving = false)
         it->second.last_frame = Device.dwFrame;
         return it->second.index;
     }
-    const u32 index = xrd3d12::AllocateBindless(HW.pDevice, 1);
-    if (index == xrd3d12::kBindlessInvalid)
+    const u32 index = da_rt_bindless_alloc(1);
+    if (index == da_rt_bindless_invalid)
         return kNone;
-    xrd3d12::WriteBindlessBuffer(HW.pDevice, index, buffer);
+    da_rt_bindless_buffer(index, buffer);
     if (moving)
         buffer->AddRef();
     g_scene.buffers.emplace(buffer, DaRtBufferSlot{index, Device.dwFrame, moving});
-    xrd3d12::NativeBuffer range;
-    if (xrd3d12::NativeBufferRange(buffer, range) && range.tracked)
+    bool tracked = false;
+    if (da_rt_engine_address(buffer, &tracked) && tracked)
         g_scene.tracked_buffers.push_back(buffer);
     return index;
 }
 
-u32 da_rt_bindless_native(ID3D12Resource* buffer, u64 size)
+u32 da_rt_native_slot(DaRtBuffer* buffer, u64 size)
 {
-    const u32 index = xrd3d12::AllocateBindless(HW.pDevice, 1);
-    if (index == xrd3d12::kBindlessInvalid)
-        return kNone;
-    D3D12_SHADER_RESOURCE_VIEW_DESC desc{};
-    desc.Format = DXGI_FORMAT_R32_TYPELESS;
-    desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-    desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    desc.Buffer.NumElements = UINT(size / 4);
-    desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-    xrd3d12::WriteBindlessNative(HW.pDevice, index, buffer, desc);
-    return index;
+    const u32 index = da_rt_bindless_raw(buffer, size);
+    return index == da_rt_bindless_invalid ? kNone : index;
 }
 
 void da_rt_free_bindless(u32& index, u32 count = 1)
 {
-    if (index != kNone && index != xrd3d12::kBindlessInvalid)
-        xrd3d12::FreeBindless(HW.pDevice, index, count);
+    if (index != kNone)
+        da_rt_bindless_free(index, count);
     index = kNone;
 }
 
@@ -633,28 +600,6 @@ ID3D11ShaderResourceView* da_rt_texture_view(CTexture* t)
     if (t->ds_pending())
         t->ds_finish();
     return t->get_SRView();
-}
-
-// A DEFAULT buffer filled from CPU data inside an open section (copy, then the read state).
-ID3D12Resource* da_rt_upload_buffer(DaRtSection& section, const void* data, u64 size, const wchar_t* name,
-    D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE)
-{
-    ID3D12Resource* buffer = nullptr;
-    // Created in COMMON: the copy below promotes it to COPY_DEST.
-    if (!size || FAILED(xrd3d12::CreateNativeBuffer(HW.pDevice, da_align(size, 256), D3D12_HEAP_TYPE_DEFAULT, flags,
-                     D3D12_RESOURCE_STATE_COMMON, name, &buffer)))
-        return nullptr;
-    const xrd3d12::UploadSpan span = xrd3d12::AllocateUpload(section.context(), size, 16);
-    if (!span.cpu)
-    {
-        xrd3d12::ReleaseNative(HW.pDevice, buffer);
-        return nullptr;
-    }
-    std::memcpy(span.cpu, data, size);
-    section.scope().list->CopyBufferRegion(buffer, 0, span.resource, span.offset, size);
-    section.transition(buffer, D3D12_RESOURCE_STATE_COPY_DEST,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    return buffer;
 }
 
 // ---- collection ---------------------------------------------------------------------------------
@@ -784,7 +729,7 @@ void da_rt_collect()
 
 void da_rt_level_load()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     da_rt_scene_release();
     g_scene = {};
     g_scene.level = true;
@@ -797,7 +742,7 @@ void da_rt_level_load()
 void da_rt_level_unload()
 {
     da_rt_scene_release();
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     // The level's visuals go with it: nothing collected may outlive them.
     g_scene = {};
 #endif
@@ -805,63 +750,51 @@ void da_rt_level_unload()
 
 bool da_rt_scene_ready()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     return g_scene.ready;
 #else
     return false;
 #endif
 }
 
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
 const DaRtSceneBinding& da_rt_scene_binding() { return g_scene.binding; }
 
 void da_rt_require_geometry(DaRtSection& section)
 {
     if (!g_scene.tracked_buffers.empty())
-        xrd3d12::RequireMany(section.context(), g_scene.tracked_buffers.data(), UINT(g_scene.tracked_buffers.size()),
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        section.require_read(g_scene.tracked_buffers.data(), u32(g_scene.tracked_buffers.size()));
 }
 
 namespace
 {
 // ---- the static build ------------------------------------------------------------------------------
 
-struct DaRtBuildInputs
-{
-    xr_vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometry;
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs{};
-};
+constexpr u32 kStaticBlasFlags = DaRtBuildFastTrace | DaRtBuildCompaction;
 
-bool da_rt_blas_inputs(const DaRtBlas& blas, DaRtBuildInputs& out)
+bool da_rt_blas_inputs(const DaRtBlas& blas, xr_vector<DaRtTriangles>& out)
 {
-    out.geometry.clear();
-    out.geometry.reserve(blas.meshes.size());
+    out.clear();
+    out.reserve(blas.meshes.size());
     for (const u32 m : blas.meshes)
     {
         const DaRtMesh& mesh = g_scene.meshes[m];
-        const D3D12_GPU_VIRTUAL_ADDRESS vb = da_rt_buffer_address(mesh.vb);
-        const D3D12_GPU_VIRTUAL_ADDRESS ib = da_rt_buffer_address(mesh.ib);
+        const DaRtAddress vb = da_rt_engine_address(mesh.vb);
+        const DaRtAddress ib = da_rt_engine_address(mesh.ib);
         if (!vb || !ib)
             return false;
-        out.geometry.push_back(da_rt_geometry_desc(vb + mesh.vb_offset, mesh.stride, mesh.vertex_count, ib + mesh.ib_offset,
-            mesh.index_count, mesh.flags & kGeomAlpha));
+        out.push_back(da_rt_triangles(vb + mesh.vb_offset, mesh.stride, mesh.vertex_count, ib + mesh.ib_offset, mesh.index_count,
+            mesh.flags & kGeomAlpha));
     }
-    out.inputs = {};
-    out.inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-    out.inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE |
-        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION;
-    out.inputs.NumDescs = UINT(out.geometry.size());
-    out.inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    out.inputs.pGeometryDescs = out.geometry.data();
     return true;
 }
 
 DaRtGeometryRecord da_rt_record(const DaRtMesh& mesh, u32 texture_index, u32 extra_flags)
 {
     DaRtGeometryRecord r{};
-    r.vb = da_rt_bindless_buffer(mesh.vb);
+    r.vb = da_rt_buffer_slot(mesh.vb);
     r.vb_offset = mesh.vb_offset;
-    r.ib = da_rt_bindless_buffer(mesh.ib);
+    r.ib = da_rt_buffer_slot(mesh.ib);
     r.ib_offset = mesh.ib_offset;
     r.layout = mesh.layout;
     r.layout2 = mesh.layout2;
@@ -880,13 +813,13 @@ bool da_rt_write_textures()
         g_scene.texture_base = kNone;
         return true;
     }
-    const u32 base = xrd3d12::AllocateBindless(HW.pDevice, count);
-    if (base == xrd3d12::kBindlessInvalid)
+    const u32 base = da_rt_bindless_alloc(count);
+    if (base == da_rt_bindless_invalid)
         return false;
     for (u32 i = 0; i < count; ++i)
     {
         g_scene.texture_views[i] = da_rt_texture_view(g_scene.textures[i]._get());
-        xrd3d12::WriteBindless(HW.pDevice, base + i, g_scene.texture_views[i]);
+        da_rt_bindless_texture(base + i, g_scene.texture_views[i]);
     }
     // The previous range is read by frames still in flight: freed after this frame's fence.
     da_rt_free_bindless(g_scene.texture_base, count);
@@ -914,43 +847,35 @@ void da_rt_require_textures(DaRtSection& section)
     for (const auto& [texture, slot] : g_scene.dyn_textures)
         add(slot.view);
     if (!resources.empty())
-        xrd3d12::RequireMany(section.context(), resources.data(), UINT(resources.size()),
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        section.require_read(resources.data(), u32(resources.size()));
 }
 
 bool da_rt_create_tlas(u32 capacity)
 {
-    ID3D12Device5* device5 = xrd3d12::NativeDevice5(HW.pDevice);
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS in{};
-    in.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-    in.NumDescs = capacity;
-    in.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
     u64 result = 0, scratch = 0;
-    for (const auto flags : {D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD})
+    for (const u32 flags : {u32(DaRtBuildFastTrace), u32(DaRtBuildFastBuild)})
     {
-        in.Flags = flags;
-        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info{};
-        device5->GetRaytracingAccelerationStructurePrebuildInfo(&in, &info);
-        result = std::max<u64>(result, info.ResultDataMaxSizeInBytes);
-        scratch = std::max<u64>(scratch, info.ScratchDataSizeInBytes);
+        DaRtSizes sizes;
+        if (!da_rt_sizes(nullptr, capacity, flags, sizes))
+            return false;
+        result = std::max(result, sizes.result);
+        scratch = std::max(scratch, sizes.build);
     }
-    if (!result ||
-        FAILED(xrd3d12::CreateAccelerationStructureBuffer(HW.pDevice, da_align(result, kAsAlign), L"rt tlas", &g_scene.tlas)) ||
-        FAILED(xrd3d12::CreateNativeBuffer(HW.pDevice, da_align(std::max<u64>(scratch, 256), kAsAlign), D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON, L"rt tlas scratch", &g_scene.tlas_scratch)) ||
-        FAILED(xrd3d12::CreateAccelerationStructureView(HW.pDevice, g_scene.tlas, &g_scene.tlas_view)))
+    if (!result || !(g_scene.tlas = da_rt_accel_create(da_align(result, kAsAlign), true, "rt tlas")) ||
+        !(g_scene.tlas_scratch = da_rt_buffer_create(da_align(std::max<u64>(scratch, 256), kAsAlign), "rt tlas scratch")) ||
+        !(g_scene.tlas_view = da_rt_accel_view(g_scene.tlas)))
         return false;
     g_scene.memory += result + scratch;
     return true;
 }
 
 // Records the top-level build over the static instances and `dynamic` more (moving objects).
-bool da_rt_build_tlas(DaRtSection& section, const D3D12_RAYTRACING_INSTANCE_DESC* dynamic, u32 dynamic_count, bool fast_build)
+bool da_rt_build_tlas(DaRtSection& section, const DaRtInstanceDesc* dynamic, u32 dynamic_count, bool fast_build)
 {
     const u32 total = u32(g_scene.instances.size()) + dynamic_count;
-    const u64 bytes = u64(std::max(total, 1u)) * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-    const xrd3d12::UploadSpan span = xrd3d12::AllocateUpload(section.context(), bytes, D3D12_RAYTRACING_INSTANCE_DESCS_BYTE_ALIGNMENT);
+    const u64 bytes = u64(std::max(total, 1u)) * sizeof(DaRtInstanceDesc);
+    // Instance records start at 16 bytes (D3D12_RAYTRACING_INSTANCE_DESCS_BYTE_ALIGNMENT, Vulkan the same).
+    const DaRtUpload span = section.upload(bytes, 16);
     if (!span.cpu)
     {
         // The structure keeps its last build, whose moving objects name tables that are gone: the
@@ -959,25 +884,22 @@ bool da_rt_build_tlas(DaRtSection& section, const D3D12_RAYTRACING_INSTANCE_DESC
             g_scene.binding.tlas = nullptr;
         return false;
     }
-    auto* out = static_cast<D3D12_RAYTRACING_INSTANCE_DESC*>(span.cpu);
+    auto* out = static_cast<DaRtInstanceDesc*>(span.cpu);
     if (!g_scene.instances.empty())
-        std::memcpy(out, g_scene.instances.data(), g_scene.instances.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
+        std::memcpy(out, g_scene.instances.data(), g_scene.instances.size() * sizeof(DaRtInstanceDesc));
     if (dynamic_count)
-        std::memcpy(out + g_scene.instances.size(), dynamic, dynamic_count * sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
+        std::memcpy(out + g_scene.instances.size(), dynamic, dynamic_count * sizeof(DaRtInstanceDesc));
 
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC d{};
-    d.DestAccelerationStructureData = g_scene.tlas->GetGPUVirtualAddress();
-    d.ScratchAccelerationStructureData = g_scene.tlas_scratch->GetGPUVirtualAddress();
-    d.Inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-    d.Inputs.Flags = fast_build ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD :
-                                  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-    d.Inputs.NumDescs = total;
-    d.Inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    d.Inputs.InstanceDescs = span.gpu;
+    DaRtBuild build;
+    build.dst = g_scene.tlas;
+    build.count = total;
+    build.instances = span.address;
+    build.flags = fast_build ? DaRtBuildFastBuild : DaRtBuildFastTrace;
+    build.scratch = da_rt_address(g_scene.tlas_scratch);
     // The previous build's readers and this build's scratch.
-    section.native_uav_barrier(nullptr);
-    section.list4()->BuildRaytracingAccelerationStructure(&d, 0, nullptr);
-    section.native_uav_barrier(g_scene.tlas);
+    section.accel_barrier();
+    section.build(build);
+    section.accel_barrier(g_scene.tlas);
     g_scene.tlas_dynamic = dynamic_count != 0;
     g_scene.binding.tlas = g_scene.tlas_view;
     return true;
@@ -987,10 +909,6 @@ bool da_rt_scene_build()
 {
     CTimer timer;
     timer.Start();
-    ID3D12Device5* device5 = xrd3d12::NativeDevice5(HW.pDevice);
-    ID3D11DeviceContext* context = HW.get_context(CHW::IMM_CTX_ID);
-    if (!device5 || !context)
-        return false;
 
     // 1. Structures: static meshes by 256 m cell and class, multiple-use models by their geometry.
     g_scene.meshes.clear();
@@ -1032,19 +950,18 @@ bool da_rt_scene_build()
     }
 
     // 2. Sizes, and the memory budget: crowns and trunks go first, then the scene.
-    DaRtBuildInputs inputs;
+    xr_vector<DaRtTriangles> inputs;
     u64 result_total = 0, scratch_max = 0, foliage_total = 0;
     for (DaRtBlas& blas : g_scene.blases)
     {
-        if (!da_rt_blas_inputs(blas, inputs))
+        DaRtSizes sizes;
+        if (!da_rt_blas_inputs(blas, inputs) || !da_rt_sizes(inputs.data(), u32(inputs.size()), kStaticBlasFlags, sizes))
         {
             Msg("! [rt] scene: a level buffer has no native range");
             return false;
         }
-        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info{};
-        device5->GetRaytracingAccelerationStructurePrebuildInfo(&inputs.inputs, &info);
-        blas.result_size = da_align(info.ResultDataMaxSizeInBytes, kAsAlign);
-        blas.scratch_size = da_align(info.ScratchDataSizeInBytes, kAsAlign);
+        blas.result_size = da_align(sizes.result, kAsAlign);
+        blas.scratch_size = da_align(sizes.build, kAsAlign);
         result_total += blas.result_size;
         scratch_max = std::max(scratch_max, blas.scratch_size);
     }
@@ -1063,8 +980,8 @@ bool da_rt_scene_build()
         (g_scene.statics.size() + g_scene.trees.size()) * sizeof(DaRtInstanceRecord);
     const u64 estimate = result_total + scratch_size + tables;
     bool drop_foliage = false;
-    UINT64 budget = 0, usage = 0;
-    if (xrd3d12::QueryVideoMemory(HW.pDevice, budget, usage) && budget)
+    u64 budget = 0, usage = 0;
+    if (da_rt_video_memory(budget, usage) && budget)
     {
         const u64 free = budget > usage ? budget - usage : 0;
         if (free < estimate + kVramReserve)
@@ -1104,7 +1021,7 @@ bool da_rt_scene_build()
     }
     for (const DaRtGeometryRecord& r : g_scene.records)
     {
-        if (r.vb == xrd3d12::kBindlessInvalid || r.ib == xrd3d12::kBindlessInvalid)
+        if (r.vb == kNone || r.ib == kNone)
         {
             Msg("! [rt] scene: the bindless range is full");
             return false;
@@ -1115,18 +1032,18 @@ bool da_rt_scene_build()
         Msg("! [rt] scene: no bindless range for %u textures", u32(g_scene.textures.size()));
         return false;
     }
-    g_scene.texture_generation = xrd3d12::TextureWriteGeneration(HW.pDevice);
+    g_scene.texture_generation = da_rt_texture_generation();
 
     g_scene.instances.clear();
     g_scene.instance_records.clear();
     xr_vector<u32> instance_blas; // the structure each instance points at, once it exists
-    constexpr u32 cull_none = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
+    constexpr u32 cull_none = da_rt_instance_cull_disable;
     for (u32 b = 0; b < g_scene.blases.size(); ++b)
     {
         const DaRtBlas& blas = g_scene.blases[b];
         if (blas.tree)
             continue;
-        D3D12_RAYTRACING_INSTANCE_DESC& d = g_scene.instances.emplace_back();
+        DaRtInstanceDesc& d = g_scene.instances.emplace_back();
         da_rt_instance(d, Fidentity, blas.first_record, blas.mask, cull_none, 0);
         g_scene.instance_records.push_back({0.f, 1.f, 0.f, 0u});
         instance_blas.push_back(b);
@@ -1138,10 +1055,10 @@ bool da_rt_scene_build()
             continue;
         const DaRtBlas& blas = g_scene.blases[tree_blas[i]];
         const FTreeVisualColors colors = item.visual->colors();
-        D3D12_RAYTRACING_INSTANCE_DESC& d = g_scene.instances.emplace_back();
+        DaRtInstanceDesc& d = g_scene.instances.emplace_back();
         // A trunk reaches the occlusion rays' candidate loop, which accepts it near the root only.
         da_rt_instance(d, item.visual->world(), blas.first_record, item.mask,
-            cull_none | (item.trunk ? D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE : 0u), 0);
+            cull_none | (item.trunk ? da_rt_instance_force_non_opaque : 0u), 0);
         g_scene.instance_records.push_back({item.visual->world().c.y, colors.scale.w, colors.bias.w,
             kInstTree | (item.trunk ? kInstTrunk : 0u) | (item.season_row ? kInstSeason | (u32(item.season_row) << 8) : 0u)});
         instance_blas.push_back(tree_blas[i]);
@@ -1153,25 +1070,19 @@ bool da_rt_scene_build()
 
     // 4. Resources: the structures as built, one scratch, the compacted sizes' way back.
     const u32 count = u32(g_scene.blases.size());
-    ID3D12Resource* scratch = nullptr;
-    ID3D12Resource* sizes = nullptr;
-    ID3D12Resource* readback = nullptr;
+    DaRtBuffer* scratch = nullptr;
+    DaRtSizeQuery* sizes = nullptr;
     const auto cleanup = [&] {
-        da_rt_release_native(scratch);
-        da_rt_release_native(sizes);
-        da_rt_release_native(readback);
+        da_rt_release(scratch);
+        da_rt_release(sizes);
     };
-    bool created = SUCCEEDED(xrd3d12::CreateNativeBuffer(HW.pDevice, scratch_size, D3D12_HEAP_TYPE_DEFAULT,
-                       D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON, L"rt build scratch", &scratch)) &&
-        SUCCEEDED(xrd3d12::CreateNativeBuffer(HW.pDevice, da_align(count * 8ull, 256), D3D12_HEAP_TYPE_DEFAULT,
-            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON, L"rt compacted sizes", &sizes)) &&
-        SUCCEEDED(xrd3d12::CreateNativeBuffer(HW.pDevice, da_align(count * 8ull, 256), D3D12_HEAP_TYPE_READBACK,
-            D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST, L"rt compacted sizes readback", &readback));
+    scratch = da_rt_buffer_create(scratch_size, "rt build scratch");
+    sizes = da_rt_size_query(count);
+    bool created = scratch && sizes;
     for (u32 i = 0; created && i < count; ++i)
     {
         if (used[i])
-            created = SUCCEEDED(xrd3d12::CreateAccelerationStructureBuffer(HW.pDevice, g_scene.blases[i].result_size, L"rt blas",
-                &g_scene.blases[i].uncompacted));
+            created = (g_scene.blases[i].uncompacted = da_rt_accel_create(g_scene.blases[i].result_size, false, "rt blas")) != nullptr;
     }
     created = created && da_rt_create_tlas(u32(g_scene.instances.size()) + kMaxDynamicInstances);
     if (!created)
@@ -1185,15 +1096,15 @@ bool da_rt_scene_build()
     {
         dx11GpuTimerScope gpu(dx11GpuTimers::RtScene);
         DaRtSection section;
-        if (!section || !section.list4())
+        if (!section)
         {
             cleanup();
             return false;
         }
-        g_scene.geometry_table = da_rt_upload_buffer(section, g_scene.records.data(),
-            g_scene.records.size() * sizeof(DaRtGeometryRecord), L"rt geometry table");
-        g_scene.instance_table = da_rt_upload_buffer(section, g_scene.instance_records.data(),
-            std::max<size_t>(g_scene.instance_records.size(), 1) * sizeof(DaRtInstanceRecord), L"rt instance table");
+        g_scene.geometry_table = section.upload_buffer(g_scene.records.data(),
+            g_scene.records.size() * sizeof(DaRtGeometryRecord), "rt geometry table");
+        g_scene.instance_table = section.upload_buffer(g_scene.instance_records.data(),
+            std::max<size_t>(g_scene.instance_records.size(), 1) * sizeof(DaRtInstanceRecord), "rt instance table");
         da_rt_require_textures(section);
         da_rt_require_geometry(section);
 
@@ -1206,23 +1117,23 @@ bool da_rt_scene_build()
             if (offset + blas.scratch_size > scratch_size)
             {
                 // The next batch reuses the scratch.
-                section.native_uav_barrier(scratch);
+                section.scratch_barrier(scratch);
                 offset = 0;
             }
             da_rt_blas_inputs(blas, inputs);
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC d{};
-            d.DestAccelerationStructureData = blas.uncompacted->GetGPUVirtualAddress();
-            d.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() + offset;
-            d.Inputs = inputs.inputs;
-            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC post{};
-            post.DestBuffer = sizes->GetGPUVirtualAddress() + i * 8ull;
-            post.InfoType = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_COMPACTED_SIZE;
-            section.list4()->BuildRaytracingAccelerationStructure(&d, 1, &post);
+            DaRtBuild build;
+            build.dst = blas.uncompacted;
+            build.geometry = inputs.data();
+            build.count = u32(inputs.size());
+            build.flags = kStaticBlasFlags;
+            build.scratch = da_rt_address(scratch) + offset;
+            build.sizes = sizes;
+            build.size_index = i;
+            section.build(build);
             offset += blas.scratch_size;
         }
-        section.native_uav_barrier(nullptr);
-        section.transition(sizes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        section.scope().list->CopyBufferRegion(readback, 0, sizes, 0, count * 8ull);
+        section.accel_barrier();
+        section.copy_sizes(sizes, count);
     }
     if (!g_scene.geometry_table || !g_scene.instance_table)
     {
@@ -1232,24 +1143,20 @@ bool da_rt_scene_build()
     }
     CTimer wait;
     wait.Start();
-    xrd3d12::Flush(context, true);
+    da_rt_flush_wait();
     const float wait_ms = wait.GetElapsed_sec() * 1000.f;
 
     // 6. Compaction into exact-size buffers, then the top-level structure.
     u64 before = 0, after = 0;
     bool tlas_built = false;
     {
-        const u64* compacted = nullptr;
-        const D3D12_RANGE range{0, SIZE_T(count * 8ull)};
-        void* mapped = nullptr;
-        if (SUCCEEDED(readback->Map(0, &range, &mapped)))
-            compacted = static_cast<const u64*>(mapped);
+        xr_vector<u64> compacted(count, 0);
+        if (!da_rt_read_sizes(sizes, compacted.data(), count))
+            std::fill(compacted.begin(), compacted.end(), 0ull);
         dx11GpuTimerScope gpu(dx11GpuTimers::RtScene);
         DaRtSection section;
-        if (!section || !section.list4())
+        if (!section)
         {
-            if (mapped)
-                readback->Unmap(0, nullptr);
             cleanup();
             return false;
         }
@@ -1259,15 +1166,13 @@ bool da_rt_scene_build()
             if (!used[i])
                 continue;
             before += blas.result_size;
-            const u64 size = compacted ? da_align(compacted[i], kAsAlign) : 0;
-            ID3D12Resource* target = nullptr;
-            if (size && size < blas.result_size &&
-                SUCCEEDED(xrd3d12::CreateAccelerationStructureBuffer(HW.pDevice, size, L"rt blas compacted", &target)))
+            const u64 size = da_align(compacted[i], kAsAlign);
+            DaRtAccel* target = nullptr;
+            if (compacted[i] && size < blas.result_size && (target = da_rt_accel_create(size, false, "rt blas compacted")))
             {
-                section.list4()->CopyRaytracingAccelerationStructure(target->GetGPUVirtualAddress(),
-                    blas.uncompacted->GetGPUVirtualAddress(), D3D12_RAYTRACING_ACCELERATION_STRUCTURE_COPY_MODE_COMPACT);
+                section.compact(target, blas.uncompacted);
                 blas.as = target;
-                da_rt_release_native(blas.uncompacted);
+                da_rt_release(blas.uncompacted);
                 after += size;
             }
             else
@@ -1277,11 +1182,9 @@ bool da_rt_scene_build()
                 after += blas.result_size;
             }
         }
-        if (mapped)
-            readback->Unmap(0, nullptr);
-        section.native_uav_barrier(nullptr);
+        section.accel_barrier();
         for (u32 i = 0; i < g_scene.instances.size(); ++i)
-            g_scene.instances[i].AccelerationStructure = g_scene.blases[instance_blas[i]].as->GetGPUVirtualAddress();
+            g_scene.instances[i].accel = da_rt_address(g_scene.blases[instance_blas[i]].as);
         tlas_built = da_rt_build_tlas(section, nullptr, 0, false);
     }
     cleanup();
@@ -1293,8 +1196,8 @@ bool da_rt_scene_build()
 
     g_scene.memory += after + tables;
     g_scene.binding.tlas = g_scene.tlas_view;
-    g_scene.binding.tables[0] = g_scene.geometry_table->GetGPUVirtualAddress();
-    g_scene.binding.tables[1] = g_scene.instance_table->GetGPUVirtualAddress();
+    g_scene.binding.tables[0] = da_rt_address(g_scene.geometry_table);
+    g_scene.binding.tables[1] = da_rt_address(g_scene.instance_table);
     g_scene.binding.tables[2] = 0;
     g_scene.binding.tables[3] = 0;
     g_scene.binding.static_instances = u32(g_scene.instances.size());
@@ -1306,7 +1209,7 @@ bool da_rt_scene_build()
         u32 prof = 0, seas_first = 0, seas = 0;
         float snow = 0.f;
         const bool on = da_veg_rt_tables(veg, prof, seas_first, seas, snow);
-        g_scene.binding.veg_tables = on ? da_rt_bindless_buffer(veg) : kNone;
+        g_scene.binding.veg_tables = on ? da_rt_buffer_slot(veg) : kNone;
         g_scene.binding.veg_prof = prof;
         g_scene.binding.veg_seas = seas_first;
         g_scene.binding.veg_rows = seas;
@@ -1335,10 +1238,10 @@ void da_rt_repoint_textures()
         ID3D11ShaderResourceView* view = da_rt_texture_view(texture);
         if (view == slot.view)
             continue;
-        const u32 index = xrd3d12::AllocateBindless(HW.pDevice, 1);
-        if (index == xrd3d12::kBindlessInvalid)
+        const u32 index = da_rt_bindless_alloc(1);
+        if (index == da_rt_bindless_invalid)
             continue;
-        xrd3d12::WriteBindless(HW.pDevice, index, view);
+        da_rt_bindless_texture(index, view);
         da_rt_free_bindless(slot.index);
         slot.index = index;
         slot.view = view;
@@ -1348,7 +1251,7 @@ void da_rt_repoint_textures()
 // A texture reloaded, recreated or written in place: new views into a fresh range, and the read state.
 void da_rt_refresh_textures(DaRtSection& section)
 {
-    const u64 generation = xrd3d12::TextureWriteGeneration(HW.pDevice);
+    const u64 generation = da_rt_texture_generation();
     if (generation == g_scene.texture_generation)
         return;
     g_scene.texture_generation = generation;
@@ -1360,7 +1263,7 @@ void da_rt_refresh_textures(DaRtSection& section)
 
 struct DaRtFrameDynamic
 {
-    xr_vector<D3D12_RAYTRACING_INSTANCE_DESC> instances;
+    xr_vector<DaRtInstanceDesc> instances;
     xr_vector<DaRtInstanceRecord> instance_records;
     xr_vector<DaRtGeometryRecord> records;
 };
@@ -1397,10 +1300,10 @@ u32 da_rt_dynamic_texture(const ref_texture& t)
         return it->second.index;
     }
     ID3D11ShaderResourceView* view = da_rt_texture_view(texture);
-    const u32 index = xrd3d12::AllocateBindless(HW.pDevice, 1);
-    if (index == xrd3d12::kBindlessInvalid)
+    const u32 index = da_rt_bindless_alloc(1);
+    if (index == da_rt_bindless_invalid)
         return kNone;
-    xrd3d12::WriteBindless(HW.pDevice, index, view);
+    da_rt_bindless_texture(index, view);
     g_scene.dyn_textures.emplace(texture, DaRtDynTexture{t, index, view, Device.dwFrame});
     g_scene.dyn_textures_added = true;
     return index;
@@ -1525,7 +1428,7 @@ DaRtModelBuffer* da_rt_model_buffer(DaRtSection& section, const CSkeletonX& s, b
     entry.last_frame = Device.dwFrame;
     if (entry.uploaded && (entry.crc != part.crc || entry.length != part.length))
     {
-        da_rt_release_native(entry.buffer);
+        da_rt_release(entry.buffer);
         da_rt_free_bindless(entry.bindless);
         entry.uploaded = false;
     }
@@ -1533,7 +1436,7 @@ DaRtModelBuffer* da_rt_model_buffer(DaRtSection& section, const CSkeletonX& s, b
     {
         // The bindless range was full at the upload.
         if (entry.buffer && !skin_source && entry.bindless == kNone)
-            entry.bindless = da_rt_bindless_native(entry.buffer, da_align(u64(entry.vertices) * kPackedStride, 256));
+            entry.bindless = da_rt_native_slot(entry.buffer, da_align(u64(entry.vertices) * kPackedStride, 256));
         return entry.buffer ? &entry : nullptr;
     }
     entry.uploaded = true;
@@ -1541,12 +1444,12 @@ DaRtModelBuffer* da_rt_model_buffer(DaRtSection& section, const CSkeletonX& s, b
     entry.length = part.length;
     entry.serial = ++g_scene.upload_serial;
     const xr_vector<u8> data = da_rt_part_vertices(s, skin_source);
-    entry.buffer = da_rt_upload_buffer(section, data.data(), data.size(), skin_source ? L"rt skin source" : L"rt model vertices");
+    entry.buffer = section.upload_buffer(data.data(), data.size(), skin_source ? "rt skin source" : "rt model vertices");
     if (!entry.buffer)
         return nullptr;
     entry.vertices = part.vertices;
     if (!skin_source)
-        entry.bindless = da_rt_bindless_native(entry.buffer, da_align(data.size(), 256));
+        entry.bindless = da_rt_native_slot(entry.buffer, da_align(data.size(), 256));
     g_scene.memory += data.size();
     return &entry;
 }
@@ -1555,42 +1458,36 @@ bool da_rt_dyn_scratch(u64 size)
 {
     if (size <= g_scene.dyn_scratch_size)
         return true;
-    da_rt_release_native(g_scene.dyn_scratch);
+    da_rt_release(g_scene.dyn_scratch);
     g_scene.dyn_scratch_size = 0;
     const u64 grown = da_align(std::max<u64>(size, 8ull << 20), kAsAlign);
-    if (FAILED(xrd3d12::CreateNativeBuffer(HW.pDevice, grown, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-            D3D12_RESOURCE_STATE_COMMON, L"rt dynamic scratch", &g_scene.dyn_scratch)))
+    if (!(g_scene.dyn_scratch = da_rt_buffer_create(grown, "rt dynamic scratch")))
         return false;
     g_scene.dyn_scratch_size = grown;
     return true;
 }
 
 // Builds one rigid structure over a scratch region; false when the frame's scratch is used up.
-bool da_rt_build_rigid(DaRtSection& section, DaRtDynBlas& entry, const D3D12_RAYTRACING_GEOMETRY_DESC& geometry, u64& scratch_used)
+bool da_rt_build_rigid(DaRtSection& section, DaRtDynBlas& entry, const DaRtTriangles& geometry, u64& scratch_used)
 {
-    ID3D12Device5* device5 = xrd3d12::NativeDevice5(HW.pDevice);
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS in{};
-    in.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-    in.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-    in.NumDescs = 1;
-    in.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-    in.pGeometryDescs = &geometry;
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info{};
-    device5->GetRaytracingAccelerationStructurePrebuildInfo(&in, &info);
-    const u64 scratch = da_align(info.ScratchDataSizeInBytes, kAsAlign);
-    if (!info.ResultDataMaxSizeInBytes || scratch_used + scratch > g_scene.dyn_scratch_size)
+    DaRtSizes sizes;
+    if (!da_rt_sizes(&geometry, 1, DaRtBuildFastTrace, sizes))
         return false;
-    if (FAILED(xrd3d12::CreateAccelerationStructureBuffer(HW.pDevice, da_align(info.ResultDataMaxSizeInBytes, kAsAlign),
-            L"rt dynamic blas", &entry.as)))
+    const u64 scratch = da_align(sizes.build, kAsAlign);
+    if (scratch_used + scratch > g_scene.dyn_scratch_size)
         return false;
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC d{};
-    d.DestAccelerationStructureData = entry.as->GetGPUVirtualAddress();
-    d.ScratchAccelerationStructureData = g_scene.dyn_scratch->GetGPUVirtualAddress() + scratch_used;
-    d.Inputs = in;
-    section.list4()->BuildRaytracingAccelerationStructure(&d, 0, nullptr);
+    if (!(entry.as = da_rt_accel_create(da_align(sizes.result, kAsAlign), false, "rt dynamic blas")))
+        return false;
+    DaRtBuild build;
+    build.dst = entry.as;
+    build.geometry = &geometry;
+    build.count = 1;
+    build.flags = DaRtBuildFastTrace;
+    build.scratch = da_rt_address(g_scene.dyn_scratch) + scratch_used;
+    section.build(build);
     scratch_used += scratch;
     entry.built = true;
-    g_scene.memory += info.ResultDataMaxSizeInBytes;
+    g_scene.memory += sizes.result;
     return true;
 }
 
@@ -1717,22 +1614,20 @@ void da_rt_update_dynamic(DaRtSection& section)
     da_rt_collect_dynamic(rigid, skin, tier);
 
     DaRtFrameDynamic frame;
-    ID3D12Device5* device5 = xrd3d12::NativeDevice5(HW.pDevice);
     const u32 frame_index = Device.dwFrame;
     u64 scratch_used = 0;
     u32 builds = 0;
     // Every new structure this frame shares one scratch: sized for the frame's worst case.
     da_rt_dyn_scratch(32ull << 20);
 
-    const auto add_instance = [&](const Fmatrix& world, const DaRtGeometryRecord& record, u8 mask, float hemi,
-                                  D3D12_GPU_VIRTUAL_ADDRESS as) {
+    const auto add_instance = [&](const Fmatrix& world, const DaRtGeometryRecord& record, u8 mask, float hemi, DaRtAddress as) {
         // A record without its buffers' slots (the bindless range was full) is left out, not traced.
         if (frame.instances.size() >= kMaxDynamicInstances || record.vb == kNone || record.ib == kNone || !as)
             return;
         const u32 id = kInstanceDynamic | u32(frame.records.size());
         frame.records.push_back(record);
-        D3D12_RAYTRACING_INSTANCE_DESC& d = frame.instances.emplace_back();
-        da_rt_instance(d, world, id, mask, D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE, as);
+        DaRtInstanceDesc& d = frame.instances.emplace_back();
+        da_rt_instance(d, world, id, mask, da_rt_instance_cull_disable, as);
         frame.instance_records.push_back({world.c.y, 0.f, hemi, 0u});
     };
 
@@ -1742,7 +1637,7 @@ void da_rt_update_dynamic(DaRtSection& section)
     {
         DaRtMesh mesh = c.mesh;
         u32 vb_bindless = kNone;
-        D3D12_GPU_VIRTUAL_ADDRESS vb = 0;
+        DaRtAddress vb = 0;
         u64 source = 0;
         if (c.model_data)
         {
@@ -1760,20 +1655,20 @@ void da_rt_update_dynamic(DaRtSection& section)
             mesh.layout = kPackedLayout;
             mesh.layout2 = kPackedLayout2;
             vb_bindless = buffer->bindless;
-            vb = buffer->buffer->GetGPUVirtualAddress();
+            vb = da_rt_address(buffer->buffer);
             source = buffer->serial;
         }
         else
         {
-            vb_bindless = da_rt_bindless_buffer(mesh.vb, true);
-            vb = da_rt_buffer_address(mesh.vb);
+            vb_bindless = da_rt_buffer_slot(mesh.vb, true);
+            vb = da_rt_engine_address(mesh.vb);
         }
         DaRtMeshKey key = da_rt_key(mesh);
         if (c.model_data)
             key.vb = c.model_data;
         key.source = source;
-        const D3D12_GPU_VIRTUAL_ADDRESS ib = da_rt_buffer_address(mesh.ib);
-        const u32 ib_bindless = da_rt_bindless_buffer(mesh.ib, true);
+        const DaRtAddress ib = da_rt_engine_address(mesh.ib);
+        const u32 ib_bindless = da_rt_buffer_slot(mesh.ib, true);
         if (!vb || !ib || vb_bindless == kNone || ib_bindless == kNone)
             continue;
         DaRtDynBlas& entry = g_scene.dyn_blas[key];
@@ -1784,9 +1679,8 @@ void da_rt_update_dynamic(DaRtSection& section)
                 continue;
             // A buffer registered just now may be a tracked one.
             da_rt_require_geometry(section);
-            const D3D12_RAYTRACING_GEOMETRY_DESC g =
-                da_rt_geometry_desc(vb + mesh.vb_offset, mesh.stride, mesh.vertex_count, ib + mesh.ib_offset, mesh.index_count,
-                    mesh.flags & kGeomAlpha);
+            const DaRtTriangles g = da_rt_triangles(vb + mesh.vb_offset, mesh.stride, mesh.vertex_count, ib + mesh.ib_offset,
+                mesh.index_count, mesh.flags & kGeomAlpha);
             if (!da_rt_build_rigid(section, entry, g, scratch_used))
                 continue;
             ++builds;
@@ -1802,15 +1696,15 @@ void da_rt_update_dynamic(DaRtSection& section)
         record.ib = ib_bindless;
         record.albedo = da_rt_dynamic_texture(mesh.albedo);
         record.flags = mesh.flags | kGeomAbsolute;
-        add_instance(c.world, record, kMaskDynamic, c.hemi, entry.as->GetGPUVirtualAddress());
+        add_instance(c.world, record, kMaskDynamic, c.hemi, da_rt_address(entry.as));
     }
 
     // Characters: pre-skinned into their own vertices, the structure refitted (rebuilt every 30 frames).
-    ID3D12PipelineState* skin_pipeline = da_rt_skin_pipeline();
+    const DaRtPipeline skin_pipeline = da_rt_skin_pipeline();
     struct Refit
     {
         DaRtSkinned* entry;
-        D3D12_RAYTRACING_GEOMETRY_DESC geometry;
+        DaRtTriangles geometry;
         bool update;
     };
     xr_vector<Refit> refits;
@@ -1823,9 +1717,9 @@ void da_rt_update_dynamic(DaRtSection& section)
         if (!source || !da_rt_part_window(c.mesh, first, count))
             continue;
         ID3D11Buffer* index_buffer = *c.mesh->p_rm_Indices;
-        const D3D12_GPU_VIRTUAL_ADDRESS ib = da_rt_buffer_address(index_buffer);
+        const DaRtAddress ib = da_rt_engine_address(index_buffer);
         // Looked up every frame the entry is used, so the slots live at least as long as it does.
-        const u32 ib_bindless = da_rt_bindless_buffer(index_buffer, true);
+        const u32 ib_bindless = da_rt_buffer_slot(index_buffer, true);
         ShaderElement* element = da_rt_scene_element(c.child);
         const u32 albedo = da_rt_dynamic_texture(da_rt_albedo(element));
         if (!ib || ib_bindless == kNone)
@@ -1835,7 +1729,7 @@ void da_rt_update_dynamic(DaRtSection& section)
         // Another part at a reused visual address: a structure sized and built anew, never refitted.
         if (entry.source != source->serial || entry.index_buffer != index_buffer || entry.first != first || entry.count != count)
         {
-            da_rt_release_native(entry.as);
+            da_rt_release(entry.as);
             entry.built = false;
             entry.source = source->serial;
             entry.index_buffer = index_buffer;
@@ -1844,21 +1738,20 @@ void da_rt_update_dynamic(DaRtSection& section)
         }
         if (!entry.out || entry.vertices != source->vertices)
         {
-            da_rt_release_native(entry.out);
-            da_rt_release_native(entry.as);
+            da_rt_release(entry.out);
+            da_rt_release(entry.as);
             da_rt_free_bindless(entry.out_bindless);
             entry.built = false;
             const u64 bytes = da_align(u64(source->vertices) * kPackedStride, 256);
-            if (FAILED(xrd3d12::CreateNativeBuffer(HW.pDevice, bytes, D3D12_HEAP_TYPE_DEFAULT,
-                    D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON, L"rt skinned vertices", &entry.out)))
+            if (!(entry.out = da_rt_buffer_create(bytes, "rt skinned vertices")))
                 continue;
             entry.vertices = source->vertices;
-            entry.out_bindless = da_rt_bindless_native(entry.out, bytes);
+            entry.out_bindless = da_rt_native_slot(entry.out, bytes);
             g_scene.memory += bytes;
         }
         // The bindless range was full when the vertices were made (add_instance skips kNone).
         if (entry.out_bindless == kNone)
-            entry.out_bindless = da_rt_bindless_native(entry.out, da_align(u64(entry.vertices) * kPackedStride, 256));
+            entry.out_bindless = da_rt_native_slot(entry.out, da_align(u64(entry.vertices) * kPackedStride, 256));
         entry.record.vb = entry.out_bindless;
         entry.record.vb_offset = 0;
         entry.record.ib = ib_bindless;
@@ -1869,7 +1762,7 @@ void da_rt_update_dynamic(DaRtSection& section)
         entry.record.flags = kGeomAbsolute | (da_rt_alpha_tested(element) ? kGeomAlpha : 0u);
         // This frame's palette, as SkeletonX uploads sbones_array.
         const u32 bones = c.parent->LL_BoneCount();
-        const xrd3d12::UploadSpan palette = xrd3d12::AllocateUpload(section.context(), u64(bones) * 48, 16);
+        const DaRtUpload palette = section.upload(u64(bones) * 48, 16);
         if (!palette.cpu || !bones)
             continue;
         auto* rows = static_cast<Fvector4*>(palette.cpu);
@@ -1885,42 +1778,35 @@ void da_rt_update_dynamic(DaRtSection& section)
         d.pipeline = skin_pipeline;
         d.constants = constants;
         d.constants_size = sizeof(constants);
-        d.tables[0] = source->buffer->GetGPUVirtualAddress();
-        d.tables[1] = palette.gpu;
-        d.raw_output = entry.out->GetGPUVirtualAddress();
+        d.tables[0] = da_rt_address(source->buffer);
+        d.tables[1] = palette.address;
+        d.raw_output = da_rt_address(entry.out);
         d.groups_x = (entry.vertices + 63) / 64;
         if (!section.dispatch(d))
             continue;
         Refit& r = refits.emplace_back();
         r.entry = &entry;
-        r.geometry = da_rt_geometry_desc(entry.out->GetGPUVirtualAddress(), kPackedStride, entry.vertices, ib + first * 2,
-            count, false);
+        r.geometry = da_rt_triangles(da_rt_address(entry.out), kPackedStride, entry.vertices, ib + first * 2, count, false);
         r.update = entry.built && frame_index - entry.built_frame < kSkinRebuildFrames;
     }
     if (!refits.empty())
     {
         da_rt_require_geometry(section);
         for (const Refit& r : refits)
-            section.transition(r.entry->out, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            section.written(r.entry->out);
+        constexpr u32 skinned_flags = DaRtBuildFastBuild | DaRtBuildAllowUpdate;
         for (Refit& r : refits)
         {
             DaRtSkinned& entry = *r.entry;
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS in{};
-            in.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-            in.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD |
-                D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-            in.NumDescs = 1;
-            in.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-            in.pGeometryDescs = &r.geometry;
             if (!entry.as)
             {
-                D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info{};
-                device5->GetRaytracingAccelerationStructurePrebuildInfo(&in, &info);
-                entry.as_size = da_align(info.ResultDataMaxSizeInBytes, kAsAlign);
-                entry.build_scratch = da_align(info.ScratchDataSizeInBytes, kAsAlign);
-                entry.update_scratch = da_align(std::max<u64>(info.UpdateScratchDataSizeInBytes, 256), kAsAlign);
-                if (!entry.as_size ||
-                    FAILED(xrd3d12::CreateAccelerationStructureBuffer(HW.pDevice, entry.as_size, L"rt skinned blas", &entry.as)))
+                DaRtSizes sizes;
+                if (!da_rt_sizes(&r.geometry, 1, skinned_flags, sizes))
+                    continue;
+                entry.as_size = da_align(sizes.result, kAsAlign);
+                entry.build_scratch = da_align(sizes.build, kAsAlign);
+                entry.update_scratch = da_align(std::max<u64>(sizes.update, 256), kAsAlign);
+                if (!(entry.as = da_rt_accel_create(entry.as_size, false, "rt skinned blas")))
                     continue;
                 g_scene.memory += entry.as_size;
                 r.update = false;
@@ -1928,16 +1814,15 @@ void da_rt_update_dynamic(DaRtSection& section)
             const u64 scratch = r.update ? entry.update_scratch : entry.build_scratch;
             if (scratch_used + scratch > g_scene.dyn_scratch_size)
                 continue;
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC d{};
-            d.DestAccelerationStructureData = entry.as->GetGPUVirtualAddress();
-            d.ScratchAccelerationStructureData = g_scene.dyn_scratch->GetGPUVirtualAddress() + scratch_used;
-            d.Inputs = in;
-            if (r.update)
-            {
-                d.Inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-                d.SourceAccelerationStructureData = entry.as->GetGPUVirtualAddress();
-            }
-            section.list4()->BuildRaytracingAccelerationStructure(&d, 0, nullptr);
+            DaRtBuild build;
+            build.dst = entry.as;
+            build.src = entry.as;
+            build.geometry = &r.geometry;
+            build.count = 1;
+            build.flags = skinned_flags;
+            build.update = r.update;
+            build.scratch = da_rt_address(g_scene.dyn_scratch) + scratch_used;
+            section.build(build);
             scratch_used += scratch;
             if (!r.update)
             {
@@ -1951,7 +1836,7 @@ void da_rt_update_dynamic(DaRtSection& section)
         const auto it = g_scene.skinned.find(c.child);
         if (it == g_scene.skinned.end() || !it->second.built || it->second.last_frame != frame_index)
             continue;
-        add_instance(c.world, it->second.record, kMaskSkinned, c.hemi, it->second.as->GetGPUVirtualAddress());
+        add_instance(c.world, it->second.record, kMaskSkinned, c.hemi, da_rt_address(it->second.as));
     }
 
     // Engine buffers first seen this frame, and every tracked one again (they decay at each submission);
@@ -1971,19 +1856,19 @@ void da_rt_update_dynamic(DaRtSection& section)
     {
         const u64 rb = frame.records.size() * sizeof(DaRtGeometryRecord);
         const u64 ib = frame.instance_records.size() * sizeof(DaRtInstanceRecord);
-        const xrd3d12::UploadSpan records = xrd3d12::AllocateUpload(section.context(), rb, 16);
-        const xrd3d12::UploadSpan instances = xrd3d12::AllocateUpload(section.context(), ib, 16);
+        const DaRtUpload records = section.upload(rb, 16);
+        const DaRtUpload instances = section.upload(ib, 16);
         if (records.cpu && instances.cpu)
         {
             std::memcpy(records.cpu, frame.records.data(), rb);
             std::memcpy(instances.cpu, frame.instance_records.data(), ib);
-            g_scene.binding.tables[2] = records.gpu;
-            g_scene.binding.tables[3] = instances.gpu;
+            g_scene.binding.tables[2] = records.address;
+            g_scene.binding.tables[3] = instances.address;
             dynamic_count = u32(frame.instances.size());
         }
     }
     // Every structure written above is complete before the top level reads it.
-    section.native_uav_barrier(nullptr);
+    section.accel_barrier();
     da_rt_build_tlas(section, frame.instances.data(), dynamic_count, true);
 }
 
@@ -1995,7 +1880,7 @@ void da_rt_evict_dynamic()
     {
         if (now - it->second.last_frame > kDynamicEvictFrames)
         {
-            da_rt_release_native(it->second.as);
+            da_rt_release(it->second.as);
             it = g_scene.dyn_blas.erase(it);
         }
         else
@@ -2005,8 +1890,8 @@ void da_rt_evict_dynamic()
     {
         if (now - it->second.last_frame > kDynamicEvictFrames)
         {
-            da_rt_release_native(it->second.out);
-            da_rt_release_native(it->second.as);
+            da_rt_release(it->second.out);
+            da_rt_release(it->second.as);
             da_rt_free_bindless(it->second.out_bindless);
             it = g_scene.skinned.erase(it);
         }
@@ -2019,7 +1904,7 @@ void da_rt_evict_dynamic()
         {
             if (now - it->second.last_frame > kDynamicEvictFrames)
             {
-                da_rt_release_native(it->second.buffer);
+                da_rt_release(it->second.buffer);
                 da_rt_free_bindless(it->second.bindless);
                 it = map->erase(it);
             }
@@ -2056,7 +1941,7 @@ void da_rt_evict_dynamic()
 
 void da_rt_scene_release()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     // The level stays: its walk is made again when an effect comes back on.
     const bool level = g_scene.level;
     if (!HW.pDevice)
@@ -2067,22 +1952,22 @@ void da_rt_scene_release()
     }
     for (DaRtBlas& blas : g_scene.blases)
     {
-        da_rt_release_native(blas.as);
-        da_rt_release_native(blas.uncompacted);
+        da_rt_release(blas.as);
+        da_rt_release(blas.uncompacted);
     }
     for (auto& [key, entry] : g_scene.dyn_blas)
-        da_rt_release_native(entry.as);
+        da_rt_release(entry.as);
     for (auto& [child, entry] : g_scene.skinned)
     {
-        da_rt_release_native(entry.out);
-        da_rt_release_native(entry.as);
+        da_rt_release(entry.out);
+        da_rt_release(entry.as);
         da_rt_free_bindless(entry.out_bindless);
     }
     for (auto* map : {&g_scene.model_buffers, &g_scene.skin_sources})
     {
         for (auto& [key, entry] : *map)
         {
-            da_rt_release_native(entry.buffer);
+            da_rt_release(entry.buffer);
             da_rt_free_bindless(entry.bindless);
         }
     }
@@ -2095,13 +1980,14 @@ void da_rt_scene_release()
             buffer->Release();
     }
     da_rt_free_bindless(g_scene.texture_base, u32(g_scene.textures.size()));
-    da_rt_release_native(g_scene.geometry_table);
-    da_rt_release_native(g_scene.instance_table);
-    da_rt_release_native(g_scene.tlas);
-    da_rt_release_native(g_scene.tlas_scratch);
-    da_rt_release_native(g_scene.dyn_scratch);
+    da_rt_release(g_scene.geometry_table);
+    da_rt_release(g_scene.instance_table);
+    // The view holds the structure's storage on Vulkan: it goes first.
     if (g_scene.tlas_view)
         g_scene.tlas_view->Release();
+    da_rt_release(g_scene.tlas);
+    da_rt_release(g_scene.tlas_scratch);
+    da_rt_release(g_scene.dyn_scratch);
     g_scene = {};
     g_scene.level = level;
 #endif
@@ -2109,7 +1995,7 @@ void da_rt_scene_release()
 
 void da_rt_textures_replaced()
 {
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     // The read state of the new textures waits for the next frame's refresh: their writes moved the
     // generation it compares.
     if (g_scene.ready)
@@ -2120,7 +2006,7 @@ void da_rt_textures_replaced()
 void da_rt_frame_scene(CBackend& cmd_list)
 {
     UNUSED(cmd_list);
-#if defined(XR_D3D12)
+#if defined(DA_RT_LANE)
     if (!da_rt_available() || !g_scene.level)
         return;
     if (!da_rt_wanted())
@@ -2152,7 +2038,7 @@ void da_rt_frame_scene(CBackend& cmd_list)
     const bool track = da_rt_live(RtEffect::AO) || da_rt_live(RtEffect::Reflections);
     dx11GpuTimerScope gpu(dx11GpuTimers::RtScene);
     DaRtSection section;
-    if (!section || !section.list4())
+    if (!section)
         return;
     da_rt_refresh_textures(section);
     if (track)

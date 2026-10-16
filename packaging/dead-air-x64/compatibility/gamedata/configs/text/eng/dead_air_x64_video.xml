@@ -258,13 +258,13 @@
 		<text>Resolution and reach of the ray traced effects. Low: hard shadows, half-resolution occlusion, shorter reflections. High: full resolution and the farthest reflections.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_dx11">
-		<text>Ray tracing needs DirectX 12: choose it under Renderer and restart the game.</text>
+		<text>Ray tracing needs DirectX 12 or Vulkan: choose one of them under Renderer and restart the game.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_dx11_nohw">
-		<text>Ray tracing needs DirectX 12 and a GPU with hardware ray tracing.</text>
+		<text>Ray tracing needs DirectX 12 or Vulkan and a GPU with hardware ray tracing.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_unsupported">
-		<text>The GPU or its driver has no hardware ray tracing (DXR 1.1): GeForce RTX, Radeon RX 6000 and newer, Intel Arc.</text>
+		<text>The GPU or its driver has no hardware ray tracing (DXR 1.1, Vulkan ray queries): GeForce RTX, Radeon RX 6000 and newer, Intel Arc.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_quality_off">
 		<text>Quality of the ray traced effects: it matters only while one of them is on.</text>

@@ -64,8 +64,9 @@ upstream, and where the untouched code that actually runs is.
   (off/auto/on).
 - Hardware ray tracing in its own "RTX" section of the video options:
   reflections on water and puddles, sun shadows and ambient occlusion, with
-  three quality levels. No quality preset turns it on; it needs DirectX 12 and
-  a GPU with DXR 1.1 (GeForce RTX, Radeon RX 6000 and newer, Intel Arc).
+  three quality levels. No quality preset turns it on; it needs DirectX 12 or
+  Vulkan and a GPU with hardware ray tracing (GeForce RTX, Radeon RX 6000 and
+  newer, Intel Arc).
 - AMD FSR and NVIDIA DLSS / DLAA (on supported GPUs) upscaling on DirectX 11,
   DirectX 12 and Vulkan, anti-aliasing as its own setting (off, FXAA, SMAA,
   TAA), and frame generation through AMD FSR (DirectX 12 and Vulkan) or NVIDIA
