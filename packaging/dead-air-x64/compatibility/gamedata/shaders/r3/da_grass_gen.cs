@@ -19,15 +19,16 @@
 #include "da_season_common.h"
 #include "da_grass_common.h"
 #include "da_water_field.h"
+#include "da_raw_buffer.h"
 
-ByteAddressBuffer	da_grass_slots		: register(t0);	// level.details slots, 16 bytes each
-ByteAddressBuffer	da_grass_groups		: register(t2);	// 16 bytes per group: tile, level, flags, lanes
+DA_RAW(da_grass_slots, t0);	// level.details slots, 16 bytes each
+DA_RAW(da_grass_groups, t2);	// 16 bytes per group: tile, level, flags, lanes
 Texture2D<float>	da_grass_ground		: register(t3);	// ground of the slot-box rule, toroidal window
 Texture2D<float2>	da_grass_push		: register(t4);	// push of the creatures, toroidal window
 Texture2D<float2>	da_grass_push_prev	: register(t5);	// the same, previous frame
-RWByteAddressBuffer	da_grass_blades		: register(u0);
+DA_RAW_RW(da_grass_blades, u0);
 RWByteAddressBuffer	da_grass_counts		: register(u1);
-RWByteAddressBuffer	da_grass_heads		: register(u2);
+DA_RAW_RW(da_grass_heads, u2);
 
 uniform float4	da_grass_cam;		// xyz camera, w draw radius R
 uniform float4	da_grass_fwd;		// xyz camera forward, w minimum width per metre of view depth (k_px x pixel)
@@ -767,20 +768,20 @@ void	grass_store_basal	(uint at, grass_basal_rec R, grass_lane L, uint p, float 
 	grass_shape c = grass_apply(R.rest, L.f_cur, P13), q = grass_apply(R.rest_prev, L.f_prev, P13);
 	c.width *= R.ws;
 	q.width *= R.ws;
-	da_grass_blades.Store4(at * GRASS_REC, uint4(asuint(R.root.x), asuint(R.root.y), asuint(R.root.z), R.flags));
-	da_grass_blades.Store4(at * GRASS_REC + 16u, grass_pack_shape(c));
-	da_grass_blades.Store4(at * GRASS_REC + 32u, grass_pack_shape(q));
-	da_grass_blades.Store4(at * GRASS_REC + 48u, uint4(grass_pack_u8(float4(R.sen, L.hc, L.ao, hemi)),
+	DA_STORE4(da_grass_blades, at * GRASS_REC, uint4(asuint(R.root.x), asuint(R.root.y), asuint(R.root.z), R.flags));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 16u, grass_pack_shape(c));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 32u, grass_pack_shape(q));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 48u, uint4(grass_pack_u8(float4(R.sen, L.hc, L.ao, hemi)),
 		grass_pack_sn2(L.nground), grass_pack_h2(L.stage, L.snow), 0u));
 }
 
 // A litter pair after the lane's basal pairs: dead (senescence 1), static (this frame's shape on both).
 void	grass_store_litter	(uint at, grass_shape S, float3 root, uint flags, grass_lane L, float hemi)
 {
-	da_grass_blades.Store4(at * GRASS_REC, uint4(asuint(root.x), asuint(root.y), asuint(root.z), flags));
-	da_grass_blades.Store4(at * GRASS_REC + 16u, grass_pack_shape(S));
-	da_grass_blades.Store4(at * GRASS_REC + 32u, grass_pack_shape(S));
-	da_grass_blades.Store4(at * GRASS_REC + 48u, uint4(grass_pack_u8(float4(1.0f, L.hc, L.ao, hemi)),
+	DA_STORE4(da_grass_blades, at * GRASS_REC, uint4(asuint(root.x), asuint(root.y), asuint(root.z), flags));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 16u, grass_pack_shape(S));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 32u, grass_pack_shape(S));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 48u, uint4(grass_pack_u8(float4(1.0f, L.hc, L.ao, hemi)),
 		grass_pack_sn2(L.nground), grass_pack_h2(L.stage, L.snow), 0u));
 }
 
@@ -790,10 +791,10 @@ void	grass_store	(uint at, float wscale, grass_lane L, float hemi, grass_shape p
 	grass_shape c = L.cur, q = prev;
 	c.width *= wscale;
 	q.width *= wscale;
-	da_grass_blades.Store4(at * GRASS_REC, uint4(asuint(L.root.x), asuint(L.root.y), asuint(L.root.z), L.flags));
-	da_grass_blades.Store4(at * GRASS_REC + 16u, grass_pack_shape(c));
-	da_grass_blades.Store4(at * GRASS_REC + 32u, grass_pack_shape(q));
-	da_grass_blades.Store4(at * GRASS_REC + 48u, uint4(grass_pack_u8(float4(L.sen, L.hc, L.ao, hemi)),
+	DA_STORE4(da_grass_blades, at * GRASS_REC, uint4(asuint(L.root.x), asuint(L.root.y), asuint(L.root.z), L.flags));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 16u, grass_pack_shape(c));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 32u, grass_pack_shape(q));
+	DA_STORE4(da_grass_blades, at * GRASS_REC + 48u, uint4(grass_pack_u8(float4(L.sen, L.hc, L.ao, hemi)),
 		grass_pack_sn2(L.nground), grass_pack_h2(L.stage, L.snow), grass_pack_h2(L.head_eq * wscale, L.head_area)));
 }
 
@@ -803,7 +804,7 @@ void	grass_store	(uint at, float wscale, grass_lane L, float hemi, grass_shape p
 void	grass_store_void	(uint at0, uint at1)
 {
 	for (uint i = at0; i < at1; ++i)
-		da_grass_blades.Store4(i * GRASS_REC + 16u, uint4(0u, 0u, 0u, 0u));
+		DA_STORE4(da_grass_blades, i * GRASS_REC + 16u, uint4(0u, 0u, 0u, 0u));
 }
 
 // Leaves on a stem, rooted on its curve at its node and moving with it (the previous frame's root offset rides in
@@ -861,11 +862,11 @@ void	grass_store_cauline	(uint at0, uint count, float wscale, grass_lane L, uint
 		lc.wind = L.cur.wind;
 		const float3 r = grass_bez(C0, C1, C2, C3, tn);
 		const float3 dp = grass_bez(Q0, Q1, Q2, Q3, tn) - r;
-		da_grass_blades.Store4((at0 + k) * GRASS_REC, uint4(asuint(r.x), asuint(r.y), asuint(r.z),
+		DA_STORE4(da_grass_blades, (at0 + k) * GRASS_REC, uint4(asuint(r.x), asuint(r.y), asuint(r.z),
 			((L.seed + k * 0x3779u) & 0xFFFFu) | grass_species_bits(p) | GRASS_F_CAULINE | (L.thatch ? GRASS_F_THATCH : 0u)));
-		da_grass_blades.Store4((at0 + k) * GRASS_REC + 16u, grass_pack_shape(lc));
-		da_grass_blades.Store4((at0 + k) * GRASS_REC + 32u, grass_pack_shape(lc));
-		da_grass_blades.Store4((at0 + k) * GRASS_REC + 48u, uint4(grass_pack_u8(float4(L.sen, L.hc, L.ao, hemi)),
+		DA_STORE4(da_grass_blades, (at0 + k) * GRASS_REC + 16u, grass_pack_shape(lc));
+		DA_STORE4(da_grass_blades, (at0 + k) * GRASS_REC + 32u, grass_pack_shape(lc));
+		DA_STORE4(da_grass_blades, (at0 + k) * GRASS_REC + 48u, uint4(grass_pack_u8(float4(L.sen, L.hc, L.ao, hemi)),
 			grass_pack_sn2(L.nground), grass_pack_h2(L.stage, dp.y), grass_pack_h2(dp.x, dp.z)));
 	}
 }
@@ -878,7 +879,7 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	GroupMemoryBarrierWithGroupSync();
 
 	// ---- The lattice point of this lane --------------------------------------------------------
-	const uint4 G = da_grass_groups.Load4(gid.x * 16u);
+	const uint4 G = DA_LOAD4(da_grass_groups, gid.x * 16u);
 	const int2 tile = int2(asint(G.x), asint(G.y));
 	const uint level = G.z & 0xFFu;
 	const uint tsize = 32u << ((G.z >> 8) & 0xFu);
@@ -927,7 +928,7 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	alive = alive && all(sxz >= 0) && sxz.x < int(da_grass_slot.z) && sxz.y < int(da_grass_slot.w);
 	uint4 S = uint4(0u, 0u, 0u, 0u);
 	if (alive)
-		S = da_grass_slots.Load4((uint(sxz.y) * uint(da_grass_slot.z) + uint(sxz.x)) * 16u);
+		S = DA_LOAD4(da_grass_slots, (uint(sxz.y) * uint(da_grass_slot.z) + uint(sxz.x)) * 16u);
 	uint comm = 0u;
 	uint picked = 0u;
 	{
@@ -1119,9 +1120,7 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	// A head whose culm found no room still fills its slot, with no culm (0xFFFFFFFF: collapsed).
 	const uint head_bits = L.head_type | ((L.thatch ? 1u : 0u) << 4) | ((seed >> 16) << 16);
 	if (head_v_fits)
-		da_grass_heads.Store4((grass_bin_base(bin_h) + gs_b[bin_h] + o_h) * GRASS_HEAD_REC,
-			uint4(culm_v, head_bits, grass_pack_h2(L.head_len, L.head_w * L.wv), grass_pack_h2(L.stage, L.hc)));
+		DA_STORE4(da_grass_heads, (grass_bin_base(bin_h) + gs_b[bin_h] + o_h) * GRASS_HEAD_REC, uint4(culm_v, head_bits, grass_pack_h2(L.head_len, L.head_w * L.wv), grass_pack_h2(L.stage, L.hc)));
 	if (head_n_fits)
-		da_grass_heads.Store4((grass_bin_base(GRASS_BIN_HEAD_SH) + gs_b[GRASS_BIN_HEAD_SH] + o_hn) * GRASS_HEAD_REC,
-			uint4(culm_n, head_bits, grass_pack_h2(L.head_len, L.head_w * L.wn), grass_pack_h2(L.stage, L.hc)));
+		DA_STORE4(da_grass_heads, (grass_bin_base(GRASS_BIN_HEAD_SH) + gs_b[GRASS_BIN_HEAD_SH] + o_hn) * GRASS_HEAD_REC, uint4(culm_n, head_bits, grass_pack_h2(L.head_len, L.head_w * L.wn), grass_pack_h2(L.stage, L.hc)));
 }

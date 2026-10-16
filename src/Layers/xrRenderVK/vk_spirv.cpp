@@ -555,7 +555,15 @@ bool PrepareSpirv(const u32* words, size_t count, Stage stage, const ShaderBindi
                 cls = kClassUnknown;
         }
         else if (!lookup(varName, cls, reg, tableCountOf))
-            cls = kClassUnknown;
+        {
+            // A byte address buffer seen as an array of uint4 (da_raw_buffer.h): the register of the buffer.
+            constexpr char kVec4Suffix[] = "_v4";
+            constexpr size_t kSuffix = sizeof(kVec4Suffix) - 1;
+            const bool alias = b.type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER && varName.size() > kSuffix &&
+                !varName.compare(varName.size() - kSuffix, kSuffix, kVec4Suffix);
+            if (!alias || !lookup(varName.substr(0, varName.size() - kSuffix), cls, reg, tableCountOf))
+                cls = kClassUnknown;
+        }
 
         u32 binding;
         if (cls == kClassUnknown || reg + arrayCount > SlotLimit(cls))
@@ -596,13 +604,23 @@ bool PrepareSpirv(const u32* words, size_t count, Stage stage, const ShaderBindi
     }
     std::sort(iface.bindings.begin(), iface.bindings.end(),
         [](const SetBinding& a, const SetBinding& b) { return a.binding < b.binding; });
-    for (size_t i = 1; i < iface.bindings.size(); ++i)
+    for (size_t i = 1; i < iface.bindings.size();)
     {
-        if (iface.bindings[i].binding == iface.bindings[i - 1].binding)
+        const SetBinding& prev = iface.bindings[i - 1];
+        const SetBinding& cur = iface.bindings[i];
+        if (cur.binding != prev.binding)
+        {
+            ++i;
+            continue;
+        }
+        // Two views of one storage buffer (da_raw_buffer.h) are one descriptor.
+        if (cur.type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || prev.type != cur.type || prev.cls != cur.cls ||
+            prev.slot != cur.slot || prev.count != cur.count)
         {
             error = "two resources share a register";
             return false;
         }
+        iface.bindings.erase(iface.bindings.begin() + ptrdiff_t(i));
     }
     return true;
 }

@@ -199,9 +199,9 @@ float shadow_extreme_quality( float3 tc )
 
 #if defined(SM_4_1) || defined( SM_5)
     // find number of blockers and sum up blocker depth
-    for( row = -BFS2; row <= BFS2; row += 2 )
+    [unroll]for( row = -BFS2; row <= BFS2; row += 2 )
     {
-        for( col = -BFS2; col <= BFS2; col += 2 )
+        [unroll]for( col = -BFS2; col <= BFS2; col += 2 )
         {
             float4 d4 = s_smap.Gather( smp_nofilter, SMAP_TC(tc.xy), int2( col, row ) );
             float4 b4 = ( tc.zzzz <= d4 ) ? (0.0f).xxxx : (1.0f).xxxx;
@@ -262,9 +262,9 @@ float shadow_extreme_quality( float3 tc )
 	   fRatio = 0.0;
    }
 
-   for( row = 0; row < FS; ++row )
+   [unroll]for( row = 0; row < FS; ++row )
    {
-      for( col = 0; col < FS; ++col )
+      [unroll]for( col = 0; col < FS; ++col )
          w += Fw(row,col,fRatio);
    }
 
@@ -360,7 +360,7 @@ float shadow_extreme_quality_fused( float3 tc )
     // filter shadow map samples using the dynamic weights
     [unroll(FS)]for( row = -FS2; row <= FS2; row += 2 )
     {
-        for( col = -FS2; col <= FS2; col += 2 )
+        [unroll]for( col = -FS2; col <= FS2; col += 2 )
         {
             float4 d4;
 
@@ -487,9 +487,9 @@ float shadow_extreme_quality_fused( float3 tc )
     }
 
     // sum up weights of dynamic filter matrix
-    for( row = 0; row < FS; ++row )
+    [unroll]for( row = 0; row < FS; ++row )
     {
-       for( col = 0; col < FS; ++col )
+       [unroll]for( col = 0; col < FS; ++col )
        {
           w += Fw(row,col,fRatio);
        }
@@ -517,7 +517,7 @@ float dx10_1_hw_hq_7x7( float3 tc )
    tc.xy = tcs * ( 1.0 / SMAP_size );
 
    // loop over the rows
-   for( row = -GS2; row <= GS2; row += 2 )
+   [unroll]for( row = -GS2; row <= GS2; row += 2 )
    {
        [unroll]for( col = -GS2; col <= GS2; col += 2 )
        {
@@ -576,9 +576,9 @@ float dx10_0_hw_hq_7x7( float4 tc )
    float2 pwGH = ( ( 1.0 ).xx + fc );
    float2 tcGH = (1.0/SMAP_size) * ( fc / pwGH );
 
-   for( int row = -GS2; row <= GS2; row += 2 )
+   [unroll]for( int row = -GS2; row <= GS2; row += 2 )
    {
-      for( int col = -GS2; col <= GS2; col += 2 )
+      [unroll]for( int col = -GS2; col <= GS2; col += 2 )
 	  {
 		// Texel offset folded into the coordinate (the same texel, SMAP_size is a power of two):
 		// at SM 6.6 DXC cannot keep a sample offset from this loop an immediate value.

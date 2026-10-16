@@ -313,6 +313,9 @@ bool da_dxc_spirv(const xrd3d12::ShaderCompile& base, const xr_vector<u8>& dxil,
             args.push_back(base.args[i]);
     }
     args.insert(args.end(), spirv_args, spirv_args + spirv_count);
+    // The SPIR-V-only paths of the shaders (da_raw_buffer.h); the DXIL twin gives the reflection without them.
+    args.push_back(L"-D");
+    args.push_back(L"GRIZZLY_SPIRV=1");
     // RWTexture2D<float> is any single-channel UAV in D3D11 (R8, R16F, R32F...): storage images take the view's
     // format. Image atomics need theirs in the shader: such a shader compiles again with the HLSL types' formats.
     args.push_back(L"-fspv-use-unknown-image-format");
