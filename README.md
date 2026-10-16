@@ -68,7 +68,8 @@ upstream, and where the untouched code that actually runs is.
   a GPU with DXR 1.1 (GeForce RTX, Radeon RX 6000 and newer, Intel Arc).
 - AMD FSR and NVIDIA DLSS / DLAA (on supported GPUs) upscaling on DirectX 11,
   DirectX 12 and Vulkan, anti-aliasing as its own setting (off, FXAA, SMAA,
-  TAA), and frame generation through AMD FSR or NVIDIA DLSS on DirectX 12.
+  TAA), and frame generation through AMD FSR (DirectX 12 and Vulkan) or NVIDIA
+  DLSS (DirectX 12).
 - Human NPCs that perceive and communicate like people, without cheating:
   each stalker knows only what it saw, heard or was told, needs time to spot
   you, and passes news by voice, radio and hand signals with a delay and a

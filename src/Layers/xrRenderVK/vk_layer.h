@@ -1594,6 +1594,7 @@ public:
     // Queues: graphics (also presents), async compute, transfer. Families may coincide.
     u32 graphicsFamily = 0, computeFamily = ~0u, transferFamily = ~0u;
     VkQueue graphicsQueue = VK_NULL_HANDLE, computeQueue = VK_NULL_HANDLE, transferQueue = VK_NULL_HANDLE;
+    u32 presentQueueIndex = 0, presentQueueCount = 0; // graphics-family queues for an SDK's presenter
     std::mutex graphicsQueueLock; // the immediate context, the init uploader (no transfer queue) and present
     std::mutex transferQueueLock;
     std::mutex computeQueueLock;
@@ -1747,7 +1748,9 @@ private:
     SwapChain() = default;
     HRESULT CreateNative(UINT syncInterval);
     friend bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive);
-    void DestroyNative();
+    friend bool SetSwapChainProvider(IDXGISwapChain* chain, SwapChainProvider* provider);
+    // `last`: the chain's provider makes none after it.
+    void DestroyNative(bool last = false);
     HRESULT CreateBackBuffer();
     bool Acquire();
     std::atomic<ULONG> m_refs{1};
@@ -1764,6 +1767,8 @@ private:
     VkPresentModeKHR m_tearingMode = VK_PRESENT_MODE_FIFO_KHR; // vsync off
     bool m_adaptive = false;
     bool m_relaxedSupported = false;
+    SwapChainProvider* m_provider = nullptr;      // what the next chain is made through (null: the driver)
+    SwapChainProvider* m_chainProvider = nullptr; // what made the current one
     bool m_switchModes = false;        // VK_EXT_swapchain_maintenance1: the mode changes per present
     bool m_mutable = false;
     bool m_minimized = false;

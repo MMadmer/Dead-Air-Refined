@@ -54,6 +54,7 @@ namespace xrvk
 #define XRVK_DEVICE_FUNCTIONS(X) \
     X(vkDestroyDevice) \
     X(vkGetDeviceQueue) \
+    X(vkQueueSubmit) \
     X(vkQueueSubmit2) \
     X(vkQueueWaitIdle) \
     X(vkDeviceWaitIdle) \

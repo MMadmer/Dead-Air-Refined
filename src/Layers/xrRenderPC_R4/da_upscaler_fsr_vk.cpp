@@ -12,75 +12,15 @@
 #include "da_upscaler.h"
 #include "Layers/xrRenderVK/vk_api.h"
 
-#include <vulkan/vulkan.h>
+#include "da_ffx_vk.h"
+
 #include <ffx_api/ffx_upscale.h>
-#include <ffx_api/ffx_api_loader.h>
 #include <ffx_api/vk/ffx_api_vk.h>
 
 namespace xray::render::RENDER_NAMESPACE
 {
 namespace
 {
-// The runtime, loaded once by its absolute path next to the executable and never unloaded (contexts and its
-// threads may outlive any owner). Null when it is missing or incomplete: FSR is off then.
-const ffxFunctions* fsr_vk_functions()
-{
-    static ffxFunctions functions{};
-    static const ffxFunctions* loaded = []() -> const ffxFunctions* {
-        wchar_t path[MAX_PATH]{};
-        const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
-        wchar_t* slash = length && length < MAX_PATH ? wcsrchr(path, L'\\') : nullptr;
-        if (!slash || wcscpy_s(slash + 1, MAX_PATH - size_t(slash + 1 - path), L"amd_fidelityfx_vk.dll"))
-            return nullptr;
-        const HMODULE module = LoadLibraryW(path);
-        if (!module)
-        {
-            Msg("~ [FFX] amd_fidelityfx_vk.dll cannot be loaded (error %u): AMD FSR is off on Vulkan", u32(GetLastError()));
-            return nullptr;
-        }
-        ffxLoadFunctions(&functions, module);
-        if (!functions.CreateContext || !functions.DestroyContext || !functions.Query || !functions.Dispatch)
-        {
-            Msg("! [FFX] amd_fidelityfx_vk.dll lacks ffx-api entry points: AMD FSR is off on Vulkan");
-            return nullptr;
-        }
-        Msg("* [FFX] AMD FidelityFX Vulkan runtime ready");
-        return &functions;
-    }();
-    return loaded;
-}
-
-PFN_vkGetDeviceProcAddr s_device_proc{};
-
-void VKAPI_PTR fsr_no_label(VkCommandBuffer, const VkDebugUtilsLabelEXT*) {}
-void VKAPI_PTR fsr_no_label_end(VkCommandBuffer) {}
-
-// ffx-api asks for extension aliases of core entry points (vkGetBufferMemoryRequirements2KHR) and for debug labels;
-// a Vulkan 1.3 device without those extensions enabled answers null, which ffx-api calls through. The core name
-// is tried next, and labels fall back to no-ops.
-PFN_vkVoidFunction VKAPI_PTR fsr_device_proc(VkDevice device, const char* name)
-{
-    if (const PFN_vkVoidFunction f = s_device_proc(device, name))
-        return f;
-    const size_t length = xr_strlen(name);
-    string128 core;
-    if (length > 3 && length < sizeof(core) && (!xr_strcmp(name + length - 3, "KHR") || !xr_strcmp(name + length - 3, "EXT")))
-    {
-        xr_strcpy(core, name);
-        core[length - 3] = 0;
-        if (const PFN_vkVoidFunction f = s_device_proc(device, core))
-            return f;
-    }
-    if (!xr_strcmp(name, "vkCmdBeginDebugUtilsLabelEXT") || !xr_strcmp(name, "vkCmdInsertDebugUtilsLabelEXT"))
-        return reinterpret_cast<PFN_vkVoidFunction>(&fsr_no_label);
-    if (!xr_strcmp(name, "vkCmdEndDebugUtilsLabelEXT"))
-        return reinterpret_cast<PFN_vkVoidFunction>(&fsr_no_label_end);
-    // AMD-only entry points (buffer markers) are optional to ffx-api.
-    if (length <= 3 || xr_strcmp(name + length - 3, "AMD"))
-        Msg("~ [FSR] %s is not available on the device", name);
-    return nullptr;
-}
-
 // r__fsr: 1 native AA, 2 quality, 3 balanced, 4 performance, 5 ultra performance (0 = off).
 u32 fsr_quality_mode(int quality)
 {
@@ -128,18 +68,17 @@ public:
     bool Init(u32 displayW, u32 displayH, int /*quality*/) override
     {
         Shutdown();
-        const ffxFunctions* ffx = fsr_vk_functions();
+        const ffxFunctions* ffx = da_ffx_vk();
         xrvk::NativeDeviceInfo device;
-        void* getDeviceProcAddr = nullptr;
-        if (!ffx || !HW.pDevice || !xrvk::GetNativeDevice(HW.pDevice, device, &getDeviceProcAddr) || !displayW || !displayH)
+        const PFN_vkGetDeviceProcAddr deviceProc = da_ffx_vk_device_proc();
+        if (!ffx || !deviceProc || !xrvk::GetNativeDevice(HW.pDevice, device, nullptr) || !displayW || !displayH)
             return false;
 
         ffxCreateBackendVKDesc backend{};
         backend.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK;
         backend.vkDevice = static_cast<VkDevice>(device.device);
         backend.vkPhysicalDevice = static_cast<VkPhysicalDevice>(device.physicalDevice);
-        s_device_proc = reinterpret_cast<PFN_vkGetDeviceProcAddr>(getDeviceProcAddr);
-        backend.vkDeviceProcAddr = &fsr_device_proc;
+        backend.vkDeviceProcAddr = deviceProc;
 
         // Tonemapped LDR input with standard, finite depth; the maximum render size is the display, so the quality
         // can change without a new context.
@@ -173,7 +112,7 @@ public:
         // Recorded and in-flight work still references the context's resources.
         if (ID3D11DeviceContext* imm = HW.get_context(CHW::IMM_CTX_ID))
             xrvk::Flush(imm, true);
-        if (const ffxFunctions* ffx = fsr_vk_functions())
+        if (const ffxFunctions* ffx = da_ffx_vk())
         {
             const ffxReturnCode_t code = ffx->DestroyContext(&m_context, nullptr);
             if (code != FFX_API_RETURN_OK)
@@ -184,7 +123,7 @@ public:
 
     bool Dispatch(const UpscaleFrame& frame) override
     {
-        const ffxFunctions* ffx = fsr_vk_functions();
+        const ffxFunctions* ffx = da_ffx_vk();
         if (!m_context || !ffx || !frame.color || !frame.depth || !frame.output)
             return false;
         if (frame.renderW > m_displayW || frame.renderH > m_displayH || frame.displayW > m_displayW ||
@@ -266,7 +205,7 @@ public:
             renderH = displayH;
             return;
         }
-        if (const ffxFunctions* ffx = fsr_vk_functions())
+        if (const ffxFunctions* ffx = da_ffx_vk())
         {
             uint32_t w = 0, h = 0;
             ffxQueryDescUpscaleGetRenderResolutionFromQualityMode query{};
@@ -292,7 +231,7 @@ public:
 IUpscaler* fsr_vk_create() { return xr_new<fsr_vk_upscaler>(); }
 
 // FSR runs on any Vulkan device the renderer runs on; only its runtime may be missing.
-bool fsr_vk_supported() { return fsr_vk_functions() != nullptr; }
+bool fsr_vk_supported() { return da_ffx_vk() != nullptr; }
 
 void fsr_vk_caps(UpscalerCaps& caps)
 {

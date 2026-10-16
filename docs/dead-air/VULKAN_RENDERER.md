@@ -18,16 +18,16 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
   (`xrRender_vulkan_failed`).
 - **Upscalers** as on the other renderers: NVIDIA DLSS / DLAA through Streamline's Vulkan path, AMD FSR
   3.1 through the signed Vulkan runtime of FidelityFX SDK 1.1.4 (`Externals/fidelityfx-vk`), the
-  engine's TAA otherwise.
-- Not on Vulkan yet: frame generation, the ray-traced effects of the RTX section and NVIDIA Reflex
-  (sections 7 and 8). Their settings are kept for the renderers that have them.
+  engine's TAA otherwise. **AMD FSR frame generation** through the same runtime (section 7).
+- Not on Vulkan yet: NVIDIA DLSS frame generation, the ray-traced effects of the RTX section, async compute
+  and NVIDIA Reflex (section 8). Their settings are kept for the renderers that have them.
 
 ## 2. xrVulkan architecture (details in `vk_layer.h`)
 
 - **Device and queues.** One graphics queue, an async compute queue and a transfer queue where the
-  family exists (`-vk_no_async`, `-vk_no_transfer`). Async compute follows `r__async_compute` exactly as
-  on DirectX 12 (`da_async.cpp`; Auto keeps it off on NVIDIA). Creation-time uploads go through the
-  transfer queue.
+  family exists (`-vk_no_async`, `-vk_no_transfer`), and two more graphics-family queues for FSR frame
+  generation's presenter. Creation-time uploads go through the transfer queue; the engine's async compute
+  passes (`da_async.cpp`) run on DirectX 12 only so far.
 - **Frames.** One timeline semaphore; three frames in flight (`kFramesInFlight`). Pools, upload pages,
   dynamic buffer versions and deferred releases are tagged with the frame and recycled when its value
   completed.
@@ -115,13 +115,34 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
 
 ## 7. Frame generation
 
-Not implemented on Vulkan: `r__framegen` reports "frame generation needs DirectX 12" and stays off.
+AMD FSR frame generation (`r__framegen st_fg_fsr`, `da_framegen_fsr_vk.cpp`), the manager shared with DirectX 12
+(`da_framegen.cpp`):
+- **The swap chain.** FFX's frame interpolation swap chain takes the place of the layer's VkSwapchainKHR through
+  `xrvk::SwapChainProvider`: the layer keeps the surface, the back buffer and its copy into the acquired image;
+  FFX creates the chain, lists its images, acquires and presents, a generated frame between every two rendered
+  ones, from its presenter thread on two graphics-family queues the device keeps for it
+  (`DeviceCreateInfo::presentQueues`). FFX submits to the layer's graphics and compute queues under the layer's
+  locks (`xrvk::SubmitToQueue`). The UI composition runs on the present queue.
+- **One context, several chains.** A resize or a vsync change destroys the chain and makes the next one under
+  the same swap chain context (FFX holds one chain at a time); only the chain that ends frame generation takes
+  the context with it.
+- **Streamline.** The runtime makes and presents its real chain through its own imports of `vulkan-1.dll`; where
+  Streamline runs they are pointed at its interposer (`da_ffx_vk_route_swapchain`), so its per-frame bookkeeping
+  sees every present and DLSS upscaling runs under the generation (the DirectX 12 twin makes FFX's chain through
+  Streamline's factory).
+- **Per frame:** configure, then prepare on the immediate command buffer (depth, motion vectors, the camera); the
+  generation dispatch runs inside the present, through the swap chain's callback. The UI is told apart from the
+  scene by the hudless copy. SDK 1.1.4 takes a reset as a frame id that does not step by one.
+- Measured (RTX 3070 Laptop, DLSS Balanced, vsync): 1213 presents for the first 600 generating frames; 52-53
+  rendered frames per second with the generation against 61.6 without it, so about 105 on the screen.
 
-## 8. Ray tracing and Reflex
+## 8. Not on Vulkan yet
 
-The RTX section (`r__rt_reflections`, `r__rt_shadows`, `r__rtao`) runs on DirectX 12 only
-(`da_rt_device.cpp`); the device reports ray query support, the passes are not ported. Streamline is
-asked for DLSS only on Vulkan, so Reflex (`VK_NV_low_latency2`) is not wired.
+- The RTX section (`r__rt_reflections`, `r__rt_shadows`, `r__rtao`) runs on DirectX 12 only
+  (`da_rt_device.cpp`); the device reports ray query support, the passes are not ported.
+- Async compute (`r__async_compute`): DirectX 12 only (`da_async.cpp`).
+- Streamline is asked for DLSS only on Vulkan, so neither DLSS frame generation nor Reflex
+  (`VK_NV_low_latency2`) is wired.
 
 ## 9. Measured (16.10.2026, RTX 3070 Laptop, 2560x1440 Extreme, DLSS Balanced)
 

@@ -1,6 +1,6 @@
 # AMD FidelityFX SDK 1.1.4 ffx-api for Vulkan (vendored subset)
 
-FSR 3.1 upscaling for the Vulkan renderer (`xrRender_R6.dll`). The AMD FSR SDK 2.x the DirectX 12 renderer uses
+FSR 3.1 upscaling and frame generation for the Vulkan renderer (`xrRender_R6.dll`). The AMD FSR SDK 2.x the DirectX 12 renderer uses
 (`Externals/fidelityfx-sdk`) has no Vulkan runtime; FidelityFX SDK 1.1.4 ships one as a signed DLL behind the same
 ffx-api. Plain vendor drop, not a submodule; nothing here is modified.
 
@@ -22,14 +22,18 @@ ffx-api. Plain vendor drop, not a submodule; nothing here is modified.
 | `include/ffx_api/ffx_api_loader.h` | `ffx-api/include/ffx_api/ffx_api_loader.h` | 2,022 | `7be51b7bf1e640b84c0c7f22a9db50a6816debce3755b51224e56c89501659c3` |
 | `include/ffx_api/ffx_api_types.h` | `ffx-api/include/ffx_api/ffx_api_types.h` | 14,748 | `dee2782813d22047c068e0fb27d1347324f8ce79d280a4672848b3b294cb12fe` |
 | `include/ffx_api/ffx_upscale.h` | `ffx-api/include/ffx_api/ffx_upscale.h` | 13,946 | `1155bcdcea9c10e6a95507bc9422ca062a853ac84250f0b09a637a66836b3ac1` |
+| `include/ffx_api/ffx_framegeneration.h` | `ffx-api/include/ffx_api/ffx_framegeneration.h` | 13,847 | `344936dccf49267d4421d1d74dc6db617d0a83c5a9f5991841325e812a38f127` |
+| `include/ffx_api/ffx_framegeneration.hpp` | `ffx-api/include/ffx_api/ffx_framegeneration.hpp` | 3,872 | `30225b7c0596cff734b7c1fc5217d5ac39ccc629bcccb3bcdeeadbcac317fbcd` |
 | `include/ffx_api/ffx_upscale.hpp` | `ffx-api/include/ffx_api/ffx_upscale.hpp` | 3,729 | `6451754c2539a7e991429a7bd8365bb848f51abebad1982715f345989cc0a234` |
 | `include/ffx_api/vk/ffx_api_vk.h` | `ffx-api/include/ffx_api/vk/ffx_api_vk.h` | 15,949 | `a50a8d5ff5689a10a6ce378f2df5569fd880c89ec46e8356aaf35eb40512edd9` |
 | `include/ffx_api/vk/ffx_api_vk.hpp` | `ffx-api/include/ffx_api/vk/ffx_api_vk.hpp` | 4,451 | `b4eab5ed043de7590c786c1904eba7064449ee8a8c9e302eb6363ccc7035172e` |
 
 ## How it is used
 
-`src/Layers/xrRenderPC_R4/da_upscaler_fsr_vk.cpp` (Vulkan module only) loads `amd_fidelityfx_vk.dll` by its absolute
-path next to the executable, takes the ffx-api entry points through `ffxLoadFunctions()` and creates the upscaler
-with the `ffxCreateBackendVKDesc` of the renderer's own device (`xrvk::GetNativeDevice`). The headers are included
+`src/Layers/xrRenderPC_R4/da_ffx_vk.cpp` (Vulkan module only) loads `amd_fidelityfx_vk.dll` by its absolute path next
+to the executable and takes the ffx-api entry points through `ffxLoadFunctions()`; `da_upscaler_fsr_vk.cpp` creates
+the upscaler and `da_framegen_fsr_vk.cpp` the frame interpolation swap chain and the frame generation with the
+`ffxCreateBackendVKDesc` of the renderer's own device (`xrvk::GetNativeDevice`). Where Streamline runs, the DLL's
+swap chain imports of `vulkan-1.dll` are pointed at its interposer in memory (the file stays as signed). The headers are included
 as `<ffx_api/...>`, so they never meet the SDK 2.3 headers of the DirectX 12 module. Nothing links against the
 DLL, so the SDK's import library is not taken.

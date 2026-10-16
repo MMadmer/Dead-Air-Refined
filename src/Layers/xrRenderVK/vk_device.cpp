@@ -2025,8 +2025,16 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     native.graphicsQueueIndex = 1;
     // Without an async compute family the SDK's compute queues come after its graphics ones.
     const u32 computeHome = computeFamily != ~0u ? computeFamily : graphicsFamily;
-    const u32 graphicsCount = addQueue(graphicsFamily,
-        1 + external.graphicsQueues + (computeHome == graphicsFamily ? external.computeQueues : 0), kPriorities);
+    // A presenter's queues come last in the graphics family.
+    const u32 presentBase = 1 + external.graphicsQueues + (computeHome == graphicsFamily ? external.computeQueues : 0);
+    const u32 graphicsCount = addQueue(graphicsFamily, presentBase + info.presentQueues, kPriorities);
+    presentQueueIndex = presentBase;
+    presentQueueCount = graphicsCount > presentBase ? (std::min)(graphicsCount - presentBase, info.presentQueues) : 0;
+    native.presentQueueIndex = presentQueueIndex;
+    native.presentQueueCount = presentQueueCount;
+    if (presentQueueCount < info.presentQueues)
+        Log("~ the graphics family has %u queue(s): %u of %u for a presenter", graphicsCount, presentQueueCount,
+            info.presentQueues);
     if (computeFamily != ~0u)
     {
         addQueue(computeFamily, 1 + external.computeQueues, kPriorities);

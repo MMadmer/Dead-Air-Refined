@@ -266,31 +266,56 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
         }
     }
     VkSwapchainKHR created = VK_NULL_HANDLE;
-    result = g_vk.vkCreateSwapchainKHR(dev->vk, &info, nullptr, &created);
-    if (result != VK_SUCCESS && (info.flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR))
+    if (m_provider)
     {
+        // A provider takes the plain description (no per-present modes, no sRGB views) and holds one chain
+        // at a time: the old one goes first.
         info.flags &= ~VkSwapchainCreateFlagsKHR(VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR);
-        info.pNext = m_switchModes ? &modesInfo : nullptr;
-        modesInfo.pNext = nullptr;
-        result = g_vk.vkCreateSwapchainKHR(dev->vk, &info, nullptr, &created);
+        info.pNext = nullptr;
+        m_switchModes = false;
+        DestroyNative();
+        info.oldSwapchain = VK_NULL_HANDLE;
+        result = VkResult(m_provider->Create(&info, &created));
     }
-    if (result != VK_SUCCESS)
+    else
     {
-        Log("! vkCreateSwapchainKHR failed: %s", ResultText(result));
+        result = g_vk.vkCreateSwapchainKHR(dev->vk, &info, nullptr, &created);
+        if (result != VK_SUCCESS && (info.flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR))
+        {
+            info.flags &= ~VkSwapchainCreateFlagsKHR(VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR);
+            info.pNext = m_switchModes ? &modesInfo : nullptr;
+            modesInfo.pNext = nullptr;
+            result = g_vk.vkCreateSwapchainKHR(dev->vk, &info, nullptr, &created);
+        }
+    }
+    if (result != VK_SUCCESS || !created)
+    {
+        Log("! %s failed: %s", m_provider ? "the swap chain provider" : "vkCreateSwapchainKHR", ResultText(result));
         return E_FAIL;
     }
     // The old chain is retired: its images go with the wrappers.
     DestroyNative();
     m_swapchain = created;
+    m_chainProvider = m_provider;
     m_chainFirstId = m_presentId + 1;
     m_clock.Reset();
     m_mutable = (info.flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) != 0;
     m_extent = info.imageExtent;
 
     count = 0;
-    g_vk.vkGetSwapchainImagesKHR(dev->vk, m_swapchain, &count, nullptr);
-    std::vector<VkImage> handles(count);
-    g_vk.vkGetSwapchainImagesKHR(dev->vk, m_swapchain, &count, handles.data());
+    std::vector<VkImage> handles;
+    if (m_chainProvider)
+    {
+        m_chainProvider->GetImages(m_swapchain, &count, nullptr);
+        handles.resize(count);
+        m_chainProvider->GetImages(m_swapchain, &count, handles.data());
+    }
+    else
+    {
+        g_vk.vkGetSwapchainImagesKHR(dev->vk, m_swapchain, &count, nullptr);
+        handles.resize(count);
+        g_vk.vkGetSwapchainImagesKHR(dev->vk, m_swapchain, &count, handles.data());
+    }
     D3D11_TEXTURE2D_DESC td{};
     td.Width = m_extent.width;
     td.Height = m_extent.height;
@@ -324,7 +349,7 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
     return S_OK;
 }
 
-void SwapChain::DestroyNative()
+void SwapChain::DestroyNative(bool last)
 {
     Device* dev = m_device;
     if (m_swapchain || !m_buffers.empty())
@@ -341,9 +366,12 @@ void SwapChain::DestroyNative()
             g_vk.vkDestroySemaphore(dev->vk, s, nullptr);
     }
     m_renderDone.clear();
-    if (m_swapchain)
+    if (m_swapchain && m_chainProvider)
+        m_chainProvider->Destroy(m_swapchain, last);
+    else if (m_swapchain)
         g_vk.vkDestroySwapchainKHR(dev->vk, m_swapchain, nullptr);
     m_swapchain = VK_NULL_HANDLE;
+    m_chainProvider = nullptr;
     m_acquired = false;
     m_pendingAcquire = VK_NULL_HANDLE;
 }
@@ -361,7 +389,9 @@ bool SwapChain::Acquire()
         }
         const VkSemaphore semaphore = m_acquire[m_acquireIndex];
         u32 index = 0;
-        const VkResult result = g_vk.vkAcquireNextImageKHR(m_device->vk, m_swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &index);
+        const VkResult result = m_chainProvider ?
+            VkResult(m_chainProvider->Acquire(m_swapchain, UINT64_MAX, semaphore, &index)) :
+            g_vk.vkAcquireNextImageKHR(m_device->vk, m_swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &index);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
             m_outOfDate = true;
@@ -420,7 +450,7 @@ ULONG STDMETHODCALLTYPE SwapChain::Release()
     Device* dev = m_device;
     if (dev)
     {
-        DestroyNative();
+        DestroyNative(true);
         if (m_backBuffer)
             m_backBuffer->Release();
         for (VkSemaphore s : m_acquire)
@@ -521,7 +551,9 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
     // before it while frames come slower than the refresh (present_pacing.h).
     m_clock.Tick(m_hwnd);
     const u64 queued = m_clock.Slower() && !xrpacing::StrictVsync() ? 1 : 0;
-    if (dev->caps.presentWait && m_syncInterval && m_presentId > queued && m_presentId - queued >= m_chainFirstId)
+    // A provider's chain is no driver chain: it paces its own presents.
+    if (dev->caps.presentWait && m_syncInterval && !m_chainProvider && m_presentId > queued &&
+        m_presentId - queued >= m_chainFirstId)
         g_vk.vkWaitForPresentKHR(dev->vk, m_swapchain, m_presentId - queued, kPresentWaitNs);
 
     VkPresentInfoKHR info{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
@@ -532,7 +564,7 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
     info.pImageIndices = &m_current;
     const u64 id = m_presentId + 1;
     VkPresentIdKHR presentId{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};
-    if (dev->caps.presentWait)
+    if (dev->caps.presentWait && !m_chainProvider)
     {
         presentId.swapchainCount = 1;
         presentId.pPresentIds = &id;
@@ -548,6 +580,9 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
         info.pNext = &modeInfo;
     }
     VkResult result;
+    if (m_chainProvider)
+        result = VkResult(m_chainProvider->Present(dev->graphicsQueue, &info));
+    else
     {
         std::lock_guard lock(dev->graphicsQueueLock);
         result = g_vk.vkQueuePresentKHR(dev->graphicsQueue, &info);
@@ -766,18 +801,44 @@ HRESULT STDMETHODCALLTYPE SwapChain::GetRotation(DXGI_MODE_ROTATION* rotation)
 // Public API
 // ================================================================================================
 
-bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive)
+namespace
+{
+// The chain behind an IDXGISwapChain of this library; null for another one.
+SwapChain* LayerChain(IDXGISwapChain* chain)
 {
     if (!chain)
-        return false;
+        return nullptr;
     ID3D11Device* device = nullptr;
     chain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device));
     const bool ours = IsLayerDevice(device);
     if (device)
         device->Release();
-    if (!ours)
+    return ours ? static_cast<SwapChain*>(static_cast<IDXGISwapChain1*>(chain)) : nullptr;
+}
+} // namespace
+
+bool SetSwapChainProvider(IDXGISwapChain* chain, SwapChainProvider* provider)
+{
+    SwapChain* s = LayerChain(chain);
+    if (!s || s->m_device->lost)
         return false;
-    SwapChain* s = static_cast<SwapChain*>(static_cast<IDXGISwapChain1*>(chain));
+    if (s->m_provider == provider && (s->m_swapchain || s->m_minimized))
+        return true;
+    s->DestroyNative(true);
+    s->m_provider = provider;
+    if (SUCCEEDED(s->CreateNative(s->m_syncInterval)) && (s->m_swapchain || s->m_minimized))
+        return true;
+    // The layer's own chain again.
+    s->m_provider = nullptr;
+    s->CreateNative(s->m_syncInterval);
+    return false;
+}
+
+bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive)
+{
+    SwapChain* s = LayerChain(chain);
+    if (!s)
+        return false;
     if (s->m_adaptive != adaptive)
     {
         s->m_adaptive = adaptive;

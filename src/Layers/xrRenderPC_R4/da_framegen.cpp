@@ -4,14 +4,14 @@
 // The frame generation manager (da_framegen.h): the registry of the backends (AMD FSR, NVIDIA
 // DLSS), the choice from r__framegen, the swap chain the chosen one presents through, and the
 // per-frame work - the hudless copy of the finished 3D frame and the backend's Prepare, or nothing
-// while a menu, the loading screen or a pause is up. DirectX 12 only: the DirectX 11 module keeps
-// the registry and answers "unavailable" to everything else.
+// while a menu, the loading screen or a pause is up. DirectX 12 and Vulkan: the DirectX 11 module
+// keeps the registry and answers "unavailable" to everything else.
 
 #include "stdafx.h"
 
 #include "da_framegen.h"
 
-#ifdef XR_D3D12
+#if defined(XR_D3D12) || defined(XR_VULKAN)
 #include "da_upscaler.h"
 #include "da_streamline.h"
 #include "Layers/xrRender/da_temporal.h"
@@ -37,7 +37,7 @@ void da_framegen_register(const FrameGenBackend& backend)
     g_da_fg_backends[g_da_fg_backend_count++] = backend;
 }
 
-#ifdef XR_D3D12
+#if defined(XR_D3D12) || defined(XR_VULKAN)
 namespace
 {
 // The finished 3D frame without the UI: display size, the back buffer's format.
@@ -215,16 +215,22 @@ void da_framegen_switch()
     }
 
     // Nothing holds a back buffer view here: the target is gone and its surfaces are released.
+#if defined(XR_D3D12)
     // Without a backend the chain goes through Streamline's upgraded factory where it runs (its
     // bookkeeping sees every present), else it is a plain DXGI one.
     IDXGISwapChain4* before = xrd3d12::NativeSwapChain(HW.m_pSwapChain);
     const HRESULT hr =
         xrd3d12::RecreateSwapChain(HW.m_pSwapChain, next ? next->Provider() : da_streamline_swapchain_provider());
+    // Refused = nothing changed and the old swap chain (and its backend) stays; otherwise the
+    // layer fell back to a plain one and the old backend's provider is gone with its chain.
+    const bool refused = hr == DXGI_ERROR_INVALID_CALL && xrd3d12::NativeSwapChain(HW.m_pSwapChain) == before;
+#else
+    // A chain the provider could not make is the layer's own again: the old backend's is gone.
+    const HRESULT hr = xrvk::SetSwapChainProvider(HW.m_pSwapChain, next ? next->Provider() : nullptr) ? S_OK : E_FAIL;
+    const bool refused = false;
+#endif
     if (FAILED(hr))
     {
-        // Refused = nothing changed and the old swap chain (and its backend) stays; otherwise the
-        // layer fell back to a plain one and the old backend's provider is gone with its chain.
-        const bool refused = hr == DXGI_ERROR_INVALID_CALL && xrd3d12::NativeSwapChain(HW.m_pSwapChain) == before;
         Msg("! [framegen] the swap chain for [%s] could not be made (0x%08X)%s", next ? next->Name() : "plain",
             u32(hr), refused ? ", the back buffer is still referenced" : ", presenting through a plain one");
         xr_delete(next);
@@ -368,13 +374,13 @@ void da_framegen_present()
 
 bool da_framegen_running() { return g_da_fg.initialised; }
 #else
-// DirectX 11 has no frame generation. r__framegen keeps its value for the DirectX 12 module.
+// DirectX 11 has no frame generation. r__framegen keeps its value for the DirectX 12 and Vulkan modules.
 void da_framegen_switch()
 {
     static bool reported = false;
     if (ps_r__framegen && !reported)
     {
-        Msg("~ [framegen] frame generation needs DirectX 12: off in this renderer");
+        Msg("~ [framegen] frame generation needs DirectX 12 or Vulkan: off in this renderer");
         reported = true;
     }
 }

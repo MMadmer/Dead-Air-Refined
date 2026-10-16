@@ -59,6 +59,8 @@ struct NativeDeviceInfo
     // The first of the extra queues made for the SDK (past the layer's own in the same family).
     UINT graphicsFamily = 0, graphicsQueueIndex = 0;
     UINT computeFamily = 0, computeQueueIndex = 0;
+    // The graphics-family queues kept for an SDK's presenter (DeviceCreateInfo::presentQueues), past the SDK's.
+    UINT presentQueueIndex = 0, presentQueueCount = 0;
 };
 
 struct DeviceCreateInfo
@@ -80,6 +82,9 @@ struct DeviceCreateInfo
     // the swap chain calls, so it sees every present, and image creation, so it knows the images it is
     // handed. Null result = the driver's.
     void* (*deviceProc)(const char* name) = nullptr;
+    // Graphics-family queues nobody else submits to, for a presenter thread (AMD FSR frame generation presents
+    // and acquires on its own queues). As many as the family has.
+    UINT presentQueues = 0;
 };
 
 // Creates the Vulkan device and returns it behind ID3D11Device / ID3D11DeviceContext (immediate). The
@@ -92,6 +97,41 @@ HRESULT CreateDevice(const DeviceCreateInfo& info, ID3D11Device** device, ID3D11
 HRESULT CreateSwapChainForHwnd(ID3D11Device* device, IDXGIFactory2* factory, HWND hwnd,
     const DXGI_SWAP_CHAIN_DESC1* desc, const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreen,
     IDXGISwapChain1** swapChain);
+
+// ---- a swap chain an SDK makes (AMD FSR frame generation) -------------------------------------------
+
+// Takes the place of the VkSwapchainKHR calls (handles and structures as pointers). The layer keeps the surface,
+// the back buffer and the copy into the acquired image; the provider creates the chain, lists its images,
+// acquires and presents. Only one chain of a provider exists at a time: the old one goes before the new one is
+// made. Present is called without the layer's queue lock (SubmitToQueue takes it).
+class SwapChainProvider
+{
+public:
+    virtual ~SwapChainProvider() = default;
+    // vkCreateSwapchainKHR: `createInfo` a VkSwapchainCreateInfoKHR without extensions, `swapchain` a
+    // VkSwapchainKHR* to fill. Returns a VkResult.
+    virtual int Create(const void* createInfo, void* swapchain) = 0;
+    // `last`: no chain is made through this provider after it (another provider, the layer's own, the end).
+    virtual void Destroy(void* swapchain, bool last) = 0;
+    virtual int GetImages(void* swapchain, UINT* count, void* images) = 0;
+    virtual int Acquire(void* swapchain, UINT64 timeout, void* semaphore, UINT* index) = 0;
+    virtual int Present(void* queue, const void* presentInfo) = 0;
+};
+
+// Makes the chain again, now, through `provider` (null: the layer's own). No buffer of the chain may be held.
+// False for a chain that is not this library's or a chain that could not be made (it is then the layer's own).
+bool SetSwapChainProvider(IDXGISwapChain* chain, SwapChainProvider* provider);
+
+// The queue an SDK hands its submissions to from any thread (VkSubmitInfo array, VkFence): under the lock the
+// layer submits with. Returns a VkResult.
+enum class Queue : UINT
+{
+    Graphics,
+    Compute, // the graphics queue where the device has no async compute queue
+};
+int SubmitToQueue(ID3D11Device* device, Queue queue, UINT count, const void* submits, void* fence);
+// The VkQueue behind Queue (the layer's own; null for another device).
+void* NativeQueue(ID3D11Device* device, Queue queue);
 
 // Adaptive vsync (rs_vsync): the vsync'd presents of a swap chain of this library go out FIFO_RELAXED, which
 // tears a frame that missed its refresh; a change recreates the chain at the next present. False when the

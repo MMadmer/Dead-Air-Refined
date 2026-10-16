@@ -122,9 +122,33 @@ bool GetNativeDevice(ID3D11Device* device, NativeDeviceInfo& out, void** getDevi
     out.device = d->vk;
     out.graphicsFamily = d->graphicsFamily;
     out.computeFamily = d->computeFamily != ~0u ? d->computeFamily : d->graphicsFamily;
+    out.presentQueueIndex = d->presentQueueIndex;
+    out.presentQueueCount = d->presentQueueCount;
     if (getDeviceProcAddr)
         *getDeviceProcAddr = reinterpret_cast<void*>(g_vk.vkGetDeviceProcAddr);
     return true;
+}
+
+int SubmitToQueue(ID3D11Device* device, Queue queue, UINT count, const void* submits, void* fence)
+{
+    if (!IsLayerDevice(device))
+        return VK_ERROR_INITIALIZATION_FAILED;
+    Device* d = Device::From(device);
+    const bool compute = queue == Queue::Compute && d->computeQueue;
+    std::lock_guard lock(compute ? d->computeQueueLock : d->graphicsQueueLock);
+    const VkResult result = g_vk.vkQueueSubmit(compute ? d->computeQueue : d->graphicsQueue, count,
+        static_cast<const VkSubmitInfo*>(submits), static_cast<VkFence>(fence));
+    if (result == VK_ERROR_DEVICE_LOST)
+        d->ReportLost(result);
+    return result;
+}
+
+void* NativeQueue(ID3D11Device* device, Queue queue)
+{
+    if (!IsLayerDevice(device))
+        return nullptr;
+    const Device* d = Device::From(device);
+    return queue == Queue::Compute && d->computeQueue ? d->computeQueue : d->graphicsQueue;
 }
 
 bool PrepareNativeImage(ID3D11DeviceContext* context, ID3D11Resource* resource, bool write, NativeImage& out)

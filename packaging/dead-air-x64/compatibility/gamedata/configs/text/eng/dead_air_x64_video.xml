@@ -210,13 +210,13 @@
 		<text>NVIDIA DLSS does what AMD FSR does, with the neural network of GeForce RTX cards. DLAA keeps the resolution and only anti-aliases. Replaces AMD FSR.</text>
 	</string>
 	<string id="st_da_x64_video_hint_framegen">
-		<text>The GPU draws extra frames between the real ones: smoother motion, slightly more input lag. Works best from 60 FPS up. DirectX 12 only; the list holds what the GPU supports.</text>
+		<text>The GPU draws extra frames between the real ones: smoother motion, slightly more input lag. Works best from 60 FPS up. DirectX 12 and Vulkan only; the list holds what the GPU supports.</text>
 	</string>
 	<string id="st_da_x64_video_hint_framegen_hags">
 		<text>The GPU draws extra frames between the real ones: smoother motion, slightly more input lag. Works best from 60 FPS up. DirectX 12 only; the list holds what the GPU supports. On a GeForce RTX 40 or newer, NVIDIA DLSS needs Windows' hardware-accelerated GPU scheduling (Settings - System - Display - Graphics) turned on and a reboot.</text>
 	</string>
 	<string id="st_da_x64_video_hint_framegen_dx11">
-		<text>Frame generation needs DirectX 12: choose it under Renderer and restart the game.</text>
+		<text>Frame generation needs DirectX 12 or Vulkan: choose one under Renderer and restart the game.</text>
 	</string>
 	<string id="st_da_x64_video_hint_framegen_unsupported">
 		<text>The GPU or its driver does not support frame generation.</text>

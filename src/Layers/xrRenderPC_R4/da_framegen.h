@@ -1,12 +1,14 @@
 // Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
-// Frame generation (DirectX 12 only): AMD FSR frame generation and NVIDIA DLSS frame generation
-// behind one interface, chosen by r__framegen. See docs/dead-air/DX12_RENDERER.md.
+// Frame generation (DirectX 12 and Vulkan): AMD FSR frame generation and NVIDIA DLSS frame generation
+// behind one interface, chosen by r__framegen. See docs/dead-air/DX12_RENDERER.md and VULKAN_RENDERER.md.
 #pragma once
 
-#ifdef XR_D3D12
+#if defined(XR_D3D12)
 #include "Layers/xrRenderDX12/d12_api.h"
+#elif defined(XR_VULKAN)
+#include "Layers/xrRenderVK/vk_api.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -35,11 +37,13 @@ class IFrameGen
 public:
     virtual ~IFrameGen() = default;
     virtual pcstr Name() const = 0;
-#ifdef XR_D3D12
-    // The swap chain this backend presents through (null = a plain DXGI one). It must stay valid
-    // until the module unloads: the swap chain keeps presenting through it after the backend is
-    // deleted (renderer destroy) and destroys it only with the device - a static object.
+    // The swap chain this backend presents through (null = a plain one). It must stay valid until the
+    // module unloads: the swap chain keeps presenting through it after the backend is deleted
+    // (renderer destroy) and destroys it only with the device - a static object.
+#if defined(XR_D3D12)
     virtual xrd3d12::SwapChainProvider* Provider() = 0;
+#elif defined(XR_VULKAN)
+    virtual xrvk::SwapChainProvider* Provider() = 0;
 #endif
     // generated = frames generated per rendered frame (1 = 2x, 2 = 3x, 3 = 4x). Called after the
     // swap chain runs through Provider(), and again after Shutdown on every renderer reset (a new
@@ -69,7 +73,7 @@ struct da_framegen_registrar
     explicit da_framegen_registrar(const FrameGenBackend& backend) { da_framegen_register(backend); }
 };
 
-// ---- the manager (da_framegen.cpp; the DirectX 11 module answers "unavailable") ---------------
+// ---- the manager (da_framegen.cpp; the DirectX 11 module answers "unavailable") -----------------
 
 // Renderer reset_begin, before any surface is released: the backend stops and the swap chain
 // finishes the presents it queued (they read the hudless copy).

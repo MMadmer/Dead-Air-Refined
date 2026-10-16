@@ -18,6 +18,7 @@ local VIDEO_LAYOUT = "dead_air_x64_video_options.ltx"
 
 -- Token ids of the renderer's commands (docs\dead-air\DX12_RENDERER.md, section 2).
 local RENDERER_DX12 = 7
+local RENDERER_VK = 8
 local FRAMEGEN_FSR, FRAMEGEN_DLSS, FRAMEGEN_DLSS_X3, FRAMEGEN_DLSS_X4 = 1, 2, 3, 4
 
 -- The DirectX 12 rows (docs\dead-air\dx12-features\PLAN.md 2.6): always shown, greyed with the reason
@@ -126,7 +127,7 @@ function opt_video:InitStates()
 		if (hags and has_string("st_da_x64_video_hint_framegen_hags")) then
 			framegen.hint = "st_da_x64_video_hint_framegen_hags"
 		end
-		if (caps.api ~= 12) then
+		if (caps.api ~= 12 and caps.api ~= 13) then
 			framegen.off_hint = "st_da_x64_video_hint_framegen_dx11"
 		elseif (caps.fsrfg ~= 1 and caps.dlssg ~= 1) then
 			framegen.off_hint = hags and "st_da_x64_video_hint_framegen_hags" or "st_da_x64_video_hint_framegen_unsupported"
@@ -247,11 +248,14 @@ function opt_video:Refresh()
 	self:SetState("upscale_sharpness", upscaling, "st_da_x64_video_hint_upscale_sharpness_off")
 
 	local renderer = self.rows.renderer
-	local dx11_chosen = (renderer ~= nil) and (renderer.ctrl:CurrentID() ~= RENDERER_DX12)
+	local chosen = (renderer ~= nil) and renderer.ctrl:CurrentID() or nil
+	local dx11_chosen = (chosen ~= nil) and (chosen ~= RENDERER_DX12)
+	-- Frame generation runs on DirectX 12 and Vulkan.
+	local fg_renderer = (chosen == nil) or (chosen == RENDERER_DX12) or (chosen == RENDERER_VK)
 	local framegen = self.rows.framegen
 	if (framegen) then
 		local off_hint = framegen.off_hint
-		if not (off_hint) and dx11_chosen then
+		if not (off_hint) and not fg_renderer then
 			off_hint = "st_da_x64_video_hint_framegen_dx11"
 		end
 		self:SetState("framegen", off_hint == nil, off_hint)
