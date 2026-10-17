@@ -1,0 +1,54 @@
+#include "common.h"
+#include "da_particle_light.h"
+
+// Glass and the other blended env-mapped models (model_env_lq.vs), after DOOM Eternal's glass: the weather's own sky in
+// the mirror direction through Fresnel, the sun's glint where the sun reaches, and the dirt the texture paints lit like
+// the scene, all through its exposure - this pass draws over the tone-mapped frame. The stock one blended a fixed
+// daylight cube into the texture by its alpha, lit by the R1 hemisphere: car windows shone with the day at night.
+
+struct 	v2p
+{
+	float2 	tc0	: TEXCOORD0;	// base
+	float3	pos	: TEXCOORD1;	// world position
+	float3	nrm	: TEXCOORD2;	// world normal
+	float3	c0	: COLOR0;		// the light, exposed
+	float  fog	: FOG;
+};
+
+TextureCube	s_env;		// the stock cube, while the lit particles are off
+TextureCube	sky_s0;		// the weather's sky, both of its blended halves
+TextureCube	sky_s1;
+uniform float4 da_sky_tint;	// rgb the weather's own sky colour (da_fog_common.h)
+
+float4 	main	( v2p I )	: SV_Target
+{
+	const float4 t_base = s_base.Sample( smp_base, I.tc0 );
+	const float3 V = normalize( I.pos - eye_position );
+	const float3 R = reflect( V, normalize( I.nrm ) );
+
+	[branch] if ( da_particle_light.x < 0.5f )
+	{
+		// The stock look (r__particle_light 0).
+		const float3 t_env = s_env.Sample( smp_rtlinear, R ).rgb;
+		const float3 stock = lerp( fog_color.rgb, I.c0 * lerp( t_env, t_base.rgb, t_base.a ) * 2.0f, I.fog );
+		return float4( stock, t_base.a * I.fog * I.fog );
+	}
+
+	// The sky as the dome shows it (hmodel.h), as radiance through the exposure; Schlick with a glass's f0 of 4 %.
+	const float3 sky = da_sky_tint.rgb * lerp( sky_s0.SampleLevel( smp_rtlinear, R, 0 ).rgb,
+		sky_s1.SampleLevel( smp_rtlinear, R, 0 ).rgb, da_particle_env.w ) * 0.66f;
+	const float nv = saturate( dot( -V, normalize( I.nrm ) ) );
+	const float F = 0.04f + 0.96f * pow( 1.0f - nv, 5.0f );
+	// The sun's glint: the mirror image of its disc, where its light reaches the glass.
+	const float glint = pow( saturate( dot( R, -L_sun_dir_w.xyz ) ), 1500.0f ) * 40.0f * da_particle_sun_vis( I.pos );
+	const float3 mirror = da_particle_exposed( sky + da_particle_sun.rgb * glint );
+
+	// What covers the glass: its dirt at the texture's alpha; through the rest the frame behind shows, less what the
+	// mirror takes of it. The blend is src-alpha over the frame: the colour is the covering's average.
+	const float a_d = t_base.a;
+	const float a = a_d + ( 1.0f - a_d ) * F;
+	float3 colour = ( t_base.rgb * I.c0 * a_d + mirror * F * ( 1.0f - a_d ) ) / max( a, 1e-4f );
+
+	colour = lerp( fog_color.rgb, colour, I.fog );
+	return float4( colour, a * I.fog * I.fog );
+}

@@ -55,3 +55,17 @@ RTX 3070 Laptop, 1440p, DLSS Balanced, noon and a steady rain on the bus by the 
 Look constants, re-applied by the preset sync: `r__spec_ggx` (1; 0 the stock lobe; QA: 2 shows the gloss, 3 the
 lights' specular in red and the sky's in green, after the tone map), `r__spec_f0` 0.8, `r__spec_f0_max` 0.16,
 `r__spec_smooth` 3.
+
+## 5. Glass
+
+The blended env-mapped models - windows of vehicles and machines (`models_xwindows.s`), the EbB blender's
+transparent models - are drawn forward over the tone-mapped frame (`model_env_lq.vs/.ps`), after DOOM Eternal's
+glass:
+
+- **What was there:** a fixed daylight cube (`sky\sky_5_cube`) blended into the texture by its alpha, lit by the R1
+  hemisphere: a car's windows shone with the day at night and never took the weather's sky.
+- **Now:** the weather's own sky in the mirror direction as the dome shows it (`hmodel.h`), through Schlick with a
+  glass's f0 of 4 %; the sun's glint where the froxel volume lets the sun reach the glass; the dirt the texture
+  paints at its alpha, lit like the lit particles (`LIT_PARTICLES.md`) - all through the scene's exposure. The frame
+  behind shows through what the dirt and the mirror leave.
+- `r__particle_light 0` brings the stock glass back.

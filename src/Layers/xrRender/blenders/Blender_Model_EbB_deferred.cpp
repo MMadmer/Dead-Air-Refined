@@ -155,6 +155,13 @@ void CBlender_Model_EbB::Compile(CBlender_Compile& C)
             // C.r_Sampler			("s_env",	oT2_Name,false,D3DTADDRESS_CLAMP);
             C.r_dx11Texture("s_base", C.L_textures[0]);
             C.r_dx11Texture("s_env", oT2_Name);
+            // The weather's sky and the scene's light for the glass (model_env_lq.ps, da_particle_light.h).
+            C.r_dx11Texture("sky_s0", r2_T_sky0);
+            C.r_dx11Texture("sky_s1", r2_T_sky1);
+            C.r_dx11Texture("s_froxel_cur", "$user$da_froxel_cur");
+            C.r_dx11Texture("s_tonemap", r2_RT_luminance_cur);
+            C.r_dx11Texture("env_s0", r2_T_envs0);
+            C.r_dx11Texture("env_s1", r2_T_envs1);
 
             C.r_dx11Sampler("smp_base");
             C.r_dx11Sampler("smp_rtlinear");

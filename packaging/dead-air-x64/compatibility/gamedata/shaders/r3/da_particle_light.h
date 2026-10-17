@@ -29,9 +29,10 @@ float3 da_particle_tm(float3 x, float w2) { return x * (1.0f + x / w2) / (1.0f +
 // The light at Pw. lobe > 0 adds a forward lobe toward the eye (Vn: from the eye to Pw) for the sun and the local
 // lights, at lobe times their light where the eye looks straight at them through the point: a drop of rain or a
 // flake of ice is a small lens that throws the light behind it at the eye.
-float3 da_particle_irradiance(float3 Pw, float3 Vn, float lobe)
+// The sun's visibility at Pw: the froxel volume's (the cascades and the clouds); outside the volume, or on a frame
+// without it, the sun as the clouds let it through.
+float da_particle_sun_vis(float3 Pw)
 {
-	// Outside the volume, or on a frame without it, the sun as the clouds let it through.
 	float vis = da_particle_sun.w;
 	[branch] if (da_particle_light.y > 0.5f)
 	{
@@ -44,6 +45,12 @@ float3 da_particle_irradiance(float3 Pw, float3 Vn, float lobe)
 				vis = s_froxel_cur.SampleLevel(smp_rtlinear, tc, 0).y;
 		}
 	}
+	return vis;
+}
+
+float3 da_particle_irradiance(float3 Pw, float3 Vn, float lobe)
+{
+	const float vis = da_particle_sun_vis(Pw);
 	// A puff takes the sun on its lit half (the diffuse's 0.7 of lmodel.h), and the sky and the ambient from all round:
 	// the irradiance cube looked up and to the side, squared like the scene's (hmodel.h).
 	const float3 up = lerp(env_s0.SampleLevel(smp_rtlinear, float3(0.0f, 1.0f, 0.0f), 0).rgb,
