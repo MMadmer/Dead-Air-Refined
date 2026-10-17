@@ -283,7 +283,17 @@ struct R_dsgraph_structure
     void add_leafs_static(dxRender_Visual* pVisual, bool lod_managed = false); // if detected node's full visibility
 
     void insert_dynamic(IRenderable* root, dxRender_Visual* pVisual, Fmatrix& xform, Fvector& Center);
-    void insert_static(dxRender_Visual* pVisual);
+    // cover: the share of its pixels the main view's walk gave it (static_cover), -1 = the stock screen-size test.
+    void insert_static(dxRender_Visual* pVisual, float cover = -1.f);
+
+    // The fade across the draw distance (r__dsgraph_build.cpp): only the main view has one.
+    bool fade_view() const;
+    float fade_gate(dxRender_Visual* visual, bool in_range);
+    float static_cover(dxRender_Visual* visual, bool lod_managed);
+    // The product of the shares down the static walk to the current node.
+    float walk_cover{ 1.f };
+    // r__fade_stats: the gate's verdicts this frame - whole, fading, dropped.
+    u32 fade_counts[3]{};
 
     // render primitives
     void render_graph(u32 _priority);

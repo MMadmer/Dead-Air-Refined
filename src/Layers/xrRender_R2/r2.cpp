@@ -101,6 +101,11 @@ static class cl_LOD : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.LOD.set_LOD(C); }
 } binder_LOD;
+
+static class cl_da_fade : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.LOD.set_fade(C); }
+} binder_da_fade;
 #endif
 
 // The G-buffer's addressing: the render size, and the reconstruction of the view ray with the
@@ -983,6 +988,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("m_AlphaRef", &binder_alpha_ref);
 #if defined(USE_DX11)
     Resources->RegisterConstantSetup("triLOD", &binder_LOD);
+    Resources->RegisterConstantSetup("da_fade", &binder_da_fade);
 #endif
 
 #if RENDER == R_R4

@@ -349,6 +349,11 @@ float ps_r__WallmarkSHIFT_V = 0.0001f;
 float ps_r__GLOD_ssa_start = 256.f;
 float ps_r__GLOD_ssa_end = 64.f;
 float ps_r__LOD = 0.75f;
+// Seconds a visual takes to appear or vanish at its draw distance, dithered (r__dsgraph_build.cpp); 0 = a pop.
+float ps_r__fade_time = 0.35f;
+// QA: a share forced on every visual of the main view (0 = off), and frames left to log the fade's counters.
+float ps_r__fade_qa = 0.f;
+int ps_r__fade_stats = 0;
 //float ps_r__LOD_Power = 1.5f;
 float ps_r__ssaDISCARD = 3.5f; // RO
 // Separate discard threshold for vegetation billboards (FLOD). The far background is filled
@@ -753,7 +758,6 @@ float ps_r2_sun_lumscale = 1.0f; // 1.0f
 float ps_r2_sun_lumscale_hemi = 1.0f; // 1.0f
 float ps_r2_sun_lumscale_amb = 1.0f;
 float ps_r2_gmaterial = 2.2f; //
-float ps_r2_zfill = 0.25f; // .1f
 
 float ps_r2_dhemi_sky_scale = 0.08f; // 1.5f
 float ps_r2_dhemi_light_scale = 0.2f;
@@ -1401,6 +1405,13 @@ void xrRender_sync_preset_derived()
     // is +2.0 ms of frame at 1080p on Extreme, the whole price of the distance ladders - the rest
     // of them measured inside the noise. Applies live (CCC recomputes dm_*).
     static constexpr int detail_radius_by_preset[] = {49, 70, 100, 130, 160};
+    // The static geometry's distance cut (r__dsgraph_build.cpp): Minimum keeps the old default, which dropped a
+    // crate or a barrel at 50 m; from Default on none, as DOOM Eternal culls by screen size alone. Over the
+    // rookie village the cut saved nothing measurable.
+    static constexpr u32 optimize_static_by_preset[] = {
+        geometry_optimization_medium, geometry_optimization_low, geometry_optimization_off,
+        geometry_optimization_off, geometry_optimization_off};
+    ps_r_optimize_static = optimize_static_by_preset[ps_Preset];
     // Wet-surface radius ladder, metres (r3_dynamic_wet_surfaces_far semantics). The pair of
     // console knobs existed but the shader hardcoded 5/20 - now that they are live, the far edge
     // rides the preset. Near stays at its 5 m default.
@@ -1510,6 +1521,7 @@ void xrRender_sync_preset_derived()
     ps_r__spec_f0 = 0.8f;
     ps_r__spec_f0_max = 0.16f;
     ps_r__spec_smooth = 3.f;
+    ps_r__fade_time = 0.35f;
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;
@@ -1972,6 +1984,9 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__supersample", &ps_r__Supersample, 1, 8);
 
     CMD4(CCC_Float, "r__geometry_lod", &ps_r__LOD, 0.1f, 2.f);
+    CMD4(CCC_RuntimeFloat, "r__fade_time", &ps_r__fade_time, 0.f, 2.f);
+    CMD4(CCC_RuntimeFloat, "r__fade_qa", &ps_r__fade_qa, 0.f, 1.f);
+    CMD4(CCC_RuntimeInteger, "r__fade_stats", &ps_r__fade_stats, 0, 600);
     CMD3(CCC_Token, "r__optimize_static_geom", &ps_r_optimize_static, q_optimize_static_token);
     //CMD4(CCC_Float, "r__geometry_lod_pow", &ps_r__LOD_Power, 0, 2);
 
@@ -2092,8 +2107,6 @@ void xrRender_initconsole()
     CMD4(CCC_Float, "r2_ls_ssm_kernel", &ps_r2_ls_ssm_kernel, .1f, 3.f);
     CMD4(CCC_Float, "r2_ls_squality", &ps_r2_ls_squality, .5f, 1.f);
 
-    CMD3(CCC_Mask, "r2_zfill", &ps_r2_ls_flags, R2FLAG_ZFILL);
-    CMD4(CCC_Float, "r2_zfill_depth", &ps_r2_zfill, .001f, .5f);
     CMD3(CCC_Mask, "r2_allow_r1_lights", &ps_r2_ls_flags, R2FLAG_R1LIGHTS);
 
     //- Mad Max

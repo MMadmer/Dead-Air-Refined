@@ -1228,6 +1228,25 @@ into the far map at all. The shadow map keeps its old ladder
 (1024/1536/2048/2048/2048): 4096 on Extreme sharpens the mid-range edges for 2.9 ms more in the
 sun pass.
 
+Small static objects had a distance cut of their own (`r__optimize_static_geom`, IX-Ray's): at the
+old default `st_optimize_med` a crate, a barrel or a fence span - a bounding sphere under 25 m3 -
+was dropped past 50 m, anything under 200 m3 past 150 m, up to 400 m. DOOM Eternal culls by screen
+size alone, and over the rookie village the cut saved nothing the frame timer could tell from its
+noise, so from Default on there is none (Minimum keeps `med`, Low `low`); what stays is the
+screen-size discard every object always had.
+
+Whatever still crosses a draw distance in the main view - that cut, the screen-size discard of
+statics and of characters - appears and vanishes over `r__fade_time` (0.35 s; 0 is the old pop) as
+a dithered share of its pixels: interleaved gradient noise turning with the frame, which TAA and
+the upscalers resolve into a partial coverage (DOOM's stochastic alpha test of its hair; its LODs
+switch outright). The verdict has the cut's dead band (15 % of the distance), and an object that
+enters the view - turning round, out from behind a hill - is drawn at once: only a crossing seen
+happening fades. The static G-buffer shaders take the share from `da_fade` (`da_fade.h`); shadows
+keep the plain verdict. QA: `r__fade_qa 0.5` forces half on every object, `r__fade_stats <frames>`
+logs the verdicts. The old depth prefill (`r2_zfill`, off by default) is gone: it drew the scene
+through the shadow-map shaders ahead of the G-buffer and left the world white as snow, and its
+depth would have shown the dither's dropped pixels as holes.
+
 ## Colour grade and foliage saturation
 
 The final combine applies a restrained, camera-like grade to the tonemapped value

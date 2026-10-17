@@ -315,39 +315,6 @@ void CRender::Render()
     da_gpu_trees_frame_begin(RCache);
 #endif
 
-    //******* Z-prefill calc - DEFERRER RENDERER
-    if (ps_r2_ls_flags.test(R2FLAG_ZFILL))
-    {
-        PIX_EVENT(DEFER_Z_FILL);
-        BasicStats.Culling.Begin();
-        float z_distance = ps_r2_zfill;
-        Fmatrix m_zfill, m_project;
-        m_project.build_projection(deg2rad(Device.fFOV /* *Device.fASPECT*/), Device.fASPECT, VIEWPORT_NEAR,
-            z_distance * g_pGamePersistent->Environment().CurrentEnv.far_plane);
-        m_zfill.mul(m_project, Device.mView);
-
-        if (last_sector_id != IRender_Sector::INVALID_SECTOR_ID)
-        {
-            dsgraph.o.phase = PHASE_SMAP;
-            dsgraph.r_pmask(true, false); // enable priority "0"
-            dsgraph.set_Recorder(nullptr);
-            dsgraph.o.use_hom = true;
-            dsgraph.o.is_main_pass = true;
-            dsgraph.o.sector_id = last_sector_id;
-            dsgraph.o.portal_traverse_flags = CPortalTraverser::VQ_HOM | CPortalTraverser::VQ_SSA | CPortalTraverser::VQ_FADE;
-            dsgraph.o.spatial_traverse_flags = ISpatial_DB::O_ORDERED;
-            dsgraph.o.spatial_types = STYPE_RENDERABLE | STYPE_LIGHTSOURCE;
-            dsgraph.o.view_pos = Device.vCameraPosition;
-            dsgraph.o.xform = m_zfill;
-            dsgraph.o.view_frustum = ViewBase;
-            dsgraph.o.query_box_side = VIEWPORT_NEAR + EPS_L;
-            dsgraph.o.precise_portals = true;
-
-            dsgraph.build_subspace();
-        }
-        BasicStats.Culling.End();
-    }
-
 #if RENDER == R_R4
     // The grass rows the calc task produced go to the GPU.
     da_grass_mesh_frame_prepare(RCache);
@@ -380,20 +347,9 @@ void CRender::Render()
     const bool async_early = da_async_fork_early(RCache);
 #endif
 
-    if (ps_r2_ls_flags.test(R2FLAG_ZFILL))
-    {
-        // flush
-        Target->phase_scene_prepare();
-        dsgraph.cmd_list.set_ColorWriteEnable(FALSE);
-        dsgraph.render_graph(0);
-        dsgraph.cmd_list.set_ColorWriteEnable();
-    }
-    else
-    {
-        Target->phase_scene_prepare();
-    }
+    Target->phase_scene_prepare();
 
-    // Insert the first-person body only after scene building and the optional depth prepass have
+    // Insert the first-person body only after scene building has
     // finished. It is not optional: the player always has legs, and Render_First gates itself on
     // the camera mode anyway.
     if (g_pGameLevel->pHUD)

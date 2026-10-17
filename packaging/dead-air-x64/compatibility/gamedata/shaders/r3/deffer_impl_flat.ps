@@ -1,5 +1,6 @@
 #include "common.h"
 #include "sload.h"
+#include "da_fade.h"	// the dithered fade across the draw distance
 #include "da_puddles.h"	// rain puddles
 
 #define	USE_4_DETAIL
@@ -36,6 +37,8 @@ f_deffer 	main	( p_flat I 		)
 #endif
 {
 	f_deffer	O;
+
+	da_fade_clip( I.hpos_cur );	// a visual crossing its draw distance (da_fade.h)
 
  	// diffuse
 	float4 D		= tbase		(I.tcdh);			// IN:  rgb.a

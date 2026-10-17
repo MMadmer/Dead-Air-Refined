@@ -77,6 +77,89 @@ ICF bool is_static_geometry_valuable(dxRender_Visual* visual, u32 context)
     return true;
 }
 
+// The main view draws a visual crossing its draw distance - the value filter above, the screen-size discard - with a
+// dithered share of its pixels that ramps over r__fade_time (da_fade.h, TAA resolves it), instead of a pop.
+bool R_dsgraph_structure::fade_view() const
+{
+    return o.is_main_pass && o.phase == CRender::PHASE_NORMAL && ps_r__fade_time > 0.f;
+}
+
+// The screen-size discard with the value filter's dead band: a visual kept last time stays until it is that much
+// smaller (SSA falls with the distance squared).
+static bool ssa_keeps(const dxRender_Visual* visual)
+{
+    const float distSQ = Device.vCameraPosition.distance_to_sqr(visual->vis.sphere.P) + EPS;
+    const float limit = visual->vis.fade_in ? r_ssaDISCARD / _sqr(staticGeometryStickyScale) : r_ssaDISCARD;
+    return visual->vis.sphere.R / distSQ > limit;
+}
+
+float R_dsgraph_structure::fade_gate(dxRender_Visual* visual, bool in_range)
+{
+    vis_data& vis = visual->vis;
+    const float now = Device.fTimeGlobal;
+    const float span = ps_r__fade_time;
+    const auto share = [&] {
+        const float t = clampr((now - vis.fade_since) / span, 0.f, 1.f);
+        return vis.fade_in ? t : 1.f - t;
+    };
+    // Judged without a gap, a flip starts a fade from where the last one stands. After a gap - out of the frustum,
+    // behind an occluder, first sight - the verdict holds at once: the visual entered the view, it did not cross
+    // its distance in it.
+    if (Device.dwFrame - vis.fade_frame <= 2)
+    {
+        if (in_range != vis.fade_in)
+        {
+            const float was = share();
+            vis.fade_in = in_range;
+            vis.fade_since = now - (in_range ? was : 1.f - was) * span;
+        }
+    }
+    else
+    {
+        vis.fade_in = in_range;
+        vis.fade_since = now - span;
+    }
+    vis.fade_frame = Device.dwFrame;
+    const float cover = share();
+    ++fade_counts[cover >= 1.f ? 0 : cover > 0.f ? 1 : 2];
+    return cover;
+}
+
+// The leaves add_static and add_leafs_static hand to insert_static: their screen-size discard joins the gate.
+static bool is_static_leaf(const dxRender_Visual* visual)
+{
+    switch (visual->Type)
+    {
+    case MT_PARTICLE_GROUP:
+    case MT_HIERRARHY:
+    case MT_SKELETON_ANIM:
+    case MT_SKELETON_RIGID:
+    case MT_LOD: return false;
+    default: return true;
+    }
+}
+
+// The share of a static visual the main view draws (0 = none), or the stock verdict elsewhere.
+float R_dsgraph_structure::static_cover(dxRender_Visual* visual, bool lod_managed)
+{
+    // Under an MT_LOD the impostor's switch governs the subtree; insert_static's stock screen-size test, which the
+    // main view's leaves skip, stays for its leaves.
+    if (lod_managed)
+    {
+        return fade_view() && is_static_leaf(visual) &&
+                visual->vis.sphere.R / (Device.vCameraPosition.distance_to_sqr(visual->vis.sphere.P) + EPS) <=
+                    r_ssaDISCARD ?
+            0.f :
+            1.f;
+    }
+    if (!fade_view())
+        return is_static_geometry_valuable(visual, context_id) ? 1.f : 0.f;
+    bool in_range = is_static_geometry_valuable(visual, context_id);
+    if (in_range && is_static_leaf(visual))
+        in_range = ssa_keeps(visual);
+    return fade_gate(visual, in_range);
+}
+
 bool dsgraph_static_value_thresholds(float (&volume)[5], float (&distance)[5])
 {
     if (ps_r_optimize_static == geometry_optimization_off)
@@ -124,7 +207,16 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
 
     float distSQ;
     float SSA = CalcSSA(distSQ, Center, pVisual);
-    if (SSA <= r_ssaDISCARD)
+    if (fade_view() && !(root && root->renderable_HUD()))
+    {
+        // The model's own centre, not the visual's rest pose: the dead band of ssa_keeps on it.
+        const float limit = pVisual->vis.fade_in ? r_ssaDISCARD / _sqr(staticGeometryStickyScale) : r_ssaDISCARD;
+        const float cover = fade_gate(pVisual, SSA > limit);
+        if (cover <= 0.f)
+            return;
+        pVisual->vis.fade_draw = ps_r__fade_qa > 0.f ? ps_r__fade_qa : cover;
+    }
+    else if (SSA <= r_ssaDISCARD)
         return;
 
     // Distortive geometry should be marked and R2 special-cases it
@@ -231,7 +323,7 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
 #endif
 }
 
-void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual)
+void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual, float cover)
 {
     ZoneScoped;
 
@@ -252,7 +344,14 @@ void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual)
 
     float distSQ;
     float SSA = CalcSSA(distSQ, pVisual->vis.sphere.P, pVisual);
-    if (SSA <= r_ssaDISCARD)
+    // The main view's walk judged the screen size already (static_cover), and a fading visual stays past it.
+    if (fade_view() && cover >= 0.f)
+    {
+        // QA (r__fade_qa): the share forced on the leaves.
+        pVisual->vis.fade_draw = ps_r__fade_qa > 0.f ? ps_r__fade_qa : cover;
+        pVisual->vis.fade_frame = Device.dwFrame;
+    }
+    else if (SSA <= r_ssaDISCARD)
         return;
 
     // Distortive geometry should be marked and R2 special-cases it
@@ -430,8 +529,17 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual, bool lod_ma
     if (o.use_hom && !RImplementation.HOM.visible(pVisual->vis))
         return;
 
-    if (!lod_managed && !is_static_geometry_valuable(pVisual, context_id))
+    const float cover = static_cover(pVisual, lod_managed);
+    if (cover <= 0.f)
         return;
+    // The share passes down to the leaves (insert_static) for this subtree.
+    const struct cover_scope
+    {
+        float& walk;
+        float was;
+        ~cover_scope() { walk = was; }
+    } scope{ walk_cover, walk_cover };
+    walk_cover *= cover;
 
     // Visual is 100% visible - simply add it
     switch (pVisual->Type)
@@ -528,13 +636,13 @@ void R_dsgraph_structure::add_leafs_static(dxRender_Visual* pVisual, bool lod_ma
     case MT_TREE_ST:
     {
         // General type of visual
-        insert_static(pVisual);
+        insert_static(pVisual, walk_cover);
     }
     return;
     default:
     {
         // General type of visual
-        insert_static(pVisual);
+        insert_static(pVisual, walk_cover);
     }
     return;
     }
@@ -665,8 +773,17 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     if (o.use_hom && !RImplementation.HOM.visible(vis))
         return;
 
-    if (!lod_managed && !is_static_geometry_valuable(pVisual, context_id))
+    const float cover = static_cover(pVisual, lod_managed);
+    if (cover <= 0.f)
         return;
+    // The share passes down to the leaves (insert_static) for this subtree.
+    const struct cover_scope
+    {
+        float& walk;
+        float was;
+        ~cover_scope() { walk = was; }
+    } scope{ walk_cover, walk_cover };
+    walk_cover *= cover;
 
     // If we get here visual is visible or partially visible
     switch (pVisual->Type)
@@ -779,13 +896,13 @@ void R_dsgraph_structure::add_static(dxRender_Visual* pVisual, const CFrustum& v
     case MT_TREE_PM:
     {
         // General type of visual
-        insert_static(pVisual);
+        insert_static(pVisual, walk_cover);
     }
         return;
     default:
     {
         // General type of visual
-        insert_static(pVisual);
+        insert_static(pVisual, walk_cover);
     }
     break;
     }

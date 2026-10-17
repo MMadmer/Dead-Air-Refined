@@ -16,4 +16,11 @@ void R_LOD::set_LOD(float LOD)
         cmd_list.set_c(c_LOD, factor);
     }
 }
+
+void R_LOD::set_fade(float cover)
+{
+    // y turns the dither's pattern every frame, so TAA blends it into a partial coverage.
+    if (c_fade)
+        cmd_list.set_c(c_fade, cover, float(Device.dwFrame & 63), 0.f, 0.f);
+}
 } // namespace xray::render::RENDER_NAMESPACE

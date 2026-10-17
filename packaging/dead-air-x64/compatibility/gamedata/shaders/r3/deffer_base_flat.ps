@@ -1,9 +1,12 @@
 #include "common.h"
 #include "sload.h"
+#include "da_fade.h"	// the dithered fade across the draw distance
 
 f_deffer main( p_flat I )
 {
   f_deffer	O;
+
+  da_fade_clip( I.hpos_cur );	// a visual crossing its draw distance (da_fade.h)
 
   // diffuse
   float3 D	= tbase		(I.tcdh);	// IN:  rgb.a

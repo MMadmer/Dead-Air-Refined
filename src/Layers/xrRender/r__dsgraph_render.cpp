@@ -65,6 +65,12 @@ struct TreeBatchScratch
     xr_vector<u8> batched_items;
 };
 
+// The share of its pixels a visual draws this frame: what the main view's walk gave it (r__dsgraph_build.cpp).
+float fade_cover(const dxRender_Visual* visual)
+{
+    return visual->vis.fade_frame == Device.dwFrame ? visual->vis.fade_draw : 1.f;
+}
+
 FTreeVisual* get_tree_visual(dxRender_Visual* visual)
 {
     switch (visual->Type)
@@ -143,7 +149,7 @@ bool get_tree_instance_constants(CBackend& cmd_list, R_constant*& instance_data,
     return data_buffer != control_buffer && !instance_data->vs.index && !instance_control->vs.index;
 }
 
-bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items)
+bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items, bool fade)
 {
     if (!ps_r__tree_batch)
         return false;
@@ -165,7 +171,7 @@ bool render_tree_batches(CBackend& cmd_list, mapNormalItems& items)
     {
         const _NormalItem& item = items[index];
         FTreeVisual* tree = get_tree_visual(item.pVisual);
-        if (!tree)
+        if (!tree || (fade && fade_cover(item.pVisual) < 1.f))
             continue;
 
         const float lod = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
@@ -342,6 +348,18 @@ void R_dsgraph_structure::render_graph(u32 _priority)
     RImplementation.BasicStats.Primitives.Begin(); // XXX: Refactor a bit later
 
     cmd_list.set_xform_world(Fidentity);
+    // The share of each visual's pixels this view draws (r__dsgraph_build.cpp, da_fade.h).
+    const bool fade = fade_view();
+    if (fade && _priority == 0)
+    {
+        if (ps_r__fade_stats > 0)
+        {
+            --ps_r__fade_stats;
+            Msg("* [fade] frame %u: whole %u, fading %u, dropped %u", Device.dwFrame, fade_counts[0], fade_counts[1],
+                fade_counts[2]);
+        }
+        fade_counts[0] = fade_counts[1] = fade_counts[2] = 0;
+    }
 
     // **************************************************** NORMAL
     // Perform sorting based on ScreenSpaceArea
@@ -396,7 +414,7 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 }
 #endif
 #ifdef USE_DX11
-                if (render_tree_batches(cmd_list, items) && items.empty())
+                if (render_tree_batches(cmd_list, items, fade) && items.empty())
                     continue;
 #endif
                 for (const auto& item : items)
@@ -404,11 +422,18 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                     const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
 #ifdef USE_DX11
                     cmd_list.LOD.set_LOD(LOD);
+                    const float cover = fade ? fade_cover(item.pVisual) : 1.f;
+                    if (cover < 1.f)
+                        cmd_list.LOD.set_fade(cover);
 #endif
                     // --#SM+#-- Обновляем шейдерные данные модели [update shader values for this model]
                     // RCache.hemi.c_update(item.pVisual);
 
                     item.pVisual->Render(cmd_list, LOD, o.phase == CRender::PHASE_SMAP);
+#ifdef USE_DX11
+                    if (cover < 1.f)
+                        cmd_list.LOD.set_fade(1.f);
+#endif
                 }
                 items.clear();
 
@@ -452,11 +477,18 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                     const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
 #ifdef USE_DX11
                     cmd_list.LOD.set_LOD(LOD);
+                    const float cover = fade ? fade_cover(item.pVisual) : 1.f;
+                    if (cover < 1.f)
+                        cmd_list.LOD.set_fade(cover);
 #endif
                     // --#SM+#-- Обновляем шейдерные данные модели [update shader values for this model]
                     // RCache.hemi.c_update(item.pVisual);
 
                     item.pVisual->Render(cmd_list, LOD, o.phase == CRender::PHASE_SMAP);
+#ifdef USE_DX11
+                    if (cover < 1.f)
+                        cmd_list.LOD.set_fade(1.f);
+#endif
                 }
                 items.clear();
             }

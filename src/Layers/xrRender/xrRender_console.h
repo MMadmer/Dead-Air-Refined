@@ -128,6 +128,9 @@ extern ECORE_API float ps_r__WallmarkSHIFT_V;
 extern ECORE_API float ps_r__GLOD_ssa_start;
 extern ECORE_API float ps_r__GLOD_ssa_end;
 extern ECORE_API float ps_r__LOD;
+extern ECORE_API float ps_r__fade_time;
+extern ECORE_API float ps_r__fade_qa;
+extern ECORE_API int ps_r__fade_stats;
 //.extern ECORE_API	float		ps_r__LOD_Power		;
 extern ECORE_API float ps_r__ssaDISCARD;
 // Separate discard threshold for vegetation billboards (FLOD); see xrRender_console.cpp.
@@ -362,7 +365,6 @@ extern ECORE_API float ps_r2_sun_depth_near_bias; // -0.0001f
 extern ECORE_API float ps_r2_sun_lumscale; // 0.5f
 extern ECORE_API float ps_r2_sun_lumscale_hemi; // 1.0f
 extern ECORE_API float ps_r2_sun_lumscale_amb; // 1.0f
-extern ECORE_API float ps_r2_zfill; // .1f
 
 extern ECORE_API float ps_r2_dhemi_sky_scale; // 1.5f
 extern ECORE_API float ps_r2_dhemi_light_scale; // 1.f
@@ -422,7 +424,6 @@ enum
     R2FLAG_GI = (1 << 6),
     R2FLAG_FASTBLOOM = (1 << 7),
     R2FLAG_GLOBALMATERIAL = (1 << 8),
-    R2FLAG_ZFILL = (1 << 9),
     R2FLAG_R1LIGHTS = (1 << 10),
     R2FLAG_SUN_IGNORE_PORTALS = (1 << 11),
 

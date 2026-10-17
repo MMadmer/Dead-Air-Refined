@@ -94,7 +94,6 @@ phase 3 was removed), `tree_s` props (`def_shaders\def_objects_lod`, 55 visuals 
 | View | Where | Phase / context |
 |---|---|---|
 | main | `render_main::calculate`, `r2_R_calculate.cpp:37-64` | NORMAL, immediate, HOM |
-| z-prefill | `r2_R_render.cpp:280-310` | SMAP, immediate, HOM; `r2_zfill off` by default |
 | sun cascades x3 | `render_sun::calculate` `render_phase_sun.cpp:352-385`, `render` `:397-455` | SMAP, 3 deferred contexts in parallel |
 | rain map | `r3_R_rain.cpp:298-311, 317-343` | SMAP, aux context |
 | shadowed light faces | `calc_lights` `r2_R_lights.cpp:254-277`, `flush_lights` `:156-215` | SMAP, aux contexts, tasks |
