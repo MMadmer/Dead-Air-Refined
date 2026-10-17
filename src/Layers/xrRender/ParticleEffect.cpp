@@ -285,7 +285,7 @@ void CParticleEffect::OnDeviceCreate()
     {
         if (m_Def->m_Flags.is(CPEDef::dfSprite))
         {
-            geom.create(FVF::F_LIT, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
+            geom.create(FVF::F_LIT_FLIP, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
             if (m_Def)
                 shader = m_Def->m_CachedShader;
         }
@@ -304,7 +304,8 @@ void CParticleEffect::OnDeviceDestroy()
     }
 }
 
-IC void FillSprite_fpu(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
+template <typename V>
+IC void FillSprite_fpu(V*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
     const Fvector2& rb, float r1, float r2, u32 clr, float sina, float cosa)
 {
     ZoneScoped;
@@ -337,7 +338,8 @@ IC void FillSprite_fpu(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const 
     pv++;
 }
 
-IC void FillSprite_fpu(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
+template <typename V>
+IC void FillSprite_fpu(V*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
     float r1, float r2, u32 clr, float sina, float cosa)
 {
     ZoneScoped;
@@ -378,7 +380,8 @@ IC void FillSprite_fpu(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, co
 #ifndef _EDITOR
 //----------------------------------------------------
 #if defined(XR_ARCHITECTURE_X86) || defined(XR_ARCHITECTURE_X64) || defined(XR_ARCHITECTURE_E2K) || defined(XR_ARCHITECTURE_PPC64)
-IC void FillSprite(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
+template <typename V>
+IC void FillSprite(V*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
     const Fvector2& rb, float r1, float r2, u32 clr, float sina, float cosa)
 {
     ZoneScoped;
@@ -437,7 +440,8 @@ IC void FillSprite(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const Fvec
     pv++;
 }
 
-IC void FillSprite(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
+template <typename V>
+IC void FillSprite(V*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
     float r1, float r2, u32 clr, float sina, float cosa)
 {
     ZoneScoped;
@@ -491,12 +495,14 @@ IC void FillSprite(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, const 
     FillSprite(pv, T, R, pos, lt, rb, r1, r2, clr, sina, cosa);
 }
 #elif defined(XR_ARCHITECTURE_ARM) || defined(XR_ARCHITECTURE_ARM64)
-ICF void FillSprite(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
+template <typename V>
+ICF void FillSprite(V*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
     const Fvector2& rb, float r1, float r2, u32 clr, float sina, float cosa)
 {
     FillSprite_fpu(pv, T, R, pos, lt, rb, r1, r2, clr, sina, cosa);
 }
-ICF void FillSprite(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
+template <typename V>
+ICF void FillSprite(V*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
     float r1, float r2, u32 clr, float sina, float cosa)
 {
     FillSprite_fpu(pv, pos, dir, lt, rb, r1, r2, clr, sina, cosa);
@@ -529,7 +535,7 @@ ICF void magnitude_sse(Fvector& vec, float& res)
 #error Specify your platform explicitly
 #endif
 
-void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Particle * particles)
+void CParticleEffect::ParticleRenderStream(FVF::LIT_FLIP* pv, u32 count, PAPI::Particle * particles)
 {
     const auto renderParticles = [this, pv, particles](const TaskRange<u32>& range)
     {
@@ -540,10 +546,15 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Partic
         for (u32 i = range.begin(); i != range.end(); ++i)
         {
             PAPI::Particle& m = particles[i];
-            FVF::LIT* particleVertices = pv + i * 4;
+            FVF::LIT_FLIP* particleVertices = pv + i * 4;
+            FVF::LIT_FLIP* const quad = particleVertices;
             Fvector2 lt, rb;
             lt.set(0.f, 0.f);
             rb.set(1.f, 1.f);
+            // The flipbook's next frame and the blend toward it (DOOM Eternal blends its frames): an animated
+            // sequence plays smoothly at any speed instead of stepping frame to frame.
+            Fvector2 next{};
+            float blend = 0.f;
 
             _mm_prefetch((char*)&particles[i + 1], _MM_HINT_NTA);
 
@@ -557,7 +568,21 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Partic
             _mm_prefetch(64 + (char*)&particles[i + 1], _MM_HINT_NTA);
 
             if (m_Def->m_Flags.is(CPEDef::dfFramed))
-                m_Def->m_Frame.CalculateTC(iFloor(float(m.frame) / 255.f), lt, rb);
+            {
+                const int frame = iFloor(float(m.frame) / 255.f);
+                m_Def->m_Frame.CalculateTC(frame, lt, rb);
+                const int count = m_Def->m_Frame.m_iFrameCount;
+                if (m_Def->m_Flags.is(CPEDef::dfAnimated) && count > 1)
+                {
+                    // Backward sequences blend toward the frame before, from the end of the current one.
+                    const bool ccw = m.flags.is(Particle::ANIMATE_CCW);
+                    const float f = float(m.frame % 255u) / 255.f;
+                    blend = ccw ? 1.f - f : f;
+                    Fvector2 lt2, rb2;
+                    m_Def->m_Frame.CalculateTC((frame + (ccw ? count - 1 : 1)) % count, lt2, rb2);
+                    next.sub(lt2, lt);
+                }
+            }
 
             float r_x = m.size.x * 0.5f;
             float r_y = m.size.y * 0.5f;
@@ -652,6 +677,8 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Partic
                         m.color, sina, cosa);
                 }
             }
+            for (u32 k = 0; k < 4; ++k)
+                quad[k].t2.set(quad[k].t.x + next.x, quad[k].t.y + next.y, blend);
         }
     };
 
@@ -707,7 +734,7 @@ void CParticleEffect::Render(CBackend& cmd_list, float, bool use_fast_geo)
     {
         if (m_Def && m_Def->m_Flags.is(CPEDef::dfSprite))
         {
-            FVF::LIT* pv_start = (FVF::LIT*)RImplementation.Vertex.Lock(p_cnt * 4, geom->vb_stride, dwOffset);
+            FVF::LIT_FLIP* pv_start = (FVF::LIT_FLIP*)RImplementation.Vertex.Lock(p_cnt * 4, geom->vb_stride, dwOffset);
 
             ParticleRenderStream(pv_start, p_cnt, particles);
 
@@ -762,13 +789,15 @@ void CParticleEffect::Render(CBackend& cmd_list, float, bool use_fast_geo)
 #else // _EDITOR
 
 //----------------------------------------------------
-IC void FillSprite(FVF::LIT*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
+template <typename V>
+IC void FillSprite(V*& pv, const Fvector& T, const Fvector& R, const Fvector& pos, const Fvector2& lt,
     const Fvector2& rb, float r1, float r2, u32 clr, float angle)
 {
     FillSprite_fpu(pv, T, R, pos, lt, rb, r1, r2, clr, _sin(angle), _cos(angle));
 }
 
-IC void FillSprite(FVF::LIT*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
+template <typename V>
+IC void FillSprite(V*& pv, const Fvector& pos, const Fvector& dir, const Fvector2& lt, const Fvector2& rb,
     float r1, float r2, u32 clr, float angle)
 {
     FillSprite_fpu(pv, pos, dir, lt, rb, r1, r2, clr, _sin(angle), _cos(angle));

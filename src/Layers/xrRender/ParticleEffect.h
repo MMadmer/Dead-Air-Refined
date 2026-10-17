@@ -62,7 +62,7 @@ public:
     virtual void Render(CBackend& cmd_list, float LOD, bool use_fast_geo) override;
 
 private:
-    void ParticleRenderStream(FVF::LIT* pv, u32 count, PAPI::Particle* particles);
+    void ParticleRenderStream(FVF::LIT_FLIP* pv, u32 count, PAPI::Particle* particles);
 
 public:
     virtual void Copy(dxRender_Visual* pFrom);

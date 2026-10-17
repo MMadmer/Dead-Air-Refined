@@ -82,6 +82,24 @@ struct LIT
 };
 const u32 F_LIT = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1;
 
+// A particle's vertex: LIT and its flipbook's next frame, t2.xy the same corner in that frame, t2.z the blend toward
+// it (ParticleEffect.cpp).
+struct LIT_FLIP
+{
+    Fvector p;
+    u32 color;
+    Fvector2 t;
+    Fvector t2;
+
+    void set(float x, float y, float z, u32 C, float u, float v)
+    {
+        p.set(x, y, z);
+        color = C;
+        t.set(u, v);
+    }
+};
+const u32 F_LIT_FLIP = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX2 | D3DFVF_TEXCOORDSIZE2(0) | D3DFVF_TEXCOORDSIZE3(1);
+
 struct TL
 {
     Fvector4 p;

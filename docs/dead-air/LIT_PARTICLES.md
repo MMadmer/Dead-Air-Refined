@@ -45,7 +45,17 @@ smoke from 0.6 m on stays whole. Multiplying particles now fade toward white (MU
 that leave the frame as it is, at the soft edge and near the eye alike; fading them toward black darkened what they
 crossed.
 
-## 5. Cost
+## 5. Flipbooks
+
+An animated sequence (the effect's frames played at its speed: fireballs, flames, anomalies) blends into its next
+frame by the particle's progress through the current one, as DOOM Eternal's particles do, instead of stepping from
+frame to frame: a 77-frame fireball played at 39 frames a second no longer judders at 60 or 144 Hz. The particle's
+vertex carries the same corner in the next frame and the blend (`FVF::LIT_FLIP`, `ParticleEffect.cpp`); a sequence
+played backwards blends toward the frame before. Random still frames and single images take one fetch as before,
+the blending ones a second (`particle.ps`). QA: `r__particle_light 3` paints the blend over every particle (red
+toward the next frame, blue none).
+
+## 6. Cost
 
 The particles need the froxel volume's sun term. With the glow on it is there anyway; with the glow off (overcast,
 `r__froxel_strength 0`) the injection runs only while lit particles were drawn in the last two seconds, and without
@@ -55,7 +65,7 @@ nor keep the volume alive.
 RTX 3070 Laptop, 1440p, DLSS Balanced, noon, glow off: the injection for the particles alone +0.2 ms in the sun slot.
 The per-vertex light itself is below the timer's noise.
 
-## 6. Measured
+## 7. Measured
 
 Heli smoke and a storm haze 8 m ahead (the A/B against `r__particle_light 0`):
 
@@ -64,7 +74,7 @@ Heli smoke and a storm haze 8 m ahead (the A/B against `r__particle_light 0`):
 | Noon | -0.9 of 255: the smoke takes the warm sun and the overcast sky instead of its blue-grey | -0.8 | -0.5 |
 | Night | -1.3: the smoke no longer glows | -0.4 | -1.7 |
 
-## 7. Knobs
+## 8. Knobs
 
 A look constant, re-applied by the preset sync: `r__particle_light` (1; 0 the stock unlit particles; QA: 2 shows
-the light itself at half strength over the particles' coverage).
+the light itself at half strength over the particles' coverage, 3 the flipbooks' blend).

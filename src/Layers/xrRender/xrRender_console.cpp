@@ -315,7 +315,8 @@ float ps_r__froxel_torch = 1.f;
 // The GGX specular of the stock materials (lmodel.h), look constants: on, f0 per unit of gloss and its ceiling,
 // smoothness per unit of gloss.
 int ps_r__spec_ggx = 1;
-// Lit particles (da_particle_light.cpp), a look constant: 1 on, 0 the stock unlit ones; QA: 2 the light itself.
+// Lit particles (da_particle_light.cpp), a look constant: 1 on, 0 the stock unlit ones; QA: 2 the light itself, 3 the
+// flipbooks' blend.
 int ps_r__particle_light = 1;
 // The screen-space glossy reflections (r4_rendertarget_phase_ssr.cpp), a preset feature: 0 off, 1 Low (12 steps a
 // ray), 2 High (20).
@@ -2027,7 +2028,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__froxel_torch", &ps_r__froxel_torch, 0.f, 100.f);
     CMD4(CCC_RuntimeInteger, "r__spec_ggx", &ps_r__spec_ggx, 0, 3); // QA: 2 the gloss as grey, 3 the lights' and the sky's specular
     CMD4(CCC_RuntimeFloat, "r__spec_f0", &ps_r__spec_f0, 0.f, 4.f);
-    CMD4(CCC_RuntimeInteger, "r__particle_light", &ps_r__particle_light, 0, 2);
+    CMD4(CCC_RuntimeInteger, "r__particle_light", &ps_r__particle_light, 0, 3);
     CMD4(CCC_Integer, "r__ssr", &ps_r__ssr, 0, 2);
     CMD4(CCC_RuntimeFloat, "r__spec_f0_max", &ps_r__spec_f0_max, 0.02f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__spec_smooth", &ps_r__spec_smooth, 0.f, 8.f);

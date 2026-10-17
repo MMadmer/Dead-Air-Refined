@@ -8,6 +8,8 @@ struct vv
 	float4 P	: POSITION;
 	float2 tc	: TEXCOORD0;
 	float4 c	: COLOR0;
+	// The flipbook's next frame: the same corner in it, the blend toward it (ParticleEffect.cpp).
+	float3 tc2	: TEXCOORD1;
 };
 
 struct v2p
@@ -25,6 +27,7 @@ struct v2p
 	// The light the particle receives (da_particle_light.h), last so the pixel shaders that do not read it keep their
 	// registers.
 	float3 light	: TEXCOORD2;
+	float3 tc2	: TEXCOORD3;	// the flipbook's next frame and the blend toward it
 };
 
 uniform float4x4 	mVPTexgen;
@@ -36,6 +39,7 @@ v2p main (vv v)
 	o.hpos 		= mul	(m_WVP, v.P);		// xform, input in world coords
 //	o.hpos 		= mul	(m_VP, v.P);		// xform, input in world coords
 	o.tc		= v.tc;				// copy tc
+	o.tc2		= v.tc2;
 	o.c			= unpack_D3DCOLOR(v.c);				// copy color
 
 //	Igor: for additional depth dest

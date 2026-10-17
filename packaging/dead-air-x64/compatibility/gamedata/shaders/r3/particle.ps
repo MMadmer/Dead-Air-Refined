@@ -16,9 +16,12 @@ struct v2p
 	float4 hpos	: SV_Position;
     float fog: FOG;		// fog
 	float3 light : TEXCOORD2;	// the light the particle receives (da_particle_light.h)
+	float3 tc2 : TEXCOORD3;	// the flipbook's next frame and the blend toward it (ParticleEffect.cpp)
 };
 
 uniform float4 da_particle_light;
+// x: r__particle_light, for the QA views every particle takes (da_particle_light is the lit ones' alone).
+uniform float4 da_particle_qa;
 
 
 //	Must be less than view near
@@ -28,7 +31,13 @@ uniform float4 da_particle_light;
 float4 main( v2p I ) : SV_Target
 {
 //	float4 result = I.c*tex2D	(s_base,I.tc0);
-	float4 result = I.c * s_base.Sample( smp_base, I.tc0);
+	float4 tex = s_base.Sample( smp_base, I.tc0);
+	// An animated flipbook blends into its next frame (DOOM Eternal): the sequence plays smoothly instead of stepping.
+	// The gradients are the frame's own, taken outside the branch.
+	const float2 dx = ddx( I.tc0 ), dy = ddy( I.tc0 );
+	[branch] if ( I.tc2.z > 0.004f )
+		tex = lerp( tex, s_base.SampleGrad( smp_base, I.tc2.xy, dx, dy ), I.tc2.z );
+	float4 result = I.c * tex;
 
 	//	Igor: additional depth test
 #ifdef	USE_SOFT_PARTICLES
@@ -85,5 +94,9 @@ float4 main( v2p I ) : SV_Target
 	result.rgb = lerp( result.rgb, fog_color.rgb, fog );
 #endif
 	
+	// QA (r__particle_light 3): the flipbook's blend toward its next frame, red (none: blue).
+	[branch] if ( da_particle_qa.x > 2.5f )
+		result.rgb = float3( I.tc2.z, 0.2f, 1.0f - I.tc2.z ) * max( result.a, 0.3f );
+
 	return	result;
 }

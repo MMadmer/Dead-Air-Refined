@@ -54,6 +54,12 @@ class cl_da_particle_lights : public R_constant_setup
     }
 } binder_da_particle_lights;
 
+// The QA views' switch for every particle; unlike da_particle_light it keeps no froxel volume alive.
+class cl_da_particle_qa : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, float(ps_r__particle_light), 0.f, 0.f, 0.f); }
+} binder_da_particle_qa;
+
 // The scene's own light terms as combine_1 takes them (r4_rendertarget_phase_combine.cpp): the sun light's colour,
 // the sky's tint (2 x env_color x the hemi scale, w the weathers' blend) and the ambient (2 x ambient x its scale).
 class cl_da_particle_sun : public R_constant_setup
@@ -167,6 +173,7 @@ void da_particle_light_register(CResourceManager& resources)
 {
     resources.RegisterConstantSetup("da_particle_light", &binder_da_particle_light);
     resources.RegisterConstantSetup("da_particle_lights", &binder_da_particle_lights);
+    resources.RegisterConstantSetup("da_particle_qa", &binder_da_particle_qa);
     resources.RegisterConstantSetup("da_particle_sun", &binder_da_particle_sun);
     resources.RegisterConstantSetup("da_particle_env", &binder_da_particle_env);
     resources.RegisterConstantSetup("da_particle_amb", &binder_da_particle_amb);
