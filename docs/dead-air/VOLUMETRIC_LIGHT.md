@@ -18,8 +18,10 @@ are gone; the far cascade now covers only what lies past the middle one, at a be
 
 - **Grid** over the view frustum, set by the `r2_sun_shafts` tier the presets already carry: Low (Default) 16 render
   pixels a froxel and 64 slices, Medium (High) 12 and 64, High (Extreme) 8 and 96. Slices are spread quadratically
-  in view depth from 0.1 m to 200 m (DOOM's 100 m is an arena's scale). RGBA16F volumes: two for the injection
-  (history and current, in turn) and one for the integral.
+  in view depth from 0.1 m to 200 m (DOOM's 100 m is an arena's scale). The injection writes an RG16F volume (the
+  air's density and the sun it sees), copied each frame into a second one for the next frame's history; the integral
+  is RGBA16F. The lit particles read the sun term of the current one (`LIT_PARTICLES.md`), which keeps the injection
+  running without the glow while they are about.
 - **Injection**, once a frame after the sun has accumulated every cascade (in the far cascade's accumulation, while
   the three slices of the shadow map array are still the sun's):
   - the cell's point, jittered in depth only inside its slice (DOOM: a 16-phase bit-reversed sequence plus a
@@ -29,13 +31,13 @@ are gone; the far cascade now covers only what lies past the middle one, at a be
     up to 60 % and drifting with the wind at 60 % of its speed;
   - the sun it sees: the finest cascade that holds the point (one hardware PCF tap; the temporal filter averages the
     jitter), times the cloud deck's shadow (`da_cloud_transmittance`, the field the ground's cloud shadow reads);
-  - the light: the sun's hue, isotropic on purpose (the shafts must not crowd the sun - see the history of the stock
-    shader), at four times the weather's shaft strength (`sun_shafts_intensity` + `r2_sun_shafts_value`, times the
-    cloud cover's sun visibility);
   - the previous frame's value of the cell's centre, reprojected and blended in at 0.9 while it was on screen and in
     the grid (DOOM keeps 0.95; a swaying crown's shadow must not trail). A missed frame or a history reset starts over.
 - **Integration** front to back along every column, each slice's in-scatter integrated against its own extinction
-  (Hillaire 2015): what has reached the eye up to the far edge of each slice, and the transmittance.
+  (Hillaire 2015): what has reached the eye up to the far edge of each slice, and the transmittance. The light is the
+  sun's hue, isotropic on purpose (the shafts must not crowd the sun - see the history of the stock shader), at four
+  times the weather's shaft strength (`sun_shafts_intensity` + `r2_sun_shafts_value`, times the cloud cover's sun
+  visibility).
 - **Apply**: every pixel reads the integral at its depth (the sky at the far plane) into the volumetric light target,
   which `combine_volumetric` adds to the scene through the tone map, as it did the shafts. The light levels off at
   four times the strength by some 80 m of lit air: near things stay clear, the distance gets the sunlit haze, and the
@@ -62,5 +64,5 @@ sun's accumulation, on the cascades' lists):
 ## 5. Not yet
 
 The local volumetric lights (the flashlight's beam and the lamps authored volumetric) keep the stock slice renderer
-(`accum_volumetric`), additive into the same target; water, glass and particles read the volume at the depth of the
-opaque surface behind them, as they read the shafts before.
+(`accum_volumetric`), additive into the same target; water, glass and particles take the glow at the depth of the
+opaque surface behind them, as they took the shafts before.

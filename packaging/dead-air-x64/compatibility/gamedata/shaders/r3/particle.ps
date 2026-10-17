@@ -15,7 +15,10 @@ struct v2p
 
 	float4 hpos	: SV_Position;
     float fog: FOG;		// fog
+	float3 light : TEXCOORD2;	// the light the particle receives (da_particle_light.h)
 };
+
+uniform float4 da_particle_light;
 
 
 //	Must be less than view near
@@ -49,6 +52,14 @@ float4 main( v2p I ) : SV_Target
 #endif	//	USE_SOFT_PARTICLES
 
 	clip(result.a-(0.01f/255.0f));
+
+	// A blended particle is lit like the scene (da_particle_light.h); additive and multiplying ones are light themselves.
+#if !defined(DA_PARTICLE_ADD) && !defined(DA_PARTICLE_MUL) && !defined(DA_PARTICLE_MUL2)
+	result.rgb *= I.light;
+	// QA (r__particle_light 2): the light itself, half strength, over the particle's coverage.
+	[branch] if (da_particle_light.x > 1.5f)
+		result.rgb = I.light * 0.5f;
+#endif
 	
 	//result.rgb /= 2;
 	//result.rgb = Vibrance(result.rgb,2.0);

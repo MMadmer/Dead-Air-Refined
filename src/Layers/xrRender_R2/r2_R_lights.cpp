@@ -1,6 +1,9 @@
 #include "stdafx.h"
 
 #include "Layers/xrRender/da_veg.h"
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_particle_light.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -19,6 +22,10 @@ static xr_vector<ISpatial*> s_light_dynamic_casters;
 void CRender::render_lights(light_Package& LP)
 {
     ZoneScoped;
+#if RENDER == R_R4
+    // The lit particles' nearest lights, before the package is consumed below.
+    da_particle_light_snapshot(LP);
+#endif
 
     //////////////////////////////////////////////////////////////////////////
     // Refactor order based on ability to pack shadow-maps

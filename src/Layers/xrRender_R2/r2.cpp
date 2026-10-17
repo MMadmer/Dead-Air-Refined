@@ -29,6 +29,7 @@
 #include "Layers/xrRenderPC_R4/da_upscaler.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
+#include "Layers/xrRenderPC_R4/da_particle_light.h"
 #endif
 
 // Declared BEFORE the render namespace opens: a block-scope extern inside it binds to the
@@ -949,6 +950,9 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_cloud_shadow", &binder_da_cloud_shadow);
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
     Resources->RegisterConstantSetup("da_spec", &binder_da_spec);
+#if RENDER == R_R4
+    da_particle_light_register(*Resources);
+#endif
     Resources->RegisterConstantSetup("da_grade_params", &binder_da_grade_params);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
     Resources->RegisterConstantSetup("da_lod_tune", &binder_da_lod_tune);

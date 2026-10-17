@@ -3,17 +3,16 @@
 #include "da_froxel.h"
 #include "da_clouds.h"
 
-// The sunlit air of every froxel (da_froxel.h): its density, the sun it sees through the cascades and the clouds,
-// DOOM Eternal's depth jitter inside the slice, and the previous frame's value reprojected into it. rgb: the light the
-// air scatters per metre (isotropic: the shafts must not crowd the sun, see the history of accum_volumetric_sun.ps),
-// a: its extinction per metre.
+// The air of every froxel (da_froxel.h): its density per metre and the sun it sees through the cascades and the
+// clouds, at DOOM Eternal's depth jitter inside the slice, with the previous frame's values reprojected into it. The
+// integration turns them into the sunlit air's glow; the lit particles read the sun's share.
 
 Texture2DArray s_smap_array;	// the sun cascades, slice = cascade
 SamplerComparisonState smp_smap;
 Texture2D s_cloud_map;
 Texture2D s_blue_noise;
-Texture3D s_froxel_prev;
-RWTexture3D<float4> u_froxel : register(u0);
+Texture3D s_froxel_hist;
+RWTexture3D<float2> u_froxel : register(u0);
 
 uniform float4x4 m_froxel_v2w;		// view -> world
 uniform float4x4 m_froxel_reproj;	// view -> the previous frame's clip space (unjittered)
@@ -24,9 +23,8 @@ uniform float4x4 m_froxel_shadow2;	// far
 uniform float4 da_froxel_media;
 // xyz: the medium's drift with the wind (m, wrapped at the noise's period), w: the noise's frequency (1 / m).
 uniform float4 da_froxel_wind;
-// rgb: the colour of the light the air scatters, times the weather's strength; w: 1 when the history is usable.
-uniform float4 da_froxel_sun;
-// x: this frame's depth jitter phase 0..1, y: the cascades to read, z: the history's share kept, w: unused.
+// x: this frame's depth jitter phase 0..1, y: the cascades to read, z: the history's share kept (0: no history),
+// w: unused.
 uniform float4 da_froxel_frame;
 
 // Value noise over a lattice periodic in 256 cells (the wind's drift wraps at that period), 0..1.
@@ -95,23 +93,17 @@ void main(uint3 id : SV_DispatchThreadID)
 	const float3 Pv = da_froxel_view(uv, da_froxel_depth(float(id.z) + jitter));
 	const float3 Pw = mul(m_froxel_v2w, float4(Pv, 1.0f)).xyz;
 
-	const float sigma = da_froxel_density(Pw);
-	float4 cur = 0.0f;
-	[branch] if (sigma > 0.0f)
-	{
-		const float vis = da_froxel_sun_vis(Pv) * da_cloud_transmittance(s_cloud_map, Pw);
-		cur = float4(da_froxel_sun.rgb * (sigma * vis), sigma);
-	}
+	float2 cur = float2(da_froxel_density(Pw), da_froxel_sun_vis(Pv) * da_cloud_transmittance(s_cloud_map, Pw));
 
 	// The froxel's centre in the previous frame: its share of the history while it was on screen and in the grid.
-	[branch] if (da_froxel_sun.w > 0.5f)
+	[branch] if (da_froxel_frame.z > 0.0f)
 	{
 		const float4 prev = mul(m_froxel_reproj, float4(da_froxel_view(uv, da_froxel_depth(float(id.z) + 0.5f)), 1.0f));
 		[branch] if (prev.w > da_froxel_range.x)
 		{
 			const float3 tc = float3(prev.xy / prev.w * float2(0.5f, -0.5f) + 0.5f, da_froxel_slice(prev.w) / da_froxel_grid.z);
 			[branch] if (all(tc == saturate(tc)))
-				cur = lerp(cur, s_froxel_prev.SampleLevel(smp_rtlinear, tc, 0), da_froxel_frame.z);
+				cur = lerp(cur, s_froxel_hist.SampleLevel(smp_rtlinear, tc, 0).xy, da_froxel_frame.z);
 		}
 	}
 	u_froxel[id] = cur;

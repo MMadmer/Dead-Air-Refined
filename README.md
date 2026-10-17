@@ -304,6 +304,8 @@ versions and compatibility pins are recorded in
   volume of the sunlit air.
 - [`SPECULAR.md`](docs/dead-air/SPECULAR.md) — the specular model of the
   stock materials and of the sky's reflection.
+- [`LIT_PARTICLES.md`](docs/dead-air/LIT_PARTICLES.md) — smoke, dust and
+  steam lit by the sun with its shadow, the sky and the local lights.
 
 ## Credits
 

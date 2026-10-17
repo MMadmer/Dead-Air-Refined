@@ -217,6 +217,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_da_bloom.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_da_mblur.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_froxels.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/da_particle_light.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_sky_water_velocity.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/r4_rendertarget_phase_upscale.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/da_upscaler.cpp"

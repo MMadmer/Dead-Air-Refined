@@ -12,6 +12,7 @@
 #include "stdafx.h"
 
 #include "Layers/xrRender/blenders/blender_da_froxel.h"
+#include "Layers/xrRenderPC_R4/da_particle_light.h"
 #include "Layers/xrRender/da_temporal.h"
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
@@ -49,12 +50,11 @@ constexpr float kHistory = 0.9f;
 struct DaFroxels
 {
     u32 tier = 0, w = 0, h = 0, d = 0;
-    ID3DTexture3D* tex[3]{}; // A, B (injection, ping-pong), the integral
+    ID3DTexture3D* tex[3]{}; // the air this frame (density, sun visibility), its copy for the next one, the glow
     ID3D11UnorderedAccessView* uav[3]{};
     ref_texture named[3];
     ref_shader shader;
-    u32 last = 0; // the volume the last injection wrote
-    u32 frame = 0; // the frame it did
+    u32 frame = 0; // the frame the injection last ran
     Fmatrix prev_viewproj{}; // the previous injection's view-projection, unjittered
     Fmatrix shadow[3]{}; // view -> cascade texture space, this frame
     u32 shadow_frame[3]{};
@@ -64,6 +64,15 @@ struct DaFroxels
 
 namespace
 {
+enum : u32
+{
+    kCur,
+    kHist,
+    kInt,
+};
+
+DaFroxelFrame g_frame;
+
 void release(DaFroxels& f)
 {
     for (u32 i = 0; i < 3; ++i)
@@ -83,7 +92,7 @@ bool allocate(DaFroxels& f, u32 tier)
     f.w = (Device.dwRenderWidth + kTiers[tier].tile - 1) / kTiers[tier].tile;
     f.h = (Device.dwRenderHeight + kTiers[tier].tile - 1) / kTiers[tier].tile;
     f.d = kTiers[tier].slices;
-    const pcstr names[3] = {da_froxel_volume_rt[0], da_froxel_volume_rt[1], da_froxel_int_rt};
+    const pcstr names[3] = {da_froxel_cur_rt, da_froxel_hist_rt, da_froxel_int_rt};
     for (u32 i = 0; i < 3; ++i)
     {
         D3D_TEXTURE3D_DESC desc{};
@@ -91,11 +100,11 @@ bool allocate(DaFroxels& f, u32 tier)
         desc.Height = f.h;
         desc.Depth = f.d;
         desc.MipLevels = 1;
-        desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+        desc.Format = i == kInt ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_R16G16_FLOAT;
         desc.Usage = D3D_USAGE_DEFAULT;
-        desc.BindFlags = D3D_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+        desc.BindFlags = D3D_BIND_SHADER_RESOURCE | (i == kHist ? 0u : u32(D3D11_BIND_UNORDERED_ACCESS));
         if (FAILED(HW.pDevice->CreateTexture3D(&desc, nullptr, &f.tex[i])) ||
-            FAILED(HW.pDevice->CreateUnorderedAccessView(f.tex[i], nullptr, &f.uav[i])))
+            (i != kHist && FAILED(HW.pDevice->CreateUnorderedAccessView(f.tex[i], nullptr, &f.uav[i]))))
         {
             Msg("! [froxels] the %ux%ux%u volumes could not be created: no volumetric sunlight", f.w, f.h, f.d);
             release(f);
@@ -128,6 +137,8 @@ void dispatch(CBackend& cmd_list, ShaderElement* element, ID3D11UnorderedAccessV
 }
 } // namespace
 
+const DaFroxelFrame& da_froxel_frame() { return g_frame; }
+
 void CRenderTarget::froxels_create()
 {
     froxels_destroy();
@@ -156,15 +167,27 @@ void CRenderTarget::froxels_note_cascade(u32 cascade, const Fmatrix& m_shadow)
 bool CRenderTarget::phase_froxels(CBackend& cmd_list)
 {
     if (!m_froxels || !m_froxels->shader || !RImplementation.o.advancedpp || !ps_r_sun_shafts ||
-        RImplementation.o.oldshadowcascades || !need_to_render_sunshafts())
+        RImplementation.o.oldshadowcascades)
         return false;
     DaFroxels& f = *m_froxels;
+
+    // The glow wants the weather's shaft strength; the lit particles, while some are about, want the sun's visibility
+    // while there is a sun.
+    const auto& env = g_pGamePersistent->Environment();
+    const float strength = (env.CurrentEnv.m_fSunShaftsIntensity + ps_r2_sun_shafts_value) * env.cloud_sun_visibility *
+        kLevel * ps_r__froxel_strength;
+    const bool glow = strength > 0.0001f;
+    light* sun = (light*)RImplementation.Lights.sun._get();
+    Fvector colour{sun->color.r, sun->color.g, sun->color.b};
+    const float length = colour.magnitude();
+    if (!glow && !(da_particle_light_wanted() && length > 0.01f))
+        return false;
+
     const u32 tier = std::min<u32>(ps_r_sun_shafts, std::size(kTiers)) - 1;
     if ((!f.tex[0] || f.tier != tier || f.w != (Device.dwRenderWidth + kTiers[tier].tile - 1) / kTiers[tier].tile ||
             f.h != (Device.dwRenderHeight + kTiers[tier].tile - 1) / kTiers[tier].tile) &&
         !allocate(f, tier))
         return false;
-    PIX_EVENT_CTX(cmd_list, phase_froxels);
 
     // The cascades the sun accumulated this frame, from the near one up without a gap.
     u32 cascades = 0;
@@ -172,14 +195,9 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
         ++cascades;
     if (!cascades)
         return false;
+    PIX_EVENT_CTX(cmd_list, phase_froxels);
 
-    const auto& env = g_pGamePersistent->Environment();
-    const float strength =
-        (env.CurrentEnv.m_fSunShaftsIntensity + ps_r2_sun_shafts_value) * env.cloud_sun_visibility * kLevel * ps_r__froxel_strength;
     // The sun's hue at the stock shafts' brightness (they lit the air with a unit-length colour).
-    light* sun = (light*)RImplementation.Lights.sun._get();
-    Fvector colour{sun->color.r, sun->color.g, sun->color.b};
-    const float length = colour.magnitude();
     colour = length > EPS_S ? colour.div(length) : Fvector{0.577f, 0.577f, 0.577f};
 
     // The medium drifts with the wind; the noise's lattice repeats every 256 cells, and so does the drift.
@@ -196,11 +214,15 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
     const u32 bits = ((f.phase & 1) << 3) | ((f.phase & 2) << 1) | ((f.phase & 4) >> 1) | ((f.phase & 8) >> 3);
     const float jitter = (float(bits) + 0.5f) / 16.f;
 
+    g_frame.frame = Device.dwFrame;
+    g_frame.grid.set(float(f.w), float(f.h), float(f.d), 0.f);
+    g_frame.range.set(kNear, kFar - kNear, 1.f / (kFar - kNear), kFar);
+    g_frame.ray.set(1.f / Device.mProject._11, 1.f / Device.mProject._22, 0.f, 0.f);
     const auto common = [&]
     {
-        cmd_list.set_c("da_froxel_grid", float(f.w), float(f.h), float(f.d), 0.f);
-        cmd_list.set_c("da_froxel_range", kNear, kFar - kNear, 1.f / (kFar - kNear), kFar);
-        cmd_list.set_c("da_froxel_ray", 1.f / Device.mProject._11, 1.f / Device.mProject._22, 0.f, 0.f);
+        cmd_list.set_c("da_froxel_grid", g_frame.grid);
+        cmd_list.set_c("da_froxel_range", g_frame.range);
+        cmd_list.set_c("da_froxel_ray", g_frame.ray);
     };
 
     // Nothing of the scene's may stay bound for output while the volumes are written.
@@ -209,8 +231,7 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
     cmd_list.set_ZB(nullptr);
     rt_smap_depth->set_slice_read(-1);
 
-    const u32 write = f.last ^ 1;
-    dispatch(cmd_list, &*f.shader->E[write], f.uav[write], (f.w + 7) / 8, (f.h + 7) / 8, f.d, [&]
+    dispatch(cmd_list, &*f.shader->E[0], f.uav[kCur], (f.w + 7) / 8, (f.h + 7) / 8, f.d, [&]
     {
         common();
         cmd_list.set_c("m_froxel_v2w", Device.mInvView);
@@ -218,22 +239,29 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
         cmd_list.set_c("m_froxel_shadow0", f.shadow[0]);
         cmd_list.set_c("m_froxel_shadow1", f.shadow[1]);
         cmd_list.set_c("m_froxel_shadow2", f.shadow[2]);
-        cmd_list.set_c("da_froxel_media", kExtinction, kHeightFalloff, kNoiseShare, 0.f);
+        // Without the glow only the sun's visibility is read: the wisps' noise is skipped.
+        cmd_list.set_c("da_froxel_media", kExtinction, kHeightFalloff, glow ? kNoiseShare : 0.f, 0.f);
         cmd_list.set_c("da_froxel_wind", f.drift.x, 0.f, f.drift.z, kNoiseFrequency);
-        cmd_list.set_c("da_froxel_sun", colour.x * strength, colour.y * strength, colour.z * strength, history ? 1.f : 0.f);
-        cmd_list.set_c("da_froxel_frame", jitter, float(cascades), kHistory, 0.f);
+        cmd_list.set_c("da_froxel_frame", jitter, float(cascades), history ? kHistory : 0.f, 0.f);
     });
-    dispatch(cmd_list, &*f.shader->E[2 + write], f.uav[2], (f.w + 7) / 8, (f.h + 7) / 8, 1, common);
     rt_smap_depth->set_slice_read(SE_SUN_FAR);
-
-    f.last = write;
+    // The next frame's history: the injection cannot read the volume it writes.
+    HW.get_context(cmd_list.context_id)->CopyResource(f.tex[kHist], f.tex[kCur]);
     f.frame = Device.dwFrame;
     f.prev_viewproj = Device.mFullTransform;
+    if (!glow)
+        return true;
+
+    dispatch(cmd_list, &*f.shader->E[1], f.uav[kInt], (f.w + 7) / 8, (f.h + 7) / 8, 1, [&]
+    {
+        common();
+        cmd_list.set_c("da_froxel_sun", colour.x * strength, colour.y * strength, colour.z * strength, 0.f);
+    });
 
     // Every pixel's share, into the volumetric light target.
     phase_vol_accumulator(cmd_list);
     cmd_list.SetViewport({0.f, 0.f, float(Device.dwRenderWidth), float(Device.dwRenderHeight), 0.f, 1.f});
-    cmd_list.set_Element(f.shader->E[4]);
+    cmd_list.set_Element(f.shader->E[2]);
     common();
     u32 offset = 0;
     FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, g_combine->vb_stride, offset);

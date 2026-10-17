@@ -313,6 +313,8 @@ float ps_r__froxel_strength = 1.f;
 // The GGX specular of the stock materials (lmodel.h), look constants: on, f0 per unit of gloss and its ceiling,
 // smoothness per unit of gloss.
 int ps_r__spec_ggx = 1;
+// Lit particles (da_particle_light.cpp), a look constant: 1 on, 0 the stock unlit ones; QA: 2 the light itself.
+int ps_r__particle_light = 1;
 float ps_r__spec_f0 = 0.8f;
 float ps_r__spec_f0_max = 0.16f;
 float ps_r__spec_smooth = 3.f;
@@ -1495,6 +1497,7 @@ void xrRender_sync_preset_derived()
     ps_r__mblur_shutter = 0.5f;
     ps_r__froxel_strength = 1.f;
     ps_r__spec_ggx = 1;
+    ps_r__particle_light = 1;
     ps_r__spec_f0 = 0.8f;
     ps_r__spec_f0_max = 0.16f;
     ps_r__spec_smooth = 3.f;
@@ -2017,6 +2020,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__froxel_strength", &ps_r__froxel_strength, 0.f, 100.f);
     CMD4(CCC_RuntimeInteger, "r__spec_ggx", &ps_r__spec_ggx, 0, 3); // QA: 2 the gloss as grey, 3 the lights' and the sky's specular
     CMD4(CCC_RuntimeFloat, "r__spec_f0", &ps_r__spec_f0, 0.f, 4.f);
+    CMD4(CCC_RuntimeInteger, "r__particle_light", &ps_r__particle_light, 0, 2);
     CMD4(CCC_RuntimeFloat, "r__spec_f0_max", &ps_r__spec_f0_max, 0.02f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__spec_smooth", &ps_r__spec_smooth, 0.f, 8.f);
 #if defined(USE_DX11)

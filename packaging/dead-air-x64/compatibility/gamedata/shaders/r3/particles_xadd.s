@@ -1,5 +1,5 @@
 function normal		(shader, t_base, t_second, t_detail)
-	shader:begin	("particle",	"particle_add") -- additive: the fog takes its light away (particle.ps)
+	shader:begin	("particle_unlit",	"particle_add") -- additive: the fog takes its light away (particle.ps)
 			: sorting	(3, false)
 			: blend		(true,blend.one,blend.one)
 			: aref 		(false,0)
@@ -17,7 +17,7 @@ function normal		(shader, t_base, t_second, t_detail)
 end
 
 function l_special	(shader, t_base, t_second, t_detail)
-	shader:begin	("particle",	"particle_distort")
+	shader:begin	("particle_unlit",	"particle_distort")
 			: sorting	(3, false)
 			: blend		(true,blend.srcalpha,blend.invsrcalpha)
 			: zb 		(true,false)
