@@ -16,10 +16,12 @@
 
 // The specular of every stock material after DOOM Eternal (specBRDF): GGX without the 1/pi the diffuse lacks too,
 // Schlick-Smith visibility with k = alpha^2, Schlick Fresnel with f90 from f0 (an f0 under 2 % fades the grazing
-// sheen out). The width comes from the material's slice of s_material - its Blinn exponent n as alpha^2 = 2 / (n + 2) -
-// and narrows with the gloss the rain raises; f0 follows the gloss, which the content authored as the strength of
-// its specular (the stock lobe's energy at a gloss of 0.05 is the 4 % of a dielectric). No floor: a dry road's gloss
-// of 0.005 is the authors' "no specular", and the physical 2 % gave it five times the stock's sheen.
+// sheen out). The width is DOOM's alpha^2 = (1 - 0.8 s)^4 from the smoothness the sky's term (hmodel.h) takes too: a
+// dull surface is a rough one. Held at the stock slice's narrower lobe, dry ground lit from behind at a grazing view
+// mirrored the sun at 15 times its diffuse light - a distant hill white as snow. f0 follows the gloss, which the content
+// authored as the strength of its specular (the stock lobe's energy at a gloss of 0.05 is the 4 % of a dielectric). No
+// floor: a dry road's gloss of 0.005 is the authors' "no specular", and the physical 2 % gave it five times the
+// stock's sheen.
 // da_spec (cl_da_spec): x 1 = this model (0 = the stock lobe), y f0 per unit of gloss, z its ceiling, w smoothness per
 // unit of gloss.
 uniform float4 da_spec;
@@ -30,13 +32,6 @@ bool da_spec_ggx_on(float m) { return da_spec.x > 0.5f && !da_is_foliage(m) && !
 float da_spec_smoothness(float gloss) { return saturate(gloss * da_spec.w); }
 
 float da_spec_f0(float gloss) { return min(gloss * da_spec.y, da_spec.z); }
-
-// alpha^2 of the stock slices: Blinn exponents 16, 24, 128 and the metal's 24.
-float da_spec_slice_a2(float m)
-{
-	const float k = floor(m * 4.0f);
-	return k < 0.5f ? 0.111f : k < 1.5f ? 0.0769f : k < 2.5f ? 0.0154f : 0.0769f;
-}
 
 // Geometric specular antialiasing (Kaplanyan & Tokuyoshi 2019): what the normal turns across the pixel's quad - the
 // G-buffer's, a normal map's ripple at a distance, an edge - widens the lobe by its variance, so a highlight thinner
@@ -49,13 +44,12 @@ void da_spec_aa(float3 N)
 	da_spec_aa_a2 = min(0.5f * (dot(du, du) + dot(dv, dv)), 0.18f);
 }
 
-float da_spec_ggx(float m, float gloss, float3 N, float3 V, float3 L)
+float da_spec_ggx(float gloss, float3 N, float3 V, float3 L)
 {
 	const float r = 1.0f - 0.8f * da_spec_smoothness(gloss);
-	// DOOM's alpha^2 = (1 - 0.8 s)^4, never wider than the material's own lobe; then the pixel's own spread, on the
-	// smooth surfaces whose highlight is thin enough to flicker (a rough one only gains a grazing sheen from it).
-	const float a2 = saturate(max(min(r * r * r * r, da_spec_slice_a2(m)), 0.002f) +
-		da_spec_aa_a2 * saturate(2.0f * da_spec_smoothness(gloss)));
+	// DOOM's alpha^2 = (1 - 0.8 s)^4, then the pixel's own spread on the smooth surfaces whose highlight is thin enough
+	// to flicker (a rough one only gains a grazing sheen from it).
+	const float a2 = saturate(max(r * r * r * r, 0.002f) + da_spec_aa_a2 * saturate(2.0f * da_spec_smoothness(gloss)));
 	const float3 H = normalize(L + V);
 	const float nh = saturate(dot(N, H));
 	const float nv = saturate(dot(N, V)) + 1e-4f;
@@ -123,7 +117,7 @@ float4 plight_infinity( float m, float3 pnt, float3 normal, float3 light_directi
 {
 	float4 ret = plight_infinity( m, pnt, normal, light_direction );
 	[branch] if ( da_spec_ggx_on( m ) )
-		ret.w = LIGHT_MUL1 * da_spec_ggx( m, gloss, normal, -normalize( pnt ), -light_direction );
+		ret.w = LIGHT_MUL1 * da_spec_ggx( gloss, normal, -normalize( pnt ), -light_direction );
 	return ret;
 }
 
@@ -155,7 +149,7 @@ float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, 
 	[branch] if ( da_spec_ggx_on( m ) )
 	{
 		const float att = saturate( 1 - rsqr * light_range_rsq * L_RANGE ) * L_BRIGHT;
-		ret.w = att * LIGHT_MUL1 * da_spec_ggx( m, gloss, normal, -normalize( pnt ), normalize( light_position - pnt ) );
+		ret.w = att * LIGHT_MUL1 * da_spec_ggx( gloss, normal, -normalize( pnt ), normalize( light_position - pnt ) );
 	}
 	return ret;
 }

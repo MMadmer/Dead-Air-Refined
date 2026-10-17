@@ -12,8 +12,10 @@ and the light passes in the compatibility overlay.
   light's intensity squared, tinted by the albedo's light.
 - **Now** (`da_spec_ggx`): GGX without the 1/pi the diffuse lacks too, Schlick-Smith visibility with k = alpha^2,
   Schlick Fresnel with f90 = saturate(50 f0).
-  - Width: the slice's Blinn exponent n as alpha^2 = 2 / (n + 2), narrowed by the gloss the rain raises (DOOM's
-    alpha^2 = (1 - 0.8 s)^4, s = 3 x gloss).
+  - Width: DOOM's alpha^2 = (1 - 0.8 s)^4 with s = 3 x gloss, the smoothness the sky's term takes too (section 2) -
+    a dull surface is a rough one, a wet one narrows. The first version held it at the stock slice's lobe (Blinn
+    exponent n as alpha^2 = 2 / (n + 2), 0.111 for soil): dry ground seen at a grazing angle against a sun behind the
+    clouds mirrored it at 15 times its diffuse light, and a distant hill or a village road looked under snow.
   - Strength: f0 = 0.8 x gloss, at most 0.16. The content authored its gloss as the strength of its specular - a dry
     road 0.005, a bus 0.045, a wet road 0.15 to 0.25 - and the stock lobe's energy at a gloss of 0.05 is a
     dielectric's 4 %. No physical floor: 2 % gave a dry road five times the stock sheen.
@@ -27,8 +29,8 @@ and the light passes in the compatibility overlay.
   across the pixel's quad widens alpha^2 by its variance (at most 0.18), on the smooth surfaces only (weighted by
   2 x smoothness) - a wet road's or a car's highlight thinner than a pixel stops flickering, while a rough surface,
   which would only gain a grazing sheen, keeps its lobe (`da_spec_aa`, called once per pixel by the light passes).
-- A dielectric's Fresnel rises toward f90 at grazing angles even on dry ground (f0 0.004, f90 0.2): a faint sheen of
-  the sun's colour on a dirt road under a high sun, as dry soil shows it.
+- A dielectric's Fresnel rises toward f90 at grazing angles (f90 = saturate(50 f0)); on dry ground (f0 0.004, f90
+  0.2) the rough lobe keeps that sheen under its diffuse light, on a wet road it is the glare toward the sun.
 
 ## 2. The sky
 
