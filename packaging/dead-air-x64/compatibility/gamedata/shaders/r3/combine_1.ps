@@ -126,7 +126,7 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 	float sun_occ = P.w*2;
 
 	mtl = xmaterial;
-	L += Ldynamic_color * sun_occ * plight_infinity	(mtl, P.xyz, N.xyz, Ldynamic_dir);
+	L += Ldynamic_color * sun_occ * plight_infinity	(mtl, P.xyz, N.xyz, Ldynamic_dir, D.w);
 #endif
 
 	// hemisphere
@@ -223,7 +223,7 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 		hdiffuse *= max( occ.xxx, ( ( occ * a + b ) * occ + c ) * occ );
 		// The sky's G-buffer holds P = 0: no normalize of a zero vector.
 		const float NdotV = saturate( dot( N.xyz, -P.xyz * rsqrt( max( dot( P.xyz, P.xyz ), 1e-8f ) ) ) );
-		const float roughness = 1.0f - saturate( D.w );
+		const float roughness = 1.0f - ( da_spec_ggx_on( mtl ) ? da_spec_smoothness( D.w ) : saturate( D.w ) );
 		hspecular *= saturate( pow( NdotV + occ, exp2( -16.0f * roughness - 1.0f ) ) - 1.0f + occ );
 	}
 
@@ -247,6 +247,11 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
         float4         C           = D*light       ;                             // rgb.gloss * light(diffuse.specular)
 //        float3         spec        = (C.rgb*.5h + .5h)*C.w + hspecular + hspecular + hspecular;			// replicated specular
 	float3         spec        = C.www*L_spec*5         + hspecular;      // replicated specular
+	// Under the GGX model the lights' specular carries its own Fresnel (lmodel.h): the light's hue at its strength,
+	// not the gloss times the diffuse sum, which squared the light's intensity and took the albedo's tint of it.
+	[branch] if ( da_spec_ggx_on( mtl ) )
+		spec = L.w * ( 1.0f / LIGHT_MUL1 ) * da_spec_hue( L.rgb ) + hspecular;
+	const float3 qa_spec = float3( dot( spec - hspecular, LUMINANCE_VECTOR ), dot( hspecular, LUMINANCE_VECTOR ), 0.0f );
 
 #ifdef         USE_SUPER_SPECULAR
                       spec      = (C.rgb*.5h + .5h)*C.w + hspecular        ;
@@ -334,6 +339,10 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
         _out        	o;
         o.scene        	= float4( color, 0.0f );
         tonemap        	(o.low, o.high, color, tm_scale )	;
+	// QA (r__spec_ggx 2): the G-buffer's gloss as grey after the tone map, the stock materials only (foliage and
+	// snow black).
+	[branch] if ( da_spec.x > 1.5f )
+		o.low.rgb = ( da_is_foliage( mtl ) || da_is_snowy( mtl ) ) ? 0.0f : ( da_spec.x > 2.5f ? qa_spec * 4.0f : D.w.xxx );
                         o.low.a         = skyblend	;
 						o.high.a		= skyblend	;
 //		o.low	= skyblend;

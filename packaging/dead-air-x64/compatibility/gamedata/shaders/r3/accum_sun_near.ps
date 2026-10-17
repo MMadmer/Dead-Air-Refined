@@ -154,7 +154,7 @@ float4 main ( v2p_volume I ) : SV_Target
 # ifndef USE_R2_STATIC_SUN
 			m 	= _P.w;
 # endif
-	float4	light	= plight_infinity ( m, _P, _N, Ldynamic_dir );
+	float4	light	= plight_infinity( m, _P, _N, Ldynamic_dir, gbd.gloss );
 
 	return 		blend( Ldynamic_color * light * s/*float4( 1.f, 0.2f, 0.2f, 1.f)*/, I.tc );
 }

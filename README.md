@@ -63,6 +63,8 @@ upstream, and where the untouched code that actually runs is.
 - Volumetric sunlight in a froxel volume: shafts through crowns and windows that
   follow every shadow cascade and the clouds, haze that deepens with distance
   and drifts with the wind, at a third of the old shafts' cost.
+- Physically based specular on every surface (GGX, Fresnel, an environment
+  BRDF): highlights in the light's own colour, wet ground that mirrors the sky.
 - DirectX 12-only features on GPUs that support them: shaders compiled for
   Shader Model 6.6, trees culled and drawn by the GPU, mesh-shader grass,
   texture and level loading through DirectStorage, variable rate shading on
@@ -300,6 +302,8 @@ versions and compatibility pins are recorded in
   pyramid and the motion blur, their passes, knobs and costs.
 - [`VOLUMETRIC_LIGHT.md`](docs/dead-air/VOLUMETRIC_LIGHT.md) — the froxel
   volume of the sunlit air.
+- [`SPECULAR.md`](docs/dead-air/SPECULAR.md) — the specular model of the
+  stock materials and of the sky's reflection.
 
 ## Credits
 

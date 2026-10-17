@@ -14,6 +14,48 @@
 #define LIGHT_MUL1 0.7//.7f
 #define LIGHT_MUL2 .0//.5f
 
+// The specular of every stock material after DOOM Eternal (specBRDF): GGX without the 1/pi the diffuse lacks too,
+// Schlick-Smith visibility with k = alpha^2, Schlick Fresnel with f90 from f0 (an f0 under 2 % fades the grazing
+// sheen out). The width comes from the material's slice of s_material - its Blinn exponent n as alpha^2 = 2 / (n + 2) -
+// and narrows with the gloss the rain raises; f0 follows the gloss, which the content authored as the strength of
+// its specular (the stock lobe's energy at a gloss of 0.05 is the 4 % of a dielectric). No floor: a dry road's gloss
+// of 0.005 is the authors' "no specular", and the physical 2 % gave it five times the stock's sheen.
+// da_spec (cl_da_spec): x 1 = this model (0 = the stock lobe), y f0 per unit of gloss, z its ceiling, w smoothness per
+// unit of gloss.
+uniform float4 da_spec;
+
+bool da_spec_ggx_on(float m) { return da_spec.x > 0.5f && !da_is_foliage(m) && !da_is_snowy(m); }
+
+// Perceptual smoothness 0..1 from the G-buffer gloss.
+float da_spec_smoothness(float gloss) { return saturate(gloss * da_spec.w); }
+
+float da_spec_f0(float gloss) { return min(gloss * da_spec.y, da_spec.z); }
+
+// alpha^2 of the stock slices: Blinn exponents 16, 24, 128 and the metal's 24.
+float da_spec_slice_a2(float m)
+{
+	const float k = floor(m * 4.0f);
+	return k < 0.5f ? 0.111f : k < 1.5f ? 0.0769f : k < 2.5f ? 0.0154f : 0.0769f;
+}
+
+float da_spec_ggx(float m, float gloss, float3 N, float3 V, float3 L)
+{
+	const float r = 1.0f - 0.8f * da_spec_smoothness(gloss);
+	// DOOM's alpha^2 = (1 - 0.8 s)^4, never wider than the material's own lobe.
+	const float a2 = max(min(r * r * r * r, da_spec_slice_a2(m)), 0.002f);
+	const float3 H = normalize(L + V);
+	const float nh = saturate(dot(N, H));
+	const float nv = saturate(dot(N, V)) + 1e-4f;
+	const float nl = saturate(dot(N, L));
+	const float lh = saturate(dot(L, H));
+	const float d = nh * nh * (a2 - 1.0f) + 1.0f;
+	const float D = a2 / (d * d);
+	const float Vis = 1.0f / (4.0f * (nv * (1.0f - a2) + a2) * (nl * (1.0f - a2) + a2));
+	const float f0 = da_spec_f0(gloss);
+	const float F = f0 + (saturate(50.0f * f0) - f0) * pow(1.0f - lh, 5.0f);
+	return D * Vis * F * nl;
+}
+
 // Transmission tint: light through a grass blade is warmer than the light on it (combine multiplies by
 // the albedo).
 #define DA_FOLIAGE_TINT	float3(1.0, 0.95, 0.70)
@@ -63,6 +105,15 @@ float4 plight_infinity( float m, float3 pnt, float3 normal, float3 light_directi
 	return ret;
 }
 
+// The same with the surface's gloss: the stock materials take the GGX specular above.
+float4 plight_infinity( float m, float3 pnt, float3 normal, float3 light_direction, float gloss )
+{
+	float4 ret = plight_infinity( m, pnt, normal, light_direction );
+	[branch] if ( da_spec_ggx_on( m ) )
+		ret.w = LIGHT_MUL1 * da_spec_ggx( m, gloss, normal, -normalize( pnt ), -light_direction );
+	return ret;
+}
+
 float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, float light_range_rsq, out float rsqr )
 {
   	float3 N		= normal;							// normal
@@ -82,6 +133,26 @@ float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, 
 	ret.rgb = Vibrance(ret.rgb,2);
 
 	return ret;
+}
+
+float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, float light_range_rsq, out float rsqr,
+	float gloss )
+{
+	float4 ret = plight_local( m, pnt, normal, light_position, light_range_rsq, rsqr );
+	[branch] if ( da_spec_ggx_on( m ) )
+	{
+		const float att = saturate( 1 - rsqr * light_range_rsq * L_RANGE ) * L_BRIGHT;
+		ret.w = att * LIGHT_MUL1 * da_spec_ggx( m, gloss, normal, -normalize( pnt ), normalize( light_position - pnt ) );
+	}
+	return ret;
+}
+
+// The specular light's colour: combine_1 has the diffuse sum, whose Vibrance(2) doubled the lights' saturation around
+// their luminance; half of it back is the lights' own hue, at unit luminance.
+float3 da_spec_hue( float3 diffuse )
+{
+	const float l = dot( diffuse, LUMINANCE_VECTOR );
+	return lerp( l.xxx, diffuse, 0.5f ) / max( l, 1e-4f );
 }
 
 //	TODO: DX10: Remove path without blending

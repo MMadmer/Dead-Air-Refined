@@ -55,7 +55,7 @@ float4 	main	( p_aa_AA_sun_vs I ) : SV_Target
 # ifndef USE_R2_STATIC_SUN
 			m 	= _P.w		;
 # endif
-	float4	light	= plight_infinity( m, _P, _N, Ldynamic_dir );
+	float4	light	= plight_infinity( m, _P, _N, Ldynamic_dir, gbd.gloss );
 
 	// ----- shadow
 	float4 	s_sum;

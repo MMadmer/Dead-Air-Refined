@@ -429,6 +429,15 @@ static class cl_da_tonemap_params : public R_constant_setup
     }
 } binder_da_tonemap_params;
 
+// The GGX specular of the stock materials (lmodel.h): on, f0 per unit of gloss, its ceiling, smoothness per unit of gloss.
+static class cl_da_spec : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, float(ps_r__spec_ggx), ps_r__spec_f0, ps_r__spec_f0_max, ps_r__spec_smooth);
+    }
+} binder_da_spec;
+
 // Colour grade after the tonemap: saturation, the extra factor for greens, the olive pull and
 // the contrast. Consumed by da_grade() in common_functions.h; a zero constant is a no-op.
 static class cl_da_grade_params : public R_constant_setup
@@ -939,6 +948,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_sky_tint", &binder_da_sky_tint);
     Resources->RegisterConstantSetup("da_cloud_shadow", &binder_da_cloud_shadow);
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
+    Resources->RegisterConstantSetup("da_spec", &binder_da_spec);
     Resources->RegisterConstantSetup("da_grade_params", &binder_da_grade_params);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
     Resources->RegisterConstantSetup("da_lod_tune", &binder_da_lod_tune);
