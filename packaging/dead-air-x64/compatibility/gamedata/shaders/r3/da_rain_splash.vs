@@ -1,4 +1,5 @@
 #include "common.h"
+#include "da_particle_light.h"
 
 // Splash crowns: the rain.dm detail model, one instance per landed drop, transformed on the
 // CPU into world space and batched (dxRainRender). Same vertex layout as the streaks, but the
@@ -19,6 +20,7 @@ struct v2p_splash
 	float3 wpos  : TEXCOORD1;
 	float4 HPos  : SV_Position;
 	float  fog   : FOG;
+	float3 light : TEXCOORD2;	// the light the crown takes (da_particle_light.h)
 };
 
 v2p_splash main (v_rain I)
@@ -30,6 +32,7 @@ v2p_splash main (v_rain I)
 	O.Color = I.Color.bgra; // swizzle vertex colour
 	O.wpos  = I.P.xyz;
 	O.fog   = saturate(calc_fogging(I.P));
+	O.light = da_particle_lighting(I.P.xyz);
 
 	return O;
 }

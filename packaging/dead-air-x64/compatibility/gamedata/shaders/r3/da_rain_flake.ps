@@ -21,7 +21,11 @@ struct v2p_rain
 	float4 tctexgen : TEXCOORD2;
 	float4 HPos     : SV_Position;
 	float  fog      : FOG;
+	float3 light    : TEXCOORD3;	// the light the flake takes (da_rain.vs)
 };
+
+// x: 1 when the flakes are lit like the particles (da_particle_light.h).
+uniform float4 da_particle_light;
 
 //	Must be less than view near
 #define DEPTH_EPSILON 0.1h
@@ -40,11 +44,17 @@ float4 main (v2p_rain I) : SV_Target
 	const float  dist = length(V);
 	const float3 Vn   = V / max(dist, 0.001);
 
-	const float3 skyc = L_hemi_color.rgb / (1.0 + L_hemi_color.rgb);
-	const float3 sunc = L_sun_color / (1.0 + L_sun_color);
-	const float  fwd  = pow(saturate(dot(Vn, -L_sun_dir_w)), 6.0);
-	float3 col = I.Color.rgb * (0.50 + 0.35 * skyc + 0.25 * sunc + 0.80 * sunc * fwd);
-	col = saturate(col);
+	float3 col;
+	// Lit like the particles (da_rain.vs), so a night's snowfall is dark but where a light catches it.
+	[branch] if (da_particle_light.x > 0.5)
+		col = saturate(I.Color.rgb * I.light);
+	else
+	{
+		const float3 skyc = L_hemi_color.rgb / (1.0 + L_hemi_color.rgb);
+		const float3 sunc = L_sun_color / (1.0 + L_sun_color);
+		const float  fwd  = pow(saturate(dot(Vn, -L_sun_dir_w)), 6.0);
+		col = saturate(I.Color.rgb * (0.50 + 0.35 * skyc + 0.25 * sunc + 0.80 * sunc * fwd));
+	}
 
 	float fogd = saturate(1.0 - I.fog);
 	[branch] if (da_fog_extras_on())

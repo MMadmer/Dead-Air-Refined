@@ -27,7 +27,11 @@ struct v2p_rain
 	float4 tctexgen : TEXCOORD2;
 	float4 HPos     : SV_Position;
 	float  fog      : FOG;
+	float3 light    : TEXCOORD3;	// the light the drop takes (da_rain.vs)
 };
+
+// x: 1 when the drops are lit like the particles (da_particle_light.h).
+uniform float4 da_particle_light;
 
 //	Must be less than view near
 #define DEPTH_EPSILON 0.1h
@@ -50,7 +54,12 @@ float4 main (v2p_rain I) : SV_Target
 	// This pass writes an LDR target AFTER the tonemap, so the scene's light terms - which are
 	// HDR - may only MODULATE the streak, never scale it, or a sunlit sheet clips to white.
 	// x/(1+x) folds any brightness into 0..1 and the authored drop colour stays underneath.
-	[branch] if (da_rain2.z >= 2.5)
+	// Lit like the particles (da_rain.vs): the sun with its shadow, the sky, the ambient and the local lights through the
+	// exposure, so a night's rain is dark but where a lamp or a flashlight catches it. The constant floor below kept
+	// the sheet at half its authored grey in the dark.
+	[branch] if (da_particle_light.x > 0.5)
+		col *= I.light;
+	else [branch] if (da_rain2.z >= 2.5)
 	{
 		const float3 skyc = L_hemi_color.rgb / (1.0 + L_hemi_color.rgb);
 		const float3 sunc = L_sun_color / (1.0 + L_sun_color);

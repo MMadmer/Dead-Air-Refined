@@ -42,13 +42,20 @@ float4 main( v2p I ) : SV_Target
 	float4 _P		= float4( gbd.P, gbd.mtl );
 	float spaceDepth = _P.z-I.tctexgen.z-DEPTH_EPSILON;
 	if (spaceDepth < -2*DEPTH_EPSILON ) spaceDepth = 100000.0h; //  Skybox doesn't draw into position buffer
-	//result.a *= saturate(spaceDepth*0.3h);
-	result.a *= Contrast( saturate(spaceDepth*1.3h), 2);
-	result.rgb *= Contrast( saturate(spaceDepth*1.3h), 2);
-//	result = Contrast( saturate(spaceDepth*1.3h), 2);
-//	result = saturate (spaceDepth*5.0);
-//	result.rgb = float3(1,0,0);
-//	result.a = 1;
+	// Soft against the scene, and against the eye (DOOM Eternal's camera fade): a puff the camera walks through
+	// dissolves over the last 40 cm before the near plane instead of being cut by it (z is the clip depth, the view
+	// depth less the near plane's; a muzzle's smoke past 0.6 m stays whole).
+	const float soft = Contrast( saturate(spaceDepth*1.3h), 2) * smoothstep( 0.0f, 0.4f, I.tctexgen.z );
+	// Faded toward what leaves the frame as it is: no light for an additive particle, white or grey for a multiplying
+	// one (fading those toward black darkened what they crossed).
+#if defined(DA_PARTICLE_MUL)
+	result.rgb = lerp( 1.0f, result.rgb, soft );
+#elif defined(DA_PARTICLE_MUL2)
+	result.rgb = lerp( 0.5f, result.rgb, soft );
+#else
+	result.a *= soft;
+	result.rgb *= soft;
+#endif
 #endif	//	USE_SOFT_PARTICLES
 
 	clip(result.a-(0.01f/255.0f));

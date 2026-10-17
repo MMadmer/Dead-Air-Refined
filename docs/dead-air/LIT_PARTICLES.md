@@ -28,7 +28,24 @@ the blend.
 - Through the scene's exposure (`s_tonemap`) and the tone curve's shoulder at its white point, relative to a white
   surface at the exposure's white - the light the effects were authored for - and capped at 1.5.
 
-## 3. Cost
+## 3. Rain, snow and splashes
+
+The rain's streaks, the snowflakes and the splash crowns (`da_rain.vs`, `da_rain_splash.vs`) take the same light in
+their vertex shaders. They kept a constant floor of half their authored grey whatever the light, so a night's rain,
+a downpour under a roof's edge and the crowns in a dark yard stood out at the brightness of the day's. A drop and a
+flake are lenses: on the High rung of the rain's ladder (`r__rain_quality`) the sun and the local lights add a
+forward lobe toward the eye, up to four times their light where the eye looks through the drop at them (it was the
+sun's alone). With `r__particle_light 0` they keep the old terms.
+
+## 4. Near the eye
+
+Blended and additive particles also fade over the last 40 cm before the near plane (DOOM Eternal's camera fade, on
+the soft particles' path): a puff the camera walks through no longer shows the plane's straight cut. A muzzle's
+smoke from 0.6 m on stays whole. Multiplying particles now fade toward white (MUL) and grey (MUL_2X), the colours
+that leave the frame as it is, at the soft edge and near the eye alike; fading them toward black darkened what they
+crossed.
+
+## 5. Cost
 
 The particles need the froxel volume's sun term. With the glow on it is there anyway; with the glow off (overcast,
 `r__froxel_strength 0`) the injection runs only while lit particles were drawn in the last two seconds, and without
@@ -38,7 +55,7 @@ nor keep the volume alive.
 RTX 3070 Laptop, 1440p, DLSS Balanced, noon, glow off: the injection for the particles alone +0.2 ms in the sun slot.
 The per-vertex light itself is below the timer's noise.
 
-## 4. Measured
+## 6. Measured
 
 Heli smoke and a storm haze 8 m ahead (the A/B against `r__particle_light 0`):
 
@@ -47,7 +64,7 @@ Heli smoke and a storm haze 8 m ahead (the A/B against `r__particle_light 0`):
 | Noon | -0.9 of 255: the smoke takes the warm sun and the overcast sky instead of its blue-grey | -0.8 | -0.5 |
 | Night | -1.3: the smoke no longer glows | -0.4 | -1.7 |
 
-## 5. Knobs
+## 7. Knobs
 
 A look constant, re-applied by the preset sync: `r__particle_light` (1; 0 the stock unlit particles; QA: 2 shows
 the light itself at half strength over the particles' coverage).

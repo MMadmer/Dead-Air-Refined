@@ -19,4 +19,12 @@ function normal		(shader, t_base, t_second, t_detail)
 	shader	: dx10texture	("s_normal",   "$user$normal")
 
 	shader	: dx10sampler	("smp_nofilter")
+
+	-- The light the vertex shader gives it (da_particle_light.h): the froxel volume's sun term, the exposure and the
+	-- sky's irradiance cubes.
+	shader	: dx10texture	("s_froxel_cur", "$user$da_froxel_cur")
+	shader	: dx10texture	("s_tonemap",    "$user$tonemap")
+	shader	: dx10texture	("env_s0",       "$user$env_s0")
+	shader	: dx10texture	("env_s1",       "$user$env_s1")
+	shader	: dx10sampler	("smp_rtlinear")
 end
