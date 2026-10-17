@@ -50,10 +50,10 @@ void dx11GpuTimers::LogLine() const
     int length = std::snprintf(extra, sizeof(extra),
         " ripple=%.3f join=%.3f vrs=%.3f gd=%.3f grass=%.3f grass_gen=%.3f snow_prep=%.3f snow_grid=%.3f "
         "snow_layer=%.3f shrubs=%.3f shrubs_bend=%.3f trees=%.3f trees_bend=%.3f trees_bb=%.3f trees_bake=%.3f rt_scene=%.3f rt_sun=%.3f "
-        "rt_ao=%.3f rt_refl=%.3f rt_gloss=%.3f fire=%.3f fire_sim=%.3f",
+        "rt_ao=%.3f rt_refl=%.3f rt_gloss=%.3f fire=%.3f fire_sim=%.3f ssr=%.3f",
         ms(Ripple), ms(JoinWait), ms(VrsRate) + ms(VrsLuma), ms(GdCull), ms(Grass), ms(GrassGen), ms(SnowPrep),
         ms(SnowGrid), ms(SnowLayer), ms(Shrubs), ms(ShrubsBend), ms(Trees), ms(TreesBend), ms(TreesBb), ms(TreesBake), ms(RtScene), ms(RtSun),
-        ms(RtAO), ms(RtRefl), ms(RtGloss), ms(Fire), ms(FireSim));
+        ms(RtAO), ms(RtRefl), ms(RtGloss), ms(Fire), ms(FireSim), ms(Ssr));
     for (size_t i = 0; i < g_gpu_log_field_count && length > 0 && size_t(length) < sizeof(extra); ++i)
     {
         const int added = std::snprintf(extra + length, sizeof(extra) - length, " %s=%.3f",
@@ -108,6 +108,7 @@ pcstr dx11GpuTimers::name(Slot slot)
     case RtGloss: return "rt_gloss";
     case Fire: return "fire";
     case FireSim: return "fire_sim";
+    case Ssr: return "ssr";
     default: return "?";
     }
 }

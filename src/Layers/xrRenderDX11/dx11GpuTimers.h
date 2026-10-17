@@ -64,6 +64,7 @@ public:
         RtGloss, // ray traced reflections of glossy surfaces (trace and temporal)
         Fire, // the fluid fires' volumes drawn, every one of the frame
         FireSim, // the fluid fires' simulation steps, every grid of the frame
+        Ssr, // the screen-space reflections of glossy surfaces (trace and temporal)
         Count
     };
 

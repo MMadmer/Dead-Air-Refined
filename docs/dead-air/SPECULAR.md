@@ -29,8 +29,9 @@ and the light passes in the compatibility overlay.
 - **Now:** the sky cubes themselves (`sky_s0/1`) in the true mirror direction at mip 6 (1 - s) (DOOM's probe mip),
   tinted as the dome shows them (the fog's `da_sky_tint`, `da_fog_common.h`), weighted by DOOM's analytic
   environment BRDF and by the sky the point sees (its hemi term, so tunnels do not mirror the sky). The ray traced
-  reflection of glossy surfaces still takes the cube's place where it hits (`dxr.md` 3.9), now under the same
-  weight; the cone specular occlusion follows the same smoothness.
+  reflection of glossy surfaces still takes the cube's place where it hits (`dxr.md` 3.9), and without ray tracing
+  the screen-space one (`SSR.md`), now under the same weight; the cone specular occlusion follows the same
+  smoothness.
 
 ## 3. Measured
 

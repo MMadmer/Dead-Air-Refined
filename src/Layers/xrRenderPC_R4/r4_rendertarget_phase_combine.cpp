@@ -189,6 +189,8 @@ void CRenderTarget::phase_combine()
 
     // The glossy surfaces' ray traced reflections, which combine_1 reads in place of the sky's cube.
     da_rt_gloss_pass(RCache);
+    // Without them, what the screen shows of the world (r4_rendertarget_phase_ssr.cpp).
+    phase_ssr(RCache);
 
     // low/hi RTs (and the linear colour the next frame's glossy reflections reuse)
     {
@@ -197,6 +199,8 @@ void CRenderTarget::phase_combine()
         RCache.ClearRT(rt_Generic_1_r, {});
         static const ref_rt none;
         const ref_rt* gloss_scene = _menu_pp ? nullptr : da_rt_gloss_scene_target();
+        if (!gloss_scene && !_menu_pp)
+            gloss_scene = ssr_scene_target();
         if (gloss_scene)
             RCache.ClearRT((*gloss_scene)->pRT, {});
         u_setrt(RCache, rt_Generic_0_r, rt_Generic_1_r, gloss_scene ? *gloss_scene : none, rt_MSAADepth);

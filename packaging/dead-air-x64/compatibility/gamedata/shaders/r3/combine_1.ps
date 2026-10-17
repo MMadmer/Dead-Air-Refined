@@ -16,6 +16,11 @@ uniform	Texture2D					s_half_depth;
 #include "da_fog_common.h"
 #include "da_rt_consumer.h"	// ray traced occlusion (DirectX 12, RTX)
 
+// The screen-space glossy reflections (da_ssr.h) where the traced ones do not run: linear rgb premultiplied by a.
+Texture2D s_ssr;
+// x: 1 when they are this frame's.
+uniform float4 da_ssr;
+
 //#include "ssao_blur.ps"
 
 #ifdef HDAO
@@ -199,6 +204,11 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 		{
 			const float4 traced = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) );
 			env_s = env_s * ( 1.0f - traced.a ) + traced.rgb;
+		}
+		else [branch] if ( da_ssr.x > 0.5f )
+		{
+			const float4 seen = s_ssr.Load( int3( I.pos2d.xy, 0 ) );
+			env_s = env_s * ( 1.0f - seen.a ) + seen.rgb;
 		}
 		hspecular = env_s * spec_w;
 	}

@@ -439,6 +439,14 @@ public:
     void froxels_note_cascade(u32 cascade, const Fmatrix& m_shadow);
     bool phase_froxels(CBackend& cmd_list);
     struct DaFroxels* m_froxels{};
+    // The screen-space glossy reflections (r4_rendertarget_phase_ssr.cpp) where the traced ones do not run: the trace
+    // and its temporal pass before combine_1, which writes the linear colour the next frame's trace reads.
+    void ssr_create();
+    void ssr_destroy();
+    void phase_ssr(CBackend& cmd_list);
+    const ref_rt* ssr_scene_target(); // combine_1's third target this frame, or null
+    bool ssr_ran() const; // combine_1 reads them this frame
+    struct DaSsr* m_ssr{};
     void accum_point(CBackend& cmd_list, light* L);
     void accum_spot(CBackend& cmd_list, light* L);
     void accum_reflected(CBackend& cmd_list, light* L);

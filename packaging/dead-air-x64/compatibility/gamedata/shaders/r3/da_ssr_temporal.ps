@@ -1,0 +1,130 @@
+#include "common.h"
+#include "da_ssr.h"
+
+// The screen-space glossy reflections at full resolution (da_ssr.h), after DOOM Eternal's temporal upscale of its
+// reflections (as rt/rt_gloss_temporal.hlsl does for the traced ones): every render pixel takes the 3x3 blocks of
+// this frame's half-resolution trace around it, weighted by distance (Gaussian), depth and normal; mean and spread
+// of that neighbourhood clip the history, which follows the reflected point (on a plane the mirror image lies on the
+// eye's ray at the reflector's distance plus the hit's; elsewhere the surface itself). Colours blend in a tonemapped
+// space (x / (1 + max x)), so a bright highlight cannot outweigh its neighbourhood. Written to the history and to
+// the target combine_1 reads, premultiplied by the confidence.
+
+Texture2D s_ssr_raw;
+Texture2D s_ssr_dist;
+Texture2D s_ssr_hist;
+
+struct ssr_out
+{
+	float4 hist		: SV_Target0;
+	float4 result	: SV_Target1;
+};
+
+float3 da_ssr_tm(float3 c) { return c / (1.0f + max(c.r, max(c.g, c.b))); }
+float3 da_ssr_tm_inv(float3 c) { return c / max(1.0f - max(c.r, max(c.g, c.b)), 1e-3f); }
+
+ssr_out da_ssr_write(float4 v)
+{
+	ssr_out o;
+	o.hist = v;
+	o.result = v;
+	return o;
+}
+
+ssr_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
+{
+	const uint2 id = uint2(pos2d.xy);
+	float3 P, N;
+	da_ssr_surface(id, P, N);
+	const float g = s_diffuse.Load(int3(id, 0)).w;
+#ifdef GBUFFER_OPTIMIZATION
+	const float mtl = gbuf_unpack_mtl(s_position.Load(int3(id, 0)).w);
+#else
+	const float mtl = abs(s_position.Load(int3(id, 0)).w);
+#endif
+	[branch] if (da_ssr_skips(P.z, g, mtl))
+		return da_ssr_write(0.0f);
+	const float z = P.z;
+	const float3 n = normalize(N);
+
+	// The neighbourhood of this frame's samples.
+	const int2 block = int2(id / 2u);
+	const int2 blocks = int2(da_ssr_frame.zw) - 1;
+	float3 sum = 0.0f, sum2 = 0.0f;
+	float conf = 0.0f, conf_lo = 1.0f, conf_hi = 0.0f;
+	float weight = 0.0f, peak = 0.0f, dist = 0.0f, dist_w = 0.0f;
+	bool coplanar = true;
+	[unroll] for (int dy = -1; dy <= 1; ++dy)
+	{
+		[unroll] for (int dx = -1; dx <= 1; ++dx)
+		{
+			const int2 b = clamp(block + int2(dx, dy), int2(0, 0), blocks);
+			const uint2 sp = da_ssr_block_pixel(uint2(b));
+			const float2 d = float2(sp) - float2(id);
+			float w = exp(-0.5f * dot(d, d));
+			float3 Ps, Ns;
+			da_ssr_surface(sp, Ps, Ns);
+			const float zs = Ps.z > 0.0001f ? Ps.z : 1e6f;
+			const float facing = saturate(dot(normalize(Ns), n));
+			coplanar = coplanar && facing > 0.98f;
+			w *= saturate(1.0f - abs(zs - z) / (0.02f * z + 0.05f)) * pow(facing, 16.0f);
+			const float4 r = s_ssr_raw.Load(int3(b, 0));
+			const float3 c = da_ssr_tm(r.rgb);
+			sum += c * w;
+			sum2 += c * c * w;
+			conf += r.a * w;
+			[branch] if (w > 0.01f)
+			{
+				conf_lo = min(conf_lo, r.a);
+				conf_hi = max(conf_hi, r.a);
+			}
+			const float t = s_ssr_dist.Load(int3(b, 0)).x;
+			[flatten] if (t > 0.0f)
+			{
+				dist += t * w;
+				dist_w += w;
+			}
+			weight += w;
+			peak = max(peak, w);
+		}
+	}
+
+	const bool fresh = weight > 1e-3f;
+	const float3 mean = fresh ? sum / weight : 0.0f;
+	const float3 sigma = fresh ? sqrt(max(sum2 / weight - mean * mean, 0.0f)) : 1.0f;
+	const float mean_conf = fresh ? conf / weight : 0.0f;
+
+	float4 history = 0.0f;
+	bool valid = false;
+	[branch] if (da_ssr_frame.y > 0.5f)
+	{
+		const float hit = dist_w > 1e-3f ? dist / dist_w : 0.0f;
+		const float3 follow = (coplanar && hit > 0.0f) ? normalize(P) * (length(P) + hit) : P;
+		const float4 prev = mul(m_ssr_reproj, float4(follow, 1.0f));
+		[branch] if (prev.w > 0.05f)
+		{
+			const float2 puv = prev.xy / prev.w * float2(0.5f, -0.5f) + 0.5f;
+			[branch] if (all(puv > 0.0f) && all(puv < 1.0f))
+			{
+				history = s_ssr_hist.SampleLevel(smp_rtlinear, puv, 0);
+				valid = true;
+			}
+		}
+	}
+
+	float4 result;
+	[branch] if (!valid)
+		result = float4(da_ssr_tm_inv(mean), mean_conf);
+	else [branch] if (!fresh)
+		result = history;
+	else
+	{
+		// The history clipped to what this frame's neighbourhood allows (1.5 sigmas).
+		float3 h = da_ssr_tm(history.rgb);
+		h = clamp(h, mean - 1.5f * sigma, mean + 1.5f * sigma);
+		const float hc = clamp(history.a, conf_lo, conf_hi);
+		// A pixel next to a fresh sample takes it; one between samples keeps more history.
+		const float alpha = saturate(max(0.1f, 0.85f * peak));
+		result = float4(da_ssr_tm_inv(lerp(h, mean, alpha)), lerp(hc, mean_conf, alpha));
+	}
+	return da_ssr_write(result);
+}

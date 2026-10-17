@@ -1,0 +1,166 @@
+#include "common.h"
+#include "da_ssr.h"
+
+// The screen-space mirror ray of one pixel of each 2x2 block (da_ssr.h): the colour the previous frame showed where
+// the ray meets this frame's depth, premultiplied by its confidence, and the distance to it (for the history's
+// parallax in da_ssr_temporal.ps).
+
+Texture2D s_ssr_scene;	// the previous frame's linear colour, after the fog (combine_1's third target)
+
+// The longest ray in metres: a glossy surface's image is blurred by its roughness and fogged by its distance.
+#define DA_SSR_REACH 250.0f
+
+struct ssr_out
+{
+	float4 color	: SV_Target0;
+	float dist		: SV_Target1;
+};
+
+float da_ssr_ign(float2 p)
+{
+	return frac(52.9829189f * frac(dot(p, float2(0.06711056f, 0.00583715f))));
+}
+
+// Two numbers per pixel, a fresh pair every frame (an R2 sequence over the interleaved gradient noise).
+float2 da_ssr_noise2(uint2 pixel, uint frame)
+{
+	const float2 r2 = frac(float2(0.7548776662f, 0.5698402910f) * float(frame & 1023u));
+	return frac(float2(da_ssr_ign(float2(pixel)), da_ssr_ign(float2(pixel.yx) + 17.0f)) + r2);
+}
+
+// A direction inside the cone of tan_r round d.
+float3 da_ssr_cone_dir(float3 d, float tan_r, float2 u)
+{
+	const float s = d.z >= 0.0f ? 1.0f : -1.0f;
+	const float a = -1.0f / (s + d.z);
+	const float c = d.x * d.y * a;
+	const float3 t = float3(1.0f + s * d.x * d.x * a, s * c, -s * d.x);
+	const float3 b = float3(c, s + d.y * d.y * a, -d.y);
+	const float r = tan_r * sqrt(u.x);
+	const float phi = 6.28318530718f * u.y;
+	return normalize(d + t * (r * cos(phi)) + b * (r * sin(phi)));
+}
+
+// The view z the frame shows at uv; the sky is infinitely far.
+float da_ssr_z(float2 uv)
+{
+	const float z = s_position.SampleLevel(smp_nofilter, uv, 0).z;
+	return z > 0.0001f ? z : 1e6f;
+}
+
+// 1 inside the frame, falling to 0 over the band at its border (past the border nothing is known).
+float da_ssr_edge(float2 uv)
+{
+	const float2 px = uv * pos_decompression_params2.xy;
+	const float2 edge = min(px - 8.0f, pos_decompression_params2.xy - 8.0f - px) / 32.0f;
+	return saturate(min(edge.x, edge.y));
+}
+
+// Where p + d * s leaves [0, 1] on one axis.
+float da_ssr_exit(float p, float d)
+{
+	return d > 1e-7f ? (1.0f - p) / d : (d < -1e-7f ? -p / d : 1e30f);
+}
+
+// The first surface the frame shows in the way of the view-space ray o + d t, t up to t_end: its uv (xy) and weight
+// (z, 0 = none). Uniform steps on the screen with 1/z linear along them (perspective-correct); a step that takes the
+// ray behind the frame's depth is bisected, and the crossing counts where the ray meets that surface within its
+// thickness: a ray passing well behind a post goes on (rt/rt_reflect.hlsli rf_march).
+float3 da_ssr_march(float3 o, float3 d, float t_end, float2 pixel)
+{
+	// A ray coming toward the camera stops short of it: behind the camera the projection flips.
+	[flatten] if (d.z < 0.0f)
+		t_end = min(t_end, (min(0.2f, 0.5f * o.z) - o.z) / d.z);
+	[branch] if (t_end <= 0.0f)
+		return 0.0f;
+	const float3 e = o + d * t_end;
+	const float3 p0 = float3(da_ssr_uv(o), 1.0f / o.z);
+	const float3 dp = float3(da_ssr_uv(e), 1.0f / e.z) - p0;
+	const float s_end = min(1.0f, min(da_ssr_exit(p0.x, dp.x), da_ssr_exit(p0.y, dp.y)));
+	const float pixels = length(dp.xy * pos_decompression_params2.xy) * s_end;
+	[branch] if (s_end <= 0.0f || pixels < 2.0f)
+		return 0.0f;
+	const uint steps = clamp(uint(pixels * 0.25f), 4u, max(uint(da_ssr_gloss.w), 4u));
+	const float ds = s_end / float(steps);
+	// Clear of the origin's own pixel; a per-pixel offset of the strides breaks their banding.
+	const float s_first = 1.5f * s_end / pixels;
+	const float offset = da_ssr_ign(pixel + float2(da_ssr_frame.x * 5.588238f, 0.0f));
+	float s_prev = 0.0f;
+	bool front = true;
+	[loop] for (uint i = 0u; i < steps; ++i)
+	{
+		const float s = min(s_first + ds * (float(i) + offset), s_end);
+		const float3 p = p0 + dp * s;
+		const bool behind = da_ssr_z(p.xy) < 1.0f / p.z;
+		[branch] if (behind && front)
+		{
+			float lo = s_prev, hi = s;
+			[unroll] for (uint k = 0u; k < 5u; ++k)
+			{
+				const float m = 0.5f * (lo + hi);
+				const float3 pm = p0 + dp * m;
+				[flatten] if (da_ssr_z(pm.xy) < 1.0f / pm.z)
+					hi = m;
+				else
+					lo = m;
+			}
+			const float3 ph = p0 + dp * hi;
+			const float zr = 1.0f / ph.z;
+			const float zs = da_ssr_z(ph.xy);
+			// The first-person HUD, far nearer than the reflecting surface, is never in a ray's way.
+			[branch] if (zr - zs < 0.05f + 0.01f * zr && zs > 0.5f * o.z)
+				return float3(ph.xy, da_ssr_edge(ph.xy));
+		}
+		front = !behind;
+		s_prev = s;
+	}
+	return 0.0f;
+}
+
+ssr_out main(float2 tc : TEXCOORD0, float4 pos2d : SV_Position)
+{
+	ssr_out o;
+	o.color = 0.0f;
+	o.dist = 0.0f;
+	const uint2 pixel = da_ssr_block_pixel(uint2(pos2d.xy));
+	float3 P, N;
+	da_ssr_surface(pixel, P, N);
+	const float4 C = s_diffuse.Load(int3(pixel, 0));
+#ifdef GBUFFER_OPTIMIZATION
+	const float mtl = gbuf_unpack_mtl(s_position.Load(int3(pixel, 0)).w);
+#else
+	const float mtl = abs(s_position.Load(int3(pixel, 0)).w);
+#endif
+	[branch] if (da_ssr_skips(P.z, C.w, mtl))
+		return o;
+
+	const float3 n = normalize(N);
+	float3 dir = reflect(normalize(P), n);
+	// A rough surface spreads its mirror image (the ray traced reflections' spread); a ray that would leave below the
+	// surface grazes it instead.
+	const float rough = 1.0f - C.w;
+	dir = da_ssr_cone_dir(dir, da_ssr_gloss.z * rough * rough, da_ssr_noise2(pixel, uint(da_ssr_frame.x)));
+	const float rise = dot(dir, n);
+	[flatten] if (rise < 0.02f)
+		dir = normalize(dir + n * (0.02f - rise));
+
+	const float3 origin = P + n * (0.02f + 0.001f * P.z);
+	const float3 seen = da_ssr_march(origin, dir, DA_SSR_REACH, float2(pixel));
+	[branch] if (seen.z <= 0.0f)
+		return o;
+
+	// The hit's colour where the previous frame showed it.
+	const float3 hit = da_ssr_view(seen.xy, da_ssr_z(seen.xy));
+	const float4 prev = mul(m_ssr_reproj, float4(hit, 1.0f));
+	[branch] if (prev.w <= 0.05f)
+		return o;
+	const float2 puv = prev.xy / prev.w * float2(0.5f, -0.5f) + 0.5f;
+	[branch] if (any(puv <= 0.0f) || any(puv >= 1.0f))
+		return o;
+	const float3 c = s_ssr_scene.SampleLevel(smp_rtlinear, puv, 0).rgb;
+	// The weight ramps in above the lowest gloss traced, so the threshold draws no edge.
+	const float alpha = seen.z * da_ssr_edge(puv) * saturate((C.w - da_ssr_gloss.x) / max(da_ssr_gloss.y - da_ssr_gloss.x, 1e-3f));
+	o.color = float4(c * alpha, alpha);
+	o.dist = length(hit - origin);
+	return o;
+}

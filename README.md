@@ -306,6 +306,8 @@ versions and compatibility pins are recorded in
   stock materials and of the sky's reflection.
 - [`LIT_PARTICLES.md`](docs/dead-air/LIT_PARTICLES.md) — smoke, dust and
   steam lit by the sun with its shadow, the sky and the local lights.
+- [`SSR.md`](docs/dead-air/SSR.md) — screen-space reflections of glossy
+  surfaces where ray tracing does not run.
 
 ## Credits
 

@@ -439,6 +439,17 @@ static class cl_da_spec : public R_constant_setup
     }
 } binder_da_spec;
 
+#if RENDER == R_R4
+// The screen-space glossy reflections are this frame's (r4_rendertarget_phase_ssr.cpp): combine_1 reads them.
+static class cl_da_ssr : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, RImplementation.Target && RImplementation.Target->ssr_ran() ? 1.f : 0.f, 0.f, 0.f, 0.f);
+    }
+} binder_da_ssr;
+#endif
+
 // Colour grade after the tonemap: saturation, the extra factor for greens, the olive pull and
 // the contrast. Consumed by da_grade() in common_functions.h; a zero constant is a no-op.
 static class cl_da_grade_params : public R_constant_setup
@@ -952,6 +963,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_spec", &binder_da_spec);
 #if RENDER == R_R4
     da_particle_light_register(*Resources);
+    Resources->RegisterConstantSetup("da_ssr", &binder_da_ssr);
 #endif
     Resources->RegisterConstantSetup("da_grade_params", &binder_da_grade_params);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);

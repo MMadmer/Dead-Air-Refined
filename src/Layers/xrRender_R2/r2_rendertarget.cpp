@@ -616,6 +616,8 @@ CRenderTarget::CRenderTarget()
         // The sunlit air (r4_rendertarget_phase_froxels.cpp).
         if (options.advancedpp)
             froxels_create();
+        // The glossy surfaces' reflections without ray tracing (r4_rendertarget_phase_ssr.cpp).
+        ssr_create();
 #endif
     }
 
@@ -1002,6 +1004,7 @@ CRenderTarget::~CRenderTarget()
 #if RENDER == R_R4
     da_async_targets_destroy(*this);
     froxels_destroy();
+    ssr_destroy();
     da_rt_targets_destroy(*this);
     da_vrs_targets_destroy(*this);
     for (auto& tex : cloud_readback)
