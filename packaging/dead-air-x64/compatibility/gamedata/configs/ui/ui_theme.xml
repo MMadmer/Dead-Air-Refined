@@ -46,6 +46,8 @@
     <color name="accent" value="#D4913AFF" follow="accent"/>
     <color name="accent_dim" value="#A46D2BFF" follow="accent"/>
     <color name="accent_soft" value="#D4913A2E" follow="accent"/>
+    <!-- what goes with the item in hand (its ammo, its weapon, its addons): a warmer cousin of the accent -->
+    <color name="related" value="#D9A441FF" follow="accent"/>
 
     <!-- the surfaces of buttons, tools, tabs, key caps, menus and hints -->
     <color name="button_fill" value="#221E19FF" follow="main"/>
@@ -195,7 +197,7 @@
     <style name="cell_item" fill="#FFFFFF0D" line="#FFFFFF1A" border="1" radius="2"/>
     <style name="cell_selected" fill="$accent#26" line="$accent" border="1" radius="2"/>
     <style name="cell_marked" fill="$good#1F" line="$good#99" border="1" radius="2"/>
-    <style name="cell_related" fill="$warn#1C" line="$warn#80" border="1" radius="2"/>
+    <style name="cell_related" fill="$related#1C" line="$related#80" border="1" radius="2"/>
     <style name="cell_blocked" fill="$bad#26" line="$bad#99" border="1" radius="2"/>
     <style name="cell_drop" fill="$accent#1F" line="$accent" border="1" radius="2"/>
     <style name="badge" fill="$inset#D9" line="$panel_edge#B3" border="1" radius="2"/>
