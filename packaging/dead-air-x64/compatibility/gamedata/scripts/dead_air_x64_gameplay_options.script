@@ -32,6 +32,10 @@ local function on_init(menu)
 	-- The community icons of the main menu and the pause menu (dar_community_links). Caption:
 	-- ui_mm_community_links.
 	menu.gameplay_options["community_links"] = {typ="check"}
+	-- The main and the accent colour of the game's windows: a window of its own (dar_ui_colors). Caption:
+	-- ui_mm_interface_colors.
+	menu.gameplay_options["interface_colors"] = {typ="button", button="st_da_colors_open",
+		on_click=function() get_console():execute("dar_ui_colors") end}
 	menu.gameplay_options["cursor_sens"] = {typ="list", list=CURSOR_SENS_STEPS}
 	local positions = {}
 	for i, id in ipairs(DIALOG_POSITIONS) do

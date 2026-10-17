@@ -27,6 +27,8 @@ public:
     void OnRender();
     void Draw_();
     void SetHintText(CUIWindow* w, LPCSTR text);
+    // the text for the owner, beside the cursor and within the screen
+    void ShowFor(CUIWindow* owner, pcstr text);
 
     pcstr GetDebugType() override { return "CUIButtonHint"; }
 };

@@ -1,0 +1,478 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The interface colours (CUIInterfaceColorsWnd), written by tools\ui\interface_colors_layout.py: the
+     window in the menus' palette, a picker after Unreal's, and the templates the game windows' colours are
+     previewed on (their styles and colours are ui_theme.xml's; <item section> is the item's own icon,
+     plate= the look of its cells, count= the number on it). -->
+<w>
+    <backdrop x="0" y="0" width="1024" height="768" shape="sys_shade"/>
+    <frame x="30" y="40" width="964" height="688" shape="sys_panel"/>
+    <title x="48" y="52" width="450" height="28"><text font="graffiti22" align="l" vert_align="c" color="$sys_text">st_da_colors_title</text></title>
+    <subtitle x="48" y="80" width="928" height="20"><text font="letterica16" align="l" vert_align="c" color="$sys_muted">st_da_colors_subtitle</text></subtitle>
+    <template_caption x="676" y="640" width="90" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_muted">st_da_colors_template</text></template_caption>
+    <template x="769" y="640" width="207" height="22" list_length="6"><list_font font="letterica16" color="$sys_text"/></template>
+    <preview x="43.5" y="114" width="619" height="596" shape="sys_inset"/>
+    <target_main x="676" y="120" width="147" height="30" shape="sys_button"><text font="letterica18" align="c" vert_align="c">st_da_colors_main</text></target_main>
+    <target_main_swatch x="682" y="128" width="10.5" height="14"/>
+    <target_accent x="829" y="120" width="147" height="30" shape="sys_button"><text font="letterica18" align="c" vert_align="c">st_da_colors_accent</text></target_accent>
+    <target_accent_swatch x="835" y="128" width="10.5" height="14"/>
+    <picker x="676" y="162" width="300" height="464">
+        <wheel x="0" y="0" width="135" height="180"/>
+        <saturation x="144" y="0" width="12" height="180"/>
+        <value x="162" y="0" width="12" height="180"/>
+        <old_caption x="184.5" y="0" width="115.5" height="16"><text font="letterica16" align="l" vert_align="c" color="$sys_muted">st_da_colors_old</text></old_caption>
+        <old x="184.5" y="18" width="115.5" height="36"/>
+        <new_caption x="184.5" y="62" width="115.5" height="16"><text font="letterica16" align="l" vert_align="c" color="$sys_muted">st_da_colors_new</text></new_caption>
+        <new x="184.5" y="80" width="115.5" height="36"/>
+        <row_r>
+            <caption x="0" y="198" width="16.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_r</text></caption>
+            <track x="21" y="204" width="207" height="10"/>
+            <field x="234" y="198" width="66" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </row_r>
+        <row_g>
+            <caption x="0" y="226" width="16.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_g</text></caption>
+            <track x="21" y="232" width="207" height="10"/>
+            <field x="234" y="226" width="66" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </row_g>
+        <row_b>
+            <caption x="0" y="254" width="16.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_b</text></caption>
+            <track x="21" y="260" width="207" height="10"/>
+            <field x="234" y="254" width="66" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </row_b>
+        <row_h>
+            <caption x="0" y="282" width="16.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_h</text></caption>
+            <track x="21" y="288" width="207" height="10"/>
+            <field x="234" y="282" width="66" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </row_h>
+        <row_s>
+            <caption x="0" y="310" width="16.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_s</text></caption>
+            <track x="21" y="316" width="207" height="10"/>
+            <field x="234" y="310" width="66" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </row_s>
+        <row_v>
+            <caption x="0" y="338" width="16.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_v</text></caption>
+            <track x="21" y="344" width="207" height="10"/>
+            <field x="234" y="338" width="66" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </row_v>
+        <hex_linear>
+            <caption x="0" y="374" width="75" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_hex_linear</text></caption>
+            <field x="78" y="374" width="222" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </hex_linear>
+        <hex_srgb>
+            <caption x="0" y="402" width="75" height="22"><text font="letterica16" align="l" vert_align="c" color="$sys_text">st_da_colors_hex_srgb</text></caption>
+            <field x="78" y="402" width="222" height="22" max_symb_count="10"><shape style="sys_field"/><text x="4" font="letterica16" align="l" vert_align="c" color="$sys_text"/></field>
+        </hex_srgb>
+    </picker>
+    <btn_reset x="676" y="672" width="96" height="32" shape="sys_button"><text font="letterica18" align="c" vert_align="c">st_da_colors_reset</text></btn_reset>
+    <btn_cancel x="778" y="672" width="96" height="32" shape="sys_button"><text font="letterica18" align="c" vert_align="c">st_da_colors_cancel</text></btn_cancel>
+    <btn_ok x="880" y="672" width="96" height="32" shape="sys_button_primary"><text font="letterica18" align="c" vert_align="c">st_da_colors_ok</text></btn_ok>
+    <templates x="48" y="120" width="610" height="584">
+        <template id="inventory" caption="st_da_colors_tpl_inventory" x="0" y="0" width="610" height="584">
+            <auto_static x="0" y="0" width="234" height="584" shape="panel"/>
+            <auto_static x="6" y="8" width="222" height="76" shape="card"/>
+            <auto_static x="13.5" y="14" width="154.5" height="20"><text font="letterica18" align="l" vert_align="c" color="$text">st_da_colors_tpl_stalker</text></auto_static>
+            <auto_static x="13.5" y="36" width="154.5" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_faction</text></auto_static>
+            <auto_static x="13.5" y="36" width="150" height="14"><text font="letterica16" align="r" vert_align="c" color="$text">st_da_colors_tpl_loners</text></auto_static>
+            <auto_static x="174" y="17" width="45" height="58" shape="portrait_frame"/>
+            <auto_static x="181.5" y="26" width="30" height="40"><shape kind="gasmask" fill="$text_muted"/></auto_static>
+            <auto_static x="13.5" y="62" width="154.5" height="20"><text font="graffiti22" align="r" vert_align="c" color="$text">st_da_colors_tpl_money</text></auto_static>
+            <auto_static x="6" y="92" width="16.5" height="22" shape="tool_button"/>
+            <auto_static x="8.97" y="95.96" width="10.56" height="14.08"><shape kind="sort" fill="$text_dim"/></auto_static>
+            <auto_static x="25.5" y="92" width="72" height="22" shape="tool_button"/>
+            <auto_static x="30" y="92" width="52.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$text">st_da_colors_tpl_by_type</text></auto_static>
+            <auto_static x="84" y="99" width="6.75" height="9"><shape kind="chevron" fill="$text" border="1.5"/></auto_static>
+            <auto_static x="102" y="92" width="16.5" height="22"><shape style="tab" fill="$accent_soft" line="$accent"/></auto_static>
+            <auto_static x="104.97" y="95.96" width="10.56" height="14.08"><shape kind="grid" fill="$accent"/></auto_static>
+            <auto_static x="121.5" y="92" width="16.5" height="22" shape="tool_button"/>
+            <auto_static x="124.47" y="95.96" width="10.56" height="14.08"><shape kind="pistol" fill="$text_dim"/></auto_static>
+            <auto_static x="141" y="92" width="16.5" height="22" shape="tool_button"/>
+            <auto_static x="143.97" y="95.96" width="10.56" height="14.08"><shape kind="helmet" fill="$text_dim"/></auto_static>
+            <auto_static x="160.5" y="92" width="16.5" height="22" shape="tool_button"/>
+            <auto_static x="163.47" y="95.96" width="10.56" height="14.08"><shape kind="cutlery" fill="$text_dim"/></auto_static>
+            <auto_static x="180" y="92" width="16.5" height="22" shape="tool_button"/>
+            <auto_static x="182.97" y="95.96" width="10.56" height="14.08"><shape kind="medkit" fill="$text_dim"/></auto_static>
+            <auto_static x="9.38" y="122" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="122" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="122" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="122" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="122" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="122" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="122" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="163" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="163" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="163" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="163" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="163" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="163" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="163" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="204" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="204" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="204" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="204" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="204" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="204" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="204" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="245" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="245" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="245" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="245" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="245" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="245" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="245" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="286" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="286" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="286" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="286" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="286" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="286" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="286" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="327" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="327" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="327" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="327" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="327" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="327" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="327" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="368" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="368" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="368" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="368" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="368" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="368" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="368" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="409" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="409" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="409" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="409" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="409" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="409" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="409" width="30.75" height="41" shape="cell"/>
+            <auto_static x="9.38" y="450" width="30.75" height="41" shape="cell"/>
+            <auto_static x="40.12" y="450" width="30.75" height="41" shape="cell"/>
+            <auto_static x="70.88" y="450" width="30.75" height="41" shape="cell"/>
+            <auto_static x="101.62" y="450" width="30.75" height="41" shape="cell"/>
+            <auto_static x="132.38" y="450" width="30.75" height="41" shape="cell"/>
+            <auto_static x="163.12" y="450" width="30.75" height="41" shape="cell"/>
+            <auto_static x="193.88" y="450" width="30.75" height="41" shape="cell"/>
+            <item section="wpn_ak74" x="9.38" y="122" cell="41" plate="cell_selected"/>
+            <item section="ammo_5.45x39_fmj" x="9.38" y="204" cell="41" plate="cell_related" count="60"/>
+            <item section="detector_simple" x="70.88" y="204" cell="41" plate="cell_item"/>
+            <item section="grenade_f1" x="101.62" y="204" cell="41" plate="cell_blocked"/>
+            <item section="medkit" x="9.38" y="245" cell="41" plate="cell_item"/>
+            <item section="bandage" x="40.12" y="245" cell="41" plate="cell_item" count="x3"/>
+            <item section="bread" x="70.88" y="245" cell="41" plate="cell_item"/>
+            <item section="vodka" x="101.62" y="245" cell="41" plate="cell_marked"/>
+            <item section="antirad" x="132.38" y="245" cell="41" plate="cell_item"/>
+            <auto_static x="6" y="538" width="222" height="16"><text font="letterica16" align="r" vert_align="c" color="$text_dim">st_da_colors_tpl_weight</text></auto_static>
+            <auto_static x="9" y="562" width="216" height="4" shape="load_track"/>
+            <auto_static x="9" y="562" width="90.72" height="4"><shape style="load_fill" fill="$good"/></auto_static>
+            <auto_static x="181.8" y="558" width="1.12" height="12" shape="load_mark"/>
+            <auto_static x="240" y="0" width="370" height="584" shape="panel"/>
+            <auto_static x="246" y="8" width="115.33" height="44" shape="slot"/>
+            <auto_static x="367.33" y="8" width="115.33" height="44" shape="slot"/>
+            <auto_static x="414.5" y="16" width="21" height="28"><shape kind="trefoil" fill="$text#1F"/></auto_static>
+            <auto_static x="488.67" y="8" width="115.33" height="44" shape="slot"/>
+            <item section="detector_simple" x="491.67" y="10" cell="41" fit_w="109.33" fit_h="40"/>
+            <auto_static x="246" y="60" width="115.33" height="214" shape="slot"/>
+            <item section="wpn_toz34" x="250.5" y="66" cell="41" fit_w="106.33" fit_h="194" turn="1"/>
+            <auto_static x="367.33" y="60" width="115.33" height="140" shape="slot"/>
+            <item section="novice_outfit" x="371.83" y="66" cell="41" fit_w="106.33" fit_h="120"/>
+            <auto_static x="488.67" y="60" width="115.33" height="214" shape="slot_highlight"/>
+            <item section="wpn_ak74" x="493.17" y="66" cell="41" fit_w="106.33" fit_h="194" turn="1"/>
+            <auto_static x="246" y="266" width="115.33" height="3" shape="bar_thin_track"/>
+            <auto_static x="246" y="266" width="103.8" height="3"><shape style="bar_thin_fill" fill="$good"/></auto_static>
+            <auto_static x="367.33" y="192" width="115.33" height="3" shape="bar_thin_track"/>
+            <auto_static x="367.33" y="192" width="80.73" height="3"><shape style="bar_thin_fill" fill="$good"/></auto_static>
+            <auto_static x="488.67" y="266" width="115.33" height="3" shape="bar_thin_track"/>
+            <auto_static x="488.67" y="266" width="57.67" height="3"><shape style="bar_thin_fill" fill="$good"/></auto_static>
+            <auto_static x="246" y="284" width="86.12" height="50" shape="inset"/>
+            <item section="medkit" x="249" y="287" cell="41" fit_w="80.12" fit_h="44"/>
+            <auto_static x="249" y="318" width="22.5" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_f1</text></auto_static>
+            <auto_static x="336.62" y="284" width="86.12" height="50" shape="inset"/>
+            <item section="bandage" x="339.62" y="287" cell="41" fit_w="80.12" fit_h="44"/>
+            <auto_static x="339.62" y="318" width="22.5" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_f2</text></auto_static>
+            <auto_static x="427.25" y="284" width="86.12" height="50" shape="inset"/>
+            <item section="antirad" x="430.25" y="287" cell="41" fit_w="80.12" fit_h="44"/>
+            <auto_static x="430.25" y="318" width="22.5" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_f3</text></auto_static>
+            <auto_static x="517.88" y="284" width="86.12" height="50" shape="inset"/>
+            <item section="energy_drink" x="520.88" y="287" cell="41" fit_w="80.12" fit_h="44"/>
+            <auto_static x="520.88" y="318" width="22.5" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_f4</text></auto_static>
+            <auto_static x="246" y="344" width="358" height="188" shape="card"/>
+            <auto_static x="252" y="353" width="9.75" height="13"><shape kind="heart" fill="$health"/></auto_static>
+            <auto_static x="267" y="354" width="325" height="11" shape="bar_track"/>
+            <auto_static x="267" y="354" width="299" height="11"><shape style="bar_fill" fill="$health"/></auto_static>
+            <auto_static x="252" y="372" width="9.75" height="13"><shape kind="cutlery" fill="$satiety"/></auto_static>
+            <auto_static x="267" y="376" width="325" height="5" shape="bar_thin_track"/>
+            <auto_static x="267" y="376" width="227.5" height="5"><shape style="bar_thin_fill" fill="$satiety"/></auto_static>
+            <auto_static x="252" y="390" width="346" height="1" shape="rule"/>
+            <auto_static x="252" y="398" width="9.75" height="13"><shape kind="trefoil" fill="$text_dim"/></auto_static>
+            <auto_static x="267" y="401" width="325" height="7" shape="bar_track"/>
+            <auto_static x="267" y="401" width="195" height="7"><shape style="bar_fill" fill="$protection"/></auto_static>
+            <auto_static x="252" y="416" width="9.75" height="13"><shape kind="biohazard" fill="$text_dim"/></auto_static>
+            <auto_static x="267" y="419" width="325" height="7" shape="bar_track"/>
+            <auto_static x="267" y="419" width="243.75" height="7"><shape style="bar_fill" fill="$protection"/></auto_static>
+            <auto_static x="252" y="434" width="9.75" height="13"><shape kind="bolt" fill="$text_dim"/></auto_static>
+            <auto_static x="267" y="437" width="325" height="7" shape="bar_track"/>
+            <auto_static x="267" y="437" width="130" height="7"><shape style="bar_fill" fill="$protection"/></auto_static>
+            <auto_static x="252" y="452" width="9.75" height="13"><shape kind="flame" fill="$text_dim"/></auto_static>
+            <auto_static x="267" y="455" width="325" height="7" shape="bar_track"/>
+            <auto_static x="267" y="455" width="178.75" height="7"><shape style="bar_fill" fill="$protection"/></auto_static>
+            <auto_static x="246" y="542" width="358" height="34" shape="button"><text font="graffiti22" align="c" vert_align="c">st_da_colors_tpl_exit</text></auto_static>
+            <over>
+            <auto_static x="28.5" y="294" width="177" height="226" shape="tooltip"/>
+            <auto_static x="36" y="302" width="162" height="20"><text font="letterica18" align="l" vert_align="c" color="$text">st_da_colors_tpl_ak</text></auto_static>
+            <auto_static x="36" y="302" width="162" height="20"><text font="letterica16" align="r" vert_align="c" color="$text_dim">st_da_colors_tpl_ak_weight</text></auto_static>
+            <auto_static x="36" y="326" width="162" height="1" shape="tooltip_rule"/>
+            <auto_static x="36" y="332" width="162" height="48"><text font="letterica16" align="l" vert_align="c" color="$text_dim" complex_mode="1">st_da_colors_tpl_ak_text</text></auto_static>
+            <auto_static x="36" y="390" width="75" height="16"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_accuracy</text></auto_static>
+            <auto_static x="112.5" y="394" width="85.5" height="8" shape="tip_bar_track"/>
+            <auto_static x="112.5" y="394" width="68.4" height="8" shape="tip_bar_fill"/>
+            <auto_static x="36" y="412" width="75" height="16"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_handling</text></auto_static>
+            <auto_static x="112.5" y="416" width="85.5" height="8" shape="tip_bar_track"/>
+            <auto_static x="112.5" y="416" width="58.14" height="8" shape="tip_bar_fill"/>
+            <auto_static x="36" y="434" width="75" height="16"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_damage</text></auto_static>
+            <auto_static x="112.5" y="438" width="85.5" height="8" shape="tip_bar_track"/>
+            <auto_static x="112.5" y="438" width="47.88" height="8" shape="tip_bar_fill"/>
+            <auto_static x="36" y="456" width="75" height="16"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_rate</text></auto_static>
+            <auto_static x="112.5" y="460" width="85.5" height="8" shape="tip_bar_track"/>
+            <auto_static x="112.5" y="460" width="37.62" height="8" shape="tip_bar_fill"/>
+            <auto_static x="36" y="480" width="162" height="1" shape="tooltip_rule"/>
+            <auto_static x="36" y="488" width="162" height="22"><text font="graffiti22" align="r" vert_align="c" color="$text">st_da_colors_tpl_ak_price</text></auto_static>
+            </over>
+        </template>
+        <template id="trade" caption="st_da_colors_tpl_trade" x="0" y="0" width="610" height="584">
+            <auto_static x="0" y="0" width="302" height="584" shape="panel"/>
+            <auto_static x="6" y="8" width="290" height="76" shape="card"/>
+            <auto_static x="13.5" y="14" width="222.5" height="20"><text font="letterica18" align="l" vert_align="c" color="$text">st_da_colors_tpl_stalker</text></auto_static>
+            <auto_static x="13.5" y="36" width="222.5" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_faction</text></auto_static>
+            <auto_static x="13.5" y="36" width="218" height="14"><text font="letterica16" align="r" vert_align="c" color="$text">st_da_colors_tpl_loners</text></auto_static>
+            <auto_static x="242" y="17" width="45" height="58" shape="portrait_frame"/>
+            <auto_static x="249.5" y="26" width="30" height="40"><shape kind="gasmask" fill="$text_muted"/></auto_static>
+            <auto_static x="13.5" y="62" width="222.5" height="20"><text font="graffiti22" align="r" vert_align="c" color="$text">st_da_colors_tpl_money</text></auto_static>
+            <auto_static x="6" y="92" width="290" height="90" shape="inset"/>
+            <auto_static x="12.62" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="12.62" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="137" width="30.75" height="41" shape="cell"/>
+            <item section="ammo_9x18_fmj" x="12.62" y="96" cell="41" plate="cell_item" count="50"/>
+            <auto_static x="6" y="188" width="290" height="30" shape="inset"/>
+            <auto_static x="12" y="192" width="278" height="22"><text font="letterica18" align="r" vert_align="c" color="$text">st_da_colors_tpl_sum0</text></auto_static>
+            <auto_static x="12.62" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="12.62" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="12.62" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="12.62" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="12.62" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="12.62" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="12.62" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="43.37" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="74.12" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="104.87" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="135.62" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="166.38" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="197.12" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="227.88" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="258.62" y="472" width="30.75" height="41" shape="cell"/>
+            <item section="wpn_ak74" x="12.62" y="226" cell="41" plate="cell_item"/>
+            <item section="medkit" x="166.38" y="226" cell="41" plate="cell_selected"/>
+            <item section="kolbasa" x="12.62" y="308" cell="41" plate="cell_item"/>
+            <item section="conserva" x="43.37" y="308" cell="41" plate="cell_item"/>
+            <item section="bandage" x="74.12" y="308" cell="41" plate="cell_item" count="x5"/>
+            <auto_static x="308" y="0" width="302" height="584" shape="panel"/>
+            <auto_static x="314" y="8" width="290" height="76" shape="card"/>
+            <auto_static x="321.5" y="14" width="222.5" height="20"><text font="letterica18" align="l" vert_align="c" color="$text">st_da_colors_tpl_trader</text></auto_static>
+            <auto_static x="321.5" y="36" width="222.5" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_faction</text></auto_static>
+            <auto_static x="321.5" y="36" width="218" height="14"><text font="letterica16" align="r" vert_align="c" color="$text">st_da_colors_tpl_loners</text></auto_static>
+            <auto_static x="550" y="17" width="45" height="58" shape="portrait_frame"/>
+            <auto_static x="557.5" y="26" width="30" height="40"><shape kind="gasmask" fill="$text_muted"/></auto_static>
+            <auto_static x="321.5" y="62" width="222.5" height="20"><text font="graffiti22" align="r" vert_align="c" color="$text">st_da_colors_tpl_trader_money</text></auto_static>
+            <auto_static x="314" y="92" width="290" height="90" shape="inset"/>
+            <auto_static x="320.62" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="96" width="30.75" height="41" shape="cell"/>
+            <auto_static x="320.62" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="137" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="137" width="30.75" height="41" shape="cell"/>
+            <item section="wpn_pm" x="320.62" y="96" cell="41" plate="cell_item"/>
+            <auto_static x="314" y="188" width="290" height="30" shape="inset"/>
+            <auto_static x="320" y="192" width="278" height="22"><text font="letterica18" align="r" vert_align="c" color="$text">st_da_colors_tpl_sum1</text></auto_static>
+            <auto_static x="320.62" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="226" width="30.75" height="41" shape="cell"/>
+            <auto_static x="320.62" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="267" width="30.75" height="41" shape="cell"/>
+            <auto_static x="320.62" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="308" width="30.75" height="41" shape="cell"/>
+            <auto_static x="320.62" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="349" width="30.75" height="41" shape="cell"/>
+            <auto_static x="320.62" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="390" width="30.75" height="41" shape="cell"/>
+            <auto_static x="320.62" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="431" width="30.75" height="41" shape="cell"/>
+            <auto_static x="320.62" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="351.37" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="382.12" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="412.88" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="443.62" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="474.38" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="505.12" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="535.88" y="472" width="30.75" height="41" shape="cell"/>
+            <auto_static x="566.62" y="472" width="30.75" height="41" shape="cell"/>
+            <item section="wpn_mosin" x="320.62" y="226" cell="41" plate="cell_item"/>
+            <item section="stalker_outfit" x="320.62" y="308" cell="41" plate="cell_item"/>
+            <item section="ammo_12x70_buck" x="412.88" y="308" cell="41" plate="cell_related" count="20"/>
+            <item section="helm_respirator" x="474.38" y="226" cell="41" plate="cell_item"/>
+            <auto_static x="6" y="540" width="290" height="34" shape="button_primary"><text font="graffiti22" align="c" vert_align="c">st_da_colors_tpl_trade_button</text></auto_static>
+            <auto_static x="314" y="540" width="290" height="34" shape="button"><text font="graffiti22" align="c" vert_align="c">st_da_colors_tpl_exit</text></auto_static>
+            <over>
+            <auto_static x="67.5" y="267" width="112.5" height="96" shape="menu"/>
+            <auto_static x="76.5" y="271" width="97.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_sell</text></auto_static>
+            <auto_static x="70.5" y="293" width="106.5" height="22"><shape style="menu_row" fill="$accent"/></auto_static>
+            <auto_static x="76.5" y="293" width="97.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$text_dark">st_da_colors_tpl_describe</text></auto_static>
+            <auto_static x="76.5" y="315" width="97.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_attach</text></auto_static>
+            <auto_static x="76.5" y="337" width="97.5" height="22"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_drop</text></auto_static>
+            </over>
+        </template>
+        <template id="dialog" caption="st_da_colors_tpl_dialog" x="0" y="0" width="610" height="584">
+            <auto_static x="130.62" y="0" width="348.75" height="584" shape="talk_panel"/>
+            <auto_static x="137.37" y="10" width="335.25" height="76" shape="card"/>
+            <auto_static x="144.87" y="16" width="267.75" height="20"><text font="letterica18" align="l" vert_align="c" color="$text">st_da_colors_tpl_trader</text></auto_static>
+            <auto_static x="144.87" y="38" width="267.75" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_faction</text></auto_static>
+            <auto_static x="144.87" y="38" width="263.25" height="14"><text font="letterica16" align="r" vert_align="c" color="$text">st_da_colors_tpl_traders</text></auto_static>
+            <auto_static x="144.87" y="52" width="267.75" height="14"><text font="letterica16" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_relation</text></auto_static>
+            <auto_static x="144.87" y="52" width="263.25" height="14"><text font="letterica16" align="r" vert_align="c" color="$text">st_da_colors_tpl_neutral</text></auto_static>
+            <auto_static x="418.62" y="19" width="45" height="58" shape="portrait_frame"/>
+            <auto_static x="426.12" y="28" width="30" height="40"><shape kind="gasmask" fill="$text_muted"/></auto_static>
+            <auto_static x="137.37" y="94" width="335.25" height="280" shape="talk_inset"/>
+            <auto_static x="141.87" y="102" width="326.25" height="20"><text font="graffiti22" align="l" vert_align="c" color="$accent">st_da_colors_tpl_trader</text></auto_static>
+            <auto_static x="153.87" y="124" width="314.25" height="32"><text font="letterica18" align="l" vert_align="c" color="$text" complex_mode="1">st_da_colors_tpl_line1</text></auto_static>
+            <auto_static x="141.87" y="164" width="326.25" height="20"><text font="graffiti22" align="l" vert_align="c" color="$text_dim">st_da_colors_tpl_stalker</text></auto_static>
+            <auto_static x="153.87" y="186" width="314.25" height="32"><text font="letterica18" align="l" vert_align="c" color="$text_dim" complex_mode="1">st_da_colors_tpl_line2</text></auto_static>
+            <auto_static x="141.87" y="226" width="326.25" height="20"><text font="graffiti22" align="l" vert_align="c" color="$accent">st_da_colors_tpl_trader</text></auto_static>
+            <auto_static x="153.87" y="248" width="314.25" height="32"><text font="letterica18" align="l" vert_align="c" color="$text" complex_mode="1">st_da_colors_tpl_line3</text></auto_static>
+            <auto_static x="137.37" y="382" width="335.25" height="150" shape="talk_inset"/>
+            <auto_static x="141.87" y="390" width="10.5" height="22"><text font="letterica18" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_n1</text></auto_static>
+            <auto_static x="153.87" y="390" width="314.25" height="22"><text font="letterica18" align="l" vert_align="c" color="$text">st_da_colors_tpl_ask1</text></auto_static>
+            <auto_static x="141.87" y="414" width="10.5" height="22"><text font="letterica18" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_n2</text></auto_static>
+            <auto_static x="153.87" y="414" width="314.25" height="22"><text font="letterica18" align="l" vert_align="c" color="$accent">st_da_colors_tpl_ask2</text></auto_static>
+            <auto_static x="141.87" y="438" width="10.5" height="22"><text font="letterica18" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_n3</text></auto_static>
+            <auto_static x="153.87" y="438" width="314.25" height="22"><text font="letterica18" align="l" vert_align="c" color="$text">st_da_colors_tpl_ask3</text></auto_static>
+            <auto_static x="141.87" y="462" width="10.5" height="22"><text font="letterica18" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_n4</text></auto_static>
+            <auto_static x="153.87" y="462" width="314.25" height="22"><text font="letterica18" align="l" vert_align="c" color="$text_muted">st_da_colors_tpl_ask4</text></auto_static>
+            <auto_static x="237.5" y="540" width="135" height="34" shape="button_primary"><text font="graffiti22" align="c" vert_align="c">st_da_colors_tpl_trade_button</text></auto_static>
+        </template>
+    </templates>
+</w>

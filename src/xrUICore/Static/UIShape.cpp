@@ -21,7 +21,8 @@ constexpr std::pair<pcstr, Kind> kinds[] = {{"box", Kind::Box}, {"star", Kind::S
     {"burst", Kind::Burst}, {"heart", Kind::Heart}, {"drop", Kind::Drop}, {"runner", Kind::Runner},
     {"weight", Kind::Weight}, {"clock", Kind::Clock}, {"wrench", Kind::Wrench}, {"crosshair", Kind::Crosshair},
     {"hand", Kind::Hand}, {"gauge", Kind::Gauge}, {"shield", Kind::Shield}, {"cartridge", Kind::Cartridge},
-    {"moon", Kind::Moon}, {"upgrade", Kind::Upgrade}, {"pin", Kind::Pin}, {"keyboard", Kind::Keyboard}, {"scales", Kind::Scales}};
+    {"moon", Kind::Moon}, {"upgrade", Kind::Upgrade}, {"pin", Kind::Pin}, {"keyboard", Kind::Keyboard}, {"scales", Kind::Scales},
+    {"hue_wheel", Kind::HueWheel}, {"gradient", Kind::Gradient}, {"hue_bar", Kind::HueBar}};
 static_assert(std::size(kinds) == size_t(Kind::Count), "every kind has a name");
 
 Fvector4 shape_color(u32 argb)
@@ -121,6 +122,7 @@ struct STheme
 {
     xr_map<shared_str, SUIShapeSkin> skins;
     xr_map<shared_str, u32> colors;
+    xr_map<shared_str, u32> seeds; // the theme's own seeds
     bool loaded{};
 };
 
@@ -130,15 +132,99 @@ STheme& theme()
     return instance;
 }
 
+// the seeds the player chose (Options -> Game -> Interface), over the theme's own; they outlive a reload
+xr_map<shared_str, u32>& seed_overrides()
+{
+    static xr_map<shared_str, u32> overrides;
+    return overrides;
+}
+
+struct SHsv
+{
+    float h, s, v; // h in turns
+};
+
+SHsv to_hsv(u32 c)
+{
+    const float r = color_get_R(c) / 255.f, g = color_get_G(c) / 255.f, b = color_get_B(c) / 255.f;
+    const float mx = std::max({ r, g, b }), mn = std::min({ r, g, b }), d = mx - mn;
+    SHsv out{ 0.f, mx > 0.f ? d / mx : 0.f, mx };
+    if (d > 0.f)
+    {
+        const float h = mx == r ? (g - b) / d : (mx == g ? 2.f + (b - r) / d : 4.f + (r - g) / d);
+        out.h = h / 6.f - std::floor(h / 6.f);
+    }
+    return out;
+}
+
+u32 from_hsv(SHsv c, u32 alpha)
+{
+    const float h = (c.h - std::floor(c.h)) * 6.f;
+    const float f = h - std::floor(h);
+    const float p = c.v * (1.f - c.s), q = c.v * (1.f - c.s * f), t = c.v * (1.f - c.s * (1.f - f));
+    float r, g, b;
+    switch (int(h) % 6)
+    {
+    case 0: r = c.v, g = t, b = p; break;
+    case 1: r = q, g = c.v, b = p; break;
+    case 2: r = p, g = c.v, b = t; break;
+    case 3: r = p, g = q, b = c.v; break;
+    case 4: r = t, g = p, b = c.v; break;
+    default: r = c.v, g = p, b = q; break;
+    }
+    return color_rgba(iFloor(r * 255.f + .5f), iFloor(g * 255.f + .5f), iFloor(b * 255.f + .5f), alpha);
+}
+
+// A colour of the theme turned the way its seed was turned from the theme's own: the hue moves with it, the
+// saturation scales with it, and the value moves with it (a shade: surfaces) or stays (a tint: text over them).
+u32 follow(u32 value, u32 seed_default, u32 seed_now, bool tint)
+{
+    if ((seed_default & 0x00FFFFFF) == (seed_now & 0x00FFFFFF))
+        return value;
+    const SHsv d = to_hsv(value), s0 = to_hsv(seed_default), s1 = to_hsv(seed_now);
+    SHsv out;
+    out.h = d.h + s1.h - s0.h;
+    out.s = s0.s > 0.01f ? std::clamp(d.s * s1.s / s0.s, 0.f, 1.f) : std::clamp(d.s + s1.s, 0.f, 1.f);
+    out.v = tint ? d.v : std::clamp(d.v + s1.v - s0.v, 0.f, 1.f);
+    return from_hsv(out, color_get_A(value));
+}
+
+u32 effective_seed(const STheme& t, const shared_str& name)
+{
+    const auto& overrides = seed_overrides();
+    if (const auto it = overrides.find(name); it != overrides.end())
+        return it->second;
+    const auto it = t.seeds.find(name);
+    return it != t.seeds.end() ? it->second : 0xFFFFFFFF;
+}
+
 void load_theme_file(CUIXml& xml)
 {
     STheme& t = theme();
-    // Colours first: the styles of the same file name them.
+    // Seeds first, then colours - some follow a seed -, then the styles that name them.
+    for (size_t i = 0, count = xml.GetNodesNum(xml.GetRoot(), "seed"); i < count; ++i)
+    {
+        const shared_str name = xml.ReadAttrib("seed", i, "name", "");
+        if (name.size())
+            t.seeds[name] = UIShape::ParseColor(xml.ReadAttrib("seed", i, "value", nullptr), 0xFFFFFFFF);
+    }
     for (size_t i = 0, count = xml.GetNodesNum(xml.GetRoot(), "color"); i < count; ++i)
     {
         const shared_str name = xml.ReadAttrib("color", i, "name", "");
-        if (name.size())
-            t.colors[name] = UIShape::ParseColor(xml.ReadAttrib("color", i, "value", nullptr), 0xFFFFFFFF);
+        if (!name.size())
+            continue;
+        u32 value = UIShape::ParseColor(xml.ReadAttrib("color", i, "value", nullptr), 0xFFFFFFFF);
+        if (cpcstr seed = xml.ReadAttrib("color", i, "follow", nullptr))
+        {
+            if (const auto it = t.seeds.find(seed); it != t.seeds.end())
+            {
+                const bool tint = !xr_strcmp(xml.ReadAttrib("color", i, "mode", "shade"), "tint");
+                value = follow(value, it->second, effective_seed(t, seed), tint);
+            }
+            else
+                Msg("! [ui] theme colour [%s] in [%s] follows an unknown seed [%s]", name.c_str(), xml.m_xml_file_name, seed);
+        }
+        t.colors[name] = value;
     }
     for (size_t i = 0, count = xml.GetNodesNum(xml.GetRoot(), "style"); i < count; ++i)
     {
@@ -164,6 +250,7 @@ void load_theme()
     t.loaded = true;
     t.skins.clear();
     t.colors.clear();
+    t.seeds.clear();
 
     CUIXml xml;
     if (xml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "ui_theme.xml", false))
@@ -216,6 +303,45 @@ bool UITheme::Color(pcstr name, u32& color)
 
 void UITheme::Reset() { theme().loaded = false; }
 
+bool UITheme::DefaultSeed(pcstr name, u32& color)
+{
+    STheme& t = loaded_theme();
+    const auto it = name ? t.seeds.find(name) : t.seeds.end();
+    if (it == t.seeds.end())
+        return false;
+    color = it->second;
+    return true;
+}
+
+bool UITheme::Seed(pcstr name, u32& color)
+{
+    if (!DefaultSeed(name, color))
+        return false;
+    if (const auto it = seed_overrides().find(name); it != seed_overrides().end())
+        color = it->second;
+    return true;
+}
+
+bool UITheme::SeedChosen(pcstr name) { return name && seed_overrides().count(name); }
+
+void UITheme::SetSeed(pcstr name, u32 color)
+{
+    if (!name || !name[0])
+        return;
+    color |= 0xFF000000;
+    auto& overrides = seed_overrides();
+    if (const auto it = overrides.find(name); it != overrides.end() && it->second == color)
+        return;
+    overrides[name] = color;
+    Reset();
+}
+
+void UITheme::ResetSeed(pcstr name)
+{
+    if (name && seed_overrides().erase(name))
+        Reset();
+}
+
 // =================================================================================================
 
 bool UIShape::FindKind(pcstr text, SUIShapeStyle::Kind& kind)
@@ -247,9 +373,21 @@ u32 UIShape::ParseColor(pcstr text, u32 fallback)
         return fallback;
     if (text[0] == '$')
     {
+        // "$name", or "$name#aa": the colour with an alpha of its own
+        string64 name;
+        xr_strcpy(name, text + 1);
+        int alpha = -1;
+        if (char* hash = strchr(name, '#'))
+        {
+            *hash = 0;
+            char* end = nullptr;
+            const unsigned long a = strtoul(hash + 1, &end, 16);
+            if (xr_strlen(hash + 1) == 2 && end && !*end)
+                alpha = int(a);
+        }
         u32 color;
-        if (UITheme::Color(text + 1, color))
-            return color;
+        if (UITheme::Color(name, color))
+            return alpha < 0 ? color : subst_alpha(color, u32(alpha));
         Msg("! [ui] unknown theme colour [%s]", text);
         return fallback;
     }
@@ -371,6 +509,8 @@ void set_params(const SScreenShape& s, const SUIShapeStyle& style)
     Fvector4 mode;
     if (style.kind == Kind::Box)
         mode.set(0.f, style.segment > 0.f ? style.segment * unit : 0.f, s.soft, style.gap * unit);
+    else if (style.Paint())
+        mode.set(100.f + float(u8(style.kind) - u8(Kind::HueWheel)), style.fraction, s.soft, 0.f); // xms_ui_shape.ps paints
     else if (style.kind == Kind::GasMask)
         mode.set(float(style.kind), float(style.badge), s.soft, style.badgeScale);
     else

@@ -2552,6 +2552,10 @@ target_sources(xrGame PRIVATE
     "${CMAKE_SOURCE_DIR}/Externals/GameSpy/src/GameSpy/md5c.c"
     ui/BugReportService.cpp
     ui/BugReportService.h
+    ui/UIColorPicker.cpp
+    ui/UIColorPicker.h
+    ui/UIInterfaceColorsWnd.cpp
+    ui/UIInterfaceColorsWnd.h
     ui/CommunityHtmlCanvas.cpp
     ui/CommunityHtmlCanvas.h
     ui/ContentService.cpp

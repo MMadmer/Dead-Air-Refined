@@ -11,6 +11,7 @@
 #include "ListWnd/UIListWnd.h"
 #include "ListBox/UIListBox.h"
 #include "ComboBox/UIComboBox.h"
+#include "EditBox/UIEditBox.h"
 #include "TrackBar/UITrackBar.h"
 #include "Static/UIShape.h"
 
@@ -1379,16 +1380,27 @@ bool CUIXmlInitBase::InitComboBox(CUIXml& xml_doc, pcstr path, int index, CUICom
     pWnd->InitComboBox(pWnd->GetWndPos(), pWnd->GetWidth());
     InitOptionsItem(xml_doc, path, index, pWnd);
 
-    const bool b = (1 == xml_doc.ReadAttribInt(path, index, "always_show_scroll", 1));
-
-    pWnd->m_list_box.SetFixedScrollBar(b);
-
     string512 _path;
     strconcat(_path, path, ":list_font");
-    InitFont(xml_doc, _path, index, color, pFont);
-    //.	pWnd->SetFont				(pFont);
-    pWnd->m_list_box.SetFont(pFont);
-    pWnd->m_list_box.SetTextColor(color);
+    if (xml_doc.NavigateToNode(_path, index))
+    {
+        InitFont(xml_doc, _path, index, color, pFont);
+        pWnd->SetFont(pFont);
+        pWnd->SetTextColor(color);
+    }
+
+    // The looks a layout names over the theme's: shape= on the node, <list>, <row>, <arrow>.
+    if (auto field = UIShape::ReadSkin(xml_doc, path, index))
+        pWnd->m_fieldLook = *field;
+    strconcat(_path, path, ":list");
+    if (auto list = UIShape::ReadSkin(xml_doc, _path, index))
+        pWnd->m_listLook = list->looks[SUIShapeSkin::Normal];
+    strconcat(_path, path, ":row");
+    if (auto row = UIShape::ReadSkin(xml_doc, _path, index))
+        pWnd->m_rowLook = *row;
+    strconcat(_path, path, ":arrow");
+    if (auto arrow = UIShape::ReadSkin(xml_doc, _path, index))
+        pWnd->m_arrowLook = arrow->looks[SUIShapeSkin::Normal];
 
     strconcat(_path, path, ":text_color:e");
     if (xml_doc.NavigateToNode(_path, index))

@@ -1,6 +1,7 @@
 #include "pch.hpp"
 
 #include "UICursor.h"
+#include "ComboBox/UIComboBox.h"
 
 #include "Static/UIStatic.h"
 #include "Buttons/UIBtnHint.h"
@@ -75,8 +76,13 @@ void CUICursor::OnRender()
     if (!m_in_rt_pass && m_rt_frame == Device.dwFrame)
         return; // this frame's cursor+hints already live on the PDA screen texture
 
-    g_btnHint->OnRender();
-    g_statHint->OnRender();
+    // An open drop-down's list over every window; the hints of what lies under it wait while it is open.
+    CUIComboBox::DrawOpenList();
+    if (!CUIComboBox::AnyOpen())
+    {
+        g_btnHint->OnRender();
+        g_statHint->OnRender();
+    }
 
     if (!IsVisible())
         return;

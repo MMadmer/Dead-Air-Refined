@@ -10,6 +10,7 @@
 #include "UIActorStateInfo.h"
 #include "Actor.h"
 #include "UIGameSP.h"
+#include "xrUICore/ComboBox/UIComboBox.h"
 #include "Inventory.h"
 #include "inventory_item.h"
 #include "InventoryBox.h"
@@ -428,13 +429,6 @@ bool CUIActorMenu::OnMouseAction(float x, float y, EUIMessages mouse_action)
         return true;
     }
 
-    // a click anywhere but on an open drop-down of orders closes it
-    if (mouse_action == WINDOW_LBUTTON_DOWN || mouse_action == WINDOW_RBUTTON_DOWN || mouse_action == WINDOW_CBUTTON_DOWN)
-    {
-        for (CUIInventoryToolbar* toolbar : m_inventory_tools)
-            toolbar->OnMouseDown(GetUICursor().GetCursorPosition());
-    }
-
     // A click or a turn of the wheel with the modifiers of a hotkey is the hotkey's.
     // A wheel has no release to swallow.
     constexpr std::tuple<EUIMessages, EHotkeyTrigger, EUIMessages, bool> triggers[] = {
@@ -471,6 +465,16 @@ bool CUIActorMenu::OnKeyboardAction(int dik, EUIMessages keyboard_action)
             return true;
         }
         m_compare_wnd->OnKeyboardAction(dik, keyboard_action);
+        return true;
+    }
+
+    // An open drop-down of orders takes every key; a way out closes it alone.
+    if (CUIComboBox::AnyOpen())
+    {
+        if (WINDOW_KEY_PRESSED == keyboard_action && (IsBinded(kQUIT, dik) || IsBinded(kUI_BACK, dik, EKeyContext::UI)))
+            CloseSortModes();
+        else
+            inherited::OnKeyboardAction(dik, keyboard_action);
         return true;
     }
 

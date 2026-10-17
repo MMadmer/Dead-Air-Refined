@@ -19,8 +19,8 @@
      <node glyph="...">  - a pictogram the shader draws (ui_theme.xml lists them), or the name of a
                            white mask texture the way glyphs were made before
      sort_mode           - the drop-down of orders beside the sort button: its width, its caption, the
-                           list it opens (list), its rows (row, row_height) and the space round them
-                           (padding); without this node the row has the sort button alone
+                           list it opens (list) and its rows (row); without this node the row has the
+                           sort button alone
      hint*               - string ids; the sort button has one per pane
      glyph_color_disabled - the glyph of a button that cannot be pressed now
      <action>            - a button at the right end of the row, the last node rightmost: action is
@@ -40,7 +40,7 @@
 		<sort glyph="sort" hint_actor="st_da_inv_sort_actor" hint_loot="st_da_inv_sort_loot"
 			hint_trader="st_da_inv_sort_trader"/>
 
-		<sort_mode width="92" row_height="20" padding="3" hint="st_da_inv_order_hint" shape="tool_button">
+		<sort_mode width="112" hint="st_da_inv_order_hint" shape="tool_button">
 			<text font="letterica16" align="l" vert_align="c" x="6" color="$text"/>
 			<list shape="menu"/>
 			<row shape="menu_row">

@@ -191,29 +191,7 @@ void CUIButton::Update()
 
     if (CursorOverWindow() && m_hint_text.size() && g_btnHint->Vacant() &&
         Device.dwTimeContinual > m_dwFocusReceiveTime + 700)
-    {
-        g_btnHint->SetHintText(this, m_hint_text.c_str());
-
-        Fvector2 c_pos = GetUICursor().GetCursorPosition();
-        Frect vis_rect;
-        vis_rect.set(0, 0, UI_BASE_WIDTH, UI_BASE_HEIGHT);
-
-        // select appropriate position
-        Frect r;
-        r.set(0.0f, 0.0f, g_btnHint->GetWidth(), g_btnHint->GetHeight());
-        r.add(c_pos.x, c_pos.y);
-
-        r.sub(0.0f, r.height());
-        if (false == is_in2(vis_rect, r))
-            r.sub(r.width(), 0.0f);
-        if (false == is_in2(vis_rect, r))
-            r.add(0.0f, r.height());
-
-        if (false == is_in2(vis_rect, r))
-            r.add(r.width(), 45.0f);
-
-        g_btnHint->SetWndPos(r.lt);
-    }
+        g_btnHint->ShowFor(this, m_hint_text.c_str());
     ApplySkinTextColor(true);
 }
 

@@ -172,6 +172,15 @@ function options_dialog:BuildGameplayList()
 				if (option.default ~= nil) then -- obviously dynamic axr option
 					self:Register(ctrl, "ck_" .. key)
 				end
+			elseif (option.typ == "button") then
+				-- a row that opens a window of its own: option.on_click, its caption option.button
+				ctrl = xml:Init3tButton(option.tag or "tab_gameplay:btn_axr", row)
+				ctrl:TextControl():SetText(game.translate_string(option.button or ""))
+				if (option.on_click) then
+					self:Register(ctrl, "btn_" .. key)
+					local on_click = option.on_click
+					self:AddCallback("btn_" .. key, ui_events.BUTTON_CLICKED, function() on_click() end, self)
+				end
 			elseif (option.typ == "list") then
 				ctrl = xml:InitComboBox(option.tag or "tab_gameplay:list_axr", row)
 				if (option.list) then

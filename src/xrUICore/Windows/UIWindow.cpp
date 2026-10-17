@@ -181,6 +181,8 @@ void CUIWindow::DetachChild(CUIWindow* pChild)
 
     if (m_pMouseCapturer == pChild)
         SetCapture(pChild, false);
+    if (m_pKeyboardCapturer == pChild)
+        SetKeyboardCapture(pChild, false);
 
     //.	SafeRemoveChild			(pChild);
     auto it = std::find(m_ChildWndList.begin(), m_ChildWndList.end(), pChild);

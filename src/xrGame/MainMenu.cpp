@@ -54,6 +54,8 @@
 #include "xrEngine/da_media.h"
 #include "ui/RemoteConfig.h"
 #include "ui/UICommunityPanel.h"
+#include "ui/UIInterfaceColorsWnd.h"
+#include "xrUICore/ComboBox/UIComboBox.h"
 
 // fwd. decl.
 extern ENGINE_API bool bShowPauseString;
@@ -169,6 +171,7 @@ CMainMenu::~CMainMenu()
 
     xr_delete(m_startDialog);
     xr_delete(m_bugReportDialog);
+    xr_delete(m_colorsDialog);
     xr_delete(m_updateDialog);
     xr_delete(m_majorUpdateDialog);
     xr_delete(m_contentDialog);
@@ -270,6 +273,10 @@ void CMainMenu::Activate(bool bActivate)
         if (show)
             Console->Show();
 
+        // the menu's windows stay "shown" when it goes: an open list and the colours tried go with it
+        CUIComboBox::CloseOpenList();
+        if (m_colorsDialog && m_colorsDialog->IsShown())
+            m_colorsDialog->HideDialog();
         if (m_startDialog->IsShown())
             m_startDialog->HideDialog();
 
@@ -857,6 +864,22 @@ void CMainMenu::ShowBugReportDialog()
 {
     if (EnsureBugReportDialog())
         m_bugReportDialog->ShowManual();
+}
+
+void CMainMenu::ShowInterfaceColorsDialog()
+{
+    if (!m_colorsDialog)
+    {
+        m_colorsDialog = xr_new<CUIInterfaceColorsWnd>();
+        if (!m_colorsDialog->Init())
+        {
+            xr_delete(m_colorsDialog);
+            Msg("! Failed to initialize the interface colours window");
+            return;
+        }
+    }
+    if (!m_colorsDialog->IsShown())
+        m_colorsDialog->ShowDialog(true);
 }
 
 void CMainMenu::RequestModsDialog() { s_modsDialogRequested = true; }

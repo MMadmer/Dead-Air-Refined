@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<!-- The interface colours: written by tools\ui\interface_colors_strings.py. -->
+<string_table>
+	<string id="ui_mm_interface_colors">
+		<text>Цвета интерфейса</text>
+	</string>
+	<string id="ui_mm_interface_colors_hint">
+		<text>Основной и акцентный цвета окон игры: инвентаря, торговли, обыска, диалога и подсказок. Меню сохраняют свои.</text>
+	</string>
+	<string id="st_da_colors_open">
+		<text>Настроить</text>
+	</string>
+	<string id="st_da_colors_title">
+		<text>Цвета интерфейса</text>
+	</string>
+	<string id="st_da_colors_subtitle">
+		<text>Цвета окон игры: инвентаря, торговли, обыска, диалога и подсказок. Меню сохраняют свои.</text>
+	</string>
+	<string id="st_da_colors_template">
+		<text>Шаблон</text>
+	</string>
+	<string id="st_da_colors_main">
+		<text>Основной</text>
+	</string>
+	<string id="st_da_colors_accent">
+		<text>Акцентный</text>
+	</string>
+	<string id="st_da_colors_old">
+		<text>Старый</text>
+	</string>
+	<string id="st_da_colors_new">
+		<text>Новый</text>
+	</string>
+	<string id="st_da_colors_r">
+		<text>R</text>
+	</string>
+	<string id="st_da_colors_g">
+		<text>G</text>
+	</string>
+	<string id="st_da_colors_b">
+		<text>B</text>
+	</string>
+	<string id="st_da_colors_h">
+		<text>H</text>
+	</string>
+	<string id="st_da_colors_s">
+		<text>S</text>
+	</string>
+	<string id="st_da_colors_v">
+		<text>V</text>
+	</string>
+	<string id="st_da_colors_hex_linear">
+		<text>Hex Linear</text>
+	</string>
+	<string id="st_da_colors_hex_srgb">
+		<text>Hex sRGB</text>
+	</string>
+	<string id="st_da_colors_reset">
+		<text>По умолчанию</text>
+	</string>
+	<string id="st_da_colors_cancel">
+		<text>Отмена</text>
+	</string>
+	<string id="st_da_colors_ok">
+		<text>Применить</text>
+	</string>
+	<string id="st_da_colors_tpl_inventory">
+		<text>Инвентарь</text>
+	</string>
+	<string id="st_da_colors_tpl_trade">
+		<text>Торговля</text>
+	</string>
+	<string id="st_da_colors_tpl_dialog">
+		<text>Диалог</text>
+	</string>
+	<string id="st_da_colors_tpl_stalker">
+		<text>Сталкер</text>
+	</string>
+	<string id="st_da_colors_tpl_trader">
+		<text>Сидорович</text>
+	</string>
+	<string id="st_da_colors_tpl_faction">
+		<text>Группировка</text>
+	</string>
+	<string id="st_da_colors_tpl_loners">
+		<text>Одиночки</text>
+	</string>
+	<string id="st_da_colors_tpl_traders">
+		<text>Торговцы</text>
+	</string>
+	<string id="st_da_colors_tpl_relation">
+		<text>Отношение</text>
+	</string>
+	<string id="st_da_colors_tpl_neutral">
+		<text>нейтральное</text>
+	</string>
+	<string id="st_da_colors_tpl_money">
+		<text>15000 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_trader_money">
+		<text>48500 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_by_type">
+		<text>По типу</text>
+	</string>
+	<string id="st_da_colors_tpl_weight">
+		<text>Вес: 23.4 кг (макс. 75 кг)</text>
+	</string>
+	<string id="st_da_colors_tpl_f1">
+		<text>F1</text>
+	</string>
+	<string id="st_da_colors_tpl_f2">
+		<text>F2</text>
+	</string>
+	<string id="st_da_colors_tpl_f3">
+		<text>F3</text>
+	</string>
+	<string id="st_da_colors_tpl_f4">
+		<text>F4</text>
+	</string>
+	<string id="st_da_colors_tpl_exit">
+		<text>Выход</text>
+	</string>
+	<string id="st_da_colors_tpl_ak">
+		<text>АК-74</text>
+	</string>
+	<string id="st_da_colors_tpl_ak_weight">
+		<text>3.60 кг</text>
+	</string>
+	<string id="st_da_colors_tpl_ak_text">
+		<text>Надёжный автомат под патрон 5,45x39. Прощает грязь и небрежный уход.</text>
+	</string>
+	<string id="st_da_colors_tpl_accuracy">
+		<text>Точность</text>
+	</string>
+	<string id="st_da_colors_tpl_handling">
+		<text>Удобство</text>
+	</string>
+	<string id="st_da_colors_tpl_damage">
+		<text>Урон</text>
+	</string>
+	<string id="st_da_colors_tpl_rate">
+		<text>Темп огня</text>
+	</string>
+	<string id="st_da_colors_tpl_ak_price">
+		<text>6250 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_sum0">
+		<text>Продажа: 1200 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_sum1">
+		<text>Покупка: 3400 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_trade_button">
+		<text>Обменять</text>
+	</string>
+	<string id="st_da_colors_tpl_sell">
+		<text>Продать</text>
+	</string>
+	<string id="st_da_colors_tpl_describe">
+		<text>Описание</text>
+	</string>
+	<string id="st_da_colors_tpl_attach">
+		<text>Присоединить</text>
+	</string>
+	<string id="st_da_colors_tpl_drop">
+		<text>Выбросить</text>
+	</string>
+	<string id="st_da_colors_tpl_line1">
+		<text>Ну, здравствуй, сталкер. С чем пожаловал?</text>
+	</string>
+	<string id="st_da_colors_tpl_line2">
+		<text>Есть товар. Посмотришь?</text>
+	</string>
+	<string id="st_da_colors_tpl_line3">
+		<text>Показывай, сговоримся.</text>
+	</string>
+	<string id="st_da_colors_tpl_ask1">
+		<text>Что нового в Зоне?</text>
+	</string>
+	<string id="st_da_colors_tpl_ask2">
+		<text>Давай поторгуем.</text>
+	</string>
+	<string id="st_da_colors_tpl_ask3">
+		<text>Есть для меня работа?</text>
+	</string>
+	<string id="st_da_colors_tpl_ask4">
+		<text>Мне пора.</text>
+	</string>
+	<string id="st_da_colors_tpl_n1">
+		<text>1.</text>
+	</string>
+	<string id="st_da_colors_tpl_n2">
+		<text>2.</text>
+	</string>
+	<string id="st_da_colors_tpl_n3">
+		<text>3.</text>
+	</string>
+	<string id="st_da_colors_tpl_n4">
+		<text>4.</text>
+	</string>
+</string_table>

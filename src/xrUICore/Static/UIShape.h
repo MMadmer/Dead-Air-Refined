@@ -54,6 +54,15 @@ XRUICORE_API const SUIShapeSkin* Skin(pcstr name);
 XRUICORE_API bool Color(pcstr name, u32& color);
 // read again on the next use: the UI is being rebuilt
 XRUICORE_API void Reset();
+
+// The seeds of the palette (<seed> of ui_theme.xml): the colours a <color follow="seed"> turns with. The
+// player may choose others (Options -> Game -> Interface); a chosen seed holds until it is reset, and the
+// theme is read again with it.
+XRUICORE_API bool DefaultSeed(pcstr name, u32& color);
+XRUICORE_API bool Seed(pcstr name, u32& color);
+XRUICORE_API bool SeedChosen(pcstr name);
+XRUICORE_API void SetSeed(pcstr name, u32 color);
+XRUICORE_API void ResetSeed(pcstr name);
 } // namespace UITheme
 
 // A shape as a window: a panel, a separator, a shadow, a badge, an icon.

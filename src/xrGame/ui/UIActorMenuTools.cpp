@@ -11,6 +11,7 @@
 #include "xrUICore/XML/xrUIXmlParser.h"
 #include "xrUICore/ui_base.h"
 #include "xrUICore/Static/UIShape.h"
+#include "xrUICore/ComboBox/UIComboBox.h"
 
 #include "UIActorMenu.h"
 #include "UICellItem.h"
@@ -616,59 +617,39 @@ bool CUIInventoryToolbar::Init(CUIXml& xml)
     return true;
 }
 
-void CUIInventoryToolbar::InitSortModes(CUIXml& xml, const Fvector2& size, float fit)
+void CUIInventoryToolbar::InitSortModes(CUIXml& xml, const Fvector2& size, float /*fit*/)
 {
     constexpr pcstr node = "inventory_tools:sort_mode";
 
-    m_mode = xr_new<CUI3tButton>();
+    m_mode = xr_new<CUIComboBox>();
     m_mode->SetAutoDelete(true);
     AttachChild(m_mode);
-    m_mode->InitButton({}, size);
-    if (auto skin = UIShape::ReadSkin(xml, node, 0))
-        m_mode->SetShapeSkin(std::move(skin));
-    else if (auto button = UIShape::ReadSkin(xml, "inventory_tools:button", 0))
-        m_mode->SetShapeSkin(std::move(button));
-    else
-        m_mode->InitTexture(xml.Read("inventory_tools:button_texture", 0, "ui_inGame2_inventory_button"), false);
+    m_mode->SetWndSize(size);
+    m_mode->SetListLength(int(EInventorySort::Count));
+    m_mode->InitComboBox({}, size.x);
+
+    // the caption's font and colour, the field's look and its list's and rows' (ui_theme.xml)
     string256 path;
-    CUIXmlInit::InitText(xml, strconcat(path, node, ":text"), 0, m_mode->TextItemControl());
-    m_mode->m_hint_text = xml.ReadAttrib(node, 0, "hint", "");
+    CUIStatic caption{ "caption" };
+    CUIXmlInit::InitText(xml, strconcat(path, node, ":text"), 0, caption.TextItemControl());
+    m_mode->SetFont(caption.TextItemControl()->GetFont());
+    m_mode->SetTextColor(caption.TextItemControl()->GetTextColor());
+    const auto field = UIShape::ReadSkin(xml, node, 0);
+    const auto list = UIShape::ReadSkin(xml, strconcat(path, node, ":list"), 0);
+    const auto row = UIShape::ReadSkin(xml, strconcat(path, node, ":row"), 0);
+    const SUIShapeSkin* button = field ? field.get() : UITheme::Skin("tool_button");
+    const SUIShapeSkin* menu = list ? list.get() : UITheme::Skin("menu");
+    const SUIShapeSkin* rows = row ? row.get() : UITheme::Skin("menu_row");
+    SUIShapeStyle arrow;
+    arrow.kind = SUIShapeStyle::Kind::Chevron;
+    arrow.border = 1.5f;
+    if (button && menu && rows)
+        m_mode->SetLooks(*button, menu->looks[SUIShapeSkin::Normal], *rows, arrow);
 
-    // The caret at the right end, in the caption's colour.
-    const float caret = size.y * 0.42f;
-    m_mode_chevron = xr_new<CUIStatic>("caret");
-    m_mode_chevron->SetAutoDelete(true);
-    m_mode->AttachChild(m_mode_chevron);
-    m_mode_chevron->SetWndPos({ size.x - (caret + size.y * 0.3f) * UI().get_current_kx(), (size.y - caret) * 0.5f });
-    m_mode_chevron->SetWndSize({ caret * UI().get_current_kx(), caret });
-    auto chevron = std::make_unique<SUIShapeSkin>();
-    chevron->looks[SUIShapeSkin::Normal].kind = SUIShapeStyle::Kind::Chevron;
-    chevron->looks[SUIShapeSkin::Normal].fill = 0xFFFFFFFF;
-    chevron->looks[SUIShapeSkin::Normal].border = 1.5f;
-    m_mode_chevron->SetShapeSkin(std::move(chevron));
-    m_mode_chevron->Enable(false);
+    m_mode->SetHint(xml.ReadAttrib(node, 0, "hint", ""));
 
-    // The list: a window of the menu's own (CUIActorMenu::InitInventoryTools attaches it last).
-    const float row_height = xml.ReadAttribFlt(node, 0, "row_height", 20.0f) * fit;
-    const float padding = xml.ReadAttribFlt(node, 0, "padding", 3.0f) * fit;
-    m_mode_list = xr_new<CUIWindow>("sort_modes");
-    m_mode_list->SetAutoDelete(true);
-    m_mode_list->SetWndSize({ size.x, row_height * u32(EInventorySort::Count) + padding * 2.0f });
-    m_mode_list->SetShapeSkin(UIShape::ReadSkin(xml, strconcat(path, node, ":list"), 0));
     for (u8 i = 0; i < u8(EInventorySort::Count); ++i)
-    {
-        auto* row = xr_new<CUI3tButton>();
-        row->SetAutoDelete(true);
-        m_mode_list->AttachChild(row);
-        row->InitButton({ padding * UI().get_current_kx(), padding + row_height * i },
-            { size.x - padding * 2.0f * UI().get_current_kx(), row_height });
-        row->SetShapeSkin(UIShape::ReadSkin(xml, strconcat(path, node, ":row"), 0));
-        CUIXmlInit::InitText(xml, strconcat(path, node, ":row:text"), 0, row->TextItemControl());
-        row->TextItemControl()->SetText(StringTable().translate(inventory_tools::sort_mode_caption(EInventorySort(i))).c_str());
-        row->SetButtonAsSwitch(true);
-        m_mode_rows[i] = row;
-    }
-    m_mode_list->Show(false);
+        m_mode->AddItem_(StringTable().translate(inventory_tools::sort_mode_caption(EInventorySort(i))).c_str(), i);
     SyncSortMode();
 }
 
@@ -681,10 +662,10 @@ void CUIInventoryToolbar::ShowSort(bool show)
     m_sort->Enable(show);
     if (m_mode)
     {
+        if (!show)
+            CloseSortModes();
         m_mode->Show(show);
         m_mode->Enable(show);
-        if (!show)
-            ShowSortModes(false);
     }
 
     // Flush with the grid's first column, whether the sort button is there or not.
@@ -706,19 +687,12 @@ void CUIInventoryToolbar::ShowSort(bool show)
     }
 }
 
-void CUIInventoryToolbar::ShowSortModes(bool show)
+bool CUIInventoryToolbar::SortModesShown() const { return m_mode && m_mode->IsOpen(); }
+
+void CUIInventoryToolbar::CloseSortModes()
 {
-    if (!m_mode_list)
-        return;
-    if (show)
-    {
-        // under the drop-down's button, in the menu's coordinates
-        const Fvector2 below{ GetWndPos().x + m_mode->GetWndPos().x, GetWndPos().y + m_mode->GetWndPos().y + m_mode->GetHeight() + 1.0f };
-        m_mode_list->SetWndPos(below);
-        SyncSortMode();
-    }
-    m_mode_list->Show(show);
-    m_mode->SetButtonState(show ? CUIButton::BUTTON_PUSHED : CUIButton::BUTTON_NORMAL);
+    if (SortModesShown())
+        CUIComboBox::CloseOpenList();
 }
 
 void CUIInventoryToolbar::SyncSortMode()
@@ -727,24 +701,8 @@ void CUIInventoryToolbar::SyncSortMode()
         return;
     const EInventorySort mode = inventory_tools::sort_mode();
     m_synced_mode = mode;
-    m_mode->TextItemControl()->SetText(StringTable().translate(inventory_tools::sort_mode_caption(mode)).c_str());
-    for (u8 i = 0; i < u8(EInventorySort::Count); ++i)
-    {
-        if (m_mode_rows[i] && !m_mode_rows[i]->CursorOverWindow())
-            m_mode_rows[i]->SetButtonState(i == u8(mode) ? CUIButton::BUTTON_PUSHED : CUIButton::BUTTON_NORMAL);
-    }
-}
-
-void CUIInventoryToolbar::OnMouseDown(const Fvector2& cursor)
-{
-    if (!SortModesShown())
-        return;
-    Frect list, button;
-    m_mode_list->GetAbsoluteRect(list);
-    m_mode->GetAbsoluteRect(button);
-    Fvector2 at = cursor;
-    if (!list.in(at) && !button.in(at))
-        ShowSortModes(false);
+    if (m_mode->CurrentID() != int(mode) || !m_mode->GetText()[0])
+        m_mode->SetItemToken(int(mode));
 }
 
 const shared_str* CUIInventoryToolbar::ActionOf(const CUIWindow* button) const
@@ -854,10 +812,8 @@ void CUIInventoryToolbar::Update()
         if (button && !button->CursorOverWindow())
             button->SetButtonState(i == u32(m_active) ? CUIButton::BUTTON_PUSHED : CUIButton::BUTTON_NORMAL);
     }
-    if (m_mode && !m_mode->CursorOverWindow())
-        m_mode->SetButtonState(SortModesShown() ? CUIButton::BUTTON_PUSHED : CUIButton::BUTTON_NORMAL);
     // an order set from the console shows too
-    if (SortModesShown() || m_synced_mode != inventory_tools::sort_mode())
+    if (m_synced_mode != inventory_tools::sort_mode())
         SyncSortMode();
 
     for (auto& [button, glyph] : m_glyphs)
@@ -871,8 +827,6 @@ void CUIInventoryToolbar::Update()
             color = m_color_hover;
         glyph->SetTextureColor(color);
     }
-    if (m_mode_chevron)
-        m_mode_chevron->SetTextureColor(m_mode->TextItemControl()->GetTextColor());
 }
 
 // =================================================================================================
@@ -914,19 +868,10 @@ void CUIActorMenu::InitInventoryTools()
         RegisterCallback(toolbar->SortButton(), BUTTON_CLICKED, on_click);
         for (u32 i = 0; i < u32(EItemCategory::Count); ++i)
             RegisterCallback(toolbar->FilterButton(EItemCategory(i)), BUTTON_CLICKED, on_click);
-        RegisterCallback(toolbar->SortModeButton(), BUTTON_CLICKED, on_click);
-        for (u8 i = 0; i < u8(EInventorySort::Count); ++i)
-            RegisterCallback(toolbar->SortModeRow(EInventorySort(i)), BUTTON_CLICKED, on_click);
+        RegisterCallback(toolbar->SortModeCombo(), LIST_ITEM_SELECT, on_click);
         for (const CUIInventoryToolbar::SAction& action : toolbar->Actions())
             RegisterCallback(action.button, BUTTON_CLICKED, on_click);
         m_inventory_tools.push_back(toolbar);
-    }
-
-    // The drop-down lists last: over every grid, and the first to take a click.
-    for (CUIInventoryToolbar* toolbar : m_inventory_tools)
-    {
-        if (CUIWindow* list = toolbar->SortModeList())
-            AttachChild(list);
     }
 }
 
@@ -958,7 +903,7 @@ void CUIActorMenu::SyncInventoryTools()
         toolbar->Show(list == toolbar->List() && list->IsShown());
         toolbar->ShowSort(m_currMenuMode != mmUpgrade);
         if (!toolbar->IsShown())
-            toolbar->ShowSortModes(false);
+            toolbar->CloseSortModes();
     }
 }
 
@@ -968,7 +913,7 @@ bool CUIActorMenu::CloseSortModes()
     for (CUIInventoryToolbar* toolbar : m_inventory_tools)
     {
         closed |= toolbar->SortModesShown();
-        toolbar->ShowSortModes(false);
+        toolbar->CloseSortModes();
     }
     return closed;
 }
@@ -1014,20 +959,10 @@ void CUIActorMenu::OnInventoryToolClicked(CUIWindow* w, void* d)
             SortInventoryPane(toolbar->Pane());
             return;
         }
-        if (w && w == toolbar->SortModeButton())
+        if (w && w == toolbar->SortModeCombo())
         {
-            const bool show = !toolbar->SortModesShown();
-            CloseSortModes();
-            toolbar->ShowSortModes(show);
+            SetSortMode(EInventorySort(toolbar->SortModeCombo()->CurrentID()));
             return;
-        }
-        for (u8 i = 0; i < u8(EInventorySort::Count); ++i)
-        {
-            if (w && w == toolbar->SortModeRow(EInventorySort(i)))
-            {
-                SetSortMode(EInventorySort(i));
-                return;
-            }
         }
         for (u32 i = 0; i < u32(EItemCategory::Count); ++i)
         {

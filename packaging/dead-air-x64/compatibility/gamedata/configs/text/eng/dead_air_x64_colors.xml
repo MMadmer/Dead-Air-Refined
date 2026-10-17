@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The interface colours: written by tools\ui\interface_colors_strings.py. -->
+<string_table>
+	<string id="ui_mm_interface_colors">
+		<text>Interface colours</text>
+	</string>
+	<string id="ui_mm_interface_colors_hint">
+		<text>The main and the accent colour of the game's windows: the inventory, the trade, the search, the dialog and the hints. The menus keep their own.</text>
+	</string>
+	<string id="st_da_colors_open">
+		<text>Set up</text>
+	</string>
+	<string id="st_da_colors_title">
+		<text>Interface colours</text>
+	</string>
+	<string id="st_da_colors_subtitle">
+		<text>The colours of the game's windows: the inventory, the trade, the search, the dialog and the hints. The menus keep their own.</text>
+	</string>
+	<string id="st_da_colors_template">
+		<text>Template</text>
+	</string>
+	<string id="st_da_colors_main">
+		<text>Main</text>
+	</string>
+	<string id="st_da_colors_accent">
+		<text>Accent</text>
+	</string>
+	<string id="st_da_colors_old">
+		<text>Old</text>
+	</string>
+	<string id="st_da_colors_new">
+		<text>New</text>
+	</string>
+	<string id="st_da_colors_r">
+		<text>R</text>
+	</string>
+	<string id="st_da_colors_g">
+		<text>G</text>
+	</string>
+	<string id="st_da_colors_b">
+		<text>B</text>
+	</string>
+	<string id="st_da_colors_h">
+		<text>H</text>
+	</string>
+	<string id="st_da_colors_s">
+		<text>S</text>
+	</string>
+	<string id="st_da_colors_v">
+		<text>V</text>
+	</string>
+	<string id="st_da_colors_hex_linear">
+		<text>Hex Linear</text>
+	</string>
+	<string id="st_da_colors_hex_srgb">
+		<text>Hex sRGB</text>
+	</string>
+	<string id="st_da_colors_reset">
+		<text>Defaults</text>
+	</string>
+	<string id="st_da_colors_cancel">
+		<text>Cancel</text>
+	</string>
+	<string id="st_da_colors_ok">
+		<text>Apply</text>
+	</string>
+	<string id="st_da_colors_tpl_inventory">
+		<text>Inventory</text>
+	</string>
+	<string id="st_da_colors_tpl_trade">
+		<text>Trade</text>
+	</string>
+	<string id="st_da_colors_tpl_dialog">
+		<text>Dialog</text>
+	</string>
+	<string id="st_da_colors_tpl_stalker">
+		<text>Stalker</text>
+	</string>
+	<string id="st_da_colors_tpl_trader">
+		<text>Sidorovich</text>
+	</string>
+	<string id="st_da_colors_tpl_faction">
+		<text>Faction</text>
+	</string>
+	<string id="st_da_colors_tpl_loners">
+		<text>Loners</text>
+	</string>
+	<string id="st_da_colors_tpl_traders">
+		<text>Traders</text>
+	</string>
+	<string id="st_da_colors_tpl_relation">
+		<text>Attitude</text>
+	</string>
+	<string id="st_da_colors_tpl_neutral">
+		<text>neutral</text>
+	</string>
+	<string id="st_da_colors_tpl_money">
+		<text>15000 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_trader_money">
+		<text>48500 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_by_type">
+		<text>By type</text>
+	</string>
+	<string id="st_da_colors_tpl_weight">
+		<text>Weight: 23.4 kg (max 75 kg)</text>
+	</string>
+	<string id="st_da_colors_tpl_f1">
+		<text>F1</text>
+	</string>
+	<string id="st_da_colors_tpl_f2">
+		<text>F2</text>
+	</string>
+	<string id="st_da_colors_tpl_f3">
+		<text>F3</text>
+	</string>
+	<string id="st_da_colors_tpl_f4">
+		<text>F4</text>
+	</string>
+	<string id="st_da_colors_tpl_exit">
+		<text>Exit</text>
+	</string>
+	<string id="st_da_colors_tpl_ak">
+		<text>AK-74</text>
+	</string>
+	<string id="st_da_colors_tpl_ak_weight">
+		<text>3.60 kg</text>
+	</string>
+	<string id="st_da_colors_tpl_ak_text">
+		<text>A reliable rifle for the 5.45x39 round. It forgives dirt and careless upkeep.</text>
+	</string>
+	<string id="st_da_colors_tpl_accuracy">
+		<text>Accuracy</text>
+	</string>
+	<string id="st_da_colors_tpl_handling">
+		<text>Handling</text>
+	</string>
+	<string id="st_da_colors_tpl_damage">
+		<text>Damage</text>
+	</string>
+	<string id="st_da_colors_tpl_rate">
+		<text>Rate of fire</text>
+	</string>
+	<string id="st_da_colors_tpl_ak_price">
+		<text>6250 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_sum0">
+		<text>Selling: 1200 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_sum1">
+		<text>Buying: 3400 RU</text>
+	</string>
+	<string id="st_da_colors_tpl_trade_button">
+		<text>Trade</text>
+	</string>
+	<string id="st_da_colors_tpl_sell">
+		<text>Sell</text>
+	</string>
+	<string id="st_da_colors_tpl_describe">
+		<text>Description</text>
+	</string>
+	<string id="st_da_colors_tpl_attach">
+		<text>Attach</text>
+	</string>
+	<string id="st_da_colors_tpl_drop">
+		<text>Drop</text>
+	</string>
+	<string id="st_da_colors_tpl_line1">
+		<text>Well, hello, stalker. What brings you here?</text>
+	</string>
+	<string id="st_da_colors_tpl_line2">
+		<text>I have goods. Will you take a look?</text>
+	</string>
+	<string id="st_da_colors_tpl_line3">
+		<text>Show me, we will come to terms.</text>
+	</string>
+	<string id="st_da_colors_tpl_ask1">
+		<text>What is new in the Zone?</text>
+	</string>
+	<string id="st_da_colors_tpl_ask2">
+		<text>Let us trade.</text>
+	</string>
+	<string id="st_da_colors_tpl_ask3">
+		<text>Got any work for me?</text>
+	</string>
+	<string id="st_da_colors_tpl_ask4">
+		<text>I have to go.</text>
+	</string>
+	<string id="st_da_colors_tpl_n1">
+		<text>1.</text>
+	</string>
+	<string id="st_da_colors_tpl_n2">
+		<text>2.</text>
+	</string>
+	<string id="st_da_colors_tpl_n3">
+		<text>3.</text>
+	</string>
+	<string id="st_da_colors_tpl_n4">
+		<text>4.</text>
+	</string>
+</string_table>

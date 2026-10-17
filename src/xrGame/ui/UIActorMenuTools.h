@@ -6,6 +6,7 @@
 #include "xrUICore/Windows/UIWindow.h"
 
 class CUI3tButton;
+class CUIComboBox;
 class CUIStatic;
 class CUIXml;
 class CUIDragDropListEx;
@@ -100,17 +101,12 @@ public:
     CUI3tButton* SortButton() const { return m_sort; }
     CUI3tButton* FilterButton(EItemCategory category) const { return m_filters[u8(category)]; }
 
-    // The drop-down of sort orders: its button in the row and its list, a window of the menu's
-    // own so it lies over the grids and takes their clicks.
-    CUI3tButton* SortModeButton() const { return m_mode; }
-    CUIWindow* SortModeList() const { return m_mode_list; }
-    CUI3tButton* SortModeRow(EInventorySort mode) const { return m_mode_rows[u8(mode)]; }
-    void ShowSortModes(bool show);
-    bool SortModesShown() const { return m_mode_list && m_mode_list->IsShown(); }
-    // the caption and the checked row follow the current order
+    // The drop-down of sort orders (the interface's own, CUIComboBox): the menu hears LIST_ITEM_SELECT.
+    CUIComboBox* SortModeCombo() const { return m_mode; }
+    bool SortModesShown() const;
+    void CloseSortModes();
+    // the choice shown follows the current order, one set from the console too
     void SyncSortMode();
-    // A click anywhere but on the drop-down closes it.
-    void OnMouseDown(const Fvector2& cursor);
 
     // The buttons at the right end of the row: <action action="..." glyph="..." hint="..."/> nodes,
     // the action one a hotkey could run (toggle_panel, compare, clear_picks, script:...).
@@ -137,10 +133,7 @@ private:
     CUIDragDropListEx* m_list;
     CUI3tButton* m_sort{};
     CUI3tButton* m_filters[u8(EItemCategory::Count)]{};
-    CUI3tButton* m_mode{};
-    CUIStatic* m_mode_chevron{};
-    CUIWindow* m_mode_list{};
-    CUI3tButton* m_mode_rows[u8(EInventorySort::Count)]{};
+    CUIComboBox* m_mode{};
     xr_vector<std::pair<CUI3tButton*, CUIStatic*>> m_glyphs;
     xr_vector<SAction> m_actions;
     EItemCategory m_active{ EItemCategory::All };

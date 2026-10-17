@@ -1185,6 +1185,10 @@
 		<cap_check_axr x="10" y="3" width="240" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79"></text>
 		</cap_check_axr>
+		<!-- a row's button that opens a window of its own (the interface colours) -->
+		<btn_axr x="195" y="1" width="90" height="21" shape="sys_button">
+			<text align="c" vert_align="c" font="letterica16"/>
+		</btn_axr>
 		<list_axr x="195" y="1" width="90" height="21" list_length="5">
 			<list_font r="170" g="170" b="170" font="letterica16"/>
 			<text_color>

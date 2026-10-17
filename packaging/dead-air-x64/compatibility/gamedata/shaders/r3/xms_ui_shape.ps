@@ -86,6 +86,17 @@ float sd_gas_mask(float2 q, float badge, float badge_scale)
 
 float4 premultiplied(float4 c) { return float4(c.rgb * c.a, c.a); }
 
+// hue (turns), saturation, value to RGB
+float3 da_hsv_to_rgb(float3 c)
+{
+	float3 k = saturate(abs(frac(c.x + float3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0);
+	return c.z * lerp(float3(1.0, 1.0, 1.0), k, c.y);
+}
+
+// sRGB to linear and back, exactly
+float3 da_to_linear(float3 c) { return lerp(pow((c + 0.055) / 1.055, 2.4), c / 12.92, step(c, 0.04045)); }
+float3 da_to_srgb(float3 c) { return lerp(1.055 * pow(max(c, 0.0), 1.0 / 2.4) - 0.055, c * 12.92, step(c, 0.0031308)); }
+
 float4 main(p_TL I) : SV_Target
 {
 	float2 p = I.Tex0;
@@ -94,6 +105,33 @@ float4 main(p_TL I) : SV_Target
 	float soft = max(xms_shape_mode.z, 1.0);
 	float4 fill = premultiplied(I.Color);
 	float4 edge = premultiplied(xms_shape_line);
+
+	if (kind > 99.5)
+	{
+		// The colour picker's paints in a box of the corner radius: 100 the hue round a disc and the saturation
+		// out from its centre at the value mode.y; 101 the fill blending into the border colour, from the left
+		// (from the top when mode.y is 1 or 3; in linear space when it is 2 or 3); 102 every hue along the box
+		// (down it when mode.y is 1). The fill's alpha is the paint's opacity.
+		float d = sd_box(p, half_size, min(xms_shape_box.z, min(half_size.x, half_size.y)));
+		float t = fmod(xms_shape_mode.y, 2.0) > 0.5 ? (p.y + half_size.y) / (2.0 * half_size.y) : (p.x + half_size.x) / (2.0 * half_size.x);
+		float4 c;
+		if (kind < 100.5)
+		{
+			float r = min(half_size.x, half_size.y);
+			d = length(p) - r;
+			float hue = frac(atan2(-p.y, p.x) / 6.2831853 + 1.0);
+			c = float4(da_hsv_to_rgb(float3(hue, saturate(length(p) / r), xms_shape_mode.y)), I.Color.a);
+		}
+		else if (kind < 101.5)
+		{
+			c = lerp(I.Color, xms_shape_line, saturate(t));
+			if (xms_shape_mode.y > 1.5)
+				c.rgb = da_to_srgb(lerp(da_to_linear(I.Color.rgb), da_to_linear(xms_shape_line.rgb), saturate(t)));
+		}
+		else
+			c = float4(da_hsv_to_rgb(float3(saturate(t), 1.0, 1.0)), I.Color.a);
+		return premultiplied(c) * saturate(0.5 - d / soft);
+	}
 
 	if (kind < 0.5)
 	{

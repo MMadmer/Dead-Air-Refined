@@ -22,6 +22,7 @@
 #include "xrEngine/da_media.h"
 #include "MainMenu.h"
 #include "ui/UIDialogWnd.h"
+#include "xrUICore/Static/UIShape.h"
 #include "xrUICore/Cursor/UICursor.h"
 #include "ai/monsters/basemonster/base_monster.h"
 #include "ai/stalker/ai_stalker.h"
@@ -552,6 +553,61 @@ public:
 extern u32 g_inventory_sort;
 // the panel of hotkeys is up when the menu opens (UIActorMenuHotkeys.cpp)
 extern u32 g_inventory_hotkeys_panel;
+// ui_color_main, ui_color_accent #rrggbb | default: a seed of the game windows' palette (ui_theme.xml) the
+// player chose - Options -> Game -> Interface -> the interface colours -, or the theme's own.
+class CCC_UIColorSeed final : public IConsole_Command
+{
+    pcstr m_seed;
+
+public:
+    CCC_UIColorSeed(pcstr name, pcstr seed) : IConsole_Command(name), m_seed(seed) {}
+
+    void Execute(pcstr args) override
+    {
+        string64 value{};
+        sscanf(args, "%63s", value);
+        if (!xr_stricmp(value, "default"))
+        {
+            UITheme::ResetSeed(m_seed);
+            return;
+        }
+        u32 rgb = 0;
+        char* end = nullptr;
+        if (value[0] == '#' && xr_strlen(value) == 7)
+            rgb = u32(strtoul(value + 1, &end, 16));
+        if (!end || *end)
+        {
+            Msg("! %s #rrggbb | default", cName);
+            return;
+        }
+        UITheme::SetSeed(m_seed, color_rgba((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 0xFF));
+    }
+
+    void GetStatus(TStatus& status) override
+    {
+        u32 color;
+        if (UITheme::SeedChosen(m_seed) && UITheme::Seed(m_seed, color))
+            xr_sprintf(status, "#%02X%02X%02X", color_get_R(color), color_get_G(color), color_get_B(color));
+        else
+            xr_strcpy(status, "default");
+    }
+
+    void Info(TInfo& info) override { xr_strcpy(info, "#rrggbb | default"); }
+};
+
+// dar_ui_colors: the window of the interface colours (Options -> Game -> Interface)
+class CCC_DarUiColors final : public IConsole_Command
+{
+public:
+    CCC_DarUiColors(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override
+    {
+        if (MainMenu())
+            MainMenu()->ShowInterfaceColorsDialog();
+    }
+    void Save(IWriter*) override {}
+};
+
 const xr_token inventory_sort_tokens[] = { { "default", 0 }, { "type", 1 }, { "name", 2 }, { "weight", 3 },
     { "price", 4 }, { "condition", 5 }, { nullptr, 0 } };
 
@@ -567,4 +623,7 @@ void register_ui_console_commands()
     CMD1(CCC_DarUiCursorItem, "dar_ui_cursor_item");
     CMD1(CCC_DarUiKey, "dar_ui_key");
     CMD4(CCC_Integer, "ui_inv_hotkeys", (int*)&g_inventory_hotkeys_panel, 0, 1);
+    CMD1(CCC_DarUiColors, "dar_ui_colors");
+    CMD2(CCC_UIColorSeed, "ui_color_main", "main");
+    CMD2(CCC_UIColorSeed, "ui_color_accent", "accent");
 }

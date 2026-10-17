@@ -3,6 +3,7 @@
 #include "Static/UIStatic.h"
 #include "Windows/UIFrameLineWnd.h"
 #include "XML/UIXmlInitBase.h"
+#include "Cursor/UICursor.h"
 
 CUIButtonHint* g_btnHint = nullptr;
 CUIButtonHint* g_statHint = nullptr;
@@ -54,6 +55,30 @@ void CUIButtonHint::OnRender()
         Draw();
         m_enabledOnFrame = false;
     }
+}
+
+void CUIButtonHint::ShowFor(CUIWindow* owner, pcstr text)
+{
+    SetHintText(owner, text);
+
+    const auto inside = [](const Frect& outer, const Frect& r)
+    { return outer.x1 < r.x1 && outer.x2 > r.x2 && outer.y1 < r.y1 && outer.y2 > r.y2; };
+    const Fvector2 cursor = GetUICursor().GetCursorPosition();
+    Frect screen;
+    screen.set(0.0f, 0.0f, UI_BASE_WIDTH, UI_BASE_HEIGHT);
+
+    // above and right of the cursor, else left of it, else below, else right and lower still
+    Frect r;
+    r.set(0.0f, 0.0f, GetWidth(), GetHeight());
+    r.add(cursor.x, cursor.y);
+    r.sub(0.0f, r.height());
+    if (!inside(screen, r))
+        r.sub(r.width(), 0.0f);
+    if (!inside(screen, r))
+        r.add(0.0f, r.height());
+    if (!inside(screen, r))
+        r.add(r.width(), 45.0f);
+    SetWndPos(r.lt);
 }
 
 void CUIButtonHint::SetHintText(CUIWindow* w, LPCSTR text)

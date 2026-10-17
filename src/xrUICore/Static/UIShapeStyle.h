@@ -52,6 +52,13 @@ struct SUIShapeStyle
         Pin,
         Keyboard,
         Scales,
+        // paints of the colour picker: the hue round a disc and the saturation out from its centre at the value
+        // `fraction`; fill blending into line (from the left, or from the top when `fraction` is 1 or 3; blended
+        // as light adds up, in linear space, when it is 2 or 3); every hue along the box (down it when `fraction`
+        // is 1)
+        HueWheel,
+        Gradient,
+        HueBar,
         Count
     };
 
@@ -76,8 +83,9 @@ struct SUIShapeStyle
     Badge badge{Badge::None};
     float badgeScale{1.f};
 
-    bool Visible() const { return (fill >> 24) || ((line >> 24) && (border > 0.f || kind == Kind::Star)); }
-    bool Pictogram() const { return kind >= Kind::GasMask; }
+    bool Visible() const { return (fill >> 24) || ((line >> 24) && (border > 0.f || kind == Kind::Star || kind == Kind::Gradient)); }
+    bool Pictogram() const { return kind >= Kind::GasMask && kind < Kind::HueWheel; }
+    bool Paint() const { return kind >= Kind::HueWheel; }
 };
 
 // A window's look drawn by the shader in place of its texture. A button has a look per state; a

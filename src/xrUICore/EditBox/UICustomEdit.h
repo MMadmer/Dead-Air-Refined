@@ -34,6 +34,8 @@ public:
     virtual void Show(bool status);
 
     void CaptureFocus(bool bCapture);
+    // the player is typing into it
+    bool IsInputFocused() const { return m_bInputFocus; }
     void SetNextFocusCapturer(CUICustomEdit* next_capturer) { m_next_focus_capturer = next_capturer; };
     void ClearText();
     void SetText(LPCSTR str) override;
