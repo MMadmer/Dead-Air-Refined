@@ -2,6 +2,7 @@
 #include "lmodel.h"
 #include "shadow.h"
 #include "da_hud_light.h"
+#include "da_sss.h"	// the contact shadows, the sun's knobs (r__sss)
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // This is the basic primitive used by convex, volumetric lights
@@ -93,6 +94,10 @@ float4 main( p_volume I, float4 pos2d : SV_Position ) : SV_Target
 					s = 1.h;
         #endif
 
+        // ----- contact shadow: what is thinner than the shadow map's texel, or lit by a light without one, touches
+        // the ground it stands on (da_sss.h). The hands are in no world light's way.
+        [branch] if ( !hud )
+				s *= da_local_contact_shadow( _P.xyz, Ldynamic_pos.xyz, pos2d.xy );
         // ----- lightmap
         float4         lightmap= 1.h;
         #ifdef        USE_LMAP

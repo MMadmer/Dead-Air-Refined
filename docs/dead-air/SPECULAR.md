@@ -20,7 +20,11 @@ and the light passes in the compatibility overlay.
   - `combine_1` takes the lights' specular at its own strength in the lights' hue (the diffuse sum with its
     `Vibrance(2)` undone), not the gloss times the diffuse sum.
 - Local lights and the sun alike (`plight_local` / `plight_infinity` with the gloss); the stock signatures stay for
-  shaders that do not pass it.
+  shaders that do not pass it. The light blenders bind the albedo target for the gloss (they named none, so the
+  first version read whatever an earlier pass left in that slot), and the point light without a shadow map takes
+  the shared body (`accum_omni_unshadowed.ps` -> `accum_base.ps`) instead of the stock one with the old lobe.
+- A dielectric's Fresnel rises toward f90 at grazing angles even on dry ground (f0 0.004, f90 0.2): a faint sheen of
+  the sun's colour on a dirt road under a high sun, as dry soil shows it.
 
 ## 2. The sky
 
@@ -40,10 +44,11 @@ RTX 3070 Laptop, 1440p, DLSS Balanced, noon and a steady rain on the bus by the 
 
 | | DirectX 12 | Vulkan | DirectX 11 |
 |---|---|---|---|
-| Dry, noon | -0.4 of 255 | -0.3 | -0.4 |
-| Wet, rain | +1.2: wet ground mirrors the sky | +1.2 | +1.5 |
-| Interior, lamp | -0.2 | - | - |
+| Dry, noon | +1.3 of 255: the sun's grazing sheen | +1.3 | +1.3 |
+| Wet, rain | +1.4: wet ground mirrors the sky and the sun | +1.3 | +1.4 |
 | Cost | +0.1 ms in the combine, +0.01 in the lights | | |
+
+(Before the light blenders bound the gloss, the lights' share was missing: dry -0.4, wet +1.2, the sky's alone.)
 
 ## 4. Knobs
 

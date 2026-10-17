@@ -37,19 +37,13 @@ float da_sss_dither( float2 pos2d )
 	return frac( 52.9829189f * frac( dot( floor( pos2d ), float2( 0.06711056f, 0.00583715f ) ) ) );
 }
 
-// Returns a lighting factor: 1 = lit, 0 = fully shadowed.
-float da_screen_space_shadow( float3 pv, float3 light_dir_view, float2 pos2d )
+// The march from pv along dir (unit, view space, toward the light) over len metres. Returns a lighting factor:
+// 1 = lit, 0 = fully shadowed.
+float da_contact_shadow( float3 pv, float3 dir, float len, float2 pos2d )
 {
-	[branch] if ( da_sss.x <= 0.001f )
-		return 1.0f;
-
 	const int   steps = (int)max( da_sss.w, 2.0f );
-	const float len   = da_sss.y;
 	const float thick = da_sss.z;
 	const float dstep = len / steps;
-
-	// The ray walks TOWARD the sun, so negate: Ldynamic_dir points AT the surface.
-	const float3 dir = -normalize( light_dir_view );
 
 	// Start offset in [0.5, 1) step: the first test lands 1.5..2 steps out, clear of the
 	// virtual-offset region where the ray still sits inside its own surface's bias.
@@ -105,6 +99,26 @@ float da_screen_space_shadow( float3 pv, float3 light_dir_view, float2 pos2d )
 	}
 
 	return saturate( 1.0f - occ * da_sss.x );
+}
+
+// The sun's: light_dir_view points AT the surface, so the ray walks against it.
+float da_screen_space_shadow( float3 pv, float3 light_dir_view, float2 pos2d )
+{
+	[branch] if ( da_sss.x <= 0.001f )
+		return 1.0f;
+	return da_contact_shadow( pv, -normalize( light_dir_view ), da_sss.y, pos2d );
+}
+
+// A local light's (DOOM Eternal shades its characters with per-light contact shadows): the ray toward the light
+// at view position light_pos, at most half way to it, within 25 m of the eye (fading out over the last 5).
+float da_local_contact_shadow( float3 pv, float3 light_pos, float2 pos2d )
+{
+	[branch] if ( da_sss.x <= 0.001f || pv.z > 25.0f )
+		return 1.0f;
+	const float3 to_light = light_pos - pv;
+	const float dist = length( to_light );
+	const float s = da_contact_shadow( pv, to_light / max( dist, 1e-3f ), min( da_sss.y, 0.5f * dist ), pos2d );
+	return lerp( s, 1.0f, saturate( ( pv.z - 20.0f ) * 0.2f ) );
 }
 
 #endif

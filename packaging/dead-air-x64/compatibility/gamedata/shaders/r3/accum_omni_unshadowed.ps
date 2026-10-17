@@ -1,0 +1,4 @@
+// The point light without a shadow map: the shared body without the shadow and the lightmap (accum_base.ps), so it
+// takes what every other light takes - the GGX specular with the gloss, the virtual offset, the first-person
+// position and the contact shadow. The stock body here was its own and kept the old lobe.
+#include "accum_base.ps"

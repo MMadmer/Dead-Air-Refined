@@ -1265,6 +1265,11 @@ start. Tuning knobs: `r__sss_len` (ray length in metres, default 0.35), `r__sss_
 technique: only visible geometry casts, and the shadow fades at the screen edge. Ported
 from the sibling open-source engine.
 
+Every local light takes the same march toward itself (DOOM Eternal's per-light contact
+shadows, `accum_base.ps`): at most half way to the light, within 25 m of the eye (fading out
+over the last 5), never on the first-person hands. Same knobs; its cost was under the frame
+time's noise in Sidorovich's bunker with its lamps lit.
+
 ## Wind service and cloud deck
 
 One wind for the whole world. The engine's environment keeps a single wind state - heading,
