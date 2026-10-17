@@ -36,6 +36,8 @@ float4 main ( v2p_volume I  ) : SV_Target
 
 	gbuffer_data gbd = gbuffer_load_data( GLD_P(I.tc, I.hpos, ISAMPLE) );
 
+	da_spec_aa( gbd.N );	// the lobe widened by the normal's spread over the pixel (lmodel.h)
+
 	// The receiver's offset against shadow acne. Two-sided foliage (the blade grass) moves TOWARD the sun
 	// instead: the stock push along N carries a back-lit blade behind its own caster, and the sunlight
 	// through it (lmodel.h) would be shadowed by the blade itself.
@@ -67,6 +69,8 @@ float4 main ( v2p_volume I ) : SV_Target
 	//float4	_N	= tex2D( s_normal, tc );
 
 	gbuffer_data gbd = gbuffer_load_data( GLD_P(I.tc.xy/I.tc.w, I.hpos, ISAMPLE) );
+
+	da_spec_aa( gbd.N );	// the lobe widened by the normal's spread over the pixel (lmodel.h)
 
 	// The receiver's offset against shadow acne. Two-sided foliage (the blade grass) moves TOWARD the sun
 	// instead: the stock push along N carries a back-lit blade behind its own caster, and the sunlight

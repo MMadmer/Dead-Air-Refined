@@ -44,6 +44,7 @@ float4 	main	( p_aa_AA_sun_vs I ) : SV_Target
 #endif
 {
 	gbuffer_data gbd = gbuffer_load_data( GLD_P(I.tc, pos2d, ISAMPLE) );
+	da_spec_aa( gbd.N );	// the lobe widened by the normal's spread over the pixel (lmodel.h)
 
 //  float4 _P		= tex2D 	(s_position, 	I.tc); 
 //  float4  _N		= tex2D 	(s_normal,   	I.tc); 

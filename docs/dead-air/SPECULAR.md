@@ -23,6 +23,10 @@ and the light passes in the compatibility overlay.
   shaders that do not pass it. The light blenders bind the albedo target for the gloss (they named none, so the
   first version read whatever an earlier pass left in that slot), and the point light without a shadow map takes
   the shared body (`accum_omni_unshadowed.ps` -> `accum_base.ps`) instead of the stock one with the old lobe.
+- Geometric specular antialiasing (Kaplanyan & Tokuyoshi 2019; DOOM has none): what the G-buffer normal turns
+  across the pixel's quad widens alpha^2 by its variance (at most 0.18), on the smooth surfaces only (weighted by
+  2 x smoothness) - a wet road's or a car's highlight thinner than a pixel stops flickering, while a rough surface,
+  which would only gain a grazing sheen, keeps its lobe (`da_spec_aa`, called once per pixel by the light passes).
 - A dielectric's Fresnel rises toward f90 at grazing angles even on dry ground (f0 0.004, f90 0.2): a faint sheen of
   the sun's colour on a dirt road under a high sun, as dry soil shows it.
 

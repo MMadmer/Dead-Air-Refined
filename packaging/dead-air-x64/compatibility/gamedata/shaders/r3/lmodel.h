@@ -38,11 +38,24 @@ float da_spec_slice_a2(float m)
 	return k < 0.5f ? 0.111f : k < 1.5f ? 0.0769f : k < 2.5f ? 0.0154f : 0.0769f;
 }
 
+// Geometric specular antialiasing (Kaplanyan & Tokuyoshi 2019): what the normal turns across the pixel's quad - the
+// G-buffer's, a normal map's ripple at a distance, an edge - widens the lobe by its variance, so a highlight thinner
+// than a pixel stops flickering. Taken once per pixel by the light passes, in uniform control flow (da_spec_aa).
+static float da_spec_aa_a2 = 0.0f;
+void da_spec_aa(float3 N)
+{
+	const float3 du = ddx(N), dv = ddy(N);
+	// 2 sigma^2 of the filter with sigma^2 = 0.25 (|dN/dx|^2 + |dN/dy|^2), at most 0.18.
+	da_spec_aa_a2 = min(0.5f * (dot(du, du) + dot(dv, dv)), 0.18f);
+}
+
 float da_spec_ggx(float m, float gloss, float3 N, float3 V, float3 L)
 {
 	const float r = 1.0f - 0.8f * da_spec_smoothness(gloss);
-	// DOOM's alpha^2 = (1 - 0.8 s)^4, never wider than the material's own lobe.
-	const float a2 = max(min(r * r * r * r, da_spec_slice_a2(m)), 0.002f);
+	// DOOM's alpha^2 = (1 - 0.8 s)^4, never wider than the material's own lobe; then the pixel's own spread, on the
+	// smooth surfaces whose highlight is thin enough to flicker (a rough one only gains a grazing sheen from it).
+	const float a2 = saturate(max(min(r * r * r * r, da_spec_slice_a2(m)), 0.002f) +
+		da_spec_aa_a2 * saturate(2.0f * da_spec_smoothness(gloss)));
 	const float3 H = normalize(L + V);
 	const float nh = saturate(dot(N, H));
 	const float nv = saturate(dot(N, V)) + 1e-4f;
