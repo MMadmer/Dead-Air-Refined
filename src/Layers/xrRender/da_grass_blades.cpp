@@ -718,6 +718,17 @@ struct Latch
     u32 frame_mod{};
 };
 
+// A tile of the frame's blade grass (build_tiles), nearest first.
+struct Tile
+{
+    float dn;
+    int x, z;
+    u32 level, k, flags, lanes;
+    // The tile behind an occluder (expand_tiles): only what its shadow wants, at the shadow's coarser level.
+    u32 level_alt, flags_alt, lanes_alt;
+    Fbox box;
+};
+
 struct State
 {
     bool loaded{}, failed{}, active{};
@@ -768,8 +779,10 @@ struct State
     // The frame.
     Latch latch;
     Fvector4 tables[kTabTotal]{};
-    xr_vector<u32> groups; // the calc task's output, 4 uints per group
+    xr_vector<Tile> tiles, tiles_build; // the calc task's output and the one it builds next
+    xr_vector<u32> groups; // the tiles as compute groups, 4 uints per group (expand_tiles)
     u32 group_count{}, lane_count{};
+    u32 hidden{}; // the tiles in view the main view's occlusion hid this frame
     std::atomic<float> green{0.f};
     u32 preset{2};
     u32 counts_seen[kBins]{};
@@ -1466,13 +1479,6 @@ void fill_tint(float day, float R, float grass_visible, float height)
 }
 
 // ---- Tiles of the frame (detail calc task) -----------------------------------------------------------
-struct Tile
-{
-    float dn;
-    int x, z;
-    u32 level, k, flags, lanes;
-};
-
 u32 ring_level(float d, float R0) { return d < 2.f * R0 ? 0u : u32(std::floor(std::log2(d / R0))); }
 
 int floor_div(int a, int b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
@@ -1503,11 +1509,10 @@ bool casts_into_view(const Latch& L, Fbox box)
 void build_tiles()
 {
     const Latch& L = g.latch;
-    g.groups.clear();
-    g.group_count = g.lane_count = 0;
     // (Under the winter's snow no meadow grows - its communities' densities are zero - but a reed bed stands.)
     if (L.dlat <= 0.f)
     {
+        g.tiles.clear();
         g.green.store(0.f, std::memory_order_relaxed);
         return;
     }
@@ -1524,7 +1529,7 @@ void build_tiles()
     // The casters' widths of da_grass_gen.cs: 2 texels of the near cascade, 3 of the middle one.
     const u32 level_near = shadow_level(2.f * L.near_texel), level_mid = shadow_level(3.f * L.mid_texel);
 
-    thread_local xr_vector<Tile> tiles;
+    xr_vector<Tile>& tiles = g.tiles_build;
     thread_local xr_vector<std::pair<int, int>> stack_xz;
     thread_local xr_vector<u32> stack_k;
     tiles.clear();
@@ -1539,7 +1544,6 @@ void build_tiles()
             stack_xz.emplace_back(x, z);
             stack_k.push_back(k_max);
         }
-    u64 total_groups = 0;
     while (!stack_k.empty())
     {
         const auto [x, z] = stack_xz.back();
@@ -1614,23 +1618,26 @@ void build_tiles()
         level = std::min({level, 2 * k + 9, kLmax - 1});
         const u32 n = u32(32 << k) >> (level >> 1);
         const u32 lanes = (level & 1) ? n * (n / 2) : n * n;
-        tiles.push_back({dn, x, z, level, k, (view ? 1u : 0u) | (sh_near ? 2u : 0u) | (sh_mid ? 4u : 0u), lanes});
-        total_groups += (lanes + 63) / 64;
+        const u32 flags = (view ? 1u : 0u) | (sh_near ? 2u : 0u) | (sh_mid ? 4u : 0u);
+        Tile tile{dn, x, z, level, k, flags, lanes, level, flags, lanes, box};
+        if (view)
+        {
+            // Hidden from the eye it keeps the shadow it casts into the view, as a shadow-only tile would.
+            const bool cast_alt = (want_near || want_mid) && casts_into_view(L, box);
+            const bool near_alt = want_near && cast_alt, mid_alt = want_mid && cast_alt;
+            tile.flags_alt = (near_alt ? 2u : 0u) | (mid_alt ? 4u : 0u);
+            // Never finer than the view's own level: far off the view's rings are coarser than a shadow's keep.
+            tile.level_alt = std::max(level, std::min({(near_alt ? level_near : level_mid) + j, 2 * k + 9, kLmax - 1}));
+            const u32 na = u32(32 << k) >> (tile.level_alt >> 1);
+            tile.lanes_alt = tile.flags_alt ? ((tile.level_alt & 1) ? na * (na / 2) : na * na) : 0u;
+        }
+        tiles.push_back(tile);
     }
     // Nearest tiles first: over the group budget, and in a bin that overflows (the records go out in about the
-    // order of the groups), the far ones lose.
+    // order of the groups), the far ones lose. They become groups on the main thread, behind the main view's
+    // occlusion (expand_tiles).
     std::sort(tiles.begin(), tiles.end(), [](const Tile& a, const Tile& b) { return a.dn < b.dn; });
-    g.groups.reserve(size_t(std::min<u64>(total_groups, kMaxGroups)) * 4);
-    for (const Tile& t : tiles)
-    {
-        const u32 groups = (t.lanes + 63) / 64;
-        if (g.group_count + groups > kMaxGroups)
-            break;
-        for (u32 off = 0; off < t.lanes; off += 64)
-            g.groups.insert(g.groups.end(), {u32(t.x), u32(t.z), t.level | (t.k << 8) | (t.flags << 16), off | (t.lanes << 16)});
-        g.group_count += groups;
-        g.lane_count += t.lanes;
-    }
+    g.tiles.swap(tiles);
 
     // How much blade grass grows around the camera now (the vegetation audio's "green").
     float green = 0.f, slots = 0.f;
@@ -1654,6 +1661,36 @@ void build_tiles()
             green += std::min(best, 1.f);
         }
     g.green.store(slots > 0.f ? green / slots : 0.f, std::memory_order_relaxed);
+}
+
+// The frame's tiles as compute groups, on the main thread once the main view's occlusion (HOM) is drawn, after
+// DOOM Eternal's culling of its GPU-driven geometry by the occlusion buffer: a meadow behind a house or a hill grows
+// only the shadow it casts, at the shadow's coarser level, or nothing. The budget goes to what is left, nearest first.
+void expand_tiles()
+{
+    g.groups.clear();
+    g.group_count = g.lane_count = g.hidden = 0;
+    const bool hom = ps_r__grass_hom != 0;
+    for (const Tile& t : g.tiles)
+    {
+        u32 level = t.level, flags = t.flags, lanes = t.lanes;
+        if (hom && (flags & 1u) && !RImplementation.HOM.visible(t.box))
+        {
+            ++g.hidden;
+            level = t.level_alt;
+            flags = t.flags_alt;
+            lanes = t.lanes_alt;
+            if (!flags)
+                continue;
+        }
+        const u32 groups = (lanes + 63) / 64;
+        if (g.group_count + groups > kMaxGroups)
+            break;
+        for (u32 off = 0; off < lanes; off += 64)
+            g.groups.insert(g.groups.end(), {u32(t.x), u32(t.z), level | (t.k << 8) | (flags << 16), off | (lanes << 16)});
+        g.group_count += groups;
+        g.lane_count += lanes;
+    }
 }
 
 // ---- Compute and draw helpers --------------------------------------------------------------------------
@@ -2377,6 +2414,7 @@ void da_grass_frame_prepare(CBackend& cmd)
     }
     if (!g.active)
         return;
+    expand_tiles();
     ID3D11DeviceContext* ctx = HW.get_context(cmd.context_id);
     if (g.tab_upload)
     {
@@ -2513,8 +2551,8 @@ void da_grass_stats()
         return;
     }
     const Latch& L = g.latch;
-    Msg("* [grass] preset %u, R %.0f m, R0 %.1f m, d1/d2 %.0f/%.0f m, lattice %.3f m (%.0f /m2), %u groups, %u lanes",
-        g.preset, L.R, L.R0, L.d1, L.d2, L.s0, L.dlat, g.group_count, g.lane_count);
+    Msg("* [grass] preset %u, R %.0f m, R0 %.1f m, d1/d2 %.0f/%.0f m, lattice %.3f m (%.0f /m2), %u groups, %u lanes, %u of %u tiles hidden",
+        g.preset, L.R, L.R0, L.d1, L.d2, L.s0, L.dlat, g.group_count, g.lane_count, g.hidden, u32(g.tiles.size()));
     static constexpr pcstr names[kBins] = {"lod0 a", "lod0 b", "lod1 a", "lod1 b", "lod1 c", "lod2 a", "lod2 b", "lod2 c",
         "lod2 d", "sun near", "sun mid", "head 0", "head 1 a", "head 1 b", "head sun", "short"};
     for (u32 b = 0; b < kBins; ++b)

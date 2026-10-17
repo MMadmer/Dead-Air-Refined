@@ -108,6 +108,7 @@ extern ECORE_API float ps_r__froxel_torch;
 extern ECORE_API int ps_r__spec_ggx;
 extern ECORE_API int ps_r__particle_light;
 extern ECORE_API int ps_r__ssr;
+extern ECORE_API int ps_r__grass_hom;
 extern ECORE_API float ps_r__spec_f0;
 extern ECORE_API float ps_r__spec_f0_max;
 extern ECORE_API float ps_r__spec_smooth;

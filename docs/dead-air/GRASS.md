@@ -189,7 +189,13 @@ Per frame:
    plus the levels its own grass density spares (a sparse or out-of-season tile runs fewer lanes), tiles
    outside the view that can cast into it run at their shadow level, tiles without blade grass run none.
    64 lanes per compute group, the nearest tiles first (over the group budget, and in a bin that overflows,
-   the far ones lose).
+   the far ones lose). The groups are laid out on the main thread once the main view's occlusion buffer (HOM)
+   is drawn, after DOOM Eternal's culling of its GPU-driven geometry by its occlusion buffer: a tile in view
+   that the HOM hides grows only the shadow it casts into the view, at the coarser of its own and the shadow's
+   level, or nothing (`r__grass_hom`, 1; 0 for QA). Among the rookie village's fences and houses 780 of 1915
+   tiles hide: 22014 -> 15270 groups, the blades' compute 2.4 -> 1.5 ms and their G-buffer 0.93 -> 0.8 ms on the
+   RTX 3070 Laptop at Extreme; in the open 15 tiles hide; the HOM tests cost the main thread about 0.1 ms.
+   `r__grass_blades_stats` reports the hidden tiles.
 3. **Ground window** (compute): a toroidal 1024² or 2048² R32F window of 0.25 m texels around the camera,
    exactly the stock decompress rule - the highest up-facing non-passable surface under the slot's top,
    nothing below its base. Only the strips the window moved onto (8 m steps) are rebaked.
