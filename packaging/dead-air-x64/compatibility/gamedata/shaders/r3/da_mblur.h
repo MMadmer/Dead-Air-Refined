@@ -24,7 +24,12 @@ static const float da_mblur_hud_z = 1.10f;
 
 float da_mblur_depth(float2 uv)
 {
+#ifdef USE_MSAA
+	// A multisampled position target has no filtered read: its first sample.
+	const float z = s_position.Load(int2(uv * pos_decompression_params2.xy), 0).z;
+#else
 	const float z = s_position.SampleLevel(smp_nofilter, uv, 0).z;
+#endif
 	return z > 0.01f ? z : 1e4f;
 }
 
@@ -67,7 +72,13 @@ float3 da_mblur_gather(Texture2D src, float2 uv, float3 c, float2 pos)
 	const float lc = max(length(center.xy), 0.5f);
 	// The sample positions differ pixel to pixel instead of banding. White noise: interleaved gradient noise drew
 	// its diagonal lattice over the blur, which no temporal pass after this one resolves.
-	const float jitter = frac(sin(dot(pos, float2(12.9898f, 78.233f))) * 43758.5453f) - 0.5f;
+	// An integer hash of the pixel: a sine's range reduction at these arguments is coarse and patterned on some GPUs,
+	// and DXC may reorder the float maths (da_lattice.h).
+	uint h = uint(pos.x) * 1973u + uint(pos.y) * 9277u + 26699u;
+	h = (h ^ (h >> 15)) * 0x2c1b3c6du;
+	h = (h ^ (h >> 12)) * 0x297a2d39u;
+	h ^= h >> 15;
+	const float jitter = float(h & 0xffffu) * (1.0f / 65536.0f) - 0.5f;
 	// A tap per two pixels of the motion, 4 to 12.
 	const int taps = clamp(int(lmax * 0.5f + 0.5f) * 2, 4, 12);
 	float total = 1.0f / lc;

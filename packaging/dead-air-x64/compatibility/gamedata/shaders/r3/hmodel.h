@@ -20,10 +20,12 @@ uniform float4	env_color;        // color.w  = lerp factor
 uniform float3x4	m_v2w;
 
 // The specular term in its two factors: the sky's cube in the mirror direction (env_s) and its weight by the
-// material and the gloss (hspecular = env_s * spec_w). combine_1 puts the traced reflection in place of the cube.
+// material and the gloss (hspecular = env_s * spec_w). combine_1 puts the traced or screen-space reflection in place of
+// the cube, at spec_e: the same weight without the sky the point sees (h), which a reflection of what is really there
+// needs no longer - under a roof the cube is dimmed by it, the ceiling a ray finds is not.
 void hmodel_parts
 (
-	out float3 hdiffuse, out float3 env_s, out float spec_w,
+	out float3 hdiffuse, out float3 env_s, out float spec_w, out float spec_e,
 	float m, float h, float s, float3 Pnt, float3 normal
 )
 {
@@ -61,6 +63,7 @@ void hmodel_parts
 			env_s	= env_color.xyz * lerp( e0s, e1s, env_color.w);
 			env_s	*=env_s;	// contrast
 			spec_w	= light.w*s;
+			spec_e	= spec_w;
 
 	// The stock materials under the GGX model (lmodel.h) reflect the sky itself, as the dome shows it (the fog's
 	// tint, da_fog_common.h), sharp or blurred by the surface's roughness - DOOM picks the probe's mip by 6 (1 - s) -
@@ -78,7 +81,8 @@ void hmodel_parts
 		const float A = ( 0.095f + smooth * ( 0.6f + 4.19f * smooth ) ) * ( nv + 0.025f ) * exp2( 1.0f - 14.0f * nv );
 		const float B = 0.4f + 0.6f * ( 1.0f - exp2( -9.5f * smooth * nv ) );
 		const float f0 = da_spec_f0( s );
-		spec_w = ( A * ( 1.0f - f0 ) + B * f0 ) * saturate( hscale );
+		spec_e = A * ( 1.0f - f0 ) + B * f0;
+		spec_w = spec_e * saturate( hscale );
 	}
 }
 
@@ -89,8 +93,8 @@ void hmodel
 )
 {
 	float3	env_s;
-	float	spec_w;
-	hmodel_parts( hdiffuse, env_s, spec_w, m, h, s, Pnt, normal );
+	float	spec_w, spec_e;
+	hmodel_parts( hdiffuse, env_s, spec_w, spec_e, m, h, s, Pnt, normal );
 		hspecular	= env_s*spec_w;                //*h*m*s        ;        //env_s        *light.w         * s;
 }
 

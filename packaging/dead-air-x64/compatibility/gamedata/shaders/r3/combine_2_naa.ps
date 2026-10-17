@@ -30,6 +30,29 @@ uniform float4		da_gamma;
 // no memory. What replaces it keeps a field of the water itself (da_visor_drops.ps) and this
 // header is the optics of looking through it.
 #include "da_visor.h"
+
+// Contrast-adaptive sharpening after the native temporal pass, the way DOOM Eternal sharpens its TAA (AMD's RCAS):
+// the cross of four neighbours lifts the pixel's detail by a negative lobe, limited so the result never leaves the
+// neighbourhood's range (no halo, no ringing) - smaller where the contrast already is. The frame here is before the
+// tone curve, so the range's ceiling is the neighbourhood's own peak, not 1. strength 0..1 of the largest lobe.
+float3 da_rcas(float2 uv, float3 c, float strength)
+{
+	const float2 step = screen_res.zw;
+	const float3 n = s_image.SampleLevel(smp_nofilter, uv + float2(0.0f, -step.y), 0).rgb;
+	const float3 s = s_image.SampleLevel(smp_nofilter, uv + float2(0.0f, step.y), 0).rgb;
+	const float3 w = s_image.SampleLevel(smp_nofilter, uv + float2(-step.x, 0.0f), 0).rgb;
+	const float3 e = s_image.SampleLevel(smp_nofilter, uv + float2(step.x, 0.0f), 0).rgb;
+	const float3 lo = min(c, min(min(n, s), min(w, e)));
+	const float3 hi = max(c, max(max(n, s), max(w, e)));
+	const float peak = max(max(hi.r, max(hi.g, hi.b)), 1.0f);
+	// The most negative lobe that keeps each channel above the low and below the ceiling.
+	const float3 to_lo = -lo / max(4.0f * hi, 1e-4f);
+	const float3 to_hi = (peak - hi) / min(4.0f * lo - 4.0f * peak, -1e-4f);
+	const float3 lobes = max(to_lo, to_hi);
+	const float lobe = clamp(max(lobes.r, max(lobes.g, lobes.b)), -0.1875f, 0.0f) * strength;
+	return max((lobe * (n + s + w + e) + c) / (4.0f * lobe + 1.0f), 0.0f);
+}
+
 #include "lumasharpen.h"
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -154,6 +177,9 @@ c2_out main( v2p_aa_AA I )
 
 	if (lumasharpen.x != 0)
 		img = LumaSharpenPass(img, sceneColor, center, lumasharpen*3);
+	// After the native temporal pass (lumasharpen.y: its strength, 0 under an upscaler, which sharpens on its own).
+	[branch] if (lumasharpen.y > 0.001f && uw <= 0.0h)
+		img = da_rcas(center, img, lumasharpen.y);
 
 	img	= dof(img, center, centerDepth);
 

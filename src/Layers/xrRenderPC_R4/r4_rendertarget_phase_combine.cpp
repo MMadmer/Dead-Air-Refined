@@ -244,7 +244,7 @@ void CRenderTarget::phase_combine()
     Fmatrix m_previous;
     {
         // (new-camera) -> (world) -> (old_viewproj)
-        const bool historyValid = m_mblur_history_valid && m_mblur_frame + 1 == Device.dwFrame;
+        const bool historyValid = m_mblur_history_valid && m_mblur_frame + 1 == Device.dwFrame && !da_history_reset();
         if (historyValid)
             m_previous.mul(m_mblur_viewproj, Device.mInvView);
         else
@@ -519,6 +519,7 @@ void CRenderTarget::phase_combine()
     // An upscaler is the anti-aliasing while it runs: nothing spatial goes before it, and there
     // is exactly one temporal filter.
     GpuTimers.Begin(dx11GpuTimers::CombineAA);
+    bool taa_ran = false; // the native temporal pass resolved this frame (combine_2 sharpens after it)
     if (!upscaling)
     {
         // TAA stacks on top of the spatial pass: SMAA removes staircases, this resolves the
@@ -538,6 +539,7 @@ void CRenderTarget::phase_combine()
 
         if (taa)
             phase_taa(m_previous, ps_r__smaa != 0);
+        taa_ran = taa;
     }
     GpuTimers.End(dx11GpuTimers::CombineAA);
     GpuTimers.Begin(dx11GpuTimers::CombinePost);
@@ -715,7 +717,9 @@ void CRenderTarget::phase_combine()
         }
         else
             RCache.set_c("da_visor", 0.f, 1.f, 1.f, 1.f);
-        RCache.set_c("lumasharpen", ps_r2_lumasharpen, 0.f, 0.f, 0.f);
+        // y: the contrast-adaptive sharpening after the native TAA, at the upscalers' strength (they sharpen on their
+        // own); not over the motion blur, whose streaks it would cut.
+        RCache.set_c("lumasharpen", ps_r2_lumasharpen, taa_ran && !m_da_mblur_ran ? ps_r__upscale_sharpness : 0.f, 0.f, 0.f);
         // The menu's bloom slider scales the pyramid (0.7 is its default).
         RCache.set_c("da_bloom_params", m_da_bloom_ran ? ps_r__bloom * ps_r2_ls_bloom_kernel_scale / 0.7f : 0.f, 0.f,
             0.f, 0.f);

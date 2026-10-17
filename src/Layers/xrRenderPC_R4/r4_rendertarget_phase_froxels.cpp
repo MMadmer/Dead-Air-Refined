@@ -62,6 +62,7 @@ struct DaFroxels
     u32 shadow_frame[3]{};
     Fvector drift{}; // the medium's drift with the wind, wrapped at the noise's period
     u32 phase = 0;
+    u64 failed = 0; // the tier and size the volumes could not be created at (not retried every frame)
 };
 
 namespace
@@ -243,10 +244,19 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
         return false;
 
     const u32 tier = std::min<u32>(ps_r_sun_shafts, std::size(kTiers)) - 1;
-    if ((!f.tex[0] || f.tier != tier || f.w != (Device.dwRenderWidth + kTiers[tier].tile - 1) / kTiers[tier].tile ||
-            f.h != (Device.dwRenderHeight + kTiers[tier].tile - 1) / kTiers[tier].tile) &&
-        !allocate(f, tier))
-        return false;
+    const u64 key = (u64(tier + 1) << 40) | (u64(Device.dwRenderWidth) << 20) | u64(Device.dwRenderHeight);
+    if (!f.tex[0] || f.tier != tier || f.w != (Device.dwRenderWidth + kTiers[tier].tile - 1) / kTiers[tier].tile ||
+        f.h != (Device.dwRenderHeight + kTiers[tier].tile - 1) / kTiers[tier].tile)
+    {
+        if (f.failed == key)
+            return false;
+        if (!allocate(f, tier))
+        {
+            f.failed = key;
+            return false;
+        }
+        f.failed = 0;
+    }
 
     if (!cascades && !torch)
         return false;

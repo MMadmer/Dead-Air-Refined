@@ -1267,8 +1267,12 @@ from the sibling open-source engine.
 
 Every local light takes the same march toward itself (DOOM Eternal's per-light contact
 shadows, `accum_base.ps`): at most half way to the light, within 25 m of the eye (fading out
-over the last 5), never on the first-person hands. Same knobs; its cost was under the frame
-time's noise in Sidorovich's bunker with its lamps lit.
+over the last 5), never on the first-person hands. Same knobs.
+
+Until 17.10.2026 the march projected its points to render pixels and tested them as uv, so it stopped at its
+first step on almost every pixel and no contact shadow was ever cast; it now runs, with about one step per three
+pixels of the ray on screen (at most `r__sss_steps`): +0.75 ms in the sun's slot at Extreme on the RTX 3070
+Laptop, 1440p DLSS Balanced, a 15:30 sun over the bus by the road.
 
 ## Wind service and cloud deck
 

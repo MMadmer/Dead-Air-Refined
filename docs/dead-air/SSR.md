@@ -26,7 +26,10 @@ Before `combine_1`, after the ambient occlusion:
   and normal; their mean and spread clip the history, which follows the reflected point (the mirror image of a plane
   moves with the hit's parallax). The same filter as the traced reflections' `rt_gloss_temporal.hlsl`.
 - **Combine**: the result, premultiplied by its confidence, takes the cube's place in the sky specular term, as the
-  traced one does. Where a ray finds nothing on screen the cube stays.
+  traced one does, at the environment BRDF's weight without the sky the point sees (`hmodel_parts`' spec_e): under a
+  roof the cube dims, the ceiling a ray finds does not. Where a ray finds nothing on screen the cube stays.
+- **Not under MSAA** (its third target would not match combine_1's multisampled ones), and not on a frame after a
+  cut, which would reflect the view before it.
 
 The thresholds and the roughness spread are the traced reflections', so the two look alike: in a rain on the bus by
 the road the screen-space frame against the traced one differs by 0.5 to 0.6 of 255.

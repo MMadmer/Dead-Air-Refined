@@ -41,9 +41,10 @@ sun's alone). With `r__particle_light 0` they keep the old terms.
 
 Blended and additive particles also fade over the last 40 cm before the near plane (DOOM Eternal's camera fade, on
 the soft particles' path): a puff the camera walks through no longer shows the plane's straight cut. A muzzle's
-smoke from 0.6 m on stays whole. Multiplying particles now fade toward white (MUL) and grey (MUL_2X), the colours
-that leave the frame as it is, at the soft edge and near the eye alike; fading them toward black darkened what they
-crossed.
+smoke from 0.6 m on stays whole. Every soft fade now fades once, toward what leaves the frame as it is: a blended
+particle by its coverage (the stock faded its colour as well, which darkened a puff's soft edge toward black), an
+additive one by its light, a multiplying one toward white (MUL) or grey (MUL_2X); fading those toward black darkened
+what they crossed.
 
 ## 5. Flipbooks
 

@@ -15,8 +15,11 @@ struct v2p
 
 	float4 hpos	: SV_Position;
     float fog: FOG;		// fog
+	// The model distortion's vertex shaders (particle_hard.ps) write neither.
+#ifndef DA_PARTICLE_HARD
 	float3 light : TEXCOORD2;	// the light the particle receives (da_particle_light.h)
 	float3 tc2 : TEXCOORD3;	// the flipbook's next frame and the blend toward it (ParticleEffect.cpp)
+#endif
 };
 
 uniform float4 da_particle_light;
@@ -31,12 +34,17 @@ uniform float4 da_particle_qa;
 float4 main( v2p I ) : SV_Target
 {
 //	float4 result = I.c*tex2D	(s_base,I.tc0);
+#ifdef DA_PARTICLE_HARD
+	const float3 light = 1.0f, tc2 = 0.0f;
+#else
+	const float3 light = I.light, tc2 = I.tc2;
+#endif
 	float4 tex = s_base.Sample( smp_base, I.tc0);
 	// An animated flipbook blends into its next frame (DOOM Eternal): the sequence plays smoothly instead of stepping.
 	// The gradients are the frame's own, taken outside the branch.
 	const float2 dx = ddx( I.tc0 ), dy = ddy( I.tc0 );
-	[branch] if ( I.tc2.z > 0.004f )
-		tex = lerp( tex, s_base.SampleGrad( smp_base, I.tc2.xy, dx, dy ), I.tc2.z );
+	[branch] if ( tc2.z > 0.004f )
+		tex = lerp( tex, s_base.SampleGrad( smp_base, tc2.xy, dx, dy ), tc2.z );
 	float4 result = I.c * tex;
 
 	//	Igor: additional depth test
@@ -55,15 +63,17 @@ float4 main( v2p I ) : SV_Target
 	// dissolves over the last 40 cm before the near plane instead of being cut by it (z is the clip depth, the view
 	// depth less the near plane's; a muzzle's smoke past 0.6 m stays whole).
 	const float soft = Contrast( saturate(spaceDepth*1.3h), 2) * smoothstep( 0.0f, 0.4f, I.tctexgen.z );
-	// Faded toward what leaves the frame as it is: no light for an additive particle, white or grey for a multiplying
-	// one (fading those toward black darkened what they crossed).
+	// Faded toward what leaves the frame as it is, once: an additive particle by its light, a blended one by its
+	// coverage (the stock faded both, which darkened a puff's soft edge toward black), a multiplying one toward white or
+	// grey (fading those toward black darkened what they crossed).
 #if defined(DA_PARTICLE_MUL)
 	result.rgb = lerp( 1.0f, result.rgb, soft );
 #elif defined(DA_PARTICLE_MUL2)
 	result.rgb = lerp( 0.5f, result.rgb, soft );
+#elif defined(DA_PARTICLE_ADD)
+	result.rgb *= soft;
 #else
 	result.a *= soft;
-	result.rgb *= soft;
 #endif
 #endif	//	USE_SOFT_PARTICLES
 
@@ -71,10 +81,10 @@ float4 main( v2p I ) : SV_Target
 
 	// A blended particle is lit like the scene (da_particle_light.h); additive and multiplying ones are light themselves.
 #if !defined(DA_PARTICLE_ADD) && !defined(DA_PARTICLE_MUL) && !defined(DA_PARTICLE_MUL2)
-	result.rgb *= I.light;
+	result.rgb *= light;
 	// QA (r__particle_light 2): the light itself, half strength, over the particle's coverage.
-	[branch] if (da_particle_light.x > 1.5f)
-		result.rgb = I.light * 0.5f;
+	[branch] if (da_particle_qa.x > 1.5f && da_particle_qa.x < 2.5f)
+		result.rgb = light * 0.5f;
 #endif
 	
 	//result.rgb /= 2;
@@ -96,7 +106,7 @@ float4 main( v2p I ) : SV_Target
 	
 	// QA (r__particle_light 3): the flipbook's blend toward its next frame, red (none: blue).
 	[branch] if ( da_particle_qa.x > 2.5f )
-		result.rgb = float3( I.tc2.z, 0.2f, 1.0f - I.tc2.z ) * max( result.a, 0.3f );
+		result.rgb = float3( tc2.z, 0.2f, 1.0f - tc2.z ) * max( result.a, 0.3f );
 
 	return	result;
 }

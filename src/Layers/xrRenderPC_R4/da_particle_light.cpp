@@ -122,13 +122,16 @@ bool da_particle_light_wanted()
 
 void da_particle_light_snapshot(const light_Package& package)
 {
-    // The nearest lights by the near side of their spheres, those that reach a particle near the eye first.
+    // The nearest lights by the near side of their spheres, those that reach a particle near the eye first. The lights
+    // come in two packages a frame (those settled and those whose occlusion query is in flight): both count.
     struct Candidate
     {
         light* L;
         float gap;
     };
-    xr_vector<Candidate> candidates;
+    static xr_vector<Candidate> candidates;
+    if (g_lights.frame != Device.dwFrame)
+        candidates.clear();
     const auto consider = [&](const xr_vector<light*>& list)
     {
         for (light* L : list)

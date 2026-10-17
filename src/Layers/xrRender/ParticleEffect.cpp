@@ -285,7 +285,11 @@ void CParticleEffect::OnDeviceCreate()
     {
         if (m_Def->m_Flags.is(CPEDef::dfSprite))
         {
+#ifdef _EDITOR
+            geom.create(FVF::F_LIT, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
+#else
             geom.create(FVF::F_LIT_FLIP, RImplementation.Vertex.Buffer(), RImplementation.QuadIB);
+#endif
             if (m_Def)
                 shader = m_Def->m_CachedShader;
         }
@@ -677,8 +681,11 @@ void CParticleEffect::ParticleRenderStream(FVF::LIT_FLIP* pv, u32 count, PAPI::P
                         m.color, sina, cosa);
                 }
             }
-            for (u32 k = 0; k < 4; ++k)
-                quad[k].t2.set(quad[k].t.x + next.x, quad[k].t.y + next.y, blend);
+            // The corners in FillSprite's order, from lt/rb: the mapped buffer is write-combined and never read back.
+            quad[0].t2.set(lt.x + next.x, rb.y + next.y, blend);
+            quad[1].t2.set(lt.x + next.x, lt.y + next.y, blend);
+            quad[2].t2.set(rb.x + next.x, rb.y + next.y, blend);
+            quad[3].t2.set(rb.x + next.x, lt.y + next.y, blend);
         }
     };
 

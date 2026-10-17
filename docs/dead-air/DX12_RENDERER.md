@@ -66,7 +66,7 @@ a command the running module lacks asserts). Token **names** are what user.ltx s
 | `r__fsr` | token | `st_fsr_off` 0, `st_fsr_native` 1, `st_fsr_quality` 2, `st_fsr_balanced` 3, `st_fsr_performance` 4, `st_fsr_ultra_performance` 5 | yes | non-off switches `r__dlss` off |
 | `r__dlss` | token | `st_dlss_off` 0, `st_dlss_dlaa` 1, `st_dlss_quality` 2, `st_dlss_balanced` 3, `st_dlss_performance` 4, `st_dlss_ultra_performance` 5 | yes | non-off switches `r__fsr` off; forced off at start when unsupported |
 | `r__framegen` | token | `st_fg_off` 0, `st_fg_fsr` 1, `st_fg_dlss` 2, `st_fg_dlss_x3` 3, `st_fg_dlss_x4` 4 | yes | DX12 only; unsupported values fall back to off at start |
-| `r__upscale_sharpness` | float 0..1 | default 0.3 | yes | FSR RCAS; post sharpen for DLSS |
+| `r__upscale_sharpness` | float 0..1 | default 0.3 | yes | FSR RCAS; post sharpen for DLSS; the native TAA's contrast-adaptive sharpening in combine_2 (`da_rcas`, after DOOM Eternal's RCAS over its TAA; not over the motion blur or under water) |
 | `r__caps` | read-only string | e.g. `api=11;dx12=1;dlss=1;dlssg=0;dlssg_max=0;fsr=1;fsrfg=1;hags=1` | no | for the menu (`get_console():get_string("r__caps")`); on DX12 `fsr` = the FFX loader (`da_ffx_loader.h`) has an upscaling provider for the adapter; the DirectX 12 feature keys that follow are in section 8 |
 
 Changing `r__aa`, `r__fsr`, `r__dlss`, `r__framegen` or `r__upscale_sharpness` applies without a game

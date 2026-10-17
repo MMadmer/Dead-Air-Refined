@@ -197,20 +197,16 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 	
 	{
 		float3 env_s;
-		float spec_w;
-		hmodel_parts( hdiffuse, env_s, spec_w, mtl, N.w, D.w, P.xyz, N.xyz );
-		// The traced mirror image of a glossy surface in place of the sky's cube (rt_gloss*.hlsl; premultiplied).
+		float spec_w, spec_e;
+		hmodel_parts( hdiffuse, env_s, spec_w, spec_e, mtl, N.w, D.w, P.xyz, N.xyz );
+		// The traced mirror image of a glossy surface in place of the sky's cube (rt_gloss*.hlsl), else what the screen
+		// shows (da_ssr.h): premultiplied by its confidence, at the weight without the sky's visibility (hmodel.h).
+		float4 mirror = 0.0f;
 		[branch] if ( da_rt.x > 1.5f )
-		{
-			const float4 traced = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) );
-			env_s = env_s * ( 1.0f - traced.a ) + traced.rgb;
-		}
+			mirror = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) );
 		else [branch] if ( da_ssr.x > 0.5f )
-		{
-			const float4 seen = s_ssr.Load( int3( I.pos2d.xy, 0 ) );
-			env_s = env_s * ( 1.0f - seen.a ) + seen.rgb;
-		}
-		hspecular = env_s * spec_w;
+			mirror = s_ssr.Load( int3( I.pos2d.xy, 0 ) );
+		hspecular = env_s * ( ( 1.0f - mirror.a ) * spec_w ) + mirror.rgb * spec_e;
 	}
 //      hmodel		(hdiffuse, hspecular, mtl, 1, D.w, P.xyz, N.xyz);
 //	hdiffuse*=hdiffuse;			//. high contrast hemi

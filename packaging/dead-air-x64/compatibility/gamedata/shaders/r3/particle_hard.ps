@@ -4,4 +4,6 @@
 #define	DA_PARTICLE_TEXGEN_INPUT
 #endif
 #undef	USE_SOFT_PARTICLES
+// The model distortion's vertex shaders (model_distort*.vs) write no light and no flipbook: particle.ps takes neither.
+#define	DA_PARTICLE_HARD
 #include "particle.ps"

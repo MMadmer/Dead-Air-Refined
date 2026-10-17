@@ -55,9 +55,11 @@ float3 da_bloom_knee_of(float3 c)
 	return c * smoothstep(0.0f, 1.0f, saturate((peak - da_bloom_knee.x) / da_bloom_knee.y));
 }
 
-// The space the history blends in: a lone bright texel weighs no more than a dim one.
-float3 da_bloom_compress(float3 c) { return c / (1.0f + dot(c, LUMINANCE_VECTOR)); }
-float3 da_bloom_expand(float3 c) { return c / max(1.0f - dot(c, LUMINANCE_VECTOR), 1e-3f); }
+// The space the history blends in: a lone bright texel weighs no more than a dim one. By the brightest channel, not the
+// luminance: the history clamped channel by channel into the box of its neighbours stays under 1 in every channel, so
+// it never expands toward infinity (two saturated lights of different hues made a firefly by luminance).
+float3 da_bloom_compress(float3 c) { return c / (1.0f + max(c.r, max(c.g, c.b))); }
+float3 da_bloom_expand(float3 c) { return c / max(1.0f - max(c.r, max(c.g, c.b)), 1e-3f); }
 
 out_bloom main(v2p I)
 {

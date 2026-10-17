@@ -21,10 +21,13 @@ uniform float4 da_sss;
 
 // Screen point from a view-space position, using the same pair of numbers
 // gbuffer_load_data uses to reconstruct the position. No projection matrix needed:
-//   P.xy = P.z * ( uv * dp.zw - dp.xy )   =>   uv = ( P.xy / P.z + dp.xy ) / dp.zw
+//   P.xy = P.z * ( px * dp.zw - dp.xy )   =>   px = ( P.xy / P.z + dp.xy ) / dp.zw
+// dp.zw is per render PIXEL (px), so the uv is px over the render size. Returned as px, the march stopped at its
+// first step on every pixel past (1, 1): the contact shadows never cast.
 float2 da_sss_project( float3 pv )
 {
-	return ( pv.xy / max( pv.z, 0.001f ) + pos_decompression_params.xy ) / pos_decompression_params.zw;
+	return ( pv.xy / max( pv.z, 0.001f ) + pos_decompression_params.xy ) / pos_decompression_params.zw *
+		pos_decompression_params2.zw;
 }
 
 // Per-pixel jitter of the ray start. Without it every pixel steps in lockstep and the
@@ -41,7 +44,10 @@ float da_sss_dither( float2 pos2d )
 // 1 = lit, 0 = fully shadowed.
 float da_contact_shadow( float3 pv, float3 dir, float len, float2 pos2d )
 {
-	const int   steps = (int)max( da_sss.w, 2.0f );
+	// About one step per three pixels the ray crosses on screen, at most da_sss.w: a far surface's short ray needs few
+	// (the full count everywhere cost 2 ms of the sun's pass at the Extreme preset).
+	const float2 span = ( da_sss_project( pv + dir * len ) - da_sss_project( pv ) ) * pos_decompression_params2.xy;
+	const int   steps = (int)clamp( length( span ) * ( 1.0f / 3.0f ), 3.0f, max( da_sss.w, 3.0f ) );
 	const float thick = da_sss.z;
 	const float dstep = len / steps;
 

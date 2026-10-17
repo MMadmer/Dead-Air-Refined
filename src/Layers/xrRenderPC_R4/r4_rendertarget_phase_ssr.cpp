@@ -80,6 +80,10 @@ bool wanted(const DaSsr& s)
 void CRenderTarget::ssr_create()
 {
     ssr_destroy();
+    // Not under MSAA: the third target of combine_1 would not match its multisampled targets, and the passes read
+    // the G-buffer by Load (glossy surfaces keep the sky's cube there).
+    if (RImplementation.o.msaa)
+        return;
     m_ssr = xr_new<DaSsr>();
     CBlender_da_ssr blender;
     m_ssr->shader.create(&blender, "r2" DELIMITER "da_ssr");
@@ -105,8 +109,9 @@ const ref_rt* CRenderTarget::ssr_scene_target()
 void CRenderTarget::phase_ssr(CBackend& cmd_list)
 {
     // The traced reflections answer instead when they ran; without last frame's colour there is nothing to show.
+    // A cut (a load, a teleport, back from the menu) leaves last frame's colour showing another view.
     if (!m_ssr || !wanted(*m_ssr) || da_rt_constants().x > 1.5f || !ready(*m_ssr) ||
-        m_ssr->scene_frame + 1 != Device.dwFrame)
+        m_ssr->scene_frame + 1 != Device.dwFrame || da_history_reset())
         return;
     DaSsr& s = *m_ssr;
     PIX_EVENT_CTX(cmd_list, phase_ssr);
