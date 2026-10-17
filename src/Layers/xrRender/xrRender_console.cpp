@@ -308,6 +308,8 @@ float ps_r__bloom_knee = 0.5f;
 // share of a frame's motion it spans (a 180-degree shutter), a look constant.
 int ps_r__mblur = 0;
 float ps_r__mblur_shutter = 0.5f;
+// The sunlit air (r4_rendertarget_phase_froxels.cpp): its density against the weather's shaft strength, a look constant.
+float ps_r__froxel_strength = 1.f;
 // Middle/far sun cascade reuse TTL in ms, 0 = rebuild every frame (default). The cascade
 // volume is fitted to the camera frustum, but cache validity never checks the view direction,
 // so any turn or walk applies sun light through a stale volume: the newly revealed part of
@@ -1485,6 +1487,7 @@ void xrRender_sync_preset_derived()
     ps_r__bloom_threshold = 0.5f;
     ps_r__bloom_knee = 0.5f;
     ps_r__mblur_shutter = 0.5f;
+    ps_r__froxel_strength = 1.f;
     ps_r__grass_fade_start = grass_fade_by_preset[ps_Preset];
     ps_r__grass_fade_flat = grass_flat_by_preset[ps_Preset];
     ps_r__puddles = puddles_by_preset[ps_Preset] > 0;
@@ -2001,6 +2004,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__bloom_knee", &ps_r__bloom_knee, 0.05f, 8.f);
     CMD4(CCC_Integer, "r__mblur", &ps_r__mblur, 0, 1);
     CMD4(CCC_RuntimeFloat, "r__mblur_shutter", &ps_r__mblur_shutter, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__froxel_strength", &ps_r__froxel_strength, 0.f, 100.f);
 #if defined(USE_DX11)
     {
         // kill switch for batched tree rendering - it reorders and consumes the draw list

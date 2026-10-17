@@ -1,0 +1,21 @@
+#include "common.h"
+#include "da_froxel.h"
+
+// The froxel volume's light at every pixel's depth (da_froxel.h), into the volumetric light target combine_volumetric
+// adds to the scene (where the stock shafts went).
+
+struct v2p
+{
+	float2 tc0 : TEXCOORD0;
+	float4 hpos : SV_Position;
+};
+
+float4 main(v2p I) : SV_Target
+{
+#ifndef USE_MSAA
+	const float z = s_position.SampleLevel(smp_nofilter, I.tc0, 0).z;
+#else
+	const float z = s_position.Load(int2(I.hpos.xy), 0).z;
+#endif
+	return float4(da_froxel_sample(I.tc0, z).rgb, 0.0f);
+}

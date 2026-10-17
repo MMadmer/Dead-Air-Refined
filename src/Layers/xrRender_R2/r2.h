@@ -151,8 +151,6 @@ struct render_sun : public i_render_phase
 
     sun::cascade m_sun_cascades[R__NUM_SUN_CASCADES];
     light* sun{ nullptr };
-    bool need_to_render_sunshafts{ false };
-    bool last_cascade_chain_mode{ false };
 
     u32 contexts_ids[R__NUM_SUN_CASCADES];
 

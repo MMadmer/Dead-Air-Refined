@@ -104,7 +104,8 @@ void VertexInputStates(Device* d, DynamicStates& s)
     s.Add(VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE);
 }
 
-void PreRasterStates(Device* d, DynamicStates& s)
+// mesh: a mesh shader pipeline, which has no tessellation state to make dynamic.
+void PreRasterStates(Device* d, DynamicStates& s, bool mesh = false)
 {
     s.Add(VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT);
     s.Add(VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT);
@@ -119,7 +120,7 @@ void PreRasterStates(Device* d, DynamicStates& s)
         s.Add(VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT);
     if (d->eds3DepthClip)
         s.Add(VK_DYNAMIC_STATE_DEPTH_CLIP_ENABLE_EXT);
-    if (d->patchControlPointsDynamic)
+    if (d->patchControlPointsDynamic && !mesh)
         s.Add(VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT);
     if (d->caps.shadingRate)
         s.Add(VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR);
@@ -168,7 +169,7 @@ void AllStates(Device* d, DynamicStates& s, bool mesh)
     if (!mesh)
         VertexInputStates(d, s);
     DynamicStates parts[3];
-    PreRasterStates(d, parts[0]);
+    PreRasterStates(d, parts[0], mesh);
     FragmentStates(d, parts[1]);
     OutputStates(d, parts[2]);
     for (const DynamicStates& p : parts)

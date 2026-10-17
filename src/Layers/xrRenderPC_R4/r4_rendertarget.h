@@ -161,9 +161,6 @@ private:
     ref_shader s_accum_mask_msaa[8];
     ref_shader s_accum_direct;
     ref_shader s_accum_direct_msaa[8];
-    ref_shader s_accum_direct_volumetric;
-    ref_shader s_accum_direct_volumetric_msaa[8];
-    ref_shader s_accum_direct_volumetric_minmax;
     ref_shader s_accum_point;
     ref_shader s_accum_point_msaa[8];
     ref_shader s_accum_spot;
@@ -435,7 +432,13 @@ public:
     void accum_direct_f(CBackend& cmd_list, u32 sub_phase);
     void accum_direct_lum(CBackend& cmd_list);
     void accum_direct_blend(CBackend& cmd_list);
-    void accum_direct_volumetric(CBackend& cmd_list, u32 sub_phase, const u32 Offset, const Fmatrix& mShadow, float zMin, float zMax);
+    // The froxel volume of the sunlit air (r4_rendertarget_phase_froxels.cpp): each cascade's matrix as the sun
+    // accumulates it, then the injection, the integration and the apply into the volumetric light target.
+    void froxels_create();
+    void froxels_destroy();
+    void froxels_note_cascade(u32 cascade, const Fmatrix& m_shadow);
+    bool phase_froxels(CBackend& cmd_list);
+    struct DaFroxels* m_froxels{};
     void accum_point(CBackend& cmd_list, light* L);
     void accum_spot(CBackend& cmd_list, light* L);
     void accum_reflected(CBackend& cmd_list, light* L);

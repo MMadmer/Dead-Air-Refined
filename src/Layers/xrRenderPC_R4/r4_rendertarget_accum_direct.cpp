@@ -368,13 +368,6 @@ void CRenderTarget::accum_direct(CBackend& cmd_list, u32 sub_phase)
         // disable depth bounds
         //		u_DBT_disable	();
 
-        //	Igor: draw volumetric here
-        // if (ps_r2_ls_flags.test(R2FLAG_SUN_SHAFTS))
-        if (RImplementation.o.advancedpp && (ps_r_sun_shafts > 0) && sub_phase == SE_SUN_FAR)
-        {
-            da_vrs_scope vrs(cmd_list, VrsPass::SunVolumetric);
-            accum_direct_volumetric(cmd_list, sub_phase, Offset, m_shadow, 0, ps_r2_sun_far);
-        }
     }
 }
 
@@ -547,6 +540,7 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
                 m_shadow.mulB_44(bias_t);
             }
         }
+        froxels_note_cascade(sub_phase, m_shadow);
 
         // clouds xform - one builder for every sun pass (see da_cloud_shadow_xform)
         const Fmatrix m_clouds_shadow = da_cloud_shadow_xform(fuckingsun->direction);
@@ -784,13 +778,11 @@ void CRenderTarget::accum_direct_cascade(CBackend& cmd_list, u32 sub_phase, Fmat
         // disable depth bounds
         //		u_DBT_disable	();
 
-        //	Igor: draw volumetric here
-        // if (ps_r2_ls_flags.test(R2FLAG_SUN_SHAFTS))
-        if (RImplementation.o.advancedpp && (ps_r_sun_shafts > 0) && sub_phase == SE_SUN_FAR)
+        // The sunlit air, once every cascade is in its slice (r4_rendertarget_phase_froxels.cpp).
+        if (sub_phase == SE_SUN_FAR)
         {
-            const float max = RImplementation.r_sun.m_sun_cascades[R__NUM_SUN_CASCADES - 1].size;
             da_vrs_scope vrs(cmd_list, VrsPass::SunVolumetric);
-            accum_direct_volumetric(cmd_list, sub_phase, Offset, m_shadow, 0, max);
+            phase_froxels(cmd_list);
         }
     }
 }
@@ -1092,9 +1084,6 @@ void CRenderTarget::accum_direct_f(CBackend& cmd_list, u32 sub_phase)
             }
             cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, 0x00);
         }
-
-        //	Igor: draw volumetric here
-        // accum_direct_volumetric	(sub_phase, Offset);
     }
 }
 
@@ -1237,160 +1226,6 @@ void CRenderTarget::accum_direct_lum(CBackend& cmd_list)
             cmd_list.StateManager.SetSampleMask(0xffffffff);
         }
         cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, 0x00);
-    }
-}
-
-void CRenderTarget::accum_direct_volumetric(CBackend& cmd_list, u32 sub_phase,
-    const u32 Offset, const Fmatrix& mShadow, float zMin, float zMax)
-{
-    PIX_EVENT_CTX(cmd_list, accum_direct_volumetric);
-
-    if (!need_to_render_sunshafts())
-        return;
-
-    //	Test. draw only for near part
-    //	if (sub_phase!=SE_SUN_N/EAR) return;
-    //	if (sub_phase!=SE_SUN_FAR) return;
-
-    if ((sub_phase != SE_SUN_NEAR) && (sub_phase != SE_SUN_FAR))
-        return;
-
-    phase_vol_accumulator(cmd_list);
-
-    cmd_list.set_ColorWriteEnable();
-
-    ref_selement Element = s_accum_direct_volumetric->E[0];
-
-    // if ( (sub_phase==SE_SUN_NEAR) && use_minmax_sm_this_frame())
-    if (use_minmax_sm_this_frame())
-        Element = s_accum_direct_volumetric_minmax->E[0];
-
-    //	Assume everything was recalculated before this call by accum_direct
-
-    // Perform lighting
-    {
-        // *** assume accumulator setted up ***
-        light* fuckingsun = (light*)RImplementation.Lights.sun._get();
-
-        // Common constants (light-related)
-        Fvector L_dir, L_clr;
-        L_clr.set(fuckingsun->color.r, fuckingsun->color.g, fuckingsun->color.b);
-        Device.mView.transform_dir(L_dir, fuckingsun->direction);
-        L_dir.normalize();
-
-        //	Use g_combine_2UV that was set up by accum_direct
-        //	cmd_list.set_Geometry			(g_combine_2UV);
-
-        // setup
-        // cmd_list.set_Element			(s_accum_direct_volumetric->E[sub_phase]);
-        cmd_list.set_Element(Element);
-        if (!RImplementation.o.oldshadowcascades)
-        {
-            cmd_list.set_CullMode(CULL_CCW);
-        }
-        cmd_list.set_c("Ldynamic_dir", L_dir.x, L_dir.y, L_dir.z, 0.f);
-        cmd_list.set_c("Ldynamic_color", L_clr.x, L_clr.y, L_clr.z, 0.f);
-        cmd_list.set_c("m_shadow", mShadow);
-        Fmatrix m_Texgen;
-        m_Texgen.identity();
-        cmd_list.xforms.set_W(m_Texgen);
-        cmd_list.xforms.set_V(Device.mView);
-        cmd_list.xforms.set_P(da_jitter_project(Device.mProject));
-        u_compute_texgen_screen(cmd_list, m_Texgen);
-
-        cmd_list.set_c("m_texgen", m_Texgen);
-        // The shafts march the same air the clouds shade. Without the cloud projection here
-        // the ground darkened under a cloud while the shaft through the same air stayed at
-        // full brightness - a lit beam standing in a shadow.
-        const Fmatrix m_clouds_shadow = da_cloud_shadow_xform(fuckingsun->direction);
-        cmd_list.set_c("m_sunmask", m_clouds_shadow);
-        cmd_list.set_c("volume_range", zMin, zMax, 0.f, 0.f);
-
-        // nv-DBT
-        //Fvector center_pt;
-        //center_pt.mad(Device.vCameraPosition, Device.vCameraDirection, zMin);
-        //Device.mFullTransform.transform(center_pt);
-        //zMin = center_pt.z;
-
-        //center_pt.mad(Device.vCameraPosition, Device.vCameraDirection, zMax);
-        //Device.mFullTransform.transform(center_pt);
-        //zMax = center_pt.z;
-
-        //	TODO: DX11: Check if DX11 has analog for NV DBT
-        //		if (u_DBT_enable(zMin,zMax))	{
-        // z-test always
-        //			cmd_list.set_ZFunc(D3DCMP_ALWAYS);
-        //			HW.pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        //		}
-        //		else
-        {
-            //	TODO: DX11: Implement via different passes
-            if (SE_SUN_NEAR == sub_phase)
-                cmd_list.set_ZFunc(D3DCMP_GREATER);
-            else
-                cmd_list.set_ZFunc(D3DCMP_ALWAYS);
-        }
-
-        // Fetch4 : enable
-        //		if (RImplementation.o.HW_smap_FETCH4)	{
-        //. we hacked the shader to force smap on S0
-        //#			define FOURCC_GET4  MAKEFOURCC('G','E','T','4')
-        //			HW.pDevice->SetSamplerState	( 0, D3DSAMP_MIPMAPLODBIAS, FOURCC_GET4 );
-        //		}
-
-        // setup stencil: we have to draw to both lit and unlit pixels
-        // cmd_list.set_Stencil			(TRUE,D3DCMP_LESSEQUAL,dwLightMarkerID,0xff,0x00);
-        // if( ! RImplementation.o.msaa )
-        {
-            if (RImplementation.o.oldshadowcascades)
-                cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
-            else
-                cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 8, 0, 16);
-        }
-        /*else
-        {
-            // per pixel
-            cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
-
-            // per sample
-            if (RImplementation.o.msaa_opt)
-            {
-                cmd_list.set_Element(s_accum_direct_volumetric_msaa[0]->E[0]);
-                cmd_list.set_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0xff, 0xff);
-                if (SE_SUN_NEAR == sub_phase)
-                    cmd_list.set_ZFunc(D3DCMP_GREATER);
-                else
-                    cmd_list.set_ZFunc(D3DCMP_LESSEQUAL);
-                cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
-            }
-            else
-            {
-                for (u32 i = 0; i < RImplementation.o.msaa_samples; ++i)
-                {
-                    cmd_list.set_Element(s_accum_direct_volumetric_msaa[i]->E[0]);
-                    StateManager.SetSampleMask(u32(1) << i);
-                    cmd_list.set_Stencil(TRUE, D3DCMP_ALWAYS, 0xff, 0xff, 0xff);
-                    if (SE_SUN_NEAR == sub_phase)
-                        cmd_list.set_ZFunc(D3DCMP_GREATER);
-                    else
-                        cmd_list.set_ZFunc(D3DCMP_LESSEQUAL);
-                    cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
-                }
-                StateManager.SetSampleMask(0xffffffff);
-            }
-            cmd_list.set_Stencil(TRUE, D3DCMP_LESSEQUAL, dwLightMarkerID, 0xff, 0x00);
-        }*/
-
-        // Fetch4 : disable
-        //		if (RImplementation.o.HW_smap_FETCH4)	{
-        //. we hacked the shader to force smap on S0
-        //#			define FOURCC_GET1  MAKEFOURCC('G','E','T','1')
-        //			HW.pDevice->SetSamplerState	( 0, D3DSAMP_MIPMAPLODBIAS, FOURCC_GET1 );
-        //		}
-
-        //	TODO: DX11: Check if DX11 has analog for NV DBT
-        // disable depth bounds
-        //		u_DBT_disable	();
     }
 }
 } // namespace xray::render::RENDER_NAMESPACE

@@ -95,10 +95,6 @@ void render_sun::calculate()
     m_sun_cascades[2].size = std::max(ps_r__sun_cascade_far, ps_r__sun_cascade_mid);
     m_sun_cascades[2].bias = m_sun_cascades[2].size * fBias;
 
-    need_to_render_sunshafts = RImplementation.Target->need_to_render_sunshafts();
-    last_cascade_chain_mode = m_sun_cascades[R__NUM_SUN_CASCADES - 1].reset_chain;
-    if (need_to_render_sunshafts)
-        m_sun_cascades[R__NUM_SUN_CASCADES - 1].reset_chain = true;
 
     // Lets begin from base frustum
     Fmatrix fullxform_inv = Device.mInvFullTransform;
@@ -401,8 +397,6 @@ void render_sun::render()
     if (!o.active)
         return;
 
-    if (need_to_render_sunshafts)
-        m_sun_cascades[R__NUM_SUN_CASCADES - 1].reset_chain = last_cascade_chain_mode;
 
     // Render shadow-map
     const auto render_cascade = [&, this](const TaskRange<u32>& range)

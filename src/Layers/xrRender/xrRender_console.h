@@ -103,6 +103,7 @@ extern ECORE_API float ps_r__bloom_threshold;
 extern ECORE_API float ps_r__bloom_knee;
 extern ECORE_API int ps_r__mblur;
 extern ECORE_API float ps_r__mblur_shutter;
+extern ECORE_API float ps_r__froxel_strength;
 extern ECORE_API int ps_r__sun_cache_ms;
 
 extern ECORE_API float ps_r__Detail_l_ambient;

@@ -612,37 +612,11 @@ CRenderTarget::CRenderTarget()
             }
         }
 
-        // Accum volumetric
+#if RENDER == R_R4
+        // The sunlit air (r4_rendertarget_phase_froxels.cpp).
         if (options.advancedpp)
-        {
-            s_accum_direct_volumetric.create("accum_volumetric_sun_nomsaa");
-            manually_assign_texture(s_accum_direct_volumetric, "s_smap", smapTarget);
-
-            if (options.minmax_sm)
-            {
-                s_accum_direct_volumetric_minmax.create("accum_volumetric_sun_nomsaa_minmax");
-                manually_assign_texture(s_accum_direct_volumetric_minmax, "s_smap", smapTarget);
-            }
-
-            if (options.msaa)
-            {
-                static constexpr pcstr snames[] =
-                {
-                    "accum_volumetric_sun_msaa0", "accum_volumetric_sun_msaa1",
-                    "accum_volumetric_sun_msaa2", "accum_volumetric_sun_msaa3",
-                    "accum_volumetric_sun_msaa4", "accum_volumetric_sun_msaa5",
-                    "accum_volumetric_sun_msaa6", "accum_volumetric_sun_msaa7"
-                };
-
-                for (u32 i = 0; i < BoundSamples; ++i)
-                {
-                    // CBlender_accum_direct_volumetric_sun_msaa b_accum_direct_volumetric_sun_msaa{ "ISAMPLE", SAMPLE_DEFS[i] };
-                    // s_accum_direct_volumetric_msaa[i].create(&b_accum_direct_volumetric_sun_msaa, "r2" DELIMITER "accum_direct");
-                    s_accum_direct_volumetric_msaa[i].create(snames[i]);
-                    manually_assign_texture(s_accum_direct_volumetric_msaa[i], "s_smap", smapTarget);
-                }
-            }
-        }
+            froxels_create();
+#endif
     }
 
     // RAIN
@@ -1027,6 +1001,7 @@ CRenderTarget::~CRenderTarget()
 {
 #if RENDER == R_R4
     da_async_targets_destroy(*this);
+    froxels_destroy();
     da_rt_targets_destroy(*this);
     da_vrs_targets_destroy(*this);
     for (auto& tex : cloud_readback)

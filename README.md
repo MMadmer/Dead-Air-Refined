@@ -60,6 +60,9 @@ upstream, and where the untouched code that actually runs is.
 - Bloom rebuilt as a pyramid, a tight core and a wide halo round bright light,
   fire and muzzle flashes, and motion blur as an option of its own that follows
   moving objects and leaves the weapon sharp.
+- Volumetric sunlight in a froxel volume: shafts through crowns and windows that
+  follow every shadow cascade and the clouds, haze that deepens with distance
+  and drifts with the wind, at a third of the old shafts' cost.
 - DirectX 12-only features on GPUs that support them: shaders compiled for
   Shader Model 6.6, trees culled and drawn by the GPU, mesh-shader grass,
   texture and level loading through DirectStorage, variable rate shading on
@@ -295,6 +298,8 @@ versions and compatibility pins are recorded in
   engine is this project’s own, and the map of what is still stock.
 - [`BLOOM_MOTION_BLUR.md`](docs/dead-air/BLOOM_MOTION_BLUR.md) — the bloom
   pyramid and the motion blur, their passes, knobs and costs.
+- [`VOLUMETRIC_LIGHT.md`](docs/dead-air/VOLUMETRIC_LIGHT.md) — the froxel
+  volume of the sunlit air.
 
 ## Credits
 
