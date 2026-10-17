@@ -753,6 +753,11 @@ void CRender::Render()
         render_hud_shadow();
 #endif
         Target->accum_direct_blend(dsgraph.cmd_list);
+#if RENDER == R_R4
+        // A frame without the sun's pass (a moonless night): the froxel volume still carries the player's torch.
+        if (!Target->froxels_ran())
+            Target->phase_froxels(dsgraph.cmd_list);
+#endif
     }
 
     {

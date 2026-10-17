@@ -310,6 +310,8 @@ int ps_r__mblur = 0;
 float ps_r__mblur_shutter = 0.5f;
 // The sunlit air (r4_rendertarget_phase_froxels.cpp): its density against the weather's shaft strength, a look constant.
 float ps_r__froxel_strength = 1.f;
+// The player's torch beam in the froxel volume, a look constant (0: none).
+float ps_r__froxel_torch = 1.f;
 // The GGX specular of the stock materials (lmodel.h), look constants: on, f0 per unit of gloss and its ceiling,
 // smoothness per unit of gloss.
 int ps_r__spec_ggx = 1;
@@ -1499,6 +1501,7 @@ void xrRender_sync_preset_derived()
     ps_r__bloom_knee = 0.5f;
     ps_r__mblur_shutter = 0.5f;
     ps_r__froxel_strength = 1.f;
+    ps_r__froxel_torch = 1.f;
     ps_r__spec_ggx = 1;
     ps_r__particle_light = 1;
     ps_r__spec_f0 = 0.8f;
@@ -2021,6 +2024,7 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__mblur", &ps_r__mblur, 0, 1);
     CMD4(CCC_RuntimeFloat, "r__mblur_shutter", &ps_r__mblur_shutter, 0.f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__froxel_strength", &ps_r__froxel_strength, 0.f, 100.f);
+    CMD4(CCC_RuntimeFloat, "r__froxel_torch", &ps_r__froxel_torch, 0.f, 100.f);
     CMD4(CCC_RuntimeInteger, "r__spec_ggx", &ps_r__spec_ggx, 0, 3); // QA: 2 the gloss as grey, 3 the lights' and the sky's specular
     CMD4(CCC_RuntimeFloat, "r__spec_f0", &ps_r__spec_f0, 0.f, 4.f);
     CMD4(CCC_RuntimeInteger, "r__particle_light", &ps_r__particle_light, 0, 2);

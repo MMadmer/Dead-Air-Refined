@@ -438,6 +438,7 @@ public:
     void froxels_destroy();
     void froxels_note_cascade(u32 cascade, const Fmatrix& m_shadow);
     bool phase_froxels(CBackend& cmd_list);
+    bool froxels_ran() const; // the volume is this frame's
     struct DaFroxels* m_froxels{};
     // The screen-space glossy reflections (r4_rendertarget_phase_ssr.cpp) where the traced ones do not run: the trace
     // and its temporal pass before combine_1, which writes the linear colour the next frame's trace reads.

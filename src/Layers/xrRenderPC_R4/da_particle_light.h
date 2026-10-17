@@ -17,6 +17,8 @@ struct DaFroxelFrame
     Fvector4 ray{};
 };
 const DaFroxelFrame& da_froxel_frame();
+// The player's torch for the volume's beam, taken on the main thread before the sun's task records the cascades.
+void da_froxel_capture_torch();
 
 // The lit particles (shaders/r3/particle.vs): the frame's nearest local lights, taken as the lights are rendered,
 // and the constants the particle vertex shader lights itself with.

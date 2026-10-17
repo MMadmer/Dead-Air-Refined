@@ -72,7 +72,9 @@ float da_froxel_cascade(float4x4 m, float3 Pv, float slice, inout bool found)
 float da_froxel_sun_vis(float3 Pv)
 {
 	bool found = false;
-	float v = da_froxel_cascade(m_froxel_shadow0, Pv, 0.0f, found);
+	float v = 1.0f;
+	[branch] if (da_froxel_frame.y > 0.5f)
+		v = da_froxel_cascade(m_froxel_shadow0, Pv, 0.0f, found);
 	[branch] if (!found && da_froxel_frame.y > 1.5f)
 		v = da_froxel_cascade(m_froxel_shadow1, Pv, 1.0f, found);
 	[branch] if (!found && da_froxel_frame.y > 2.5f)

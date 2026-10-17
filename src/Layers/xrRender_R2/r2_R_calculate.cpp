@@ -7,6 +7,9 @@
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_reeds.h"
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_particle_light.h"
+#endif
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -228,6 +231,8 @@ void CRender::Calculate()
     // screenshot under the menu).
     da_veg_frame_prepare(RCache);
     da_grass_frame_ensure_latch();
+    // The torch whose beam the froxel volume lights, read by the far cascade's recording.
+    da_froxel_capture_torch();
 #endif
 
     // Rain calc

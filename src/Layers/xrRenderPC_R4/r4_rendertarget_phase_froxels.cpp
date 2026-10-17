@@ -13,6 +13,8 @@
 
 #include "Layers/xrRender/blenders/blender_da_froxel.h"
 #include "Layers/xrRenderPC_R4/da_particle_light.h"
+#include "Layers/xrRender/light.h"
+#include "xrCDB/ISpatial.h"
 #include "Layers/xrRender/da_temporal.h"
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
@@ -72,6 +74,23 @@ enum : u32
 };
 
 DaFroxelFrame g_frame;
+
+// The player's own torch, the volume's one local light (DOOM Eternal injects its lights into the froxels). From the
+// eye its beam needs no shadow: what an object hides of it lies behind that object from the camera too (in the third
+// person its shadows in the air are missing).
+struct DaTorch
+{
+    u32 frame = 0; // the frame it was taken on
+    Fvector pos{}, dir{}, colour{};
+    float range = 0.f;
+    float cos_half = 1.f; // of the cone
+};
+DaTorch g_torch;
+// The beam's in-scatter per unit of the torch's light, by the weather: the air of the volume holds the day's haze,
+// which would show a torch's beam even in clear air; a beam stands out in a fog and a rain, and never hides what it
+// lights. Fog reaching 1000 m leaves 1.5 % of it, 100 m 15 %, a full rain 12 % more (look constants over
+// r__froxel_torch); under 3 % (clear air) the beam is not drawn at all.
+constexpr float kTorchFog = 15.f, kTorchRain = 0.12f, kTorchMin = 0.03f, kTorchMax = 0.3f;
 
 void release(DaFroxels& f)
 {
@@ -139,6 +158,33 @@ void dispatch(CBackend& cmd_list, ShaderElement* element, ID3D11UnorderedAccessV
 
 const DaFroxelFrame& da_froxel_frame() { return g_frame; }
 
+void da_froxel_capture_torch()
+{
+    g_torch.frame = 0;
+    if (ps_r__froxel_torch <= 0.f || !g_pGamePersistent)
+        return;
+    // The lights whose reach takes in the camera's surroundings (the third-person camera stands metres behind the
+    // actor); the actor's torch is the one never demoted from its shadow (CTorch::UpdateCL), its widest-reaching spot.
+    thread_local xr_vector<ISpatial*> around;
+    g_pGamePersistent->SpatialSpace.q_sphere(around, 0, STYPE_LIGHTSOURCE, Device.vCameraPosition, 10.f);
+    const light* best = nullptr;
+    for (ISpatial* s : around)
+    {
+        const light* L = (const light*)s->dcast_Light();
+        if (L && L->flags.bActive && L->flags.bNeverDemote && L->flags.type == IRender_Light::SPOT &&
+            (!best || L->range > best->range))
+            best = L;
+    }
+    if (!best || best->range <= EPS_L)
+        return;
+    g_torch.frame = Device.dwFrame;
+    g_torch.pos = best->position;
+    g_torch.dir = best->direction;
+    g_torch.colour.set(best->color.r, best->color.g, best->color.b);
+    g_torch.range = best->range;
+    g_torch.cos_half = _cos(best->cone * 0.5f);
+}
+
 void CRenderTarget::froxels_create()
 {
     froxels_destroy();
@@ -164,6 +210,8 @@ void CRenderTarget::froxels_note_cascade(u32 cascade, const Fmatrix& m_shadow)
     }
 }
 
+bool CRenderTarget::froxels_ran() const { return g_frame.frame == Device.dwFrame; }
+
 bool CRenderTarget::phase_froxels(CBackend& cmd_list)
 {
     if (!m_froxels || !m_froxels->shader || !RImplementation.o.advancedpp || !ps_r_sun_shafts ||
@@ -171,16 +219,27 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
         return false;
     DaFroxels& f = *m_froxels;
 
-    // The glow wants the weather's shaft strength; the lit particles, while some are about, want the sun's visibility
-    // while there is a sun.
+    // The cascades the sun accumulated this frame, from the near one up without a gap: none in a frame without the sun's
+    // pass (a moonless night), where only the torch lights the air.
+    u32 cascades = 0;
+    while (cascades < 3 && f.shadow_frame[cascades] == Device.dwFrame)
+        ++cascades;
+
+    // The glow wants the weather's shaft strength and the sun's cascades; the lit particles, while some are about, want
+    // the sun's visibility while there is a sun.
     const auto& env = g_pGamePersistent->Environment();
     const float strength = (env.CurrentEnv.m_fSunShaftsIntensity + ps_r2_sun_shafts_value) * env.cloud_sun_visibility *
         kLevel * ps_r__froxel_strength;
-    const bool glow = strength > 0.0001f;
+    const bool glow = cascades && strength > 0.0001f;
     light* sun = (light*)RImplementation.Lights.sun._get();
     Fvector colour{sun->color.r, sun->color.g, sun->color.b};
     const float length = colour.magnitude();
-    if (!glow && !(da_particle_light_wanted() && length > 0.01f))
+    // The player's torch, taken before the cascades were recorded (da_froxel_capture_torch), at the weather's strength.
+    const float torch_k = ps_r__froxel_torch *
+        std::min(kTorchFog / std::max(env.CurrentEnv.fog_distance, 1.f) + kTorchRain * env.CurrentEnv.rain_density, kTorchMax);
+    const bool torch = g_torch.frame == Device.dwFrame && torch_k >= kTorchMin;
+    const bool scatter = glow || torch;
+    if (!scatter && !(da_particle_light_wanted() && length > 0.01f))
         return false;
 
     const u32 tier = std::min<u32>(ps_r_sun_shafts, std::size(kTiers)) - 1;
@@ -189,11 +248,7 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
         !allocate(f, tier))
         return false;
 
-    // The cascades the sun accumulated this frame, from the near one up without a gap.
-    u32 cascades = 0;
-    while (cascades < 3 && f.shadow_frame[cascades] == Device.dwFrame)
-        ++cascades;
-    if (!cascades)
+    if (!cascades && !torch)
         return false;
     PIX_EVENT_CTX(cmd_list, phase_froxels);
 
@@ -229,7 +284,8 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
     for (u32 i = 0; i < 4; ++i)
         cmd_list.set_RT(nullptr, i);
     cmd_list.set_ZB(nullptr);
-    rt_smap_depth->set_slice_read(-1);
+    if (cascades)
+        rt_smap_depth->set_slice_read(-1);
 
     dispatch(cmd_list, &*f.shader->E[0], f.uav[kCur], (f.w + 7) / 8, (f.h + 7) / 8, f.d, [&]
     {
@@ -239,23 +295,36 @@ bool CRenderTarget::phase_froxels(CBackend& cmd_list)
         cmd_list.set_c("m_froxel_shadow0", f.shadow[0]);
         cmd_list.set_c("m_froxel_shadow1", f.shadow[1]);
         cmd_list.set_c("m_froxel_shadow2", f.shadow[2]);
-        // Without the glow only the sun's visibility is read: the wisps' noise is skipped.
-        cmd_list.set_c("da_froxel_media", kExtinction, kHeightFalloff, glow ? kNoiseShare : 0.f, 0.f);
+        // Without a glow only the sun's visibility is read: the wisps' noise is skipped.
+        cmd_list.set_c("da_froxel_media", kExtinction, kHeightFalloff, scatter ? kNoiseShare : 0.f, 0.f);
         cmd_list.set_c("da_froxel_wind", f.drift.x, 0.f, f.drift.z, kNoiseFrequency);
         cmd_list.set_c("da_froxel_frame", jitter, float(cascades), history ? kHistory : 0.f, 0.f);
     });
-    rt_smap_depth->set_slice_read(SE_SUN_FAR);
+    if (cascades)
+        rt_smap_depth->set_slice_read(SE_SUN_FAR);
     // The next frame's history: the injection cannot read the volume it writes.
     HW.get_context(cmd_list.context_id)->CopyResource(f.tex[kHist], f.tex[kCur]);
     f.frame = Device.dwFrame;
     f.prev_viewproj = Device.mFullTransform;
-    if (!glow)
+    if (!scatter)
         return true;
 
     dispatch(cmd_list, &*f.shader->E[1], f.uav[kInt], (f.w + 7) / 8, (f.h + 7) / 8, 1, [&]
     {
         common();
-        cmd_list.set_c("da_froxel_sun", colour.x * strength, colour.y * strength, colour.z * strength, 0.f);
+        const float sun_k = glow ? strength : 0.f;
+        cmd_list.set_c("da_froxel_sun", colour.x * sun_k, colour.y * sun_k, colour.z * sun_k, 0.f);
+        // The torch in view space: position and 1 / range^2 (0: none), direction and the cone's cosine, its light at
+        // the beam's strength and the cosine where the cone's edge has faded in.
+        Fvector pos{}, dir{};
+        Device.mView.transform_tiny(pos, g_torch.pos);
+        Device.mView.transform_dir(dir, g_torch.dir);
+        dir.normalize_safe();
+        const float k = torch_k;
+        cmd_list.set_c("da_froxel_torch_pos", pos.x, pos.y, pos.z, torch ? 1.f / (g_torch.range * g_torch.range) : 0.f);
+        cmd_list.set_c("da_froxel_torch_dir", dir.x, dir.y, dir.z, g_torch.cos_half);
+        cmd_list.set_c("da_froxel_torch_col", g_torch.colour.x * k, g_torch.colour.y * k, g_torch.colour.z * k,
+            g_torch.cos_half + (1.f - g_torch.cos_half) * 0.6f);
     });
 
     // Every pixel's share, into the volumetric light target.
