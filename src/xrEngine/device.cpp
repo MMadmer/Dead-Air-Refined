@@ -436,17 +436,22 @@ void CRenderDevice::ProcessFrame()
         // budget is then followed by a shorter wait, so the rate holds the target instead of
         // drifting below it (every overrun used to be lost for good). Re-sync when the limit
         // changes or a whole frame has already been missed - after a level load or an alt-tab the
-        // engine must not sprint to catch up on a backlog.
+        // engine must not sprint to catch up on a backlog. A late frame waits for nothing: the
+        // re-sync used to start from now and add a whole budget, so every frame slower than the
+        // limit waited one more budget out (60 FPS set, 20 ms frames: 27 FPS shown).
         const auto frameEnd = CTimerBase::Clock::now();
-        if (pacedLimit != configuredLimit || pacedFramesPerRender != framesPerRender ||
-            pacingDeadline + frameDuration < frameEnd)
+        if (pacedLimit != configuredLimit || pacedFramesPerRender != framesPerRender)
         {
             pacedLimit = configuredLimit;
             pacedFramesPerRender = framesPerRender;
             pacingDeadline = frameEnd;
         }
-
-        pacingDeadline += frameDuration;
+        else
+        {
+            pacingDeadline += frameDuration;
+            if (pacingDeadline + frameDuration < frameEnd)
+                pacingDeadline = frameEnd;
+        }
         const auto deadline = pacingDeadline;
 
         // Waiting out the whole budget with sleep_until misses the target badly: the thread wakes
