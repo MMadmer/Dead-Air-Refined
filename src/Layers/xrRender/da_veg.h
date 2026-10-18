@@ -27,9 +27,11 @@ void da_veg_destroy();
 // Top of CRender::Calculate (main thread, before any view walks the graph): a changed r__shrubs or r__trees takes the
 // stock models out of their hierarchies or puts them back (the GPU-driven registry and the ray tracing scene rebuilt).
 void da_veg_apply_switch();
-// CRender::Calculate, main thread, immediate context, after the occlusion task is joined and before r_sun.run() (its
-// task draws the cascades on a worker at once): the season tables, the frame's instances in the view, the sun cascades
-// and the rain map, their records and chunks uploaded.
+// CRender::Calculate, main thread, once the occlusion task is joined and the sun's and rain's phases are set up: the
+// frame's instances in the view, the sun cascades and the rain map are picked on a worker while the main view culls.
+void da_veg_frame_begin();
+// CRender::Calculate, main thread, immediate context, before r_sun.run() (its task draws the cascades on a worker at
+// once): the pick joined (made here if begin did not), the season tables, the records and chunks uploaded.
 void da_veg_frame_prepare(CBackend& cmd);
 // CRender::Render, immediate context, before the shadow maps' lists run and before the G-buffer: the populations' work
 // before the frame's draws (the trees' billboard atlas filled), then the frame's bends (r3\da_shrub_bend.cs) into the

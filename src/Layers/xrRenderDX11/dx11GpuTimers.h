@@ -68,6 +68,12 @@ public:
         // Parts of Lights
         LightSmap, // the local lamps' shadow maps, every atlas batch
         LightVolumes, // the lamps' instanced volumes (da_light_volumes.cpp), every atlas batch
+        // Parts of CombinePost
+        PostShafts, // the screen-space sun shafts
+        PostUpscale, // the upscaler
+        PostMblur, // the motion blur's tiles
+        PostFinal, // combine_2 and the lens flares
+        PostPP, // the post-process effectors
         Count
     };
 

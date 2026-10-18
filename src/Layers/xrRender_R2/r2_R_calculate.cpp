@@ -212,6 +212,11 @@ void CRender::Calculate()
     r_rain.init();
 #endif
 
+#if RENDER == R_R4
+    // The shrubs' and trees' pick of the frame beside the main view's walk (da_veg.h).
+    da_veg_frame_begin();
+#endif
+
     // Main calc
     BasicStats.Culling.Begin();
     {

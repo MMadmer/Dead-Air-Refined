@@ -1922,10 +1922,13 @@ void da_veg_apply_switch()
     da_history_request_reset("r__shrubs/r__trees");
 }
 
-void da_veg_frame_prepare(CBackend& cmd)
+namespace
 {
-    if (!da_veg_active())
-        return;
+// The frame's pick on a worker (da_veg_frame_begin), joined by da_veg_frame_prepare.
+Task* g_frame_task = nullptr;
+
+void frame_pick()
+{
     for (u32 pi = 0; pi < kPops; ++pi)
         if (Population* P = pop(pi); pop_on(P))
             P->cpu_frames.fetch_add(1, std::memory_order_relaxed);
@@ -1935,6 +1938,26 @@ void da_veg_frame_prepare(CBackend& cmd)
         latch_frame();
     }
     build_frame();
+}
+} // namespace
+
+void da_veg_frame_begin()
+{
+    if (g_frame_task || !da_veg_active())
+        return;
+    // It reads the camera, the environment, the occlusion raster and the sun's and rain's decisions, and writes only
+    // the vegetation's own frame: the main view's walk beside it touches none of that.
+    g_frame_task = &TaskScheduler->AddTask([] { frame_pick(); });
+}
+
+void da_veg_frame_prepare(CBackend& cmd)
+{
+    if (Task* task = std::exchange(g_frame_task, nullptr))
+        TaskScheduler->Wait(*task);
+    else if (da_veg_active())
+        frame_pick();
+    if (!da_veg_active())
+        return;
     Population* first = pop_on(pop(kPopShrubs)) ? pop(kPopShrubs) : pop(kPopTrees);
     CpuSpan span(*first);
     ID3D11DeviceContext* ctx = HW.get_context(cmd.context_id);

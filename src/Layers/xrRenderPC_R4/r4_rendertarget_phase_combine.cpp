@@ -554,7 +554,10 @@ void CRenderTarget::phase_combine()
     // Off, the five passes still ran with shaders compiled down to a copy of the scene - a full
     // frame of fill paid for nothing. The copy they ended in is what rt_Generic_0 already holds.
     if (!_menu_pp && RImplementation.o.advancedpp && ps_r2_sss_enable)
+    {
+        dx11GpuTimerScope gpu(dx11GpuTimers::PostShafts);
         phase_sunshafts();
+    }
 
     // The finished render-size frame gives the next frame's shading rates their luminance; nothing
     // after this point shades at a reduced rate.
@@ -565,7 +568,10 @@ void CRenderTarget::phase_combine()
     // depth after it; from here on everything runs at the display size. Without an upscaler the
     // frame never leaves the one size and this is not reached.
     if (upscaling)
+    {
+        dx11GpuTimerScope gpu(dx11GpuTimers::PostUpscale);
         phase_upscale();
+    }
     // The temporal pass has resolved the jitter: the flares and the tracers drawn after it are
     // not jittered (the next frame's view brings it back).
     else if (da_temporal_active())
@@ -573,7 +579,11 @@ void CRenderTarget::phase_combine()
     da_vrs_luma_upscaled_pass(RCache); // [dx12:vrs] hook
 
     // The motion blur's tiles, for combine_2's gather.
-    phase_da_mblur(m_previous);
+    {
+        dx11GpuTimerScope gpu(dx11GpuTimers::PostMblur);
+        phase_da_mblur(m_previous);
+    }
+    GpuTimers.Begin(dx11GpuTimers::PostFinal);
 
     // PP enabled ?
     //	Render to RT texture to be able to copy RT even in windowed mode.
@@ -747,11 +757,13 @@ void CRenderTarget::phase_combine()
     /* if (!RImplementation.o.fp16_blend)*/
     PIX_EVENT(LENS_FLARES);
     g_pGamePersistent->Environment().RenderFlares(); // lens-flares
+    GpuTimers.End(dx11GpuTimers::PostFinal);
 
     //	PP-if required
     if (PP_Complex)
     {
         PIX_EVENT(phase_pp);
+        dx11GpuTimerScope gpu(dx11GpuTimers::PostPP);
         phase_pp();
     }
     // QA: the shading rates over the finished frame (r__vrs_debug).
