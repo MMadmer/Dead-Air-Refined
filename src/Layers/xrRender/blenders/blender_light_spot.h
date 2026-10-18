@@ -2,6 +2,7 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#if RENDER != R_R4
 class CBlender_accum_spot : public IBlender
 {
 public:
@@ -13,8 +14,10 @@ public:
     CBlender_accum_spot();
     virtual ~CBlender_accum_spot();
 };
+#endif
 
 #if RENDER != R_R2
+#if RENDER != R_R4
 class CBlender_accum_spot_msaa final : public IBlender
 {
     pcstr Name{};
@@ -30,6 +33,7 @@ public:
     virtual BOOL canBeLMAPped() { return FALSE; }
     virtual void Compile(CBlender_Compile& C);
 };
+#endif
 
 class CBlender_accum_volumetric_msaa final : public IBlender
 {

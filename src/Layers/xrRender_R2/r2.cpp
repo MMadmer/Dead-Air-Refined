@@ -1095,6 +1095,7 @@ void CRender::reset_begin()
 #endif
     Resources->reset_begin();
 
+#if RENDER != R_R4
     // Update incremental shadowmap-visibility solver
     // BUG-ID: 10646
     {
@@ -1115,6 +1116,7 @@ void CRender::reset_begin()
         }
         Lights_LastFrame.clear();
     }
+#endif
 
     //AVO: let's reload details while changed details options on vid_restart
     if (b_loaded && (dm_current_size != dm_size ||

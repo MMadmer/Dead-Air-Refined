@@ -33,8 +33,6 @@ public:
 
     u32 dwLightMarkerID;
 
-    IBlender* b_accum_spot{};
-    IBlender* b_accum_spot_msaa[8]{};
     IBlender* b_accum_volumetric_msaa[8]{};
 
 #ifdef DEBUG
@@ -137,6 +135,10 @@ public:
     ref_rt rt_smap_depth; // 24(32) bit,	depth
     ref_rt rt_smap_cache; // the lamps' static casters kept between frames (da_smap_cache.cpp)
     ref_shader s_smap_cache;
+    // The cache's quad, its own vertices: the lamps' faces record it on worker threads (r2_R_lights.cpp), where the
+    // shared dynamic stream cannot be locked.
+    VertexStagingBuffer g_smap_cache_vb;
+    ref_geom g_smap_cache_quad;
     // The cache's quad over the viewport: xy the slot's corner, z the face size, w 1 = clear (da_smap_cache.cpp).
     void phase_smap_cache_quad(CBackend& cmd_list, float x, float y, float size, float clear);
     // The decals' G-buffer pass (WallmarksEngine.cpp): the albedo's gloss and the normal channels as targets.
@@ -170,10 +172,6 @@ private:
     ref_shader s_accum_mask_msaa[8];
     ref_shader s_accum_direct;
     ref_shader s_accum_direct_msaa[8];
-    ref_shader s_accum_point;
-    ref_shader s_accum_point_msaa[8];
-    ref_shader s_accum_spot;
-    ref_shader s_accum_spot_msaa[8];
     ref_shader s_accum_reflected;
     ref_shader s_accum_reflected_msaa[8];
     ref_shader s_accum_volume;
@@ -298,6 +296,10 @@ public:
     ref_shader s_menu;
     ref_shader s_menu_display; // the menu over the display-size targets (upscaling)
     ref_geom g_menu;
+    // The unit volumes of the lamps (du_sphere, du_cone, du_sphere_part), for the instanced light volumes.
+    const ref_geom& volume_point() const { return g_accum_point; }
+    const ref_geom& volume_spot() const { return g_accum_spot; }
+    const ref_geom& volume_omnipart() const { return g_accum_omnipart; }
 #if 0 // kept for historical reasons
     ref_shader s_flip;
     ref_geom g_flip;
@@ -412,7 +414,6 @@ public:
     void phase_smap_direct_tsh(CBackend& cmd_list, light *L, u32 sub_phase);
     void phase_smap_spot_clear(CBackend& cmd_list);
     void phase_smap_spot(CBackend& cmd_list, light* L);
-    void phase_smap_spot_tsh(CBackend& cmd_list, light* L);
     void phase_accumulator(CBackend& cmd_list);
     void phase_vol_accumulator(CBackend& cmd_list);
 
@@ -465,8 +466,6 @@ public:
     const ref_rt* ssr_scene_target(); // combine_1's third target this frame, or null
     bool ssr_ran() const; // combine_1 reads them this frame
     struct DaSsr* m_ssr{};
-    void accum_point(CBackend& cmd_list, light* L);
-    void accum_spot(CBackend& cmd_list, light* L);
     void accum_reflected(CBackend& cmd_list, light* L);
     //	Igor: for volumetric lights
     void accum_volumetric(CBackend& cmd_list, light* L);

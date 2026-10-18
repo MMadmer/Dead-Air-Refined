@@ -620,6 +620,7 @@ void CRender::Render()
         Wallmarks->Render(); // wallmarks has priority as normal geometry
     }
 
+#if RENDER != R_R4
     // Update incremental shadowmap-visibility solver
     {
         PIX_EVENT(DEFER_FLUSH_OCCLUSION);
@@ -640,6 +641,7 @@ void CRender::Render()
         }
         Lights_LastFrame.clear();
     }
+#endif
 
     // full screen pass to mark msaa-edge pixels in highest stencil bit
     if (o.msaa)

@@ -335,8 +335,13 @@ public:
     // light::set_texture creates the projector shader for the texture name (light.cpp:86)
     // together with loading the texture itself, and the first press paid for exactly
     // that. The reference is held for the whole level so the refcount cannot drop and
-    // undo the warmup. No light parameters are touched - only the resource exists.
+    // undo the warmup. No light parameters are touched - only the resource exists. The light volumes
+    // (DirectX 11, 12, Vulkan) take the texture alone; the volumetric shaders name it too.
     ref_shader m_torch_spot_warm;
+#if RENDER == R_R4
+    ref_texture m_torch_projector_warm;
+    ref_shader m_torch_volume_warm;
+#endif
 
     // Global vertex-buffer container
     xr_vector<FSlideWindowItem> SWIs;
@@ -360,7 +365,9 @@ public:
 
     CLight_DB Lights;
     CLight_Compute_XFORM_and_VIS LR;
-    xr_vector<light*> Lights_LastFrame;
+#if RENDER != R_R4
+    xr_vector<light*> Lights_LastFrame; // the shadow casters' occlusion tests (light::svis)
+#endif
     SMAP_Allocator LP_smap_pool;
     light_Package LP_normal;
     light_Package LP_pending;

@@ -26,6 +26,7 @@
 #    include "Layers/xrRender/blenders/blender_da_upscale.h"
 #    include "Layers/xrRender/blenders/blender_da_smap_cache.h"
 #    include "Layers/xrRenderPC_R4/da_smap_cache.h"
+#    include "Layers/xrRenderPC_R4/da_light_volumes.h"
 #    include "Layers/xrRenderPC_R4/da_upscaler.h"
 #    include "Layers/xrRenderPC_R4/da_vrs.h"
 #    include "Layers/xrRenderPC_R4/da_rt.h"
@@ -279,13 +280,17 @@ CRenderTarget::CRenderTarget()
     RImplementation.Resources->Evict();
 
     // Blenders
+#if RENDER != R_R4
     b_accum_spot = xr_new<CBlender_accum_spot>();
+#endif
 
     if (options.msaa)
     {
         for (u32 i = 0; i < BoundSamples; ++i)
         {
+#if RENDER != R_R4
             b_accum_spot_msaa[i] = xr_new<CBlender_accum_spot_msaa>("ISAMPLE", SAMPLE_DEFS[i]);
+#endif
             b_accum_volumetric_msaa[i] = xr_new<CBlender_accum_volumetric_msaa>("ISAMPLE", SAMPLE_DEFS[i]);
         }
     }
@@ -551,9 +556,20 @@ CRenderTarget::CRenderTarget()
             rt_smap_cache.create(r2_RT_smap_cache, 8192, 4096, depth_format);
             CBlender_da_smap_cache b_smap_cache;
             s_smap_cache.create(&b_smap_cache, "r2" DELIMITER "da_smap_cache");
+            FVF::TL quad[4];
+            quad[0].set(-1.f, 1.f, 0.f, 1.f, 0u, 0.f, 0.f);
+            quad[1].set(-1.f, -1.f, 0.f, 0.f, 0u, 0.f, 0.f);
+            quad[2].set(1.f, 1.f, 1.f, 1.f, 0u, 0.f, 0.f);
+            quad[3].set(1.f, -1.f, 1.f, 0.f, 0u, 0.f, 0.f);
+            g_smap_cache_vb.Create(sizeof(quad));
+            CopyMemory(g_smap_cache_vb.Map(), quad, sizeof(quad));
+            g_smap_cache_vb.Unmap(true);
+            g_smap_cache_quad.create(FVF::F_TL, g_smap_cache_vb, RImplementation.QuadIB);
         }
         // A new atlas holds nothing the lamps' slots name.
         da_smap_cache_reset();
+        // The light volumes' buffer and shader are made again at the next draw.
+        da_lv_reset();
         // The decals' G-buffer pass ships its shader with the content as well.
         IReader* wmark_ps = open_shader("da_wmark_gbuf.ps");
         m_wmark_gbuf_ok = wmark_ps != nullptr;
@@ -660,10 +676,12 @@ CRenderTarget::CRenderTarget()
                 CBlender_rain_msaa b_rain_msaa{ "ISAMPLE", SAMPLE_DEFS[i] };
                 s_rain_msaa[i].create(&b_rain_msaa, "null");
 
+#if RENDER != R_R4
                 CBlender_accum_point_msaa b_accum_point_msaa{ "ISAMPLE", SAMPLE_DEFS[i] };
                 s_accum_point_msaa[i].create(&b_accum_point_msaa, "r2" DELIMITER "accum_point_s");
 
                 s_accum_spot_msaa[i].create(b_accum_spot_msaa[i], "r2" DELIMITER "accum_spot_s", "lights" DELIMITER "lights_spot01");
+#endif
 
                 // CBlender_accum_direct_volumetric_msaa b_accum_direct_volumetric_msaa{ "ISAMPLE", SAMPLE_DEFS[i] };
                 // s_accum_volume_msaa[i].create(&b_accum_direct_volumetric_msaa, "lights" DELIMITER "lights_spot01");
@@ -678,10 +696,12 @@ CRenderTarget::CRenderTarget()
         s_mark_msaa_edges.create(&b_msaa, "null");
     }
 
-    // POINT
+    // POINT (the volumes: the light volumes draw them on DirectX 11, 12 and Vulkan, da_light_volumes.cpp)
     {
+#if RENDER != R_R4
         CBlender_accum_point b_accum_point;
         s_accum_point.create(&b_accum_point, "r2" DELIMITER "accum_point_s");
+#endif
         accum_point_geom_create();
         g_accum_point.create(D3DFVF_XYZ, g_accum_point_vb, g_accum_point_ib);
         accum_omnip_geom_create();
@@ -690,7 +710,9 @@ CRenderTarget::CRenderTarget()
 
     // SPOT
     {
+#if RENDER != R_R4
         s_accum_spot.create(b_accum_spot, "r2" DELIMITER "accum_spot_s", "lights" DELIMITER "lights_spot01");
+#endif
         accum_spot_geom_create();
         g_accum_spot.create(D3DFVF_XYZ, g_accum_spot_vb, g_accum_spot_ib);
     }
@@ -1072,16 +1094,25 @@ CRenderTarget::~CRenderTarget()
     accum_omnip_geom_destroy();
     accum_point_geom_destroy();
     accum_volumetric_geom_destroy();
+#if RENDER == R_R4
+    g_smap_cache_quad.destroy();
+    if (g_smap_cache_vb)
+        g_smap_cache_vb.Release();
+#endif
 
     // Blenders
+#if RENDER != R_R4
     xr_delete(b_accum_spot);
+#endif
     if (RImplementation.o.msaa)
     {
         const u32 bound = RImplementation.o.msaa_opt ? 1 : RImplementation.o.msaa_samples;
 
         for (u32 i = 0; i < bound; ++i)
         {
+#if RENDER != R_R4
             xr_delete(b_accum_spot_msaa[i]);
+#endif
             xr_delete(b_accum_volumetric_msaa[i]);
         }
     }

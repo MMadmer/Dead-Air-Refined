@@ -5,6 +5,8 @@
 
 namespace xray::render::RENDER_NAMESPACE
 {
+// The stock spot accumulation: OpenGL's (DirectX 11, 12 and Vulkan light the lamps as volumes, da_light_volumes.h).
+#if RENDER != R_R4
 CBlender_accum_spot::CBlender_accum_spot() { description.CLS = 0; }
 CBlender_accum_spot::~CBlender_accum_spot() {}
 void CBlender_accum_spot::Compile(CBlender_Compile& C)
@@ -272,8 +274,10 @@ void CBlender_accum_spot::Compile(CBlender_Compile& C)
     }
 #endif
 }
+#endif
 
 #if RENDER != R_R2
+#if RENDER != R_R4
 void CBlender_accum_spot_msaa::Compile(CBlender_Compile& C)
 {
     IBlender::Compile(C);
@@ -462,6 +466,7 @@ void CBlender_accum_spot_msaa::Compile(CBlender_Compile& C)
 #endif
     RImplementation.m_MSAASample = -1;
 }
+#endif
 
 void CBlender_accum_volumetric_msaa::Compile(CBlender_Compile& C)
 {

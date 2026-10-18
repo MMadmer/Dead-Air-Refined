@@ -65,6 +65,9 @@ public:
         Fire, // the fluid fires' volumes drawn, every one of the frame
         FireSim, // the fluid fires' simulation steps, every grid of the frame
         Ssr, // the screen-space reflections of glossy surfaces (trace and temporal)
+        // Parts of Lights
+        LightSmap, // the local lamps' shadow maps, every atlas batch
+        LightVolumes, // the lamps' instanced volumes (da_light_volumes.cpp), every atlas batch
         Count
     };
 

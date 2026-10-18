@@ -1,9 +1,12 @@
 #include "stdafx.h"
 
+#include "xrCore/Threading/ParallelFor.hpp"
 #include "Layers/xrRender/da_veg.h"
 #if RENDER == R_R4
 #include "Layers/xrRenderPC_R4/da_particle_light.h"
 #include "Layers/xrRenderPC_R4/da_smap_cache.h"
+#include "Layers/xrRenderPC_R4/da_light_volumes.h"
+#include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -147,6 +150,7 @@ void CRender::render_lights(light_Package& LP)
     const bool volumetricLightsEnabled = RImplementation.o.advancedpp &&
         ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
 
+#if RENDER != R_R4
     const auto accumulateUnshadowedSpot = [&](light* L)
     {
         // Volume-only faces exist for the unshadowed-point export case, where the parent in
@@ -165,8 +169,41 @@ void CRender::render_lights(light_Package& LP)
         if (volumetricLightsEnabled && L->flags.bVolumetric)
             Target->accum_volumetric(cmd_list, L);
     };
+#endif
 
     Target->rt_smap_depth->set_slice_read(0);
+
+#if RENDER == R_R4
+    // The instanced light volumes (da_light_volumes.h): each atlas batch below lights its lamps in a draw per volume
+    // type. The visible unshadowed lamps go with the last batch, the faces of a point lamp that only carry its fog with
+    // nothing.
+    static xr_vector<light*> lit_unshadowed, fog_spots;
+    lit_unshadowed.clear();
+    fog_spots.clear();
+    for (light* L : LP.v_point)
+    {
+        L->vis_update();
+        if (L->vis.visible)
+            lit_unshadowed.push_back(L);
+    }
+    for (light* L : LP.v_spot)
+    {
+        L->vis_update();
+        if (!L->vis.visible)
+            continue;
+        const bool volumeOnlyPointFace =
+            L->flags.type == IRender_Light::OMNIPART && L->flags.bVolumetric && !L->flags.bShadow &&
+            L->omnipart_owner && !L->omnipart_owner->flags.bShadow;
+        LR.compute_xf_spot(L);
+        if (!volumeOnlyPointFace)
+            lit_unshadowed.push_back(L);
+        if (volumetricLightsEnabled && L->flags.bVolumetric)
+            fog_spots.push_back(L);
+    }
+    LP.v_point.clear();
+    LP.v_spot.clear();
+    const bool shadowed_batches = !LP.v_shadowed.empty();
+#endif
 
     PIX_EVENT(SHADOWED_LIGHTS);
 
@@ -184,7 +221,221 @@ void CRender::render_lights(light_Package& LP)
     //	if (left_some_lights_that_doesn't cast shadows)
     //		accumulate them
     static xr_vector<light*> L_spot_s;
+#if RENDER == R_R4
+    // The frame's lamp faces are culled and recorded up front on worker threads, every worker's share of each atlas
+    // batch closed into a command list of its own, and the lists run in batch order between the atlas clears and the
+    // batches' lighting (the sun cascades' way, render_phase_sun.cpp): the faces' draws were a quarter of the render
+    // thread with a hundred faces. A list takes kFacesPerList faces at least - on DirectX 11 every list costs its
+    // execution (two faces a list measured the same on DirectX 12).
+    constexpr u32 kFacesPerList = 4;
+    const bool parallel = o.mt_calculate && o.mt_render;
 
+    // One face: its caster build, then its draws into dsgraph's list. False = it had nothing to cast and lights
+    // nothing (the stock rule).
+    const auto record_face = [this](R_dsgraph_structure& dsgraph, light* L) -> bool
+    {
+        ZoneScopedN("light face");
+        const auto cache = DaSmapCache(L->smap_cache.mode);
+        dsgraph.o.phase = PHASE_SMAP;
+        dsgraph.o.local_light = true;
+        dsgraph.o.smap_cache = u8(cache);
+        if (cache == DaSmapCache::fill)
+            L->smap_cache.trees.clear();
+        dsgraph.o.smap_trees = bool(cache) ? &L->smap_cache.trees : nullptr;
+        dsgraph.r_pmask(true, RImplementation.o.Tshadows);
+        dsgraph.o.sector_id = L->spatial.sector_id;
+        dsgraph.o.view_pos = L->position;
+        dsgraph.o.xform = L->X.S.combine;
+        dsgraph.o.view_frustum.CreateFromMatrix(L->X.S.combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
+        // An empty shared list means the hoist is off or found nothing; the build then queries the tree as before.
+        dsgraph.o.dynamic_source =
+            (ps_r__light_dyn_shared && !s_light_dynamic_casters.empty()) ? &s_light_dynamic_casters : nullptr;
+        dsgraph.build_subspace();
+        dsgraph.o.dynamic_source = nullptr;
+        dsgraph.o.smap_trees = nullptr;
+
+        const bool bNormal = !dsgraph.mapNormalPasses[0][0].empty() || !dsgraph.mapMatrixPasses[0][0].empty();
+        const bool bSpecial = !dsgraph.mapNormalPasses[1][0].empty() || !dsgraph.mapMatrixPasses[1][0].empty() ||
+            !dsgraph.mapSorted.empty();
+        // Detail objects never render into local light shadow maps in the reference: CoC and Dead Air 1.0 reserve
+        // them for the sun cascades. The pass is a High/Maximum preset feature (r__light_details), gated by the grass
+        // shadow option itself, and only for the lamps within 40 m: beyond that their grass shadows are sub-texel.
+        const bool light_near_enough = L->position.distance_to_sqr(Device.vCameraPosition) < (40.f * 40.f);
+        const bool renderDetails = ps_r__light_details && ps_r_sun_details >= detail_shadow_high && Details &&
+            light_near_enough && Details->HasRenderableDetails();
+        // The procedural shrubs cast into the lights near the camera as the stock bushes did.
+        const bool renderShrubs = da_veg_light_casts(L);
+        if (!bool(cache) && !bNormal && !bSpecial && !renderDetails && !renderShrubs)
+            return false;
+
+        PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
+        auto& cmd = dsgraph.cmd_list;
+        // The statics into the light's slot first, with the face's bias and transforms.
+        if (cache == DaSmapCache::fill)
+        {
+            da_smap_cache_fill_begin(cmd, L);
+            cmd.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
+            cmd.set_xform_world(Fidentity);
+            cmd.set_xform_view(L->X.S.view);
+            cmd.set_xform_project(L->X.S.project);
+            dsgraph.o.smap_draw = 1;
+            dsgraph.render_graph(0);
+            dsgraph.o.smap_draw = 0;
+            cmd.StateManager.OverrideDepthBias(false);
+        }
+        Target->phase_smap_spot(cmd, L);
+        if (cache != DaSmapCache::off)
+            da_smap_cache_copy(cmd, L);
+        cmd.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
+        cmd.set_xform_world(Fidentity);
+        cmd.set_xform_view(L->X.S.view);
+        cmd.set_xform_project(L->X.S.project);
+        dsgraph.render_graph(0);
+        if (renderDetails)
+            Details->Render(cmd, false, &dsgraph.o.view_frustum);
+        if (renderShrubs)
+            da_veg_render_light(cmd, L);
+        // The translucent and strictly sorted casters write their depth like the rest: the volumes read no
+        // translucency from the map's colour.
+        if (bSpecial)
+        {
+            PIX_EVENT_CTX(cmd, SHADOWED_LIGHTS_RENDER_GRAPH);
+            dsgraph.render_graph(1); // normal level, secondary priority
+            PIX_EVENT_CTX(cmd, SHADOWED_LIGHTS_RENDER_SORTED);
+            dsgraph.render_sorted(); // strict-sorted geoms
+        }
+        cmd.StateManager.OverrideDepthBias(false);
+        return true;
+    };
+
+    // The frame's faces, batch by batch as the atlas packing ordered them.
+    static xr_vector<light*> faces;
+    static xr_vector<u32> batch_first; // the batches' first faces, and the end
+    static xr_vector<u8> drawn;
+    faces.clear();
+    batch_first.clear();
+    while (!LP.v_shadowed.empty())
+    {
+        xr_vector<light*>& source = LP.v_shadowed;
+        const u16 sid = source.back()->vis.smap_ID;
+        batch_first.push_back(u32(faces.size()));
+        while (!source.empty() && source.back()->vis.smap_ID == sid)
+        {
+            faces.push_back(source.back());
+            source.pop_back();
+        }
+    }
+    const u32 batches = u32(batch_first.size());
+    batch_first.push_back(u32(faces.size()));
+    drawn.assign(faces.size(), 0);
+
+    if (batches)
+    {
+        u32 contexts[R__NUM_PARALLEL_CONTEXTS];
+        u32 lists = 0;
+        const u32 wanted = parallel ?
+            std::clamp((u32(faces.size()) + kFacesPerList - 1) / kFacesPerList, 1u, u32(R__NUM_PARALLEL_CONTEXTS)) : 1u;
+        while (lists < wanted)
+        {
+            const u32 id = alloc_context();
+            if (id == R_dsgraph_structure::INVALID_CONTEXT_ID)
+                break;
+            contexts[lists++] = id;
+        }
+        R_ASSERT2(lists, "the lamps' shadow maps found no free render context");
+
+        // The work in units: unit j of a batch cut into n is its faces j, j + n, ... closed into one command list.
+        // The units go round the contexts, so every worker gets a share of every batch.
+        struct Unit
+        {
+            u32 batch, first, step;
+            ID3D11CommandList* list;
+        };
+        static xr_vector<Unit> units;
+        units.clear();
+        for (u32 b = 0; b < batches; ++b)
+        {
+            const u32 count = batch_first[b + 1] - batch_first[b];
+            const u32 n = std::clamp((count + kFacesPerList - 1) / kFacesPerList, 1u, lists);
+            for (u32 j = 0; j < n; ++j)
+                units.push_back({ b, batch_first[b] + j, n, nullptr });
+        }
+        const auto record_context = [&](const TaskRange<u32>& range)
+        {
+            for (u32 k = range.begin(); k != range.end(); ++k)
+            {
+                auto& dsgraph = get_context(contexts[k]);
+                bool fresh = true;
+                for (u32 u = k; u < units.size(); u += lists)
+                {
+                    Unit& unit = units[u];
+                    for (u32 i = unit.first; i < batch_first[unit.batch + 1]; i += unit.step)
+                    {
+                        if (!fresh)
+                        {
+                            // The context's graph emptied for the next face, its state forgotten.
+                            const u32 id = dsgraph.context_id;
+                            dsgraph.reset();
+                            dsgraph.context_id = id;
+                        }
+                        fresh = false;
+                        drawn[i] = record_face(dsgraph, faces[i]);
+                    }
+                    CHK_DX(HW.get_context(dsgraph.cmd_list.context_id)->FinishCommandList(false, &unit.list));
+                }
+            }
+        };
+        if (parallel && lists > 1)
+            xr_parallel_for(TaskRange<u32>(0, lists), record_context);
+        else
+            record_context(TaskRange<u32>(0, lists));
+        for (u32 k = 0; k < lists; ++k)
+            release_context(contexts[k]);
+
+        ID3D11DeviceContext* imm = HW.get_context(CHW::IMM_CTX_ID);
+        u32 next_unit = 0;
+        for (u32 b = 0; b < batches; ++b)
+        {
+            Stats.s_used++;
+            GpuTimers.Begin(dx11GpuTimers::LightSmap);
+            Target->phase_smap_spot_clear(cmd_list);
+            for (; next_unit < units.size() && units[next_unit].batch == b; ++next_unit)
+            {
+                if (ID3D11CommandList* list = units[next_unit].list)
+                {
+                    imm->ExecuteCommandList(list, false);
+                    list->Release();
+                }
+            }
+            // ExecuteCommandList clears the immediate context's state: its backend cache must not survive it.
+            cmd_list.Invalidate();
+            for (u32 i = batch_first[b]; i < batch_first[b + 1]; ++i)
+            {
+                if (drawn[i])
+                {
+                    Stats.s_merged++;
+                    L_spot_s.push_back(faces[i]);
+                }
+                else
+                    Stats.s_finalclip++;
+            }
+            GpuTimers.End(dx11GpuTimers::LightSmap);
+
+            PIX_EVENT(UNSHADOWED_LIGHTS);
+            Target->phase_accumulator(cmd_list);
+
+            PIX_EVENT(LIGHT_VOLUMES);
+            da_lv_draw(cmd_list, L_spot_s, b + 1 == batches ? &lit_unshadowed : nullptr);
+            for (light* p_light : L_spot_s)
+                render_indirect(p_light);
+            PIX_EVENT(ACCUM_VOLUMETRIC);
+            if (volumetricLightsEnabled)
+                for (light* p_light : L_spot_s)
+                    Target->accum_volumetric(cmd_list, p_light);
+            L_spot_s.clear();
+        }
+    }
+#else
     struct task_data_t
     {
         light* L{};
@@ -221,37 +472,13 @@ void CRender::render_lights(light_Package& LP)
                 light_near_enough && Details->HasRenderableDetails();
             // The procedural shrubs cast into the lights near the camera as the stock bushes did.
             const bool renderShrubs = da_veg_light_casts(L);
-#if RENDER == R_R4
-            const auto cache = DaSmapCache(L->smap_cache.mode);
-#else
-            constexpr bool cache = false;
-#endif
-            if (bool(cache) || bNormal || bSpecial || renderDetails || renderShrubs)
+            if (bNormal || bSpecial || renderDetails || renderShrubs)
             {
                 PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
 
                 Stats.s_merged++;
                 L_spot_s.push_back(L);
-#if RENDER == R_R4
-                // The statics into the light's slot first, with the face's bias and transforms.
-                if (cache == DaSmapCache::fill)
-                {
-                    da_smap_cache_fill_begin(dsgraph.cmd_list, L);
-                    dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
-                    dsgraph.cmd_list.set_xform_world(Fidentity);
-                    dsgraph.cmd_list.set_xform_view(L->X.S.view);
-                    dsgraph.cmd_list.set_xform_project(L->X.S.project);
-                    dsgraph.o.smap_draw = 1;
-                    dsgraph.render_graph(0);
-                    dsgraph.o.smap_draw = 0;
-                    dsgraph.cmd_list.StateManager.OverrideDepthBias(false);
-                }
-#endif
                 Target->phase_smap_spot(dsgraph.cmd_list, L);
-#if RENDER == R_R4
-                if (cache != DaSmapCache::off)
-                    da_smap_cache_copy(dsgraph.cmd_list, L);
-#endif
                 dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
                 dsgraph.cmd_list.set_xform_world(Fidentity);
                 dsgraph.cmd_list.set_xform_view(L->X.S.view);
@@ -278,9 +505,7 @@ void CRender::render_lights(light_Package& LP)
                 Stats.s_finalclip++;
             }
 
-            // A cached face's statics are not this frame's draws: its caster tests wait until it is stock again.
-            if (!bool(cache))
-                L->svis[batch_id].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
+            L->svis[batch_id].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
             RImplementation.release_context(batch_id);
         }
 
@@ -330,22 +555,10 @@ void CRender::render_lights(light_Package& LP)
                 auto& dsgraph = RImplementation.get_context(data.batch_id);
                 light* L = data.L;
 
-#if RENDER == R_R4
-                const u8 cache = L->smap_cache.mode;
-#else
-                constexpr u8 cache = 0;
-#endif
-                if (!cache)
-                    L->svis[data.batch_id].begin();
+                L->svis[data.batch_id].begin();
 
                 dsgraph.o.phase = PHASE_SMAP;
                 dsgraph.o.local_light = true;
-                dsgraph.o.smap_cache = cache;
-#if RENDER == R_R4
-                if (cache == u8(DaSmapCache::fill))
-                    L->smap_cache.trees.clear();
-                dsgraph.o.smap_trees = cache ? &L->smap_cache.trees : nullptr;
-#endif
                 dsgraph.r_pmask(true, RImplementation.o.Tshadows);
                 dsgraph.o.sector_id = L->spatial.sector_id;
                 dsgraph.o.view_pos = L->position;
@@ -426,7 +639,22 @@ void CRender::render_lights(light_Package& LP)
             L_spot_s.clear();
         }
     }
+#endif
 
+#if RENDER == R_R4
+    // No atlas batch this frame: the unshadowed lamps light on their own.
+    if (!shadowed_batches)
+    {
+        Target->phase_accumulator(cmd_list);
+        PIX_EVENT(LIGHT_VOLUMES);
+        da_lv_draw(cmd_list, L_spot_s, &lit_unshadowed);
+    }
+    for (light* p_light : lit_unshadowed)
+        render_indirect(p_light);
+    PIX_EVENT(ACCUM_VOLUMETRIC);
+    for (light* p_light : fog_spots)
+        Target->accum_volumetric(cmd_list, p_light);
+#else
     PIX_EVENT(POINT_LIGHTS_ACCUM);
     // Point lighting (unshadowed, if left)
     if (!LP.v_point.empty())
@@ -457,6 +685,7 @@ void CRender::render_lights(light_Package& LP)
         }
         Lvec.clear();
     }
+#endif
 }
 
 void CRender::render_indirect(light* L) const

@@ -9,6 +9,7 @@ namespace xray::render::RENDER_NAMESPACE
 {
 // extern Fvector du_cone_vertices[DU_CONE_NUMVERTEX];
 
+#if RENDER != R_R4
 void CRenderTarget::accum_spot(CBackend& cmd_list, light* L)
 {
     phase_accumulator(cmd_list);
@@ -321,6 +322,7 @@ void CRenderTarget::accum_spot(CBackend& cmd_list, light* L)
 
     u_DBT_disable();
 }
+#endif
 
 void CRenderTarget::accum_volumetric(CBackend& cmd_list, light* L)
 {

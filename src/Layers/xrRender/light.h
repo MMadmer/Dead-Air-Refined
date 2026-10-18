@@ -4,7 +4,9 @@
 
 #if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER==R_GL)
 #include "Light_Package.h"
+#if RENDER != R_R4
 #include "light_smapvis.h"
+#endif
 #include "light_gi.h"
 #endif //(RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)
 
@@ -55,7 +57,11 @@ public:
     xr_vector<light_indirect> indirect;
     u32 indirect_photons;
 
+#if RENDER != R_R4
+    // The shadow casters' occlusion tests, OpenGL's: the other renderers record the faces on worker threads, where
+    // no query can be issued, and keep the faces' statics in the shadow cache instead (da_smap_cache.h).
     smapvis svis[R__NUM_CONTEXTS]; // used for 6-cubemap faces
+#endif
 
     // The lamp shadow cache (da_smap_cache.cpp): the atlas slot (-1: none), the transform and face size its depth was
     // drawn for, the last frame's transform and how many frames it has held, and this frame's mode.
@@ -71,14 +77,22 @@ public:
         xr_vector<dxRender_Visual*> trees;
     } smap_cache;
 
+#if RENDER != R_R4
+    // The stock accumulation's shaders, OpenGL's: the other renderers light every lamp with one (da_light_volumes.h).
     ref_shader s_spot;
     ref_shader s_point;
+#endif
     ref_shader s_volumetric;
     ref_shader s_volumetric_unshadowed;
+    // The spot's projector texture as the lamp's config names it (spot_texture), null for the stock one
+    // (da_light_volumes.cpp).
+    ref_texture projector;
 
 #if (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if RENDER != R_R4
     ref_shader s_spot_msaa[8];
     ref_shader s_point_msaa[8];
+#endif
     ref_shader s_volumetric_msaa[8];
 #endif //	(RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)
 

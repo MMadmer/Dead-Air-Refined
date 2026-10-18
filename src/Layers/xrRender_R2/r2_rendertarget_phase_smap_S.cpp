@@ -40,6 +40,7 @@ void CRenderTarget::phase_smap_spot(CBackend& cmd_list, light* L)
         cmd_list.set_ColorWriteEnable(FALSE);
 }
 
+#if RENDER != R_R4
 void CRenderTarget::phase_smap_spot_tsh(CBackend& cmd_list, light* L)
 {
     VERIFY(!"Implement clear of the buffer for tsh!");
@@ -99,4 +100,5 @@ void CRenderTarget::phase_smap_spot_tsh(CBackend& cmd_list, light* L)
         cmd_list.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);
     }
 }
+#endif
 } // namespace xray::render::RENDER_NAMESPACE

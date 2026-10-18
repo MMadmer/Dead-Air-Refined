@@ -1,0 +1,154 @@
+// Copyright (c) 2026 Grizzly
+// Released under the MIT licence, see License.txt
+//
+// The local lamps' lighting, one lamp per instance (da_light_volumes.h): what the stock accumulation shaded
+// (accum_base.ps) - the light model with the GGX lobe and the falloff, the 9-tap shadow, the projector, the contact
+// shadow, the first-person position - with the lamp's constants from its record. The volume's front faces are drawn with
+// the scene's depth test, or its back faces with the test inverted where the near plane cuts it (da_light_volumes.cpp):
+// the depth test takes one side of the volume, the reach test here the other, the stencil masks are gone. A spot's cone
+// and a point lamp's cube face are tested here too, which the tessellated meshes only approximate.
+
+#if defined(USE_MSAA) && !defined(MSAA_OPTIMIZATION)
+#define MSAA_OPTIMIZATION
+#endif
+
+#include "common.h"
+#include "lmodel.h"
+#include "shadow.h"
+#include "da_hud_light.h"
+#include "da_sss.h"
+#include "da_light_volumes.h"
+
+DA_RAW(da_lv_lights, t16);
+
+Texture2D s_proj0 : register(t18);
+Texture2D s_proj1 : register(t19);
+Texture2D s_proj2 : register(t20);
+Texture2D s_proj3 : register(t21);
+Texture2D s_proj4 : register(t22);
+Texture2D s_proj5 : register(t23);
+Texture2D s_proj6 : register(t24);
+Texture2D s_proj7 : register(t25);
+Texture2D s_proj8 : register(t26);
+Texture2D s_proj9 : register(t27);
+Texture2D s_proj10 : register(t28);
+Texture2D s_proj11 : register(t29);
+Texture2D s_proj12 : register(t30);
+Texture2D s_proj13 : register(t31);
+
+uniform float4 da_lv_axes[3];	// the world's x, y and z in view space: the cube faces of the point lamps
+
+float4 da_lv_projector(uint slot, float2 uv, float2 dx, float2 dy)
+{
+	switch (slot)
+	{
+	case 0u: return s_proj0.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 1u: return s_proj1.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 2u: return s_proj2.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 3u: return s_proj3.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 4u: return s_proj4.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 5u: return s_proj5.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 6u: return s_proj6.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 7u: return s_proj7.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 8u: return s_proj8.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 9u: return s_proj9.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 10u: return s_proj10.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 11u: return s_proj11.SampleGrad(smp_rtlinear, uv, dx, dy);
+	case 12u: return s_proj12.SampleGrad(smp_rtlinear, uv, dx, dy);
+	default: return s_proj13.SampleGrad(smp_rtlinear, uv, dx, dy);
+	}
+}
+
+// The cube face (0..5: +x, -x, +y, -y, +z, -z) a view-space vector from a point lamp falls in.
+uint da_lv_face(float3 d)
+{
+	const float3 w = float3(dot(d, da_lv_axes[0].xyz), dot(d, da_lv_axes[1].xyz), dot(d, da_lv_axes[2].xyz));
+	const float3 a = abs(w);
+	if (a.x >= a.y && a.x >= a.z)
+		return w.x >= 0.0f ? 0u : 1u;
+	if (a.y >= a.z)
+		return w.y >= 0.0f ? 2u : 3u;
+	return w.z >= 0.0f ? 4u : 5u;
+}
+
+// The inputs in da_light_volume.vs's output order: DirectX 12 links the stages by it.
+#ifdef USE_MSAA
+[earlydepthstencil]
+float4 main(float4 pos2d : SV_Position, nointerpolation uint light : TEXCOORD1, uint iSample : SV_SampleIndex) : SV_Target
+#else
+[earlydepthstencil]
+float4 main(float4 pos2d : SV_Position, nointerpolation uint light : TEXCOORD1) : SV_Target
+#endif
+{
+	const uint a = light * DA_LV_STRIDE;
+	const uint4 info = DA_LOAD4(da_lv_lights, a + 48u);
+	const float4 lpos = asfloat(DA_LOAD4(da_lv_lights, a));
+	const float4 lclr = asfloat(DA_LOAD4(da_lv_lights, a + 16u));
+
+	const float2 tc = pos2d.xy * pos_decompression_params2.zw;
+	gbuffer_data gbd = gbuffer_load_data(GLD_P(tc, pos2d, ISAMPLE));
+
+	da_spec_aa(gbd.N);	// the lobe widened by the normal's spread over the pixel (lmodel.h)
+
+#ifdef GBUFFER_OPTIMIZATION
+	gbd.P += gbd.N * 0.015f;	// the virtual offset
+#endif
+
+	float4 _P = float4(gbd.P, gbd.mtl);
+	float4 _N = float4(gbd.N, gbd.hemi);
+
+	bool hud = false;
+#ifndef USE_MSAA
+	hud = da_hud_pixel(pos2d.xy);
+	[branch] if (hud)
+		_P.xyz = da_hud_position(pos2d.xy, gbd.P.z) + gbd.N * 0.004f;
+#endif
+
+	float m = xmaterial;
+#ifndef USE_R2_STATIC_SUN
+	m = _P.w;
+#endif
+
+	// The projector's coordinates with their screen gradients, while the whole quad still runs.
+	const float4 P4 = float4(_P.xyz, 1.0f);
+	const float4 r0 = asfloat(DA_LOAD4(da_lv_lights, a + 64u));
+	const float4 r1 = asfloat(DA_LOAD4(da_lv_lights, a + 80u));
+	const float4 r2 = asfloat(DA_LOAD4(da_lv_lights, a + 96u));
+	const float4 r3 = asfloat(DA_LOAD4(da_lv_lights, a + 112u));
+	const float4 PS = float4(dot(r0, P4), dot(r1, P4), dot(r2, P4), dot(r3, P4));
+	const bool xform = (info.y & DA_LV_LMAP_XFORM) != 0u;
+	const float4 u0 = xform ? asfloat(DA_LOAD4(da_lv_lights, a + 128u)) : r0;
+	const float4 u1 = xform ? asfloat(DA_LOAD4(da_lv_lights, a + 144u)) : r1;
+	const float2 uv = float2(dot(u0, P4), dot(u1, P4)) / PS.w;
+	const float2 uvdx = ddx(uv), uvdy = ddy(uv);
+
+	// The lamp's reach and its own volume: the cone of a spot, the cube face of a point lamp.
+	const float3 L2P = _P.xyz - lpos.xyz;
+	const float d2 = dot(L2P, L2P);
+	const uint type = info.x & 15u;
+	bool inside = (info.y & DA_LV_ENABLED) != 0u && d2 * lpos.w * L_RANGE < 1.0f;
+	[branch] if (type == DA_LV_SPOT)
+	{
+		const float4 ldir = asfloat(DA_LOAD4(da_lv_lights, a + 32u));
+		inside = inside && dot(L2P, ldir.xyz) >= ldir.w * sqrt(d2);
+	}
+	else if (type == DA_LV_FACE)
+		inside = inside && da_lv_face(L2P) == (info.x >> 4);
+	[branch] if (!inside)
+		return 0.0f;
+
+	float rsqr;
+	const float4 lit = plight_local(m, _P.xyz, _N.xyz, lpos.xyz, lpos.w, rsqr, gbd.gloss);
+
+	float s = 1.0f;
+	[branch] if ((info.y & DA_LV_SHADOW) != 0u && !hud)
+		s = shadow(PS);
+	[branch] if (!hud)
+		s *= da_local_contact_shadow(_P.xyz, lpos.xyz, pos2d.xy);
+
+	float4 lightmap = 1.0f;
+	[branch] if ((info.y & (DA_LV_LMAP_XFORM | DA_LV_LMAP_SHADOW)) != 0u)
+		lightmap = da_lv_projector(info.w, uv, uvdx, uvdy);
+
+	return lclr * lit * s * lightmap;
+}

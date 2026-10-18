@@ -36,8 +36,10 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
 #if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
     ZeroMemory(omnipart, sizeof(omnipart));
     omnipart_owner = nullptr;
+#if RENDER != R_R4
     s_spot = nullptr;
     s_point = nullptr;
+#endif
     vis.frame2test = 0; // xffffffff;
     vis.query_id = u32(-1);
     vis.query_order = 0;
@@ -47,8 +49,10 @@ light::light() : SpatialBase(g_pGamePersistent->SpatialSpace)
     vis.visible = true;
     vis.pending = false;
     vis.miss_streak = 0;
+#if RENDER != R_R4
     for (u32 id = 0; id < R__NUM_CONTEXTS; ++id)
         svis[id].id = id;
+#endif
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)
 }
 
@@ -64,7 +68,7 @@ light::~light()
     set_active(false);
 
 // remove from Lights_LastFrame
-#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_GL)
     for (auto& p_light : RImplementation.Lights_LastFrame)
         if (this == p_light)
             p_light = nullptr;
@@ -77,19 +81,25 @@ void light::set_texture(LPCSTR name)
     if (!name || !name[0])
     {
         // default shaders
+#if RENDER != R_R4
         s_spot.destroy();
         s_point.destroy();
+#endif
         s_volumetric.destroy();
         s_volumetric_unshadowed.destroy();
+        projector.destroy();
         return;
     }
+    projector.create(name);
 
 #pragma todo("Only shadowed spot implements projective texture")
     string256 temp;
 
+#if RENDER != R_R4
     strconcat(sizeof(temp), temp, "r2" DELIMITER "accum_spot_", name);
     // strconcat(sizeof(temp),temp,"_nomsaa",name);
     s_spot.create(RImplementation.Target->b_accum_spot, temp, name);
+#endif
 
 #if (RENDER != R_R3) && (RENDER != R_R4) && (RENDER != R_GL)
     s_volumetric.create("accum_volumetric", name);
@@ -104,8 +114,10 @@ void light::set_texture(LPCSTR name)
 
         for (u32 i = 0; i < bound; ++i)
         {
+#if RENDER != R_R4
             s_spot_msaa[i].create(RImplementation.Target->b_accum_spot_msaa[i],
                 strconcat(sizeof(temp), temp, "r2" DELIMITER "accum_spot_", name), name);
+#endif
             s_volumetric_msaa[i].create(RImplementation.Target->b_accum_volumetric_msaa[i],
                 strconcat(sizeof(temp), temp, "r2" DELIMITER "accum_volumetric_", name), name);
         }
@@ -245,8 +257,10 @@ void light::spatial_move()
 #if (RENDER == R_R2) || (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
     if (flags.bActive)
         gi_generate();
+#if RENDER != R_R4
     for (u32 id = 0; id < R__NUM_CONTEXTS; ++id)
         svis[id].invalidate();
+#endif
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER == R_GL)
 }
 
@@ -392,13 +406,15 @@ void light::Export(light_Package& package)
                 L->set_virtual_size(virtual_size);
                 L->set_color(color);
                 L->spatial.sector_id = spatial.sector_id; //. dangerous?
+#if RENDER != R_R4
                 L->s_spot = s_spot;
                 L->s_point = s_point;
+#endif
                 L->s_volumetric = s_volumetric;
                 L->s_volumetric_unshadowed = s_volumetric_unshadowed;
 
 // Holger - do we need to export msaa stuff as well ?
-#if (RENDER == R_R3) || (RENDER == R_R4) || (RENDER == R_GL)
+#if (RENDER == R_R3) || (RENDER == R_GL)
                 if (RImplementation.o.msaa)
                 {
                     int bound = 1;

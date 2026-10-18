@@ -131,7 +131,8 @@ float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, 
   	float3 H		= normalize	(L+V);						// float-angle-vector
 		rsqr	= dot		(L2P,L2P);					// distance 2 light (squared)
   	float  att 	= da_light_att	(rsqr*light_range_rsq*L_RANGE)*L_BRIGHT;			// the falloff (da_light_falloff.h)
-	float4 light	= s_material.Sample( smp_material, float3( dot(L,N), dot(H,N), da_lut_z(m) ) ).xxxy;		// sample material
+	// The LUT has one mip: read without gradients, the light volumes call this in flow control.
+	float4 light	= s_material.SampleLevel( smp_material, float3( dot(L,N), dot(H,N), da_lut_z(m) ), 0 ).xxxy;		// sample material
 	[branch] if (da_is_snowy(m))
 		light = da_snow_light(light, N, V, L, da_is_glint(m));
 	if (da_is_foliage(m))

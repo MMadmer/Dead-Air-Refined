@@ -14,6 +14,7 @@
 #include "xrEngine/WindVegSound.h"
 #if RENDER == R_R4
 #include "Layers/xrRenderPC_R4/da_smap_cache.h"
+#include "Layers/xrRenderPC_R4/da_light_volumes.h"
 #endif
 #include "Layers/xrRender/r__sector.h"
 
@@ -51,6 +52,7 @@ void CRender::level_Load(IReader* fs)
 #if RENDER == R_R4
     // The previous level's lamp slots (da_smap_cache.h).
     da_smap_cache_reset();
+    da_lv_reset();
 #endif
     // Nothing the previous level left in TAA or the upscaler belongs to this one.
     da_history_request_reset("level load");
@@ -257,9 +259,16 @@ void CRender::level_Load(IReader* fs)
     if (Target)
     {
         static constexpr pcstr torch_spot_texture = "internal" DELIMITER "torch1";
+#if RENDER == R_R4
+        // What light::set_texture makes on these renderers (light.cpp).
+        m_torch_projector_warm.create(torch_spot_texture);
+        m_torch_spot_warm.create("accum_volumetric_nomsaa", torch_spot_texture);
+        m_torch_volume_warm.create("accum_volumetric_unshadowed", torch_spot_texture);
+#else
         string256 warm_name;
         strconcat(sizeof(warm_name), warm_name, "r2" DELIMITER "accum_spot_", torch_spot_texture);
         m_torch_spot_warm.create(Target->b_accum_spot, warm_name, torch_spot_texture);
+#endif
     }
 
 #if RENDER == R_R4
@@ -273,6 +282,10 @@ void CRender::level_Unload()
 {
     // the warmup held the projector shader and its texture - released with the level
     m_torch_spot_warm.destroy();
+#if RENDER == R_R4
+    m_torch_projector_warm.destroy();
+    m_torch_volume_warm.destroy();
+#endif
 
     // the published tree list points into this level's visuals - gone with them
     if (g_pGamePersistent)

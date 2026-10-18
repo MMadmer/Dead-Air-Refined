@@ -1264,6 +1264,18 @@ it (the user's `light_test` hall at night: 0.2 % of the pixels apart, the lamps'
 thread there went 31.7-32.9 to 34.2 FPS on Vulkan and 46.9-47.7 to 49.0 on DirectX 11, with 90 of
 its 101 faces cached. `r__light_shadow_cache` (1; 0 the stock faces, QA: 2 logs the faces' modes).
 
+## Lamp lighting: instanced volumes, faces recorded in parallel
+
+On DirectX 11, 12 and Vulkan the lamps no longer go through the stock accumulation (two stencil
+draws and a lighting draw per lamp, each with its own pipeline). An atlas batch's lamps are records
+in one buffer and at most six instanced draws of the stock volume meshes, front faces with the
+scene's depth test or, where the near plane cuts a volume, back faces with it inverted; one shader
+(`da_light_volume.ps`) shades every lamp as `accum_base.ps` did. The shadow faces are culled and
+recorded on the worker threads into command lists, run in batch order. Details:
+docs/dead-air/LIGHT_VOLUMES.md. For mods: the `accum_spot_*`, `accum_omni_*` and `accum_base`
+shaders light nothing there; a lamp's `spot_texture` still projects. `light_test` at night: 47.6
+to 56-60 FPS on DirectX 11, 41 to 48-52 on DirectX 12, 39.4 to 45-50 on Vulkan, the same picture.
+
 ## Lamp falloff
 
 The local lights fell off by the stock window `saturate(1 - d^2/R^2)`: no hot spot, a pool of
@@ -1364,7 +1376,7 @@ technique: only visible geometry casts, and the shadow fades at the screen edge.
 from the sibling open-source engine.
 
 Every local light takes the same march toward itself (DOOM Eternal's per-light contact
-shadows, `accum_base.ps`): at most half way to the light, within 25 m of the eye (fading out
+shadows, `da_light_volume.ps`): at most half way to the light, within 25 m of the eye (fading out
 over the last 5), never on the first-person hands. Same knobs.
 
 Until 17.10.2026 the march projected its points to render pixels and tested them as uv, so it stopped at its

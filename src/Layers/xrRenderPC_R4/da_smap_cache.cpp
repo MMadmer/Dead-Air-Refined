@@ -167,23 +167,11 @@ void draw_quad(CBackend& cmd_list, float x, float y, float size, float clear)
 
 void CRenderTarget::phase_smap_cache_quad(CBackend& cmd_list, float x, float y, float size, float clear)
 {
-    u32 offset = 0;
-    FVF::TL* pv = (FVF::TL*)RImplementation.Vertex.Lock(4, g_combine->vb_stride, offset);
-    pv->set(-1.f, 1.f, 0.f, 1.f, 0u, 0.f, 0.f);
-    pv++;
-    pv->set(-1.f, -1.f, 0.f, 0.f, 0u, 0.f, 0.f);
-    pv++;
-    pv->set(1.f, 1.f, 1.f, 1.f, 0u, 0.f, 0.f);
-    pv++;
-    pv->set(1.f, -1.f, 1.f, 0.f, 0u, 0.f, 0.f);
-    pv++;
-    RImplementation.Vertex.Unlock(4, g_combine->vb_stride);
-
     cmd_list.set_CullMode(CULL_NONE);
     cmd_list.set_Element(s_smap_cache->E[0]);
     cmd_list.set_c("da_smap_blit", x, y, size, clear);
-    cmd_list.set_Geometry(g_combine);
-    cmd_list.Render(D3DPT_TRIANGLELIST, offset, 0, 4, 0, 2);
+    cmd_list.set_Geometry(g_smap_cache_quad);
+    cmd_list.Render(D3DPT_TRIANGLELIST, 0, 0, 4, 0, 2);
     cmd_list.set_CullMode(CULL_CCW);
 }
 
