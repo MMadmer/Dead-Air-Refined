@@ -1,0 +1,59 @@
+#include "common.h"
+
+// Copyright (c) 2026 Grizzly
+// Released under the MIT licence, see License.txt
+//
+// GTAO's temporal accumulation (r4_rendertarget_phase_gtao.cpp): the noise of the slices turns every frame, and this
+// pass gathers the turns - last frame's AO reprojected through the previous view-projection, clamped to this frame's
+// neighbourhood (a moving occluder leaves no trail), dropped where the depth it was stored with is not the depth that
+// lands there now (disocclusion), blended in at a tenth. The donor's static noise showed its pattern on every flat
+// wall; the cheap tier's single slice becomes the donor's three within a few frames.
+Texture2D<float> t_gtao_cur;		// this frame's filtered AO
+Texture2D<float2> t_gtao_hist;		// x: AO, y: view-z, last frame
+uniform float4x4 m_gtao_reproj;		// current view -> previous clip
+// x: 1 = a history to use, y: the blend toward this frame
+uniform float4 gtao_temporal;
+
+struct fo
+{
+	float ao		: SV_Target0;	// $user$ssao_temp, combine_1's s_occ
+	float2 hist		: SV_Target1;	// next frame's history
+};
+
+fo main( float2 tc0 : TEXCOORD0, float4 hpos : SV_Position )
+{
+	const int2 pix = int2( hpos.xy );
+	const float cur = t_gtao_cur.Load( int3( pix, 0 ) );
+	const float z = s_position.Load( int3( pix, 0 ) ).z;
+	fo o;
+	o.ao = cur;
+	o.hist = float2( cur, z );
+	[branch] if ( gtao_temporal.x < 0.5f || z < 0.01f )
+		return o;
+
+	// This frame's 3x3 range.
+	float lo = cur, hi = cur;
+	[unroll] for ( int y = -1; y <= 1; ++y )
+		[unroll] for ( int x = -1; x <= 1; ++x )
+		{
+			const float a = t_gtao_cur.Load( int3( pix + int2( x, y ), 0 ) );
+			lo = min( lo, a );
+			hi = max( hi, a );
+		}
+
+	const float3 P = float3( z * ( hpos.xy * pos_decompression_params.zw - pos_decompression_params.xy ), z );
+	const float4 prev = mul( m_gtao_reproj, float4( P, 1.0f ) );
+	[branch] if ( prev.w <= 0.05f )
+		return o;
+	const float2 puv = prev.xy / prev.w * float2( 0.5f, -0.5f ) + 0.5f;
+	[branch] if ( any( puv < 0.0f ) || any( puv > 1.0f ) )
+		return o;
+	const float2 h = t_gtao_hist.SampleLevel( smp_nofilter, puv, 0 );
+	// The depth the history was stored with against where this point was: 3 % apart is another surface.
+	[branch] if ( abs( h.y - prev.w ) > 0.03f * prev.w )
+		return o;
+	const float ao = lerp( clamp( h.x, lo, hi ), cur, gtao_temporal.y );
+	o.ao = ao;
+	o.hist = float2( ao, z );
+	return o;
+}

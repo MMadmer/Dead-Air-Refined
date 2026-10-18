@@ -852,6 +852,14 @@ CRenderTarget::CRenderTarget()
         // The blur path did not run, so the final-AO target may not exist yet.
         if (!rt_ssao_temp)
             rt_ssao_temp.create(r2_RT_ssao_temp, gw, gh, D3DFMT_R16F);
+        // The filter's output and the temporal pass's history (gtao_temporal.ps).
+#if defined(XR_NATIVE)
+        rt_gtao_cur.create(r2_RT_gtao_cur, gw, gh, D3DFMT_R16F, 1, { CRT::CreateUAV });
+#else
+        rt_gtao_cur.create(r2_RT_gtao_cur, gw, gh, D3DFMT_R16F);
+#endif
+        rt_gtao_hist[0].create(r2_RT_gtao_hist0, gw, gh, D3DFMT_G16R16F);
+        rt_gtao_hist[1].create(r2_RT_gtao_hist1, gw, gh, D3DFMT_G16R16F);
 
         CBlender_gtao b_gtao;
         s_gtao.create(&b_gtao, "r2" DELIMITER "gtao");

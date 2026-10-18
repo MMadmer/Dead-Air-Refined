@@ -224,6 +224,10 @@ int ps_r__LightSleepFrames = 10;
 int ps_r__light_shadow_budget = 0;
 // The lamps' static casters kept between frames (da_smap_cache.cpp): no change to the picture, so on everywhere.
 int ps_r__light_shadow_cache = 1;
+// GTAO's slices (the preset's tier), its temporal pass and that pass's blend toward the frame (gtao_temporal.ps).
+int ps_r__gtao_slices = 3;
+int ps_r__gtao_temporal = 1;
+float ps_r__gtao_blend = 0.12f;
 // The local lights' inverse-square falloff (da_light_falloff.h), look constants: its share, core and gain.
 float ps_r__light_falloff = 1.f;
 // The decals' normal and gloss (da_wmark_gbuf.ps), look constants: on, the bump of their coverage, the gloss of blood and
@@ -1461,11 +1465,15 @@ void xrRender_sync_preset_derived()
     // into the near pass, so this is the one genuinely expensive shadow distance (the sibling
     // measured 5.05 ms -> 2.42 ms cutting it back). Equal to the middle box above, rung for rung.
     static constexpr int grass_shadow_by_preset[] = {40, 50, 60, 75, 95};
-    // AO technique ladder. GTAO (ported from IX-Ray: 3-slice horizon integral plus a guided
-    // filter) replaces the inline HDAO/HBAO on the two top presets; Default keeps the reference
-    // inline SSAO, the two lowest presets keep AO off. Applied through the console command so
-    // the R2FLAGEXT_SSAO_* side effects stay in CCC_SSAO_Mode.
-    static constexpr pcstr ssao_mode_by_preset[] = {"disabled", "disabled", "default", "gtao", "gtao"};
+    // AO technique ladder. GTAO (ported from IX-Ray: the horizon integral plus a guided filter, gathered
+    // over the frames by its temporal pass) from Low up, its slices by the preset - Low the cheap tier of
+    // one, which the temporal pass turns into the donor's three; Minimum keeps AO off as before. Applied
+    // through the console command so the R2FLAGEXT_SSAO_* side effects stay in CCC_SSAO_Mode.
+    static constexpr pcstr ssao_mode_by_preset[] = {"disabled", "gtao", "gtao", "gtao", "gtao"};
+    static constexpr int gtao_slices_by_preset[] = {1, 1, 2, 3, 3};
+    ps_r__gtao_slices = gtao_slices_by_preset[ps_Preset];
+    ps_r__gtao_temporal = 1;
+    ps_r__gtao_blend = 0.12f;
     // [dx12:vrs] begin preset
     // Variable rate shading on DirectX 12, conservative on High and Extreme only: it pays where the
     // frame is pixel-bound (Extreme 1440p +3.9 %) and costs its rate image on the light presets
@@ -2028,6 +2036,9 @@ void xrRender_initconsole()
     CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_cache", &ps_r__light_shadow_cache, 0, 2); // QA: 2 logs the faces' modes
+    CMD4(CCC_RuntimeInteger, "r__gtao_slices", &ps_r__gtao_slices, 1, 4);
+    CMD4(CCC_RuntimeInteger, "r__gtao_temporal", &ps_r__gtao_temporal, 0, 1);
+    CMD4(CCC_RuntimeFloat, "r__gtao_blend", &ps_r__gtao_blend, 0.02f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__light_falloff", &ps_r__light_falloff, 0.f, 1.f);
     CMD4(CCC_RuntimeInteger, "r__wmark_gbuf", &ps_r__wmark_gbuf, 0, 2); // QA: 2 the marks' quads whole
     CMD4(CCC_RuntimeFloat, "r__wmark_bump", &ps_r__wmark_bump, 0.f, 16.f);

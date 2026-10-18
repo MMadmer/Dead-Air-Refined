@@ -23,7 +23,7 @@ void CBlender_gtao::Compile(CBlender_Compile& C)
             C.r_dx11Sampler("smp_nofilter");
             C.r_End();
             break;
-        case 1: // guided filter, UAV $user$ssao_temp
+        case 1: // guided filter, UAV $user$gtao_cur
             C.r_ComputePass("gtao_filter");
             C.r_dx11Texture("t_gtao_packed", r2_RT_gtao);
             C.r_dx11Sampler("smp_nofilter");
@@ -48,7 +48,7 @@ void CBlender_gtao::Compile(CBlender_Compile& C)
 
         C.r_End();
         break;
-    case 1: // guided 8x8 filter into $user$ssao_temp
+    case 1: // guided 8x8 filter into $user$gtao_cur
         C.r_Pass("da_fullscreen", "gtao_filter", FALSE, FALSE, FALSE);
         C.r_CullMode(D3DCULL_NONE);
 
@@ -56,6 +56,16 @@ void CBlender_gtao::Compile(CBlender_Compile& C)
 
         C.r_dx11Sampler("smp_nofilter");
 
+        C.r_End();
+        break;
+    case 2: // the temporal pass reading history 0 (into $user$ssao_temp and history 1)
+    case 3: // reading history 1 (into history 0)
+        C.r_Pass("da_fullscreen", "gtao_temporal", FALSE, FALSE, FALSE);
+        C.r_CullMode(D3DCULL_NONE);
+        C.r_dx11Texture("s_position", r2_RT_P);
+        C.r_dx11Texture("t_gtao_cur", r2_RT_gtao_cur);
+        C.r_dx11Texture("t_gtao_hist", C.iElement == 2 ? r2_RT_gtao_hist0 : r2_RT_gtao_hist1);
+        C.r_dx11Sampler("smp_nofilter");
         C.r_End();
         break;
     }

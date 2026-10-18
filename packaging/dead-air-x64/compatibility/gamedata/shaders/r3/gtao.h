@@ -27,9 +27,9 @@
 Texture2D s_blue_noise; // R8G8: x = slice angle jitter, y = step jitter
 Texture2D<float2> t_gtao_packed; // x = view-z, y = raw AO ($user$gtao_0)
 
-// World-space radius -> screen-space radius factor: height / (4 * tan(fov/2)),
-// set by phase_gtao every frame.
-float gtao_parameters;
+// x: world-space radius -> screen-space radius factor, height / (4 * tan(fov/2)); y: slices (the preset's tier);
+// zw: this frame's turn of the noise (gtao_temporal.ps gathers the turns), set by phase_gtao every frame.
+float4 gtao_parameters;
 
 // The centre of a render-size pixel as a texture coordinate.
 float2 gtao_pixel_tc(uint2 pix)
@@ -89,8 +89,9 @@ float gtao_compute(float3 view_position, float3 view_normal, float2 texcoord, fl
     const float GTAO_TAU = 6.2831854;
     const float GTAO_HALF_PI = 1.5707964;
 
-    // Donor settings, kept verbatim: 3 slices x 4 steps, 0.85 m radius.
-    const int GTAO_DIRECTIONS = 3;
+    // Donor settings: 4 steps, 0.85 m radius; the slices from the preset (3 the donor's, 1 the cheap tier the temporal
+    // pass makes whole over the frames).
+    const int GTAO_DIRECTIONS = max(int(gtao_parameters.y), 1);
     const int GTAO_STEPS = 4;
     const float GTAO_RADIUS = 0.85;
     const float GTAO_NEG_1_OVER_RADIUSQR = -1.0 / (GTAO_RADIUS * GTAO_RADIUS);
@@ -101,7 +102,7 @@ float gtao_compute(float3 view_position, float3 view_normal, float2 texcoord, fl
     float3 view_direction = -normalize(view_position);
 
     // Screen-space radius (clamped)
-    float screen_radius = min((GTAO_RADIUS * gtao_parameters) / view_position.z, 256.0);
+    float screen_radius = min((GTAO_RADIUS * gtao_parameters.x) / view_position.z, 256.0);
 
     // Slice scale; Y flipped: texture v grows down, view-space y grows up
     float2 slice_scale = pos_decompression_params2.zw * screen_radius * float2(1.0, -1.0);
@@ -112,7 +113,7 @@ float gtao_compute(float3 view_position, float3 view_normal, float2 texcoord, fl
     // Accumulated occlusion and slice weight
     float2 occ_weight = (0.0).xx;
 
-    for (int i = 0; i < GTAO_DIRECTIONS; i++)
+    [loop] for (int i = 0; i < GTAO_DIRECTIONS; i++)
     {
         float angle = (float(i) + jitter.x) * slice_angle;
 
@@ -202,7 +203,7 @@ float2 gtao_render_pixel(uint2 pix)
 
     // Both channels of the blue-noise tile, tiled by pixel position (static
     // slice, as the donor default)
-    float2 jitter = s_blue_noise.Load(int3(pix % 128u, 0)).xy;
+    float2 jitter = frac(s_blue_noise.Load(int3(pix % 128u, 0)).xy + gtao_parameters.zw);
 
     // Unpack the G-buffer
     float3 Point = gtao_view_pos(tc0, P.z);

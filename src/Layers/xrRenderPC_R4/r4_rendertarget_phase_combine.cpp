@@ -159,14 +159,21 @@ void CRenderTarget::phase_combine()
 
     // The AO slot: ray traced AO, else GTAO already done as a job, else today's techniques.
     GpuTimers.Begin(dx11GpuTimers::CombineAO);
-    if (!da_rt_ao_pass(RCache) && !da_async_ao_done())
+    const bool rt_ao = da_rt_ao_pass(RCache);
+    // The job's GTAO left its filtered AO for the temporal pass, as the inline one does.
+    const bool async_ao = !rt_ao && da_async_ao_done();
+    if (async_ao)
+        phase_gtao_temporal(RCache);
+    if (!rt_ao && !async_ao)
     {
         if (ps_r_ssao_mode == ssao_mode_gtao && s_gtao)
         {
-            // GTAO: pre-render + guided filter into rt_ssao_temp; combine_1 samples it as
-            // s_occ (USE_GTAO). s_gtao exists only when the mode was active at renderer
-            // start and MSAA is off - otherwise fall through to the inline paths.
+            // GTAO: pre-render + guided filter into rt_gtao_cur, the temporal pass below into
+            // rt_ssao_temp; combine_1 samples it as s_occ (USE_GTAO). s_gtao exists only when the
+            // mode was active at renderer start and MSAA is off - otherwise fall through to the
+            // inline paths.
             phase_gtao(RCache);
+            phase_gtao_temporal(RCache);
         }
         else if (s_hdao_cs)
         {

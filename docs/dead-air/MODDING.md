@@ -1290,6 +1290,20 @@ masks keep every other channel (the per-target mask needs independent blending, 
 the stock marks, QA: 2 paints every mark's quad), `r__wmark_bump` (3), `r__wmark_gloss_blood`
 (0.2), `r__wmark_gloss` (0).
 
+## Ambient occlusion over the frames
+
+GTAO (`gtao.h`, IX-Ray's port) took one static blue-noise pattern, so the same three slices
+showed their pattern on every flat wall, and the two lowest presets had no AO at all. Its noise now
+turns every frame (an R2 step) and a temporal pass gathers the turns (`gtao_temporal.ps`): last
+frame's AO reprojected through the previous view-projection, clamped to this frame's 3x3 range so
+a moving occluder leaves no trail, dropped where the stored depth is not the depth landing there
+(3 %), blended in at 0.12; a cut or a missed frame starts it over. The filter (pixel and the
+DirectX 12 compute job alike) writes `$user$gtao_cur`, the temporal pass `$user$ssao_temp` (what
+`combine_1` samples) and the history pair. The slices follow the preset - 1 on Low (the cheap
+tier; the temporal pass makes it whole), 2 on Default, 3 above - and GTAO now runs from Low up
+(Minimum keeps AO off, Default left the stock SSAO): 0.37, 0.41-0.50 and 0.46-0.49 ms at 1440p.
+`r__gtao_slices`, `r__gtao_temporal` (1), `r__gtao_blend` (0.12), re-applied by the preset sync.
+
 ## Colour grade and foliage saturation
 
 The final combine applies a restrained, camera-like grade to the tonemapped value

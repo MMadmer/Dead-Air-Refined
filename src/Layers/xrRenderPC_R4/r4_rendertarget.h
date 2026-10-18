@@ -225,6 +225,14 @@ private:
     // rt_ssao_temp. Created only when the mode is active at renderer start.
     ref_rt rt_gtao;
     ref_shader s_gtao;
+    // The temporal pass (gtao_temporal.ps): the filtered AO of the frame, the history pair, which one was written last,
+    // and the view-projection it was written under.
+    ref_rt rt_gtao_cur;
+    ref_rt rt_gtao_hist[2];
+    u32 m_gtao_hist = 0;
+    u32 m_gtao_frame = 0;
+    Fmatrix m_gtao_prev_vp;
+    void phase_gtao_temporal(CBackend& cmd_list);
 
     // Bloom
     ref_geom g_bloom_build;
