@@ -444,6 +444,15 @@ static class cl_da_spec : public R_constant_setup
     }
 } binder_da_spec;
 
+// The local lights' falloff (da_light_falloff.h): the share of the inverse-square shape, its core, its gain.
+static class cl_da_light_falloff : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__light_falloff, ps_r__light_falloff_core, ps_r__light_falloff_gain, 0.f);
+    }
+} binder_da_light_falloff;
+
 #if RENDER == R_R4
 // The screen-space glossy reflections are this frame's (r4_rendertarget_phase_ssr.cpp): combine_1 reads them.
 static class cl_da_ssr : public R_constant_setup
@@ -966,6 +975,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_cloud_shadow", &binder_da_cloud_shadow);
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
     Resources->RegisterConstantSetup("da_spec", &binder_da_spec);
+    Resources->RegisterConstantSetup("da_light_falloff", &binder_da_light_falloff);
 #if RENDER == R_R4
     da_particle_light_register(*Resources);
     Resources->RegisterConstantSetup("da_ssr", &binder_da_ssr);

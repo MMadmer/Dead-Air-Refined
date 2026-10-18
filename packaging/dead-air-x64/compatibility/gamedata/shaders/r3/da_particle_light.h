@@ -3,6 +3,7 @@
 
 #define DA_FROXEL_NO_SAMPLE
 #include "da_froxel.h"
+#include "da_light_falloff.h"
 
 // Lit particles (da_particle_light.cpp), after DOOM Eternal: the blended particles take the sun with its shadow (the
 // froxel volume's sun visibility at the vertex), the sky, the ambient and the frame's nearest local lights, through
@@ -68,8 +69,9 @@ float3 da_particle_irradiance(float3 Pw, float3 Vn, float lobe)
 		const float3 to_light = p.xyz - Pw;
 		const float r2 = dot(to_light, to_light);
 		const float3 from_light = -to_light * rsqrt(max(r2, 1e-4f));
-		float att = saturate(1.0f - r2 * p.w);
-		att *= att;
+		const float x2 = r2 * p.w;
+		float att = saturate(1.0f - x2);
+		att = da_light_att(x2, att * att);
 		[branch] if (c.w > -1.5f)
 			att *= smoothstep(c.w, lerp(c.w, 1.0f, 0.3f), dot(from_light, da_particle_lights[i * 3 + 2].xyz));
 		E += c.rgb * (att * (1.0f + lobe * pow(saturate(dot(-from_light, Vn)), 8.0f)));

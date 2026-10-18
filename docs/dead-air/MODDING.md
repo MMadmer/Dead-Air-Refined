@@ -1264,6 +1264,16 @@ it (the user's `light_test` hall at night: 0.2 % of the pixels apart, the lamps'
 thread there went 31.7-32.9 to 34.2 FPS on Vulkan and 46.9-47.7 to 49.0 on DirectX 11, with 90 of
 its 101 faces cached. `r__light_shadow_cache` (1; 0 the stock faces, QA: 2 logs the faces' modes).
 
+## Lamp falloff
+
+The local lights fell off by the stock window `saturate(1 - d^2/R^2)`: no hot spot, a pool of
+light read as a flat disc. They now take DOOM Eternal's and Unreal's shape - the inverse square
+with a soft core, `1 / (1 + k d^2/R^2)`, held to zero at the range by `(1 - (d/R)^4)^2`
+(`da_light_falloff.h`) - scaled so a surface at half the range is lit as before: about 1.7 times
+brighter right under the lamp, darker toward its edge. Surfaces, the volumetric light and the lit
+particles alike. Look constants, re-applied by the preset sync: `r__light_falloff` (1; 0 the stock
+window, between them a blend), `r__light_falloff_core` (k, 4), `r__light_falloff_gain` (1.7).
+
 ## Colour grade and foliage saturation
 
 The final combine applies a restrained, camera-like grade to the tonemapped value

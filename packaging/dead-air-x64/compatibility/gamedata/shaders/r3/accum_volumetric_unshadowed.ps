@@ -1,4 +1,5 @@
 #include "common.h"
+#include "da_light_falloff.h"
 
 struct v2p
 {
@@ -24,7 +25,7 @@ float4 main(v2p I, uint iSample : SV_SAMPLEINDEX) : SV_Target
     const float4 lightmap = s_lmap.Sample(smp_rtlinear, projected.xy / projected.w);
 
     const float radiusSquared = dot(I.lightToPos, I.lightToPos);
-    const float attenuation = saturate(1.0 - radiusSquared * Ldynamic_pos.w);
+    const float attenuation = da_light_att(radiusSquared * Ldynamic_pos.w); // da_light_falloff.h
 
     projected.xy /= projected.w * 3.0;
     const float time = timers.z * 0.1;

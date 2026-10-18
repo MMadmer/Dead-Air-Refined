@@ -4,6 +4,7 @@
 #include "common.h"
 #include "da_material_codes.h"
 #include "da_snow_light.h"
+#include "da_light_falloff.h"
 
 // The light model of the base tree (configs\shaders\r3\lmodel.h) with the materials above the stock range
 // (docs/dead-air/GRASS.md, SNOW.md): codes 27-30 are two-sided foliage, which samples the Oren-Nayar slice
@@ -129,7 +130,7 @@ float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, 
   	float3 L 	= -normalize	((float3)L2P);					// vector2light
   	float3 H		= normalize	(L+V);						// float-angle-vector
 		rsqr	= dot		(L2P,L2P);					// distance 2 light (squared)
-  	float  att 	= saturate	(1 - rsqr*light_range_rsq*L_RANGE)*L_BRIGHT;			// q-linear attenuate
+  	float  att 	= da_light_att	(rsqr*light_range_rsq*L_RANGE)*L_BRIGHT;			// the falloff (da_light_falloff.h)
 	float4 light	= s_material.Sample( smp_material, float3( dot(L,N), dot(H,N), da_lut_z(m) ) ).xxxy;		// sample material
 	[branch] if (da_is_snowy(m))
 		light = da_snow_light(light, N, V, L, da_is_glint(m));
@@ -148,7 +149,7 @@ float4 plight_local( float m, float3 pnt, float3 normal, float3 light_position, 
 	float4 ret = plight_local( m, pnt, normal, light_position, light_range_rsq, rsqr );
 	[branch] if ( da_spec_ggx_on( m ) )
 	{
-		const float att = saturate( 1 - rsqr * light_range_rsq * L_RANGE ) * L_BRIGHT;
+		const float att = da_light_att( rsqr * light_range_rsq * L_RANGE ) * L_BRIGHT;
 		ret.w = att * LIGHT_MUL1 * da_spec_ggx( gloss, normal, -normalize( pnt ), normalize( light_position - pnt ) );
 	}
 	return ret;
