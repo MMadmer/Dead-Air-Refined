@@ -149,6 +149,23 @@ void CSoundRender_EffectsA_EAX::get_listener(CSoundRender_Environment& env)
     env.AirAbsorptionHF         = (float)ep.flAirAbsorptionHF;
 }
 
+// EAX occlusion of the source: the direct path and its room send lose the highs, the lows stay with the stock gain.
+void CSoundRender_EffectsA_EAX::set_source_occlusion(u32 source, int occlusion)
+{
+    long value = occlusion;
+    float lf = 0.f;
+    const ALenum error = m_eax_set_fn(&DSPROPSETID_EAX20_BufferProperties, DSPROPERTY_EAXBUFFER_OCCLUSION, source,
+        &value, sizeof(value));
+    m_eax_set_fn(&DSPROPSETID_EAX20_BufferProperties, DSPROPERTY_EAXBUFFER_OCCLUSIONLFRATIO, source, &lf, sizeof(lf));
+
+    static bool reported = false;
+    if (error != AL_NO_ERROR && !reported)
+    {
+        reported = true;
+        Msg("! SOUND: EAX source occlusion rejected (0x%x)", error);
+    }
+}
+
 void CSoundRender_EffectsA_EAX::commit()
 {
     // commit eax

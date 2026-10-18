@@ -1304,6 +1304,25 @@ tier; the temporal pass makes it whole), 2 on Default, 3 above - and GTAO now ru
 (Minimum keeps AO off, Default left the stock SSAO): 0.37, 0.41-0.50 and 0.46-0.49 ms at 1440p.
 `r__gtao_slices`, `r__gtao_temporal` (1), `r__gtao_blend` (0.12), re-applied by the preset sync.
 
+## Sound: the room from the geometry, muffling through walls
+
+The level's authored sound zones (`level.snd_env`, the names of `sEnvironment.xr`) cover few places,
+and outside them the stock reverb was off. There the listener now probes the static collision
+model five times a second while moving (`CSoundRender_Scene::probe_environment`): about 27
+directions from straight up to just below the horizon, 50 m each. A hit above is a cover, a hit
+around counts only on a surface steeper than a slope (ground seen at a grazing angle is no wall).
+Cover, walls, the share of the openings and the mean path to a surface become the EAX listener:
+room level, Sabine decay with the openings as absorbers (0.2-4 s), early reflections from the
+nearest surface and their delay, size and diffusion. The hall of `light_test` comes out at a
+1.7 s tail, the open air dry. An authored zone or a script's `set_user_env` still wins; the
+environment glides to the target over a second as before.
+
+A sound the stock occlusion ray finds behind the geometry (`[sound] occlusion_scale`, the gain it
+keeps) now also loses its highs: EAX occlusion of the source, up to 2000 mB at 5 kHz with the lows
+left to the stock gain, so the room send dulls too. World ambients and 2D sounds stay clear.
+`snd_geom_reverb` (1; 0 off, 2 logs the probes and the first muffled sounds), `snd_occlusion_hf`
+(2000), session only. Both need EAX (OpenAL Soft's emulation, `snd_efx`).
+
 ## Colour grade and foliage saturation
 
 The final combine applies a restrained, camera-like grade to the tonemapped value

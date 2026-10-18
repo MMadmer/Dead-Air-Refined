@@ -372,6 +372,14 @@ CSound_environment* CSoundRender_Scene::get_environment(const Fvector& P)
 {
     static CSoundRender_Environment identity;
 
+    if (auto* env = authored_environment(P))
+        return env;
+    identity.set_identity();
+    return &identity;
+}
+
+CSoundRender_Environment* CSoundRender_Scene::authored_environment(const Fvector& P)
+{
     if (bUserEnvironment)
     {
         return &s_user_environment;
@@ -398,11 +406,75 @@ CSound_environment* CSoundRender_Scene::get_environment(const Fvector& P)
             const u16 id_back = (u16)((T->dummy & 0xffff0000) >> 16); //	back face
             return envLib->Get(id_back);
         }
-        identity.set_identity();
-        return &identity;
     }
-    identity.set_identity();
-    return &identity;
+    return nullptr;
+}
+
+bool CSoundRender_Scene::probe_environment(const Fvector& P, CSoundRender_Environment& env, bool log)
+{
+    if (!geom_MODEL)
+        return false;
+
+    // Fibonacci directions from the top down to just below the horizon (lower ones only find the floor). A hit encloses
+    // when it is a cover above or, around, a surface steeper than a slope - ground seen at a grazing angle does not.
+    constexpr int rays = 40;
+    constexpr float range = 50.f;
+    int up = 0, up_hits = 0, side = 0, side_hits = 0;
+    float sum = 0.f, nearest = range;
+    for (int i = 0; i < rays; ++i)
+    {
+        const float y = 1.f - (i + .5f) * (2.f / rays);
+        if (y < -.35f)
+            break;
+        const float r = _sqrt(1.f - y * y);
+        const float a = float(i) * 2.3999632f;
+        const Fvector dir = { r * _cos(a), y, r * _sin(a) };
+        const bool above = y > .35f;
+        (above ? up : side)++;
+
+        geom_probe.ray_query(CDB::OPT_ONLYNEAREST, geom_MODEL, P, dir, range);
+        if (!geom_probe.r_count())
+            continue;
+        const CDB::RESULT& hit = *geom_probe.r_begin();
+        Fvector n;
+        n.mknormal(hit.verts[0], hit.verts[1], hit.verts[2]);
+        if (!above && _abs(n.y) > .7f)
+            continue;
+        (above ? up_hits : side_hits)++;
+        sum += hit.range;
+        nearest = std::min(nearest, hit.range);
+    }
+
+    // Cover, walls, the share of the openings and the mean path to a surface (Sabine with the openings as absorbers).
+    const int count = up + side;
+    const int hits = up_hits + side_hits;
+    const float cover = up ? float(up_hits) / up : 0.f;
+    const float walls = side ? float(side_hits) / side : 0.f;
+    const float w = .55f * cover + .45f * walls;
+    const float open = 1.f - float(hits) / count;
+    const float mean = hits ? sum / hits : range;
+    const float absorb = .08f + .92f * open;
+    const float near_k = clampr(1.f - nearest / 20.f, 0.f, 1.f);
+
+    const auto mix = [](float a, float b, float t) { return a + (b - a) * t; };
+    env.set_default();
+    env.Room = -600.f + 1000.f * std::log10(std::max(w, .004f));
+    env.RoomHF = mix(-1500.f, -250.f, w);
+    env.RoomRolloffFactor = 0.f;
+    env.DecayTime = clampr(.053f * mean / absorb, .2f, 4.f);
+    env.DecayHFRatio = mix(.5f, .85f, w);
+    env.Reflections = mix(-2600.f, -400.f, near_k);
+    env.ReflectionsDelay = clampr(2.f * nearest / 343.f, .002f, .3f);
+    env.Reverb = mix(-1800.f, 200.f, w);
+    env.ReverbDelay = clampr(mean / 343.f, .005f, .1f);
+    env.EnvironmentSize = clampr(2.f * mean, 1.f, 100.f);
+    env.EnvironmentDiffusion = mix(.3f, 1.f, w);
+    env.clamp();
+
+    if (log)
+        Msg("* [snd_env] cover=%.2f walls=%.2f open=%.2f mean=%.1f near=%.1f -> room=%.0f decay=%.2f refl=%.0f@%.3f reverb=%.0f",
+            cover, walls, open, mean, nearest, env.Room, env.DecayTime, env.Reflections, env.ReflectionsDelay, env.Reverb);
+    return true;
 }
 
 void CSoundRender_Scene::set_environment_size(CSound_environment* src_env, CSound_environment** dst_env)

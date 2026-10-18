@@ -19,6 +19,8 @@ XRSOUND_API Flags32 psSoundFlags =
 
 XRSOUND_API int psSoundTargets = 256;
 XRSOUND_API float psSoundOcclusionScale = 0.5f;
+XRSOUND_API int psSoundGeomReverb = 1;
+XRSOUND_API float psSoundOcclusionHF = 2000.f;
 XRSOUND_API float psSoundTimeFactor = 1.0f;
 XRSOUND_API float psSoundCull = 0.01f;
 XRSOUND_API float psSoundRolloff = 0.75f;
@@ -199,11 +201,21 @@ void CSoundRender_Core::update_listener(const Fvector& P, const Fvector& D, cons
     if (!psSoundFlags.test(ss_EFX) || !m_effects)
         return;
 
-    // Update effects
-    if (bListenerMoved)
+    // Update effects: the authored zone or, outside one, the room the geometry forms. Five times a second at most - the
+    // environment glides toward the target over a second anyway.
+    if (bListenerMoved && fTimerPersistent_Value >= m_env_probe_time)
     {
         bListenerMoved = false;
-        e_target = *(CSoundRender_Environment*)DefaultSoundScene->get_environment(P);
+        m_env_probe_time = fTimerPersistent_Value + .2f;
+        auto* scene = static_cast<CSoundRender_Scene*>(DefaultSoundScene);
+        if (const auto* env = scene->authored_environment(P))
+        {
+            e_target = *env;
+            if (psSoundGeomReverb > 1)
+                Msg("* [snd_env] authored '%s'", env->name.c_str());
+        }
+        else if (!psSoundGeomReverb || !scene->probe_environment(P, e_target, psSoundGeomReverb > 1))
+            e_target.set_identity();
     }
 
     e_current.lerp(e_current, e_target, fTimer_Delta);

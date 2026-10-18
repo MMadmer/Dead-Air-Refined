@@ -24,6 +24,10 @@ public:
     void set_environment(u32 id, CSound_environment** dst_env) override;
     void set_environment_size(CSound_environment* src_env, CSound_environment** dst_env) override;
     CSound_environment* get_environment(const Fvector& P) override;
+    // The user's environment or the zone authored at P, nullptr outside them.
+    CSoundRender_Environment* authored_environment(const Fvector& P);
+    // The room the static geometry forms around P - its cover, size and openings - as an environment.
+    bool probe_environment(const Fvector& P, CSoundRender_Environment& env, bool log);
 
     void play(ref_sound& S, IGameObject* O, u32 flags = 0, float delay = 0.f) override;
     void play_at_pos(ref_sound& S, IGameObject* O, const Fvector& pos, u32 flags = 0, float delay = 0.f) override;
@@ -60,6 +64,7 @@ private:
 
     // Collider
     CDB::COLLIDER geom_DB;
+    CDB::COLLIDER geom_probe;
     CDB::MODEL* geom_SOM{};
     CDB::MODEL* geom_MODEL{};
     CDB::MODEL* geom_ENV{};

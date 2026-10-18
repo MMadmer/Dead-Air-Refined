@@ -20,6 +20,7 @@ bool CSoundRender_TargetA::_initialize()
         A_CHK(alSourcef(pSource, AL_MAX_GAIN, 1.f));
         A_CHK(alSourcef(pSource, AL_GAIN, cache_gain));
         A_CHK(alSourcef(pSource, AL_PITCH, cache_pitch));
+        cache_occlusion = 0;
         return true;
     }
     Msg("! sound: OpenAL: Can't create source. Error: %s.", static_cast<pcstr>(alGetString(error)));
@@ -161,6 +162,26 @@ void CSoundRender_TargetA::fill_parameters()
     {
         cache_gain = _gain;
         A_CHK(alSourcef(pSource, AL_GAIN, _gain));
+    }
+
+    // Muffling through the walls: the occluded share of the stock gain occlusion also takes the highs.
+    if (auto* effects = SoundRender->effects())
+    {
+        float muffle = 0.f;
+        if (!m_pEmitter->b2D && psSoundFlags.test(ss_EFX))
+            muffle = clampr((1.f - m_pEmitter->occluder_volume) / (1.f - psSoundOcclusionScale), 0.f, 1.f);
+        const int occlusion = -iFloor(muffle * psSoundOcclusionHF);
+        if (std::abs(occlusion - cache_occlusion) >= 25 || (!occlusion && cache_occlusion))
+        {
+            cache_occlusion = occlusion;
+            effects->set_source_occlusion(pSource, occlusion);
+            static int logged = 0;
+            if (psSoundGeomReverb > 1 && occlusion && logged < 12)
+            {
+                ++logged;
+                Msg("* [snd_occ] %s occlusion=%d", m_pEmitter->source()->file_name(), occlusion);
+            }
+        }
     }
 
     float _pitch = src.freq;

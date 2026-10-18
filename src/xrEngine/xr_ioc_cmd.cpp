@@ -1166,6 +1166,8 @@ void CCC_Register()
     CMD1(CCC_SND_Restart, "snd_restart");
     CMD3(CCC_Mask, "snd_acceleration", &psSoundFlags, ss_Hardware);
     CMD3(CCC_Mask, "snd_efx", &psSoundFlags, ss_EFX);
+    CMD4(CCC_RuntimeInteger, "snd_geom_reverb", &psSoundGeomReverb, 0, 2);
+    CMD4(CCC_RuntimeFloat, "snd_occlusion_hf", &psSoundOcclusionHF, 0.f, 6000.f);
     CMD3(CCC_Mask, "snd_use_float32", &psSoundFlags, ss_UseFloat32);
     CMD4(CCC_Integer, "snd_targets", &psSoundTargets, 4, 256);
     CMD4(CCC_Integer, "snd_cache_size", &psSoundCacheSizeMB, 4, 64);

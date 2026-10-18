@@ -32,5 +32,7 @@ public:
     void get_listener(CSoundRender_Environment& env) override;
 
     void commit() override;
+
+    void set_source_occlusion(u32 source, int occlusion) override;
 };
 #endif // #if __has_include(<eax/eax.h>)

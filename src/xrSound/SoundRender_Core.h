@@ -48,6 +48,7 @@ protected:
     SListener Listener;
 
     bool bListenerMoved{};
+    float m_env_probe_time{};
 
     CSoundRender_Environment e_current;
     CSoundRender_Environment e_target;
@@ -113,6 +114,7 @@ public:
     // listener
     const auto& listener_params() const { return Listener; }
     const Fvector& listener_position() override { return Listener.position; }
+    CSoundRender_Effects* effects() const { return m_effects; }
     virtual void update_listener(const Fvector& P, const Fvector& D, const Fvector& N, const Fvector& R, float dt);
 
     void refresh_sources() override;

@@ -46,6 +46,10 @@ XRSOUND_API extern float psSoundVFactor;
 XRSOUND_API extern float psSoundVMusic;
 XRSOUND_API extern float psSoundRolloff;
 XRSOUND_API extern float psSoundOcclusionScale;
+// The room the geometry forms around the listener where no zone is authored (0 off, 2 logs the probes), and the highs
+// a fully occluded sound loses on top of the stock gain (mB at 5 kHz).
+XRSOUND_API extern int psSoundGeomReverb;
+XRSOUND_API extern float psSoundOcclusionHF;
 XRSOUND_API extern float psSoundTimeFactor; //--#SM+#--
 XRSOUND_API extern Flags32 psSoundFlags;
 XRSOUND_API extern int psSoundTargets;
