@@ -419,7 +419,8 @@ map size, 20 m and `r__sun_cascade_mid` - facing the light, with
 their heads) and on presets Default and above into the middle cascade (3 vertices, culms with their folded
 heads), each cascade with its own keep per texel and a fixed LOD, so no shadow pops when a blade crosses
 `d1` or `d2`. The far cascade gets no grass (a texel there is a third of a metre and flickered in wind);
-contact shadows and the base occlusion carry it. Local lights take no grass casters. The blades' shadows
+contact shadows and the base occlusion carry it. Local lights take no grass casters, nor the cards left beside the
+blades (litter and decals on the ground; `r__light_details` keeps deciding on a level without blades). The blades' shadows
 follow the preset alone: `r2_sun_details` keeps deciding for the detail cards that stay (forbs, ferns,
 litter), because grass without its own shadow floats over the ground.
 

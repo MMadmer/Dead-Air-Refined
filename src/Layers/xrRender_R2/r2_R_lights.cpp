@@ -6,6 +6,7 @@
 #include "Layers/xrRenderPC_R4/da_particle_light.h"
 #include "Layers/xrRenderPC_R4/da_smap_cache.h"
 #include "Layers/xrRenderPC_R4/da_light_volumes.h"
+#include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #endif
 
@@ -260,9 +261,12 @@ void CRender::render_lights(light_Package& LP)
         // Detail objects never render into local light shadow maps in the reference: CoC and Dead Air 1.0 reserve
         // them for the sun cascades. The pass is a High/Maximum preset feature (r__light_details), gated by the grass
         // shadow option itself, and only for the lamps within 40 m: beyond that their grass shadows are sub-texel.
+        // With the blade grass on the level the cards left are the litter and the decals lying on the ground, and the
+        // blades cast into no lamp (GRASS.md, Shadows): no detail casters then (3.7 ms of the workers' time at the
+        // lamp hall).
         const bool light_near_enough = L->position.distance_to_sqr(Device.vCameraPosition) < (40.f * 40.f);
-        const bool renderDetails = ps_r__light_details && ps_r_sun_details >= detail_shadow_high && Details &&
-            light_near_enough && Details->HasRenderableDetails();
+        const bool renderDetails = !da_grass_active() && ps_r__light_details && ps_r_sun_details >= detail_shadow_high &&
+            Details && light_near_enough && Details->HasRenderableDetails();
         // The procedural shrubs cast into the lights near the camera as the stock bushes did.
         const bool renderShrubs = da_veg_light_casts(L);
         if (!bool(cache) && !bNormal && !bSpecial && !renderDetails && !renderShrubs)
