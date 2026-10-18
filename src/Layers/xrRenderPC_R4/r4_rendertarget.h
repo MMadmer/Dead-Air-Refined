@@ -139,6 +139,11 @@ public:
     ref_shader s_smap_cache;
     // The cache's quad over the viewport: xy the slot's corner, z the face size, w 1 = clear (da_smap_cache.cpp).
     void phase_smap_cache_quad(CBackend& cmd_list, float x, float y, float size, float clear);
+    // The decals' G-buffer pass (WallmarksEngine.cpp): the albedo's gloss and the normal channels as targets.
+    void phase_wallmarks_gbuf();
+    void phase_wallmarks_gbuf_masks();
+    bool wallmarks_gbuf_ready() const { return m_wmark_gbuf_ok; }
+    bool m_wmark_gbuf_ok = false;
     ref_rt rt_smap_rain;
     ref_rt rt_smap_depth_minmax; //	is used for min/max sm
     ref_rt rt_smap_hud; // first-person hands and item, for self-shadowing only

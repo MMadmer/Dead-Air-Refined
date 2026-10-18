@@ -9,6 +9,9 @@
 #include "SkeletonCustom.h"
 #if RENDER == R_R4
 #include "da_temporal.h"
+#if RENDER == R_R4
+#include "Layers/xrRender/blenders/blender_da_wmark_gbuf.h"
+#endif
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -73,6 +76,9 @@ CWallmarksEngine::~CWallmarksEngine()
 
 void CWallmarksEngine::clear()
 {
+#if RENDER == R_R4
+    gbuf_shaders.clear();
+#endif
     {
         for (auto &p_it : marks)
         {
@@ -377,8 +383,8 @@ ICF void BeginStream(const ref_geom& hGeom, u32& w_offset, FVF::LIT*& w_verts, F
     w_start = w_verts;
 }
 
-ICF u32 FlushStream(
-    ref_geom hGeom, ref_shader shader, u32& w_offset, FVF::LIT*& w_verts, FVF::LIT*& w_start, BOOL bSuppressCull)
+ICF u32 FlushStream(ref_geom hGeom, ref_shader shader, u32& w_offset, FVF::LIT*& w_verts, FVF::LIT*& w_start,
+    BOOL bSuppressCull, const ref_shader& gbuf = {})
 {
     u32 w_count = u32(w_verts - w_start);
     RImplementation.Vertex.Unlock(w_count, hGeom->vb_stride);
@@ -389,11 +395,56 @@ ICF u32 FlushStream(
         if (bSuppressCull)
             RCache.set_CullMode(CULL_NONE);
         RCache.Render(D3DPT_TRIANGLELIST, w_offset, w_count / 3);
+#if RENDER == R_R4
+        // The same marks again into the normal and the gloss (da_wmark_gbuf.ps), then the albedo target back.
+        if (gbuf)
+        {
+            RImplementation.Target->phase_wallmarks_gbuf();
+            RCache.set_Shader(gbuf._get());
+            RImplementation.Target->phase_wallmarks_gbuf_masks();
+            RCache.set_Geometry(hGeom);
+            if (bSuppressCull)
+                RCache.set_CullMode(CULL_NONE);
+            RCache.Render(D3DPT_TRIANGLELIST, w_offset, w_count / 3);
+            RImplementation.Target->phase_wallmarks();
+        }
+#endif
         if (bSuppressCull)
             RCache.set_CullMode(CULL_CCW);
     }
     return w_count / 3;
 }
+
+#if RENDER == R_R4
+const ref_shader& CWallmarksEngine::gbuf_shader(const ref_shader& base)
+{
+    static const ref_shader none;
+    if (!ps_r__wmark_gbuf || !base || !RImplementation.Target->wallmarks_gbuf_ready())
+        return none;
+    const Shader* key = base._get();
+    auto it = gbuf_shaders.find(key);
+    if (it == gbuf_shaders.end())
+    {
+        // The mark's own texture, the first one its pass binds.
+        shared_str texture;
+        if (!base->E[0]->passes.empty() && base->E[0]->passes[0]->T)
+            for (const auto& [stage, tex] : *base->E[0]->passes[0]->T)
+                if (tex)
+                {
+                    texture = tex->cName;
+                    break;
+                }
+        ref_shader created;
+        if (texture.size())
+        {
+            CBlender_da_wmark_gbuf blender;
+            created.create(&blender, "da_wmark_gbuf", texture.c_str());
+        }
+        it = gbuf_shaders.emplace(key, created).first;
+    }
+    return it->second;
+}
+#endif
 
 void CWallmarksEngine::Render()
 {
@@ -432,6 +483,11 @@ void CWallmarksEngine::Render()
         FVF::LIT *w_verts, *w_start;
         BeginStream(hGeom, w_offset, w_verts, w_start);
         wm_slot* slot = slot_it;
+#if RENDER == R_R4
+        const ref_shader& gbuf = gbuf_shader(slot->shader);
+#else
+        const ref_shader gbuf;
+#endif
 
         // static wallmarks
         for (auto &w_it : slot->static_items)
@@ -448,7 +504,7 @@ void CWallmarksEngine::Render()
                     if ((w_count + W->verts.size()) >= (MAX_TRIS * 3))
                     {
                         RImplementation.BasicStats.WMTriCount +=
-                            FlushStream(hGeom, slot->shader, w_offset, w_verts, w_start, FALSE);
+                            FlushStream(hGeom, slot->shader, w_offset, w_verts, w_start, FALSE, gbuf);
                         BeginStream(hGeom, w_offset, w_verts, w_start);
                     }
                     static_wm_render(W, w_verts);
@@ -469,7 +525,7 @@ void CWallmarksEngine::Render()
         }
         // Flush stream
         RImplementation.BasicStats.WMTriCount += FlushStream(
-            hGeom, slot->shader, w_offset, w_verts, w_start, FALSE); //. remove line if !(suppress cull needed)
+            hGeom, slot->shader, w_offset, w_verts, w_start, FALSE, gbuf); //. remove line if !(suppress cull needed)
         BeginStream(hGeom, w_offset, w_verts, w_start);
 
         // dynamic wallmarks
@@ -499,7 +555,7 @@ void CWallmarksEngine::Render()
                 if ((w_count + W->VCount()) >= (MAX_TRIS * 3))
                 {
                     RImplementation.BasicStats.WMTriCount +=
-                        FlushStream(hGeom, slot->shader, w_offset, w_verts, w_start, TRUE);
+                        FlushStream(hGeom, slot->shader, w_offset, w_verts, w_start, TRUE, gbuf);
                     BeginStream(hGeom, w_offset, w_verts, w_start);
                 }
 
@@ -520,7 +576,7 @@ void CWallmarksEngine::Render()
         }
         slot->skeleton_items.clear();
         // Flush stream
-        RImplementation.BasicStats.WMTriCount += FlushStream(hGeom, slot->shader, w_offset, w_verts, w_start, TRUE);
+        RImplementation.BasicStats.WMTriCount += FlushStream(hGeom, slot->shader, w_offset, w_verts, w_start, TRUE, gbuf);
     }
 
     lock.Leave(); // Physics may add wallmarks in parallel with rendering

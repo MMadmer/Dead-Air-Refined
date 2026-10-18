@@ -1274,6 +1274,22 @@ brighter right under the lamp, darker toward its edge. Surfaces, the volumetric 
 particles alike. Look constants, re-applied by the preset sync: `r__light_falloff` (1; 0 the stock
 window, between them a blend), `r__light_falloff_core` (k, 4), `r__light_falloff_gain` (1.7).
 
+## Decals with normal and gloss
+
+The wallmarks - bullet holes, blood, scorch - only tinted the albedo, so a hole was a flat dark spot
+in any light. After the albedo pass each batch of marks is drawn again into the G-buffer's normal
+and gloss (`da_wmark_gbuf.vs/.ps`, a shader per mark texture made by `WallmarksEngine.cpp`), after
+DOOM Eternal's decals with normal and gloss. No mark has a normal map, so the mark's coverage - its
+alpha times how far it moves the surface off neutral grey, which a multiply mark's 0.5 leaves at
+zero - is a height whose slope bends the face normal (taken from the screen-space derivatives of the
+view position, the tangent frame from the texture coordinates'): the rim of a hole catches the lamp.
+Blood (a red mark) is wet, everything else matte. A packed normal cannot blend and the gloss is its
+target's alpha, so the coverage is a dither turning with the frame that TAA resolves; the write
+masks keep every other channel (the per-target mask needs independent blending, which
+`dx11StateManager::SetColorWriteEnable(rt, mask)` turns on). Look constants: `r__wmark_gbuf` (1; 0
+the stock marks, QA: 2 paints every mark's quad), `r__wmark_bump` (3), `r__wmark_gloss_blood`
+(0.2), `r__wmark_gloss` (0).
+
 ## Colour grade and foliage saturation
 
 The final combine applies a restrained, camera-like grade to the tonemapped value

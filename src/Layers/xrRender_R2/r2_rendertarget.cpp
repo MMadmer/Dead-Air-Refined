@@ -554,6 +554,10 @@ CRenderTarget::CRenderTarget()
         }
         // A new atlas holds nothing the lamps' slots name.
         da_smap_cache_reset();
+        // The decals' G-buffer pass ships its shader with the content as well.
+        IReader* wmark_ps = open_shader("da_wmark_gbuf.ps");
+        m_wmark_gbuf_ok = wmark_ps != nullptr;
+        FS.r_close(wmark_ps);
         FS.r_close(smap_cache_ps);
 #endif
         rt_smap_rain.create(r2_RT_smap_rain, options.rain_smapsize, options.rain_smapsize, depth_format);

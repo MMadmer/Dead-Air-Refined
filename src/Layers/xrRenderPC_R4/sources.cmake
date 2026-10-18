@@ -150,6 +150,7 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_smaa.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_da_upscale.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_da_smap_cache.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_da_wmark_gbuf.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_da_bloom.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_da_mblur.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/blenders/blender_da_froxel.cpp"

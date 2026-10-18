@@ -375,6 +375,38 @@ void dx11StateManager::SetColorWriteEnable(u32 WriteMask)
     }
 }
 
+void dx11StateManager::SetColorWriteEnable(u32 RenderTarget, u32 WriteMask)
+{
+    ValidateBDesc();
+    const u8 WMask = (u8)WriteMask;
+#ifdef USE_DX11
+    // Without independent blending every target takes target 0's settings, its mask included: the others copy its
+    // blend first.
+    if (!m_BDesc.IndependentBlendEnable)
+    {
+        for (u32 i = 1; i < 8; ++i)
+        {
+            const u8 mask = m_BDesc.RenderTarget[i].RenderTargetWriteMask;
+            m_BDesc.RenderTarget[i] = m_BDesc.RenderTarget[0];
+            m_BDesc.RenderTarget[i].RenderTargetWriteMask = mask;
+        }
+        m_BDesc.IndependentBlendEnable = TRUE;
+        m_bBSChanged = true;
+    }
+    if (m_BDesc.RenderTarget[RenderTarget].RenderTargetWriteMask != WMask)
+    {
+        m_BDesc.RenderTarget[RenderTarget].RenderTargetWriteMask = WMask;
+        m_bBSChanged = true;
+    }
+#else
+    if (m_BDesc.RenderTargetWriteMask[RenderTarget] != WMask)
+    {
+        m_BDesc.RenderTargetWriteMask[RenderTarget] = WMask;
+        m_bBSChanged = true;
+    }
+#endif
+}
+
 void dx11StateManager::SetSampleMask(u32 SampleMask)
 {
     if (m_uiSampleMask != SampleMask)

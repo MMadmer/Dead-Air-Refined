@@ -226,6 +226,12 @@ int ps_r__light_shadow_budget = 0;
 int ps_r__light_shadow_cache = 1;
 // The local lights' inverse-square falloff (da_light_falloff.h), look constants: its share, core and gain.
 float ps_r__light_falloff = 1.f;
+// The decals' normal and gloss (da_wmark_gbuf.ps), look constants: on, the bump of their coverage, the gloss of blood and
+// of the rest.
+int ps_r__wmark_gbuf = 1;
+float ps_r__wmark_bump = 3.f;
+float ps_r__wmark_gloss_blood = 0.2f;
+float ps_r__wmark_gloss = 0.f;
 float ps_r__light_falloff_core = 4.f;
 float ps_r__light_falloff_gain = 1.7f;
 // Detail objects (grass) in local light shadow maps: an upstream extra the reference never
@@ -1492,6 +1498,10 @@ void xrRender_sync_preset_derived()
     ps_r__light_shadow_budget = budget_by_preset[ps_Preset];
     ps_r__light_shadow_cache = 1;
     ps_r__light_falloff = 1.f;
+    ps_r__wmark_gbuf = 1;
+    ps_r__wmark_bump = 3.f;
+    ps_r__wmark_gloss_blood = 0.2f;
+    ps_r__wmark_gloss = 0.f;
     ps_r__light_falloff_core = 4.f;
     ps_r__light_falloff_gain = 1.7f;
     ps_r__light_details = light_details_by_preset[ps_Preset];
@@ -2019,6 +2029,10 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_cache", &ps_r__light_shadow_cache, 0, 2); // QA: 2 logs the faces' modes
     CMD4(CCC_RuntimeFloat, "r__light_falloff", &ps_r__light_falloff, 0.f, 1.f);
+    CMD4(CCC_RuntimeInteger, "r__wmark_gbuf", &ps_r__wmark_gbuf, 0, 2); // QA: 2 the marks' quads whole
+    CMD4(CCC_RuntimeFloat, "r__wmark_bump", &ps_r__wmark_bump, 0.f, 16.f);
+    CMD4(CCC_RuntimeFloat, "r__wmark_gloss_blood", &ps_r__wmark_gloss_blood, 0.f, 1.f);
+    CMD4(CCC_RuntimeFloat, "r__wmark_gloss", &ps_r__wmark_gloss, 0.f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__light_falloff_core", &ps_r__light_falloff_core, 0.f, 64.f);
     CMD4(CCC_RuntimeFloat, "r__light_falloff_gain", &ps_r__light_falloff_gain, 0.1f, 10.f);
     CMD4(CCC_RuntimeInteger, "r__light_details", &ps_r__light_details, 0, 1);

@@ -892,6 +892,25 @@ void CRenderTarget::phase_wallmarks()
     RCache.set_ColorWriteEnable(D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
 }
 
+// The decals' share of the G-buffer: the gloss in the albedo's alpha, the normal in its own channels (the position
+// target's xy in the optimised layout) - every other channel kept by the write masks; phase_wallmarks undoes them.
+void CRenderTarget::phase_wallmarks_gbuf()
+{
+    const bool opt = RImplementation.o.gbuffer_opt;
+    u_setrt(RCache, rt_Color, opt ? rt_Position : rt_Normal, nullptr, rt_MSAADepth);
+    RCache.set_Stencil(TRUE, D3DCMP_LESSEQUAL, 0x01, 0xff, 0x00);
+    RCache.set_CullMode(CULL_CCW);
+}
+
+// After the pass is set: its blend state discards any mask set before it (dx11StateManager::SetBlendState).
+void CRenderTarget::phase_wallmarks_gbuf_masks()
+{
+    const bool opt = RImplementation.o.gbuffer_opt;
+    RCache.set_ColorWriteEnable(0, ps_r__wmark_gbuf > 1 ? D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_ALPHA : D3DCOLORWRITEENABLE_ALPHA);
+    RCache.set_ColorWriteEnable(1, opt ? D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN :
+                                          D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
+}
+
 void CRenderTarget::phase_combine_volumetric()
 {
     PIX_EVENT(phase_combine_volumetric);

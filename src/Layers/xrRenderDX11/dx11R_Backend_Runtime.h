@@ -578,6 +578,11 @@ IC void CBackend::set_AlphaRef(u32 _value)
     //}
 }
 
+IC void CBackend::set_ColorWriteEnable(u32 _rt, u32 _mask)
+{
+    StateManager.SetColorWriteEnable(_rt, _mask);
+}
+
 IC void CBackend::set_ColorWriteEnable(u32 _mask)
 {
     StateManager.SetColorWriteEnable(_mask);

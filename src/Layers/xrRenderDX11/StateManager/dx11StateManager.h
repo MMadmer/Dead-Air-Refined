@@ -35,6 +35,8 @@ public:
     void SetDepthFunc(u32 Func);
     void SetDepthEnable(u32 Enable);
     void SetColorWriteEnable(u32 WriteMask);
+    // One target's mask (the decals' G-buffer pass writes the gloss of one and the normal of another).
+    void SetColorWriteEnable(u32 RenderTarget, u32 WriteMask);
     void SetCullMode(u32 Mode);
     void SetFillMode(u32 Mode);
     void SetMultisample(u32 Enable);

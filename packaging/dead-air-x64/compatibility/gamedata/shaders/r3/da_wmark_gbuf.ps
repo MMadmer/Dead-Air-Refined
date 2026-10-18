@@ -1,0 +1,94 @@
+#include "common.h"
+
+// Copyright (c) 2026 Grizzly
+// Released under the MIT licence, see License.txt
+//
+// The decals' share of the G-buffer, after DOOM Eternal's decals with normal and gloss: the stock wallmarks only
+// tinted the albedo, so a bullet hole was a flat dark spot whatever the light. Here the mark's coverage is a height - a
+// hole, a dent, a smear sunk into the surface - whose slope bends the normal (its rim catches the lamp and the sun),
+// and the gloss under it follows the mark: matte in a hole, wet in blood.
+//
+// No mark has a normal map of its own and the pass reads nothing of the G-buffer it writes, so everything comes from
+// the mark's texture and the geometry: the face normal and the tangent frame from the screen-space derivatives of the
+// view position and the texture coordinates (Schuler's cotangent frame). The coverage is the mark's alpha times how far
+// it moves the surface off neutral grey - a multiply mark's 0.5 changes nothing and must cover nothing.
+
+// x: bump strength (0 = the face normal), y: the gloss of blood, z: the gloss of everything else, w: the frame's turn of
+// the dither (0..63).
+uniform float4 da_wmark;
+
+struct vi
+{
+	float2 tc	: TEXCOORD0;
+	float3 pv	: TEXCOORD1;
+	float4 hpos	: SV_Position;
+};
+
+struct fo
+{
+	float4 albedo	: SV_Target0;	// a: the gloss (the target writes alpha only)
+	float4 normal	: SV_Target1;	// the G-buffer's normal channels (written alone)
+};
+
+float da_wmark_cover( float4 t )
+{
+	const float lum = dot( t.rgb, LUMINANCE_VECTOR );
+	return t.a * saturate( abs( lum * 2.0f - 1.0f ) * 3.0f );
+}
+
+fo main( vi I )
+{
+	const float4 t = s_base.Sample( smp_rtlinear, I.tc );
+	// QA (r__wmark_gbuf 2, the bump negative): every mark's quad whole, its normal straight up the view, mirror gloss.
+	[branch] if ( da_wmark.x < 0.0f )
+	{
+		fo q;
+		q.albedo = float4( 1.0f, 0.0f, 0.0f, 1.0f );
+#ifdef GBUFFER_OPTIMIZATION
+		q.normal = float4( gbuf_pack_normal( float3( 0.0f, 1.0f, 0.0f ) ), 0.0f, 0.0f );
+#else
+		q.normal = float4( 0.0f, 1.0f, 0.0f, 0.0f );
+#endif
+		return q;
+	}
+	const float cover = da_wmark_cover( t );
+	// The coverage as a share of the pixels, turning with the frame (interleaved gradient noise): neither a packed normal
+	// nor the gloss, the alpha of its own target, can blend.
+	const float2 p = floor( I.hpos.xy ) + 5.588238f * da_wmark.w;
+	clip( cover - frac( 52.9829189f * frac( dot( p, float2( 0.06711056f, 0.00583715f ) ) ) ) - 1e-3f );
+
+	// The face and its texture frame.
+	const float3 dp1 = ddx( I.pv ), dp2 = ddy( I.pv );
+	float3 N = normalize( cross( dp2, dp1 ) );
+	N = dot( N, -I.pv ) < 0.0f ? -N : N;
+	const float2 du1 = ddx( I.tc ), du2 = ddy( I.tc );
+	const float3 p2 = cross( dp2, N ), p1 = cross( N, dp1 );
+	float3 T = p2 * du1.x + p1 * du2.x;
+	float3 B = p2 * du1.y + p1 * du2.y;
+	const float inv = rsqrt( max( max( dot( T, T ), dot( B, B ) ), 1e-12f ) );
+	T *= inv;
+	B *= inv;
+
+	// The coverage as a depression: its slope one texel either way.
+	float w, h;
+	s_base.GetDimensions( w, h );
+	const float2 texel = 1.0f / float2( w, h );
+	const float cx = da_wmark_cover( s_base.Sample( smp_rtlinear, I.tc + float2( texel.x, 0.0f ) ) ) -
+		da_wmark_cover( s_base.Sample( smp_rtlinear, I.tc - float2( texel.x, 0.0f ) ) );
+	const float cy = da_wmark_cover( s_base.Sample( smp_rtlinear, I.tc + float2( 0.0f, texel.y ) ) ) -
+		da_wmark_cover( s_base.Sample( smp_rtlinear, I.tc - float2( 0.0f, texel.y ) ) );
+	const float3 n_ts = normalize( float3( cx * da_wmark.x, cy * da_wmark.x, 1.0f ) );
+	const float3 Nb = normalize( T * n_ts.x + B * n_ts.y + N * n_ts.z );
+
+	// Blood (a red mark) is wet; holes, scorch and dirt are matte.
+	const bool blood = t.r > t.g * 1.6f && t.r > t.b * 1.6f;
+
+	fo o;
+	o.albedo = float4( 0.0f, 0.0f, 0.0f, blood ? da_wmark.y : da_wmark.z );
+#ifdef GBUFFER_OPTIMIZATION
+	o.normal = float4( gbuf_pack_normal( Nb ), 0.0f, 0.0f );
+#else
+	o.normal = float4( Nb, 0.0f );
+#endif
+	return o;
+}

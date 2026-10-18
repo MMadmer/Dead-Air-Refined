@@ -46,6 +46,12 @@ private:
 
     Lock lock;
 
+#if RENDER == R_R4
+    // The decals' G-buffer shaders (da_wmark_gbuf.ps), one per wallmark shader's texture.
+    xr_map<const Shader*, ref_shader> gbuf_shaders;
+    const ref_shader& gbuf_shader(const ref_shader& base);
+#endif
+
 private:
     wm_slot* FindSlot(const ref_shader& shader);
     wm_slot* AppendSlot(const ref_shader& shader);

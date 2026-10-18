@@ -453,6 +453,17 @@ static class cl_da_light_falloff : public R_constant_setup
     }
 } binder_da_light_falloff;
 
+// The decals' G-buffer pass (da_wmark_gbuf.ps): the bump of their coverage, the gloss of blood and of the rest, the
+// frame's turn of the dither.
+static class cl_da_wmark : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        cmd_list.set_c(C, ps_r__wmark_gbuf > 1 ? -1.f : ps_r__wmark_bump, ps_r__wmark_gloss_blood, ps_r__wmark_gloss,
+            float(Device.dwFrame & 63));
+    }
+} binder_da_wmark;
+
 #if RENDER == R_R4
 // The screen-space glossy reflections are this frame's (r4_rendertarget_phase_ssr.cpp): combine_1 reads them.
 static class cl_da_ssr : public R_constant_setup
@@ -976,6 +987,7 @@ void CRender::create()
     Resources->RegisterConstantSetup("da_tonemap_params", &binder_da_tonemap_params);
     Resources->RegisterConstantSetup("da_spec", &binder_da_spec);
     Resources->RegisterConstantSetup("da_light_falloff", &binder_da_light_falloff);
+    Resources->RegisterConstantSetup("da_wmark", &binder_da_wmark);
 #if RENDER == R_R4
     da_particle_light_register(*Resources);
     Resources->RegisterConstantSetup("da_ssr", &binder_da_ssr);
