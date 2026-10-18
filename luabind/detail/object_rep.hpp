@@ -50,7 +50,7 @@ namespace luabind {
 
 			void set_instance(instance_holder* instance) { m_instance = instance; }
 
-			void add_dependency(lua_State* L, int index);
+			void add_dependency(lua_State* L, int self, int index);
 
 			std::pair<void*, int> get_instance(class_id target) const
 			{
@@ -70,9 +70,18 @@ namespace luabind {
 					m_instance->release();
 			}
 
+			// A pointer holder fits (vtable, flag, pointer, weak pointer, class id, dynamic pointer): an object handed to
+			// the scripts by pointer costs no heap block of its own.
+			static constexpr std::size_t inline_capacity = 48;
+
+			bool holds_inline(void const* storage) const
+			{
+				return storage == &m_instance_buffer;
+			}
+
 			void* allocate(std::size_t size)
 			{
-				if(size <= 32) {
+				if(size <= inline_capacity) {
 					return &m_instance_buffer;
 				}
 				else {
@@ -96,9 +105,8 @@ namespace luabind {
 			void operator=(object_rep const&) = delete;
 
 			instance_holder* m_instance;
-			std::aligned_storage<32>::type m_instance_buffer;
+			std::aligned_storage<inline_capacity>::type m_instance_buffer;
 			class_rep* m_classrep; // the class information about this object's type
-			detail::lua_reference m_dependency_ref; // reference to lua table holding dependency references
 		};
 
 		template<class T>
@@ -128,6 +136,8 @@ namespace luabind {
 		LUABIND_API object_rep* get_instance(lua_State* L, int index);
 		LUABIND_API void push_instance_metatable(lua_State* L);
 		LUABIND_API object_rep* push_new_instance(lua_State* L, class_rep* cls);
+		// The instance at index, just created, needs no finalizer: its destruction would do nothing.
+		LUABIND_API void instance_needs_no_finalizer(lua_State* L, int index);
 
 	}	// namespace detail
 

@@ -35,6 +35,11 @@ namespace luabind {
 				return m_interpreter;
 			}
 
+			int index() const
+			{
+				return m_index;
+			}
+
 		private:
 			lua_State* m_interpreter;
 			int m_index;

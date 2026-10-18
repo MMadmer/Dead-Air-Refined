@@ -30,6 +30,12 @@
 # define lua_setuservalue lua_setfenv
 #endif
 
+#if __has_include(<luajit.h>)
+extern "C" {
+# include <luajit.h>
+}
+#endif
+
 namespace luabind {
 	namespace detail {
 
@@ -48,27 +54,101 @@ namespace luabind {
 			deallocate(m_instance);
 		}
 
-		void object_rep::add_dependency(lua_State* L, int index)
+		namespace
 		{
-			if(!m_dependency_ref.is_valid())
+			// The keys of the dependencies in an instance's own uservalue table: light userdata no script can make,
+			// so neither a member a script stores there nor a lookup meets them.
+			char dependency_key;
+			char dependency_set_key;
+		}
+
+		// The objects an instance keeps alive go into its own uservalue table (where a member a script stores on it
+		// lands): the collector follows them from the instance, so they take no registry reference and the instance
+		// no finalizer to release one. The first is stored itself, any more in a set.
+		void object_rep::add_dependency(lua_State* L, int self, int index)
+		{
+			if(self < 0 && self > LUA_REGISTRYINDEX)
+				self = lua_gettop(L) + self + 1;
+			if(index < 0 && index > LUA_REGISTRYINDEX)
+				index = lua_gettop(L) + index + 1;
+			if(lua_isnoneornil(L, index))
+				return;
+
+			// The class table until the instance has a table of its own, which then has the class table as metatable.
+			lua_getuservalue(L, self);
+			if(lua_getmetatable(L, -1))
+			{
+				lua_pop(L, 1);
+			}
+			else
 			{
 				lua_newtable(L);
-				m_dependency_ref.set(L);
+				lua_insert(L, -2);
+				lua_setmetatable(L, -2);
+				lua_pushvalue(L, -1);
+				lua_setuservalue(L, self);
 			}
-			m_dependency_ref.get(L);
 
-			lua_pushvalue(L, index);
-			lua_pushnumber(L, 0);
-			lua_rawset(L, -3);
+			lua_pushlightuserdata(L, &dependency_key);
+			lua_rawget(L, -2);
+			if(lua_isnil(L, -1))
+			{
+				lua_pop(L, 1);
+				lua_pushlightuserdata(L, &dependency_key);
+				lua_pushvalue(L, index);
+				lua_rawset(L, -3);
+			}
+			else if(lua_rawequal(L, -1, index))
+			{
+				lua_pop(L, 1);
+			}
+			else
+			{
+				lua_pop(L, 1);
+				lua_pushlightuserdata(L, &dependency_set_key);
+				lua_rawget(L, -2);
+				if(lua_isnil(L, -1))
+				{
+					lua_pop(L, 1);
+					lua_newtable(L);
+					lua_pushlightuserdata(L, &dependency_set_key);
+					lua_pushvalue(L, -2);
+					lua_rawset(L, -4);
+				}
+				lua_pushvalue(L, index);
+				lua_pushboolean(L, 1);
+				lua_rawset(L, -3);
+				lua_pop(L, 1);
+			}
 			lua_pop(L, 1);
+		}
+
+		namespace
+		{
+			int get_instance_value(lua_State* L);
 		}
 
 		int destroy_instance(lua_State* L)
 		{
 			object_rep* instance = static_cast<object_rep*>(lua_touserdata(L, 1));
 
-			lua_pushstring(L, "__finalize");
-			lua_gettable(L, 1);
+			// instance.__finalize. While the instance's __index is still luabind's own, its lookup is run directly
+			// (the uservalue, its metatable, a property's getter): the metamethod's way through the VM cost every
+			// collected instance a C call. A metatable a script has changed takes the full lookup.
+			lua_pushliteral(L, "__finalize");
+			bool direct = false;
+			if(lua_getmetatable(L, 1))
+			{
+				lua_pushliteral(L, "__index");
+				lua_rawget(L, -2);
+				direct = lua_tocfunction(L, -1) == &get_instance_value;
+				lua_pop(L, 2);
+			}
+			// The stack is (instance, key), as __index gets it; the value ends on top either way.
+			if(direct)
+				get_instance_value(L);
+			else
+				lua_gettable(L, 1);
 
 			if(lua_isnil(L, -1))
 			{
@@ -248,6 +328,16 @@ namespace luabind {
 			lua_pop(L, 2);
 
 			return result;
+		}
+
+		LUABIND_API void instance_needs_no_finalizer(lua_State* L, int index)
+		{
+#ifdef LUAJIT_VERSION
+			luaJIT_udata_nofinalize(L, index);
+#else
+			(void)L;
+			(void)index;
+#endif
 		}
 
 		LUABIND_API object_rep* push_new_instance(lua_State* L, class_rep* cls)

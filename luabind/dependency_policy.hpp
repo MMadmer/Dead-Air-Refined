@@ -40,13 +40,14 @@ namespace luabind {
 			template< unsigned int... StackIndices >
 			static void postcall(lua_State* L, int results, meta::index_list<StackIndices...>)
 			{
-				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, meta::get<meta::index_list<StackIndices...>, A>::value));
+				const int nurse_index = meta::get<meta::index_list<StackIndices...>, A>::value;
+				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, nurse_index));
 
 				// If the nurse isn't an object_rep, just make this a nop.
 				if(nurse == 0)
 					return;
 
-				nurse->add_dependency(L, meta::get<meta::index_list<StackIndices...>, B>::value);
+				nurse->add_dependency(L, nurse_index, meta::get<meta::index_list<StackIndices...>, B>::value);
 			}
 		};
 
@@ -56,13 +57,14 @@ namespace luabind {
 			template< unsigned int... StackIndices >
 			static void postcall(lua_State* L, int results, meta::index_list<StackIndices...>)
 			{
-				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, meta::get<meta::index_list<StackIndices...>, 0>::value + results));
+				const int nurse_index = meta::get<meta::index_list<StackIndices...>, 0>::value + results;
+				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, nurse_index));
 
 				// If the nurse isn't an object_rep, just make this a nop.
 				if(nurse == 0)
 					return;
 
-				nurse->add_dependency(L, meta::get<meta::index_list<StackIndices...>, B>::value);
+				nurse->add_dependency(L, nurse_index, meta::get<meta::index_list<StackIndices...>, B>::value);
 			}
 		};
 
@@ -72,13 +74,14 @@ namespace luabind {
 			template< unsigned int... StackIndices >
 			static void postcall(lua_State* L, int results, meta::index_list<StackIndices...>)
 			{
-				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, meta::get<meta::index_list<StackIndices...>, A>::value));
+				const int nurse_index = meta::get<meta::index_list<StackIndices...>, A>::value;
+				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, nurse_index));
 
 				// If the nurse isn't an object_rep, just make this a nop.
 				if(nurse == 0)
 					return;
 
-				nurse->add_dependency(L, meta::get<meta::index_list<StackIndices...>, 0>::value + results);
+				nurse->add_dependency(L, nurse_index, meta::get<meta::index_list<StackIndices...>, 0>::value + results);
 			}
 		};
 

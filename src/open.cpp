@@ -113,7 +113,41 @@ namespace luabind {
 			new (storage) T(constructorArg);
 		}
 
+		// Writable, so the linker never folds them into one address as it may identical constants.
+		char class_map_key;
+		char class_id_map_key;
+
+		// The named entry also under its own address.
+		void alias_registry_entry(lua_State* L, char const* name, void const* key)
+		{
+			lua_pushlightuserdata(L, const_cast<void*>(key));
+			lua_pushstring(L, name);
+			lua_rawget(L, LUA_REGISTRYINDEX);
+			lua_rawset(L, LUA_REGISTRYINDEX);
+		}
+
+		void* registry_entry(lua_State* L, void const* key)
+		{
+			lua_pushlightuserdata(L, const_cast<void*>(key));
+			lua_rawget(L, LUA_REGISTRYINDEX);
+			void* entry = lua_touserdata(L, -1);
+			lua_pop(L, 1);
+			return entry;
+		}
+
 	}	// namespace anonymous
+
+	namespace detail {
+		LUABIND_API class_map& registry_class_map(lua_State* L)
+		{
+			return *static_cast<class_map*>(registry_entry(L, &class_map_key));
+		}
+
+		LUABIND_API class_id_map& registry_class_id_map(lua_State* L)
+		{
+			return *static_cast<class_id_map*>(registry_entry(L, &class_id_map_key));
+		}
+	}
 
 	LUABIND_API void open(lua_State* L)
 	{
@@ -132,6 +166,8 @@ namespace luabind {
 		createGarbageCollectedRegistryUserdata<detail::class_id_map>(L, "__luabind_class_id_map");
 		createGarbageCollectedRegistryUserdata<detail::cast_graph>(L, "__luabind_cast_graph");
 		createGarbageCollectedRegistryUserdata<detail::class_map>(L, "__luabind_class_map");
+		alias_registry_entry(L, "__luabind_class_map", &class_map_key);
+		alias_registry_entry(L, "__luabind_class_id_map", &class_id_map_key);
 
 		// add functions (class, cast etc...)
 		lua_pushcclosure(L, detail::create_class::stage1, 0);
