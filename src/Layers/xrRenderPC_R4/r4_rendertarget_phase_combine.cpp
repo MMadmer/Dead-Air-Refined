@@ -768,8 +768,6 @@ void CRenderTarget::phase_combine()
     //*** exposure-pipeline-clear
     {
         std::swap(rt_LUM_pool[gpu_id * 2 + 0], rt_LUM_pool[gpu_id * 2 + 1]);
-        t_LUM_src->surface_set(NULL);
-        t_LUM_dest->surface_set(NULL);
     }
 
 #ifdef DEBUG

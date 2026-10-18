@@ -63,6 +63,15 @@ CTexture::~CTexture()
     liveTextures.fetch_sub(1, std::memory_order_relaxed);
 }
 
+void CTexture::release_alt_surface()
+{
+    _RELEASE(m_altAll);
+    for (auto& srv : m_altSlices)
+        _RELEASE(srv);
+    m_altSlices.clear();
+    _RELEASE(m_altSurface);
+}
+
 void CTexture::release_surface_views()
 {
     bool aliasesOwnedView = m_pSRView && m_pSRView == srv_all;
@@ -90,6 +99,40 @@ void CTexture::surface_set(ID3DBaseTexture* surf)
     xr_sprintf(msg_buff, sizeof(msg_buff), "* Changing texture [%s] current pSurface RefCount =", cName.c_str());
     _SHOW_REF(msg_buff, pSurface);
 #endif // DEBUG
+
+    // The same surface again (the environment hands its sky and env cubes over every frame, seven views each):
+    // its views stand, only the slice goes back to the whole.
+    if (surf && surf == pSurface && (srv_all || m_pSRView))
+    {
+        if (srv_all)
+            set_slice(-1);
+        return;
+    }
+
+    // Back to the ping-pong partner: the two swap with their views.
+    if (surf && surf == m_altSurface && m_altAll)
+    {
+        m_pSRView = nullptr;
+        std::swap(pSurface, m_altSurface);
+        std::swap(srv_all, m_altAll);
+        srv_per_slice.swap(m_altSlices);
+        desc_update();
+        set_slice(-1);
+        return;
+    }
+
+    // A 2D render target or UAV with its views waits as the partner; anything else goes.
+    release_alt_surface();
+    if (surf && pSurface && srv_all && desc_cache == pSurface && !(desc.MiscFlags & D3D_RESOURCE_MISC_TEXTURECUBE) &&
+        (desc.BindFlags & (D3D_BIND_RENDER_TARGET | D3D_BIND_UNORDERED_ACCESS)))
+    {
+        m_pSRView = nullptr;
+        m_altSurface = pSurface;
+        m_altAll = srv_all;
+        m_altSlices.swap(srv_per_slice);
+        pSurface = nullptr;
+        srv_all = nullptr;
+    }
 
     if (surf)
         surf->AddRef();
@@ -660,6 +703,7 @@ void CTexture::Unload()
 
     flags.bLoaded = FALSE;
     release_surface_views();
+    release_alt_surface();
     if (!seqDATA.empty())
     {
         for (u32 I = 0; I < seqDATA.size(); I++)

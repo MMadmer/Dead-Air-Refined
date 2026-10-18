@@ -230,6 +230,13 @@ private:
 
 #if defined(USE_DX11)
     void release_surface_views();
+    void release_alt_surface();
+    // The surface before the current one with its views, when that is a 2D render target or UAV (a ping-pong
+    // partner the engine keeps alive anyway: the exposure pair, the VRS history): coming back to it swaps the
+    // views back instead of making new ones every frame.
+    ID3DBaseTexture* m_altSurface{ nullptr };
+    ID3DShaderResourceView* m_altAll{ nullptr };
+    xr_vector<ID3DShaderResourceView*> m_altSlices;
 
     // The request of a pending DirectStorage load (set by a batch worker's Load, cleared by ds_finish once
     // the surface is set).
