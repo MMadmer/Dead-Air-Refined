@@ -33,9 +33,11 @@
 #if LJ_TARGET_WINDOWS
 static inline uint64_t get_high_resolution_time(void)
 {
-  LARGE_INTEGER cnt;
+  LARGE_INTEGER cnt, freq;
   QueryPerformanceCounter(&cnt);
-  return cnt.QuadPart;
+  QueryPerformanceFrequency(&freq);
+  /* Nanoseconds, as on POSIX: the timeout counts in them (raw counter ticks made it a hundred times longer). */
+  return (uint64_t)((double)cnt.QuadPart * 1e9 / (double)freq.QuadPart);
 }
 #elif LJ_TARGET_POSIX
 static inline uint64_t get_high_resolution_time(void)
@@ -60,7 +62,7 @@ static int gc_step_timeout(lua_State *L, uint32_t timeout_usec)
 
   timeout += time_current;
   while (time_current < timeout) {
-    if (lj_gc_step(L) > 0) {
+    if (lj_gc_step_forced(L) > 0) {
       res = 1;
       break;
     }
@@ -804,6 +806,27 @@ LUA_API void *lua_newuserdata(lua_State *L, size_t size)
   return uddata(ud);
 }
 
+/* The userdata at idx needs no finalizer: it leaves the userdata list, which the atomic phase walks from end to end
+** to find the ones to finalize, for the list of plain objects. Only the userdata created last can (it is still first
+** on its list, so unlinking it costs nothing); any other keeps its finalizer as it was.
+*/
+LUA_API void luaJIT_udata_nofinalize(lua_State *L, int idx)
+{
+  global_State *g = G(L);
+  cTValue *o = index2adr(L, idx);
+  if (tvisudata(o)) {
+    GCobj *u = gcV(o);
+    GCRef *head = &mainthread(g)->nextgc;
+    if (gcref(*head) == u && mref(g->gc.sweep, GCRef) != &u->gch.nextgc &&
+	mref(g->udcursor, GCRef) != &u->gch.nextgc) {
+      setgcrefr(*head, u->gch.nextgc);
+      setgcrefr(u->gch.nextgc, g->gc.root);
+      setgcref(g->gc.root, u);
+      markfinalized(u);
+    }
+  }
+}
+
 LUA_API void lua_concat(lua_State *L, int n)
 {
   lj_checkapi_slot(n);
@@ -1311,7 +1334,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     GCSize a = (GCSize)data << 10;
     g->gc.threshold = (a <= g->gc.total) ? (g->gc.total - a) : 0;
     while (g->gc.total >= g->gc.threshold)
-      if (lj_gc_step(L) > 0) {
+      if (lj_gc_step_forced(L) > 0) {
         res = 1;
         break;
       }

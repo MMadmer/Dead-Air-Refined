@@ -84,6 +84,12 @@ typedef struct luaJIT_LowMem {
 /* Returns the number of reserved regions. Zero: this build has no arena. */
 LUA_API int luaJIT_lowmem(luaJIT_LowMem *info);
 
+/* The time the collector's implicit steps may take in a frame, in microseconds (0: no limit). Call once a frame. */
+LUA_API void luaJIT_gcframe(lua_State *L, int budget_usec);
+
+/* The userdata at idx needs no finalizer. Call right after creating it. */
+LUA_API void luaJIT_udata_nofinalize(lua_State *L, int idx);
+
 /* Enforce (dynamic) linker error for version mismatches. Call from main. */
 LUA_API void LUAJIT_VERSION_SYM(void);
 

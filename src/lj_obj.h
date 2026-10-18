@@ -662,6 +662,10 @@ typedef struct global_State {
   MRef ctype_state;	/* Pointer to C type state. */
   PRNGState prng;	/* Global PRNG state. */
   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
+  GCRef udlive;		/* Userdata marked before the atomic phase, kept out of its walk. */
+  MRef udlivetail;	/* Last link of that list. */
+  MRef udcursor;	/* Where setting them aside goes on, or NULL. */
+  uint8_t udsorted;	/* The userdata list has been gone through this cycle. */
 } global_State;
 
 #define mainthread(g)	(&gcref(g->mainthref)->th)
