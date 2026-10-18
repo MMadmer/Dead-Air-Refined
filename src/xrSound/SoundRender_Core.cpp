@@ -201,14 +201,16 @@ void CSoundRender_Core::update_listener(const Fvector& P, const Fvector& D, cons
     if (!psSoundFlags.test(ss_EFX) || !m_effects)
         return;
 
-    // Update effects: the authored zone or, outside one, the room the geometry forms. Five times a second at most - the
-    // environment glides toward the target over a second anyway.
+    // Update effects: the authored zone or, outside one, the room the geometry forms. A zone with the room off (identity,
+    // open_space) authors no room either. Five times a second at most - the environment glides toward the target over a
+    // second anyway.
     if (bListenerMoved && fTimerPersistent_Value >= m_env_probe_time)
     {
         bListenerMoved = false;
         m_env_probe_time = fTimerPersistent_Value + .2f;
         auto* scene = static_cast<CSoundRender_Scene*>(DefaultSoundScene);
-        if (const auto* env = scene->authored_environment(P))
+        const auto* env = scene->authored_environment(P);
+        if (env && (env->Room > -9999.f || !psSoundGeomReverb))
         {
             e_target = *env;
             if (psSoundGeomReverb > 1)

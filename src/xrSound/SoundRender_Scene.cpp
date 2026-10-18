@@ -2,10 +2,31 @@
 
 #include "Common/LevelStructure.hpp"
 #include "xrCDB/Intersect.hpp"
+#include "xrMaterialSystem/GameMtlLib.h"
 
 #include "SoundRender_Core.h"
 #include "SoundRender_Scene.h"
 #include "SoundRender_Emitter.h"
+
+// A tree crown, a bush, an occluder or an invisible wall is passable in the game's own material terms (a bullet does
+// not stop there): no wall for a sound either.
+static bool snd_passes(const CDB::RESULT& r)
+{
+    if (r.material >= GMLib.CountMaterial())
+        return false;
+    const SGameMtl* m = GMLib.GetMaterialByIdx(u16(r.material));
+    return m && m->Flags.test(SGameMtl::flPassable);
+}
+
+// The nearest hit of the last query that is no passable one, nullptr when there is none.
+static const CDB::RESULT* snd_solid_hit(CDB::COLLIDER& db)
+{
+    const CDB::RESULT* best = nullptr;
+    for (const CDB::RESULT *it = db.r_begin(), *end = it + db.r_count(); it != end; ++it)
+        if (!snd_passes(*it) && (!best || it->range < best->range))
+            best = it;
+    return best;
+}
 
 CSoundRender_Scene::~CSoundRender_Scene()
 {
@@ -320,11 +341,10 @@ float CSoundRender_Scene::get_occlusion(const Fvector& P, float R, Fvector* occ)
         // 2. Polygon doesn't picked up - real database query
         if (bNeedFullTest)
         {
-            geom_DB.ray_query(CDB::OPT_ONLYNEAREST, geom_MODEL, base, dir, range);
-            if (0 != geom_DB.r_count())
+            geom_DB.ray_query(0, geom_MODEL, base, dir, range);
+            if (const CDB::RESULT* R2 = snd_solid_hit(geom_DB))
             {
                 // cache polygon
-                const CDB::RESULT* R2 = geom_DB.r_begin();
                 const CDB::TRI& T = geom_MODEL->get_tris()[R2->id];
                 const Fvector* V = geom_MODEL->get_verts();
                 occ[0].set(V[T.verts[0]]);
@@ -432,17 +452,19 @@ bool CSoundRender_Scene::probe_environment(const Fvector& P, CSoundRender_Enviro
         const bool above = y > .35f;
         (above ? up : side)++;
 
-        geom_probe.ray_query(CDB::OPT_ONLYNEAREST, geom_MODEL, P, dir, range);
-        if (!geom_probe.r_count())
+        geom_probe.ray_query(0, geom_MODEL, P, dir, range);
+        const CDB::RESULT* hit = snd_solid_hit(geom_probe);
+        if (!hit)
             continue;
-        const CDB::RESULT& hit = *geom_probe.r_begin();
+        const CDB::TRI& T = geom_MODEL->get_tris()[hit->id];
+        const Fvector* V = geom_MODEL->get_verts();
         Fvector n;
-        n.mknormal(hit.verts[0], hit.verts[1], hit.verts[2]);
+        n.mknormal(V[T.verts[0]], V[T.verts[1]], V[T.verts[2]]);
         if (!above && _abs(n.y) > .7f)
             continue;
         (above ? up_hits : side_hits)++;
-        sum += hit.range;
-        nearest = std::min(nearest, hit.range);
+        sum += hit->range;
+        nearest = std::min(nearest, hit->range);
     }
 
     // Cover, walls, the share of the openings and the mean path to a surface (Sabine with the openings as absorbers).

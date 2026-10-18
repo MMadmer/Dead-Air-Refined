@@ -1307,18 +1307,21 @@ tier; the temporal pass makes it whole), 2 on Default, 3 above - and GTAO now ru
 ## Sound: the room from the geometry, muffling through walls
 
 The level's authored sound zones (`level.snd_env`, the names of `sEnvironment.xr`) cover few places,
-and outside them the stock reverb was off. There the listener now probes the static collision
+and outside them - or in a zone with the room off, `identity` and `open_space` (the rookie
+village lies in one) - the stock reverb was off. There the listener now probes the static collision
 model five times a second while moving (`CSoundRender_Scene::probe_environment`): about 27
 directions from straight up to just below the horizon, 50 m each. A hit above is a cover, a hit
-around counts only on a surface steeper than a slope (ground seen at a grazing angle is no wall).
+around counts only on a surface steeper than a slope (ground seen at a grazing angle is no wall),
+and a passable material (a crown, a bush, an invisible wall - the flag the rain goes by) is none.
 Cover, walls, the share of the openings and the mean path to a surface become the EAX listener:
 room level, Sabine decay with the openings as absorbers (0.2-4 s), early reflections from the
 nearest surface and their delay, size and diffusion. The hall of `light_test` comes out at a
-1.7 s tail, the open air dry. An authored zone or a script's `set_user_env` still wins; the
+1.7 s tail, a house of the rookie village at 1.2 s, its square at a faint 0.5-0.8 s slapback, the
+open air dry. A zone with a room of its own or a script's `set_user_env` still wins; the
 environment glides to the target over a second as before.
 
 A sound the stock occlusion ray finds behind the geometry (`[sound] occlusion_scale`, the gain it
-keeps) now also loses its highs: EAX occlusion of the source, up to 2000 mB at 5 kHz with the lows
+keeps; passable materials no longer count) now also loses its highs: EAX occlusion of the source, up to 2000 mB at 5 kHz with the lows
 left to the stock gain, so the room send dulls too. World ambients and 2D sounds stay clear.
 `snd_geom_reverb` (1; 0 off, 2 logs the probes and the first muffled sounds), `snd_occlusion_hf`
 (2000), session only. Both need EAX (OpenAL Soft's emulation, `snd_efx`).
