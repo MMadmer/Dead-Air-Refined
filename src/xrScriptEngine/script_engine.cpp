@@ -151,6 +151,8 @@ void CScriptEngine::reinit()
         lua_close(m_virtual_machine);
         UnregisterState(m_virtual_machine);
     }
+    m_gc_pace_set = 0;
+    m_gc_pace_off = false;
     // LuaJIT FR1 requires its low-address allocator inside a 64-bit process.
 #if defined(_M_X64)
     m_virtual_machine = luaL_newstate();
@@ -943,8 +945,10 @@ void CScriptEngine::init(export_func exporter, bool loadGlobalNamespace)
     if (!strstr(Core.Params, ARGUMENT_ENGINE_NOJIT))
     {
         luajit::open_lib(lua(), LUA_JITLIBNAME, luaopen_jit);
-        // Xottab_DUTY: commented this. Let's use default opt level, which is 3
-        //RunJITCommand(lua(), "opt.start(2)");
+        // A trace cache for a whole game's scripts: the default 1000 traces and 512 KB of machine code filled up at the
+        // lamp hall every few seconds, LuaJIT flushed them all and recorded the same code again (585 traces in 5 s).
+        // The optimization level stays 3; the limits change what is kept, never what a script computes.
+        RunJITCommand(lua(), "opt.start('maxtrace=8000', 'maxmcode=16384', 'sizemcode=256')");
     }
     // every library is open and no script has run yet
     if (protectedMode)
@@ -1175,6 +1179,42 @@ void CScriptEngine::collect_all_garbage()
 {
     lua_gc(lua(), LUA_GCCOLLECT, 0);
     lua_gc(lua(), LUA_GCCOLLECT, 0);
+}
+
+// The collector runs on the scripts' allocations alone: LuaJIT's incremental steps, each paid by the allocation that
+// crossed the threshold, and a cycle once the heap has grown past what the last one left by the headroom. A step forced
+// every frame on top (lua_gcstep 100: 100 KB of debt against the 60 KB the lamp hall's scripts allocate) kept a cycle
+// running all the time - every live object marked over and over, 1.3 ms of the game thread a frame. The headroom is the
+// heap's size, 64 MB at least and 256 MB at most, and never more than half the low arena still free (without LJ_GC64 every
+// state lives in it). A script that sets its own pause keeps it: the pacing stops for the state. The steps of a frame
+// take a millisecond at most (luaJIT_gcframe): what is left of a cycle goes on in the next frames instead of landing in
+// whichever one the scripts allocated most in.
+constexpr int gc_frame_budget_usec = 1000;
+
+void CScriptEngine::pace_garbage_collector()
+{
+    lua_State* L = lua();
+    if (!L)
+        return;
+    luaJIT_gcframe(L, gc_frame_budget_usec);
+    if (m_gc_pace_off)
+        return;
+    constexpr size_t megabyte = 1024 * 1024;
+    const size_t heap = std::max<size_t>(size_t(lua_gc(L, LUA_GCCOUNT, 0)) * 1024, megabyte);
+    size_t headroom = std::clamp(heap, 64 * megabyte, 256 * megabyte);
+    luaJIT_LowMem arena;
+    if (luaJIT_lowmem(&arena) > 0)
+        headroom = std::min(headroom, (arena.reserved > arena.used ? arena.reserved - arena.used : 0) / 2);
+    const int pause = std::clamp(int(100 + headroom * 100 / heap), 110, 1000);
+    const int previous = lua_gc(L, LUA_GCSETPAUSE, pause);
+    if (m_gc_pace_set && previous != m_gc_pace_set)
+    {
+        lua_gc(L, LUA_GCSETPAUSE, previous);
+        m_gc_pace_off = true;
+        Msg("* [lua] a script set the collector's pause to %d: the engine's pacing stands aside", previous);
+        return;
+    }
+    m_gc_pace_set = pause;
 }
 
 void CScriptEngine::on_error(lua_State* state)

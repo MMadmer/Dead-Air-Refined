@@ -1,5 +1,5 @@
 diff --git a/src/lib_base.c b/src/lib_base.c
-index f120b2de..af86fc8d 100644
+index f19f550b..4dd385ba 100644
 --- a/src/lib_base.c
 +++ b/src/lib_base.c
 @@ -616,6 +616,12 @@ LJLIB_ASM(coroutine_yield)
@@ -46,7 +46,7 @@ index e107e25d..0338d483 100644
    /* NOBARRIER: basemt is a GC root. */
    g = G(L);
 diff --git a/src/lj_alloc.c b/src/lj_alloc.c
-index f4d3a7da..1324ba0e 100644
+index 7dfbed8c..0868ede4 100644
 --- a/src/lj_alloc.c
 +++ b/src/lj_alloc.c
 @@ -32,6 +32,7 @@
@@ -381,10 +381,10 @@ index f4d3a7da..1324ba0e 100644
 +}
 +#endif
 diff --git a/src/lj_api.c b/src/lj_api.c
-index f972a760..139680cd 100644
+index f972a760..a1a7f6f2 100644
 --- a/src/lj_api.c
 +++ b/src/lj_api.c
-@@ -26,6 +26,53 @@
+@@ -26,6 +26,55 @@
  #include "lj_strscan.h"
  #include "lj_strfmt.h"
  
@@ -395,9 +395,11 @@ index f972a760..139680cd 100644
 +#if LJ_TARGET_WINDOWS
 +static inline uint64_t get_high_resolution_time(void)
 +{
-+  LARGE_INTEGER cnt;
++  LARGE_INTEGER cnt, freq;
 +  QueryPerformanceCounter(&cnt);
-+  return cnt.QuadPart;
++  QueryPerformanceFrequency(&freq);
++  /* Nanoseconds, as on POSIX: the timeout counts in them (raw counter ticks made it a hundred times longer). */
++  return (uint64_t)((double)cnt.QuadPart * 1e9 / (double)freq.QuadPart);
 +}
 +#elif LJ_TARGET_POSIX
 +static inline uint64_t get_high_resolution_time(void)
@@ -422,7 +424,7 @@ index f972a760..139680cd 100644
 +
 +  timeout += time_current;
 +  while (time_current < timeout) {
-+    if (lj_gc_step(L) > 0) {
++    if (lj_gc_step_forced(L) > 0) {
 +      res = 1;
 +      break;
 +    }
@@ -438,12 +440,42 @@ index f972a760..139680cd 100644
  /* -- Common helper functions --------------------------------------------- */
  
  #define lj_checkapi_slot(idx) \
-@@ -1265,11 +1312,17 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
+@@ -757,6 +806,27 @@ LUA_API void *lua_newuserdata(lua_State *L, size_t size)
+   return uddata(ud);
+ }
+ 
++/* The userdata at idx needs no finalizer: it leaves the userdata list, which the atomic phase walks from end to end
++** to find the ones to finalize, for the list of plain objects. Only the userdata created last can (it is still first
++** on its list, so unlinking it costs nothing); any other keeps its finalizer as it was.
++*/
++LUA_API void luaJIT_udata_nofinalize(lua_State *L, int idx)
++{
++  global_State *g = G(L);
++  cTValue *o = index2adr(L, idx);
++  if (tvisudata(o)) {
++    GCobj *u = gcV(o);
++    GCRef *head = &mainthread(g)->nextgc;
++    if (gcref(*head) == u && mref(g->gc.sweep, GCRef) != &u->gch.nextgc &&
++	mref(g->udcursor, GCRef) != &u->gch.nextgc) {
++      setgcrefr(*head, u->gch.nextgc);
++      setgcrefr(u->gch.nextgc, g->gc.root);
++      setgcref(g->gc.root, u);
++      markfinalized(u);
++    }
++  }
++}
++
+ LUA_API void lua_concat(lua_State *L, int n)
+ {
+   lj_checkapi_slot(n);
+@@ -1264,12 +1334,18 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
+     GCSize a = (GCSize)data << 10;
      g->gc.threshold = (a <= g->gc.total) ? (g->gc.total - a) : 0;
      while (g->gc.total >= g->gc.threshold)
-       if (lj_gc_step(L) > 0) {
+-      if (lj_gc_step(L) > 0) {
 -	res = 1;
 -	break;
++      if (lj_gc_step_forced(L) > 0) {
 +        res = 1;
 +        break;
        }
@@ -519,7 +551,7 @@ index c8e884a8..b58435a2 100644
    if ((flags & ~(BCDUMP_F_KNOWN)) != 0) return 0;
    if ((flags & BCDUMP_F_FR2) != (uint32_t)ls->fr2*BCDUMP_F_FR2) return 0;
 diff --git a/src/lj_ccallback.c b/src/lj_ccallback.c
-index 15346775..bf9f138c 100644
+index 3316c2cf..dec9d0dc 100644
 --- a/src/lj_ccallback.c
 +++ b/src/lj_ccallback.c
 @@ -136,7 +136,7 @@ static void *callback_mcode_init(global_State *g, uint8_t *page)
@@ -553,6 +585,281 @@ index 091675c7..0da6eddd 100644
        else if (dsize == 2) *(int16_t *)dp = (int16_t)i;
        else *(int8_t *)dp = (int8_t)i;
      } else if (dsize == 8) {
+diff --git a/src/lj_gc.c b/src/lj_gc.c
+index 244340c1..8015279c 100644
+--- a/src/lj_gc.c
++++ b/src/lj_gc.c
+@@ -104,6 +104,8 @@ static void gc_mark_start(global_State *g)
+   setgcrefnull(g->gc.gray);
+   setgcrefnull(g->gc.grayagain);
+   setgcrefnull(g->gc.weak);
++  g->udsorted = 0;
++  setmref(g->udcursor, NULL);
+   gc_markobj(g, mainthread(g));
+   gc_markobj(g, tabref(mainthread(g)->env));
+   gc_markobj(g, vmthread(g));
+@@ -138,12 +140,65 @@ static void gc_mark_mmudata(global_State *g)
+   }
+ }
+ 
++/* Before the atomic phase, set the userdata marked already aside: nothing turns a userdata white again within a
++** cycle, so the atomic phase's walk for the ones to finalize can skip them. That walk was the bulk of the phase:
++** every userdata alive (a game keeps tens of thousands) chased through memory in one go. A slice at a time, once
++** propagation has run dry; returns 0 when there is nothing (more) to do.
++*/
++static int gc_presort_udata(global_State *g)
++{
++  GCRef *p;
++  GCobj *o;
++  MSize n = GCSWEEPMAX;
++  if (g->udsorted)
++    return 0;
++  p = mref(g->udcursor, GCRef);
++  if (!p) {
++    p = &mainthread(g)->nextgc;
++    setgcrefnull(g->udlive);
++    setmref(g->udlivetail, &g->udlive);
++  }
++  while ((o = gcref(*p)) != NULL && n-- > 0) {
++    if (isblack(o)) {  /* Unlink, append to the list set aside. */
++      setgcrefr(*p, o->gch.nextgc);
++      setgcrefnull(o->gch.nextgc);
++      setgcref(*mref(g->udlivetail, GCRef), o);
++      setmref(g->udlivetail, &o->gch.nextgc);
++    } else {
++      p = &o->gch.nextgc;
++    }
++  }
++  if (o == NULL) {
++    g->udsorted = 1;
++    setmref(g->udcursor, NULL);
++  } else {
++    setmref(g->udcursor, p);
++  }
++  return 1;
++}
++
++/* Put the userdata set aside back at the head of the userdata list. */
++static void gc_presort_undo(global_State *g)
++{
++  GCobj *first = gcref(g->udlive);
++  if (first) {
++    setgcrefr(*mref(g->udlivetail, GCRef), mainthread(g)->nextgc);
++    setgcref(mainthread(g)->nextgc, first);
++    setgcrefnull(g->udlive);
++  }
++  setmref(g->udlivetail, &g->udlive);
++  setmref(g->udcursor, NULL);
++  g->udsorted = 0;
++}
++
+ /* Separate userdata objects to be finalized to mmudata list. */
+ size_t lj_gc_separateudata(global_State *g, int all)
+ {
+   size_t m = 0;
+   GCRef *p = &mainthread(g)->nextgc;
+   GCobj *o;
++  if (all)  /* lua_close: every userdata. */
++    gc_presort_undo(g);
+   while ((o = gcref(*p)) != NULL) {
+     if (!(iswhite(o) || all) || isfinalized(gco2ud(o))) {
+       p = &o->gch.nextgc;  /* Nothing to do. */
+@@ -608,6 +663,7 @@ void lj_gc_finalize_cdata(lua_State *L)
+ void lj_gc_freeall(global_State *g)
+ {
+   MSize i;
++  gc_presort_undo(g);
+   /* Free everything, except super-fixed objects (the main thread). */
+   g->gc.currentwhite = LJ_GC_WHITES | LJ_GC_SFIXED;
+   gc_fullsweep(g, &g->gc.root);
+@@ -615,6 +671,83 @@ void lj_gc_freeall(global_State *g)
+     gc_sweepstr(g, &g->str.tab[i]);
+ }
+ 
++/* -- Frame budget -------------------------------------------------------- */
++
++/* A game calls luaJIT_gcframe() once a frame with the time the implicit steps may take in it. What is left of a
++** cycle then waits for the next frame, instead of piling into whichever frame's scripts happened to allocate (the
++** JIT counts a step per allocation of a trace). lua_gc() requests are never held back, and neither is a heap past
++** the cycle's ceiling: a collector that cannot keep up within the budget catches up at once.
++*/
++#if LJ_TARGET_X86ORX64 && defined(_MSC_VER)
++#include <intrin.h>
++#define gcb_clock()	__rdtsc()
++#elif LJ_TARGET_X86ORX64 && defined(__GNUC__)
++#include <x86intrin.h>
++#define gcb_clock()	__rdtsc()
++#else
++#define gcb_clock()	((uint64_t)0)
++#endif
++#if LJ_TARGET_POSIX
++#include <time.h>
++#endif
++
++static struct {
++  uint64_t budget;	/* Clock ticks the frame's implicit steps may take; 0: no budget. */
++  uint64_t spent;	/* Taken so far this frame. */
++  uint64_t frame;	/* Clock at the last luaJIT_gcframe(). */
++  uint64_t stale;	/* A budget not renewed for this long lapses. */
++  uint64_t tick0, os0;	/* Calibration of the clock against the OS timer. */
++  double ticks_us;	/* Clock ticks a microsecond, once calibrated. */
++  GCSize ceiling;	/* Heap size past which the budget does not hold. */
++  int forced;		/* lua_gc() drives the steps. */
++} gcb;
++
++static uint64_t gcb_os_usec(void)
++{
++#if LJ_TARGET_WINDOWS
++  LARGE_INTEGER c, f;
++  QueryPerformanceCounter(&c);
++  QueryPerformanceFrequency(&f);
++  return (uint64_t)((double)c.QuadPart * 1e6 / (double)f.QuadPart);
++#elif LJ_TARGET_POSIX
++  struct timespec ts;
++  clock_gettime(CLOCK_MONOTONIC, &ts);
++  return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
++#else
++  return 0;
++#endif
++}
++
++LUA_API void luaJIT_gcframe(lua_State *L, int budget_usec)
++{
++  uint64_t now = gcb_clock();
++  UNUSED(L);
++  if (!gcb.ticks_us) {  /* Calibrate the clock over the first quarter second. */
++    uint64_t os = gcb_os_usec();
++    if (!gcb.os0) {
++      gcb.os0 = os;
++      gcb.tick0 = now;
++    } else if (os - gcb.os0 >= 250000 && now > gcb.tick0) {
++      gcb.ticks_us = (double)(now - gcb.tick0) / (double)(os - gcb.os0);
++    }
++  }
++  gcb.spent = 0;
++  gcb.frame = now;
++  if (budget_usec > 0 && gcb.ticks_us) {
++    gcb.budget = (uint64_t)(budget_usec * gcb.ticks_us);
++    gcb.stale = (uint64_t)(250000 * gcb.ticks_us);
++  } else {
++    gcb.budget = 0;
++  }
++}
++
++/* Has the frame's share been used up? */
++static LJ_AINLINE int gcb_held(global_State *g)
++{
++  return gcb.budget && gcb.spent >= gcb.budget && !gcb.forced &&
++	 g->gc.total < gcb.ceiling && gcb_clock() - gcb.frame < gcb.stale;
++}
++
+ /* -- Collector ----------------------------------------------------------- */
+ 
+ /* Atomic part of the GC cycle, transitioning from mark to sweep phase. */
+@@ -642,6 +775,7 @@ static void atomic(global_State *g, lua_State *L)
+   gc_propagate_gray(g);  /* Propagate it. */
+ 
+   udsize = lj_gc_separateudata(g, 0);  /* Separate userdata to be finalized. */
++  gc_presort_undo(g);  /* The ones set aside are all alive. */
+   gc_mark_mmudata(g);  /* Mark them. */
+   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
+ 
+@@ -662,12 +796,19 @@ static size_t gc_onestep(lua_State *L)
+ {
+   global_State *g = G(L);
+   switch (g->gc.state) {
+-  case GCSpause:
++  case GCSpause: {
++    /* Half the headroom again past the threshold, the frame budget stops holding the cycle back. */
++    uint64_t t = g->gc.threshold, e = g->gc.estimate;
++    uint64_t c = t + (t > e ? (t - e) / 2 : 0);
++    gcb.ceiling = (GCSize)(c < LJ_MAX_MEM ? c : LJ_MAX_MEM);
+     gc_mark_start(g);  /* Start a new GC cycle by marking all GC roots. */
+     return 0;
++    }
+   case GCSpropagate:
+     if (gcref(g->gc.gray) != NULL)
+       return propagatemark(g);  /* Propagate one gray object. */
++    if (gc_presort_udata(g))  /* Set the marked userdata aside. */
++      return GCSWEEPMAX*GCSWEEPCOST;
+     g->gc.state = GCSatomic;  /* End of mark phase. */
+     return 0;
+   case GCSatomic:
+@@ -730,6 +871,15 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
+   global_State *g = G(L);
+   GCSize lim;
+   int32_t ostate = g->vmstate;
++  uint64_t t0;
++  int res;
++  if (gcb_held(g)) {  /* The rest waits for the next frame. */
++    if (g->gc.total > g->gc.threshold)
++      g->gc.debt += g->gc.total - g->gc.threshold;
++    g->gc.threshold = g->gc.total + GCSTEPSIZE*16;
++    return -1;
++  }
++  t0 = gcb_clock();
+   setvmstate(g, GC);
+   lim = (GCSTEPSIZE/100) * g->gc.stepmul;
+   if (lim == 0)
+@@ -740,20 +890,32 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
+     lim -= (GCSize)gc_onestep(L);
+     if (g->gc.state == GCSpause) {
+       g->gc.threshold = (g->gc.estimate/100) * g->gc.pause;
+-      g->vmstate = ostate;
+-      return 1;  /* Finished a GC cycle. */
++      res = 1;  /* Finished a GC cycle. */
++      goto done;
+     }
+   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
+   if (g->gc.debt < GCSTEPSIZE) {
+     g->gc.threshold = g->gc.total + GCSTEPSIZE;
+-    g->vmstate = ostate;
+-    return -1;
++    res = -1;
+   } else {
+     g->gc.debt -= GCSTEPSIZE;
+     g->gc.threshold = g->gc.total;
+-    g->vmstate = ostate;
+-    return 0;
++    res = 0;
+   }
++done:
++  g->vmstate = ostate;
++  gcb.spent += gcb_clock() - t0;
++  return res;
++}
++
++/* A step lua_gc() asked for: the frame budget does not hold it back. */
++int lj_gc_step_forced(lua_State *L)
++{
++  int res;
++  gcb.forced = 1;
++  res = lj_gc_step(L);
++  gcb.forced = 0;
++  return res;
+ }
+ 
+ /* Ditto, but fix the stack top first. */
+@@ -782,6 +944,7 @@ void lj_gc_fullgc(lua_State *L)
+ {
+   global_State *g = G(L);
+   int32_t ostate = g->vmstate;
++  gc_presort_undo(g);  /* Caught before the atomic phase, the sweep would miss the userdata set aside. */
+   setvmstate(g, GC);
+   if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
+     setmref(g->gc.sweep, &g->gc.root);  /* Sweep everything (preserving it). */
+diff --git a/src/lj_gc.h b/src/lj_gc.h
+index 448cbca8..6eb32332 100644
+--- a/src/lj_gc.h
++++ b/src/lj_gc.h
+@@ -58,6 +58,7 @@ LJ_FUNCA int LJ_FASTCALL lj_gc_step(lua_State *L);
+ LJ_FUNCA void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L);
+ #if LJ_HASJIT
+ LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
++LJ_FUNC int lj_gc_step_forced(lua_State *L);
+ #endif
+ LJ_FUNC void lj_gc_fullgc(lua_State *L);
+ 
 diff --git a/src/lj_lex.c b/src/lj_lex.c
 index 4bbe1835..91ab2a13 100644
 --- a/src/lj_lex.c
@@ -607,8 +914,23 @@ index 4bbe1835..91ab2a13 100644
      case '[': {
        int sep = lex_skipeq(ls);
        if (sep >= 0) {
+diff --git a/src/lj_obj.h b/src/lj_obj.h
+index 30991a7e..83ca20ce 100644
+--- a/src/lj_obj.h
++++ b/src/lj_obj.h
+@@ -662,6 +662,10 @@ typedef struct global_State {
+   MRef ctype_state;	/* Pointer to C type state. */
+   PRNGState prng;	/* Global PRNG state. */
+   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
++  GCRef udlive;		/* Userdata marked before the atomic phase, kept out of its walk. */
++  MRef udlivetail;	/* Last link of that list. */
++  MRef udcursor;	/* Where setting them aside goes on, or NULL. */
++  uint8_t udsorted;	/* The userdata list has been gone through this cycle. */
+ } global_State;
+ 
+ #define mainthread(g)	(&gcref(g->mainthref)->th)
 diff --git a/src/lj_opt_fold.c b/src/lj_opt_fold.c
-index 6c9b8573..b06df20a 100644
+index 9d48aaa2..a77c697e 100644
 --- a/src/lj_opt_fold.c
 +++ b/src/lj_opt_fold.c
 @@ -314,7 +314,7 @@ LJFOLDF(kfold_intovarith)
@@ -621,7 +943,7 @@ index 6c9b8573..b06df20a 100644
  
  LJFOLD(BNOT KINT)
 diff --git a/src/lj_parse.c b/src/lj_parse.c
-index 00a64382..b18268d2 100644
+index 0a626fbc..6b41baea 100644
 --- a/src/lj_parse.c
 +++ b/src/lj_parse.c
 @@ -1181,7 +1181,7 @@ static void var_add(LexState *ls, BCReg nvars)
@@ -719,10 +1041,10 @@ index e659e100..1f5fd81d 100644
  #if defined(luajit_c)
  #define LUA_PROGNAME	"luajit"  /* Fallback frontend name. */
 diff --git a/src/luajit_rolling.h b/src/luajit_rolling.h
-index f0b64f2a..08fe1465 100644
+index f0b64f2a..93abd24c 100644
 --- a/src/luajit_rolling.h
 +++ b/src/luajit_rolling.h
-@@ -73,6 +73,17 @@ LUA_API void luaJIT_profile_stop(lua_State *L);
+@@ -73,6 +73,23 @@ LUA_API void luaJIT_profile_stop(lua_State *L);
  LUA_API const char *luaJIT_profile_dumpstack(lua_State *L, const char *fmt,
  					     int depth, size_t *len);
  
@@ -736,6 +1058,12 @@ index f0b64f2a..08fe1465 100644
 +
 +/* Returns the number of reserved regions. Zero: this build has no arena. */
 +LUA_API int luaJIT_lowmem(luaJIT_LowMem *info);
++
++/* The time the collector's implicit steps may take in a frame, in microseconds (0: no limit). Call once a frame. */
++LUA_API void luaJIT_gcframe(lua_State *L, int budget_usec);
++
++/* The userdata at idx needs no finalizer. Call right after creating it. */
++LUA_API void luaJIT_udata_nofinalize(lua_State *L, int idx);
 +
  /* Enforce (dynamic) linker error for version mismatches. Call from main. */
  LUA_API void LUAJIT_VERSION_SYM(void);

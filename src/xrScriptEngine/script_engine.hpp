@@ -77,6 +77,9 @@ private:
     char* scriptBuffer = nullptr;
     size_t scriptBufferSize = 0;
     bool m_is_editor;
+    // pace_garbage_collector: the pause it set last (0 none yet), and whether a script took the pause over.
+    int m_gc_pace_set = 0;
+    bool m_gc_pace_off = false;
 
 protected:
     CScriptProcessStorage m_script_processes;
@@ -241,6 +244,8 @@ public:
     CScriptDebugger* debugger() { return m_scriptDebugger; }
 #endif
     void collect_all_garbage();
+    // Once a frame (CLevel::script_gc): the collector's pause for its next cycle, by the heap and the low arena.
+    void pace_garbage_collector();
 
     CScriptProcess* CreateScriptProcess(shared_str name, shared_str scripts);
     CScriptThread* CreateScriptThread(LPCSTR caNamespaceName, bool do_string = false, bool reload = false);

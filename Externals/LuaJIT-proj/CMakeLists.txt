@@ -440,6 +440,11 @@ set_target_properties(buildvm_arch PROPERTIES
 set(BUILDVM_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/HostBuildTools/buildvm")
 set(BUILDVM_FILE "${BUILDVM_BINARY_DIR}/buildvm${CMAKE_EXECUTABLE_SUFFIX}")
 
+# buildvm bakes the VM's struct offsets (lj_obj.h and the rest) into lj_vm.obj: a changed header has to rebuild it,
+# or the VM keeps reading the old layout.
+file(GLOB BUILDVM_SOURCES CONFIGURE_DEPENDS
+    "${LUAJIT_DIR}/*.h" "${LUAJIT_DIR}/host/*.h" "${LUAJIT_DIR}/host/*.c")
+
 add_custom_command(
     OUTPUT "${BUILDVM_FILE}"
     COMMAND ${CMAKE_COMMAND}
@@ -454,7 +459,7 @@ add_custom_command(
         -DHOST_ACFLAGS="${HOST_ACFLAGS}"
         -DHOST_ALDFLAGS="${HOST_ALDFLAGS}"
     COMMAND ${CMAKE_COMMAND} --build ${BUILDVM_BINARY_DIR} --config Release --verbose
-    DEPENDS "${BUILDVM_ARCH}" "${LUAJIT_H}"
+    DEPENDS "${BUILDVM_ARCH}" "${LUAJIT_H}" ${BUILDVM_SOURCES}
 )
 
 add_custom_target(buildvm

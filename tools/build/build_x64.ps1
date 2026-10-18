@@ -141,6 +141,14 @@ Apply-RequiredPatch `
         "void release_ownership(T*&)"
     )
 Apply-RequiredPatch `
+    -Repository (Join-Path $repositoryRoot "Externals\luabind") `
+    -Patch (Join-Path $repositoryRoot "patches\luabind-instance-finalizers.patch") `
+    -AppliedFile "src\object_rep.cpp" `
+    -AppliedMarkers @(
+        "LUABIND_API void instance_needs_no_finalizer(",
+        "char dependency_set_key;"
+    )
+Apply-RequiredPatch `
     -Repository (Join-Path $repositoryRoot "Externals\DirectXTex") `
     -Patch (Join-Path $repositoryRoot "patches\directxtex-cmake4-shader-command.patch") `
     -AppliedFile "CMakeLists.txt" `

@@ -13,8 +13,8 @@ This file records the dependency state used by the Windows x64 runtime. A versio
 | GameSpy | `5597a6c582` | Pinned OpenXRay fork plus local x64 warning fixes. |
 | GLI | `3542f8830` | Pinned upstream revision. |
 | litehtml | `v0.10` (`9bc84b8b`) | Static HTML/CSS layout (BSD-3-Clause) for the menus' community panel; drawn by `src/xrGame/ui/CommunityHtmlCanvas.cpp` with Direct2D and DirectWrite. |
-| LuaJIT | `8b7a19e030` (upstream v2.1 `c6ffc141`, 2026-09-08) | Dead Air fork of the upstream rolling release, see [LuaJIT](#luajit). The same changes are applied to a pristine upstream checkout by the canonical build wrapper. |
-| Luabind | `ffb1e5adb8` | Pinned Dead Air integration revision. |
+| LuaJIT | `510ca4e9ea` (upstream v2.1 `dd3b2436`, 2026-10-18) | Dead Air fork of the upstream rolling release, see [LuaJIT](#luajit). The same changes are applied to a pristine upstream checkout by the canonical build wrapper. |
+| Luabind | `9f7152d8c3` | Dead Air integration revision; its changes to the collector's work are in `LUA_RUNTIME.md`. The canonical build wrapper applies them to a checkout without them (`patches/luabind-*.patch`). |
 | mimalloc | `v3.4.3` (`152fbf2634`) | Static allocator built from pinned source for each configuration. |
 | SDL2 | `2.32.8` (`98d1f3a45a`) | Shared runtime and headers built from pinned source. |
 | SSE2NEON | `3b70b3727` | Pinned upstream revision. |
@@ -39,7 +39,9 @@ could be neither run nor translated, and the saves holding them would stop loadi
 | `math.mod`, `string.gfind` | Lua 5.0 names the game scripts still use. |
 | C-style comments, `lj_allow_escape_sequences()` | The lexer accepts what the original script engine accepted. |
 | `coroutine.cstacksize` | Scripts written for LuaJIT 1.1 call it. |
-| `lua_gc(LUA_GCTIMEOUT)` | Time-boxed collection behind `lua_gc_method 2`. |
+| `lua_gc(LUA_GCTIMEOUT)` | Time-boxed collection behind `lua_gc_method 2` (the counter's ticks converted to nanoseconds; raw ticks made the box a hundred times longer). |
+| `luaJIT_gcframe()` | The collector's implicit steps take at most a set time a frame; see `LUA_RUNTIME.md`. |
+| `luaJIT_udata_nofinalize()`, marked userdata set aside | The atomic phase no longer walks every userdata alive in one go; see `LUA_RUNTIME.md`. |
 | LuaJIT 2.0 bytecode in `lj_bcread.c` | Closures inside saves of the original game. |
 | String IDs derived from content | Upstream hashes a table key by an ID handed out when its string is interned, so `pairs()` order depends on the history of the session. Scripts save state with one `pairs()` walk and load it with another, in another session. The ID is the unseeded LuaJIT 2.0 hash again, which also keeps the order existing saves were written in. |
 | Casts at four sites | The LuaJIT target builds without a single warning at `/W3`. |

@@ -586,12 +586,12 @@ void CLevel::OnFrame()
         else
             m_level_sound_manager->Update();
 
-        // The Lua GC step runs here, on the main thread, whatever mt_script_gc says. On the
-        // parallel sequence it ran on a worker while the main thread rendered, and every
+        // The Lua GC's pacing runs here, on the main thread, whatever mt_script_gc says. On the
+        // parallel sequence its step ran on a worker while the main thread rendered, and every
         // finalizer it fired - ini_file, sound_object, particles_object, script UI windows -
         // destroyed a C++ object from that worker; a report (1.3.5, "viewing the inventory")
-        // died in exactly such a finalizer, ~CInifile over already-dead items. The step is
-        // small (r__lua_gcstep units per frame); the flag stays accepted so user.ltx parses.
+        // died in exactly such a finalizer, ~CInifile over already-dead items. The flag stays
+        // accepted so user.ltx parses.
         script_gc();
     }
     if (pStatGraphR)
@@ -606,7 +606,9 @@ void CLevel::OnFrame()
         Device.fTimeDeltaReal * 1000.f, Device.GetStats().RenderTotal.result);
 }
 
-int psLUA_GCSTEP = 100; // 10
+// lua_gcstep stays accepted (user.ltx carries it, scripts may set it) but forces no step any more: the collector paces
+// itself (CScriptEngine::pace_garbage_collector), and the saved 100 would bring back the step it replaced.
+int psLUA_GCSTEP = 100;
 int psLUA_GCTIMEOUT = 1000;
 
 u32 ps_lua_gc_method = 1;
@@ -631,7 +633,7 @@ void CLevel::script_gc()
         ps_lua_gc_method = 1;
 
     case 1:
-        lua_gc(GEnv.ScriptEngine->lua(), LUA_GCSTEP, psLUA_GCSTEP);
+        GEnv.ScriptEngine->pace_garbage_collector();
         break;
     }
 

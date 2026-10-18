@@ -1,0 +1,458 @@
+diff --git a/luabind/dependency_policy.hpp b/luabind/dependency_policy.hpp
+index 9c5e151..58870a1 100644
+--- a/luabind/dependency_policy.hpp
++++ b/luabind/dependency_policy.hpp
+@@ -40,13 +40,14 @@ namespace luabind {
+ 			template< unsigned int... StackIndices >
+ 			static void postcall(lua_State* L, int results, meta::index_list<StackIndices...>)
+ 			{
+-				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, meta::get<meta::index_list<StackIndices...>, A>::value));
++				const int nurse_index = meta::get<meta::index_list<StackIndices...>, A>::value;
++				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, nurse_index));
+ 
+ 				// If the nurse isn't an object_rep, just make this a nop.
+ 				if(nurse == 0)
+ 					return;
+ 
+-				nurse->add_dependency(L, meta::get<meta::index_list<StackIndices...>, B>::value);
++				nurse->add_dependency(L, nurse_index, meta::get<meta::index_list<StackIndices...>, B>::value);
+ 			}
+ 		};
+ 
+@@ -56,13 +57,14 @@ namespace luabind {
+ 			template< unsigned int... StackIndices >
+ 			static void postcall(lua_State* L, int results, meta::index_list<StackIndices...>)
+ 			{
+-				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, meta::get<meta::index_list<StackIndices...>, 0>::value + results));
++				const int nurse_index = meta::get<meta::index_list<StackIndices...>, 0>::value + results;
++				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, nurse_index));
+ 
+ 				// If the nurse isn't an object_rep, just make this a nop.
+ 				if(nurse == 0)
+ 					return;
+ 
+-				nurse->add_dependency(L, meta::get<meta::index_list<StackIndices...>, B>::value);
++				nurse->add_dependency(L, nurse_index, meta::get<meta::index_list<StackIndices...>, B>::value);
+ 			}
+ 		};
+ 
+@@ -72,13 +74,14 @@ namespace luabind {
+ 			template< unsigned int... StackIndices >
+ 			static void postcall(lua_State* L, int results, meta::index_list<StackIndices...>)
+ 			{
+-				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, meta::get<meta::index_list<StackIndices...>, A>::value));
++				const int nurse_index = meta::get<meta::index_list<StackIndices...>, A>::value;
++				object_rep* nurse = static_cast<object_rep*>(lua_touserdata(L, nurse_index));
+ 
+ 				// If the nurse isn't an object_rep, just make this a nop.
+ 				if(nurse == 0)
+ 					return;
+ 
+-				nurse->add_dependency(L, meta::get<meta::index_list<StackIndices...>, 0>::value + results);
++				nurse->add_dependency(L, nurse_index, meta::get<meta::index_list<StackIndices...>, 0>::value + results);
+ 			}
+ 		};
+ 
+diff --git a/luabind/detail/constructor.hpp b/luabind/detail/constructor.hpp
+index 543cb7f..1ac47a4 100644
+--- a/luabind/detail/constructor.hpp
++++ b/luabind/detail/constructor.hpp
+@@ -9,6 +9,9 @@
+ #include <luabind/lua_argument_proxy.hpp>
+ #include <luabind/wrapper_base.hpp>
+ #include <luabind/detail/inheritance.hpp>
++#include <luabind/detail/instance_holder.hpp>
++#include <luabind/detail/object_rep.hpp>
++#include <type_traits>
+ 
+ namespace luabind {
+ 	namespace detail {
+@@ -22,6 +25,19 @@ namespace luabind {
+ 			weak_ref(get_main_thread(L), L, 1).swap(wrap_access::ref(*p));
+ 		}
+ 
++		// A value the class owns the default way, trivial to destroy and small enough, is built inside the instance:
++		// no heap blocks for it and its holder, and nothing to finalize. The pointer holder's release() gave an adopted
++		// object to C++, so the classes C++ adopts (polymorphic ones, all with destructors) keep it.
++		template< class T, class Pointer >
++		struct construct_in_place : std::integral_constant< bool,
++			std::is_same< Pointer, luabind::unique_ptr< T > >::value
++			&& std::is_trivially_destructible< T >::value
++			&& std::is_move_constructible< T >::value
++			&& !std::is_polymorphic< T >::value
++			&& !std::is_base_of< wrap_base, T >::value
++			&& sizeof(value_holder< T >) <= object_rep::inline_capacity >
++		{};
++
+ 		template< class T, class Pointer, class Signature, class Arguments, class ArgumentIndices >
+ 		struct construct_aux_helper;
+ 
+@@ -34,6 +50,16 @@ namespace luabind {
+ 			{
+ 				object_rep* self = touserdata<object_rep>(self_);
+ 
++				if constexpr(construct_in_place<T, Pointer>::value)
++				{
++					using value_holder_type = value_holder<T>;
++					void* storage = self->allocate(sizeof(value_holder_type));
++					self->set_instance(new (storage) value_holder_type(self_.interpreter(), T(args...)));
++					if(self->crep()->get_class_type() == class_rep::cpp_class)
++						instance_needs_no_finalizer(self_.interpreter(), self_.index());
++					return;
++				}
++
+                 luabind::unique_ptr<T> instance(luabind_new<T>(args...));
+ 				inject_backref(self_.interpreter(), instance.get(), instance.get());
+ 
+diff --git a/luabind/detail/make_instance.hpp b/luabind/detail/make_instance.hpp
+index c192721..173eee3 100644
+--- a/luabind/detail/make_instance.hpp
++++ b/luabind/detail/make_instance.hpp
+@@ -11,13 +11,15 @@
+ namespace luabind {
+ 	namespace detail {
+ 
++		// The registry's class maps under keys of their own addresses: the lookups of every instance a function
++		// returns hash no string. The named keys ("__luabind_class_map", "__luabind_class_id_map") stay.
++		LUABIND_API class_map& registry_class_map(lua_State* L);
++		LUABIND_API class_id_map& registry_class_id_map(lua_State* L);
++
+ 		template <class T>
+ 		std::pair<class_id, void*> get_dynamic_class_aux(lua_State* L, T const* p, std::true_type)
+ 		{
+-			lua_pushliteral(L, "__luabind_class_id_map");
+-			lua_rawget(L, LUA_REGISTRYINDEX);
+-			class_id_map& class_ids = *static_cast<class_id_map*>(lua_touserdata(L, -1));
+-			lua_pop(L, 1);
++			class_id_map& class_ids = registry_class_id_map(L);
+ 
+ 			return std::make_pair(class_ids.get_local(typeid(*p)), dynamic_cast<void*>(const_cast<T*>(p)));
+ 		}
+@@ -43,12 +45,7 @@ namespace luabind {
+ 		template <class P>
+ 		class_rep* get_pointee_class(lua_State* L, P const& p, class_id dynamic_id)
+ 		{
+-			lua_pushliteral(L, "__luabind_class_map");
+-			lua_rawget(L, LUA_REGISTRYINDEX);
+-
+-			class_map const& classes = *static_cast<class_map*>(lua_touserdata(L, -1));
+-
+-			lua_pop(L, 1);
++			class_map const& classes = registry_class_map(L);
+ 
+ 			class_rep* cls = classes.get(dynamic_id);
+ 
+@@ -59,6 +56,27 @@ namespace luabind {
+ 			return cls;
+ 		}
+ 
++		// Holders whose destruction does nothing: a raw pointer the instance does not own, a value with a trivial
++		// destructor. Kept inline in an instance of a C++ class, they leave it nothing to finalize.
++		template <class Holder>
++		struct holder_destruction_trivial : std::false_type {};
++
++		template <class T, class Pointee>
++		struct holder_destruction_trivial<pointer_holder<T*, Pointee>> : std::true_type {};
++
++		template <class T>
++		struct holder_destruction_trivial<value_holder<T>> : std::is_trivially_destructible<T> {};
++
++		template <class Holder>
++		void release_trivial_instance(lua_State* L, object_rep* instance, void const* storage)
++		{
++			if constexpr(holder_destruction_trivial<Holder>::value)
++			{
++				if(instance->holds_inline(storage) && instance->crep()->get_class_type() == class_rep::cpp_class)
++					instance_needs_no_finalizer(L, -1);
++			}
++		}
++
+ 		// Create an appropriate instance holder for the given pointer like object.
+ 		template <class P>
+ 		void make_pointer_instance(lua_State* L, P p)
+@@ -91,6 +109,7 @@ namespace luabind {
+ 			}
+ 
+ 			instance->set_instance(static_cast<holder_type*>(storage));
++			release_trivial_instance<holder_type>(L, instance, storage);
+ 		}
+ 
+ 
+@@ -156,6 +175,7 @@ namespace luabind {
+ 			}
+ 
+ 			instance->set_instance(static_cast<holder_type*>(storage));
++			release_trivial_instance<holder_type>(L, instance, storage);
+ 		}
+ 
+ 		template< typename ValueType >
+diff --git a/luabind/detail/object_rep.hpp b/luabind/detail/object_rep.hpp
+index 7b1b9a1..13d33f6 100644
+--- a/luabind/detail/object_rep.hpp
++++ b/luabind/detail/object_rep.hpp
+@@ -50,7 +50,7 @@ namespace luabind {
+ 
+ 			void set_instance(instance_holder* instance) { m_instance = instance; }
+ 
+-			void add_dependency(lua_State* L, int index);
++			void add_dependency(lua_State* L, int self, int index);
+ 
+ 			std::pair<void*, int> get_instance(class_id target) const
+ 			{
+@@ -70,9 +70,18 @@ namespace luabind {
+ 					m_instance->release();
+ 			}
+ 
++			// A pointer holder fits (vtable, flag, pointer, weak pointer, class id, dynamic pointer): an object handed to
++			// the scripts by pointer costs no heap block of its own.
++			static constexpr std::size_t inline_capacity = 48;
++
++			bool holds_inline(void const* storage) const
++			{
++				return storage == &m_instance_buffer;
++			}
++
+ 			void* allocate(std::size_t size)
+ 			{
+-				if(size <= 32) {
++				if(size <= inline_capacity) {
+ 					return &m_instance_buffer;
+ 				}
+ 				else {
+@@ -96,9 +105,8 @@ namespace luabind {
+ 			void operator=(object_rep const&) = delete;
+ 
+ 			instance_holder* m_instance;
+-			std::aligned_storage<32>::type m_instance_buffer;
++			std::aligned_storage<inline_capacity>::type m_instance_buffer;
+ 			class_rep* m_classrep; // the class information about this object's type
+-			detail::lua_reference m_dependency_ref; // reference to lua table holding dependency references
+ 		};
+ 
+ 		template<class T>
+@@ -128,6 +136,8 @@ namespace luabind {
+ 		LUABIND_API object_rep* get_instance(lua_State* L, int index);
+ 		LUABIND_API void push_instance_metatable(lua_State* L);
+ 		LUABIND_API object_rep* push_new_instance(lua_State* L, class_rep* cls);
++		// The instance at index, just created, needs no finalizer: its destruction would do nothing.
++		LUABIND_API void instance_needs_no_finalizer(lua_State* L, int index);
+ 
+ 	}	// namespace detail
+ 
+diff --git a/luabind/lua_argument_proxy.hpp b/luabind/lua_argument_proxy.hpp
+index ed59979..4ee6be0 100644
+--- a/luabind/lua_argument_proxy.hpp
++++ b/luabind/lua_argument_proxy.hpp
+@@ -35,6 +35,11 @@ namespace luabind {
+ 				return m_interpreter;
+ 			}
+ 
++			int index() const
++			{
++				return m_index;
++			}
++
+ 		private:
+ 			lua_State* m_interpreter;
+ 			int m_index;
+diff --git a/src/object_rep.cpp b/src/object_rep.cpp
+index 4d5f39b..b9952b3 100644
+--- a/src/object_rep.cpp
++++ b/src/object_rep.cpp
+@@ -30,6 +30,12 @@
+ # define lua_setuservalue lua_setfenv
+ #endif
+ 
++#if __has_include(<luajit.h>)
++extern "C" {
++# include <luajit.h>
++}
++#endif
++
+ namespace luabind {
+ 	namespace detail {
+ 
+@@ -48,27 +54,101 @@ namespace luabind {
+ 			deallocate(m_instance);
+ 		}
+ 
+-		void object_rep::add_dependency(lua_State* L, int index)
++		namespace
++		{
++			// The keys of the dependencies in an instance's own uservalue table: light userdata no script can make,
++			// so neither a member a script stores there nor a lookup meets them.
++			char dependency_key;
++			char dependency_set_key;
++		}
++
++		// The objects an instance keeps alive go into its own uservalue table (where a member a script stores on it
++		// lands): the collector follows them from the instance, so they take no registry reference and the instance
++		// no finalizer to release one. The first is stored itself, any more in a set.
++		void object_rep::add_dependency(lua_State* L, int self, int index)
+ 		{
+-			if(!m_dependency_ref.is_valid())
++			if(self < 0 && self > LUA_REGISTRYINDEX)
++				self = lua_gettop(L) + self + 1;
++			if(index < 0 && index > LUA_REGISTRYINDEX)
++				index = lua_gettop(L) + index + 1;
++			if(lua_isnoneornil(L, index))
++				return;
++
++			// The class table until the instance has a table of its own, which then has the class table as metatable.
++			lua_getuservalue(L, self);
++			if(lua_getmetatable(L, -1))
++			{
++				lua_pop(L, 1);
++			}
++			else
+ 			{
+ 				lua_newtable(L);
+-				m_dependency_ref.set(L);
++				lua_insert(L, -2);
++				lua_setmetatable(L, -2);
++				lua_pushvalue(L, -1);
++				lua_setuservalue(L, self);
+ 			}
+-			m_dependency_ref.get(L);
+ 
+-			lua_pushvalue(L, index);
+-			lua_pushnumber(L, 0);
+-			lua_rawset(L, -3);
++			lua_pushlightuserdata(L, &dependency_key);
++			lua_rawget(L, -2);
++			if(lua_isnil(L, -1))
++			{
++				lua_pop(L, 1);
++				lua_pushlightuserdata(L, &dependency_key);
++				lua_pushvalue(L, index);
++				lua_rawset(L, -3);
++			}
++			else if(lua_rawequal(L, -1, index))
++			{
++				lua_pop(L, 1);
++			}
++			else
++			{
++				lua_pop(L, 1);
++				lua_pushlightuserdata(L, &dependency_set_key);
++				lua_rawget(L, -2);
++				if(lua_isnil(L, -1))
++				{
++					lua_pop(L, 1);
++					lua_newtable(L);
++					lua_pushlightuserdata(L, &dependency_set_key);
++					lua_pushvalue(L, -2);
++					lua_rawset(L, -4);
++				}
++				lua_pushvalue(L, index);
++				lua_pushboolean(L, 1);
++				lua_rawset(L, -3);
++				lua_pop(L, 1);
++			}
+ 			lua_pop(L, 1);
+ 		}
+ 
++		namespace
++		{
++			int get_instance_value(lua_State* L);
++		}
++
+ 		int destroy_instance(lua_State* L)
+ 		{
+ 			object_rep* instance = static_cast<object_rep*>(lua_touserdata(L, 1));
+ 
+-			lua_pushstring(L, "__finalize");
+-			lua_gettable(L, 1);
++			// instance.__finalize. While the instance's __index is still luabind's own, its lookup is run directly
++			// (the uservalue, its metatable, a property's getter): the metamethod's way through the VM cost every
++			// collected instance a C call. A metatable a script has changed takes the full lookup.
++			lua_pushliteral(L, "__finalize");
++			bool direct = false;
++			if(lua_getmetatable(L, 1))
++			{
++				lua_pushliteral(L, "__index");
++				lua_rawget(L, -2);
++				direct = lua_tocfunction(L, -1) == &get_instance_value;
++				lua_pop(L, 2);
++			}
++			// The stack is (instance, key), as __index gets it; the value ends on top either way.
++			if(direct)
++				get_instance_value(L);
++			else
++				lua_gettable(L, 1);
+ 
+ 			if(lua_isnil(L, -1))
+ 			{
+@@ -250,6 +330,16 @@ namespace luabind {
+ 			return result;
+ 		}
+ 
++		LUABIND_API void instance_needs_no_finalizer(lua_State* L, int index)
++		{
++#ifdef LUAJIT_VERSION
++			luaJIT_udata_nofinalize(L, index);
++#else
++			(void)L;
++			(void)index;
++#endif
++		}
++
+ 		LUABIND_API object_rep* push_new_instance(lua_State* L, class_rep* cls)
+ 		{
+ 			void* storage = lua_newuserdata(L, sizeof(object_rep));
+diff --git a/src/open.cpp b/src/open.cpp
+index bfdcbb8..644e7a8 100644
+--- a/src/open.cpp
++++ b/src/open.cpp
+@@ -113,8 +113,42 @@ namespace luabind {
+ 			new (storage) T(constructorArg);
+ 		}
+ 
++		// Writable, so the linker never folds them into one address as it may identical constants.
++		char class_map_key;
++		char class_id_map_key;
++
++		// The named entry also under its own address.
++		void alias_registry_entry(lua_State* L, char const* name, void const* key)
++		{
++			lua_pushlightuserdata(L, const_cast<void*>(key));
++			lua_pushstring(L, name);
++			lua_rawget(L, LUA_REGISTRYINDEX);
++			lua_rawset(L, LUA_REGISTRYINDEX);
++		}
++
++		void* registry_entry(lua_State* L, void const* key)
++		{
++			lua_pushlightuserdata(L, const_cast<void*>(key));
++			lua_rawget(L, LUA_REGISTRYINDEX);
++			void* entry = lua_touserdata(L, -1);
++			lua_pop(L, 1);
++			return entry;
++		}
++
+ 	}	// namespace anonymous
+ 
++	namespace detail {
++		LUABIND_API class_map& registry_class_map(lua_State* L)
++		{
++			return *static_cast<class_map*>(registry_entry(L, &class_map_key));
++		}
++
++		LUABIND_API class_id_map& registry_class_id_map(lua_State* L)
++		{
++			return *static_cast<class_id_map*>(registry_entry(L, &class_id_map_key));
++		}
++	}
++
+ 	LUABIND_API void open(lua_State* L)
+ 	{
+ 		bool is_main_thread = lua_pushthread(L) == 1;
+@@ -132,6 +166,8 @@ namespace luabind {
+ 		createGarbageCollectedRegistryUserdata<detail::class_id_map>(L, "__luabind_class_id_map");
+ 		createGarbageCollectedRegistryUserdata<detail::cast_graph>(L, "__luabind_cast_graph");
+ 		createGarbageCollectedRegistryUserdata<detail::class_map>(L, "__luabind_class_map");
++		alias_registry_entry(L, "__luabind_class_map", &class_map_key);
++		alias_registry_entry(L, "__luabind_class_id_map", &class_id_map_key);
+ 
+ 		// add functions (class, cast etc...)
+ 		lua_pushcclosure(L, detail::create_class::stage1, 0);
