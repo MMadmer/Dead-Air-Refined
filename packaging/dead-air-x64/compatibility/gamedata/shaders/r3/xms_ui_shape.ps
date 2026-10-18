@@ -122,6 +122,22 @@ float4 main(p_TL I) : SV_Target
 			float hue = frac(atan2(-p.y, p.x) / 6.2831853 + 1.0);
 			c = float4(da_hsv_to_rgb(float3(hue, saturate(length(p) / r), xms_shape_mode.y)), I.Color.a);
 		}
+		else if (kind > 102.5)
+		{
+			// a hit's arc: on the ring inscribed in the box, round the angle mode.y (0 up, clockwise), as wide as
+			// mode.w: a band box.w thick, and a glow from it into the screen towards the centre
+			float thick = max(xms_shape_box.w, 1.0);
+			float r = min(half_size.x, half_size.y) - thick;
+			float a = atan2(p.x, -p.y);
+			float da = (frac((a - xms_shape_mode.y) / 6.2831853 + 0.5) - 0.5) * 6.2831853;
+			float spread = max(xms_shape_mode.w, 0.05) * 0.5;
+			float along = exp(-da * da / (2.0 * spread * spread));
+			float out_r = length(p) - r;
+			float band = saturate(0.5 - (abs(out_r) - thick * 0.5) / soft);
+			float glow = saturate(1.0 + (out_r + thick * 0.5) / (thick * 3.0));
+			c = float4(I.Color.rgb, I.Color.a * along * max(band, 0.4 * glow * glow * step(out_r, 0.0)));
+			d = -1.0;
+		}
 		else if (kind < 101.5)
 		{
 			c = lerp(I.Color, xms_shape_line, saturate(t));

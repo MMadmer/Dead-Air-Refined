@@ -67,6 +67,7 @@
 #include "InventoryBox.h"
 #include "location_manager.h"
 #include "player_hud.h"
+#include "ui/UIDamageIndicator.h"
 #include "da_snow_deformers.h"
 #include "da_ice_game.h"
 #include "da_script_cam.h"
@@ -777,7 +778,8 @@ void CActor::Hit(SHit* pHDS)
             mstate_wishful &= ~mcSprint;
         }
     }
-    if (!GEnv.isDedicatedServer && !m_disabled_hitmarks)
+    // the stock hit mark is the damage indicator's when that is on
+    if (!GEnv.isDedicatedServer && !m_disabled_hitmarks && !g_dar_damage_indicator)
     {
         bool b_fireWound = (pHDS->hit_type == ALife::eHitTypeFireWound || pHDS->hit_type == ALife::eHitTypeWound_2);
         b_initiated = b_initiated && (pHDS->hit_type == ALife::eHitTypeStrike);
@@ -830,7 +832,10 @@ void CActor::Hit(SHit* pHDS)
                 HDS.boneID
             );
         }
+        // the health a hit takes is the condition's to apply later: what is due, before and after
+        const float due = conditions().GetHealth() + conditions().PendingHealthDelta();
         inherited::Hit(&HDS);
+        DamageIndicate(HDS, due - (conditions().GetHealth() + conditions().PendingHealthDelta()));
     }
     else
     {
@@ -872,6 +877,17 @@ void CActor::Hit(SHit* pHDS)
             Game().m_WeaponUsageStatistic->OnExplosionKill(ps, HDS);
         }
     }
+}
+
+void CActor::DamageIndicate(const SHit& hit, float lost)
+{
+    // a side to show: not the actor's own (a fall), not a dose or the psy field; a hit that hurt
+    if (!g_dar_damage_indicator || GEnv.isDedicatedServer || m_disabled_hitmarks || !g_Alive() || !Local() ||
+        Level().CurrentEntity() != this || hit.who == this || lost <= EPS_L)
+        return;
+    if (hit.hit_type == ALife::eHitTypeRadiation || hit.hit_type == ALife::eHitTypeTelepatic)
+        return;
+    HUD().DamageMarked(Fvector(hit.dir).invert(), lost / std::max(conditions().GetMaxHealth(), EPS_L));
 }
 
 void CActor::HitMark(float P, Fvector dir, IGameObject* who_object, s16 element, Fvector position_in_bone_space,

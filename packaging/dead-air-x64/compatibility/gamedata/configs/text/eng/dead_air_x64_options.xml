@@ -178,6 +178,12 @@
 	<string id="ui_mm_debug_hud_hint">
 		<text>Debug information on screen. Available only in developer mode.</text>
 	</string>
+	<string id="ui_mm_damage_indicator">
+		<text>Damage direction indicator</text>
+	</string>
+	<string id="ui_mm_damage_indicator_hint">
+		<text>When you take damage, an arc appears around the crosshair on the side the hit came from. The more of your maximum health it takes, the brighter it is and the longer it stays.</text>
+	</string>
 	<string id="ui_mm_community_links">
 		<text>Mod communities in the menu</text>
 	</string>

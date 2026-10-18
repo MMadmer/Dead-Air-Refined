@@ -2553,6 +2553,8 @@ target_sources(xrGame PRIVATE
     ui/BugReportService.cpp
     ui/BugReportService.h
     ui/UIColorPicker.cpp
+    ui/UIDamageIndicator.cpp
+    ui/UIDamageIndicator.h
     ui/UIColorPicker.h
     ui/UIInterfaceColorsWnd.cpp
     ui/UIInterfaceColorsWnd.h

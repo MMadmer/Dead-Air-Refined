@@ -22,7 +22,7 @@ constexpr std::pair<pcstr, Kind> kinds[] = {{"box", Kind::Box}, {"star", Kind::S
     {"weight", Kind::Weight}, {"clock", Kind::Clock}, {"wrench", Kind::Wrench}, {"crosshair", Kind::Crosshair},
     {"hand", Kind::Hand}, {"gauge", Kind::Gauge}, {"shield", Kind::Shield}, {"cartridge", Kind::Cartridge},
     {"moon", Kind::Moon}, {"upgrade", Kind::Upgrade}, {"pin", Kind::Pin}, {"keyboard", Kind::Keyboard}, {"scales", Kind::Scales},
-    {"hue_wheel", Kind::HueWheel}, {"gradient", Kind::Gradient}, {"hue_bar", Kind::HueBar}};
+    {"hue_wheel", Kind::HueWheel}, {"gradient", Kind::Gradient}, {"hue_bar", Kind::HueBar}, {"hit_arc", Kind::HitArc}};
 static_assert(std::size(kinds) == size_t(Kind::Count), "every kind has a name");
 
 Fvector4 shape_color(u32 argb)
@@ -510,7 +510,7 @@ void set_params(const SScreenShape& s, const SUIShapeStyle& style)
     if (style.kind == Kind::Box)
         mode.set(0.f, style.segment > 0.f ? style.segment * unit : 0.f, s.soft, style.gap * unit);
     else if (style.Paint())
-        mode.set(100.f + float(u8(style.kind) - u8(Kind::HueWheel)), style.fraction, s.soft, 0.f); // xms_ui_shape.ps paints
+        mode.set(100.f + float(u8(style.kind) - u8(Kind::HueWheel)), style.fraction, s.soft, style.gap); // xms_ui_shape.ps paints
     else if (style.kind == Kind::GasMask)
         mode.set(float(style.kind), float(style.badge), s.soft, style.badgeScale);
     else

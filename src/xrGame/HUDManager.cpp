@@ -290,6 +290,7 @@ void CHUDManager::RenderUI()
     if (true /*|| psHUD_Flags.is(HUD_DRAW | HUD_DRAW_RT)*/)
     {
         HitMarker.Render();
+        m_damageIndicator.Render();
         if (pUIGame)
             pUIGame->Render();
         if (MainMenu())

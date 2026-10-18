@@ -59,6 +59,9 @@ struct SUIShapeStyle
         HueWheel,
         Gradient,
         HueBar,
+        // a hit's arc on the ring inscribed in the box: round the angle `fraction` (radians, 0 up, clockwise), as
+        // wide as `gap` (radians), `border` thick, fading towards the centre
+        HitArc,
         Count
     };
 

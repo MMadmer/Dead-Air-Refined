@@ -216,6 +216,8 @@ public:
     virtual void PHHit(SHit& H);
     virtual void HitSignal(float P, Fvector& vLocalDir, IGameObject* who, s16 element);
     void HitSector(IGameObject* who, IGameObject* weapon);
+    // the damage indicator: where the hit came from, as hard as the health it took
+    void DamageIndicate(const SHit& hit, float lost);
     void HitMark(float P, Fvector dir, IGameObject* who, s16 element, Fvector position_in_bone_space, float impulse,
         ALife::EHitType hit_type);
 

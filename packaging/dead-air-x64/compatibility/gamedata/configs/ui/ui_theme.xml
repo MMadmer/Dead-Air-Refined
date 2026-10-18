@@ -69,6 +69,7 @@
     <color name="negative" value="#E07A6CFF"/>
     <color name="health" value="#C8382CFF"/>
     <color name="satiety" value="#7FA05AFF"/>
+    <color name="damage" value="#D63A2EFF"/>
     <color name="protection" value="#B3AA9BFF" follow="main" mode="tint"/>
 
     <!-- surfaces -->
@@ -199,6 +200,10 @@
     <style name="cell_marked" fill="$good#1F" line="$good#99" border="1" radius="2"/>
     <style name="cell_related" fill="$related#1C" line="$related#80" border="1" radius="2"/>
     <style name="cell_blocked" fill="$bad#26" line="$bad#99" border="1" radius="2"/>
+
+    <!-- where a hit came from (ui/UIDamageIndicator): the arc round the crosshair - its colour and opacity at the
+         hardest hit, border its thickness, gap its width round the ring in radians -->
+    <style name="damage_arc" kind="hit_arc" fill="$damage#E6" border="9" gap="0.5" soft="1.5"/>
     <style name="cell_drop" fill="$accent#1F" line="$accent" border="1" radius="2"/>
     <style name="badge" fill="$inset#D9" line="$panel_edge#B3" border="1" radius="2"/>
     <!-- over the icons: an item picked for a comparison, and what cannot join it -->

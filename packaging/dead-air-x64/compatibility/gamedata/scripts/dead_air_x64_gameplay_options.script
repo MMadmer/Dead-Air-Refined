@@ -32,6 +32,8 @@ local function on_init(menu)
 	-- The community icons of the main menu and the pause menu (dar_community_links). Caption:
 	-- ui_mm_community_links.
 	menu.gameplay_options["community_links"] = {typ="check"}
+	-- Where a hit came from, round the crosshair (dar_damage_indicator). Caption: ui_mm_damage_indicator.
+	menu.gameplay_options["damage_indicator"] = {typ="check"}
 	-- The main and the accent colour of the game's windows: a window of its own (dar_ui_colors). Caption:
 	-- ui_mm_interface_colors.
 	menu.gameplay_options["interface_colors"] = {typ="button", button="st_da_colors_open",
@@ -76,6 +78,11 @@ local function on_set_values(menu, opt_manager)
 		community_links.ctrl:SetCheck(console:get_bool("dar_community_links"))
 	end
 
+	local damage_indicator = menu.gameplay_options["damage_indicator"]
+	if (damage_indicator and damage_indicator.ctrl) then
+		damage_indicator.ctrl:SetCheck(console:get_bool("dar_damage_indicator"))
+	end
+
 	local cursor_sens = menu.gameplay_options["cursor_sens"]
 	if (cursor_sens and cursor_sens.ctrl) then
 		cursor_sens.ctrl:SetText(nearest_cursor_step(console:get_float("ui_cursor_sens")))
@@ -117,6 +124,11 @@ local function on_accept(menu, opt_manager, console)
 	local community_links = menu.gameplay_options["community_links"]
 	if (community_links and community_links.ctrl) then
 		console:execute("dar_community_links " .. (community_links.ctrl:GetCheck() and "1" or "0"))
+	end
+
+	local damage_indicator = menu.gameplay_options["damage_indicator"]
+	if (damage_indicator and damage_indicator.ctrl) then
+		console:execute("dar_damage_indicator " .. (damage_indicator.ctrl:GetCheck() and "1" or "0"))
 	end
 
 	local cursor_sens = menu.gameplay_options["cursor_sens"]

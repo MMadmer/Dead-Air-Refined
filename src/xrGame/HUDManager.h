@@ -2,6 +2,7 @@
 
 #include "xrEngine/CustomHUD.h"
 #include "HitMarker.h"
+#include "ui/UIDamageIndicator.h"
 
 class CHUDTarget;
 class CUIGameCustom;
@@ -12,6 +13,7 @@ class CHUDManager final : public CCustomHUD
     Lock render_lock{}; // TODO: I believe this can be avoided, need to think more about it
     CUIGameCustom* pUIGame{};
     CHitMarker HitMarker;
+    CDamageIndicator m_damageIndicator;
     CHUDTarget* m_pHUDTarget;
     class CUIStatic* m_pda_rt_dbg{}; // 3D PDA: lazy fullscreen blit of $user$ui (pda3d_dbg 2)
     bool b_online{};
@@ -32,6 +34,8 @@ public:
 
     CUIGameCustom* GetGameUI() { return pUIGame; }
     void HitMarked(const Fvector& dir);
+    // a hit that took `lost` of the health came from the world direction `from`
+    void DamageMarked(const Fvector& from, float lost) { m_damageIndicator.Add(from, lost); }
     bool AddGrenade_ForMark(CGrenade* grn);
     void Update_GrenadeView(Fvector& pos_actor);
     void net_Relcase(IGameObject* obj);

@@ -145,6 +145,12 @@
 	<string id="ui_mm_debug_hud_hint">
 		<text>Отладочные сведения на экране. Есть только в режиме разработчика.</text>
 	</string>
+	<string id="ui_mm_damage_indicator">
+		<text>Индикатор направления урона</text>
+	</string>
+	<string id="ui_mm_damage_indicator_hint">
+		<text>При получении урона вокруг прицела появляется дуга со стороны, откуда пришёл удар. Чем сильнее урон относительно максимального здоровья, тем ярче и дольше она видна.</text>
+	</string>
 	<string id="ui_mm_community_links">
 		<text>Сообщества мода в меню</text>
 	</string>

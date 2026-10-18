@@ -121,6 +121,8 @@ public:
     IC float GetSatiety() const { return 1.0f; }
     IC float GetEntityMorale() const { return m_fEntityMorale; }
     IC float GetHealthLost() const { return m_fHealthLost; }
+    // the health change hits have queued for the next update
+    IC float PendingHealthDelta() const { return m_fDeltaHealth; }
     virtual bool IsLimping() const;
 
     virtual void ChangeSatiety(const float value){};
