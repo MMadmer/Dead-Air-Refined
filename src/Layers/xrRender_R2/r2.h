@@ -438,10 +438,12 @@ public:
 
 public:
     auto get_largest_sector() const { return largest_sector_id; }
-    // This frame's sun cascades and rain map draw: known once Calculate has set their phases up, before the shrubs
-    // and trees build their frame for them (da_veg.cpp).
-    bool sun_cascades_this_frame() const { return o.oldshadowcascades ? r_sun_old.o.active : r_sun.o.active; }
+    // Whether this frame's sun draws its cascades: render_sun::init's test, on the environment the frame already took,
+    // so the shrubs, trees and blades ask it before the sun's phase is set up and prepare nothing for a sun that is not
+    // there (night, the static sun).
+    bool sun_cascades_this_frame() const;
 #if RENDER != R_R2
+    // Whether this frame draws the rain map: known once Calculate has set the rain's phase up (da_veg.cpp asks after).
     bool rain_map_this_frame() const { return r_rain.o.active; }
 #endif
     ShaderElement* rimp_select_sh_static(dxRender_Visual* pVisual, float cdist_sq, u32 phase);

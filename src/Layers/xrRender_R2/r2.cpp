@@ -40,6 +40,15 @@ extern ENGINE_API int ps_r__rain_quality;
 
 namespace xray::render::RENDER_NAMESPACE
 {
+bool CRender::sun_cascades_this_frame() const
+{
+    if (!ps_r2_ls_flags.test(R2FLAG_SUN) || o.sunstatic || !g_pGamePersistent)
+        return false;
+    // The sun light's colour as CLight_DB::Update sets it.
+    const Fvector3& c = g_pGamePersistent->Environment().CurrentEnv.sun_color;
+    return u_diffuse2s(c.x * ps_r2_sun_lumscale, c.y * ps_r2_sun_lumscale, c.z * ps_r2_sun_lumscale) > EPS;
+}
+
 #if defined(USE_DX11)
 void flush_gamesave_screenshots();
 #endif

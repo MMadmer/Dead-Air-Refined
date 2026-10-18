@@ -2259,8 +2259,10 @@ void da_grass_frame_latch()
     L.dlat = dlat;
     L.s0 = dlat > 0.f ? 1.f / std::sqrt(dlat) : 1.f;
     const float smap = float(std::max(u32(RImplementation.o.smapsize), 256u));
-    L.shadow_near = true;
-    L.shadow_mid = preset.shadow_mid;
+    // No sun this frame (night, the static sun): no blade is made for its cascades.
+    const bool sun = RImplementation.sun_cascades_this_frame();
+    L.shadow_near = sun;
+    L.shadow_mid = sun && preset.shadow_mid;
     // A cascade's ortho box spans its size (render_phase_sun.cpp: +/- size / 2): one texel is size / smap.
     L.near_texel = g.floor_k * kNearReach / smap;
     L.mid_reach = float(ps_r__grass_shadow_dist);
