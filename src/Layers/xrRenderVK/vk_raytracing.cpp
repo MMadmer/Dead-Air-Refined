@@ -45,6 +45,8 @@ VkDeviceSize AlignUp(VkDeviceSize value, VkDeviceSize alignment) { return (value
 template <class F>
 void Defer(Device* device, F&& action)
 {
+    // Acceleration structures and their buffers: a set may name them.
+    device->DescriptorTargetGone();
     device->releaser.Defer(std::function<void()>(std::forward<F>(action)));
 }
 

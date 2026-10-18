@@ -312,6 +312,27 @@ u64 SignatureHash(const Shader* producer)
 }
 } // namespace
 
+bool GraphicsPipelineDesc::operator==(const GraphicsPipelineDesc& o) const
+{
+    return vs == o.vs && hs == o.hs && ds == o.ds && gs == o.gs && ps == o.ps && inputLayout == o.inputLayout &&
+        !std::memcmp(vbStrides, o.vbStrides, sizeof(vbStrides)) && blend == o.blend && raster == o.raster &&
+        sampleMask == o.sampleMask && topologyClass == o.topologyClass && patchPoints == o.patchPoints &&
+        numRTVs == o.numRTVs && !std::memcmp(rtvFormats, o.rtvFormats, sizeof(rtvFormats)) &&
+        depthFormat == o.depthFormat && stencilFormat == o.stencilFormat && samples == o.samples &&
+        alphaToCoverage == o.alphaToCoverage && shadingRate == o.shadingRate;
+}
+
+u64 GraphicsPipelineDesc::Content() const
+{
+    u64 h = 0x5c0e7u;
+    const Shader* shaders[5] = {vs, hs, ds, gs, ps};
+    for (const Shader* s : shaders)
+        h = HashCombine(h, s ? s->hash : 0);
+    h = HashCombine(h, inputLayout ? inputLayout->hash : 0);
+    h = HashCombine(h, blend ? blend->hash : 0);
+    return HashCombine(h, raster ? raster->hash : 0);
+}
+
 u64 GraphicsPipelineDesc::Hash() const
 {
     // Content only: shader objects created again from the same code reuse the pipeline.

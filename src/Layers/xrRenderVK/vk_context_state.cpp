@@ -475,32 +475,33 @@ void FillSet(Context& c, StageBindings& sb, const SetLayout* layout, ID3D11Unord
     }
 }
 
-// The set of a stage: reused when this frame already wrote one with the same contents.
+// The set of a stage: reused when this or an earlier frame wrote one with the same contents (a level's draws bind
+// the same sets frame after frame).
 VkDescriptorSet WriteSet(Context& c, const SetLayout* layout, SetWriter& w)
 {
     Device* dev = c.device();
     if (!layout->update)
         return dev->emptySet;
-    const u64 frame = dev->frame.load(std::memory_order_acquire);
-    if (c.setCacheFrame != frame)
-    {
-        c.setCache.clear();
-        c.setCacheFrame = frame;
-    }
+    constexpr size_t kCachedSets = 16384;
+    const u64 epoch = dev->descriptorEpoch.load(std::memory_order_acquire);
+    if (epoch != c.setCacheEpoch || c.setCache.size() >= kCachedSets)
+        c.FlushSetCache(epoch);
     const u64 key = Hash64(w.data, w.count * sizeof(DescriptorData), layout->hash);
-    for (auto it = c.setCache.rbegin(); it != c.setCache.rend() && it - c.setCache.rbegin() < 64; ++it)
-    {
-        if (it->key == key)
-            return it->set;
-    }
-    const VkDescriptorSet set = c.descriptors.Allocate(layout, frame);
+    if (const auto it = c.setCache.find(key); it != c.setCache.end())
+        return it->second;
+    const VkDescriptorSet set = c.descriptors.AllocatePersistent(layout);
     if (!set)
         return VK_NULL_HANDLE;
     g_vk.vkUpdateDescriptorSetWithTemplate(dev->vk, set, layout->update, w.data);
     c.Stat(Device::StatSets);
-    if (c.setCache.size() >= 4096)
-        c.setCache.erase(c.setCache.begin(), c.setCache.begin() + 1024);
-    c.setCache.push_back({key, set});
+    try
+    {
+        c.setCache.emplace(key, set);
+    }
+    catch (...)
+    {
+        // Not cached: the next draw with these bindings writes another.
+    }
     return set;
 }
 
@@ -523,6 +524,51 @@ void CheckConstantBuffers(StageBindings& sb)
     sb.offsetsDirty = true;
 }
 } // namespace
+
+void Context::FlushSetCache(u64 epoch)
+{
+    setCacheEpoch = epoch;
+    if (setCache.empty())
+        return;
+    setCache.clear();
+    descriptors.RetirePersistent();
+    Stat(Device::StatSetFlushes);
+    // The bound sets came from those pools: the next draws write theirs again.
+    for (StageBindings& sb : stages)
+        sb.dirty = true;
+    applied.setsBound = false;
+    applied.computeSetBound = false;
+}
+
+const PipelineLayout* Context::GraphicsLayout(const SetLayout* const (&sets)[kGraphicsStages])
+{
+    uintptr_t h = 0;
+    for (const SetLayout* s : sets)
+        h = (h ^ uintptr_t(s)) * 0x9E3779B97F4A7C15ull;
+    LayoutSlot& slot = layoutSlots[(h >> 58) & 63];
+    if (slot.layout && std::equal(std::begin(sets), std::end(sets), std::begin(slot.sets)))
+        return slot.layout;
+    const PipelineLayout* layout = m_device->layouts.Graphics(sets);
+    if (layout)
+    {
+        std::copy(std::begin(sets), std::end(sets), std::begin(slot.sets));
+        slot.layout = layout;
+    }
+    return layout;
+}
+
+VkPipeline Context::GraphicsPipeline(const GraphicsPipelineDesc& d, u64 hash, const PipelineLayout* layout)
+{
+    // An optimized pipeline that replaced a fast-linked one shows as a new generation.
+    const u64 generation = m_device->pipelines.Generation();
+    PipelineSlot& slot = pipelineSlots[(hash ^ (hash >> 29)) & 255];
+    if (slot.pipeline && slot.hash == hash && slot.generation == generation)
+        return slot.pipeline;
+    const VkPipeline pipeline = m_device->pipelines.Graphics(d, hash, layout);
+    if (pipeline)
+        slot = {hash, generation, pipeline};
+    return pipeline;
+}
 
 // ================================================================================================
 // Layout policy
@@ -667,11 +713,18 @@ bool Context::PrepareDraw(bool indexed, bool mesh)
     Device* dev = m_device;
 
     // ---- targets: a change ends the rendering ----
+    // Only the rate image going away keeps it: the image stays attached and the combiner ignores it
+    // (a lamp's stencil mask and its light pass alternate so, twice a lamp).
     if (m_targetsDirty)
     {
         const RenderingKey key = CurrentTargets();
         if (m_rendering && !(key == m_renderingKey))
-            EndRendering();
+        {
+            RenderingKey kept = key;
+            kept.rate = m_renderingKey.rate;
+            if (key.rate || !(kept == m_renderingKey))
+                EndRendering();
+        }
         m_targetsDirty = false;
     }
 
@@ -865,34 +918,45 @@ bool Context::PrepareDraw(bool indexed, bool mesh)
             const Shader* s = stages[u32(order[i])].shader;
             sets[i] = s ? s->setLayout : nullptr;
         }
-        const PipelineLayout* layout = dev->layouts.Graphics(sets);
-        if (!layout)
-            return false;
-        const u64 hash = HashCombine(d.Hash(), layout->hash);
-        const VkPipeline pipeline = dev->pipelines.Graphics(d, hash, layout);
-        if (!pipeline)
-            return false;
-        if (pipeline != applied.pipeline)
+        // The bound pipeline's own description (a rate image, the targets or a state object came back the same; the
+        // stages' set layouts follow their shaders): nothing to look up.
+        const u64 content = d.Content();
+        if (applied.pipeline && applied.layout && d == applied.desc && content == applied.descContent &&
+            applied.pipelineGeneration == dev->pipelines.Generation() && applied.meshPipeline == mesh)
+            applied.pipelineDirty = false;
+        else
         {
-            g_vk.vkCmdBindPipeline(m_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            Stat(Device::StatPipelineBinds);
-            applied.pipeline = pipeline;
-            // Mesh and vertex pipelines differ in what they make dynamic.
-            if (applied.meshPipeline != mesh)
+            const PipelineLayout* layout = GraphicsLayout(sets);
+            if (!layout)
+                return false;
+            const u64 hash = HashCombine(d.Hash(), layout->hash);
+            const VkPipeline pipeline = GraphicsPipeline(d, hash, layout);
+            if (!pipeline)
+                return false;
+            if (pipeline != applied.pipeline)
             {
-                applied.vertexInputDirty = true;
-                applied.topologyDirty = true;
+                g_vk.vkCmdBindPipeline(m_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                Stat(Device::StatPipelineBinds);
+                applied.pipeline = pipeline;
+                // Mesh and vertex pipelines differ in what they make dynamic.
+                if (applied.meshPipeline != mesh)
+                {
+                    applied.vertexInputDirty = true;
+                    applied.topologyDirty = true;
+                }
             }
+            if (layout != applied.layout)
+            {
+                applied.layout = layout;
+                applied.setsBound = false;
+            }
+            applied.pipelineHash = hash;
+            applied.desc = d;
+            applied.descContent = content;
+            applied.pipelineGeneration = dev->pipelines.Generation();
+            applied.meshPipeline = mesh;
+            applied.pipelineDirty = false;
         }
-        if (layout != applied.layout)
-        {
-            applied.layout = layout;
-            applied.setsBound = false;
-        }
-        applied.pipelineHash = hash;
-        applied.pipelineGeneration = dev->pipelines.Generation();
-        applied.meshPipeline = mesh;
-        applied.pipelineDirty = false;
     }
 
     // ---- dynamic state ----
@@ -1049,7 +1113,7 @@ bool Context::PrepareDraw(bool indexed, bool mesh)
         const VkExtent2D size{1u << ((shadingRate >> 2) & 3), 1u << (shadingRate & 3)};
         // D3D12 combiners map 1:1 (SUM of log2 rates is MUL); without non-trivial ops the image replaces.
         VkFragmentShadingRateCombinerOpKHR image = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
-        if (m_renderingKey.rate)
+        if (m_renderingKey.rate && shadingRateImage)
         {
             static constexpr VkFragmentShadingRateCombinerOpKHR kOps[] = {VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR,
                 VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR, VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR,

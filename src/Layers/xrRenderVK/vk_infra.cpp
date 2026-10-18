@@ -1146,6 +1146,7 @@ void DestroyPage(Device* device, UploadPage* page)
 {
     if (!page)
         return;
+    device->DescriptorTargetGone();
     if (page->buffer)
         g_vk.vkDestroyBuffer(device->vk, page->buffer, nullptr);
     device->memory.Free(page->memory);
@@ -1302,6 +1303,7 @@ UploadAlloc UploadAllocator::Allocate(VkDeviceSize size, VkDeviceSize alignment,
 DynamicHeap::~DynamicHeap()
 {
     Device* device = m_device;
+    device->DescriptorTargetGone();
     for (Block& block : m_blocks)
     {
         const Block copy = block;
@@ -1352,6 +1354,7 @@ void DynamicHeap::DropBlock(VkBuffer buffer)
         if (m_blocks[i].buffer != buffer)
             continue;
         // Only reclaimed (GPU-idle) blocks get here.
+        m_device->DescriptorTargetGone();
         g_vk.vkDestroyBuffer(m_device->vk, m_blocks[i].buffer, nullptr);
         m_device->memory.Free(m_blocks[i].memory);
         m_bytes -= m_blocks[i].size;
@@ -1372,7 +1375,7 @@ void DynamicHeap::PushRetired(const UploadAlloc& alloc)
             m_retired.swap(grown);
             m_retiredHead = 0;
         }
-        m_retired[(m_retiredHead + m_retiredCount) % m_retired.size()] = {alloc, m_device->frame.load(std::memory_order_acquire)};
+        m_retired[(m_retiredHead + m_retiredCount) & (m_retired.size() - 1)] = {alloc, m_device->frame.load(std::memory_order_acquire)};
         ++m_retiredCount;
     }
     catch (...)
@@ -1401,7 +1404,7 @@ void DynamicHeap::Reclaim(u64 frame)
             }
             m_freeLarge.push_back(entry.alloc);
         }
-        m_retiredHead = (m_retiredHead + 1) % m_retired.size();
+        m_retiredHead = (m_retiredHead + 1) & (m_retired.size() - 1);
         --m_retiredCount;
     }
 }
@@ -1496,6 +1499,7 @@ bool DynamicHeap::Orphan()
     // The memory goes after the GPU: only buffers of the dead context still name its blocks, and nothing
     // draws with them any more. The object itself stays until their versions are retired.
     Device* device = m_device;
+    device->DescriptorTargetGone();
     for (Block& block : m_blocks)
     {
         const Block copy = block;
@@ -2121,7 +2125,44 @@ void DescriptorAllocator::Shutdown()
         }
         slot.pools.clear();
     }
+    RetirePersistent();
+    for (const RetiredPool& r : m_retired)
+    {
+        Device* device = m_device;
+        const VkDescriptorPool pool = r.pool;
+        device->releaser.Defer([device, pool] { g_vk.vkDestroyDescriptorPool(device->vk, pool, nullptr); });
+    }
+    m_retired.clear();
     m_device = nullptr;
+}
+
+void DescriptorAllocator::RetirePersistent()
+{
+    if (!m_device)
+        return;
+    // Recorded frames may still bind their sets: the pools wait until those completed.
+    const u64 frame = m_device->frame.load(std::memory_order_acquire);
+    for (VkDescriptorPool pool : m_persistent.pools)
+    {
+        try
+        {
+            m_retired.push_back({pool, frame});
+        }
+        catch (...)
+        {
+            Device* device = m_device;
+            device->releaser.Defer([device, pool] { g_vk.vkDestroyDescriptorPool(device->vk, pool, nullptr); });
+        }
+    }
+    m_persistent.pools.clear();
+    m_persistent.current = 0;
+}
+
+VkDescriptorSet DescriptorAllocator::AllocatePersistent(const SetLayout* layout)
+{
+    if (!m_device || !layout)
+        return VK_NULL_HANDLE;
+    return AllocateFrom(m_persistent, layout, true);
 }
 
 VkDescriptorPool DescriptorAllocator::NewPool()
@@ -2167,6 +2208,11 @@ VkDescriptorSet DescriptorAllocator::Allocate(const SetLayout* layout, u64 frame
         slot.current = 0;
         slot.frame = frame;
     }
+    return AllocateFrom(slot, layout);
+}
+
+VkDescriptorSet DescriptorAllocator::AllocateFrom(Slot& slot, const SetLayout* layout, bool reuse)
+{
     VkDescriptorSetAllocateInfo info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     info.descriptorSetCount = 1;
     info.pSetLayouts = &layout->layout;
@@ -2174,7 +2220,17 @@ VkDescriptorSet DescriptorAllocator::Allocate(const SetLayout* layout, u64 frame
     {
         if (slot.current >= slot.pools.size())
         {
-            VkDescriptorPool pool = NewPool();
+            // EndFrame(F) waits for F - kFramesInFlight: a pool retired in frame R is idle from R + N + 1.
+            VkDescriptorPool pool = VK_NULL_HANDLE;
+            const u64 frame = m_device->frame.load(std::memory_order_acquire);
+            if (reuse && !m_retired.empty() && m_retired.front().frame + kFramesInFlight + 1 <= frame)
+            {
+                pool = m_retired.front().pool;
+                m_retired.erase(m_retired.begin());
+                g_vk.vkResetDescriptorPool(m_device->vk, pool, 0);
+            }
+            else
+                pool = NewPool();
             if (!pool)
                 return VK_NULL_HANDLE;
             try

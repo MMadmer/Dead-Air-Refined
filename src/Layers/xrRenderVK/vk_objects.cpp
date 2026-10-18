@@ -21,6 +21,8 @@ VkDeviceSize AlignUp(VkDeviceSize value, VkDeviceSize alignment)
 template <class F>
 void DeferAction(Device* device, F&& action)
 {
+    // Resource storage and views: what a descriptor set names.
+    device->DescriptorTargetGone();
     device->releaser.Defer(std::function<void()>(std::forward<F>(action)));
 }
 

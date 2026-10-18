@@ -412,6 +412,9 @@ public:
     void Init(Device* device);
     void Shutdown();
     VkDescriptorSet Allocate(const SetLayout* layout, u64 frame);
+    // Sets that outlive their frame (Context's content cache): pools of their own, which go to the releaser whole.
+    VkDescriptorSet AllocatePersistent(const SetLayout* layout);
+    void RetirePersistent();
 
 private:
     VkDescriptorPool NewPool();
@@ -423,6 +426,15 @@ private:
         u64 frame = ~0ull;
     };
     Slot m_slots[kFramesInFlight + 1];
+    Slot m_persistent;
+    // Retired persistent pools: reset and reused once the frames that bound their sets completed.
+    struct RetiredPool
+    {
+        VkDescriptorPool pool;
+        u64 frame;
+    };
+    std::vector<RetiredPool> m_retired;
+    VkDescriptorSet AllocateFrom(Slot& slot, const SetLayout* layout, bool reuse = false);
 };
 
 // Null resources for slots a shader reads that nothing is bound to (D3D11 returns zeros there), where the
@@ -1056,6 +1068,8 @@ struct GraphicsPipelineDesc
     bool alphaToCoverage = false;         // unless EDS3
     bool shadingRate = false;             // attachment shading rate used
     u64 Hash() const;
+    bool operator==(const GraphicsPipelineDesc& o) const;
+    u64 Content() const; // the content hashes of the objects it points to
 };
 
 // Pipelines by content + the persistent VkPipelineCache. Thread-safe.
@@ -1413,6 +1427,8 @@ public:
         VkPipeline pipeline = VK_NULL_HANDLE;
         const PipelineLayout* layout = nullptr;     // of the bound graphics pipeline
         bool pipelineDirty = true;                  // pipeline-relevant D3D11 state changed since the lookup
+        GraphicsPipelineDesc desc;                  // what the bound graphics pipeline was looked up by
+        u64 descContent = 0;                        // and the content of its objects (an address may come back)
         u64 pipelineHash = 0;
         u64 pipelineGeneration = 0;
         bool meshPipeline = false;
@@ -1482,14 +1498,28 @@ public:
     };
     std::vector<PendingClear> pendingClears;
     void FlushPendingClears(Resource* only = nullptr); // records them now (outside rendering)
-    // Descriptor sets written this frame by content: the same bindings reuse the set (no write at all).
-    struct SetCacheEntry
+    // Descriptor sets by content, across frames: the same bindings reuse the set (no allocation, no write). They
+    // stay until a view, sampler or buffer they may name goes (Device::descriptorEpoch) or the cache fills.
+    std::unordered_map<u64, VkDescriptorSet> setCache;
+    u64 setCacheEpoch = 0;
+    void FlushSetCache(u64 epoch);
+    // Pipeline layouts by the stages' set layouts, direct-mapped: no lock and no hash map per pipeline change.
+    struct LayoutSlot
     {
-        u64 key;
-        VkDescriptorSet set;
+        const SetLayout* sets[kGraphicsStages]{};
+        const PipelineLayout* layout = nullptr;
     };
-    std::vector<SetCacheEntry> setCache;
-    u64 setCacheFrame = ~0ull;
+    LayoutSlot layoutSlots[64];
+    const PipelineLayout* GraphicsLayout(const SetLayout* const (&sets)[kGraphicsStages]);
+    // Graphics pipelines by content hash, direct-mapped: the device's cache takes a lock per lookup.
+    struct PipelineSlot
+    {
+        u64 hash = 0;
+        u64 generation = 0;
+        VkPipeline pipeline = VK_NULL_HANDLE;
+    };
+    PipelineSlot pipelineSlots[256];
+    VkPipeline GraphicsPipeline(const GraphicsPipelineDesc& d, u64 hash, const PipelineLayout* layout);
     // Debug labels (ID3DUserDefinedAnnotation), kept balanced per command buffer.
     class Annotation;
     Annotation* annotation = nullptr;
@@ -1678,11 +1708,15 @@ public:
         StatDraws, StatDispatches, StatPipelines, StatPipelineBinds, StatSets, StatOffsetsOnly, StatBarriers,
         StatBarrierBatches, StatRenderings, StatSubmits, StatMaps, StatPools, StatLayoutChanges, StatDepthLayoutChanges,
         StatInitFlushes, StatInitKB, StatInitWaits, StatQueryNotReady, StatQuerySubmits, StatMapSubmits, StatMapWaits,
-        StatFrameWaitUs,
+        StatFrameWaitUs, StatSetFlushes,
         StatCount
     };
     static constexpr u32 kStatsFrames = 300;
     bool stats = false;
+    // Grows whenever a view, sampler, buffer or acceleration structure is released: a descriptor set written before
+    // may name it (Context's set cache starts over).
+    std::atomic<u64> descriptorEpoch{0};
+    void DescriptorTargetGone() { descriptorEpoch.fetch_add(1, std::memory_order_release); }
     std::atomic<u64> statCounters[StatCount]{};
     void Count(Stat stat, u64 amount = 1)
     {

@@ -1179,6 +1179,7 @@ void SamplerState::Destroy()
 {
     Device* device = m_device;
     const VkSampler handle = sampler;
+    device->DescriptorTargetGone();
     device->releaser.Defer([device, handle] { g_vk.vkDestroySampler(device->vk, handle, nullptr); });
     delete this;
 }
@@ -2383,10 +2384,10 @@ void Device::EndFrame(u64 lastValue)
             s[i] = statCounters[i].exchange(0, std::memory_order_relaxed) / kStatsFrames;
         Log("* stats per frame: %llu draws, %llu dispatches, %llu pipeline binds (%llu new per %u frames), %llu sets, "
             "%llu offset-only rebinds, %llu barriers in %llu batches, %llu renderings, %llu maps, %llu submissions, "
-            "%llu creation-time upload flushes (%llu KB), %llu submissions waiting for them",
+            "%llu creation-time upload flushes (%llu KB), %llu submissions waiting for them, %llu set cache restarts per %u frames",
             s[StatDraws], s[StatDispatches], s[StatPipelineBinds], s[StatPipelines] * kStatsFrames, kStatsFrames, s[StatSets],
             s[StatOffsetsOnly], s[StatBarriers], s[StatBarrierBatches], s[StatRenderings], s[StatMaps], s[StatSubmits],
-            s[StatInitFlushes], s[StatInitKB], s[StatInitWaits]);
+            s[StatInitFlushes], s[StatInitKB], s[StatInitWaits], s[StatSetFlushes] * kStatsFrames, kStatsFrames);
         Log("* sync per frame: %llu query polls not ready, %llu submissions for queries, %llu for staging maps, "
             "%llu staging map waits, %.2f ms waiting for the GPU at the frame limit",
             s[StatQueryNotReady], s[StatQuerySubmits], s[StatMapSubmits], s[StatMapWaits], s[StatFrameWaitUs] / 1000.0);

@@ -42,11 +42,17 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
   extended dynamic state 1-3 and dynamic vertex input where present (`-vk_no_eds3`,
   `-vk_no_vertex_input`), so the pipeline key is the shaders, the attachment formats and the topology
   class. Pipelines are built through graphics pipeline libraries with fast linking (`-vk_no_gpl` for
-  whole pipelines) and persist in `appdata/shaders_cache_grizzly/r6/pipelines.bin`.
+  whole pipelines) and persist in `appdata/shaders_cache_grizzly/r6/pipelines.bin`. A context looks its
+  layouts and pipelines up in small direct-mapped tables of its own (the device's caches take a lock), and a
+  description equal to the bound pipeline's - shaders, state objects and their contents - needs no lookup.
+  A rate image going away keeps the rendering (it stays attached, the combiner ignores it): a lamp's
+  stencil mask and its light pass used to end and begin one twice per lamp.
 - **Bindings.** One descriptor set per shader stage, written through an update template; constant
   buffers are dynamic uniform buffers, so a new version of a buffer only moves an offset. Sets with the
-  same contents are reused within a frame. Null descriptors (`VK_EXT_robustness2`) stand in for unbound
-  slots.
+  same contents are reused across frames: a context keeps them by content until a view, sampler, buffer or
+  acceleration structure is released (`Device::descriptorEpoch`) or 16384 are kept; their pools then wait for
+  the frames that bound them and are reset for the next sets. Null descriptors (`VK_EXT_robustness2`) stand
+  in for unbound slots.
 - **Hazards.** Per-subresource layout and access tracking (synchronization2). Each barrier carries the
   last writer's stages as its source and the consumer's as its destination; buffer hazards of a batch
   merge into one memory barrier. A barrier inside a rendering ends it (LOAD keeps the contents).
@@ -138,6 +144,11 @@ AMD FSR frame generation (`r__framegen st_fg_fsr`, `da_framegen_fsr_vk.cpp`), th
   scene by the hudless copy. SDK 1.1.4 takes a reset as a frame id that does not step by one.
 - Measured (RTX 3070 Laptop, DLSS Balanced, vsync): 1213 presents for the first 600 generating frames; 52-53
   rendered frames per second with the generation against 61.6 without it, so about 105 on the screen.
+- **The presenter spins a core.** SDK 1.1.4's Vulkan presenter waits out its pacing on the performance counter
+  (62-72 % of a core on the stand), and its pacing tuning has no hybrid wait: the key-value configure even
+  reports an error (its switch breaks before `return FFX_OK`). The DirectX 12 runtime (FSR SDK 2.x) takes the
+  hybrid wait and the fence waits (`da_framegen_fsr.cpp`): its presenter and interpolation threads went from
+  2.46 to 1.50 cores busy.
 
 ## 8. Ray tracing
 
@@ -209,3 +220,18 @@ code of the compute shader), local lights +0.2 (a rendering ends for every spot 
 starts again for its accumulation), VRS rate image +0.14 (DirectX 11 has no VRS); sun -0.2, shrubs -0.19,
 post -0.13. The CPU is not the limit in this scene: the game thread spends about 2 ms more in rendering
 than on DirectX 11 (the layer's preparation and the driver's recording), hidden behind the GPU.
+
+Where the CPU is the limit (18.10.2026, `light_test`: the Jupiter hall at night, a hundred lamps, frame
+generation off, 20 s after the load so the spawning settled, each pair in one sitting):
+
+| | DirectX 11 | Vulkan |
+| --- | ---: | ---: |
+| before | 46.6 | 35.8 |
+| after | 49.6 | 38.3 |
+
+The game thread's rendering on Vulkan costs about 5 ms a frame more than on DirectX 11, the layer's own work
+and the NVIDIA driver's in equal parts; what stays is the driver's share of about 1000 pipeline binds, 90
+renderings and 2100 draws a frame. Both APIs gained from the environment's sky and env cubes, which made 28
+shader resource views a frame (`CTexture::surface_set` of the same surface), and the exposure pair's views
+made every frame (they now swap with their surfaces). With frame generation under vsync the stand rendered 31
+frames a second on Vulkan against 37.6 without it (measured before these changes, right after the load).
