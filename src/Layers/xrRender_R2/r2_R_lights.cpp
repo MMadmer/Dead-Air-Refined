@@ -3,6 +3,7 @@
 #include "Layers/xrRender/da_veg.h"
 #if RENDER == R_R4
 #include "Layers/xrRenderPC_R4/da_particle_light.h"
+#include "Layers/xrRenderPC_R4/da_smap_cache.h"
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -40,7 +41,14 @@ void CRender::render_lights(light_Package& LP)
             if (!L->vis.visible)
                 continue;
 
+#if RENDER == R_R4
+            // The face size on the cache's ladder: a still lamp keeps its slot while the camera walks.
+            const u32 previous = L->X.S.size;
             LR.compute_xf_spot(L);
+            L->X.S.size = da_smap_cache_size(L->X.S.size, previous);
+#else
+            LR.compute_xf_spot(L);
+#endif
             *output++ = L;
         }
         source.erase(output, source.end());
@@ -119,6 +127,20 @@ void CRender::render_lights(light_Package& LP)
         std::reverse(refactored.begin(), refactored.end());
         LP.v_shadowed = std::move(refactored);
     }
+
+#if RENDER == R_R4
+    // Which faces copy their statics from the cache this frame and which fill it, before their casters are built; the
+    // small faces first, as the slots go.
+    {
+        static xr_vector<light*> by_size;
+        by_size.assign(LP.v_shadowed.begin(), LP.v_shadowed.end());
+        std::sort(by_size.begin(), by_size.end(), [](const light* a, const light* b) {
+            return a->X.S.size != b->X.S.size ? a->X.S.size < b->X.S.size : a < b;
+        });
+        for (light* L : by_size)
+            da_smap_cache_mode(L);
+    }
+#endif
 
     auto& cmd_list = get_imm_context().cmd_list;
 
@@ -199,13 +221,37 @@ void CRender::render_lights(light_Package& LP)
                 light_near_enough && Details->HasRenderableDetails();
             // The procedural shrubs cast into the lights near the camera as the stock bushes did.
             const bool renderShrubs = da_veg_light_casts(L);
-            if (bNormal || bSpecial || renderDetails || renderShrubs)
+#if RENDER == R_R4
+            const auto cache = DaSmapCache(L->smap_cache.mode);
+#else
+            constexpr bool cache = false;
+#endif
+            if (bool(cache) || bNormal || bSpecial || renderDetails || renderShrubs)
             {
                 PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
 
                 Stats.s_merged++;
                 L_spot_s.push_back(L);
+#if RENDER == R_R4
+                // The statics into the light's slot first, with the face's bias and transforms.
+                if (cache == DaSmapCache::fill)
+                {
+                    da_smap_cache_fill_begin(dsgraph.cmd_list, L);
+                    dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
+                    dsgraph.cmd_list.set_xform_world(Fidentity);
+                    dsgraph.cmd_list.set_xform_view(L->X.S.view);
+                    dsgraph.cmd_list.set_xform_project(L->X.S.project);
+                    dsgraph.o.smap_draw = 1;
+                    dsgraph.render_graph(0);
+                    dsgraph.o.smap_draw = 0;
+                    dsgraph.cmd_list.StateManager.OverrideDepthBias(false);
+                }
+#endif
                 Target->phase_smap_spot(dsgraph.cmd_list, L);
+#if RENDER == R_R4
+                if (cache != DaSmapCache::off)
+                    da_smap_cache_copy(dsgraph.cmd_list, L);
+#endif
                 dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
                 dsgraph.cmd_list.set_xform_world(Fidentity);
                 dsgraph.cmd_list.set_xform_view(L->X.S.view);
@@ -232,7 +278,9 @@ void CRender::render_lights(light_Package& LP)
                 Stats.s_finalclip++;
             }
 
-            L->svis[batch_id].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
+            // A cached face's statics are not this frame's draws: its caster tests wait until it is stock again.
+            if (!bool(cache))
+                L->svis[batch_id].end(); // NOTE(DX11): occqs are fetched here, this should be done on the imm context only
             RImplementation.release_context(batch_id);
         }
 
@@ -282,10 +330,22 @@ void CRender::render_lights(light_Package& LP)
                 auto& dsgraph = RImplementation.get_context(data.batch_id);
                 light* L = data.L;
 
-                L->svis[data.batch_id].begin();
+#if RENDER == R_R4
+                const u8 cache = L->smap_cache.mode;
+#else
+                constexpr u8 cache = 0;
+#endif
+                if (!cache)
+                    L->svis[data.batch_id].begin();
 
                 dsgraph.o.phase = PHASE_SMAP;
                 dsgraph.o.local_light = true;
+                dsgraph.o.smap_cache = cache;
+#if RENDER == R_R4
+                if (cache == u8(DaSmapCache::fill))
+                    L->smap_cache.trees.clear();
+                dsgraph.o.smap_trees = cache ? &L->smap_cache.trees : nullptr;
+#endif
                 dsgraph.r_pmask(true, RImplementation.o.Tshadows);
                 dsgraph.o.sector_id = L->spatial.sector_id;
                 dsgraph.o.view_pos = L->position;
@@ -300,6 +360,7 @@ void CRender::render_lights(light_Package& LP)
                 dsgraph.build_subspace();
 
                 dsgraph.o.dynamic_source = nullptr;
+                dsgraph.o.smap_trees = nullptr;
             };
 
             if (o.mt_calculate)

@@ -24,6 +24,8 @@
 #endif
 #if RENDER == R_R4
 #    include "Layers/xrRender/blenders/blender_da_upscale.h"
+#    include "Layers/xrRender/blenders/blender_da_smap_cache.h"
+#    include "Layers/xrRenderPC_R4/da_smap_cache.h"
 #    include "Layers/xrRenderPC_R4/da_upscaler.h"
 #    include "Layers/xrRenderPC_R4/da_vrs.h"
 #    include "Layers/xrRenderPC_R4/da_rt.h"
@@ -538,6 +540,22 @@ CRenderTarget::CRenderTarget()
         // otherwise - create texture with specified HW_smap_FORMAT
         const auto num_slices = RImplementation.o.support_rt_arrays ? R__NUM_SUN_CASCADES : 1;
         rt_smap_depth.create(r2_RT_smap_depth, smapsize, smapsize, depth_format, 1, num_slices, flags);
+#if RENDER == R_R4
+        // The lamp shadow cache's atlas, in the live map's format so a slot copies into it texel for texel: two
+        // 4096 pages, a hundred and twenty-eight 512 faces, 128 MB.
+        // Its shader ships with the content: an archive older than the binaries has none, and the lamps keep the
+        // stock faces then.
+        IReader* smap_cache_ps = open_shader("da_smap_cache.ps");
+        if (options.HW_smap && smap_cache_ps)
+        {
+            rt_smap_cache.create(r2_RT_smap_cache, 8192, 4096, depth_format);
+            CBlender_da_smap_cache b_smap_cache;
+            s_smap_cache.create(&b_smap_cache, "r2" DELIMITER "da_smap_cache");
+        }
+        // A new atlas holds nothing the lamps' slots name.
+        da_smap_cache_reset();
+        FS.r_close(smap_cache_ps);
+#endif
         rt_smap_rain.create(r2_RT_smap_rain, options.rain_smapsize, options.rain_smapsize, depth_format);
         if (options.minmax_sm)
         {

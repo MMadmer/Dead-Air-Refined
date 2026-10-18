@@ -1,0 +1,20 @@
+#include "common.h"
+
+// Copyright (c) 2026 Grizzly
+// Released under the MIT licence, see License.txt
+//
+// The lamp shadow cache (da_smap_cache.cpp): a slot of the atlas copied as depth into the light's rect of the live
+// shadow map, texel for texel, or the slot cleared to the far plane before its statics are drawn.
+Texture2D s_smap_cache;
+
+// xy: the slot's corner in the atlas (texels), z: the face size, w: 1 = clear.
+uniform float4 da_smap_blit;
+
+float main( float2 tc : TEXCOORD0 ) : SV_Depth
+{
+	[branch] if ( da_smap_blit.w > 0.5f )
+		return 1.0f;
+	const int size = int( da_smap_blit.z );
+	const int2 p = int2( da_smap_blit.xy ) + min( int2( tc * da_smap_blit.z ), size - 1 );
+	return s_smap_cache.Load( int3( p, 0 ) ).x;
+}

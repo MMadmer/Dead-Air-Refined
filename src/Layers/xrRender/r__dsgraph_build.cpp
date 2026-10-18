@@ -142,6 +142,9 @@ static bool is_static_leaf(const dxRender_Visual* visual)
 // The share of a static visual the main view draws (0 = none), or the stock verdict elsewhere.
 float R_dsgraph_structure::static_cover(dxRender_Visual* visual, bool lod_managed)
 {
+    // A lamp shadow cache fill keeps every static caster: the slot outlives the camera's distance to them.
+    if (o.smap_cache == 1)
+        return 1.f;
     // Under an MT_LOD the impostor's switch governs the subtree; insert_static's stock screen-size test, which the
     // main view's leaves skip, stays for its leaves.
     if (lod_managed)
@@ -351,7 +354,7 @@ void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual, float cover)
         pVisual->vis.fade_draw = ps_r__fade_qa > 0.f ? ps_r__fade_qa : cover;
         pVisual->vis.fade_frame = Device.dwFrame;
     }
-    else if (SSA <= r_ssaDISCARD)
+    else if (SSA <= r_ssaDISCARD && o.smap_cache != 1)
         return;
 
     // Distortive geometry should be marked and R2 special-cases it
@@ -374,6 +377,13 @@ void R_dsgraph_structure::insert_static(dxRender_Visual* pVisual, float cover)
         return;
     if (!o.pmask[sh->flags.iPriority / 2])
         return;
+    // The lamp shadow cache holds this face's opaque statics (da_smap_cache.h); the swaying trees are drawn live, and
+    // the fill notes them for the frames that skip the walk.
+    const bool tree = pVisual->Type == MT_TREE_ST || pVisual->Type == MT_TREE_PM;
+    if (o.smap_cache == 2 && !tree && sh->flags.iPriority / 2 == 0 && !sh->flags.bStrictB2F)
+        return;
+    if (o.smap_cache == 1 && tree && o.smap_trees)
+        o.smap_trees->push_back(pVisual);
 
     // strict-sorting selection
     if (sh->flags.bStrictB2F)
@@ -1091,7 +1101,15 @@ bool R_dsgraph_structure::build_subspace_static(bool defer_main_thread_work)
     static_geo_tasks.resize(PortalTraverser.r_sectors.size());
 #endif
 
-    if (psDeviceFlags.test(rsDrawStatic))
+    // A cached lamp face: its statics are in the slot, its trees on the fill's list. The portal walk above stays - the
+    // moving casters are tested against the sectors it reached.
+    if (o.smap_cache == 2 && o.smap_trees)
+    {
+        if (psDeviceFlags.test(rsDrawStatic))
+            for (dxRender_Visual* tree : *o.smap_trees)
+                insert_static(tree);
+    }
+    else if (psDeviceFlags.test(rsDrawStatic))
     {
         for (u32 s_it = 0; s_it < PortalTraverser.r_sectors.size(); s_it++)
         {

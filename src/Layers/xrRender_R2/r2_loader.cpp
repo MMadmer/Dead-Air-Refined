@@ -12,6 +12,9 @@
 #include "Layers/xrRender/FTreeVisual.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/WindVegSound.h"
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_smap_cache.h"
+#endif
 #include "Layers/xrRender/r__sector.h"
 
 #if defined(USE_DX11)
@@ -45,6 +48,10 @@ void CRender::level_Load(IReader* fs)
     R_ASSERT(g_pGameLevel);
     R_ASSERT(!b_loaded);
     da_rain_wetness_on_level_load();
+#if RENDER == R_R4
+    // The previous level's lamp slots (da_smap_cache.h).
+    da_smap_cache_reset();
+#endif
     // Nothing the previous level left in TAA or the upscaler belongs to this one.
     da_history_request_reset("level load");
     // A level load is a safe point: the season latches its texture folders (the calendar may have moved

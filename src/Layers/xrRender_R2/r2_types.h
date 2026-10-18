@@ -66,6 +66,7 @@ namespace xray::render::RENDER_NAMESPACE
 
 #define     r2_RT_smap_surf     "$user$smap_surf"   // --- directional
 #define     r2_RT_smap_depth    "$user$smap_depth"  // --- directional
+#define     r2_RT_smap_cache    "$user$smap_cache"  // the lamps' static casters (da_smap_cache.cpp)
 #define     r2_RT_smap_rain     "$user$smap_rain"
 #define     r2_RT_smap_depth_minmax "$user$smap_depth_minmax"
 #define     r2_RT_smap_hud      "$user$smap_hud"    // --- first-person self-shadow

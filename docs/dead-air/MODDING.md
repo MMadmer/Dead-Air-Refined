@@ -1247,6 +1247,23 @@ logs the verdicts. The old depth prefill (`r2_zfill`, off by default) is gone: i
 through the shadow-map shaders ahead of the G-buffer and left the world white as snow, and its
 depth would have shown the dither's dropped pixels as holes.
 
+## Lamp shadow cache
+
+A shadowed lamp face used to walk the level and draw every static caster in its frustum each frame
+(`r2_R_lights.cpp`). Now a face whose transform and size have held for two frames keeps its static
+casters' depth in an atlas (`da_smap_cache.cpp`, after DOOM Eternal's cached shadow slices): two
+4096 pages in the live map's format, 128 MB, slots handed out smallest face first and given back
+least recently used. The frame copies the slot into the face's rect of the live map texel for
+texel (`da_smap_cache.ps`, depth from the shader) and draws only what moves on top: characters,
+physics objects, the swaying trees (the fill notes them, so a cached face skips the static walk),
+grass and shrubs; translucent casters stay live. The face sizes of the lamps step along 32, 48, 64
+... 1536 with a 30 % dead band, so a still lamp keeps its slot while the camera walks; a swinging
+lamp or the torch never settles and keeps the stock face. The fill takes every static caster in
+the frustum, none dropped for its distance to the camera. The picture is the same with and without
+it (the user's `light_test` hall at night: 0.2 % of the pixels apart, the lamps' flicker); the game
+thread there went 31.7-32.9 to 34.2 FPS on Vulkan and 46.9-47.7 to 49.0 on DirectX 11, with 90 of
+its 101 faces cached. `r__light_shadow_cache` (1; 0 the stock faces, QA: 2 logs the faces' modes).
+
 ## Colour grade and foliage saturation
 
 The final combine applies a restrained, camera-like grade to the tonemapped value

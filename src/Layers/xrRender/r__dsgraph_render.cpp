@@ -403,6 +403,28 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                 mapNormalItems& items = it->second;
                 items.ssa = 0;
 
+                // The lamp shadow cache's fill (r2_R_lights.cpp, da_smap_cache.h): the statics now, into the light's
+                // slot; the swaying trees stay for the live map's call.
+                if (o.smap_draw == 1)
+                {
+                    size_t kept = 0;
+                    for (const auto& item : items)
+                    {
+                        if (item.pVisual->Type == MT_TREE_ST || item.pVisual->Type == MT_TREE_PM)
+                        {
+                            items[kept++] = item;
+                            continue;
+                        }
+                        const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
+#ifdef USE_DX11
+                        cmd_list.LOD.set_LOD(LOD);
+#endif
+                        item.pVisual->Render(cmd_list, LOD, o.phase == CRender::PHASE_SMAP);
+                    }
+                    items.resize(kept);
+                    continue;
+                }
+
 #ifdef XR_NATIVE
                 // The registered trees of this pass through ExecuteIndirect; the rest as before.
                 if (da_gpu_trees_draw_pass(cmd_list, it->first, items, o.phase))
@@ -439,10 +461,18 @@ void R_dsgraph_structure::render_graph(u32 _priority)
 
             }
             nrmPasses.clear();
+            if (o.smap_draw == 1)
+                continue;
             map.clear();
             cachedNormalPasses[_priority][iPass] = nullptr;
             cachedNormalItems[_priority][iPass] = nullptr;
         }
+    }
+    // The fill drew its statics; the moving casters wait for the live map.
+    if (o.smap_draw == 1)
+    {
+        RImplementation.BasicStats.Primitives.End();
+        return;
     }
 
     // **************************************************** MATRIX

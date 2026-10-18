@@ -57,6 +57,20 @@ public:
 
     smapvis svis[R__NUM_CONTEXTS]; // used for 6-cubemap faces
 
+    // The lamp shadow cache (da_smap_cache.cpp): the atlas slot (-1: none), the transform and face size its depth was
+    // drawn for, the last frame's transform and how many frames it has held, and this frame's mode.
+    struct SmapCache
+    {
+        s32 slot = -1;
+        u32 size = 0;
+        Fmatrix combine;
+        Fmatrix last;
+        u32 still = 0;
+        u8 mode = 0;
+        // The swaying trees the fill met: a cached face draws them live without walking the level's statics again.
+        xr_vector<dxRender_Visual*> trees;
+    } smap_cache;
+
     ref_shader s_spot;
     ref_shader s_point;
     ref_shader s_volumetric;

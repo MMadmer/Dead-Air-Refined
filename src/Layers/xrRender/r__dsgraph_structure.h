@@ -53,6 +53,13 @@ struct R_dsgraph_structure
         bool rt_skip_static{ false };
         // A local light's shadow face: the GPU-driven trees stay on the CPU walk there (gpudriven.md 3.13).
         bool local_light{ false };
+        // The lamp shadow cache (da_smap_cache.h) for the face this view builds: 1 fill - every static caster, none
+        // dropped for its distance to the camera; 2 use - the static casters are in the slot, the build skips them.
+        u8 smap_cache{ 0 };
+        // render_graph's share of the fill: 1 the statics alone, the trees and the moving casters kept for a second call.
+        u8 smap_draw{ 0 };
+        // The face's tree list: the fill records into it, a cached face inserts it in place of the static walk.
+        xr_vector<dxRender_Visual*>* smap_trees{ nullptr };
         // A dynamic-object list collected ahead of time. When set, build_subspace_dynamic filters it
         // with the view frustum instead of querying the spatial database - the database takes one
         // lock for every query, and the shadow-map passes of one frame would otherwise queue up on
@@ -184,6 +191,9 @@ struct R_dsgraph_structure
         o.dynamic_source = nullptr;
         o.rt_skip_static = false;
         o.local_light = false;
+        o.smap_cache = 0;
+        o.smap_draw = 0;
+        o.smap_trees = nullptr;
         gd_view = 0;
         gd_walk = 0;
 

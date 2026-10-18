@@ -135,6 +135,10 @@ public:
     // smap
     ref_rt rt_smap_surf; // 32bit,		color
     ref_rt rt_smap_depth; // 24(32) bit,	depth
+    ref_rt rt_smap_cache; // the lamps' static casters kept between frames (da_smap_cache.cpp)
+    ref_shader s_smap_cache;
+    // The cache's quad over the viewport: xy the slot's corner, z the face size, w 1 = clear (da_smap_cache.cpp).
+    void phase_smap_cache_quad(CBackend& cmd_list, float x, float y, float size, float clear);
     ref_rt rt_smap_rain;
     ref_rt rt_smap_depth_minmax; //	is used for min/max sm
     ref_rt rt_smap_hud; // first-person hands and item, for self-shadowing only

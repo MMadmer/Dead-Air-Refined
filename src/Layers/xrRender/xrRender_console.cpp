@@ -222,6 +222,8 @@ int ps_r__LightSleepFrames = 10;
 // meters) and let NPC headlamps shine through their own wearer's skull. The budget stays as
 // an opt-in runtime cvar for weak machines that prefer frame rate over lamp shadows.
 int ps_r__light_shadow_budget = 0;
+// The lamps' static casters kept between frames (da_smap_cache.cpp): no change to the picture, so on everywhere.
+int ps_r__light_shadow_cache = 1;
 // Detail objects (grass) in local light shadow maps: an upstream extra the reference never
 // drew, and on grassy levels the single biggest per-face cost. It follows the quality preset
 // (High and Maximum turn it on, see CCC_Preset) and still needs the grass shadow option
@@ -1484,6 +1486,7 @@ void xrRender_sync_preset_derived()
     // [dx12:vrs] end apply
 
     ps_r__light_shadow_budget = budget_by_preset[ps_Preset];
+    ps_r__light_shadow_cache = 1;
     ps_r__light_details = light_details_by_preset[ps_Preset];
     ps_r__hud_shadow = hud_shadow_by_preset[ps_Preset];
     ps_r__actor_shadow = actor_shadow_by_preset[ps_Preset];
@@ -2007,6 +2010,7 @@ void xrRender_initconsole()
     CMD4(CCC_ClearModelsOnUnload, "r__clear_models_on_unload", &ps_r__clear_models_on_unload, 0, 1);
     CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
+    CMD4(CCC_RuntimeInteger, "r__light_shadow_cache", &ps_r__light_shadow_cache, 0, 2); // QA: 2 logs the faces' modes
     CMD4(CCC_RuntimeInteger, "r__light_details", &ps_r__light_details, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__light_dyn_shared", &ps_r__light_dyn_shared, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__hud_shadow", &ps_r__hud_shadow, 0, 1);

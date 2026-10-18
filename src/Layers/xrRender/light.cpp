@@ -1,5 +1,8 @@
 #include "stdafx.h"
 #include "light.h"
+#if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_smap_cache.h"
+#endif
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -55,6 +58,9 @@ light::~light()
     for (auto& f : omnipart)
         xr_delete(f);
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4) || (RENDER==R_GL)
+#if RENDER == R_R4
+    da_smap_cache_release(this);
+#endif
     set_active(false);
 
 // remove from Lights_LastFrame
