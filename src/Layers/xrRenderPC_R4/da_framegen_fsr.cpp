@@ -280,6 +280,15 @@ public:
             ReleaseReal();
             return E_FAIL;
         }
+        // By default the presenter paces the generated frame by spinning a whole core: the hybrid wait sleeps and spins
+        // only the last two timer ticks, and the fence waits block.
+        static FfxApiSwapchainFramePacingTuning pacing{0.1f, 0.1f, true, 2, true};
+        ffxConfigureDescFrameGenerationSwapChainKeyValueDX12 tuning{};
+        tuning.header.type = FFX_API_CONFIGURE_DESC_TYPE_FRAMEGENERATIONSWAPCHAIN_KEYVALUE_DX12;
+        tuning.key = FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_FRAMEPACINGTUNING;
+        tuning.ptr = &pacing;
+        if (const ffxReturnCode_t tuned = ffx->Configure(&m_context, &tuning.header); tuned != FFX_API_RETURN_OK)
+            Msg("! [FSR FG] the presenter's pacing cannot be tuned (%u): it spins a core", u32(tuned));
         // The caller owns this reference and releases it after Destroy.
         m_chain = chain;
         *swapChain = chain;
