@@ -625,12 +625,18 @@ void build_grid(Population& P)
         at += counts[c];
     }
     P.cell_items.resize(P.instances.size());
+    float overhang = 0.f;
     for (u32 i = 0; i < P.instances.size(); ++i)
     {
         Cell& c = P.cells[cell_of[i]];
         P.cell_items[c.first + c.count++] = i;
-        c.box.merge(P.instances[i].box);
+        const Fbox& b = P.instances[i].box;
+        c.box.merge(b);
+        const float x = P.grid_origin.x + float(cell_of[i] % P.grid_x) * kCell;
+        const float z = P.grid_origin.y + float(cell_of[i] / P.grid_x) * kCell;
+        overhang = std::max({overhang, x - b.vMin.x, b.vMax.x - (x + kCell), z - b.vMin.z, b.vMax.z - (z + kCell)});
     }
+    P.grid_margin = u32(std::ceil(std::max(overhang, 0.f) / kCell));
 }
 
 // ---- Census ----
@@ -1135,7 +1141,8 @@ void build_frame()
         P->cut_elements = 0;
         for (auto& pass : P->draw_count)
             std::fill(std::begin(pass), std::end(pass), 0u);
-        P->cascades = std::min(P->frame_cascades(), kCascades);
+        // (No sun this frame - night, the static sun: no instance goes into a cascade.)
+        P->cascades = RImplementation.sun_cascades_this_frame() ? std::min(P->frame_cascades(), kCascades) : 0;
         P->frame_begin();
         float reach[kCascades]{};
         for (u32 c = 0; c < P->cascades; ++c)
@@ -1156,10 +1163,12 @@ void build_frame()
         // shadow far out gives way to a plant in view).
         P->view_order.clear();
         P->cascade_order.clear();
-        for (const Cell& cell : P->cells)
-        {
-            if (!cell.count || box_distance(cell.box, L.cam) > reach_max)
-                continue;
+        Fbox around;
+        around.set(L.cam, L.cam);
+        around.grow(reach_max);
+        for_cells(*P, around, [&](const Cell& cell) {
+            if (box_distance(cell.box, L.cam) > reach_max)
+                return;
             u32 test_mask = FRUSTUM_P_LRTB | FRUSTUM_P_FAR;
             const bool cell_view = view.testAABB(&cell.box.vMin.x, test_mask) != fcvNone;
             for (u32 k = cell.first; k < cell.first + cell.count; ++k)
@@ -1176,7 +1185,7 @@ void build_frame()
                     if (d < reach[c] && gap < 0.75f * cascade_size(c) + I.bound.R)
                         P->cascade_order.push_back({c, i});
             }
-        }
+        });
         std::sort(P->view_order.begin(), P->view_order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     }
     for (u32 pi = 0; pi < kPops; ++pi)
@@ -1195,19 +1204,22 @@ void build_frame()
                 if (record_room(*P, i))
                     P->cascade(c, i, cascade_size(c) / smap);
         }
-    // The rain's occlusion map: the crowns within its reach, from above.
-    if (ps_r2_ls_flags.test(R3FLAG_DYN_WET_SURF))
+    // The rain's occlusion map: the crowns within its reach, from above, in a frame that draws it (rain falls, and the
+    // camera moved or the map aged).
+    if (RImplementation.rain_map_this_frame())
     {
         const float rain_r = rain_reach();
+        Fbox around;
+        around.set(L.cam, L.cam);
+        around.grow(rain_r);
         for (u32 pi = 0; pi < kPops; ++pi)
         {
             Population* P = pop(pi);
             if (!pop_on(P))
                 continue;
-            for (const Cell& cell : P->cells)
-            {
-                if (!cell.count || box_distance(cell.box, L.cam) > rain_r)
-                    continue;
+            for_cells(*P, around, [&](const Cell& cell) {
+                if (box_distance(cell.box, L.cam) > rain_r)
+                    return;
                 for (u32 k = cell.first; k < cell.first + cell.count; ++k)
                 {
                     const u32 i = P->cell_items[k];
@@ -1216,7 +1228,7 @@ void build_frame()
                         continue;
                     P->rain(i);
                 }
-            }
+            });
         }
     }
     // Every draw's chunks one after another within the chunk buffer: the view's of every population first (the motion
@@ -2089,10 +2101,7 @@ void da_veg_lights_prepare(CBackend& cmd, const DaVegLight* lights, u32 count)
             CpuSpan span(*P);
             for (auto& list : P->pass_chunks[0])
                 list.clear();
-            for (const Cell& cell : P->cells)
-            {
-                if (!cell.count || !cell.box.intersect(reach))
-                    continue;
+            for_cells(*P, reach, [&](const Cell& cell) {
                 for (u32 k = cell.first; k < cell.first + cell.count; ++k)
                 {
                     const u32 i = P->cell_items[k];
@@ -2103,7 +2112,7 @@ void da_veg_lights_prepare(CBackend& cmd, const DaVegLight* lights, u32 count)
                         continue;
                     P->light(i, texel);
                 }
-            }
+            });
             const u32 start = u32(g.chunks.size());
             for (const Draw d : kAppendOrder)
             {

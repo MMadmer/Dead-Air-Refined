@@ -457,6 +457,7 @@ public:
     xr_vector<u32> cell_items;
     Fvector2 grid_origin{};
     u32 grid_x{}, grid_z{};
+    u32 grid_margin{}; // the cells an instance's box reaches past its own (build_grid)
     float max_height{};
     GpuBuffer elems_b, axes_b, aux_b;
     // The frame: each instance's record (or ~0u), the chunks of every pass and draw, their place in the frame's chunk
@@ -603,6 +604,26 @@ Fvector4* tables();
 // ======================================================================================================
 float smoothstep(float a, float b, float x);
 float box_distance(const Fbox& b, const Fvector& p);
+// The non-empty cells of P whose boxes meet box, in the grid's order: the grid's rectangle under it, grown by the
+// instances' overhang (a walk of every cell of the level took a hundred lamp faces 0.4 ms).
+template <class F>
+void for_cells(const Population& P, const Fbox& box, F&& f)
+{
+    if (P.cells.empty())
+        return;
+    const auto span = [&P](float lo, float hi, float origin, u32 n, u32& a, u32& b) {
+        const float l = std::floor((lo - origin) / kCell), h = std::floor((hi - origin) / kCell);
+        a = u32(std::clamp(l - float(P.grid_margin), 0.f, float(n - 1)));
+        b = u32(std::clamp(h + float(P.grid_margin), 0.f, float(n - 1)));
+    };
+    u32 x0, x1, z0, z1;
+    span(box.vMin.x, box.vMax.x, P.grid_origin.x, P.grid_x, x0, x1);
+    span(box.vMin.z, box.vMax.z, P.grid_origin.y, P.grid_z, z0, z1);
+    for (u32 z = z0; z <= z1; ++z)
+        for (u32 x = x0; x <= x1; ++x)
+            if (const Cell& cell = P.cells[size_t(z) * P.grid_x + x]; cell.count && cell.box.intersect(box))
+                f(cell);
+}
 u32 f16(float v);
 inline u32 h2(float a, float b) { return f16(a) | (f16(b) << 16); }
 inline u32 u8f(float v) { return u32(std::lround(std::clamp(v, 0.f, 1.f) * 255.f)); }
