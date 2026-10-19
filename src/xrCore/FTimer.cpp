@@ -3,6 +3,9 @@
 
 XRCORE_API bool g_bEnableStatGather = false;
 
+std::atomic<bool> CTimerBase::frameClockActive{false};
+std::atomic<CTimerBase::Clock::rep> CTimerBase::frameClockNow{0};
+
 void CStatTimer::FrameStart()
 {
     accum = Duration();

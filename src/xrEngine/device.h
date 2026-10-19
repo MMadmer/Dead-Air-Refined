@@ -179,6 +179,8 @@ public:
 
     CRenderDevice()
     {
+        Timer.FollowFrameClock(true);
+        TimerGlobal.FollowFrameClock(true);
         Timer.Start();
     }
 
@@ -351,6 +353,8 @@ private:
 extern ENGINE_API CRenderDevice Device;
 
 extern ENGINE_API bool g_bBenchmark;
+// Seconds a frame advances the device timers by (r__capture ... cine), 0 = wall clock.
+extern ENGINE_API float g_frame_clock_dt;
 
 typedef fastdelegate::FastDelegate0<bool> LOADING_EVENT;
 extern ENGINE_API xr_list<LOADING_EVENT> g_loading_events;

@@ -31,6 +31,7 @@ ENGINE_API CLoadScreenRenderer load_screen_renderer;
 ENGINE_API std::atomic<bool> g_bRendering = false;
 
 ENGINE_API bool g_bBenchmark = false;
+ENGINE_API float g_frame_clock_dt = 0.f;
 string512 g_sBenchmarkName;
 
 // 0 means no limit at all, which is what the "off" position of the FPS lock option selects.
@@ -678,10 +679,26 @@ void CRenderDevice::FrameMove()
 
     dwFrame++;
     Core.dwFrame = dwFrame;
+
+    // A capture's frame clock: each frame moves the device timers by exactly one interval, however long
+    // the frame took to draw and to save.
+    const bool frame_clock = g_frame_clock_dt > 0.f;
+    if (frame_clock)
+    {
+        if (CTimerBase::FrameClockActive())
+            CTimerBase::FrameClockStep(g_frame_clock_dt);
+        else
+            CTimerBase::FrameClockStart();
+    }
+    else if (CTimerBase::FrameClockActive())
+        CTimerBase::FrameClockStop();
+
     {
         static u32 continual_prev = TimerMM.GetElapsed_ms() - app_inactive_time;
         const u32 continual_now = TimerMM.GetElapsed_ms() - app_inactive_time;
         fTimeDeltaUnscaled = std::clamp(float(continual_now - continual_prev) * 0.001f, EPS_S + EPS_S, 0.25f);
+        if (frame_clock)
+            fTimeDeltaUnscaled = g_frame_clock_dt;
         continual_prev = continual_now;
         dwTimeContinual = continual_now;
     }
@@ -710,7 +727,8 @@ void CRenderDevice::FrameMove()
             fTimeDelta = 0.0f;
         else
         {
-            fTimeDelta = 0.1f * fTimeDelta + 0.9f * fTimeDeltaReal; // smooth random system activity - worst case ~7% error
+            // (The frame clock's steps are exact: no smoothing.)
+            fTimeDelta = frame_clock ? fTimeDeltaReal : 0.1f * fTimeDelta + 0.9f * fTimeDeltaReal; // smooth random system activity - worst case ~7% error
             clamp(fTimeDelta, EPS_S + EPS_S, .1f); // limit to 10fps minimum
         }
         fTimeGlobal = TimerGlobal.GetElapsed_sec();

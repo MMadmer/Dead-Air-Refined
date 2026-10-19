@@ -7,6 +7,7 @@
 #include "log.h"
 #include "Threading/ScopeLock.hpp"
 
+#include <atomic>
 #include <chrono>
 
 class CTimer_paused;
@@ -38,9 +39,31 @@ protected:
     Duration pauseDuration;
     Duration pauseAccum;
     bool paused;
+    // The device's timers read the frame clock while it runs: a capture steps it by a fixed interval
+    // a frame, so game time, animation and physics advance per frame, not per wall second.
+    bool followsFrameClock;
+
+    static std::atomic<bool> frameClockActive;
+    static std::atomic<Clock::rep> frameClockNow;
 
 public:
-    constexpr CTimerBase() noexcept : startTime(), pauseDuration(), pauseAccum(), paused(false) {}
+    constexpr CTimerBase() noexcept
+        : startTime(), pauseDuration(), pauseAccum(), paused(false), followsFrameClock(false) {}
+
+    void FollowFrameClock(const bool follow) noexcept { followsFrameClock = follow; }
+
+    static bool FrameClockActive() noexcept { return frameClockActive.load(std::memory_order_relaxed); }
+    static void FrameClockStart() noexcept
+    {
+        frameClockNow.store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);
+        frameClockActive.store(true, std::memory_order_release);
+    }
+    static void FrameClockStep(const double seconds) noexcept
+    {
+        using namespace std::chrono;
+        frameClockNow.fetch_add(duration_cast<Duration>(duration<double>(seconds)).count(), std::memory_order_relaxed);
+    }
+    static void FrameClockStop() noexcept { frameClockActive.store(false, std::memory_order_release); }
 
     ICF void Start()
     {
@@ -74,7 +97,12 @@ public:
         return duration_cast<duration<float>>(getElapsedTime()).count();
     }
 
-    Time Now() const { return Clock::now(); }
+    Time Now() const
+    {
+        if (followsFrameClock && frameClockActive.load(std::memory_order_acquire))
+            return Time(Duration(frameClockNow.load(std::memory_order_relaxed)));
+        return Clock::now();
+    }
 
     IC void Dump() const { Msg("* Elapsed time (sec): %f", GetElapsed_sec()); }
 };

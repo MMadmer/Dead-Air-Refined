@@ -27,6 +27,8 @@ struct GamesaveScreenshotJob
     // Video-capture frames reuse the same async pipeline but save a full-size JPEG to an
     // absolute path instead of the 128px BC1 gamesave thumbnail.
     bool videoFrame{};
+    // A cine frame: near-lossless JPEG (quality 0.96, no chroma subsampling) for editing.
+    bool cine{};
 };
 
 struct GamesaveGpuCapture
@@ -44,6 +46,7 @@ struct GamesaveGpuCapture
     u32 width{};
     u32 height{};
     bool videoFrame{};
+    bool cine{};
 };
 
 class GamesaveScreenshotQueue
@@ -57,20 +60,35 @@ public:
             std::lock_guard lock(mutex);
             stopping = true;
         }
-        condition.notify_one();
+        condition.notify_all();
         worker.join();
+        for (std::thread& extra : extraWorkers)
+            extra.join();
     }
 
-    void enqueue(DirectX::ScratchImage&& image, pcstr name, bool videoFrame = false)
+    void enqueue(DirectX::ScratchImage&& image, pcstr name, bool videoFrame = false, bool cine = false)
     {
         {
             std::lock_guard lock(mutex);
-            jobs.push_back({std::move(image), name, nextId++, videoFrame});
+            jobs.push_back({std::move(image), name, nextId++, videoFrame, cine});
         }
         condition.notify_one();
     }
 
-    bool enqueue_gpu_capture(ID3D11Resource* source, pcstr name, bool videoFrame = false)
+    // A cine capture encodes on several threads; the frame waits while too many frames are queued.
+    void ensure_workers(size_t count)
+    {
+        while (extraWorkers.size() + 1 < count)
+            extraWorkers.emplace_back(&GamesaveScreenshotQueue::run, this);
+    }
+
+    void wait_backlog(size_t most)
+    {
+        std::unique_lock lock(mutex);
+        drained.wait(lock, [&] { return jobs.size() + encoding <= most; });
+    }
+
+    bool enqueue_gpu_capture(ID3D11Resource* source, pcstr name, bool videoFrame = false, bool cine = false)
     {
         ID3D11Texture2D* sourceTexture = nullptr;
         if (FAILED(source->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&sourceTexture))))
@@ -85,6 +103,7 @@ public:
         capture->width = sourceDescription.Width;
         capture->height = sourceDescription.Height;
         capture->videoFrame = videoFrame;
+        capture->cine = cine;
 
         D3D11_TEXTURE2D_DESC stagingDescription = sourceDescription;
         stagingDescription.MipLevels = 1;
@@ -190,7 +209,7 @@ private:
         context->Unmap(capture.staging, 0);
 
         if (SUCCEEDED(initialized))
-            enqueue(std::move(image), capture.name.c_str(), capture.videoFrame);
+            enqueue(std::move(image), capture.name.c_str(), capture.videoFrame, capture.cine);
         gpuCaptures.pop_front();
     }
 
@@ -229,8 +248,25 @@ private:
         {
             // Full-size JPEG straight to the absolute path prepared by the capture tick.
             DirectX::Blob saved;
-            if (SUCCEEDED(SaveToWICMemory(*job.image.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE,
-                    GUID_ContainerFormatJpeg, saved)))
+            HRESULT result;
+            if (job.cine)
+            {
+                result = SaveToWICMemory(*job.image.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE,
+                    GUID_ContainerFormatJpeg, saved, &GUID_WICPixelFormat24bppBGR, [](IPropertyBag2* props) {
+                        PROPBAG2 options[2]{};
+                        options[0].pstrName = const_cast<LPOLESTR>(L"ImageQuality");
+                        options[1].pstrName = const_cast<LPOLESTR>(L"JpegYCrCbSubsampling");
+                        VARIANT values[2]{};
+                        values[0].vt = VT_R4;
+                        values[0].fltVal = 0.96f;
+                        values[1].vt = VT_UI1;
+                        values[1].bVal = WICJpegYCrCbSubsampling444;
+                        props->Write(2, options, values);
+                    });
+            }
+            else
+                result = SaveToWICMemory(*job.image.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE, GUID_ContainerFormatJpeg, saved);
+            if (SUCCEEDED(result))
                 write_file(job.name.c_str(), saved.GetBufferPointer(), saved.GetBufferSize());
             return;
         }
@@ -274,8 +310,14 @@ private:
                     break;
                 job = std::move(jobs.front());
                 jobs.pop_front();
+                ++encoding;
             }
             execute(std::move(job));
+            {
+                std::lock_guard lock(mutex);
+                --encoding;
+            }
+            drained.notify_all();
         }
         if (SUCCEEDED(com))
             CoUninitialize();
@@ -283,9 +325,12 @@ private:
 
     std::mutex mutex;
     std::condition_variable condition;
+    std::condition_variable drained;
     std::deque<GamesaveScreenshotJob> jobs;
     std::deque<std::unique_ptr<GamesaveGpuCapture>> gpuCaptures;
+    size_t encoding{};
     std::thread worker;
+    xr_vector<std::thread> extraWorkers;
     u64 nextId{};
     bool stopping{};
 };
@@ -431,6 +476,7 @@ void CRender::ProcessGamesaveScreenshots()
 // timeline even when disk writes momentarily slow the renderer.
 extern float ps_r__capture_stop_at;
 extern float ps_r__capture_fps;
+extern u32 ps_r__capture_cine_frames;
 
 // The capture's clock: game time, and real time while the game stands paused under a menu, so a menu
 // records too.
@@ -455,8 +501,16 @@ void CRender::VideoCaptureTick()
     if (ps_r__capture_stop_at <= 0.f)
         return;
 
-    if (video_capture_clock() >= ps_r__capture_stop_at)
+    // Cine: every frame is a video frame on the frame clock (g_frame_clock_dt) until the count is met.
+    const bool cine = ps_r__capture_cine_frames > 0;
+    if (cine ? frameIndex >= ps_r__capture_cine_frames : video_capture_clock() >= ps_r__capture_stop_at)
     {
+        if (cine)
+        {
+            gamesave_screenshot_queue().wait_backlog(0);
+            g_frame_clock_dt = 0.f;
+            ps_r__capture_cine_frames = 0;
+        }
         Msg("* [capture] finished: %u frame(s) -> %s", frameIndex, captureDir);
         ps_r__capture_stop_at = 0.f;
         captureDir[0] = 0;
@@ -475,15 +529,20 @@ void CRender::VideoCaptureTick()
         nextFrameTime = video_capture_clock();
         frameIndex = 0;
         Msg("* [capture] recording to %s", captureDir);
+        if (cine)
+            gamesave_screenshot_queue().ensure_workers(std::clamp<size_t>(std::thread::hardware_concurrency() / 2, 2, 8));
     }
 
-    if (video_capture_clock() < nextFrameTime)
-        return;
-    nextFrameTime += 1.f / std::max(ps_r__capture_fps, 1.f);
-    // If rendering falls behind the requested rate, resync instead of accumulating debt -
-    // a burst of back-to-back frames would break the fixed-interval timeline.
-    if (nextFrameTime < video_capture_clock())
-        nextFrameTime = video_capture_clock();
+    if (!cine)
+    {
+        if (video_capture_clock() < nextFrameTime)
+            return;
+        nextFrameTime += 1.f / std::max(ps_r__capture_fps, 1.f);
+        // If rendering falls behind the requested rate, resync instead of accumulating debt -
+        // a burst of back-to-back frames would break the fixed-interval timeline.
+        if (nextFrameTime < video_capture_clock())
+            nextFrameTime = video_capture_clock();
+    }
 
     ID3DResource* source;
     Target->get_base_rt()->GetResource(&source);
@@ -492,9 +551,15 @@ void CRender::VideoCaptureTick()
 
     string_path frameName;
     xr_sprintf(frameName, "%sframe_%05u.jpg", captureDir, frameIndex);
-    if (gamesave_screenshot_queue().enqueue_gpu_capture(source, frameName, /*videoFrame=*/true))
+    if (gamesave_screenshot_queue().enqueue_gpu_capture(source, frameName, /*videoFrame=*/true, cine))
         ++frameIndex;
     _RELEASE(source);
+    if (cine)
+    {
+        // No frame may be lost: read this one back now and keep the encoders' queue short.
+        gamesave_screenshot_queue().flush_gpu_captures();
+        gamesave_screenshot_queue().wait_backlog(16);
+    }
 }
 
 void flush_gamesave_screenshots()

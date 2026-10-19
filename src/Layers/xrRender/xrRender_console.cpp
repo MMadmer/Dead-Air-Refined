@@ -1188,8 +1188,11 @@ public:
 // Frame-sequence video capture: "r__capture <seconds> [fps]" starts recording JPEG frames to
 // $screenshots$\capture_<timestamp>\, "r__capture 0" (or no args) stops early. Dev tool for
 // analysing motion; state lives in globals read by CRender::VideoCaptureTick.
+// "r__capture <seconds> <fps> cine" is the footage mode: the device timers step 1/fps a frame
+// (g_frame_clock_dt) and every frame is saved near-lossless, so motion is smooth at any frame rate.
 float ps_r__capture_stop_at = 0.f;
 float ps_r__capture_fps = 20.f;
+u32 ps_r__capture_cine_frames = 0;
 #if defined(USE_DX11)
 float video_capture_clock(); // dx11r_screenshot.cpp
 #else
@@ -1203,24 +1206,31 @@ public:
     void Execute(pcstr args) override
     {
         float seconds = 0.f, fps = 20.f;
-        const int parsed = sscanf(args, "%f %f", &seconds, &fps);
+        char mode[16]{};
+        const int parsed = sscanf(args, "%f %f %15s", &seconds, &fps, mode);
         if (parsed < 1 || seconds <= 0.f)
         {
             if (ps_r__capture_stop_at > 0.f)
             {
                 // Force the tick to run its completion branch on the next frame.
+                if (ps_r__capture_cine_frames)
+                    ps_r__capture_cine_frames = 1;
                 ps_r__capture_stop_at = video_capture_clock();
                 Msg("* [capture] stop requested");
             }
             else
-                Msg("* [capture] usage: r__capture <seconds 1..120> [fps 5..60]");
+                Msg("* [capture] usage: r__capture <seconds 1..120> [fps 5..60] [cine]");
             return;
         }
-        clamp(seconds, 1.f, 120.f);
-        clamp(fps, 5.f, 60.f);
+        const bool cine = parsed >= 3 && !xr_stricmp(mode, "cine");
+        clamp(seconds, 1.f, cine ? 900.f : 120.f);
+        clamp(fps, 5.f, cine ? 120.f : 60.f);
         ps_r__capture_fps = fps;
         ps_r__capture_stop_at = video_capture_clock() + seconds;
-        Msg("* [capture] recording %.1fs at %.0f fps", seconds, fps);
+        ps_r__capture_cine_frames = cine ? u32(seconds * fps + 0.5f) : 0;
+        if (cine)
+            g_frame_clock_dt = 1.f / fps;
+        Msg("* [capture] recording %.1fs at %.0f fps%s", seconds, fps, cine ? " (cine: frame clock, every frame)" : "");
     }
     void Info(TInfo& info) override { xr_strcpy(info, "record a frame sequence: <seconds> [fps]"); }
 };
