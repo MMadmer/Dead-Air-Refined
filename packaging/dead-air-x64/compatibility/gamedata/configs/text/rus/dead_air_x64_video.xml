@@ -44,9 +44,6 @@
 	<string id="ui_mm_da_async_compute">
 		<text>Асинхронные вычисления</text>
 	</string>
-	<string id="ui_mm_da_dstorage">
-		<text>Загрузка текстур через DirectStorage</text>
-	</string>
 	<string id="ui_mm_da_rt_reflections">
 		<text>Отражения (трассировка лучей)</text>
 	</string>
@@ -64,6 +61,22 @@
 	</string>
 	<string id="ui_mm_da_grass_density">
 		<text>Плотность травы</text>
+	</string>
+	<!-- The tiers of the grass density row (r__grass_density): st_opt_<token>. -->
+	<string id="st_opt_grass_density_minimum">
+		<text>Минимальная</text>
+	</string>
+	<string id="st_opt_grass_density_low">
+		<text>Низкая</text>
+	</string>
+	<string id="st_opt_grass_density_medium">
+		<text>Средняя</text>
+	</string>
+	<string id="st_opt_grass_density_high">
+		<text>Высокая</text>
+	</string>
+	<string id="st_opt_grass_density_maximum">
+		<text>Максимальная</text>
 	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
 	<string id="st_opt_renderer_r2">
@@ -197,10 +210,7 @@
 		<text>Качество графики целиком: дальности прорисовки и теней, трава, отражения и эффекты. Сглаживание выбирается отдельно. Чем выше, тем тяжелее для видеокарты. На DirectX 12 два старших пресета затеняют ровные и тёмные участки в пониженном разрешении.</text>
 	</string>
 	<string id="st_da_x64_video_hint_grass_density">
-		<text>Плотность травы, на тех же ступенях, что и пресет качества. По умолчанию равна пресету, при смене пресета выставляется заново. Чем выше, тем гуще трава и выше нагрузка на видеокарту.</text>
-	</string>
-	<string id="st_da_x64_video_hint_level_texture_unload">
-		<text>Освобождает видеопамять и оперативную память после выхода с локации. Может немного увеличить время следующей загрузки.</text>
+		<text>Густота травяного покрова. Чем выше уровень, тем гуще трава и выше нагрузка на видеокарту. При выборе пресета качества графики устанавливается на тот же уровень.</text>
 	</string>
 	<string id="st_da_x64_video_hint_aa">
 		<text>Сглаживание лесенок на краях. FXAA - самое лёгкое и мягкое, SMAA - чётче, TAA - самое гладкое: собирает картинку из нескольких кадров, в движении чуть мягче.</text>
@@ -240,15 +250,6 @@
 	</string>
 	<string id="st_da_x64_video_hint_async_compute_unsupported">
 		<text>Видеокарта или драйвер не дают отдельную очередь вычислений.</text>
-	</string>
-	<string id="st_da_x64_video_hint_dstorage">
-		<text>DirectX 12: текстуры уровня загружаются через Microsoft DirectStorage, поэтому уровни грузятся быстрее. Картинка та же. Действует со следующей загрузки.</text>
-	</string>
-	<string id="st_da_x64_video_hint_dstorage_dx11">
-		<text>DirectStorage работает только на DirectX 12: выберите его в строке «Рендер» и перезапустите игру.</text>
-	</string>
-	<string id="st_da_x64_video_hint_dstorage_unavailable">
-		<text>DirectStorage не запустился на этой системе (нет его файлов или Windows отказала): текстуры загружаются обычным способом.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_reflections">
 		<text>Вода и лужи отражают мир, просчитанный аппаратной трассировкой лучей: в том числе то, что за краем экрана или скрыто, до дальнего берега. Начиная со среднего качества мокрые и глянцевые поверхности отражают окружение, а не небо.</text>

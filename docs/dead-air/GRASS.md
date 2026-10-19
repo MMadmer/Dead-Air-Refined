@@ -480,7 +480,7 @@ now than on the reference day of the latched terrain folder; under the near blad
 ## Settings and presets
 
 - `r__grass_density` (the player's row "Grass density" under the quality preset, 1.6.1; the preset's five
-  tiers): writes `r__detail_density` (a spacing 0.6 / 0.6 / 0.5 / 0.35 / 0.25): density scale
+  tiers as tokens of its own, `grass_density_minimum` ... `grass_density_maximum`, captioned `st_opt_<token>`): writes `r__detail_density` (a spacing 0.6 / 0.6 / 0.5 / 0.35 / 0.25): density scale
   `S = clamp(0.25 / spacing, 0.25, 1.6)`, times each species' calibration (`density_cal`); only the near field
   changes visibly, far coverage is the pixel rule's. Unset (a user.ltx from before 1.6.1) it takes the quality
   preset's tier, and a new quality preset brings its own (`CCC_Preset`; the menu moves the row when the preset

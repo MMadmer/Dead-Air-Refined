@@ -217,15 +217,6 @@
 			<text align="l" r="95" g="92" b="79" font="letterica16"></text>
 		</cap_hud_fov_value>
 
-		<cap_level_texture_unload x="240" y="345" width="90" height="21"
-			hint="ui_mm_level_texture_unload_hint">
-			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_level_texture_unload</text>
-		</cap_level_texture_unload>
-		<check_level_texture_unload x="320" y="342" width="30" height="21"
-			hint="ui_mm_level_texture_unload_hint">
-			<options_item entry="r__unload_level_textures" group="mm_opt_video"/>
-		</check_level_texture_unload>
-
 		<!-- Stock node, still initialised by the stock page script. -->
 		<cap_fullscreen x="240" y="375" width="90" height="21">
 			<text align="l" font="letterica16" r="95" g="92" b="79">ui_mm_fullscreen</text>
@@ -371,10 +362,6 @@
 			</text_color>
 		</list_preset>
 
-		<check_level_texture_unload x="255" y="1" width="30" height="21">
-			<options_item entry="r__unload_level_textures" group="mm_opt_video"/>
-		</check_level_texture_unload>
-
 		<list_aa x="125" y="1" width="160" height="21" list_length="4" always_show_scroll="0">
 			<options_item entry="r__aa" group="mm_opt_video" depend="vid"/>
 			<list_font r="170" g="170" b="170" font="letterica16"/>
@@ -425,10 +412,6 @@
 				<d r="70" g="70" b="70"/>
 			</text_color>
 		</list_async_compute>
-
-		<check_dstorage x="255" y="1" width="30" height="21">
-			<options_item entry="r__dstorage" group="mm_opt_video"/>
-		</check_dstorage>
 
 		<check_rt_reflections x="255" y="1" width="30" height="21">
 			<options_item entry="r__rt_reflections" group="mm_opt_video" depend="vid"/>

@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <string_table>
-	<!-- The caption of the level_texture_unload row (the Russian one is in dead_air_x64.xml). -->
-	<string id="ui_mm_level_texture_unload">
-		<text>Unload level textures</text>
-	</string>
 	<!-- Subsection headers of the video tab (dead_air_x64_video_options.ltx, [groups]). -->
 	<string id="ui_mm_grp_screen">
 		<text>Screen</text>
@@ -48,9 +44,6 @@
 	<string id="ui_mm_da_async_compute">
 		<text>Async compute</text>
 	</string>
-	<string id="ui_mm_da_dstorage">
-		<text>DirectStorage texture loading</text>
-	</string>
 	<string id="ui_mm_da_rt_reflections">
 		<text>Ray-traced reflections</text>
 	</string>
@@ -68,6 +61,22 @@
 	</string>
 	<string id="ui_mm_da_grass_density">
 		<text>Grass density</text>
+	</string>
+	<!-- The tiers of the grass density row (r__grass_density): st_opt_<token>. -->
+	<string id="st_opt_grass_density_minimum">
+		<text>Minimum</text>
+	</string>
+	<string id="st_opt_grass_density_low">
+		<text>Low</text>
+	</string>
+	<string id="st_opt_grass_density_medium">
+		<text>Medium</text>
+	</string>
+	<string id="st_opt_grass_density_high">
+		<text>High</text>
+	</string>
+	<string id="st_opt_grass_density_maximum">
+		<text>Maximum</text>
 	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
 	<string id="st_opt_renderer_r2">
@@ -201,10 +210,7 @@
 		<text>Overall graphics quality: draw and shadow distances, grass, reflections and effects. Anti-aliasing is a setting of its own. Higher is heavier on the GPU. On DirectX 12 the two highest presets shade flat and dark areas at a reduced rate.</text>
 	</string>
 	<string id="st_da_x64_video_hint_grass_density">
-		<text>Grass density, on the same tiers as the quality preset. By default it matches the preset, and a new preset sets it again. Higher is denser grass and heavier on the GPU.</text>
-	</string>
-	<string id="st_da_x64_video_hint_level_texture_unload">
-		<text>Frees video and system memory after leaving a level. May make the next load slightly longer.</text>
+		<text>How thick the grass grows. A higher level gives denser grass and puts more load on the GPU. Choosing a graphics quality preset sets it to the same level.</text>
 	</string>
 	<string id="st_da_x64_video_hint_aa">
 		<text>Smooths jagged edges. FXAA is the lightest and softest, SMAA is sharper, TAA is the smoothest: it builds the picture from several frames and is slightly softer in motion.</text>
@@ -244,15 +250,6 @@
 	</string>
 	<string id="st_da_x64_video_hint_async_compute_unsupported">
 		<text>The graphics card or driver has no separate compute queue.</text>
-	</string>
-	<string id="st_da_x64_video_hint_dstorage">
-		<text>DirectX 12: level textures load through Microsoft DirectStorage, so levels load faster. The picture is the same. Applies from the next load.</text>
-	</string>
-	<string id="st_da_x64_video_hint_dstorage_dx11">
-		<text>DirectStorage needs DirectX 12: choose it under Renderer and restart the game.</text>
-	</string>
-	<string id="st_da_x64_video_hint_dstorage_unavailable">
-		<text>DirectStorage could not start on this system (its files are missing or Windows refused it): textures load the usual way.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_reflections">
 		<text>Water and rain puddles reflect the world traced by the GPU's ray tracing cores: also what is off screen or hidden, out to the far shore. From Medium quality, wet and glossy surfaces reflect what surrounds them instead of the sky.</text>

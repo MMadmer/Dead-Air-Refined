@@ -405,18 +405,16 @@ void CRender::level_Unload()
         Models->ClearPool(true);
     }
 
+    // The level's textures always go with it, wherever the renderer can drop them.
 #if defined(USE_DX11)
-    if (ps_r__unload_level_textures)
-    {
 #if RENDER == R_R4
-        for (auto& context : contexts_pool)
-            context.cmd_list.OnFrameEnd();
+    for (auto& context : contexts_pool)
+        context.cmd_list.OnFrameEnd();
 #else
-        RCache.OnFrameEnd();
+    RCache.OnFrameEnd();
 #endif
-        Resources->UnloadLevelTextures();
-        Memory.mem_compact();
-    }
+    Resources->UnloadLevelTextures();
+    Memory.mem_compact();
 #endif
 }
 

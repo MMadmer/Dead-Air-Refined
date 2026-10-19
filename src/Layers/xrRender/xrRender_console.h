@@ -225,7 +225,7 @@ extern ECORE_API float ps_r__offload_smooth; // seconds of the timings' smoothin
 extern ECORE_API float ps_r__offload_warmup; // seconds of a level (or of a return to auto) not measured
 // [dx12:offload] end variables
 // [dx12:ds] begin variables
-extern ECORE_API int ps_r__dstorage; // r__dstorage: DirectStorage texture loading
+// DirectStorage loads the textures wherever its runtime is up (-no_dstorage keeps it off).
 // [dx12:ds] end variables
 // [dx12:rt] begin variables
 // The RTX category of the Video tab: never written by a preset.
@@ -300,7 +300,6 @@ extern ECORE_API int ps_r__tf_Anisotropic;
 extern ECORE_API float ps_r__tf_Mipbias;
 
 extern ECORE_API int ps_r__clear_models_on_unload;
-extern ECORE_API int ps_r__unload_level_textures;
 
 // R1
 extern ECORE_API float ps_r1_ssaLOD_A;

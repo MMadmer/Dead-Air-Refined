@@ -15,12 +15,6 @@
     <string id="st_opt_renderer_rgl">
         <text>OpenGL</text>
     </string>
-    <string id="ui_mm_level_texture_unload">
-        <text>Unload level textures</text>
-    </string>
-    <string id="ui_mm_level_texture_unload_hint">
-        <text>Frees video and system memory after leaving a level. The next loading may take a little longer.</text>
-    </string>
     <string id="ui_mm_auto_continue_on_load">
         <text>Start after loading</text>
     </string>

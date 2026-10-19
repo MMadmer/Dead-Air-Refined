@@ -82,10 +82,20 @@ const xr_token qpreset_token[] =
     { "Extreme", 4 },
     { nullptr, 0 }
 };
-// The grass density selector (Video, below the quality preset), on the preset's tiers. Unset (a user.ltx from
-// before 1.6.1) it takes the quality preset's tier, and a new quality preset brings its own (CCC_Preset).
+// The grass density selector (Video, below the quality preset), on the preset's tiers with captions of its own
+// (st_opt_<token>). Unset (a user.ltx from before 1.6.1) it takes the quality preset's tier, and a new quality
+// preset brings its own (CCC_Preset).
 constexpr u32 da_grass_density_unset = u32(-1);
 u32 ps_r__grass_density = da_grass_density_unset;
+const xr_token qgrass_density_token[] =
+{
+    { "grass_density_minimum", 0 },
+    { "grass_density_low", 1 },
+    { "grass_density_medium", 2 },
+    { "grass_density_high", 3 },
+    { "grass_density_maximum", 4 },
+    { nullptr, 0 }
+};
 
 u32 ps_r2_smapsize = 2048;
 const xr_token qsmapsize_token[] =
@@ -563,7 +573,6 @@ float ps_r__offload_smooth = 1.f;
 float ps_r__offload_warmup = 30.f;
 // [dx12:offload] end variables
 // [dx12:ds] begin variables
-int ps_r__dstorage = 1;
 // [dx12:ds] end variables
 // [dx12:rt] begin variables
 int ps_r__rt_reflections = 0;
@@ -699,7 +708,6 @@ int ps_r__tf_Anisotropic = 16;
 float ps_r__tf_Mipbias = 0.0f;
 
 int ps_r__clear_models_on_unload = 1; // Alundaio
-int ps_r__unload_level_textures = 1;
 
 // R1
 float ps_r1_ssaLOD_A = 64.f;
@@ -2023,7 +2031,7 @@ void xrRender_initconsole()
     ZoneScoped;
 
     CMD3(CCC_Preset, "_preset", &ps_Preset, qpreset_token);
-    CMD3(CCC_GrassDensity, "r__grass_density", &ps_r__grass_density, qpreset_token);
+    CMD3(CCC_GrassDensity, "r__grass_density", &ps_r__grass_density, qgrass_density_token);
 
     CMD4(CCC_Integer, "rs_skeleton_update", &psSkeletonUpdate, 2, 128);
 #ifndef MASTER_GOLD
@@ -2077,7 +2085,6 @@ void xrRender_initconsole()
     CMD2(CCC_tf_MipBias, "r2_tf_mipbias", &ps_r__tf_Mipbias); // {-3 +3}
 
     CMD4(CCC_ClearModelsOnUnload, "r__clear_models_on_unload", &ps_r__clear_models_on_unload, 0, 1);
-    CMD4(CCC_Integer, "r__unload_level_textures", &ps_r__unload_level_textures, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_budget", &ps_r__light_shadow_budget, 0, 64);
     CMD4(CCC_RuntimeInteger, "r__light_shadow_cache", &ps_r__light_shadow_cache, 0, 2); // QA: 2 logs the faces' modes
     CMD4(CCC_RuntimeInteger, "r__gtao_slices", &ps_r__gtao_slices, 1, 4);
@@ -2424,7 +2431,6 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__offload_warmup", &ps_r__offload_warmup, 0.f, 120.f);
     // [dx12:offload] end commands
     // [dx12:ds] begin commands
-    CMD4(CCC_Integer, "r__dstorage", &ps_r__dstorage, 0, 1);
     CMD2(CCC_DaCall, "r__texload_stats", &da_dstorage_log_stats);
     // [dx12:ds] end commands
     // [dx12:rt] begin commands

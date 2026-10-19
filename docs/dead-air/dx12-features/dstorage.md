@@ -1,5 +1,9 @@
 # DirectStorage texture loading (xrRender_R5)
 
+1.6.1: `r__dstorage` and its Video row are gone. DirectStorage loads wherever its runtime is up, `-no_dstorage`
+keeps the old path (the A/B switch of the sections below). The level's textures are unloaded with it always
+(`r__unload_level_textures` and its row are gone too).
+
 Status: implemented (28.09.2026). S1-S9 in the tree (textures and `level.geom`/`level.geomx` through
 DirectStorage); the functional part of the final test phase passed (every verified texture and geometry buffer
 equal, frames unchanged); `r__dstorage` defaults to 1. The load-time A/B of S6-S9 was not run (one-pass Perf

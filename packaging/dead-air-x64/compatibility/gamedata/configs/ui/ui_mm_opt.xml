@@ -173,16 +173,6 @@
 			<text r="170" g="170" b="170" font="letterica16" align="l" vert_align="c"></text>
 		</cap_hud_fov_value>
 
-        <cap_level_texture_unload x="15" y="243" width="108" height="24"
-            hint="ui_mm_level_texture_unload_hint">
-            <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_level_texture_unload</text>
-        </cap_level_texture_unload>
-        <check_level_texture_unload x="136" y="240" width="35" stretch="1" height="29"
-            hint="ui_mm_level_texture_unload_hint">
-            <texture>ui_inGame2_checkbox</texture>
-            <options_item entry="r__unload_level_textures" group="mm_opt_video"/>
-        </check_level_texture_unload>
-
         <!-- Stock node, still initialised by the stock page script. -->
         <cap_fullscreen x="175" y="243" width="108" height="24">
             <text r="170" g="170" b="170" font="letterica16" align="r" vert_align="c">ui_mm_fullscreen</text>
@@ -325,11 +315,6 @@
             </text_color>
         </list_preset>
 
-        <check_level_texture_unload x="355" y="0" width="35" height="29" stretch="1">
-            <texture>ui_inGame2_checkbox</texture>
-            <options_item entry="r__unload_level_textures" group="mm_opt_video"/>
-        </check_level_texture_unload>
-
         <list_aa x="200" y="2" width="190" height="20" list_length="4" always_show_scroll="0">
             <options_item entry="r__aa" group="mm_opt_video" depend="vid"/>
             <list_font r="170" g="170" b="170" font="letterica16"/>
@@ -380,11 +365,6 @@
                 <d r="70" g="70" b="70"/>
             </text_color>
         </list_async_compute>
-
-        <check_dstorage x="355" y="0" width="35" height="29" stretch="1">
-            <texture>ui_inGame2_checkbox</texture>
-            <options_item entry="r__dstorage" group="mm_opt_video"/>
-        </check_dstorage>
 
         <check_rt_reflections x="355" y="0" width="35" height="29" stretch="1">
             <texture>ui_inGame2_checkbox</texture>

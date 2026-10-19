@@ -32,14 +32,12 @@ fps_limit            = list,  vid_fps_limit
 vsync                = list,  rs_vsync
 preset               = list,  _preset
 grass_density        = list,  r__grass_density
-level_texture_unload = check, r__unload_level_textures
 aa                   = list,  r__aa
 fsr                  = list,  r__fsr
 dlss                 = list,  r__dlss
 framegen             = list,  r__framegen
 upscale_sharpness    = track, r__upscale_sharpness, %.2f
 async_compute        = list,  r__async_compute
-dstorage             = check, r__dstorage
 rt_reflections       = check, r__rt_reflections
 rt_shadows           = check, r__rt_shadows
 rtao                 = check, r__rtao
@@ -70,7 +68,7 @@ order = screen, quality, aa, rtx, image, effects, color
 rows = renderer, async_compute, resolution, window_mode, fps_limit, vsync
 
 [group_quality]
-rows = preset, grass_density, level_texture_unload, dstorage
+rows = preset, grass_density
 
 [group_aa]
 rows = aa, fsr, dlss, framegen, upscale_sharpness
@@ -98,7 +96,6 @@ dlss              = ui_mm_da_dlss
 framegen          = ui_mm_da_framegen
 upscale_sharpness = ui_mm_da_upscale_sharpness
 async_compute     = ui_mm_da_async_compute
-dstorage          = ui_mm_da_dstorage
 rt_reflections    = ui_mm_da_rt_reflections
 rt_shadows        = ui_mm_da_rt_shadows
 rtao              = ui_mm_da_rtao

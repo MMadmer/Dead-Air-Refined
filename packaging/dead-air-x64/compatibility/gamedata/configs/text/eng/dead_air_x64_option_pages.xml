@@ -861,10 +861,6 @@
 	<string id="ui_mm_use_battery">
 		<text>Battery charge</text>
 	</string>
-	<!-- The hint of the stock video page's level_texture_unload row (tab_video in ui_mm_opt.xml); the Russian one is in dead_air_x64.xml. -->
-	<string id="ui_mm_level_texture_unload_hint">
-		<text>Frees video and system memory after leaving a level. May make the next load slightly longer.</text>
-	</string>
 	<!-- The seasons page: the climate's weather (r__season_weather, docs/dead-air/WEATHER.md). -->
 	<string id="ui_mm_af_season_weather">
 		<text>Weather by the Zone's climate</text>

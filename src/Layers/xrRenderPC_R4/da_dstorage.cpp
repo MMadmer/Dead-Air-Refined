@@ -1281,7 +1281,7 @@ void ParkTicket(Runtime& rt, DaDsTicket* ticket)
 
 DaDsTicket* da_dstorage_begin(pcstr name)
 {
-    if (!ps_r__dstorage || !HW.pDevice || !name || !name[0])
+    if (!HW.pDevice || !name || !name[0])
         return nullptr;
     Runtime* rt = Available(true);
     if (!rt)
@@ -1543,7 +1543,7 @@ bool da_dstorage_load_buffers(CRender& render, CStreamReader* fs, bool alternati
     UNUSED(alternative);
     return false;
 #else
-    if (!ps_r__dstorage || !fs || !HW.pDevice)
+    if (!fs || !HW.pDevice)
         return false;
     Runtime* rt = Available(true);
     if (!rt)
@@ -1771,7 +1771,7 @@ void da_dstorage_log_stats()
     if (Runtime* rt = g_runtime)
     {
         Msg("* [texload] DirectStorage: %s, %s reads, loads raw %llu, lzo %llu, failed %llu; %.0f MB direct, %.1f MB tails; codec failures %u",
-            ps_r__dstorage && !rt->disabled ? "on" : "off", rt->buffered ? "buffered" : "unbuffered",
+            !rt->disabled ? "on" : "off", rt->buffered ? "buffered" : "unbuffered",
             rt->loadsRaw.load(), rt->loadsLzo.load(), rt->loadsFailed.load(), double(rt->bytesDirect.load()) / 1048576.0,
             double(rt->bytesTail.load()) / 1048576.0, rt->codecFailures.load());
         SweepParked(*rt);

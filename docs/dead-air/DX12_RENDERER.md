@@ -331,7 +331,7 @@ feature).
 | Variable rate shading | VRS tier 2 | conservative on High and Extreme, off below | the quality preset (`vrs_by_preset`) | `vrs.md` |
 | GPU-driven vegetation | nothing beyond R5 (ExecuteIndirect is core D3D12) | auto: while the CPU is the bottleneck | `r__gpu_driven` (runtime; -1 auto) | `gpudriven.md` |
 | Mesh-shader grass | mesh shader tier 1, SM 6.5, DXC, no MSAA | auto: while the CPU is the bottleneck | `r__grass_mesh` (runtime; -1 auto) | `mesh.md` |
-| DirectStorage loading | `dstorage.dll` + `dstoragecore.dll` | on | Video -> Quality "DirectStorage texture loading" (`r__dstorage`) | `dstorage.md` |
+| DirectStorage loading | `dstorage.dll` + `dstoragecore.dll` | on | always where the runtime is up (1.6.1: no menu row; `-no_dstorage` keeps it off) | `dstorage.md` |
 | Ray tracing ("RTX") | DXR 1.1 (tier >= 1.1), DXC, no MSAA | off | Video -> RTX, never a preset | `dxr.md` |
 
 Look-neutral features (async, GPU-driven vegetation, mesh grass, DirectStorage) were checked frame-equal to
@@ -436,7 +436,7 @@ not change with mesh grass. `r__grass_mesh` -1 (default) runs it while the CPU i
 Textures inside the game's archives (raw and LZO blocks) and the level geometry (`level.geom`,
 `level.geomx`) are read by DirectStorage straight into placed resources of pooled texture heaps; LZO is
 decoded on 8 codec threads. Loose files, XMS overlays, video textures and anything else the path cannot
-take load the usual way, per texture. `r__dstorage` (saved, default 1) applies at the next load;
+take load the usual way, per texture. It runs wherever the runtime is up (1.6.1: no setting; `-no_dstorage` keeps it off);
 `r__texload_stats` prints the state, the heaps and the last batches; `-dstorage_verify N` compares N
 textures of each batch (and every geometry buffer) with the old path. The loader logs `* [texload] batch
 early: T textures queued, L loads (ds raw R, ds lzo Z, cpu C, failed F), MB, wall W ms`. A 30 s timeout turns
@@ -517,7 +517,6 @@ the internal VRS mode of the ladder (`ps_r__vrs`, not the `r__vrs` override).
 | `r__offload_warmup` | runtime float | 0..120 s | 30 | no | auto: not measured after a level load or a return to -1 |
 | `r__grass_stats` | call | - | - | no | mesh-grass counters and a GPU row check |
 | `r__dbg_grass_ab` | runtime integer | 0..1 | 0 | no | one A/B of both grass paths on the next frame, resets itself |
-| `r__dstorage` | integer | 0..1 | 1 | yes | Video row; from the next texture load |
 | `r__texload_stats` | call | - | - | no | DirectStorage state, texture heaps, last batches, the level's sync loads |
 | `r__rt_reflections` | integer | 0..1 | 0 | yes | RTX row, `vid_restart` |
 | `r__rt_shadows` | integer | 0..1 | 0 | yes | RTX row, `vid_restart` |
@@ -547,7 +546,7 @@ the internal VRS mode of the ladder (`ps_r__vrs`, not the `r__vrs` override).
 | `acq` | a separate compute queue is available (made by the first job) | 0 |
 | `dxc` | engine shaders are DXIL this session | 0 |
 | `gd` | the GPU-driven registry is live | 0 |
-| `dstorage` | DirectStorage runtime and queues are up (independent of the `r__dstorage` tick; 0 after a timeout) | 0 |
+| `dstorage` | DirectStorage runtime and queues are up (0 after a timeout) | 0 |
 
 ## 9. `r__gpu_log` keys
 

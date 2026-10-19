@@ -20,14 +20,14 @@ local VIDEO_LAYOUT = "dead_air_x64_video_options.ltx"
 local RENDERER_DX12 = 7
 local RENDERER_VK = 8
 local FRAMEGEN_FSR, FRAMEGEN_DLSS, FRAMEGEN_DLSS_X3, FRAMEGEN_DLSS_X4 = 1, 2, 3, 4
--- The quality preset's tokens (_preset); the grass density selector shares them.
+-- The quality preset's tokens (_preset); the grass density selector's tiers have the same ids.
 local PRESET_IDS = { Minimum = 0, Low = 1, Default = 2, High = 3, Extreme = 4 }
 
 -- The DirectX 12 rows (docs\dead-air\dx12-features\PLAN.md 2.6): always shown, greyed with the reason
 -- where the running renderer or the card cannot run them, like frame generation. The RTX rows are
 -- ray tracing, a category of its own that no quality preset touches; they run on Vulkan too.
 local RT_EFFECTS = { "rt_reflections", "rt_shadows", "rtao" }
-local DX12_ROWS = { "async_compute", "dstorage", "rt_reflections", "rt_shadows", "rtao", "rt_quality" }
+local DX12_ROWS = { "async_compute", "rt_reflections", "rt_shadows", "rtao", "rt_quality" }
 local VULKAN_ROWS = { rt_reflections = true, rt_shadows = true, rtao = true, rt_quality = true }
 
 -- The stock ui_mm_opt_main.script fills the numbers beside these sliders by name, every frame.
@@ -153,12 +153,10 @@ function opt_video:InitStates()
 	end
 	dx12_row("async_compute", "st_da_x64_video_hint_async_compute_dx11", caps.acq == 1,
 		"st_da_x64_video_hint_async_compute_unsupported")
-	dx12_row("dstorage", "st_da_x64_video_hint_dstorage_dx11", caps.dstorage == 1,
-		"st_da_x64_video_hint_dstorage_unavailable")
 	-- Without hardware ray tracing DirectX 12 alone would not help: that hint says so.
 	local rt_dx11 = (caps.rt_tier >= 11) and "st_da_x64_video_hint_rt_dx11" or "st_da_x64_video_hint_rt_dx11_nohw"
 	for _, id in ipairs(DX12_ROWS) do
-		if (id ~= "async_compute" and id ~= "dstorage") then
+		if (id ~= "async_compute") then
 			dx12_row(id, rt_dx11, caps.rt == 1, "st_da_x64_video_hint_rt_unsupported")
 		end
 	end
