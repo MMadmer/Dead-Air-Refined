@@ -16,7 +16,7 @@ param(
     [string]$Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     # An installation of the same version whose database, content state, settings and shader cache
     # the rig borrows. Nothing in it is written.
-    [string]$Source = "D:\Games\Dead Air 1.6.0",
+    [string]$Source = "D:\Games\Dead Air",
     [string]$Rig = "D:\Games\Dead Air\_qa\updelta",
     [int]$Port = 8791,
     [int]$TimeoutSeconds = 240

@@ -330,26 +330,43 @@ enum class Small
     Failed
 };
 
-// A small asset, whole, into memory.
+// A small asset, whole, into memory. A dropped transfer resumes by range from what arrived.
 Small fetch_small(HttpSession& session, const std::wstring& url, std::size_t limit, std::vector<std::uint8_t>& body,
     const std::atomic_bool& cancel, std::string& error)
 {
-    for (unsigned attempt = 0; attempt < MaximumAttempts; ++attempt)
+    body.clear();
+    for (unsigned failures = 0; failures < MaximumAttempts;)
     {
-        if (attempt && !sleep_cancellable(1000u << (attempt - 1), cancel))
+        if (failures && !sleep_cancellable(1000u << (failures - 1), cancel))
             break;
-        body.clear();
         HttpGet request;
-        if (!request.Send(session, url, {}, error))
+        const std::wstring headers = body.empty() ? std::wstring() : L"Range: bytes=" + std::to_wstring(body.size()) + L"-";
+        if (!request.Send(session, url, headers, error))
+        {
+            ++failures;
             continue;
+        }
         if (request.Status() == 404)
             return Small::NotFound;
-        if (request.Status() != 200)
+        // The full size, when the server names it: a connection that closes early ends the body
+        // like a finished one, and only the size tells the two apart.
+        std::uint64_t expected = 0;
+        std::uint64_t start = 0;
+        if (request.Status() == 200)
+        {
+            // A server that ignores the range sends the whole asset again.
+            body.clear();
+            expected = std::wcstoull(request.Header(WINHTTP_QUERY_CONTENT_LENGTH).c_str(), nullptr, 10);
+        }
+        else if (request.Status() != 206 || body.empty() ||
+            !parse_content_range(request.Header(WINHTTP_QUERY_CONTENT_RANGE), start, expected) || start != body.size())
         {
             error = "HTTP " + std::to_string(request.Status());
+            ++failures;
             continue;
         }
         std::vector<std::uint8_t> buffer(64 * 1024);
+        const std::size_t before = body.size();
         bool ok = true;
         while (ok)
         {
@@ -368,9 +385,13 @@ Small fetch_small(HttpSession& session, const std::wstring& url, std::size_t lim
             }
             body.insert(body.end(), buffer.begin(), buffer.begin() + read);
         }
-        if (ok)
+        if (ok && (!expected || body.size() == expected))
             return Small::Ok;
         error = "the transfer was interrupted";
+        // bytes that arrived are progress: only attempts that bring nothing count
+        failures = body.size() > before ? 0 : failures + 1;
+        if (cancel.load(std::memory_order_acquire))
+            break;
     }
     if (cancel.load(std::memory_order_acquire))
         error = "cancelled";
@@ -768,7 +789,8 @@ bool fetch_one(const Asset& bundle, const Work& item, HttpSession& session, cons
             }
         }
 
-        for (unsigned attempt = 0; attempt < MaximumAttempts && !transferred; ++attempt)
+        // Counts attempts in a row that brought nothing; one that brought bytes starts it over.
+        for (unsigned attempt = 0; attempt < MaximumAttempts && !transferred;)
         {
             if (attempt)
             {
@@ -797,6 +819,7 @@ bool fetch_one(const Asset& bundle, const Work& item, HttpSession& session, cons
             if (!request.Send(session, url, headers, sendError))
             {
                 error = sendError;
+                ++attempt;
                 continue;
             }
 
@@ -839,11 +862,13 @@ bool fetch_one(const Asset& bundle, const Work& item, HttpSession& session, cons
             else
             {
                 error = "the download returned HTTP " + std::to_string(request.Status());
+                ++attempt;
                 continue;
             }
 
             std::vector<unsigned char> buffer(TransferBuffer);
             bool broke = false;
+            bool progressed = false;
             while (true)
             {
                 if (cancel.load(std::memory_order_acquire))
@@ -872,6 +897,7 @@ bool fetch_one(const Asset& bundle, const Work& item, HttpSession& session, cons
                 offset += read;
                 credited += read;
                 credit(shared, read);
+                progressed = true;
             }
             if (restartFromZero)
                 break;
@@ -881,6 +907,7 @@ bool fetch_one(const Asset& bundle, const Work& item, HttpSession& session, cons
             {
                 // Whatever landed is kept: the next attempt resumes from it rather than
                 // starting the whole bundle again.
+                attempt = progressed ? 0 : attempt + 1;
                 continue;
             }
             break;

@@ -19,7 +19,7 @@ GONE = ['meshes/dynamics/weapons/wpn_eat/backpack/wpn_backpack_act_hud.ogf',
         'textures/act/dar_bag_exobackpack_bump.dds', 'textures/act/dar_bag_exobackpack_bump#.dds',
         'textures/act/dar_bag_exobackpack_bump.thm']
 STALE = ['gamedata/configs/items/items/items_anm_backpack.ltx', 'gamedata/configs/items/items/ea_addon_backpack.ltx']
-INSTALLS = [r"D:\Games\Dead Air", r"D:\Games\Dead Air 1.6.0"]
+INSTALLS = [r"D:\Games\Dead Air"]
 
 apply = len(sys.argv) > 1 and sys.argv[1] == 'apply'
 for v in VARIANTS:

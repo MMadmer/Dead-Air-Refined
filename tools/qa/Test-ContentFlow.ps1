@@ -72,7 +72,9 @@ function Stop-Mock {
 function Invoke-Updater {
     param([string[]]$Arguments)
     # The updater is a /SUBSYSTEM:WINDOWS binary, so a plain call does not wait for it.
-    $process = Start-Process -FilePath $Updater -ArgumentList $Arguments -PassThru -NoNewWindow
+    # Start-Process joins the list with bare spaces: a path with a space must arrive quoted.
+    $quoted = $Arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }
+    $process = Start-Process -FilePath $Updater -ArgumentList $quoted -PassThru -NoNewWindow
     if (-not $process.WaitForExit(600000)) {
         $process.Kill()
         throw "the updater did not finish"
@@ -109,7 +111,9 @@ function Assert-Case {
 }
 
 $env:DAR_QA_CONTENT_BASE = "http://127.0.0.1:$Port"
-$expected = Get-ChildItem -LiteralPath $AssetRoot -Filter "xtra_dead_air_x64_content_*.xdb0"
+# The manifest's bundles, not the folder's: a bundle cache also keeps earlier revisions.
+$declared = Get-Content -LiteralPath $Manifest | ForEach-Object { ($_ -split "`t")[2] } | Where-Object { $_ -like "*.xdb0" }
+$expected = $declared | ForEach-Object { Get-Item -LiteralPath (Join-Path $AssetRoot $_) }
 
 Write-Host "clean fetch and commit"
 New-Installation
@@ -204,7 +208,7 @@ else {
     $v2Root = "$WorkRoot-v2"
     if (Test-Path -LiteralPath $v2Root) { Remove-Item -LiteralPath $v2Root -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $v2Root | Out-Null
-    Copy-Item (Join-Path $AssetRoot "xtra_dead_air_x64_content_*.xdb0") $v2Root -Force
+    $expected | Copy-Item -Destination $v2Root -Force
 
     $victim = Get-ChildItem $v2Root -Filter "xtra_dead_air_x64_content_*.xdb0" | Sort-Object Length -Descending | Select-Object -First 1
     $slot = [regex]::Match($victim.Name, '^xtra_dead_air_x64_content_(.+)_[0-9a-f]{16}\.xdb0$').Groups[1].Value
