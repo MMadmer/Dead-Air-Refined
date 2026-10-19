@@ -30,8 +30,8 @@ $failures = [Collections.Generic.List[string]]::new()
 $compiled = [regex]::Match([IO.File]::ReadAllText((Join-Path $Repo "src\xrCore\ProductVersion.h")),
     '(?m)^#define\s+DAR_VERSION_STRING\s+"(\d+)\.(\d+)\.(\d+)"')
 if (-not $compiled.Success) { throw "ProductVersion.h has no DAR_VERSION_STRING" }
-$base = "$($compiled.Groups[1].Value).$($compiled.Groups[2].Value).$($compiled.Groups[3].Value)"
-$target = "$($compiled.Groups[1].Value).$($compiled.Groups[2].Value).$([int]$compiled.Groups[3].Value + 1)"
+$baseVersion = "$($compiled.Groups[1].Value).$($compiled.Groups[2].Value).$($compiled.Groups[3].Value)"
+$nextVersion = "$($compiled.Groups[1].Value).$($compiled.Groups[2].Value).$([int]$compiled.Groups[3].Value + 1)"
 
 function Assert-Case {
     param([string]$Name, [bool]$Condition, [string]$Detail = "")
@@ -84,8 +84,8 @@ $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.
 if ($LASTEXITCODE -ne 0) { throw "the maintenance stub did not build" }
 
 [IO.File]::WriteAllText((Join-Path $Rig "qa-delta-changed.txt"), "before`n")
-[IO.File]::WriteAllText((Join-Path $Rig "qa-delta-dropped.txt"), "only in $base`n")
-[IO.File]::WriteAllText((Join-Path $Rig ".dead-air-x64\port-version.txt"), $base)
+[IO.File]::WriteAllText((Join-Path $Rig "qa-delta-dropped.txt"), "only in $baseVersion`n")
+[IO.File]::WriteAllText((Join-Path $Rig ".dead-air-x64\port-version.txt"), $baseVersion)
 
 # The payload of the base as the rig holds it: what managed-files.txt names.
 $payloadFiles = @($runtime) + @("DeadAirUpdater.exe", "database/xtra_dead_air_x64.xdb0", ".dead-air-x64/content-manifest.txt",
@@ -101,31 +101,31 @@ foreach ($file in $payloadFiles) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
     Copy-Item -LiteralPath (Join-Path $Rig $file.Replace('/', '\')) -Destination $target
 }
-[IO.File]::WriteAllText((Join-Path $payload "qa-delta-changed.txt"), "after, in $target`n")
-[IO.File]::WriteAllText((Join-Path $payload "qa-delta-added.txt"), "new in $target`n")
+[IO.File]::WriteAllText((Join-Path $payload "qa-delta-changed.txt"), "after, in $nextVersion`n")
+[IO.File]::WriteAllText((Join-Path $payload "qa-delta-added.txt"), "new in $nextVersion`n")
 # A third file at the other end of the archive: two separate ranges, so the second request goes to
 # the storage URL of the first - which the mock lets expire after one use.
-[IO.File]::WriteAllText((Join-Path $payload ".dead-air-x64\qa-delta-note.txt"), "new in $target, first in the archive`n")
+[IO.File]::WriteAllText((Join-Path $payload ".dead-air-x64\qa-delta-note.txt"), "new in $nextVersion, first in the archive`n")
 
 $manifest = [Collections.Generic.List[string]]::new()
 $manifest.Add("schema=dead-air-refined.update/1")
-$manifest.Add("version=$target")
+$manifest.Add("version=$nextVersion")
 Get-ChildItem -LiteralPath $payload -Recurse -File | Sort-Object { $_.FullName.Substring($payload.Length + 1) } | ForEach-Object {
     $relative = $_.FullName.Substring($payload.Length + 1).Replace('\', '/')
     $manifest.Add("$(Get-Sha256 $_.FullName)`t$($_.Length)`t$relative")
 }
 [IO.File]::WriteAllText((Join-Path $payload "update-manifest.txt"), [string]::Join("`n", $manifest) + "`n", [Text.UTF8Encoding]::new($false))
 
-$release = Join-Path $work "releases\$target"
+$release = Join-Path $work "releases\$nextVersion"
 New-Item -ItemType Directory -Force -Path $release | Out-Null
-$archive = Join-Path $release "Dead-Air-Refined-$target-Update.zip"
+$archive = Join-Path $release "Dead-Air-Refined-$nextVersion-Update.zip"
 Push-Location $payload
 try {
     & $sevenZip a -tzip -mx=9 $archive "*" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "7-Zip failed: $LASTEXITCODE" }
 }
 finally { Pop-Location }
-Copy-Item -LiteralPath (Join-Path $Rig ".dead-air-x64\content-manifest.txt") -Destination (Join-Path $release "Dead-Air-Refined-$target-content-manifest.txt")
+Copy-Item -LiteralPath (Join-Path $Rig ".dead-air-x64\content-manifest.txt") -Destination (Join-Path $release "Dead-Air-Refined-$nextVersion-content-manifest.txt")
 [IO.File]::WriteAllText((Join-Path $release "body.md"), "## EN`n`n## Changes`n`n* The delta test release.`n`n## RU`n`n## Изменения`n`n* Тестовый выпуск дельты.`n")
 $archiveSize = (Get-Item -LiteralPath $archive).Length
 
@@ -200,7 +200,7 @@ Write-Host "  log: $($logs | Where-Object { $_ -match '\* Update delta written' 
 Assert-Case "the update landed" $landed
 Assert-Case "the delta named three files" ($deltaLine -match ' 3 of \d+ file\(s\) differ') $deltaLine
 Assert-Case "the changed file is the new one" ((Test-Path (Join-Path $Rig "qa-delta-changed.txt")) -and
-    ([IO.File]::ReadAllText((Join-Path $Rig "qa-delta-changed.txt")) -eq "after, in $target`n"))
+    ([IO.File]::ReadAllText((Join-Path $Rig "qa-delta-changed.txt")) -eq "after, in $nextVersion`n"))
 Assert-Case "the added files arrived" ((Test-Path (Join-Path $Rig "qa-delta-added.txt")) -and (Test-Path (Join-Path $Rig ".dead-air-x64\qa-delta-note.txt")))
 Assert-Case "the dropped file is gone" (-not (Test-Path (Join-Path $Rig "qa-delta-dropped.txt")))
 $unchanged = $runtime | Where-Object { (Get-Sha256 (Join-Path $Rig $_)) -ne (Get-Sha256 (Join-Path $payload $_)) }
