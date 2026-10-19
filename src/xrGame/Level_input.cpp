@@ -285,7 +285,9 @@ void CLevel::IR_OnKeyboardPress(int key)
         return;
     }
 
-#ifndef MASTER_GOLD
+    // Raw developer keys (F7 reloads the level, NumPad 5 records a demo) bypass the bindings, so players got
+    // them too: only debug builds keep them.
+#ifdef DEBUG
     switch (key)
     {
     case SDL_SCANCODE_F7:
@@ -314,8 +316,6 @@ void CLevel::IR_OnKeyboardPress(int key)
         }
     }
     break;
-
-#ifdef DEBUG
 
     // Lain: added TEMP!!!
     case SDL_SCANCODE_UP:
@@ -456,10 +456,8 @@ void CLevel::IR_OnKeyboardPress(int key)
         }
         break;
     }
-
-#endif
     } // switch (key)
-#endif // MASTER_GOLD
+#endif // DEBUG
 
     if (g_consoleBindCmds.execute(key))
         return;
