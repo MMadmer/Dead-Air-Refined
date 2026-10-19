@@ -164,7 +164,7 @@ luabind::object key_binding_actions(lua_State* L)
         xr_vector<std::pair<shared_str, shared_str>> actions;
     };
     xr_vector<key_group> groups;
-    bool hasMap = false;
+    bool hasMap = false, hasDebugMenu = false;
 
     const int groupsCount = static_cast<int>(xml_doc.GetNodesNum("", 0, "group"));
     for (int i = 0; i < groupsCount; ++i)
@@ -178,6 +178,7 @@ luabind::object key_binding_actions(lua_State* L)
         {
             const shared_str action = xml_doc.ReadAttrib("command", j, "exe");
             hasMap |= action == "map";
+            hasDebugMenu |= action == "debug_menu";
             if (ActionNameToPtr(action.c_str(), true))
                 group.actions.emplace_back(xml_doc.ReadAttrib("command", j, "id"), action);
         }
@@ -190,6 +191,16 @@ luabind::object key_binding_actions(lua_State* L)
         {
             if (group.name == "kb_grp_inventory")
                 group.actions.emplace_back("kb_map", "map");
+        }
+    }
+
+    // The debug menu's key (Options -> Game -> Other turns the menu on) joins the common group the same way.
+    if (!hasDebugMenu && ActionNameToPtr("debug_menu", true))
+    {
+        for (key_group& group : groups)
+        {
+            if (group.name == "kb_grp_common")
+                group.actions.emplace_back("kb_debug_menu", "debug_menu");
         }
     }
 

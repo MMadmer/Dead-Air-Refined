@@ -4,6 +4,7 @@
 #include "xrAICore/Navigation/game_graph_space.h"
 #include "UITimeDilator.h"
 
+class CUIDebugMenuWnd;
 class CUITradeWnd;
 class CUITalkWnd;
 class CInventory;
@@ -51,6 +52,8 @@ public:
 #endif
     CUITalkWnd* TalkMenu;
     CChangeLevelWnd* UIChangeLevelWnd;
+    // made on the first opening (CUIDebugMenuWnd::Toggle)
+    CUIDebugMenuWnd* DebugMenu{};
 
     StaticDrawableWrapper* m_game_objective;
 

@@ -2564,6 +2564,8 @@ target_sources(xrGame PRIVATE
     ui/ContentService.h
     ui/UIBugReportWnd.cpp
     ui/UIBugReportWnd.h
+    ui/UIDebugMenuWnd.cpp
+    ui/UIDebugMenuWnd.h
     ui/UIContentWnd.cpp
     ui/UIContentWnd.h
     ui/UIMajorUpdateWnd.cpp

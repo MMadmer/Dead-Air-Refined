@@ -1,0 +1,406 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<!-- The debug menu (UIDebugMenuWnd, dead_air_x64_debug_menu.script). -->
+<string_table>
+	<string id="st_dbg_caption">
+		<text>Debug menu</text>
+	</string>
+	<string id="st_dbg_close">
+		<text>Close</text>
+	</string>
+	<string id="st_dbg_categories">
+		<text>Categories</text>
+	</string>
+	<string id="st_dbg_search_hint">
+		<text>Search by name or section</text>
+	</string>
+	<string id="st_dbg_count">
+		<text>Count</text>
+	</string>
+	<string id="st_dbg_pick_hint">
+		<text>Select an entry in the list</text>
+	</string>
+	<string id="st_dbg_all">
+		<text>All</text>
+	</string>
+	<string id="st_dbg_count_fmt">
+		<text>Shown: %u of %u</text>
+	</string>
+	<string id="st_dbg_empty">
+		<text>The list is empty</text>
+	</string>
+	<string id="st_dbg_nothing_found">
+		<text>Nothing found</text>
+	</string>
+	<string id="st_dbg_failed">
+		<text>The action failed</text>
+	</string>
+	<string id="st_dbg_hotkey_fmt">
+		<text>%s - close the menu</text>
+	</string>
+	<string id="st_dbg_done">
+		<text>Done</text>
+	</string>
+	<string id="st_dbg_apply">
+		<text>Apply</text>
+	</string>
+	<string id="st_dbg_now">
+		<text>now</text>
+	</string>
+	<string id="st_dbg_on">
+		<text>on</text>
+	</string>
+	<string id="st_dbg_off">
+		<text>off</text>
+	</string>
+	<string id="st_dbg_tab_items">
+		<text>Items</text>
+	</string>
+	<string id="st_dbg_tab_npc">
+		<text>Characters</text>
+	</string>
+	<string id="st_dbg_tab_teleport">
+		<text>Teleport</text>
+	</string>
+	<string id="st_dbg_tab_player">
+		<text>Player</text>
+	</string>
+	<string id="st_dbg_tab_world">
+		<text>World</text>
+	</string>
+	<string id="st_dbg_tab_story">
+		<text>Story</text>
+	</string>
+	<string id="st_dbg_tab_near">
+		<text>Nearby</text>
+	</string>
+	<string id="st_dbg_cat_weapons">
+		<text>Weapons</text>
+	</string>
+	<string id="st_dbg_cat_ammo">
+		<text>Ammunition</text>
+	</string>
+	<string id="st_dbg_cat_outfits">
+		<text>Outfits</text>
+	</string>
+	<string id="st_dbg_cat_helmets">
+		<text>Helmets</text>
+	</string>
+	<string id="st_dbg_cat_artefacts">
+		<text>Artefacts</text>
+	</string>
+	<string id="st_dbg_cat_medicine">
+		<text>Medicine</text>
+	</string>
+	<string id="st_dbg_cat_food">
+		<text>Food and drinks</text>
+	</string>
+	<string id="st_dbg_cat_devices">
+		<text>Devices</text>
+	</string>
+	<string id="st_dbg_cat_quest">
+		<text>Quest items</text>
+	</string>
+	<string id="st_dbg_cat_other">
+		<text>Other</text>
+	</string>
+	<string id="st_dbg_note_cost">
+		<text>%.0f RU</text>
+	</string>
+	<string id="st_dbg_param_weight">
+		<text>Weight: %.2f kg</text>
+	</string>
+	<string id="st_dbg_param_cost">
+		<text>Price: %.0f RU</text>
+	</string>
+	<string id="st_dbg_param_box">
+		<text>Per box: %.0f</text>
+	</string>
+	<string id="st_dbg_param_ammo">
+		<text>Ammunition:</text>
+	</string>
+	<string id="st_dbg_into_inventory">
+		<text>Into inventory</text>
+	</string>
+	<string id="st_dbg_in_front">
+		<text>In front</text>
+	</string>
+	<string id="st_dbg_spawn">
+		<text>Spawn</text>
+	</string>
+	<string id="st_dbg_spawned_fmt">
+		<text>Spawned: %d</text>
+	</string>
+	<string id="st_dbg_cat_mutants">
+		<text>Mutants</text>
+	</string>
+	<string id="st_dbg_rank_novice">
+		<text>novices</text>
+	</string>
+	<string id="st_dbg_rank_advanced">
+		<text>advanced</text>
+	</string>
+	<string id="st_dbg_rank_experienced">
+		<text>experienced</text>
+	</string>
+	<string id="st_dbg_rank_veteran">
+		<text>veterans</text>
+	</string>
+	<string id="st_dbg_rank_expert">
+		<text>experts</text>
+	</string>
+	<string id="st_dbg_rank_master">
+		<text>masters</text>
+	</string>
+	<string id="st_dbg_rank_elite">
+		<text>elite</text>
+	</string>
+	<string id="st_dbg_squad_of">
+		<text>Squad:</text>
+	</string>
+	<string id="st_dbg_note_members">
+		<text>size %s</text>
+	</string>
+	<string id="st_dbg_param_faction">
+		<text>Faction:</text>
+	</string>
+	<string id="st_dbg_param_members">
+		<text>Members:</text>
+	</string>
+	<string id="st_dbg_spawn_in_front">
+		<text>Spawn ahead</text>
+	</string>
+	<string id="st_dbg_spawn_here">
+		<text>Spawn beside</text>
+	</string>
+	<string id="st_dbg_spawned_npc_fmt">
+		<text>Characters spawned: %d</text>
+	</string>
+	<string id="st_dbg_note_smart">
+		<text>point</text>
+	</string>
+	<string id="st_dbg_note_transition">
+		<text>transition</text>
+	</string>
+	<string id="st_dbg_transition_fmt">
+		<text>Transition: %s</text>
+	</string>
+	<string id="st_dbg_teleport">
+		<text>Teleport</text>
+	</string>
+	<string id="st_dbg_teleport_here_level">
+		<text>Moves within the current level.</text>
+	</string>
+	<string id="st_dbg_teleport_other_level">
+		<text>Moves to another level and loads it.</text>
+	</string>
+	<string id="st_dbg_teleported">
+		<text>Teleported</text>
+	</string>
+	<string id="st_dbg_cat_modes">
+		<text>Modes</text>
+	</string>
+	<string id="st_dbg_cat_state">
+		<text>Condition</text>
+	</string>
+	<string id="st_dbg_cat_money">
+		<text>Money</text>
+	</string>
+	<string id="st_dbg_cat_body">
+		<text>Character</text>
+	</string>
+	<string id="st_dbg_p_god">
+		<text>God mode</text>
+	</string>
+	<string id="st_dbg_p_god_hint">
+		<text>The character takes no damage and does not tire.</text>
+	</string>
+	<string id="st_dbg_p_ammo">
+		<text>Unlimited ammo</text>
+	</string>
+	<string id="st_dbg_p_ammo_hint">
+		<text>Firing does not use up the magazine.</text>
+	</string>
+	<string id="st_dbg_p_ignore">
+		<text>Ignored by NPCs</text>
+	</string>
+	<string id="st_dbg_p_ignore_hint">
+		<text>Characters and mutants do not notice the player.</text>
+	</string>
+	<string id="st_dbg_p_noclip">
+		<text>No clipping</text>
+	</string>
+	<string id="st_dbg_p_noclip_hint">
+		<text>Free movement without collisions.</text>
+	</string>
+	<string id="st_dbg_p_heal">
+		<text>Full recovery</text>
+	</string>
+	<string id="st_dbg_p_heal_hint">
+		<text>Restores health, stamina and psy health, removes radiation and stops bleeding.</text>
+	</string>
+	<string id="st_dbg_p_money">
+		<text>Money</text>
+	</string>
+	<string id="st_dbg_p_money_hint">
+		<text>Gives or takes the amount set.</text>
+	</string>
+	<string id="st_dbg_p_weight">
+		<text>Weight limit</text>
+	</string>
+	<string id="st_dbg_p_weight_hint">
+		<text>Sets the weight the character carries without overload.</text>
+	</string>
+	<string id="st_dbg_turn_on">
+		<text>Turn on</text>
+	</string>
+	<string id="st_dbg_turn_off">
+		<text>Turn off</text>
+	</string>
+	<string id="st_dbg_give">
+		<text>Give</text>
+	</string>
+	<string id="st_dbg_take">
+		<text>Take</text>
+	</string>
+	<string id="st_dbg_set">
+		<text>Set</text>
+	</string>
+	<string id="st_dbg_healed">
+		<text>Condition restored</text>
+	</string>
+	<string id="st_dbg_cat_time">
+		<text>Time of day</text>
+	</string>
+	<string id="st_dbg_cat_weather">
+		<text>Weather</text>
+	</string>
+	<string id="st_dbg_cat_events">
+		<text>Events</text>
+	</string>
+	<string id="st_dbg_cat_season">
+		<text>Season</text>
+	</string>
+	<string id="st_dbg_cat_speed">
+		<text>Time speed</text>
+	</string>
+	<string id="st_dbg_w_climate">
+		<text>Climate weather</text>
+	</string>
+	<string id="st_dbg_w_climate_hint">
+		<text>Hands the weather back to the climate of the Zone.</text>
+	</string>
+	<string id="st_dbg_w_weather_hint">
+		<text>Sets the selected weather. The climate stops changing it until the climate weather is restored.</text>
+	</string>
+	<string id="st_dbg_w_time_hint">
+		<text>Moves the clock forward to the selected time.</text>
+	</string>
+	<string id="st_dbg_w_surge">
+		<text>Start an emission</text>
+	</string>
+	<string id="st_dbg_w_surge_stop">
+		<text>Stop the emission</text>
+	</string>
+	<string id="st_dbg_w_psi">
+		<text>Start a psy storm</text>
+	</string>
+	<string id="st_dbg_w_psi_stop">
+		<text>Stop the psy storm</text>
+	</string>
+	<string id="st_dbg_w_calendar">
+		<text>By the PC calendar</text>
+	</string>
+	<string id="st_dbg_month_1">
+		<text>January</text>
+	</string>
+	<string id="st_dbg_month_2">
+		<text>February</text>
+	</string>
+	<string id="st_dbg_month_3">
+		<text>March</text>
+	</string>
+	<string id="st_dbg_month_4">
+		<text>April</text>
+	</string>
+	<string id="st_dbg_month_5">
+		<text>May</text>
+	</string>
+	<string id="st_dbg_month_6">
+		<text>June</text>
+	</string>
+	<string id="st_dbg_month_7">
+		<text>July</text>
+	</string>
+	<string id="st_dbg_month_8">
+		<text>August</text>
+	</string>
+	<string id="st_dbg_month_9">
+		<text>September</text>
+	</string>
+	<string id="st_dbg_month_10">
+		<text>October</text>
+	</string>
+	<string id="st_dbg_month_11">
+		<text>November</text>
+	</string>
+	<string id="st_dbg_month_12">
+		<text>December</text>
+	</string>
+	<string id="st_dbg_cat_undeclared">
+		<text>Undeclared</text>
+	</string>
+	<string id="st_dbg_has">
+		<text>has</text>
+	</string>
+	<string id="st_dbg_has_info">
+		<text>The player has it</text>
+	</string>
+	<string id="st_dbg_no_info">
+		<text>The player has not got it</text>
+	</string>
+	<string id="st_dbg_story_hint">
+		<text>A story flag (info portion). Giving or taking it affects dialogues, tasks and scenes at once.</text>
+	</string>
+	<string id="st_dbg_give_info">
+		<text>Give</text>
+	</string>
+	<string id="st_dbg_take_info">
+		<text>Remove</text>
+	</string>
+	<string id="st_dbg_cat_stalkers">
+		<text>Stalkers</text>
+	</string>
+	<string id="st_dbg_cat_items">
+		<text>Items</text>
+	</string>
+	<string id="st_dbg_cat_other_objects">
+		<text>Other objects</text>
+	</string>
+	<string id="st_dbg_dead">
+		<text>dead</text>
+	</string>
+	<string id="st_dbg_gone">
+		<text>The object no longer exists</text>
+	</string>
+	<string id="st_dbg_go_to">
+		<text>Teleport to it</text>
+	</string>
+	<string id="st_dbg_kill">
+		<text>Kill</text>
+	</string>
+	<string id="st_dbg_remove">
+		<text>Remove</text>
+	</string>
+	<string id="ui_mm_debug_menu">
+		<text>Debug menu</text>
+	</string>
+	<string id="ui_mm_debug_menu_hint">
+		<text>Opens the debug window in the game with the key set under Controls: spawning items and characters, teleport, player modes, time and weather, story flags, nearby objects.</text>
+	</string>
+	<string id="kb_debug_menu">
+		<text>Debug menu</text>
+	</string>
+	<string id="kb_debug_menu_hint">
+		<text>Opens and closes the debug menu. Works when the menu is turned on under Game.</text>
+	</string>
+</string_table>

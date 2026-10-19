@@ -1,0 +1,406 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<!-- The debug menu (UIDebugMenuWnd, dead_air_x64_debug_menu.script). -->
+<string_table>
+	<string id="st_dbg_caption">
+		<text>Отладочное меню</text>
+	</string>
+	<string id="st_dbg_close">
+		<text>Закрыть</text>
+	</string>
+	<string id="st_dbg_categories">
+		<text>Категории</text>
+	</string>
+	<string id="st_dbg_search_hint">
+		<text>Поиск по названию или секции</text>
+	</string>
+	<string id="st_dbg_count">
+		<text>Количество</text>
+	</string>
+	<string id="st_dbg_pick_hint">
+		<text>Выберите запись в списке</text>
+	</string>
+	<string id="st_dbg_all">
+		<text>Все</text>
+	</string>
+	<string id="st_dbg_count_fmt">
+		<text>Показано: %u из %u</text>
+	</string>
+	<string id="st_dbg_empty">
+		<text>Список пуст</text>
+	</string>
+	<string id="st_dbg_nothing_found">
+		<text>Ничего не найдено</text>
+	</string>
+	<string id="st_dbg_failed">
+		<text>Действие не выполнено</text>
+	</string>
+	<string id="st_dbg_hotkey_fmt">
+		<text>%s - закрыть меню</text>
+	</string>
+	<string id="st_dbg_done">
+		<text>Готово</text>
+	</string>
+	<string id="st_dbg_apply">
+		<text>Применить</text>
+	</string>
+	<string id="st_dbg_now">
+		<text>сейчас</text>
+	</string>
+	<string id="st_dbg_on">
+		<text>вкл.</text>
+	</string>
+	<string id="st_dbg_off">
+		<text>выкл.</text>
+	</string>
+	<string id="st_dbg_tab_items">
+		<text>Предметы</text>
+	</string>
+	<string id="st_dbg_tab_npc">
+		<text>Персонажи</text>
+	</string>
+	<string id="st_dbg_tab_teleport">
+		<text>Телепорт</text>
+	</string>
+	<string id="st_dbg_tab_player">
+		<text>Игрок</text>
+	</string>
+	<string id="st_dbg_tab_world">
+		<text>Мир</text>
+	</string>
+	<string id="st_dbg_tab_story">
+		<text>Сюжет</text>
+	</string>
+	<string id="st_dbg_tab_near">
+		<text>Рядом</text>
+	</string>
+	<string id="st_dbg_cat_weapons">
+		<text>Оружие</text>
+	</string>
+	<string id="st_dbg_cat_ammo">
+		<text>Боеприпасы</text>
+	</string>
+	<string id="st_dbg_cat_outfits">
+		<text>Броня</text>
+	</string>
+	<string id="st_dbg_cat_helmets">
+		<text>Шлемы</text>
+	</string>
+	<string id="st_dbg_cat_artefacts">
+		<text>Артефакты</text>
+	</string>
+	<string id="st_dbg_cat_medicine">
+		<text>Медикаменты</text>
+	</string>
+	<string id="st_dbg_cat_food">
+		<text>Еда и напитки</text>
+	</string>
+	<string id="st_dbg_cat_devices">
+		<text>Устройства</text>
+	</string>
+	<string id="st_dbg_cat_quest">
+		<text>Квестовые</text>
+	</string>
+	<string id="st_dbg_cat_other">
+		<text>Прочее</text>
+	</string>
+	<string id="st_dbg_note_cost">
+		<text>%.0f руб.</text>
+	</string>
+	<string id="st_dbg_param_weight">
+		<text>Вес: %.2f кг</text>
+	</string>
+	<string id="st_dbg_param_cost">
+		<text>Цена: %.0f руб.</text>
+	</string>
+	<string id="st_dbg_param_box">
+		<text>В пачке: %.0f</text>
+	</string>
+	<string id="st_dbg_param_ammo">
+		<text>Боеприпасы:</text>
+	</string>
+	<string id="st_dbg_into_inventory">
+		<text>В инвентарь</text>
+	</string>
+	<string id="st_dbg_in_front">
+		<text>Перед собой</text>
+	</string>
+	<string id="st_dbg_spawn">
+		<text>Создать</text>
+	</string>
+	<string id="st_dbg_spawned_fmt">
+		<text>Создано: %d</text>
+	</string>
+	<string id="st_dbg_cat_mutants">
+		<text>Мутанты</text>
+	</string>
+	<string id="st_dbg_rank_novice">
+		<text>новички</text>
+	</string>
+	<string id="st_dbg_rank_advanced">
+		<text>опытные</text>
+	</string>
+	<string id="st_dbg_rank_experienced">
+		<text>опытные</text>
+	</string>
+	<string id="st_dbg_rank_veteran">
+		<text>ветераны</text>
+	</string>
+	<string id="st_dbg_rank_expert">
+		<text>эксперты</text>
+	</string>
+	<string id="st_dbg_rank_master">
+		<text>мастера</text>
+	</string>
+	<string id="st_dbg_rank_elite">
+		<text>элита</text>
+	</string>
+	<string id="st_dbg_squad_of">
+		<text>Отряд:</text>
+	</string>
+	<string id="st_dbg_note_members">
+		<text>состав %s</text>
+	</string>
+	<string id="st_dbg_param_faction">
+		<text>Группировка:</text>
+	</string>
+	<string id="st_dbg_param_members">
+		<text>Состав:</text>
+	</string>
+	<string id="st_dbg_spawn_in_front">
+		<text>Создать впереди</text>
+	</string>
+	<string id="st_dbg_spawn_here">
+		<text>Создать рядом</text>
+	</string>
+	<string id="st_dbg_spawned_npc_fmt">
+		<text>Создано персонажей: %d</text>
+	</string>
+	<string id="st_dbg_note_smart">
+		<text>точка</text>
+	</string>
+	<string id="st_dbg_note_transition">
+		<text>переход</text>
+	</string>
+	<string id="st_dbg_transition_fmt">
+		<text>Переход: %s</text>
+	</string>
+	<string id="st_dbg_teleport">
+		<text>Переместиться</text>
+	</string>
+	<string id="st_dbg_teleport_here_level">
+		<text>Перемещение в пределах текущей локации.</text>
+	</string>
+	<string id="st_dbg_teleport_other_level">
+		<text>Перемещение на другую локацию с её загрузкой.</text>
+	</string>
+	<string id="st_dbg_teleported">
+		<text>Перемещение выполнено</text>
+	</string>
+	<string id="st_dbg_cat_modes">
+		<text>Режимы</text>
+	</string>
+	<string id="st_dbg_cat_state">
+		<text>Состояние</text>
+	</string>
+	<string id="st_dbg_cat_money">
+		<text>Деньги</text>
+	</string>
+	<string id="st_dbg_cat_body">
+		<text>Персонаж</text>
+	</string>
+	<string id="st_dbg_p_god">
+		<text>Бессмертие</text>
+	</string>
+	<string id="st_dbg_p_god_hint">
+		<text>Персонаж не получает урона и не расходует выносливость.</text>
+	</string>
+	<string id="st_dbg_p_ammo">
+		<text>Бесконечные патроны</text>
+	</string>
+	<string id="st_dbg_p_ammo_hint">
+		<text>Магазин оружия не расходуется при стрельбе.</text>
+	</string>
+	<string id="st_dbg_p_ignore">
+		<text>Невидимость для NPC</text>
+	</string>
+	<string id="st_dbg_p_ignore_hint">
+		<text>Персонажи и мутанты не замечают игрока.</text>
+	</string>
+	<string id="st_dbg_p_noclip">
+		<text>Полёт сквозь стены</text>
+	</string>
+	<string id="st_dbg_p_noclip_hint">
+		<text>Свободное перемещение без столкновений.</text>
+	</string>
+	<string id="st_dbg_p_heal">
+		<text>Полное восстановление</text>
+	</string>
+	<string id="st_dbg_p_heal_hint">
+		<text>Восстанавливает здоровье, выносливость и пси-здоровье, выводит радиацию и останавливает кровотечение.</text>
+	</string>
+	<string id="st_dbg_p_money">
+		<text>Деньги</text>
+	</string>
+	<string id="st_dbg_p_money_hint">
+		<text>Выдаёт или забирает указанную сумму.</text>
+	</string>
+	<string id="st_dbg_p_weight">
+		<text>Предельный вес</text>
+	</string>
+	<string id="st_dbg_p_weight_hint">
+		<text>Задаёт вес, который персонаж может нести без перегруза.</text>
+	</string>
+	<string id="st_dbg_turn_on">
+		<text>Включить</text>
+	</string>
+	<string id="st_dbg_turn_off">
+		<text>Выключить</text>
+	</string>
+	<string id="st_dbg_give">
+		<text>Выдать</text>
+	</string>
+	<string id="st_dbg_take">
+		<text>Забрать</text>
+	</string>
+	<string id="st_dbg_set">
+		<text>Установить</text>
+	</string>
+	<string id="st_dbg_healed">
+		<text>Состояние восстановлено</text>
+	</string>
+	<string id="st_dbg_cat_time">
+		<text>Время суток</text>
+	</string>
+	<string id="st_dbg_cat_weather">
+		<text>Погода</text>
+	</string>
+	<string id="st_dbg_cat_events">
+		<text>События</text>
+	</string>
+	<string id="st_dbg_cat_season">
+		<text>Сезон</text>
+	</string>
+	<string id="st_dbg_cat_speed">
+		<text>Скорость времени</text>
+	</string>
+	<string id="st_dbg_w_climate">
+		<text>Погода по климату</text>
+	</string>
+	<string id="st_dbg_w_climate_hint">
+		<text>Возвращает управление погодой климату Зоны.</text>
+	</string>
+	<string id="st_dbg_w_weather_hint">
+		<text>Включает выбранную погоду. Климат перестаёт менять её до возврата погоды по климату.</text>
+	</string>
+	<string id="st_dbg_w_time_hint">
+		<text>Переводит часы вперёд до выбранного времени.</text>
+	</string>
+	<string id="st_dbg_w_surge">
+		<text>Начать выброс</text>
+	</string>
+	<string id="st_dbg_w_surge_stop">
+		<text>Остановить выброс</text>
+	</string>
+	<string id="st_dbg_w_psi">
+		<text>Начать пси-шторм</text>
+	</string>
+	<string id="st_dbg_w_psi_stop">
+		<text>Остановить пси-шторм</text>
+	</string>
+	<string id="st_dbg_w_calendar">
+		<text>По календарю ПК</text>
+	</string>
+	<string id="st_dbg_month_1">
+		<text>Январь</text>
+	</string>
+	<string id="st_dbg_month_2">
+		<text>Февраль</text>
+	</string>
+	<string id="st_dbg_month_3">
+		<text>Март</text>
+	</string>
+	<string id="st_dbg_month_4">
+		<text>Апрель</text>
+	</string>
+	<string id="st_dbg_month_5">
+		<text>Май</text>
+	</string>
+	<string id="st_dbg_month_6">
+		<text>Июнь</text>
+	</string>
+	<string id="st_dbg_month_7">
+		<text>Июль</text>
+	</string>
+	<string id="st_dbg_month_8">
+		<text>Август</text>
+	</string>
+	<string id="st_dbg_month_9">
+		<text>Сентябрь</text>
+	</string>
+	<string id="st_dbg_month_10">
+		<text>Октябрь</text>
+	</string>
+	<string id="st_dbg_month_11">
+		<text>Ноябрь</text>
+	</string>
+	<string id="st_dbg_month_12">
+		<text>Декабрь</text>
+	</string>
+	<string id="st_dbg_cat_undeclared">
+		<text>Без описания</text>
+	</string>
+	<string id="st_dbg_has">
+		<text>есть</text>
+	</string>
+	<string id="st_dbg_has_info">
+		<text>Получен игроком</text>
+	</string>
+	<string id="st_dbg_no_info">
+		<text>Не получен</text>
+	</string>
+	<string id="st_dbg_story_hint">
+		<text>Сюжетная отметка (инфопоршень). Выдача и снятие сразу влияют на диалоги, задания и сценарии.</text>
+	</string>
+	<string id="st_dbg_give_info">
+		<text>Выдать</text>
+	</string>
+	<string id="st_dbg_take_info">
+		<text>Снять</text>
+	</string>
+	<string id="st_dbg_cat_stalkers">
+		<text>Сталкеры</text>
+	</string>
+	<string id="st_dbg_cat_items">
+		<text>Предметы</text>
+	</string>
+	<string id="st_dbg_cat_other_objects">
+		<text>Прочие объекты</text>
+	</string>
+	<string id="st_dbg_dead">
+		<text>мёртв</text>
+	</string>
+	<string id="st_dbg_gone">
+		<text>Объект больше не существует</text>
+	</string>
+	<string id="st_dbg_go_to">
+		<text>Переместиться к нему</text>
+	</string>
+	<string id="st_dbg_kill">
+		<text>Убить</text>
+	</string>
+	<string id="st_dbg_remove">
+		<text>Удалить</text>
+	</string>
+	<string id="ui_mm_debug_menu">
+		<text>Отладочное меню</text>
+	</string>
+	<string id="ui_mm_debug_menu_hint">
+		<text>Открывает в игре окно отладки клавишей из раздела «Управление»: создание предметов и персонажей, телепорт, режимы игрока, время и погода, сюжетные отметки, объекты поблизости.</text>
+	</string>
+	<string id="kb_debug_menu">
+		<text>Отладочное меню</text>
+	</string>
+	<string id="kb_debug_menu_hint">
+		<text>Открывает и закрывает отладочное меню. Работает, когда меню включено в разделе «Игра».</text>
+	</string>
+</string_table>

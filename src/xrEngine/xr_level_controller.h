@@ -190,6 +190,8 @@ enum EGameActions : u32
     kTALK_LOG_SCROLL_DOWN,
 
     kWPN_8,
+    // the debug menu (xrGame/ui/UIDebugMenuWnd.h), after the numbered ones scripts and addons know
+    kDEBUG_MENU,
     kLASTACTION,
     kNOTBINDED
 };

@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The debug menu (UIDebugMenuWnd). Written by tools\ui\debug_menu_layout.py for 4:3 and 16:9 in
+     the palette of the Mods window (sys_* of ui_theme.xml). -->
+<w>
+    <main x="0" y="0" width="1024" height="768">
+        <colors text="#ECE9E2FF" muted="#9A968CFF" dim="#7C786FFF" good="#7FB069FF" bad="#DC645AFF" accent="#D2BE73FF"/>
+        <shade x="0" y="0" width="1024" height="768" fill="#00000040"/>
+        <shadow x="74" y="68" width="876" height="636" fill="#000000B3" soft="18" radius="8"/>
+        <frame x="82" y="74" width="860" height="620" fill="#000000EB" line="#E8E6E0CC" border="1" radius="3"/>
+        <caption x="104" y="86" width="300" height="34">
+            <text font="graffiti22" align="l" vert_align="c" color="$sys_text">st_dbg_caption</text>
+        </caption>
+        <hotkey_hint x="404" y="86" width="406" height="34">
+            <text font="letterica16" align="r" vert_align="c" color="$sys_dim"></text>
+        </hotkey_hint>
+        <close x="820" y="89" width="100" height="28">
+            <text font="letterica16" align="c" vert_align="c" color="$sys_text">st_dbg_close</text>
+            <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+            <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+            <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+            <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+        </close>
+        <tabs x="104" y="130" width="816" height="30" step="117.43">
+            <tab x="0" y="0" width="111.43" height="30">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_text"></text>
+                <normal fill="#00000000" line="#E8E6E066" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E01F" line="#E8E6E0CC" text="#ECE9E2FF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </tab>
+        </tabs>
+        <separator x="104" y="170" width="816" height="1" fill="#E8E6E033"/>
+        <cat_back x="104" y="182" width="156" height="490" fill="#FFFFFF05" line="#E8E6E026" border="1" radius="3"/>
+        <cat_caption x="114" y="186" width="136" height="24">
+            <text font="letterica16" align="l" vert_align="c" color="$sys_dim">st_dbg_categories</text>
+        </cat_caption>
+        <cats x="109" y="212" width="146" height="454" row_height="26">
+            <cat x="0" y="0" width="146" height="24">
+                <text font="letterica16" align="l" vert_align="c" color="$sys_text" x="8"></text>
+                <normal fill="#00000000" radius="2" text="#9A968CFF"/>
+                <highlight fill="#FFFFFF0D" text="#ECE9E2FF"/>
+                <pushed fill="#FFFFFF17" text="#ECE9E2FF"/>
+                <checked fill="#D2BE7314" line="#D2BE7366" border="1" text="#D2BE73FF"/>
+            </cat>
+        </cats>
+        <search_back x="272" y="182" width="374" height="30" fill="#FFFFFF0A" line="#E8E6E066" border="1" radius="2"/>
+        <search_icon x="281" y="190" width="14" height="14" kind="search" fill="#9A968CFF" border="1.6"/>
+        <search_hint x="300" y="182" width="338" height="30">
+            <text font="letterica16" align="l" vert_align="c" color="#7C786FFF">st_dbg_search_hint</text>
+        </search_hint>
+        <search x="300" y="182" width="338" height="30" max_symb_count="64">
+            <text font="letterica18" align="l" vert_align="c" color="$sys_text" x="0"/>
+        </search>
+        <count x="272" y="214" width="374" height="20">
+            <text font="letterica16" align="r" vert_align="c" color="$sys_dim"></text>
+        </count>
+        <list_back x="272" y="236" width="374" height="436" fill="#FFFFFF05" line="#E8E6E026" border="1" radius="3"/>
+        <list x="276" y="240" width="366" height="428" row_height="42" bar_width="3">
+            <track x="362" y="0" width="3" height="428" fill="#E8E6E014" radius="1"/>
+            <thumb x="362" y="0" width="3" height="40" fill="#E8E6E080" radius="1"/>
+            <row x="0" y="0" width="356" height="42">
+                <back x="0" y="1" width="356" height="40">
+                    <normal fill="#00000000" radius="2"/>
+                    <highlight fill="#FFFFFF0D" line="#E8E6E026" border="1"/>
+                    <checked fill="#FFFFFF17" line="#E8E6E0B3" border="1"/>
+                </back>
+                <name x="8" y="3" width="270" height="21">
+                    <text font="letterica18" align="l" vert_align="c" color="$sys_text"></text>
+                </name>
+                <sec x="8" y="23" width="270" height="16">
+                    <text font="letterica16" align="l" vert_align="c" color="$sys_dim"></text>
+                </sec>
+                <badge x="278" y="3" width="70" height="21">
+                    <text font="letterica16" align="r" vert_align="c" color="$sys_accent"></text>
+                </badge>
+                <note x="258" y="23" width="90" height="16">
+                    <text font="letterica16" align="r" vert_align="c" color="$sys_dim"></text>
+                </note>
+            </row>
+        </list>
+        <list_status x="282" y="356" width="354" height="80">
+            <text font="letterica16" align="c" vert_align="c" color="$sys_muted" complex_mode="1"></text>
+        </list_status>
+        <card x="658" y="182" width="262" height="490">
+            <back x="0" y="0" width="262" height="490" fill="#FFFFFF05" line="#E8E6E026" border="1" radius="3"/>
+            <hint x="14" y="150" width="234" height="80">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_muted" complex_mode="1">st_dbg_pick_hint</text>
+            </hint>
+            <icon x="14" y="14" width="234" height="86" stretch="1"/>
+            <title x="14" y="104" width="234" height="44">
+                <text font="graffiti19" align="l" vert_align="t" color="$sys_text" complex_mode="1"></text>
+            </title>
+            <sub x="14" y="148" width="234" height="18">
+                <text font="letterica16" align="l" vert_align="c" color="$sys_dim"></text>
+            </sub>
+            <rule x="14" y="170" width="234" height="1" fill="#E8E6E033"/>
+            <body x="14" y="178" width="234" height="84" always_show_scroll="0" vert_interval="2" right_ident="6" left_ident="0" top_indent="0" bottom_indent="0" bar_width="2">
+                <track fill="#E8E6E014"/>
+                <thumb fill="#E8E6E080" radius="1"/>
+            </body>
+            <body_text x="0" y="0" width="226" height="16">
+                <text font="letterica16" align="l" vert_align="t" color="$sys_muted" complex_mode="1"></text>
+            </body_text>
+            <status x="14" y="268" width="234" height="30">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_accent" complex_mode="1"></text>
+            </status>
+            <choice_a x="14" y="300" width="114" height="28">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_text"></text>
+                <normal fill="#00000000" line="#E8E6E066" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E01F" line="#E8E6E0CC" text="#ECE9E2FF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </choice_a>
+            <choice_b x="134" y="300" width="114" height="28">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_text"></text>
+                <normal fill="#00000000" line="#E8E6E066" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E01F" line="#E8E6E0CC" text="#ECE9E2FF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </choice_b>
+            <count_label x="14" y="338" width="90" height="30">
+                <text font="letterica16" align="l" vert_align="c" color="$sys_muted">st_dbg_count</text>
+            </count_label>
+            <count_minus x="98" y="338" width="34" height="30">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_text">-</text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </count_minus>
+            <count x="138" y="338" width="70" height="30" max_symb_count="5" num_only="1">
+                <shape style="sys_field"/>
+                <text font="letterica18" align="c" vert_align="c" color="$sys_text"/>
+            </count>
+            <count_plus x="214" y="338" width="34" height="30">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_text">+</text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </count_plus>
+            <second x="14" y="380" width="114" height="30">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_text"></text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </second>
+            <third x="134" y="380" width="114" height="30">
+                <text font="letterica16" align="c" vert_align="c" color="$sys_text"></text>
+                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
+                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
+                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </third>
+            <primary x="14" y="418" width="234" height="34">
+                <text font="letterica18" align="c" vert_align="c" color="$sys_text"></text>
+                <normal fill="#00000000" line="#D2BE73FF" border="1" radius="2" text="#D2BE73FF"/>
+                <highlight fill="#D2BE73FF" line="#D2BE73FF" text="#0B0B0BFF"/>
+                <pushed fill="#B8A45EFF" line="#B8A45EFF" text="#0B0B0BFF"/>
+                <checked fill="#D2BE73FF" line="#D2BE73FF" text="#0B0B0BFF"/>
+                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
+            </primary>
+        </card>
+    </main>
+</w>

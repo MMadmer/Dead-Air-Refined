@@ -49,6 +49,8 @@
 #include "ui/UIOptConCom.h"
 #include "UIGameSP.h"
 #include "ui/UIActorMenu.h"
+#include "ui/UIDebugMenuWnd.h"
+#include "xrEngine/xr_level_controller.h"
 #include "ui/ContentService.h"
 #include "ui/ModUpdateService.h"
 #include "ui/UpdateService.h"
@@ -101,6 +103,7 @@ extern int g_dar_major_update_notice;
 extern int g_dar_community_links;
 // ui/UIDamageIndicator.cpp - the side a hit came from, round the crosshair
 extern int g_dar_damage_indicator;
+extern int g_dar_debug_menu;
 // UIGameSP.cpp - open the inventory without waiting out the backpack scene.
 extern int g_dar_instant_inventory;
 // ZoneCampfire.cpp - rain puts campfires out.
@@ -283,6 +286,39 @@ public:
         xrDebug::SetOutOfMemoryCallback(full_memory_stats);
     };
     virtual void Execute(LPCSTR args) { full_memory_stats(); }
+};
+
+// dar_debug_menu 0|1 (Options -> Game -> Other): the debug menu's key opens it. Turned on, the key gets F7 when the
+// action has no key and F7 is free.
+class CCC_DebugMenu final : public CCC_Integer
+{
+public:
+    CCC_DebugMenu(pcstr name) : CCC_Integer(name, &g_dar_debug_menu, 0, 1) {}
+
+    void Execute(pcstr args) override
+    {
+        CCC_Integer::Execute(args);
+        if (g_dar_debug_menu && !GetActionDik(kDEBUG_MENU, 0) && GetBindedAction(SDL_SCANCODE_F7) == kNOTBINDED)
+            Console->Execute("bind debug_menu kF7");
+    }
+};
+
+// dar_debug_menu_open: the debug menu over the game or away, whatever the option says (QA, the console).
+class CCC_DebugMenuOpen final : public IConsole_Command
+{
+public:
+    CCC_DebugMenuOpen(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr) override { CUIDebugMenuWnd::Toggle(); }
+    void Save(IWriter*) override {}
+};
+
+// dar_debug_menu_do <command>: what a click on the open debug menu does (CUIDebugMenuWnd::Command), for QA.
+class CCC_DebugMenuDo final : public IConsole_Command
+{
+public:
+    CCC_DebugMenuDo(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override { CUIDebugMenuWnd::Command(args); }
+    void Save(IWriter*) override {}
 };
 
 class CCC_SessionReport : public IConsole_Command
@@ -3941,6 +3977,9 @@ void CCC_RegisterCommands()
     // the community panel of the main menu and the pause menu (ui/UICommunityPanel)
     CMD4(CCC_Integer, "dar_community_links", &g_dar_community_links, 0, 1);
     CMD4(CCC_Integer, "dar_damage_indicator", &g_dar_damage_indicator, 0, 1);
+    CMD1(CCC_DebugMenu, "dar_debug_menu");
+    CMD1(CCC_DebugMenuOpen, "dar_debug_menu_open");
+    CMD1(CCC_DebugMenuDo, "dar_debug_menu_do");
     CMD4(CCC_Integer, "dar_instant_inventory", &g_dar_instant_inventory, 0, 1);
     CMD4(CCC_Integer, "dar_rain_douses_fires", &g_dar_rain_douses_fires, 0, 1);
     // the dialog window at the screen's left edge (0), where its layout puts it (1, the middle) or at the right

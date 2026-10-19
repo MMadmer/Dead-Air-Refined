@@ -1,0 +1,67 @@
+# Debug menu (1.6.1)
+
+A window over the running game (it does not pause it) in the look of the main menu's own windows - the palette of
+the Mods window (`sys_*` of `ui_theme.xml`): black panel, thin light lines, graffiti and letterica fonts. Off by
+default: Options -> Game -> Other -> "Debug menu" (`dar_debug_menu`, saved). The key is the action `debug_menu`
+(Options -> Controls, common group); turning the menu on binds it to F7 when the action has no key and F7 is free.
+Esc or the key closes the window.
+
+Sources: `src/xrGame/ui/UIDebugMenuWnd.{h,cpp}` (the window), `gamedata/scripts/dead_air_x64_debug_menu.script`
+(what the tabs list and do), `configs/ui/ui_debug_menu.xml` and `_16` (written by `tools/ui/debug_menu_layout.py`),
+`configs/text/<lang>/dead_air_x64_debug_menu.xml`. The window belongs to the game UI (`CUIGameSP::DebugMenu`), made
+on its first opening and dropped with the level or a UI rebuild.
+
+## The window
+
+Every tab has the same three panes:
+
+- **Categories** on the left, "All" first where the tab has it.
+- **The list** with its **search**: rows show the game name and, in a smaller font under it, the internal name
+  (section, info portion, console command); a state on the right in the accent colour and a small note (price,
+  distance, members). The list is virtual: the rows on screen are filled from the entries under the scroll
+  position, so thousands of items cost the same as ten. Wheel, a drag of the bar, Up/Down/PgUp/PgDn move the pick;
+  Enter or a double click presses the main button; Ctrl+Tab and Ctrl+Shift+Tab walk the tabs.
+- **The card** of the picked entry: an inventory icon for items, the name, the internal name, a scrolling
+  description, a two-way choice (into the inventory / in front), a count with - and + (a tenth at a time over ten)
+  and up to three buttons; a line over them says what the last button did.
+
+The search matches every word of the query against the game name (the start of a word, inside it, one typo in a
+word of five letters or more - the Mod Browser's rule, ModSearch) and against the internal name (its start, the
+start of a part after an underscore, inside it, its letters in order: "wpnak" finds "wpn_ak74"), in the layout it
+was typed in, in the other one (QWERTY <-> JCUKEN) and transliterated from Cyrillic ("medkit" typed in Cyrillic).
+An exact name or section ranks first; a tie goes to the shorter section (the item before its scene's copy).
+
+## Tabs (the script's)
+
+| Tab | Categories | Entries | Buttons |
+| --- | --- | --- | --- |
+| Items | weapons, ammo, outfits, helmets, artefacts, medicine, food, devices, quest, other (by `class`) | every section with `inv_name`, `visual` and inventory cells | Spawn - into the inventory or in front, N items or N boxes of ammo |
+| Characters | factions (`st_faction_*`), mutants | squad sections (`faction` + `npc_random`/`npc`); simulation squads first, named by faction and rank | Spawn ahead / beside (`create_npc` + `setup_squad_and_group`, they come online at once) |
+| Teleport | levels (`level_maps_single`, the current first) | smart terrains (`smart_names`), level changers | Teleport: `set_actor_position` on this level, `ChangeLevel` to another; the window closes |
+| Player | modes, condition, money, character | god mode, unlimited ammo, ignored by AI, no clipping, full recovery, money, weight limit | Turn on/off, Apply, Give/Take, Set |
+| World | time, weather, events, season, time speed | the 24 hours, every weather file, climate weather, emission and psy storm start/stop, the months and the PC calendar, x1..x100 | Apply (a weather pins the sky until "Climate weather") |
+| Story | the `[info_portions]` files, undeclared | every declared info portion and those the actor holds | Give / Remove |
+| Nearby | stalkers, mutants, items, other | online objects within 80 m, nearest first | Teleport to it, Kill, Remove |
+
+## Script contract (`dead_air_x64_debug_menu.script`)
+
+```lua
+tabs()                               -- { { id = "items", caption = "st_dbg_tab_items" }, ... }
+build(tab)                           -- { all = true, categories = { caption, ... },
+                                     --   entries = { { key, name, sec, badge, note, cat }, ... } }
+describe(tab, key)                   -- { title, sub, body, icon = <item section>, choice = { a, b }, choice_default,
+                                     --   count = { min, max, default }, primary, second, third }
+act(tab, key, button, count, choice) -- { msg, rebuild = true, close = true } or the message alone
+add_tab(id, caption, provider)       -- a mod's own tab: provider.build(), describe(key), act(key, button, count, choice)
+```
+
+Captions are string ids or text in the UI code page. Every tab is read again when the window opens (what is near and
+what the player holds change while it is closed) and after a button asks for it.
+
+## QA
+
+- `dar_debug_menu_open` toggles the window whatever the option says; `dar_debug_menu_do <command>` drives the open
+  window: `tab <id>`, `category <n>`, `search <text>`, `pick <n>`, `pick_key <key>`, `count <n>`, `choice <1|2>`,
+  `press <primary|second|third>`, `state` (logged as `* [debug menu] ...`).
+- `tools/qa/water/debug_menu.lua` (Run-WaterQa): every tab driven and checked in the game's state - spawn into the
+  inventory and in front, a squad, a mode, money, the time, the story, nearby, a teleport.

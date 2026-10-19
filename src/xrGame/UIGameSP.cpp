@@ -20,6 +20,7 @@
 #include "GameTask.h"
 
 #include "ui/UIActorMenu.h"
+#include "ui/UIDebugMenuWnd.h"
 #include "ui/UIPdaWnd.h"
 #include "ui/UITalkWnd.h"
 #include "xrUICore/MessageBox/UIMessageBox.h"
@@ -38,6 +39,7 @@ CUIGameSP::CUIGameSP() : m_game(NULL), m_game_objective(NULL)
 
 CUIGameSP::~CUIGameSP()
 {
+    xr_delete(DebugMenu);
     delete_data(TalkMenu);
     delete_data(UIChangeLevelWnd);
     CloseTimeDilator();
@@ -47,6 +49,8 @@ void CUIGameSP::HideShownDialogs()
 {
     HideActorMenu();
     HidePdaMenu();
+    if (DebugMenu && DebugMenu->IsShown())
+        DebugMenu->HideDialog();
     CUIDialogWnd* mir = TopInputReceiver();
     if (mir && mir == TalkMenu)
     {
@@ -56,6 +60,10 @@ void CUIGameSP::HideShownDialogs()
 
 void CUIGameSP::ReinitDialogs()
 {
+    // the UI is rebuilt (a resolution change): the menu is made again on its next opening
+    if (DebugMenu && DebugMenu->IsShown())
+        DebugMenu->HideDialog();
+    xr_delete(DebugMenu);
     delete_data(TalkMenu);
     TalkMenu = xr_new<CUITalkWnd>();
     delete_data(UIChangeLevelWnd);
@@ -128,6 +136,12 @@ bool CUIGameSP::IR_UIOnKeyboardPress(int dik)
 
     switch (GetBindedAction(dik))
     {
+    case kDEBUG_MENU:
+    {
+        if (CUIDebugMenuWnd::Enabled())
+            CUIDebugMenuWnd::Toggle();
+        break;
+    }
     case kMAP:
     {
         if (!pActor->inventory_disabled())
