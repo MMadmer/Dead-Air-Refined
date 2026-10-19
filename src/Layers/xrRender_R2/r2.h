@@ -567,7 +567,8 @@ public:
     void model_Logging(bool bEnable) override { Models->Logging(bEnable); }
     void models_Prefetch() override;
     void models_Clear(bool b_complete) override;
-    size_t models_GetMemoryUsage() override { return Models->memory_usage(); }
+    // Before the renderer is created (a session_report from user.ltx) there are no models.
+    size_t models_GetMemoryUsage() override { return Models ? Models->memory_usage() : 0; }
 
     // Occlusion culling
     bool occ_visible(vis_data& V) override;

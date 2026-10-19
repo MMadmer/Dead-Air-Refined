@@ -71,7 +71,7 @@ void CRenderTarget::phase_sunshafts()
     const Fvector2 p1 = { (width + .5f) * inverseWidth, (height + .5f) * inverseHeight };
 
     const auto renderPass = [&](const ref_rt& target, ref_selement element, pcstr constant = nullptr,
-                                float x = 0.f, float y = 0.f)
+                                float x = 0.f, float y = 0.f, float z = 0.f)
     {
         u_setrt(RCache, target, nullptr, nullptr, static_cast<ID3DDepthStencilView*>(nullptr));
         RCache.set_CullMode(CULL_NONE);
@@ -118,7 +118,7 @@ void CRenderTarget::phase_sunshafts()
 
         RCache.set_Element(element);
         if (constant)
-            RCache.set_c(constant, x, y, 0.f, 0.f);
+            RCache.set_c(constant, x, y, z, 0.f);
         RCache.set_Geometry(g_aa_AA);
         RCache.Render(D3DPT_TRIANGLELIST, offset, 0, 4, 0, 2);
     };
@@ -128,7 +128,8 @@ void CRenderTarget::phase_sunshafts()
         da_vrs_scope vrs(RCache, VrsPass::SunshaftsBlur);
         renderPass(rt_SunShaftsMask, s_sunshafts->E[0]);
         renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[1]);
-        renderPass(rt_SunShaftsPass0, s_sunshafts->E[2], "SSParams", ps_r2_sss_phase1, ps_r2_sss_radius);
+        // z = 1: the first pass reads the sky mask and weighs the shafts by how much of the sun's disk it sees.
+        renderPass(rt_SunShaftsPass0, s_sunshafts->E[2], "SSParams", ps_r2_sss_phase1, ps_r2_sss_radius, 1.f);
         renderPass(rt_SunShaftsMaskSmoothed, s_sunshafts->E[3], "SSParams", ps_r2_sss_phase2, ps_r2_sss_radius);
     }
     renderPass(rt_Generic, s_sunshafts->E[4], "SSParamsDISPLAY", ps_r2_sss_intensity, ps_r2_sss_blend);

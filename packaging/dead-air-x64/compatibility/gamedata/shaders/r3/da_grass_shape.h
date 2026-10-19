@@ -22,6 +22,7 @@ uniform float4	da_grass_vfwd;	// xyz camera forward, w draw radius R
 uniform float4	da_grass_vlod;	// x d1, y d2, z time, w previous time
 uniform float4	da_grass_vsun;	// xyz direction toward the sun (world), w shadow texel (m)
 uniform float4	da_grass_vmisc;	// x frame & 63, y 1 = motion vectors, z r__detail_height, w unused
+uniform float4	da_grass_vshade;	// x how far the blades cast into the sun cascades (m), y the sun's share of the light
 
 struct grass_blade
 {
@@ -296,6 +297,20 @@ float	grass_ao	(float d, float ao, float y_rel)
 		- 0.3f * (1.0f - ao));
 	const float a = saturate(y_rel);
 	return lerp(root, 1.0f, a * (2.0f - a));
+}
+
+// The canopy's shade of itself from the sun where the blades cast no shadow (past their cascades, da_grass_vshade.x):
+// the sun reaching a point y_rel canopy heights up passes the leaves above it, Beer-Lambert along the sun's slant
+// (1.2 of optical depth through a whole stand, the sun no lower than 8 degrees), on the sun's share of the light.
+// Inside the casters' reach their shadows do it; over its last fifth the two cross. Past it a field was lit through
+// to the ground, the far meadow flat and pale against the near one ("the grass has no self-shadowing"). Returns the
+// factor on the albedo; the sky term is raised by its inverse where it can be, so only the sun's part darkens.
+float	grass_canopy_sun	(float d, float y_rel)
+{
+	const float w = smoothstep(0.8f * da_grass_vshade.x, da_grass_vshade.x, d) * da_grass_vshade.y;
+	const float depth = 1.0f - saturate(y_rel);
+	const float t = exp(-1.2f * depth / max(da_grass_vsun.y, 0.14f));
+	return lerp(1.0f, t, w);
 }
 
 // Weight of the canopy normal (GoT specular anti-aliasing: blades shade more like the canopy with distance).

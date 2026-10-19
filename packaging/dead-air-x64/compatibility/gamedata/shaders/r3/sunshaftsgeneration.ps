@@ -48,6 +48,24 @@ float4		main		(	AntiAliasingStruct	INStruct	)		:		SV_Target
 	
 
 	outColor = accum*2*float4(sunDist.xxx,1);
+
+	// The first pass (SSParams.z = 1, the sky mask in sMaskBlur) weighs the shafts by how much of the sun's disk the
+	// view sees: a sun behind a roof or a wall streamed the sky beside the edge over it ("rays through the roofs").
+	// The mask's w is 0 on the sky and 1 on geometry; nine taps over a disk a little wider than the sun.
+	[branch] if (SSParams.z > 0.5f)
+	{
+		const float2 r = float2(0.012f, 0.012f / fAspectRatio);
+		float sky = 0.0f;
+		[unroll] for (int k = 0; k < 9; ++k)
+		{
+			const float a = float(k) * 0.7853982f;
+			const float2 o = k == 8 ? float2(0.0f, 0.0f) : float2(cos(a), sin(a)) * r;
+			sky += 1.0f - saturate(sMaskBlur.SampleLevel(smp_rtlinear, saturate(sunScreen.xy + o), 0).w);
+		}
+		const float vis = smoothstep(0.0f, 0.6f, sky / 9.0f);
+		outColor.rgb *= vis;
+		outColor.w = lerp(1.0f, outColor.w, vis);
+	}
 	outColor.w +=1-saturate(saturate(fSign*0.1+0.9));
 	
 #endif //USE_SSHAFTS

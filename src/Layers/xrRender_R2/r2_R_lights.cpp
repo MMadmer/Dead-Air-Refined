@@ -239,6 +239,7 @@ void CRender::render_lights(light_Package& LP)
         const auto cache = DaSmapCache(L->smap_cache.mode);
         dsgraph.o.phase = PHASE_SMAP;
         dsgraph.o.local_light = true;
+        dsgraph.o.carried_light = L->flags.bNeverDemote;
         dsgraph.o.smap_cache = u8(cache);
         if (cache == DaSmapCache::fill)
             L->smap_cache.trees.clear();

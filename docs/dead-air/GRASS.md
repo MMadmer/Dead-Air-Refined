@@ -493,11 +493,11 @@ now than on the reference day of the latched terrain folder; under the near blad
 **Reach** (1.6.1): at full cover to the detail radius, the far edge of the grass read as a line from any hill.
 The blades now reach `kReach` = 1.5 times the detail radius (Extreme 240 m) for the same records: past `d2` the
 cover thins as `1 / sqrt(1 + x^2)`, `x = (d - d2) / scale` (`grass_taper`, density thinning without widening:
-the tiles' lattice level, the early out, the view and the casters' keep). `blade_reach` solves the scale per
+the view's lattice level, early out and keep; the casters keep the stand's full density, so a field's shadow is as
+deep as before). `blade_reach` solves the scale per
 radius and `d2` so that the far field's records match the stock reach at full cover; on the l01_escape meadow
 they go per metre as `r x cover / widening`, measured: Extreme 0.38 of the cover at 160 m and 0.24 at 240 m,
-the view records +0.8 % at the eye and +1.2 % from 18 m up against the stock reach, the shadow casters -5 % and
--10 %, the compute lanes fewer. The slope is at most 0.8 % a metre and nothing changes inside `d2`: running
+the view records +0.8 % at the eye and +1.2 % from 18 m up against the stock reach, the compute lanes fewer. The slope is at most 0.8 % a metre and nothing changes inside `d2`: running
 across a meadow the thinning cannot be seen. The ground tint takes the opening gaps over (`da_gtint2.zw`: the
 near-to-far strength follows `1 - cover` too), and the reed billboards hand over at the new reach. QA:
 `r__dbg_grass 256` is the stock reach at full cover; `tools/qa/water/grass_reach.lua` shoots both, at the eye

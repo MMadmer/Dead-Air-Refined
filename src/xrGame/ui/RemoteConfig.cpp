@@ -343,7 +343,17 @@ void RemoteConfig::Start()
             DeleteFileA(slot.cache);
         }
     }
-    s.worker = std::thread(fetch_all);
+    // Anything that escaped a plain std::thread would end the process: the kept copies keep serving instead.
+    s.worker = std::thread([]
+    {
+        try
+        {
+            fetch_all();
+        }
+        catch (...)
+        {
+        }
+    });
 }
 
 void RemoteConfig::Stop() { state().stop_and_join(); }

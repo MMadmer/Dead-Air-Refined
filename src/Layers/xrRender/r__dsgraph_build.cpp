@@ -1355,8 +1355,10 @@ void R_dsgraph_structure::build_subspace()
 
     // In first person the actor is dropped from the spatial database, so the query above can
     // never find it and its shadow has to be inserted into each shadow map by hand. The main
-    // pass keeps its own z-prefill on PHASE_SMAP, hence the is_main_pass guard.
-    if (o.phase == CRender::PHASE_SMAP && !o.is_main_pass && ps_r__actor_shadow && g_pGameLevel &&
+    // pass keeps its own z-prefill on PHASE_SMAP, hence the is_main_pass guard. A light he carries never takes it:
+    // a glowstick held out in front sits past the body's radius (CActor::render_shadow_caster), and the shadow
+    // model's hand and item, a few centimetres from the lamp, laid a black square on the ground under him.
+    if (o.phase == CRender::PHASE_SMAP && !o.is_main_pass && !o.carried_light && ps_r__actor_shadow && g_pGameLevel &&
         g_pGameLevel->pHUD)
         g_pGameLevel->pHUD->Render_Actor_Shadow(context_id, o.view_pos);
 }

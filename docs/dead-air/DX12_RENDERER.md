@@ -269,8 +269,11 @@ While an upscaler is active the scene samplers get `log2(render/display) - 1` ad
   video page) and never saved.
 - DirectX 11 has the same: a flip chain of three buffers, waitable, on the same pacer (two buffers made
   a vsync'd frame slower than the refresh wait a whole refresh for the buffer still on the display).
-  Direct3D 11 does not take the waitable flag in exclusive fullscreen, so a switch to it makes the chain
-  again as the copy model, and a switch back makes the paced flip chain.
+  The chain is windowed in every window mode (1.6.1): "Fullscreen" is SDL's, the window takes the output in
+  the chosen display mode and Windows presents the flip chain by independent flip as it would an exclusive
+  one. DXGI's exclusive mode fought SDL over the display mode, dropped out on every focus change and, on
+  DirectX 12 and Vulkan, made every reset rebuild the chain without its frame generation. The gamma
+  sliders are the combine shader's in every mode (`da_gamma.w`).
 - Submission: `ExecuteCommandList` does not submit. The immediate list so far and the deferred list
   are queued (`Context::m_queued`) and go to the queue in one `ExecuteCommandLists` at the next real
   submission (Present, `Flush`, an event query, a staging `Map` that has to wait, `GetData` without

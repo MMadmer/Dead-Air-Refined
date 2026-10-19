@@ -708,6 +708,9 @@ struct Latch
     float R{}, R0{}, d1{}, d2{}, kpx{}, wmin_per_m{};
     // Past d2 the cover thins as 1 / sqrt(1 + x^2), x = (d - d2) x taper_inv (0 = no thinning, the stock reach).
     float taper_inv{};
+    // The sun's share of the light on the grass (0 without a sun this frame) and how far the blades cast into its
+    // cascades: past that the canopy shades itself analytically (da_grass_blade_vs.h, grass_canopy_sun).
+    float sun_share{}, caster_reach{};
     float s0{}, dlat{}, density_scale{}, height{};
     float near_texel{}, mid_reach{}, mid_texel{};
     bool shadow_near{}, shadow_mid{};
@@ -1675,9 +1678,10 @@ void build_tiles()
             }
         if (dmax <= 0.f)
             continue;
-        // The cover thins past d2: the tile's nearest point bounds it.
-        dmax *= taper_cover(dn, L.d2, L.taper_inv);
         const u32 j = dmax >= L.dlat ? 0u : u32(std::floor(std::log2(L.dlat / dmax)));
+        // The view's cover thins past d2 (the tile's nearest point bounds it); the casters keep the full stand.
+        const float dmax_view = dmax * taper_cover(dn, L.d2, L.taper_inv);
+        const u32 jv = dmax_view >= L.dlat ? 0u : u32(std::floor(std::log2(L.dlat / dmax_view)));
         // Lanes leave their lattice cell by the jitter and the clump pull: the box takes them in.
         Fbox box;
         box.vMin.set(x0 - 1.f, ymin, z0 - 1.f);
@@ -1690,7 +1694,7 @@ void build_tiles()
         const bool sh_near = want_near && (view || cast), sh_mid = want_mid && (view || cast);
         if (!view && !sh_near && !sh_mid)
             continue;
-        u32 level = view ? ring + j : (sh_near ? level_near : level_mid) + j;
+        u32 level = view ? ring + (sh_near || sh_mid ? j : jv) : (sh_near ? level_near : level_mid) + j;
         level = std::min({level, 2 * k + 9, kLmax - 1});
         const u32 n = u32(32 << k) >> (level >> 1);
         const u32 lanes = (level & 1) ? n * (n / 2) : n * n;
@@ -1817,6 +1821,7 @@ void draw_bins(CBackend& cmd, const ref_shader& shader, u32 first, u32 last, flo
     cmd.set_c("da_grass_vlod", L.d1, L.d2, L.time, L.time_prev);
     cmd.set_c("da_grass_vsun", L.sun.x, L.sun.y, L.sun.z, texel);
     cmd.set_c("da_grass_vmisc", float(L.frame_mod), L.motion ? 1.f : 0.f, L.height, 0.f);
+    cmd.set_c("da_grass_vshade", L.caster_reach, L.sun_share, 0.f, 0.f);
     cmd.SRVSManager.SetVSResource(0, g.blades_b.srv);
     cmd.SRVSManager.SetVSResource(1, g.tables_b.srv);
     cmd.SRVSManager.SetVSResource(2, g.counts_b.srv);
@@ -2351,8 +2356,18 @@ void da_grass_frame_latch()
     L.near_texel = g.floor_k * kNearReach / smap;
     L.mid_reach = float(ps_r__grass_shadow_dist);
     L.mid_texel = g.floor_k * std::max(ps_r__sun_cascade_mid, 1.f) / smap;
+    L.sun_share = 0.f;
+    L.caster_reach = L.shadow_mid ? L.mid_reach : (L.shadow_near ? kNearReach : 0.f);
     if (g_pGamePersistent)
     {
+        const auto& env = g_pGamePersistent->Environment().CurrentEnv;
+        if (sun)
+        {
+            const auto lum = [](float r, float g, float b) { return 0.2126f * r + 0.7152f * g + 0.0722f * b; };
+            const float ls = lum(env.sun_color.x, env.sun_color.y, env.sun_color.z);
+            const float lh = lum(env.hemi_color.x, env.hemi_color.y, env.hemi_color.z);
+            L.sun_share = std::clamp(ls / std::max(ls + lh, 1e-4f), 0.f, 1.f);
+        }
         L.sun = g_pGamePersistent->Environment().CurrentEnv.sun_dir;
         L.sun.invert();
         if (L.sun.square_magnitude() < 1e-6f)

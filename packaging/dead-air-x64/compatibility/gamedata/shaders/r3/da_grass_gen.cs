@@ -489,10 +489,11 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	{
 		const float dist = distance(xz, da_grass_cam.xz);
 		const float dens_ub = P6.x * da_grass_lat.z * grass_seas(p, 2, false).w * grass_seas(p, 3, false).z
-			/ max(da_grass_lat.y, 1e-3f) * (culm ? 1.0f : 3.0f) * grass_taper(dist - 0.6f);
+			/ max(da_grass_lat.y, 1e-3f) * (culm ? 1.0f : 3.0f);
 		const float wide = grass_prof(p, 27).x;
 		const float depth = max(0.45f * (dist - 0.6f), 0.05f);
-		float ub = (tflags & 1u) != 0u ? saturate(wide / (da_grass_fwd.w * depth)) * dens_ub : 0.0f;
+		// The view's cover thins with distance, the casters' does not (the keep below).
+		float ub = (tflags & 1u) != 0u ? saturate(wide / (da_grass_fwd.w * depth)) * dens_ub * grass_taper(dist - 0.6f) : 0.0f;
 		if ((tflags & 2u) != 0u)
 			ub = max(ub, saturate(wide / (2.0f * da_grass_sh.z)) * dens_ub);
 		if ((tflags & 4u) != 0u)
@@ -685,7 +686,8 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	// (the far LOD carries both); density thins without width compensation, the pixel rule with it.
 	const float dens = P6.x * da_grass_lat.z * K2.w * K3.z * lerp(1.0f, P8.y, shade);
 	// (A folded profile's density counts its strips: one lane for two leaves.)
-	const float dens_keep = dens / max(da_grass_lat.y, 1e-3f) * grass_taper(d);
+	// (The casters keep the stand's full density: the thinning is the view's, a field's shadow stays as deep.)
+	const float dens_keep = dens / max(da_grass_lat.y, 1e-3f);
 	const float4 P23 = grass_prof(p, 23);
 	// A forb's dead stem of last year stands bare; a reed's keeps its sheaths.
 	const uint leaves = (culm && !(life.thatch && form != GRASS_FORM_GRAMINOID)) ? min(uint(P6.z), GRASS_CAULINE_MAX) : 0u;
@@ -717,7 +719,7 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 		cover_k = 1.0f + min(basal, 2.0f) * fade_b * facing;
 	}
 	if (view)
-		L.wv = grass_keep(saturate(area_w / wmin) * dens_keep * cover_k, u, level) * max(1.0f, wmin / area_w);
+		L.wv = grass_keep(saturate(area_w / wmin) * dens_keep * grass_taper(d) * cover_k, u, level) * max(1.0f, wmin / area_w);
 	// The casters keep 2 texels of the near cascade and 3 of the middle one: fewer, wider casters, the same
 	// shadow coverage (da_grass_blades.cpp builds the shadow-only tiles for the same widths).
 	const float tn = 2.0f * da_grass_sh.z, tm = 3.0f * da_grass_sh.w;

@@ -495,13 +495,13 @@ static class cl_da_grade_params : public R_constant_setup
 } binder_da_grade_params;
 
 // Gamma/brightness/contrast for the final combine, packed the way CGammaControl::GenLUT
-// consumes them. w flags "the hardware ramp is not in charge" - anything but exclusive
-// fullscreen - which is when the shader has to apply the sliders itself.
+// consumes them. w flags "the hardware ramp is not in charge", which is every window mode now that the
+// swap chain is never exclusive (dx11HW.cpp): the shader applies the sliders itself.
 static class cl_da_gamma : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
-        const bool rampDead = psDeviceMode.WindowStyle != rsFullscreen;
+        constexpr bool rampDead = true;
         cmd_list.set_c(C, 1.f / _max(::ps_gamma, 0.1f), ::ps_brightness * 0.5f, ::ps_contrast * 0.5f,
             rampDead ? 1.f : 0.f);
     }

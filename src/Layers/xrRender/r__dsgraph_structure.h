@@ -53,6 +53,9 @@ struct R_dsgraph_structure
         bool rt_skip_static{ false };
         // A local light's shadow face: the GPU-driven trees stay on the CPU walk there (gpudriven.md 3.13).
         bool local_light{ false };
+        // A light the actor carries (his torch, a glowstick or a detector in hand: set_never_demote): his own shadow
+        // stays out of its faces.
+        bool carried_light{ false };
         // The lamp shadow cache (da_smap_cache.h) for the face this view builds: 1 fill - every static caster, none
         // dropped for its distance to the camera; 2 use - the static casters are in the slot, the build skips them.
         u8 smap_cache{ 0 };
@@ -191,6 +194,7 @@ struct R_dsgraph_structure
         o.dynamic_source = nullptr;
         o.rt_skip_static = false;
         o.local_light = false;
+        o.carried_light = false;
         o.smap_cache = 0;
         o.smap_draw = 0;
         o.smap_trees = nullptr;

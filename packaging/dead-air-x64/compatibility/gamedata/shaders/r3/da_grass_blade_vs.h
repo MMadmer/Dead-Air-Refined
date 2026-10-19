@@ -210,7 +210,9 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	// dark of the stand's foot and a reed's leaves were near black.)
 	const bool cauline = (B.flags & GRASS_F_CAULINE) != 0u;
 	const float y_rel = litter ? 0.25f : (C.y - B.root.y) / grass_canopy_h(p) + (cauline ? 0.5f : 0.0f);
-	O.alb_h = float4(grass_to_albedo(albedo), grass_sky(B.hemi) * lerp(grass_ao(d, B.ao, y_rel), grass_ao(d, B.ao, 0.5f), culm_sub));
+	const float sky = grass_sky(B.hemi) * lerp(grass_ao(d, B.ao, y_rel), grass_ao(d, B.ao, 0.5f), culm_sub);
+	const float sun_k = grass_canopy_sun(d, lerp(y_rel, 0.5f, culm_sub));
+	O.alb_h = float4(grass_to_albedo(albedo) * sun_k, saturate(sky / max(sun_k, 1e-3f)));
 
 	const float sen = ((B.flags & GRASS_F_THATCH) != 0u || litter) ? 1.0f : B.sen;
 	const float gloss = lerp(P14.x, P14.y, sen) * lerp(1.0f, 0.4f, smoothstep(15.0f, 60.0f, d))

@@ -264,6 +264,23 @@ xr_string wide_to_utf8(std::wstring_view value)
     return result;
 }
 
+// The ANSI code page's spelling of a wide string, '?' for what it cannot hold: never throws, unlike a narrow
+// std::filesystem::path conversion.
+xr_string wide_to_ansi(std::wstring_view value)
+{
+    if (value.empty())
+        return {};
+
+    const int length = WideCharToMultiByte(
+        CP_ACP, 0, value.data(), static_cast<int>(value.size()), nullptr, 0, "?", nullptr);
+    if (length <= 0)
+        return {};
+
+    xr_string result(static_cast<size_t>(length), '\0');
+    WideCharToMultiByte(CP_ACP, 0, value.data(), static_cast<int>(value.size()), result.data(), length, "?", nullptr);
+    return result;
+}
+
 xr_string ansi_to_utf8(std::string_view value)
 {
     if (value.empty())
@@ -1684,7 +1701,7 @@ bool should_hash_loose_file(const std::filesystem::path& path, u64 size)
     if (size <= MaximumHashedLooseFileBytes)
         return true;
 
-    xr_string extension = path.extension().string().c_str();
+    xr_string extension = wide_to_utf8(path.extension().native());
     std::ranges::transform(extension, extension.begin(),
         [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
     constexpr std::array importantExtensions{
@@ -1737,8 +1754,11 @@ ContentSnapshot capture_content_snapshot(const Sanitizer& sanitizer)
     for (const CLocatorAPI::archive& archive : FS.m_archives)
     {
         ArchiveInfo information;
-        std::filesystem::path path(archive.path.c_str());
-        information.name = sanitizer.Apply(path.filename().string(), false);
+        // The archive's name from its ANSI path by hand: a narrow std::filesystem::path converts through the code
+        // page and throws on what it cannot map.
+        const std::string_view full = archive.path.c_str();
+        const size_t slash = full.find_last_of("\\/");
+        information.name = sanitizer.Apply(slash == std::string_view::npos ? full : full.substr(slash + 1), false);
         information.size = archive.size;
         information.timestamp = archive.modif;
         snapshot.archives.push_back(std::move(information));
@@ -1776,8 +1796,10 @@ ContentSnapshot capture_content_snapshot(const Sanitizer& sanitizer)
         snapshot.looseBytes += information.size;
 
         const std::filesystem::path relative = std::filesystem::relative(path, root, error);
-        information.path = sanitizer.Apply(
-            (error ? path.filename() : relative).generic_string(), false);
+        // From the wide name (the sanitizer takes ANSI): generic_string() converts through the code page and throws
+        // on a name outside it (a Cyrillic folder on a Western system, accents or CJK on a Cyrillic one), which took
+        // the game down on Send from many a modded install.
+        information.path = sanitizer.Apply(wide_to_ansi((error ? path.filename() : relative).generic_wstring()), false);
         error.clear();
 
         const auto writeTime = iterator->last_write_time(error);
@@ -2308,7 +2330,17 @@ bool write_report(ReportKind kind, _EXCEPTION_POINTERS* exceptionPointers)
         auto saves = open_save_attachments(context.savePath);
         const SystemSnapshot system = capture_system_snapshot(context);
         const Sanitizer sanitizer;
-        const ContentSnapshot content = capture_content_snapshot(sanitizer);
+        // The loose files' list is the one part that walks what the player put on disk: whatever it throws costs the
+        // report that list, never the game.
+        ContentSnapshot content;
+        try
+        {
+            content = capture_content_snapshot(sanitizer);
+        }
+        catch (...)
+        {
+            content = {};
+        }
 
         FlushLog();
         const xr_string rawLog = read_file_tail(log_name(), MaximumLogBytes);

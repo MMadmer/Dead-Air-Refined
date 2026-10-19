@@ -360,13 +360,22 @@ bool BugReportService::Submit(pcstr title, pcstr description, pcstr attachmentPa
         instance.message.clear();
     }
     instance.state.store(State::Sending, std::memory_order_release);
+    // A plain std::thread ends the process on anything that escapes it (no engine terminate handler there): a failed
+    // allocation of the attachment's copy is a failed send, not a crash.
     instance.worker = std::thread([utf8Title, utf8Description, path]
     {
-        xr_string error;
-        if (send_request(utf8Title, utf8Description, path.c_str(), error))
-            set_result(State::Succeeded, {});
-        else
-            set_result(State::Failed, std::move(error));
+        try
+        {
+            xr_string error;
+            if (send_request(utf8Title, utf8Description, path.c_str(), error))
+                set_result(State::Succeeded, {});
+            else
+                set_result(State::Failed, std::move(error));
+        }
+        catch (...)
+        {
+            set_result(State::Failed, "the report could not be sent");
+        }
     });
     return true;
 }
@@ -409,7 +418,14 @@ void BugReportService::CheckAvailability()
     instance.availabilityWorker = std::thread([]
     {
         ServiceState& instance = service();
-        const bool available = check_availability();
+        bool available = false;
+        try
+        {
+            available = check_availability();
+        }
+        catch (...)
+        {
+        }
         const Endpoint server = endpoint();
         Msg("* [bug report] %ls%ls: %s", server.host.c_str(), server.path.c_str(), available ? "available" : "out of reach");
         instance.availability.store(available ? Availability::Available : Availability::Unavailable,

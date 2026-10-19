@@ -619,7 +619,8 @@ bool CHW::CreateSwapChain(HWND hwnd)
 
     sd.OutputWindow = hwnd;
 
-    sd.Windowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
+    // Windowed in every window mode (CreateSwapChain2).
+    sd.Windowed = TRUE;
 
     //  Additional set up
     sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
@@ -702,8 +703,13 @@ bool CHW::CreateSwapChain2(HWND hwnd)
 
     desc.Scaling = DXGI_SCALING_STRETCH;
 
+    // Fullscreen belongs to SDL (CRenderDevice::UpdateWindowProps): the window takes the output in the chosen
+    // display mode and the chain stays windowed, which Windows 10 presents by independent flip as it would an
+    // exclusive one. DXGI's exclusive mode fought SDL over the display mode, dropped out on every focus change and,
+    // on DirectX 12 and Vulkan (whose chains are flip chains whatever they are asked), had every reset rebuild the
+    // chain without its frame generation: players saw no working fullscreen.
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fulldesc{};
-    fulldesc.Windowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
+    fulldesc.Windowed = TRUE;
 
     // Copy-based chain: the shape every release before the flip model shipped with, and the
     // fallback whenever a flip chain cannot be created. These must be set unconditionally -
@@ -910,7 +916,9 @@ void CHW::Reset()
     ReleaseBackgroundPreviewResources();
 
     DXGI_SWAP_CHAIN_DESC& cd = m_ChainDesc;
-    const bool bWindowed = ThisInstanceIsGlobal() ? psDeviceMode.WindowStyle != rsFullscreen : true;
+    // The chain is windowed in every window mode (CreateSwapChain2); one left exclusive by an earlier build or a
+    // driver is taken out of it below.
+    constexpr bool bWindowed = true;
 
 #ifndef XR_NATIVE
     // The chain a fresh start would make for the new window mode: a paced flip chain windowed, the copy model
