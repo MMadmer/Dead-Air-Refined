@@ -337,8 +337,6 @@ their mod.
 To **[ambientCG](https://ambientcg.com)** and **[Poly Haven](https://polyhaven.com)**,
 whose CC0 leaf, needle and bark scans the mod's own tree textures and seasons are
 built from, and to GSC Game World for the CoP SDK's original texture sources.
-Up to 1.5.x the mod shipped **Akinaro**'s Stalker Two-K and **Cromm Cruac**'s
-Absolute Nature 4; since 1.6.0 both are replaced by the project's own textures.
 
 To **Feel_Fried** (FDDA), **themrdemonized** (Ledge Grabbing), **Mirrowel**
 (FDDA Enhanced Animations), **lizzardman** (Headgear Animations, FDDA Redone)

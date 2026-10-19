@@ -23,7 +23,7 @@ import wave
 
 import numpy as np
 
-sys.path.insert(0, r"D:\Games\Dead-Air-AssetCompare\pipeline")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'asset_pipeline'))
 
 OUT = sys.argv[1]
 STAMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'audio', 'stamp_xray_ogg_comment.py')

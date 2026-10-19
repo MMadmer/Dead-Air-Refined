@@ -17,7 +17,7 @@ tag, ogf = a[0], a[1]
 hands = a[2] if len(a) > 2 else 'wpn_hand_00'
 gd = os.path.join(os.path.dirname(os.path.dirname(ogf)), 'gd')
 prefs = bpy.context.preferences.addons['io_scene_xray'].preferences
-prefs.gamedata_folder = (gd if os.path.isdir(gd) else r"D:\Games\Dead-Air-Refined_Assets\source\gamedata-1.6.0") + '\\'
+prefs.gamedata_folder = (gd if os.path.isdir(gd) else r"D:\Games\Dead-Air-Refined_Assets\source\gamedata") + '\\'
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o, do_unlink=True)
 bpy.ops.xray_import.ogf(directory=os.path.dirname(ogf), files=[{'name': os.path.basename(ogf)}], import_motions=False)

@@ -11,7 +11,7 @@ make_leaf_textures.py and make_bark_textures.py write PNG layers and their manif
   a layer's compressed slice is cached under the hash of its PNG, the encoder's arguments and texconv.exe
   (build/arrays/cache), so only the changed layers are encoded again, and the shrubs' slices are checked against
   the ones pinned at the first build (build/arrays/shrub_slices.json: the shrub data references them),
-- writes da/shrub_leaf_d, shrub_leaf_n, shrub_bark_d and shrub_bark_n.dds into the compatibility gamedata,
+- writes da/shrub_leaf_d, shrub_leaf_n, shrub_bark_d and shrub_bark_n.dds into the asset source (Dead-Air-Refined_Assets),
 - writes out/tree_layers.json: each tree species' layers, hull and squares over its elements (the keys
   tools/trees/make_trees.py writes into its species, as make_shrubs.py does for the shrubs), the trees' layers'
   coverage and bark means.
@@ -32,11 +32,13 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
-OUT = os.path.join(REPO, 'packaging', 'dead-air-x64', 'compatibility', 'gamedata', 'textures', 'da')
+# Textures are content: they go to the asset source (Dead-Air-Refined_Assets), not into the repository.
+ASSETS = os.environ.get('DAR_ASSETS_GAMEDATA', os.path.join(REPO, '..', '..', 'Dead-Air-Refined_Assets', 'source', 'gamedata'))
+OUT = os.path.join(ASSETS, 'textures', 'da')
 WORK = os.path.join(HERE, 'build', 'arrays')
 CACHE = os.path.join(WORK, 'cache')
 PINS = os.path.join(WORK, 'shrub_slices.json')
-TOOLS = r'D:\Games\Dead-Air-AssetCompare\tools\dxtex-build\bin'
+TOOLS = os.path.join(os.environ.get('DAR_ASSET_TOOLS', r'D:\Tools\asset-pipeline'), 'dxtex-build', 'bin')
 
 
 SRC = HERE

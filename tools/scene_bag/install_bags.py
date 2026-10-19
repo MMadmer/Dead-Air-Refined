@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TREE = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata-1.6.0"
+TREE = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata"
 VARIANTS = ['default', 'kit_hunt', 'backpack_light', 'backpack_heavy', 'backpack_travel', 'backpack_stalker',
             ]
 GONE = ['meshes/dynamics/weapons/wpn_eat/backpack/wpn_backpack_act_hud.ogf',

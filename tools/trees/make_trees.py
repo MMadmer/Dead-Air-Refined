@@ -34,7 +34,9 @@ GAMEDATA = os.path.join(REPO, 'packaging', 'dead-air-x64', 'compatibility', 'gam
 OUT_LTX = os.path.join(GAMEDATA, 'configs', 'dead_air_x64_trees.ltx')
 OUT_MD = os.path.join(REPO, 'docs', 'dead-air', 'TREE_DATA.md')
 TREES_MD = os.path.join(REPO, 'docs', 'dead-air', 'TREES.md')
-SKEL_DIR = os.path.join(GAMEDATA, 'meshes', 'da', 'trees')
+# The skeletons are content: they live in the asset source (Dead-Air-Refined_Assets), not in the repository.
+ASSETS = os.environ.get('DAR_ASSETS_GAMEDATA', os.path.join(REPO, '..', '..', 'Dead-Air-Refined_Assets', 'source', 'gamedata'))
+SKEL_DIR = os.path.join(ASSETS, 'meshes', 'da', 'trees')
 TEX_DIR = os.path.join(REPO, 'tools', 'shrubs', 'textures')
 TREE_LAYERS = os.path.join(TEX_DIR, 'out', 'tree_layers.json')
 

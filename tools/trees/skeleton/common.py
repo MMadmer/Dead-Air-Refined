@@ -22,9 +22,11 @@ TREES = os.path.normpath(os.path.join(HERE, '..'))
 REPO = os.path.normpath(os.path.join(TREES, '..', '..'))
 SCRATCH = r'C:\Users\admin\AppData\Local\Temp\claude\D--Games-Dead-Air-DeadAir-x64\f9b3463a-7c5c-40f8-a3bd-38013b895726\scratchpad\trees'
 INVENTORY = os.environ.get('DA_TREES_INVENTORY', os.path.join(SCRATCH, 'inventory'))
-LEVELS = os.environ.get('DA_LEVELS', r'D:\Games\Dead-Air-AssetCompare\work\seasons\da_levels\levels')
+LEVELS = os.environ.get('DA_LEVELS', os.path.join(REPO, '_work', 'asset_pipeline', 'seasons', 'da_levels', 'levels'))
 GAMEMTL = os.environ.get('DA_GAMEMTL', r'D:\Games\Dead Air\_work\da_unpack\configs\gamemtl.xr')
-OUT_DTSK = os.path.join(REPO, 'packaging', 'dead-air-x64', 'compatibility', 'gamedata', 'meshes', 'da', 'trees')
+# Binary assets live in the content source (Dead-Air-Refined_Assets), never in the engine repository.
+ASSETS = os.environ.get('DAR_ASSETS_GAMEDATA', os.path.join(REPO, '..', '..', 'Dead-Air-Refined_Assets', 'source', 'gamedata'))
+OUT_DTSK = os.path.join(ASSETS, 'meshes', 'da', 'trees')
 OUT = os.path.join(TREES, 'out')
 OUT_REPORT = os.path.join(OUT, 'report')
 REPORT_PNG = os.environ.get('DA_SKEL_REPORT', os.path.join(SCRATCH, 'skeleton_report'))

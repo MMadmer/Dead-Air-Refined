@@ -15,7 +15,7 @@ a = sys.argv[sys.argv.index('--') + 1:]
 NAME = a[0]
 FRAME = int(a[1]) if len(a) > 1 else 0
 OUT = os.path.join(HERE, 'out', NAME)
-GD = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata-1.6.0"
+GD = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata"
 BPDIR = os.path.join(GD, r"meshes\dynamics\weapons\wpn_eat\backpack")
 
 prefs = bpy.context.preferences.addons['io_scene_xray'].preferences

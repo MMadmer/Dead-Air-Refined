@@ -1,0 +1,88 @@
+-- QA probe: opens Options -> Game on a loaded save, shoots it, picks winter in the season row, accepts,
+-- and checks that r__season followed. Put into <rig>\gamedata\scripts, remove after the run.
+
+local dlg, step, t_next = nil, 0, 0
+local owner = { ShowDialog = function() end, Show = function() end, HideDialog = function() end }
+
+local function con(cmd)
+	get_console():execute(cmd)
+end
+
+local function season_row()
+	return dlg and dlg.gameplay_options and dlg.gameplay_options["season"]
+end
+
+local steps = {
+	function()
+		dlg = ui_mm_opt_main.options_dialog()
+		dlg.owner = owner
+		dlg.tab:SetActiveTab("gameplay")
+		dlg:OnTabChange()
+		-- As the main menu does before it shows the dialog
+		dlg:SetCurrentValues()
+		dlg:ShowDialog(true)
+		local row = season_row()
+		printf("[qa] options open, season row %s, shows '%s', r__season %s", tostring(row ~= nil),
+			row and row.ctrl and row.ctrl:GetText() or "-", get_console():get_string("r__season"))
+		return 2500
+	end,
+	function()
+		-- The window capture (Watch-QaShots) grabs the dialog itself: the engine's shots have no UI
+		printf("[qa] SHOT options_game")
+		return 3000
+	end,
+	function()
+		local row = season_row()
+		if row and row.ctrl then
+			row.ctrl:SetText(game.translate_string("ui_mm_season_winter"))
+		end
+		dlg:OnBtnAccept()
+		return 1000
+	end,
+	function()
+		printf("[qa] after accept r__season %s", get_console():get_string("r__season"))
+		if dlg and dlg:IsShown() then
+			dlg:HideDialog()
+		end
+		return 5000
+	end,
+	function()
+		printf("[qa] SHOT options_winter_world")
+		return 3000
+	end,
+	function()
+		printf("[qa] qa_options_done")
+		con("flush")
+		con("quit")
+		return 100000
+	end,
+}
+
+local function on_update()
+	device():pause(false)
+	local now = time_global()
+	if now < t_next or step >= #steps then
+		return
+	end
+	step = step + 1
+	local ok, wait = pcall(steps[step])
+	if not ok then
+		printf("[qa] step %d failed: %s", step, tostring(wait))
+		printf("[qa] qa_options_done")
+		con("quit")
+		return
+	end
+	t_next = now + (wait or 1000)
+end
+
+local function on_first_update()
+	con("g_pause_in_background 0")
+	con("main_menu off")
+	device():pause(false)
+	t_next = time_global() + 6000
+	RegisterScriptCallback("actor_on_update", on_update)
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+end

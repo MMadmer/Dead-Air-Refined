@@ -13,7 +13,7 @@ import tempfile
 
 import numpy as np
 
-sys.path.insert(0, r"D:\Games\Dead-Air-AssetCompare\pipeline")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'asset_pipeline'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bump  # noqa: E402
 from common import install, save_png, texconv  # noqa: E402

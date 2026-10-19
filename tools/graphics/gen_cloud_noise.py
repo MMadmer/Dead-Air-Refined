@@ -5,12 +5,15 @@ volume textures with a full mip chain.
                       rising frequencies (the shape erosion octaves)
   da_cloud_detail.dds  32^3 RGBA8: RGB = Worley FBM at three frequencies (edge erosion), A = 1
 
-Everything tiles. Deterministic seed, so a rebuild produces identical files.
+Everything tiles. Deterministic seed, so a rebuild produces identical files. The volumes are content: by default
+they go to textures/da of the asset source (Dead-Air-Refined_Assets), or to the folder given as the argument.
 """
 import sys, struct, os
 import numpy as np
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else "."
+REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+ASSETS = os.environ.get("DAR_ASSETS_GAMEDATA", os.path.join(REPO, "..", "..", "Dead-Air-Refined_Assets", "source", "gamedata"))
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ASSETS, "textures", "da")
 rng = np.random.default_rng(1337)
 
 

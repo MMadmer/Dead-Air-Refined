@@ -14,7 +14,7 @@ import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
-sys.path.insert(0, r"D:\Games\Dead-Air-AssetCompare\pipeline")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'asset_pipeline'))
 import bump  # noqa: E402
 from common import install, push_pull_fill, save_png, texconv  # noqa: E402
 

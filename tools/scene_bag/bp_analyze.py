@@ -8,7 +8,7 @@ import os
 import bpy
 from mathutils import Vector
 
-GD = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata-1.6.0"
+GD = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata"
 BP = os.path.join(GD, r"meshes\dynamics\weapons\wpn_eat\backpack")
 OUT = os.path.dirname(os.path.abspath(__file__))
 

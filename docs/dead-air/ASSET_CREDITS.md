@@ -12,11 +12,11 @@ the sets are used unchanged.
 
 | Set | Author | Terms | Used for |
 | --- | --- | --- | --- |
-| Environment textures (replace Stalker Two-K since 1.6.0) | Dead Air: Refined | Part of the mod | `textures/briks, crete, detail, door, floor, glas, glass, grnd, mtl, prop, roof, ston, tile, veh, wall, water, wind, wood`: Dead Air's own textures (or GSC's uncompressed CoP SDK sources of the same picture) upscaled 2-4x with Real-ESRGAN x4plus (BSD-3-Clause, a tool; the output is the project's), colour pinned to Dead Air's file at its own texel scale; bump pairs re-encoded the way the SDK does. Where Two-K was not sharper than Dead Air, or had no Dead Air counterpart, Dead Air's own file is used. Not a single Two-K pixel is used |
-| Tree and foliage cards (replace Absolute Nature 4 since 1.6.0) | Dead Air: Refined | Part of the mod | `textures/trees` and the season sets: branches grown procedurally inside the layout of Dead Air's card; leaves from ambientCG LeafSet004/006/007/008/009/012/013/014/016/024 (CC0), needle sprays from Poly Haven `fir_tree_01` and `pine_tree_01` (CC0), bark from ambientCG Bark001/006 (CC0); reeds, sedge, sprouts, forest walls and the bush from GSC's own CoP SDK pictures; colour statistics from Dead Air's cards (and, for summer, from the summer pack shipped with Dead Air - numbers only, no pixels). Absolute Nature is not used, and neither are Dead Air's `trees_atp_*` pictures, which are an older Absolute Nature release |
+| Environment textures (1.6.0) | Dead Air: Refined | Part of the mod | `textures/briks, crete, detail, door, floor, glas, glass, grnd, mtl, prop, roof, ston, tile, veh, wall, water, wind, wood`: Dead Air's own textures (or GSC's uncompressed CoP SDK sources of the same picture) upscaled 2-4x with Real-ESRGAN x4plus (BSD-3-Clause, a tool; the output is the project's), colour pinned to Dead Air's file at its own texel scale; bump pairs re-encoded the way the SDK does. Where the upscale gained nothing, Dead Air's own file is used |
+| Tree and foliage cards (1.6.0) | Dead Air: Refined | Part of the mod | `textures/trees` and the season sets: branches grown procedurally inside the layout of Dead Air's card; leaves from ambientCG LeafSet004/006/007/008/009/012/013/014/016/024 (CC0), needle sprays from Poly Haven `fir_tree_01` and `pine_tree_01` (CC0), bark from ambientCG Bark001/006 (CC0); reeds, sedge, sprouts, forest walls and the bush from GSC's own CoP SDK pictures; colour statistics from Dead Air's cards (and, for summer, from the summer pack shipped with Dead Air - numbers only, no pixels). Dead Air's own `trees_atp_*` pictures are not used |
 | Season sets (1.6.0) | Dead Air: Refined | Part of the mod | `textures/seasons/<winter, spring_early, spring_mid, spring_late, summer>`: the cards above that stock models still wear (reeds, sedge, duckweed, forest walls, the stock fallen trees and debris, props) in each look, their barks in winter, Dead Air's own terrain, grass atlas and PDA maps recoloured, the leaf decals and the ivy in winter. Winter's art direction followed screenshots of "Yet Another Winter Mod" (look only; the mod itself was not used) |
 | Bark upscale | DeadAir-x64 project (from the game's own textures) | Part of the port | Eight bark textures in `textures/trees` |
-| Backpack scene bags (replace Mirrowel's bag and its `act_morthbag` texture since 1.6.0) | Dead Air: Refined | Part of the mod | `meshes/dynamics/weapons/wpn_eat/backpack/dar_bag_*_hud.ogf`, `textures/act/dar_bag_*`: a bag for every kind of backpack the slot holds and a cheap default one, modelled and textured procedurally by the project (`tools/scene_bag`). Each sits on the original bag's two-bone skeleton and keeps its outer size, and the zipper runs along the pull's own path, so the hands meet the bag where they did; the motions stay Mirrowel's (row below) |
+| Backpack scene bags (1.6.0) | Dead Air: Refined | Part of the mod | `meshes/dynamics/weapons/wpn_eat/backpack/dar_bag_*_hud.ogf`, `textures/act/dar_bag_*`: a bag for every kind of backpack the slot holds and a cheap default one, modelled and textured procedurally by the project (`tools/scene_bag`). Each sits on the original bag's two-bone skeleton and keeps its outer size, and the zipper runs along the pull's own path, so the hands meet the bag where they did; the motions stay Mirrowel's (row below) |
 | Landing roll sound | Dead Air: Refined (the project's own recording, 05.09.2026) | Part of the mod | `sounds/actor/fall_roll.ogg` - converted to mono 44.1 kHz and given the X-Ray ogg comment by the project |
 | **FDDA 0.9b** (food, drink, drugs, harvest) | **Feel_Fried** | Public Domain | `enhanced_animations.script`, `take_item_anim.script`, `ciga_effects.script`, the `item_ea_*` hud sections, `meshes/dynamics/weapons/wpn_eat`, `meshes/anomaly_weapons/hud_hands_animation/zzzz_ea_*`, `textures/usable_items`, `sounds/interface/item_usage`, `anims/itemuse_anm_effects` |
 | **Ledge Grabbing** (parkour) | **themrdemonized** | MIT | `demonized_ledge_grabbing.script` and its helpers, `climbing_in.omf`, the baked camera curves |
@@ -24,14 +24,11 @@ the sets are used unchanged.
 | **Headgear Animations** (helmets) | **lizzardman** | Permission given publicly on 27.08.2026 ("everything in open access may be used freely") | `headgear_*` omfs, `meshes/dynamics/weapons/wpn_headgear`, `textures/headgear_hud`, `sounds/actor/headgear_hud` |
 | **FDDA Redone / "Anomation"** (outfits, body search) | **lizzardman** | Same permission | `liz_*` omfs, `meshes/anomaly_weapons/liz_outfit_animations`, `textures/liz_outfit_animations`, `sounds/actor/liz_*` |
 | **MFS bread and sausage anims** | **ZeburG** / MFS team, <https://www.moddb.com/members/zeburg> | Author's permission (via the DeadAir-x64 project) | `mfs_*` omfs, `meshes/dynamics/mfs`, `textures/usable_items/mfs`, `sounds/interface/item_usage/mfs_*` |
-| 3D PDA | Gunslinger team | See `README.md` | `meshes/dynamics/devices/dev_pda`, `pda_hands_animation.omf`, `textures/item/item_kpk*`, `textures/ui/ui_deadpda*`, `ui_pda_loadscreen*` |
+| 3D PDA | Gunslinger team | See `README.md` | `meshes/dynamics/devices/dev_pda`, `pda_hands_animation.omf`, `textures/item/item_kpk*`, `textures/ui/ui_deadpda*`, `ui_pda_loadscreen*`, `meshes/gwr`, `textures/gwr` |
 
 ## Who has to be notified
 
-Since 1.6.0 no set in the content bundles asks for a notification: Stalker Two-K and Absolute
-Nature 4 are gone (see the rows above). Up to 1.5.x the bundles still carried them, and their
-authors were written to: Akinaro (Stalker Two-K, akinaro@onet.eu) and Cromm Cruac (Absolute
-Nature 4, info@crommcruac.com).
+No set in the content bundles asks for a notification.
 
 The animation authors did not ask for a notification; the terms are attribution (MIT and
 Creative Commons require the notice to travel with the work, which this page and the readme
@@ -42,9 +39,9 @@ question come up: lizzardman <https://www.moddb.com/members/lizzardman>, ZeburG
 No e-mail address exists for Feel_Fried, themrdemonized, Mirrowel, lizzardman or ZeburG in any
 of the source repositories.
 
-The pipeline that makes the 1.6.0 textures (upscale, palette lock, bump re-encode, tree card
-generator, season looks) lives outside the repository, in `D:\Games\Dead-Air-AssetCompare\pipeline`;
-the CC0 sources it reads are in `D:\Games\Dead-Air-AssetCompare\sources`.
+The pipeline that makes the project's textures (upscale, palette lock, bump re-encode, tree card
+generator, season looks) is `tools/asset_pipeline`; the CC0 scans it reads sit next to the asset source,
+in `Dead-Air-Refined_Assets\source\cc0`.
 
 ## What is deliberately not included
 

@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.argv += ['--'] if '--' not in sys.argv else []
 args = sys.argv[sys.argv.index('--') + 1:]
 hands = args[0] if args else 'wpn_hand_00'
-sys.argv = [sys.argv[0], '--', os.path.join(r"D:\Games\Dead-Air-Refined_Assets\source\gamedata-1.6.0",
+sys.argv = [sys.argv[0], '--', os.path.join(r"D:\Games\Dead-Air-Refined_Assets\source\gamedata",
             r"meshes\dynamics\weapons\wpn_eat\backpack\wpn_backpack_act_hud.ogf"), '_contact', hands]
 # reuse the scene builder up to the render loop
 src = open(os.path.join(HERE, 'bp_scene.py'), encoding='utf-8').read()

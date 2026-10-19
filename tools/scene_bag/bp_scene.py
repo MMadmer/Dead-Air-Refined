@@ -12,7 +12,7 @@ import bpy
 from mathutils import Matrix
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GD = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata-1.6.0"
+GD = r"D:\Games\Dead-Air-Refined_Assets\source\gamedata"
 STOCK = r"D:\Games\Dead Air\_work\texaudit\stock"
 BP = os.path.join(GD, r"meshes\dynamics\weapons\wpn_eat\backpack")
 HANDS_DIR = os.path.join(STOCK, r"meshes\dynamics\weapons\wpn_hand")

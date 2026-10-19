@@ -10,7 +10,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 a = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 hands = a[0] if a else 'wpn_hand_00'
-sys.argv = [sys.argv[0], '--', os.path.join(r"D:\Games\Dead-Air-Refined_Assets\source\gamedata-1.6.0",
+sys.argv = [sys.argv[0], '--', os.path.join(r"D:\Games\Dead-Air-Refined_Assets\source\gamedata",
             r"meshes\dynamics\weapons\wpn_eat\backpack\wpn_backpack_act_hud_anm.omf").replace('_anm.omf', '.ogf'),
             '_dump', hands]
 src = open(os.path.join(HERE, 'bp_scene.py'), encoding='utf-8').read()

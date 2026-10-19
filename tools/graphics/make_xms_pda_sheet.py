@@ -2,9 +2,9 @@
 
     python tools/graphics/make_xms_pda_sheet.py [--preview out.png]
 
-Writes, under packaging/dead-air-x64/compatibility/gamedata:
-    textures/ui/ui_xms_pda.dds                   512x512 A8R8G8B8, no mips
-    configs/ui/textures_descr/ui_xms_pda.xml     the ids
+Writes:
+    textures/ui/ui_xms_pda.dds                   512x512 A8R8G8B8, no mips (asset source, Dead-Air-Refined_Assets)
+    configs/ui/textures_descr/ui_xms_pda.xml     the ids (packaging/dead-air-x64/compatibility/gamedata)
 
 The sheet holds a white block (every rectangle a layout draws samples its middle and is
 tinted by the vertex colour), a kit of white icons a layout tints with icon_color, and four
@@ -21,6 +21,8 @@ from PIL import Image, ImageChops, ImageDraw
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
 OUT_ROOT = os.path.join(REPO, "packaging", "dead-air-x64", "compatibility", "gamedata")
+# The sheet itself is content: it goes to the asset source (Dead-Air-Refined_Assets), the ids stay in the overlay.
+ASSETS = os.environ.get("DAR_ASSETS_GAMEDATA", os.path.join(REPO, "..", "..", "Dead-Air-Refined_Assets", "source", "gamedata"))
 SHEET = 512
 CELL = 64
 SS = 4  # supersampling
@@ -449,7 +451,7 @@ def write_descr(path, entries):
 
 def main():
     img, entries = build()
-    write_dds(os.path.join(OUT_ROOT, "textures", "ui", "ui_xms_pda.dds"), img)
+    write_dds(os.path.join(ASSETS, "textures", "ui", "ui_xms_pda.dds"), img)
     write_descr(os.path.join(OUT_ROOT, "configs", "ui", "textures_descr", "ui_xms_pda.xml"), entries)
     if "--preview" in sys.argv:
         out = sys.argv[sys.argv.index("--preview") + 1]
