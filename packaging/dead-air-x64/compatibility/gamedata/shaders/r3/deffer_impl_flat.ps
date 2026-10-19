@@ -30,6 +30,13 @@ uniform float4	da_gtint2;			// xy where the blades' basal pairs fade out (m: fro
 uniform float4	da_gcanopy[16];		// rgb canopy of each blade community at the day (albedo space), w = grass_visible
 uniform float4	da_gcanopy_ref[16];	// rgb canopy at the reference day of the latched terrain folder, w = shade under the blades
 Texture2D		s_grass_cover;		// r blade grass, g herbs, b shrubs, a dominant blade community / 15
+// Row c, the clumps of community c's graminoids (da_grass_blades.cpp fill_clumps): texel 0 its patch size, scattered
+// share, species count and mean occlusion of the ground (the rest is da_grass_tufts.cs's).
+Texture2D<float4>	s_grass_clumps;
+// The tufts' shade on the ground around the camera (da_grass_tufts.cs), a toroidal window: world xz * da_gtuft.x is its
+// uv (wrapped); da_gtuft.y = 1 while it is valid, z how far it reaches (m).
+Texture2D		s_grass_tufts;
+uniform float4	da_gtuft;
 
 #ifdef USE_4_BUMP
 f_deffer 	main	( p_bumped I 	)
@@ -186,6 +193,7 @@ f_deffer 	main	( p_flat I 		)
 	// The season tint of the ground under and beyond the blade grass, before the puddles so wet darkening
 	// still applies on top. Only the hue moves: the canopy colour is scaled to the ground's brightness,
 	// times how much brighter the canopy is now than on the day the terrain textures show.
+	float sky_open = 1.0f;
 	[branch] if (da_gtint.y > 0.001f)
 	{
 		const float3 Pw = mul(m_v2w, float4(I.position.xyz, 1.0f));
@@ -207,6 +215,25 @@ f_deffer 	main	( p_flat I 		)
 		const float lum_c = max(dot(da_gcanopy[gp].rgb, LUMW), 1e-3f);
 		const float ratio = clamp(sqrt(lum_c / max(dot(da_gcanopy_ref[gp].rgb, LUMW), 1e-3f)), 0.75f, 1.33f);
 		D.rgb = lerp(D.rgb, da_gcanopy[gp].rgb * (lum_d / lum_c) * ratio, saturate(cover * gk));
+
+		// The tufts' shade on the ground at their foot: inside d2 the very clumps the blades grow in (da_grass_tufts.cs),
+		// beyond it their mean. It takes the sky from the ground in any weather (the sun's shade is the blades'
+		// casters'), easing out with the blades' thinning, and gathers the litter's shade below under the tufts and
+		// out of the gaps between them (a uniform shade lit a lone tuft's foot like bare soil; a darker one turned the
+		// gaps black).
+		const float4 H0 = s_grass_clumps.Load(int3(0, gp, 0));
+		float occ = H0.w * saturate(gc.r), spread = 1.0f, foot = 0.0f;
+		const float near_end = min(da_gtint2.z, da_gtuft.z);
+		[branch] if (gdist < near_end && da_gtuft.y > 0.5f)
+		{
+			const float tuft = s_grass_tufts.SampleLevel(smp_base, Pw.xz * da_gtuft.x, 0).r;
+			const float far_k = smoothstep(0.7f * near_end, near_end, gdist);
+			spread = lerp(min(tuft / max(occ, 0.05f), 2.0f), 1.0f, far_k);
+			foot = 0.6f * tuft * (1.0f - far_k) * da_gcanopy[gp].w;
+			occ = lerp(tuft, occ, far_k);
+		}
+		sky_open = 1.0f - 0.75f * occ * da_gcanopy[gp].w * (1.0f - thin);
+
 		// Between the near blades lies the stand's own litter - last year's leaves and straw, matted, in the
 		// shade of the live ones - not bare soil: the canopy's colour turned toward a grey-brown thatch at
 		// 40-65 % of its value, the ground's own light and dark kept as the litter's grain. A little shade on
@@ -225,7 +252,7 @@ f_deffer 	main	( p_flat I 		)
 		const float3 litter = lerp(da_gcanopy[gp].rgb, float3(0.42f, 0.37f, 0.31f), lerp(0.35f, 0.15f, under))
 			* lerp(lerp(0.4f, 0.65f, grain), lerp(0.6f, 0.75f, grain), under);
 		D.rgb = lerp(D.rgb, litter, lerp(0.65f, 0.85f, under) * g_near * da_gcanopy[gp].w);
-		D.rgb *= 1.0f - lerp(0.25f, 0.1f, under) * g_near * da_gcanopy_ref[gp].w;
+		D.rgb *= 1.0f - max(lerp(0.25f, 0.1f, under) * g_near * da_gcanopy_ref[gp].w * spread, foot);
 	}
 
 	// Puddles and wet ground. Placed here, after everything else: by this point the normal
@@ -243,7 +270,7 @@ f_deffer 	main	( p_flat I 		)
 	const float da_sky_src = D.w;
 #endif
 	da_puddle_result PDL = da_puddles(I.position.xyz, da_sky_src, N);
-	D.w = PDL.hemi;
+	D.w = PDL.hemi * sky_open;
 
 	// G-buffer half switch (r__puddles_gbuf): flat water normal in the G-buffer is what
 	// makes deferred lighting treat the surface as level - it gives the water volume and

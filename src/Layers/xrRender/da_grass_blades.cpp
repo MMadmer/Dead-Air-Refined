@@ -541,6 +541,8 @@ constexpr u32 kTabSeasPrev = kTabSeas + da_grass_species * kSeasF4;
 constexpr u32 kTabComm = kTabSeasPrev + da_grass_species * kSeasF4;
 constexpr u32 kTabIds = kTabComm + kCommRows * kCommF4;
 constexpr u32 kTabTotal = kTabIds + 16;
+// A community's row of $user$grass_clumps: its patch block, the cumulative shares, two texels per graminoid.
+constexpr u32 kClumpTexels = 3 + 2 * da_community_species;
 constexpr u32 kLmax = 24;
 constexpr float kBand = 0.08f;
 // The blades reach half again as far as the detail radius: past d2 their cover thins (blade_reach), so the longer
@@ -553,6 +555,9 @@ constexpr u32 kMaxStamps = 4096;
 constexpr u32 kStampBytes = 32;
 // The ground bake's triangle cells (m) and the push window: 512 texels of 12.5 cm around the camera.
 constexpr float kCell = 4.f;
+// The tufts' window (da_grass_tufts.cs): 128 m at 6.25 cm around the camera, a tuft's foot a few texels across.
+constexpr u32 kTuftSize = 2048;
+constexpr float kTuftTexel = 0.0625f;
 constexpr u32 kPushSize = 512;
 constexpr float kPushTexel = 0.125f;
 constexpr float kPushTau = 2.5f;
@@ -753,7 +758,7 @@ struct State
     float level_hmax{};
     float max_area_width{};
     // Shaders.
-    ref_shader s_gen, s_args, s_ground, s_stamp, s_resolve, s_blade, s_blade_cut, s_head, s_shadow, s_head_shadow;
+    ref_shader s_gen, s_args, s_ground, s_stamp, s_resolve, s_tufts, s_blade, s_blade_cut, s_head, s_shadow, s_head_shadow;
     // Buffers and textures.
     GpuBuffer slots_b, tables_b, groups_b, stamps_b, cells_b, refs_b, verts_b, tris_b, blades_b, heads_b, counts_b, args_b;
     ID3D11ShaderResourceView* cdb_verts{};
@@ -763,7 +768,7 @@ struct State
     bool staging_pending[kReadbacks]{};
     u32 staging_next{};
     u32 rebalance_frame{};
-    GpuTexture ground, push[2], stamp;
+    GpuTexture ground, push[2], stamp, tufts;
     VertexStagingBuffer vb;
     IndexStagingBuffer ib;
     ref_geom geom;
@@ -775,6 +780,9 @@ struct State
     u32 gsize{};
     float gtexel{0.25f};
     bool gvalid{};
+    // The tufts' window (update_tufts): first world texel; its contents are valid (false: the clumps changed).
+    int tx{}, tz{};
+    bool tvalid{};
     // The push window, this frame's and the previous (ping-pong).
     int px[2]{}, pz[2]{};
     u32 pcur{};
@@ -813,6 +821,10 @@ struct State
     // The tables were filled for this day, previous day, height setting and grass visibility; upload pending.
     float tab_day{-1000.f}, tab_day_prev{-1000.f}, tab_height{-1.f}, tab_visible{-1.f};
     bool tab_upload{};
+    // $user$grass_clumps (fill_clumps): filled with the canopy colours, uploaded at the next frame's prepare.
+    Fvector4 clumps[16][kClumpTexels]{};
+    ID3D11Texture2D* clump_tex{};
+    bool clump_upload{};
 };
 
 State g;
@@ -828,6 +840,8 @@ bool reset_tables()
 // $user$grass_cover: one CTexture for the renderer's lifetime (compiled passes keep pointers to it), its
 // surface replaced per level (the water field's rule, r4_water_field.cpp).
 ref_texture g_cover;
+// $user$grass_clumps and $user$grass_tufts: the same rule, textures of the level's own (fill_clumps, update_tufts).
+ref_texture g_clumps, g_tufts;
 
 bool make_buffer(GpuBuffer& b, u32 bytes, UINT bind, UINT misc, const void* init)
 {
@@ -910,9 +924,9 @@ bool draw_ready(const ref_shader& s)
 
 // Every shader of the blades ships with the content: an install with older shaders has none of them,
 // and compiling a missing file is fatal.
-constexpr pcstr kShaderFiles[] = {"da_grass_gen.cs", "da_grass_args.cs", "da_grass_ground.cs", "da_grass_push_stamp.cs",
-    "da_grass_push_resolve.cs", "da_grass_blade.vs", "da_grass_head.vs", "da_grass_shadow.vs", "da_grass_head_shadow.vs",
-    "da_grass_blade.ps", "da_grass_blade_cut.ps", "da_grass_head.ps"};
+constexpr pcstr kShaderFiles[] = {"da_grass_gen.cs", "da_grass_args.cs", "da_grass_ground.cs", "da_grass_tufts.cs",
+    "da_grass_push_stamp.cs", "da_grass_push_resolve.cs", "da_grass_blade.vs", "da_grass_head.vs", "da_grass_shadow.vs",
+    "da_grass_head_shadow.vs", "da_grass_blade.ps", "da_grass_blade_cut.ps", "da_grass_head.ps"};
 
 bool shaders_present()
 {
@@ -925,13 +939,15 @@ bool shaders_present()
 bool create_shaders()
 {
     static CBlender_da_grass_compute b_gen("da_grass_gen", true), b_args("da_grass_args", false),
-        b_ground("da_grass_ground", false), b_stamp("da_grass_push_stamp", false), b_resolve("da_grass_push_resolve", false);
+        b_ground("da_grass_ground", false), b_tufts("da_grass_tufts", false), b_stamp("da_grass_push_stamp", false),
+        b_resolve("da_grass_push_resolve", false);
     static CBlender_da_grass_draw b_blade("da_grass_blade", "da_grass_blade", false),
         b_blade_cut("da_grass_blade", "da_grass_blade_cut", false), b_head("da_grass_head", "da_grass_head", false),
         b_shadow("da_grass_shadow", "null", true), b_head_shadow("da_grass_head_shadow", "null", true);
     g.s_gen.create(&b_gen, "r2" DELIMITER "da_grass_gen");
     g.s_args.create(&b_args, "r2" DELIMITER "da_grass_args");
     g.s_ground.create(&b_ground, "r2" DELIMITER "da_grass_ground");
+    g.s_tufts.create(&b_tufts, "r2" DELIMITER "da_grass_tufts");
     g.s_stamp.create(&b_stamp, "r2" DELIMITER "da_grass_push_stamp");
     g.s_resolve.create(&b_resolve, "r2" DELIMITER "da_grass_push_resolve");
     g.s_blade.create(&b_blade, "r2" DELIMITER "da_grass_blade");
@@ -939,9 +955,9 @@ bool create_shaders()
     g.s_head.create(&b_head, "r2" DELIMITER "da_grass_head");
     g.s_shadow.create(&b_shadow, "r2" DELIMITER "da_grass_shadow");
     g.s_head_shadow.create(&b_head_shadow, "r2" DELIMITER "da_grass_head_shadow");
-    return compute_ready(g.s_gen) && compute_ready(g.s_args) && compute_ready(g.s_ground) && compute_ready(g.s_stamp) &&
-        compute_ready(g.s_resolve) && draw_ready(g.s_blade) && draw_ready(g.s_blade_cut) && draw_ready(g.s_head) &&
-        draw_ready(g.s_shadow) && draw_ready(g.s_head_shadow);
+    return compute_ready(g.s_gen) && compute_ready(g.s_args) && compute_ready(g.s_ground) && compute_ready(g.s_tufts) &&
+        compute_ready(g.s_stamp) && compute_ready(g.s_resolve) && draw_ready(g.s_blade) && draw_ready(g.s_blade_cut) &&
+        draw_ready(g.s_head) && draw_ready(g.s_shadow) && draw_ready(g.s_head_shadow);
 }
 
 // A strip of `pairs` pairs and a tip as a triangle list (local vertex ids).
@@ -1038,6 +1054,7 @@ void release_all()
     g.s_gen.destroy();
     g.s_args.destroy();
     g.s_ground.destroy();
+    g.s_tufts.destroy();
     g.s_stamp.destroy();
     g.s_resolve.destroy();
     g.s_blade.destroy();
@@ -1054,6 +1071,7 @@ void release_all()
     g.push[0].release();
     g.push[1].release();
     g.stamp.release();
+    g.tufts.release();
     if (g.geom)
         g.geom.destroy();
     if (g.ib.IsValid())
@@ -1062,6 +1080,11 @@ void release_all()
         g.vb.Release();
     if (g_cover)
         g_cover->surface_set(nullptr);
+    if (g_clumps)
+        g_clumps->surface_set(nullptr);
+    if (g_tufts)
+        g_tufts->surface_set(nullptr);
+    _RELEASE(g.clump_tex);
     // Every file-scope value belongs to one level (second-load bugs): the next one starts from scratch.
     const u32 preset = g.preset, density = g.density;
     const bool failed = g.failed;
@@ -1223,6 +1246,19 @@ void publish_cover(const CDetailManager& dm)
         g_cover = RImplementation.Resources->_CreateTexture("$user$grass_cover");
     g_cover->surface_set(surface);
     _RELEASE(surface);
+
+    // The clumps' table, one row per community; filled by fill_tint, uploaded by the frame's prepare.
+    desc.Width = kClumpTexels;
+    desc.Height = 16;
+    desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    _RELEASE(g.clump_tex);
+    if (FAILED(HW.pDevice->CreateTexture2D(&desc, nullptr, &g.clump_tex)) || !g.clump_tex)
+        return;
+    if (!g_clumps)
+        g_clumps = RImplementation.Resources->_CreateTexture("$user$grass_clumps");
+    g_clumps->surface_set(g.clump_tex);
+    g.clump_upload = true;
 }
 } // namespace
 
@@ -1474,6 +1510,51 @@ Reach blade_reach()
     return {kReach * R, d2, g.taper_inv};
 }
 
+// The clumps of every community's graminoids for the sky occlusion of the ground at the foot of the tufts
+// (deffer_impl_flat.ps s_grass_clumps): the patch size, scattered share and species count with the mean occlusion
+// of the ground under the stand, the cumulative shares (fill_community's), and per species its clump cell, cover,
+// the reach of a tuft's shade (the clump's lanes pulled into it, its leaves spreading over a third of their height)
+// and its depth (the standing growth or lodged thatch against a 0.45 m sward, as the litter's shade), its index.
+void fill_clumps(float day, float height)
+{
+    for (u32 c = 0; c < 16; ++c)
+    {
+        Fvector4* row = g.clumps[c];
+        for (u32 i = 0; i < kClumpTexels; ++i)
+            row[i].set(0.f, 0.f, 0.f, 0.f);
+        if (c >= da_grass_communities || !g_data.communities[c].used)
+            continue;
+        const DaGrassCommunity& C = g_data.communities[c];
+        float acc = 0.f, mean = 0.f;
+        float cum[da_community_species];
+        for (u32 i = 0; i < da_community_species; ++i)
+        {
+            acc += i < C.count ? C.share[i] : 0.f;
+            cum[i] = i + 1 >= C.count ? 1.f : acc;
+        }
+        for (u32 i = 0; i < C.count; ++i)
+        {
+            const u32 p = C.species[i];
+            const DaGrassProfile& P = g_data.profiles[p];
+            const DaGrassKeys& k = g_data.keys[p];
+            const float growth = std::max(curve_or(k.s[gkNewGrowth], day, 1.f), 0.35f * curve_or(k.s[gkThatch], day, 0.f));
+            const float top = (P.form < 0.5f ? P.leaf_h[1] : 0.6f * P.culm_h[1]) * growth * height;
+            const float cell = std::max(P.clump_cell, 0.02f);
+            const float reach = std::max(0.6f * cell * (1.f - P.clump_pull) + 0.3f * top, 0.02f);
+            const float depth = std::clamp(top / 0.45f, 0.f, 1.f);
+            row[3 + 2 * i].set(cell, std::clamp(P.cover, 0.f, 1.f), reach, depth);
+            row[4 + 2 * i].set(float(p), 0.f, 0.f, 0.f);
+            // A grown clump's (1 - (d / reach)^2)^2 over its cell: pi reach^2 / 3 of it.
+            mean += C.share[i] * std::clamp(P.cover, 0.f, 1.f) * depth * std::min(PI * reach * reach / (3.f * cell * cell), 1.f);
+        }
+        row[0].set(C.patch, C.scattered, float(C.count), mean * (1.f - C.forb_total()));
+        row[1].set(cum[0], cum[1], cum[2], cum[3]);
+        row[2].set(cum[4], cum[5], cum[6], cum[7]);
+    }
+    g.clump_upload = true;
+    g.tvalid = false;
+}
+
 // The ground tint of the frame: cover map transform, strength and fade, where the basal pairs fade out
 // (the ground under the blades turns from their litter to the stand's under-layer there), the canopy colour
 // of every community at the day (its species by their shares; w = grass_visible) and at the reference day of
@@ -1545,6 +1626,7 @@ void fill_tint(float day, float R, float grass_visible, float height)
             g.canopy_ref[c].set(linear_to_srgb(b.x), linear_to_srgb(b.y), linear_to_srgb(b.z), shade);
             g.canopy_shade[c] = shade;
         }
+        fill_clumps(day, height);
     }
     // grass_visible moves every frame (the snow): only the w columns follow it.
     for (u32 c = 0; c < 16; ++c)
@@ -1894,6 +1976,61 @@ void update_ground(CBackend& cmd)
     }
 }
 
+// The tufts' shade on the ground (da_grass_tufts.cs), a toroidal window that moves like the ground's: what it moved
+// onto is baked, the rest stays; all of it when the season's clumps changed (a level, a step of the day).
+void update_tufts(CBackend& cmd)
+{
+    if (!g_clumps || !g_clumps->get_SRView())
+        return;
+    if (g.tufts.size != kTuftSize)
+    {
+        if (!make_texture(g.tufts, kTuftSize, DXGI_FORMAT_R8_UNORM, 1, false))
+            return;
+        if (!g_tufts)
+            g_tufts = RImplementation.Resources->_CreateTexture("$user$grass_tufts");
+        g_tufts->surface_set(g.tufts.tex);
+        g.tvalid = false;
+    }
+    const Latch& L = g.latch;
+    const int S = int(kTuftSize);
+    const int nx = floor_div(iFloor(L.cam.x / kTuftTexel), 32) * 32 - S / 2;
+    const int nz = floor_div(iFloor(L.cam.z / kTuftTexel), 32) * 32 - S / 2;
+    struct Rect
+    {
+        int x, z, w, h;
+    };
+    Rect rects[2]{};
+    u32 count = 0;
+    if (!g.tvalid || std::abs(nx - g.tx) >= S || std::abs(nz - g.tz) >= S)
+        rects[count++] = {nx, nz, S, S};
+    else
+    {
+        const int dx = nx - g.tx, dz = nz - g.tz;
+        if (dx > 0)
+            rects[count++] = {g.tx + S, nz, dx, S};
+        else if (dx < 0)
+            rects[count++] = {nx, nz, -dx, S};
+        const int xs = std::max(nx, g.tx), xe = std::min(nx, g.tx) + S;
+        if (dz > 0 && xe > xs)
+            rects[count++] = {xs, g.tz + S, xe - xs, dz};
+        else if (dz < 0 && xe > xs)
+            rects[count++] = {xs, nz, xe - xs, -dz};
+    }
+    g.tx = nx;
+    g.tz = nz;
+    g.tvalid = true;
+    for (u32 i = 0; i < count; ++i)
+    {
+        const Rect& r = rects[i];
+        dispatch(cmd, g.s_tufts, u32(r.w + 7) / 8, u32(r.h + 7) / 8,
+            {{0, g.slots_b.srv}, {1, g.tables_b.srv}, {2, g_clumps->get_SRView()}}, {g.tufts.uav}, [&] {
+                cmd.set_c("da_gt_rect", float(r.x), float(r.z), float(r.w), float(r.h));
+                cmd.set_c("da_gt_win", kTuftTexel, float(kTuftSize), 0.f, 0.f);
+                cmd.set_c("da_grass_slot", float(g.offs_x), float(g.offs_z), float(g.size_x), float(g.size_z));
+            });
+    }
+}
+
 Fvector4 push_window(u32 i)
 {
     const float extent = float(kPushSize) * kPushTexel;
@@ -2026,6 +2163,8 @@ void da_grass_destroy()
     g.failed = false;
     // The CTexture outlives levels (compiled terrain passes point at it), never the resource manager.
     g_cover = nullptr;
+    g_clumps = nullptr;
+    g_tufts = nullptr;
 }
 
 namespace
@@ -2522,6 +2661,12 @@ void da_grass_frame_prepare(CBackend& cmd)
         ctx->UpdateSubresource(g.tables_b.buf, 0, nullptr, g.tables, 0, 0);
         g.tab_upload = false;
     }
+    if (g.clump_upload && g.clump_tex)
+    {
+        ctx->UpdateSubresource(g.clump_tex, 0, nullptr, g.clumps, sizeof(g.clumps[0]), 0);
+        g.clump_upload = false;
+    }
+    update_tufts(cmd);
     if (g.group_count)
     {
         const D3D11_BOX box{0, 0, 0, g.group_count * 16, 1, 1};
@@ -2616,6 +2761,14 @@ void da_grass_render_cascade(CBackend& cmd, u32 cascade)
     else
         draw_bins(cmd, g.s_shadow, kBinShMid, kBinShMid, g.latch.mid_texel);
     cmd.set_CullMode(CULL_CCW);
+}
+
+Fvector4 da_grass_tuft_window()
+{
+    if (!g.tint_on || !g.tvalid)
+        return {0.f, 0.f, 0.f, 0.f};
+    // The window spans at least half its size less its 32-texel step around the camera.
+    return {1.f / (kTuftTexel * float(kTuftSize)), 1.f, (0.5f * float(kTuftSize) - 32.f) * kTuftTexel, 0.f};
 }
 
 bool da_grass_ground_tint(Fvector4& cover_xf, Fvector4& tint, Fvector4& tint2, Fvector4 (&canopy)[16], Fvector4 (&canopy_ref)[16])

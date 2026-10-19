@@ -409,6 +409,22 @@ species (`SEASON_DATA.md`):
   ground there is the stand's under-layer, the canopy colour with less thatch (0.15 of the way) at 60-75 % of
   its value by 0.85 of the cover - about the mean of the blades with their base occlusion, so the gaps never
   glow - and only 10 % of shade on top.
+- The tufts' shade on the ground (1.6.1): the litter's shade and the ground's sky light follow the very tufts
+  the blades grow in, not the slot's mean. `da_grass_tufts.cs` fills a toroidal window around the camera
+  (`$user$grass_tufts`, R8, 2048 texels of 6.25 cm, 128 m) with how deep a tuft shades its foot at each point:
+  the slot's dominant community, the patch's species (`grass_species_pick`'s graminoids) and its Voronoi clump
+  by the generation's own hashes (`da_grass_hash.h`, shared with `da_grass_gen.cs`), `(1 - (d / reach)^2)^2`
+  around the clump's centre (reach: 0.6 of the cell less the clump pull, plus a third of the sward's height),
+  times the sward's depth (as the litter's shade) and the root of the share of its lanes alive at the centre (a
+  thin stand's tuft has fewer blades, not a smaller foot; out under a tenth). The window moves like the ground
+  window, baking only the 32-texel strips it moves onto, and is baked whole when the season's clumps change
+  (`fill_clumps`, a level, a step of the day: `$user$grass_clumps`, a row per community). The terrain reads
+  it with one tap inside `d2` (easing into the stand's mean from 0.7 of it): the litter's shade gathers under
+  the tufts and out of the gaps between them (twice its mean at most), at least 60 % of the tuft's depth at
+  its foot (a uniform shade lit a lone tuft at a road's edge like bare soil), and the hemi term loses 75 % of
+  the occlusion in any weather (the sun's shade is the casters'), easing out with the blades' thinning. Cost
+  at 1080p: 0.01-0.02 ms in the scene (the shade computed in the terrain's pixel shader cost 0.12 ms looking
+  down into a meadow). QA: `tools/qa/water/ground_ao.lua`.
 - Wet blades: the rain apply pass darkens and glosses them like any surface (foliage porosity 0.35);
   fill-map puddles never stand on foliage. The snow layer skips foliage (the blades carry their own snow).
 

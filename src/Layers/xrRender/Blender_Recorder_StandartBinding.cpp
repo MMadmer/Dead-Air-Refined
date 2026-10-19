@@ -1202,6 +1202,10 @@ static class cl_da_gtint2 : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_grass_tint_values().tint2); }
 } binder_da_gtint2;
+static class cl_da_gtuft : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_grass_tuft_window()); }
+} binder_da_gtuft;
 static class cl_da_gcanopy : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -1463,6 +1467,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_gcover_xf", &binder_da_gcover_xf);
     r_Constant("da_gtint", &binder_da_gtint);
     r_Constant("da_gtint2", &binder_da_gtint2);
+    r_Constant("da_gtuft", &binder_da_gtuft);
     r_Constant("da_gcanopy", &binder_da_gcanopy);
     r_Constant("da_gcanopy_ref", &binder_da_gcanopy_ref);
 #endif

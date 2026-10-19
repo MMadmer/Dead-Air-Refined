@@ -236,6 +236,9 @@ bool uber_deffer(CBlender_Compile& C, bool hq, LPCSTR _vspec, LPCSTR _pspec, BOO
     // Blade grass cover under the ground tint of deffer_impl_flat.ps (da_grass_blades.cpp publishes it
     // per level). Same silent-skip contract.
     C.r_dx11Texture("s_grass_cover", "$user$grass_cover");
+    // The communities' clumps and the tufts' shade around the camera (da_grass_blades.cpp fill_clumps, update_tufts).
+    C.r_dx11Texture("s_grass_clumps", "$user$grass_clumps");
+    C.r_dx11Texture("s_grass_tufts", "$user$grass_tufts");
     C.r_dx11Sampler("smp_rtlinear");
     if (lmap)
     {

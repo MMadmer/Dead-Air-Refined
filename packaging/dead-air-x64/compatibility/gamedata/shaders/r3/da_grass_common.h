@@ -113,16 +113,8 @@ uint	grass_id_community	(uint id)
 	return (da_grass_tables.Load((GRASS_T_IDS * 16) + id * 4) & 0x1Fu);
 }
 
-// ---- Hashes ----------------------------------------------------------------------------------------
-uint	grass_hash	(uint x)
-{
-	x ^= x >> 16; x *= 0x7feb352du;
-	x ^= x >> 15; x *= 0x846ca68bu;
-	x ^= x >> 16;
-	return x;
-}
-float	grass_u01	(uint x)	{ return float(x >> 8) * (1.0f / 16777216.0f); }
-uint	grass_seed	(int2 g, uint salt)	{ return grass_hash(asuint(g.x) * 0x9E3779B1u ^ grass_hash(asuint(g.y) + salt)); }
+// ---- Hashes, patches, clumps -------------------------------------------------------------------------
+#include "da_grass_hash.h"
 
 // ---- Packing ---------------------------------------------------------------------------------------
 uint	grass_pack_h2	(float a, float b)	{ return f32tof16(a) | (f32tof16(b) << 16); }

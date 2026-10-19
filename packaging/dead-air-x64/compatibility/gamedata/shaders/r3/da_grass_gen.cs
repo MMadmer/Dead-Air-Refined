@@ -165,17 +165,6 @@ float	grass_vnoise	(float2 q, uint salt)
 	return lerp(lerp(a00, a10, t.x), lerp(a01, a11, t.x), t.y);
 }
 
-// A patch of clonal growth at xz: the cell of a grid one patch size apart under a warp of two incommensurate sine
-// waves (most of a cell), so the cells are organic blobs, and the cell's own uniform value (so the shares of the
-// patches are exact).
-float	grass_patch	(float2 xz, float size, uint salt)
-{
-	const float2 q = xz / max(size, 0.25f);
-	const float ph = float(salt & 1023u) * 0.0061359f;
-	const float2 w = float2(sin(q.y * 1.37f + ph) + 0.5f * sin(q.x * 2.71f - ph), sin(q.x * 1.19f + 2.0f * ph) + 0.5f * sin(q.y * 2.33f + ph));
-	return grass_u01(grass_hash(grass_seed(int2(floor(q + w * 0.4f)), salt) ^ 0xA7C3u));
-}
-
 // The species a lane of community c grows. The forbs first: a patch field of the community's forb patch size
 // gives each forb its share of the area as clonal patches (goldenrod and nettle clones, lily of the valley
 // carpets), where it takes its share of the lanes (and the grass the rest); everywhere each forb also takes a
@@ -512,39 +501,15 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	L.cut = !culm && uint(P19.y + 0.5f) >= GRASS_LEAF_PINNATE;
 	L.forb = form != GRASS_FORM_GRAMINOID;
 
-	// The clump (GoT: a Voronoi cell of 3x3 jittered points), the species' own.
-	float2 centre = xz;
-	float cdist = 0.0f;
-	uint cid = 0u;
-	{
-		const float cell = max(P5.x, 0.02f);
-		const float2 cq = xz / cell, b = floor(cq);
-		float best = 1e9f;
-		float2 best_cell = b, best_pt = b;
-		[unroll] for (int j = -1; j <= 1; ++j)
-		{
-			[unroll] for (int i = -1; i <= 1; ++i)
-			{
-				const float2 cc = b + float2(i, j);
-				const uint hc2 = grass_seed(int2(cc), 0x2545F491u + p * 0x3B9Du);
-				const float2 pt = cc + float2(grass_u01(hc2), grass_u01(grass_hash(hc2)));
-				const float d2 = dot(cq - pt, cq - pt);
-				if (d2 < best)
-				{
-					best = d2;
-					best_cell = cc;
-					best_pt = pt;
-				}
-			}
-		}
-		centre = best_pt * cell;
-		cdist = sqrt(best) * cell;
-		cid = grass_seed(int2(best_cell), 0x7F4A7C15u + p * 0x3B9Du);
-	}
+	// The clump, the species' own (da_grass_hash.h; the terrain shades the ground under the same ones).
+	float2 centre;
+	float cdist;
+	uint cid;
+	grass_clump(xz, P5.x, p, centre, cdist, cid);
 	const float hc = grass_u01(grass_hash(cid ^ 0x51u));
 	L.hc = hc;
 	// Bare gaps between tufts (sand: cover < 1).
-	if (grass_u01(grass_hash(cid ^ 0xC0C0u)) >= P5.w)
+	if (!grass_clump_grows(cid, P5.w))
 		return;
 	// Pull towards the clump centre (culms keep half of it: they stand inside the tuft).
 	xz = lerp(xz, centre, P5.y * (culm ? 0.5f : 1.0f));

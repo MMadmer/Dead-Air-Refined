@@ -52,6 +52,9 @@ bool da_grass_brushes(const Fvector& feet, float radius, float min_height, float
 // communities at the day (w = grass_visible) and at the reference day of the latched terrain folder. False
 // while no level has a cover map (tint off).
 bool da_grass_ground_tint(Fvector4& cover_xf, Fvector4& tint, Fvector4& tint2, Fvector4 (&canopy)[16], Fvector4 (&canopy_ref)[16]);
+// The tufts' window of the terrain ($user$grass_tufts, deffer_impl_flat.ps da_gtuft): world xz -> its wrapped uv, 1
+// while it is valid, how far it reaches around the camera (m).
+Fvector4 da_grass_tuft_window();
 // r__grass_blades_stats (QA): lanes, groups, records per bin against the bin windows, memory.
 void da_grass_stats();
 // r__grass_species_pin <name|off> (QA): every lane of the blade grass grows that species (species.json ids).
