@@ -33,6 +33,7 @@ DA_RAW_RW(da_grass_heads, u2);
 uniform float4	da_grass_cam;		// xyz camera, w draw radius R
 uniform float4	da_grass_fwd;		// xyz camera forward, w minimum width per metre of view depth (k_px x pixel)
 uniform float4	da_grass_lod;		// x d1, y d2, z end fade start, w 1 / (R - fade start)
+uniform float4	da_grass_taper;		// x where the cover starts to thin (d2), y 1 / the thinning's scale (0 = none)
 uniform float4	da_grass_lat;		// x lattice spacing (m), y lattice density (1/m2), z density scale, w height setting
 uniform float4	da_grass_time;		// x time, y previous time, z 1 = previous state wanted, w frame & 63
 uniform float4	da_grass_sh;		// x near cascade reach, y middle reach, z near texel (m), w middle texel (m)
@@ -84,6 +85,15 @@ bool	grass_visible	(float3 c, float r)
 			return false;
 	}
 	return true;
+}
+
+// Past d2 the cover thins with distance as 1 / sqrt(1 + x^2), x = (d - d2) / scale: smooth at d2, no step anywhere,
+// a long tail. The blades reach half again as far as the detail radius for the records the radius alone took
+// (da_grass_blades.cpp solves the scale), and the ground tint takes the opening gaps over.
+float	grass_taper	(float d)
+{
+	const float x = max(d - da_grass_taper.x, 0.0f) * da_grass_taper.y;
+	return rsqrt(1.0f + x * x);
 }
 
 // Survival of a lane under a keep, with the relative 8 % fade band and the lattice's supply cap
@@ -477,10 +487,11 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	// most - is below its rank: the pixel rule would drop it after all the work below. Most lanes of the middle
 	// and far field end here.
 	{
+		const float dist = distance(xz, da_grass_cam.xz);
 		const float dens_ub = P6.x * da_grass_lat.z * grass_seas(p, 2, false).w * grass_seas(p, 3, false).z
-			/ max(da_grass_lat.y, 1e-3f) * (culm ? 1.0f : 3.0f);
+			/ max(da_grass_lat.y, 1e-3f) * (culm ? 1.0f : 3.0f) * grass_taper(dist - 0.6f);
 		const float wide = grass_prof(p, 27).x;
-		const float depth = max(0.45f * (distance(xz, da_grass_cam.xz) - 0.6f), 0.05f);
+		const float depth = max(0.45f * (dist - 0.6f), 0.05f);
 		float ub = (tflags & 1u) != 0u ? saturate(wide / (da_grass_fwd.w * depth)) * dens_ub : 0.0f;
 		if ((tflags & 2u) != 0u)
 			ub = max(ub, saturate(wide / (2.0f * da_grass_sh.z)) * dens_ub);
@@ -674,7 +685,7 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	// (the far LOD carries both); density thins without width compensation, the pixel rule with it.
 	const float dens = P6.x * da_grass_lat.z * K2.w * K3.z * lerp(1.0f, P8.y, shade);
 	// (A folded profile's density counts its strips: one lane for two leaves.)
-	const float dens_keep = dens / max(da_grass_lat.y, 1e-3f);
+	const float dens_keep = dens / max(da_grass_lat.y, 1e-3f) * grass_taper(d);
 	const float4 P23 = grass_prof(p, 23);
 	// A forb's dead stem of last year stands bare; a reed's keeps its sheaths.
 	const uint leaves = (culm && !(life.thatch && form != GRASS_FORM_GRAMINOID)) ? min(uint(P6.z), GRASS_CAULINE_MAX) : 0u;

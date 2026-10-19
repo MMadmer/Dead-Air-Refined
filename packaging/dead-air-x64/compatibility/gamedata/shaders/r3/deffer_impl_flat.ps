@@ -25,7 +25,8 @@ uniform float4	da_macro_var2;
 uniform float3x4	m_v2w;
 uniform float4	da_gcover_xf;		// world xz -> cover map uv: xy scale, zw offset
 uniform float4	da_gtint;			// x near strength, y far strength, z fade start (m), w fade end (m)
-uniform float4	da_gtint2;			// xy where the blades' basal pairs fade out (m: from d1 to halfway to d2), zw unused
+uniform float4	da_gtint2;			// xy where the blades' basal pairs fade out (m: from d1 to halfway to d2), z where their
+									// cover starts to thin (d2), w 1 / the thinning's scale (da_grass_gen.cs grass_taper)
 uniform float4	da_gcanopy[16];		// rgb canopy of each blade community at the day (albedo space), w = grass_visible
 uniform float4	da_gcanopy_ref[16];	// rgb canopy at the reference day of the latched terrain folder, w = shade under the blades
 Texture2D		s_grass_cover;		// r blade grass, g herbs, b shrubs, a dominant blade community / 15
@@ -197,7 +198,10 @@ f_deffer 	main	( p_flat I 		)
 		const uint gp = min(uint(s_grass_cover.Load(int3(gt, 0)).a * 15.0f + 0.5f), 15u);
 		const float cover = saturate(gc.r + 0.5f * gc.g) * da_gcanopy[gp].w;
 		const float gdist = length(I.position.xyz);
-		const float gk = lerp(da_gtint.x, da_gtint.y, saturate((gdist - da_gtint.z) / max(da_gtint.w - da_gtint.z, 1.0f)));
+		// As the blades thin past d2 the canopy's colour takes the opening gaps over (fully where they fade out).
+		const float gx = max(gdist - da_gtint2.z, 0.0f) * da_gtint2.w;
+		const float thin = 1.0f - rsqrt(1.0f + gx * gx);
+		const float gk = lerp(da_gtint.x, da_gtint.y, max(saturate((gdist - da_gtint.z) / max(da_gtint.w - da_gtint.z, 1.0f)), thin));
 		const float3 LUMW = float3(0.299f, 0.587f, 0.114f);
 		const float lum_d = dot(D.rgb, LUMW);
 		const float lum_c = max(dot(da_gcanopy[gp].rgb, LUMW), 1e-3f);

@@ -66,6 +66,9 @@
 	<string id="ui_mm_da_motion_blur">
 		<text>Motion blur</text>
 	</string>
+	<string id="ui_mm_da_grass_density">
+		<text>Grass density</text>
+	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
 	<string id="st_opt_renderer_r2">
 		<text>DirectX 10 (R2)</text>
@@ -196,6 +199,9 @@
 	</string>
 	<string id="st_da_x64_video_hint_preset">
 		<text>Overall graphics quality: draw and shadow distances, grass, reflections and effects. Anti-aliasing is a setting of its own. Higher is heavier on the GPU. On DirectX 12 the two highest presets shade flat and dark areas at a reduced rate.</text>
+	</string>
+	<string id="st_da_x64_video_hint_grass_density">
+		<text>Grass density, on the same tiers as the quality preset. By default it matches the preset, and a new preset sets it again. Higher is denser grass and heavier on the GPU.</text>
 	</string>
 	<string id="st_da_x64_video_hint_level_texture_unload">
 		<text>Frees video and system memory after leaving a level. May make the next load slightly longer.</text>

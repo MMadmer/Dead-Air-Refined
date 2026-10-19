@@ -31,6 +31,7 @@ window_mode          = list,  vid_window_mode
 fps_limit            = list,  vid_fps_limit
 vsync                = list,  rs_vsync
 preset               = list,  _preset
+grass_density        = list,  r__grass_density
 level_texture_unload = check, r__unload_level_textures
 aa                   = list,  r__aa
 fsr                  = list,  r__fsr
@@ -69,7 +70,7 @@ order = screen, quality, aa, rtx, image, effects, color
 rows = renderer, async_compute, resolution, window_mode, fps_limit, vsync
 
 [group_quality]
-rows = preset, level_texture_unload, dstorage
+rows = preset, grass_density, level_texture_unload, dstorage
 
 [group_aa]
 rows = aa, fsr, dlss, framegen, upscale_sharpness
@@ -90,6 +91,7 @@ rows = color_r, color_g, color_b, vibrance
 [captions]
 renderer          = ui_mm_da_renderer
 preset            = ui_mm_quality_presets
+grass_density     = ui_mm_da_grass_density
 aa                = ui_mm_da_aa
 fsr               = ui_mm_da_fsr
 dlss              = ui_mm_da_dlss

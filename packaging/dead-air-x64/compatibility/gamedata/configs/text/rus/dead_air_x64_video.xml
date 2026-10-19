@@ -62,6 +62,9 @@
 	<string id="ui_mm_da_motion_blur">
 		<text>Размытие в движении</text>
 	</string>
+	<string id="ui_mm_da_grass_density">
+		<text>Плотность травы</text>
+	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
 	<string id="st_opt_renderer_r2">
 		<text>DirectX 10 (R2)</text>
@@ -192,6 +195,9 @@
 	</string>
 	<string id="st_da_x64_video_hint_preset">
 		<text>Качество графики целиком: дальности прорисовки и теней, трава, отражения и эффекты. Сглаживание выбирается отдельно. Чем выше, тем тяжелее для видеокарты. На DirectX 12 два старших пресета затеняют ровные и тёмные участки в пониженном разрешении.</text>
+	</string>
+	<string id="st_da_x64_video_hint_grass_density">
+		<text>Плотность травы, на тех же ступенях, что и пресет качества. По умолчанию равна пресету, при смене пресета выставляется заново. Чем выше, тем гуще трава и выше нагрузка на видеокарту.</text>
 	</string>
 	<string id="st_da_x64_video_hint_level_texture_unload">
 		<text>Освобождает видеопамять и оперативную память после выхода с локации. Может немного увеличить время следующей загрузки.</text>

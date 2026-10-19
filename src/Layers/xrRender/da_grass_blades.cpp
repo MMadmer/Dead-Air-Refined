@@ -543,8 +543,11 @@ constexpr u32 kTabIds = kTabComm + kCommRows * kCommF4;
 constexpr u32 kTabTotal = kTabIds + 16;
 constexpr u32 kLmax = 24;
 constexpr float kBand = 0.08f;
-// Compute groups of a frame (64 lanes each): 2 M lanes, far beyond what the presets ask.
-constexpr u32 kMaxGroups = 32768;
+// The blades reach half again as far as the detail radius: past d2 their cover thins (blade_reach), so the longer
+// reach costs the records the radius alone did. 1.5 x 160 m stays inside the 2048 ground window of 0.25 m texels.
+constexpr float kReach = 1.5f;
+// Compute groups of a frame (64 lanes each): 3 M lanes, far beyond what the presets ask.
+constexpr u32 kMaxGroups = 49152;
 // Deformer stamps the push field takes per frame, 32 bytes each.
 constexpr u32 kMaxStamps = 4096;
 constexpr u32 kStampBytes = 32;
@@ -703,6 +706,8 @@ struct Latch
     CFrustum view;
     Fvector4 planes[6]{};
     float R{}, R0{}, d1{}, d2{}, kpx{}, wmin_per_m{};
+    // Past d2 the cover thins as 1 / sqrt(1 + x^2), x = (d - d2) x taper_inv (0 = no thinning, the stock reach).
+    float taper_inv{};
     float s0{}, dlat{}, density_scale{}, height{};
     float near_texel{}, mid_reach{}, mid_texel{};
     bool shadow_near{}, shadow_mid{};
@@ -785,6 +790,11 @@ struct State
     u32 hidden{}; // the tiles in view the main view's occlusion hid this frame
     std::atomic<float> green{0.f};
     u32 preset{2};
+    // The grass density selector (r__grass_density, the same tiers as the quality preset): the lattice's density and,
+    // with the quality preset, the record budget.
+    u32 density{2};
+    // The taper scale solved for this detail radius and d2 (blade_reach).
+    float taper_R{-1.f}, taper_d2{-1.f}, taper_inv{};
     u32 counts_seen[kBins]{};
     u32 overflow_frames{};
     // The record budget's pixel floor: over the buffer the blades of the whole view grow fewer and wider (the
@@ -1001,9 +1011,12 @@ void layout_bins(const float (&need)[kBins])
     }
 }
 
+// The record budget: a denser field than the quality preset's needs its density tier's windows.
+const PresetColumns& budget_columns() { return kPresets[std::max(g.preset, g.density)]; }
+
 bool create_bins()
 {
-    const PresetColumns& p = kPresets[g.preset];
+    const PresetColumns& p = budget_columns();
     g.records = p.records;
     g.heads = p.heads;
     if (!make_buffer(g.blades_b, g.records * kRec, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS, 0, nullptr) ||
@@ -1047,11 +1060,12 @@ void release_all()
     if (g_cover)
         g_cover->surface_set(nullptr);
     // Every file-scope value belongs to one level (second-load bugs): the next one starts from scratch.
-    const u32 preset = g.preset;
+    const u32 preset = g.preset, density = g.density;
     const bool failed = g.failed;
     g.~State();
     new (&g) State();
     g.preset = preset;
+    g.density = density;
     g.failed = failed;
 }
 
@@ -1398,6 +1412,65 @@ Fvector3 species_canopy(u32 p, float day)
     return c;
 }
 
+// The blades' reach for the detail radius R_detail: kReach x R_detail, the cover thinning past d2 so that the far
+// field's records stay those of R_detail at full cover. Measured on the l01_escape meadow (eye and 18 m up), the far
+// field's records per metre of radius go as r x cover / the pixel floor's widening (x1 -> x1.5 from d2 to 2.5 d2,
+// da_grass_gen.cs): the scale of 1 / sqrt(1 + x^2) is solved so that integral over [0, kReach R] matches the one of
+// [0, R] at full cover. The tail is long and the slope gentle (at Extreme 0.38 of the cover at the old 160 m, 0.24 at
+// 240 m, at most 0.8 % a metre): running across a meadow, nothing near the eye changes. r__dbg_grass 256: the stock
+// reach (QA).
+struct Reach
+{
+    float R, d2, taper_inv;
+};
+
+float taper_cover(float d, float d2, float inv)
+{
+    const float x = std::max(d - d2, 0.f) * inv;
+    return 1.f / std::sqrt(1.f + x * x);
+}
+
+Reach blade_reach()
+{
+    const float R = std::max(dm_fade, 8.f);
+    const PresetColumns& preset = kPresets[g.preset];
+    const float d2 = std::clamp(preset.d2, std::min(preset.d1, R) + 1.f, std::max(R, std::min(preset.d1, R) + 1.f));
+    if (ps_r__dbg_grass & 256)
+        return {R, d2, 0.f};
+    if (R != g.taper_R || d2 != g.taper_d2)
+    {
+        const auto widen = [d2](float r) {
+            const float t = std::clamp((r - d2) / (1.5f * d2), 0.f, 1.f);
+            return 1.f + 0.5f * t * t * (3.f - 2.f * t);
+        };
+        constexpr u32 n = 512;
+        const float Rn = kReach * R;
+        float target = 0.f;
+        for (u32 i = 0; i < n; ++i)
+        {
+            const float r = (float(i) + 0.5f) * R / float(n);
+            target += r / widen(r);
+        }
+        target *= R / float(n);
+        float lo = 1.f, hi = 8.f * Rn;
+        for (u32 it = 0; it < 40; ++it)
+        {
+            const float mid = 0.5f * (lo + hi);
+            float sum = 0.f;
+            for (u32 i = 0; i < n; ++i)
+            {
+                const float r = (float(i) + 0.5f) * Rn / float(n);
+                sum += r * taper_cover(r, d2, 1.f / mid) / widen(r);
+            }
+            (sum * Rn / float(n) > target ? hi : lo) = mid;
+        }
+        g.taper_R = R;
+        g.taper_d2 = d2;
+        g.taper_inv = 2.f / (lo + hi);
+    }
+    return {kReach * R, d2, g.taper_inv};
+}
+
 // The ground tint of the frame: cover map transform, strength and fade, where the basal pairs fade out
 // (the ground under the blades turns from their litter to the stand's under-layer there), the canopy colour
 // of every community at the day (its species by their shares; w = grass_visible) and at the reference day of
@@ -1417,7 +1490,8 @@ void fill_tint(float day, float R, float grass_visible, float height)
     const PresetColumns& preset = kPresets[g.preset];
     const float d1 = std::min(preset.d1, R);
     const float d2 = std::clamp(preset.d2, d1 + 1.f, std::max(R, d1 + 1.f));
-    g.tint2.set(d1, d1 + 0.35f * (d2 - d1), 0.f, 0.f);
+    const Reach reach = blade_reach();
+    g.tint2.set(d1, d1 + 0.35f * (d2 - d1), reach.d2, reach.taper_inv);
     // Autumn is the base set (no folder): ref[0].
     float ref = t.ref[0];
     if (pcstr folder = da_season_folder())
@@ -1601,6 +1675,8 @@ void build_tiles()
             }
         if (dmax <= 0.f)
             continue;
+        // The cover thins past d2: the tile's nearest point bounds it.
+        dmax *= taper_cover(dn, L.d2, L.taper_inv);
         const u32 j = dmax >= L.dlat ? 0u : u32(std::floor(std::log2(L.dlat / dmax)));
         // Lanes leave their lattice cell by the jitter and the clump pull: the box takes them in.
         Fbox box;
@@ -1929,6 +2005,10 @@ bool da_grass_active() { return g.active && psDeviceFlags.is(rsDrawDetails); }
 
 void da_grass_apply_preset(u32 preset) { g.preset = std::min(preset, 4u); }
 
+void da_grass_apply_density(u32 density) { g.density = std::min(density, 4u); }
+
+float da_grass_reach() { return blade_reach().R; }
+
 void da_grass_level_unload()
 {
     release_all();
@@ -2195,7 +2275,7 @@ void da_grass_level_load()
         return fail("the blade geometry could not be created");
     publish_cover(*dm);
     g.loaded = g.active = true;
-    fill_tint(da_season_day(), std::max(dm_fade, 8.f), std::clamp(da_snow_frame().grass_visible, 0.f, 1.f), ps_r__Detail_height);
+    fill_tint(da_season_day(), blade_reach().R, std::clamp(da_snow_frame().grass_visible, 0.f, 1.f), ps_r__Detail_height);
     Msg("* [grass] blades on: %u x %u slots, %u MB of records", g.size_x, g.size_z,
         (g.records * kRec + g.heads * kHeadRec) >> 20);
 }
@@ -2225,15 +2305,19 @@ void da_grass_frame_latch()
     }
     const PresetColumns& preset = kPresets[g.preset];
     // A preset with other buffer sizes: the new buffers before anything of this frame records a draw.
-    if (g.records != preset.records && !create_bins())
+    if (g.records != budget_columns().records && !create_bins())
     {
         Msg("! [grass] the blade buffers could not be resized");
         g.active = false;
         return;
     }
-    L.R = std::max(dm_fade, 8.f);
-    L.d1 = std::min(preset.d1, L.R);
-    L.d2 = std::clamp(preset.d2, L.d1 + 1.f, std::max(L.R, L.d1 + 1.f));
+    // The LOD distances follow the detail radius, the reach goes past it (blade_reach).
+    const float R_detail = std::max(dm_fade, 8.f);
+    const Reach reach = blade_reach();
+    L.R = reach.R;
+    L.d1 = std::min(preset.d1, R_detail);
+    L.d2 = reach.d2;
+    L.taper_inv = reach.taper_inv;
     L.kpx = preset.kpx;
     // One render pixel per metre of view depth (the upscaler's input height).
     const float render_h = float(std::max(Device.dwRenderHeight ? Device.dwRenderHeight : Device.dwHeight, 1u));
@@ -2446,6 +2530,7 @@ void da_grass_frame_prepare(CBackend& cmd)
                 cmd.set_c("da_grass_fwd", L.fwd.x, L.fwd.y, L.fwd.z, L.wmin_per_m);
                 const float fade_start = 0.85f * L.R;
                 cmd.set_c("da_grass_lod", L.d1, L.d2, fade_start, 1.f / std::max(L.R - fade_start, 0.5f));
+                cmd.set_c("da_grass_taper", L.d2, L.taper_inv, 0.f, 0.f);
                 cmd.set_c("da_grass_lat", L.s0, L.dlat, L.density_scale, L.height);
                 cmd.set_c("da_grass_time", L.time, L.time_prev, L.motion ? 1.f : 0.f, float(L.frame_mod));
                 cmd.set_c("da_grass_sh", L.shadow_near ? kNearReach : 0.f, L.shadow_mid ? L.mid_reach : 0.f, L.near_texel, L.mid_texel);
@@ -2553,8 +2638,9 @@ void da_grass_stats()
         return;
     }
     const Latch& L = g.latch;
-    Msg("* [grass] preset %u, R %.0f m, R0 %.1f m, d1/d2 %.0f/%.0f m, lattice %.3f m (%.0f /m2), %u groups, %u lanes, %u of %u tiles hidden",
-        g.preset, L.R, L.R0, L.d1, L.d2, L.s0, L.dlat, g.group_count, g.lane_count, g.hidden, u32(g.tiles.size()));
+    Msg("* [grass] preset %u, density %u, R %.0f m, R0 %.1f m, d1/d2 %.0f/%.0f m, cover %.2f at %.0f m and %.2f at R, lattice %.3f m (%.0f /m2), %u groups, %u lanes, %u of %u tiles hidden",
+        g.preset, g.density, L.R, L.R0, L.d1, L.d2, taper_cover(L.R / kReach, L.d2, L.taper_inv), L.R / kReach,
+        taper_cover(L.R, L.d2, L.taper_inv), L.s0, L.dlat, g.group_count, g.lane_count, g.hidden, u32(g.tiles.size()));
     static constexpr pcstr names[kBins] = {"lod0 a", "lod0 b", "lod1 a", "lod1 b", "lod1 c", "lod2 a", "lod2 b", "lod2 c",
         "lod2 d", "sun near", "sun mid", "head 0", "head 1 a", "head 1 b", "head sun", "short"};
     for (u32 b = 0; b < kBins; ++b)

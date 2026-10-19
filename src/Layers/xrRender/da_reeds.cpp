@@ -239,7 +239,7 @@ void da_reeds_frame(R_dsgraph_structure& dsgraph)
     // Inside the blades' radius the blades are the reeds; over its last 15 %, where the blades fade out, the billboard
     // fades in. Without the blades (details off) the billboards stand everywhere.
     const bool blades = da_grass_active();
-    const float R = std::max(dm_fade, 8.f);
+    const float R = da_grass_reach();
     const float cut_in = blades ? 0.85f * R : 0.f, cut_out = blades ? R : 0.f;
     const Fvector& cam = Device.vCameraPosition;
     const float span = r_ssaVEG_DISCARD * 3.f;

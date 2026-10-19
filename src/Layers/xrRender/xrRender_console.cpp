@@ -82,6 +82,10 @@ const xr_token qpreset_token[] =
     { "Extreme", 4 },
     { nullptr, 0 }
 };
+// The grass density selector (Video, below the quality preset), on the preset's tiers. Unset (a user.ltx from
+// before 1.6.1) it takes the quality preset's tier, and a new quality preset brings its own (CCC_Preset).
+constexpr u32 da_grass_density_unset = u32(-1);
+u32 ps_r__grass_density = da_grass_density_unset;
 
 u32 ps_r2_smapsize = 2048;
 const xr_token qsmapsize_token[] =
@@ -1507,8 +1511,11 @@ void xrRender_sync_preset_derived()
 #endif
     const int detail_radius =
         mesh_grass ? detail_radius_mesh_by_preset[ps_Preset] : detail_radius_by_preset[ps_Preset];
-    const float detail_density =
-        mesh_grass ? detail_density_mesh_by_preset[ps_Preset] : detail_density_by_preset[ps_Preset];
+    // The density is the grass density selector's, not the quality preset's.
+    if (ps_r__grass_density > 4)
+        ps_r__grass_density = ps_Preset;
+    const float detail_density = mesh_grass ? detail_density_mesh_by_preset[ps_r__grass_density] :
+                                              detail_density_by_preset[ps_r__grass_density];
     // [dx12:vrs] begin apply
     ps_r__vrs = vrs_by_preset[ps_Preset];
     // [dx12:vrs] end apply
@@ -1609,6 +1616,7 @@ void xrRender_sync_preset_derived()
     // The blade grass and the snow keep their preset columns in their own modules (GRASS.md, SNOW.md);
     // both apply at the next frame.
     da_grass_apply_preset(ps_Preset);
+    da_grass_apply_density(ps_r__grass_density);
     da_snow_apply_preset(ps_Preset);
     da_veg_apply_preset(ps_Preset);
 #endif
@@ -1622,9 +1630,9 @@ void xrRender_sync_preset_derived()
     constexpr int vrs_mode = 0;
 #endif
     Msg("* [preset] %u: sun shadows=%.0f m (cascades 20/%.0f/%.0f, map %u), grass_shadow=%d m, grass=%d m%s, "
-        "refl_tier=%u, puddles=%d m, wet=%.0f m, vrs=%d",
+        "grass density=%u, refl_tier=%u, puddles=%d m, wet=%.0f m, vrs=%d",
         ps_Preset, ps_r__sun_shadow_fade, ps_r__sun_cascade_mid, ps_r__sun_cascade_far, ps_r2_smapsize,
-        ps_r__grass_shadow_dist, detail_radius, mesh_grass ? " (mesh)" : "", ps_r_water_reflection,
+        ps_r__grass_shadow_dist, detail_radius, mesh_grass ? " (mesh)" : "", ps_r__grass_density, ps_r_water_reflection,
         ps_r__puddles_dist, ps_r3_dyn_wet_surf_far, vrs_mode);
     string_path ssao_cmd;
     strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
@@ -1696,8 +1704,33 @@ public:
 
     virtual void Execute(LPCSTR args)
     {
+        const u32 before = *value;
         CCC_Token::Execute(args);
+        // A new quality preset brings its own grass density; the selector may move it after.
+        if (*value != before)
+            ps_r__grass_density = *value;
         xrRender_apply_preset();
+    }
+};
+
+// r__grass_density: the derived switches again, which take the density from it (the blades follow at once,
+// the stock detail cards at the next detail reload).
+class CCC_GrassDensity final : public CCC_Token
+{
+public:
+    CCC_GrassDensity(pcstr name, u32* target, const xr_token* tokens) : CCC_Token(name, target, tokens) {}
+
+    void Execute(pcstr args) override
+    {
+        CCC_Token::Execute(args);
+        // The sync replays qa_autoexec.ltx, which may set the density itself.
+        static bool syncing = false;
+        if (*value <= 4 && !syncing)
+        {
+            syncing = true;
+            xrRender_sync_preset_derived();
+            syncing = false;
+        }
     }
 };
 
@@ -1990,6 +2023,7 @@ void xrRender_initconsole()
     ZoneScoped;
 
     CMD3(CCC_Preset, "_preset", &ps_Preset, qpreset_token);
+    CMD3(CCC_GrassDensity, "r__grass_density", &ps_r__grass_density, qpreset_token);
 
     CMD4(CCC_Integer, "rs_skeleton_update", &psSkeletonUpdate, 2, 128);
 #ifndef MASTER_GOLD
@@ -2356,7 +2390,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__snow_glint", &ps_r__snow_glint, 0.f, 4.f);
     CMD4(CCC_RuntimeInteger, "r__snow_shells", &ps_r__snow_shells, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__snow_shadow", &ps_r__snow_shadow, 0, 1);
-    CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 255);
+    CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 511);
     CMD4(CCC_RuntimeInteger, "r__dbg_shrubs", &ps_r__dbg_shrubs, 0, 511);
     CMD4(CCC_RuntimeFloat, "r__shrubs_lod_scale", &ps_r__shrubs_lod_scale, 0.05f, 20.f);
     CMD4(CCC_RuntimeInteger, "r__shrubs_force_tier", &ps_r__shrubs_force_tier, -1, 3);
