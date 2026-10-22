@@ -94,10 +94,9 @@ float2 da_tree_bend_ex(da_tree_bend_in I, float4 wave, float4 wind, float3 root_
     // Motors: the tree rule (da_wind_motors.h, da_tree_motors_bend); wood takes none.
     result += da_tree_motors_bend_ex(I.pos, I.root, I.H, I.tree_h, I.frac, prev) * I.flex_gate;
     // Progressive stiffness of a real trunk: resistance grows smoothly with the bend and the
-    // limit (~0.5 H, ~30 degrees) is an asymptote nothing visibly slams into. (An 8-degree
-    // cap tried here left the trees leaning less in a storm than they used to.)
+    // limit (da_trunk_bend_share) is an asymptote nothing visibly slams into.
     const float bend_len = length(result);
-    const float bend_max = I.H * 0.50f;
+    const float bend_max = I.H * da_trunk_bend_share(I.tree_h);
     [branch] if (bend_len > 0.001f)
         result *= bend_max * tanh(bend_len / bend_max) / bend_len;
     return result;

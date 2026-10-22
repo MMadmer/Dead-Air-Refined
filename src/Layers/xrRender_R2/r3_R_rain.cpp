@@ -308,6 +308,7 @@ void render_rain::calculate()
         dsgraph.o.view_frustum = cull_frustum;
         dsgraph.o.view_pos = cull_COP;
         dsgraph.o.mt_calculate = o.mt_calc_enabled;
+        dsgraph.o.rain_map = true;
 
         // Fill the database
         dsgraph.build_subspace();

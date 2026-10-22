@@ -202,8 +202,10 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 		// The traced mirror image of a glossy surface in place of the sky's cube (rt_gloss*.hlsl), else what the screen
 		// shows (da_ssr.h): premultiplied by its confidence, at the weight without the sky's visibility (hmodel.h).
 		float4 mirror = 0.0f;
+		// The traced rays pass the crowns off the screen: under trees they came back with the sunlit world beyond, a
+		// glare on every wet stone. Where the sky is mostly hidden the image is taken down by it, as the cube is.
 		[branch] if ( da_rt.x > 1.5f )
-			mirror = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) );
+			mirror = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) ) * lerp( saturate( N.w * 2.0f ), 1.0f, 0.35f );
 		else [branch] if ( da_ssr.x > 0.5f )
 			mirror = s_ssr.Load( int3( I.pos2d.xy, 0 ) );
 		hspecular = env_s * ( ( 1.0f - mirror.a ) * spec_w ) + mirror.rgb * spec_e;

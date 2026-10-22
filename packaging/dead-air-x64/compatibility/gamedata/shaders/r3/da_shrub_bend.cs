@@ -32,6 +32,7 @@ void	bend_record	(uint b, shrub_elem E, shrub_inst I, bool prev)
 	float3 T = float3(0.0f, 0.0f, 0.0f);
 	uint a = X0.parent;
 	float at = X0.attach;
+	float left = SHRUB_CHAIN_TURN;
 	[loop] for (uint lvl = 1u; lvl < 7u && a != SHRUB_NO_AXIS; ++lvl)
 	{
 		const shrub_axis X = shrub_axis_load(I.axis0 + a);
@@ -42,8 +43,10 @@ void	bend_record	(uint b, shrub_elem E, shrub_inst I, bool prev)
 		shrub_axis_turn_of(X, I, W, base, k, A);
 		[branch] if (A > 0.0f)
 		{
+			const float turn = min(A * sqrt(saturate(at / max(X.len, 1e-3f))), left);
+			left -= turn;
 			float sn, cs;
-			sincos(0.5f * A * sqrt(saturate(at / max(X.len, 1e-3f))), sn, cs);
+			sincos(0.5f * turn, sn, cs);
 			const float4 R = float4(k * sn, cs);
 			Q = shrub_qmul(R, Q);
 			T = shrub_qrot(R, T - base) + base;

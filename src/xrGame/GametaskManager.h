@@ -17,7 +17,8 @@ class CGameTaskManager
         eMultipleTasks = (1 << 1),
     };
     Flags8 m_flags;
-    u32 m_actual_frame;
+    // bumped whenever a view of the tasks has to be rebuilt; not a frame number despite the name
+    u32 m_actual_frame{1};
 
 protected:
     void UpdateActiveTask();
@@ -54,7 +55,12 @@ public:
     u32 GetTaskCount(ETaskState state, ETaskType type = eTaskTypeStoryline);
     void MapLocationRelcase(CMapLocation* ml);
 
-    void ResetStorage() { m_gametasks = NULL; };
+    // The simulator was unloaded or loaded again: the tasks every open view points at are gone
+    void ResetStorage()
+    {
+        m_gametasks = nullptr;
+        ++m_actual_frame;
+    }
     void DumpTasks();
 
 public:

@@ -1179,6 +1179,13 @@ void CCustomZone::UpdateBlowout()
     {
         AffectObjects();
         BornArtefact();
+
+        // The vegetation answers a zone that blows air (blowout_wind in its section: the springboard, the gravitational
+        // ones): a ring pushed out from it like a blast's (da_wind_motors.h). The stock gust (StartWind) only nudged
+        // the global wind factor, which the wind field overwrites every frame - the grass never saw it.
+        if (m_zone_flags.test(eBlowoutWind) && Position().distance_to_sqr(Device.vCameraPosition) < _sqr(80.f))
+            g_pGamePersistent->Environment().wind_motor_impulse(
+                Position(), clampr(Radius() * 3.f, 3.f, 12.f), clampr(m_fBlowoutWindPowerMax * 2.f, 0.4f, 1.15f));
     }
 }
 

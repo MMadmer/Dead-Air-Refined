@@ -521,11 +521,16 @@ pattern) from 30 m on.
   is an integer one (the sine hash took a quarter-rate sine a call).
 - **Wind**: the trunk sways on its stock root's oscillator (the root's state, frequency factor, gust and deviation,
   the frame's wave and wind: `da_tree_bend_ex` on the CPU, the downwind push per metre of height now and a frame back
-  in the record): `d = push h saturate(h / H)`, capped at half the height by a tanh, the length kept by the drop; while
+  in the record): `d = push h saturate(h / H)`, capped by a tanh at `da_trunk_bend_share` of the height (0.27 of it up
+  to 6 m tall, 0.18 from 20 m: the top's asymptote about 16 and 10 degrees; at half the height every tree leaned 30 in a
+  storm, 1.6.2), the length kept by the drop; the stock trees, their impostors and the rain map take the same; while
   the player may be in the tree (the camera within 4-8 m of the trunk and 2.2-3 m up over its root) the climbable wood
   moves a few centimetres at most (3 cm times 1 + 4 wind^2) up to its top and the rest on from there - held always, a
   tree whose stock wood is climbable most of its height stood still in a gale;
-  the tree motors as the stock trees'; the grafted axes bend on top through their chain. The same in the view, every
+  the tree motors as the stock trees'; the grafted axes bend on top through their chain - each by its soft limit of
+  0.6 rad times the sine between it and the wind and never past the wind's heading, the chain's turns adding up to
+  `SHRUB_CHAIN_TURN` (0.6 rad) at most (1.6.2: an axis turned its full 50 degrees whatever its heading, six levels of
+  them on top of one another). The same in the view, every
   shadow map and the motion vectors - their wind a frame back only within 15 m of view depth (`SHRUB_MV_NEAR`: past it
   a leaf's or a twig's sway is under a tenth of a pixel a frame, and the second bend and flutter were a third of the
   vertex shaders' work), the camera's everywhere.
@@ -700,7 +705,10 @@ box is past 200 m or whose crown grid's cell is not in (0, 2] m, whose axis come
 vertex names no axis; it holds the misfits: a ring profile's harmonics past 0.6 of its radius (a thin twig made round),
 an arclength running back, a ring past its axis's bound (a limb's two and a half times its parent's widest ring, the
 trunk's half the box across: the median of its axis's rings within the bound) - the level log's `misfit rings held`
-line. The templates' check after the level's build rejects a template with a bad reference: its trees stay stock.
+line. Before that check (1.6.2): a stock ring of fewer than 8 sides drops its third harmonic (fitted on 7 vertices it
+is a three-lobed zigzag, blended toward the next ring's lobes the limb read as twisted into itself), the first harmonic
+moves into the ring's centre, and along each axis the second and third harmonics are evened out 1-2-1, so no lobe
+turns by half its width between two rings (the misfits went down four to seven times on new_military's trees). The templates' check after the level's build rejects a template with a bad reference: its trees stay stock.
 
 The level log prints `* [trees] data: ...`, the census line, `* [trees] T templates (C from the disk cache), ...` and
 `* [trees] N trees of M placements, T templates, E elements (K KB), billboard atlas WxH (P px cells), ms`;

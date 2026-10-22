@@ -150,7 +150,7 @@ void CActor::update_shadow_caster(bool enabled)
     collect_shadow_items();
 }
 
-void CActor::render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source)
+void CActor::render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source, bool carried_light)
 {
     // A light sitting on the actor itself - the torch above all - cannot be shadowed by the body
     // carrying it, and letting it try only paints the beam with the player's own silhouette.
@@ -169,6 +169,12 @@ void CActor::render_shadow_caster(u32 context_id, IRenderable* root, const Fvect
     IRenderVisual* body = m_shadow_caster ? m_shadow_caster : Visual();
     if (body)
         GEnv.Render->add_Visual(context_id, root, body, XFORM());
+
+    // A lamp he carries sits among the shadow model's weapon and gear (a glowstick held out, the lighter at the
+    // face): a few centimetres off it they blotted out whole faces of its shadow map. The body keeps casting -
+    // that shadow on the walls around is the point of the feature.
+    if (carried_light)
+        return;
 
     for (auto& item : m_shadow_items)
         GEnv.Render->add_Visual(context_id, root, item.visual, item.xform);

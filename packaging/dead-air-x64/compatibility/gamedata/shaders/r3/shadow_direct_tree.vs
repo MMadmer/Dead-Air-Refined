@@ -15,6 +15,7 @@ uniform float4 consts;
 uniform float4 c_scale, c_bias, wind, wave;
 uniform float4 c_sun;
 uniform float4 c_tree;
+uniform float4 da_rest_pose;	// x 1 = the rain's occlusion map: the crown at rest
 
 #ifdef USE_AREF
 v2p_shadow_direct_aref main(v_shadow_direct_aref I, uint instance_id : SV_InstanceID
@@ -85,6 +86,8 @@ v2p_shadow_direct main(v_shadow_direct I, uint instance_id : SV_InstanceID
     bi.freq_k = local_c_sun.w > 0.01f ? local_c_sun.w : (0.82f + 0.42f * da_wf_hash(root3.xz * 0.37f));
     bi.flex_gate = da_tree_row_gate(local_c_tree.w);
     float2 result = da_tree_bend(bi, wave, wind, float3(local_c_tree.yz, da_tree_row_valid(local_c_tree.w)));
+    // The rain's occlusion map takes the crown at rest (da_rest_pose).
+    result *= 1.0f - da_rest_pose.x;
     const float drop = H - sqrt(max(H * H - dot(result, result), 0.0f));
 
     float4 f_pos = float4(pos.x + result.x, pos.y - drop, pos.z + result.y, 1);

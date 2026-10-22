@@ -251,7 +251,9 @@ depth)` and is widened to that floor, so the field's expected coverage equals th
 distance; density (season, settings, presence) thins without widening. Survivors are chosen by a nested
 rank of the lattice point, with an 8 % band relative to the keep in which the blade narrows to zero: no
 blade ever pops, and the coarser points live longest. Where the lattice level supplies fewer lanes than
-the keep asks (wide reed culms near a ring edge) the survivors widen further. Folded short grass (a species'
+the keep asks (wide reed culms near a ring edge) the survivors widen further. Without TAA or an upscaler (SMAA, FXAA,
+no anti-aliasing) the floor is 1.75 times wider (1.6.2): nothing resolves a blade of one or two pixels across frames,
+and the far field shimmered with every sway. Folded short grass (a species'
 leaf height x `r__detail_height` below its fold height) draws two leaves per strip from one shared base pair.
 
 ### The blade
@@ -445,7 +447,10 @@ litter), because grass without its own shadow floats over the ground.
 The blades bend with exactly the stock tufts' wind (the travelling gust field, the two wave groups, local
 heading, sheltering by the baked hemi) and the 8 wind motors (boots, bullets, blasts, scripts), plus the
 push field of every creature and settled object, plus a lean downhill. Shots and explosions keep working
-through the motors; trails of NPCs, mutants and the player press the grass through the push field.
+through the motors; trails of NPCs, mutants and the player press the grass through the push field. An anomaly whose
+section blows air (`blowout_wind`: the springboard, the gravitational ones) rings out from its discharge like a blast,
+at three times its radius (3..12 m) and twice its `blowout_wind_power` (1.6.2, `CCustomZone::UpdateBlowout`): stock
+only nudged the global wind factor, which the wind field overwrites every frame.
 
 The wave is the gusts and lulls of the moment, not a harmonic: the tuft's lean is its mean (0.42 + 0.38 x the wind)
 plus the rest of the way times the turbulence at its root (`da_wind_turb`: eddies of 8 and 4 m ridden downwind on

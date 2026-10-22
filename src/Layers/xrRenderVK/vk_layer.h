@@ -227,6 +227,10 @@ private:
         std::vector<std::pair<VkDeviceSize, VkDeviceSize>> free; // (offset, size) sorted, coalesced
     };
     bool AllocateDedicated(const VkMemoryRequirements& req, u32 type, VkImage image, VkBuffer buffer, Allocation& out);
+    bool AllocateInType(const VkMemoryRequirements& req, u32 type, bool dedicated, VkImage image, VkBuffer buffer,
+        Allocation& out);
+    // A type among `typeBits` outside video memory, for device resources once video memory is full (~0u when none).
+    u32 SystemTypeFor(u32 typeBits) const;
     Device* m_device = nullptr;
     VkPhysicalDeviceMemoryProperties m_props{};
     u32 m_classType[u32(MemoryClass::Count)]{};
@@ -234,6 +238,8 @@ private:
     mutable std::mutex m_lock;
     std::vector<Block> m_blocks;
     std::atomic<u64> m_heapUse[VK_MAX_MEMORY_HEAPS]{};
+    // The driver refused new memory in the heap; cleared when memory of it goes back
+    std::atomic<bool> m_heapFull[VK_MAX_MEMORY_HEAPS]{};
 };
 
 // A host-visible VkBuffer page: constants, dynamic data and staging copies of one frame.

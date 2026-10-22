@@ -61,7 +61,7 @@ vf 	main	( vv I )
 		// The trunk profile of da_tree_bend.h (top^1.5, three quarters at the crown) and its cap.
 		float2 bend = wdir * (12.0f * top * sqrt(top) * 0.75f * (dp * flow.x + flow.y * 0.5f));
 		const float bend_len = length(bend);
-		const float bend_max = 12.0f * top * 0.50f;
+		const float bend_max = 12.0f * top * da_trunk_bend_share(12.0f);
 		[branch] if (bend_len > 0.001f)
 			bend *= bend_max * tanh(bend_len / bend_max) / bend_len;
 		p.xz += bend;

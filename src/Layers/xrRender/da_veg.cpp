@@ -1060,6 +1060,7 @@ void cut(Population& P, CutClass cls, const Draw (&d)[4], u32 rec, u32 first, u3
     const u32 chunks = (n + kChunk - 1) / kChunk;
     if (words > kMaxCutWords || u32(P.cut_chunks.size()) + chunks > kMaxCutChunks)
     {
+        P.cut_fallback += n;
         emit(P, 0, d[cls == ccPatch ? 0 : 1], rec, first, n, keep, lo, hi, flags, aux);
         return;
     }
@@ -1139,6 +1140,7 @@ void build_frame()
         P->cut_chunks.clear();
         P->cut_routes.clear();
         P->cut_elements = 0;
+        P->cut_fallback = 0;
         for (auto& pass : P->draw_count)
             std::fill(std::begin(pass), std::end(pass), 0u);
         // (No sun this frame - night, the static sun: no instance goes into a cascade.)

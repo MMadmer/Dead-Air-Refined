@@ -317,12 +317,18 @@ float CSoundRender_Scene::get_occlusion(const Fvector& P, float R, Fvector* occ)
 
     float occ_value = 1.f;
 
-    // Calculate RAY params
+    // Calculate RAY params. The ray aims at the source pulled a little toward the listener, not at a random point
+    // around it: half of those lay under the surface the sound sits on (a bolt on the ground, a step), and since
+    // occlusion also cuts the highs every second landing came out muffled. A real wall in between still counts.
     const Fvector base = SoundRender->listener_position();
-    Fvector pos, dir;
-    pos.random_dir();
-    pos.mul(R);
-    pos.add(P);
+    Fvector pos = P, dir;
+    Fvector to_listener;
+    to_listener.sub(base, P);
+    const float to_listener_len = to_listener.magnitude();
+    // A sound at the listener's own ears has nothing in between
+    if (to_listener_len <= EPS_L)
+        return occ_value;
+    pos.mad(to_listener, _min(R + .05f, to_listener_len * .5f) / to_listener_len);
     dir.sub(pos, base);
     const float range = dir.magnitude();
     dir.div(range);

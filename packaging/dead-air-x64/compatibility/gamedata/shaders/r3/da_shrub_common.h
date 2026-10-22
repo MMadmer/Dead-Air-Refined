@@ -697,13 +697,19 @@ void	shrub_axis_turn_of	(shrub_axis X, shrub_inst I, shrub_wind W, out float3 ba
 	const float tip = length(push);
 	[branch] if (tip < 1e-4f)
 		return;
-	// A soft limit on the tip angle (about 50 degrees).
-	A = 0.87f * tanh(tip / 0.87f);
+	// A soft limit on the tip angle (about 35 degrees), as much as the axis lies across the wind: one already pointing
+	// downwind has little to turn by, and none turns past the wind's heading. (Turned the full angle whatever its
+	// heading, a limb along the wind swung past it and one against it pitched up or down by fifty degrees.)
 	const float3 w3 = float3(push.x, 0.0f, push.y) / tip;
 	k = cross(dirw, w3);
 	const float kl = length(k);
+	A = min(0.6f * tanh(tip / 0.6f) * kl, acos(clamp(dot(dirw, w3), -1.0f, 1.0f)));
 	k = kl > 1e-4f ? k / kl : float3(-w3.z, 0.0f, w3.x);
 }
+
+// The total turn a chain of axes may add to a point (about 35 degrees): each limb's own soft limit summed over a
+// grafted tree's six levels put the twig tips at impossible angles in a storm.
+static const float SHRUB_CHAIN_TURN = 0.6f;
 
 // The bend of a point attached to axis `axis` at arclength s by walking its chain of axes from its own out (the
 // slots the bend buffer has no room for: a frame of more chunks than it grew to); seven at most (a shrub's five - a
@@ -714,6 +720,7 @@ void	shrub_bend_chain	(inout float3 q, inout float3 n, inout float3 t, uint axis
 	const shrub_wind W = shrub_wind_at(I, prev);
 	uint a = axis;
 	float at = s;
+	float left = SHRUB_CHAIN_TURN;
 	[loop] for (uint lvl = 0u; lvl < 7u; ++lvl)
 	{
 		const shrub_axis X = shrub_axis_load(I.axis0 + a);
@@ -724,8 +731,10 @@ void	shrub_bend_chain	(inout float3 q, inout float3 n, inout float3 t, uint axis
 		shrub_axis_turn_of(X, I, W, base, k, A);
 		[branch] if (A > 0.0f)
 		{
+			const float turn = min(A * sqrt(saturate(at / max(X.len, 1e-3f))), left);
+			left -= turn;
 			float sn, cs;
-			sincos(A * sqrt(saturate(at / max(X.len, 1e-3f))), sn, cs);
+			sincos(turn, sn, cs);
 			q = base + shrub_rotate(q - base, k, sn, cs);
 			n = shrub_rotate(n, k, sn, cs);
 			t = shrub_rotate(t, k, sn, cs);
@@ -744,8 +753,10 @@ void	shrub_bend_chain	(inout float3 q, inout float3 n, inout float3 t, uint axis
 // view's slots only).
 void	shrub_bend	(inout float3 q, inout float3 n, inout float3 t, uint slot, uint axis, float s, shrub_inst I, bool prev)
 {
-	// (A rigid chunk's elements ride a tree's fixed stock axes: no bend of their own, the trunk's sway alone.)
-	[branch] if (slot == SHRUB_SLOT_RIGID)
+	// (A rigid chunk's elements ride a tree's fixed stock axes: no bend of their own, the trunk's sway alone. The rain's
+	// occlusion map, pass 4, takes every plant at rest: caught at a new phase on each of its slow redraws, the crowns
+	// reshuffled the wet patches under them.)
+	[branch] if (slot == SHRUB_SLOT_RIGID || da_shrub_draw.w > 3.5f)
 		return;
 	const uint cap = uint(prev ? da_shrub_bend_cap.y : da_shrub_bend_cap.x);
 	[branch] if (slot >= cap)
@@ -781,6 +792,8 @@ void	shrub_bend	(inout float3 q, inout float3 n, inout float3 t, uint slot, uint
 // from there. h: the point's rest height above the root (world), q: its bent position; the same in every pass.
 float3	shrub_tree_sway	(float3 q, shrub_inst I, float h, bool prev)
 {
+	[branch] if (da_shrub_draw.w > 3.5f)
+		return q;
 	const float2 push = prev ? I.tpush_prev : I.tpush;
 	const float H = max(I.tree_h, 1.0f);
 	const float hh = max(h, 0.0f);
@@ -802,7 +815,7 @@ float3	shrub_tree_sway	(float3 q, shrub_inst I, float h, bool prev)
 	[branch] if (da_wm_count(prev) > 0)
 		d += da_tree_motors_bend_ex(q, root, hh, H, saturate(hh / H), prev);
 	const float len = length(d);
-	const float lim = max(hh * 0.5f, 1e-3f);
+	const float lim = max(hh * da_trunk_bend_share(H), 1e-3f);
 	[branch] if (len > 0.001f)
 		d *= lim * tanh(len / lim) / len;
 	const float drop = hh - sqrt(max(hh * hh - dot(d, d), 0.0f));

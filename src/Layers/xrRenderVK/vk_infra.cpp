@@ -859,12 +859,17 @@ bool MemoryAllocator::AllocateDedicated(const VkMemoryRequirements& req, u32 typ
         priority.pNext = info.pNext;
         info.pNext = &priority;
     }
+    const u32 heap = m_props.memoryTypes[type].heapIndex;
+    if (m_heapFull[heap].load(std::memory_order_relaxed))
+        return false;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     const VkResult result = g_vk.vkAllocateMemory(m_device->vk, &info, nullptr, &memory);
     if (result != VK_SUCCESS)
     {
         static constexpr char kFormat[] = "! vkAllocateMemory (%llu MB, type %u) failed: %s";
         LogOnce(kFormat, kFormat, static_cast<unsigned long long>(req.size >> 20), type, ResultText(result));
+        if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
+            m_heapFull[heap].store(true, std::memory_order_relaxed);
         return false;
     }
     out = {};
@@ -883,8 +888,32 @@ bool MemoryAllocator::AllocateDedicated(const VkMemoryRequirements& req, u32 typ
         }
         out.cpu = static_cast<u8*>(cpu);
     }
-    m_heapUse[m_props.memoryTypes[type].heapIndex].fetch_add(req.size, std::memory_order_relaxed);
+    m_heapUse[heap].fetch_add(req.size, std::memory_order_relaxed);
     return true;
+}
+
+u32 MemoryAllocator::SystemTypeFor(u32 typeBits) const
+{
+    u32 best = ~0u;
+    int bestScore = -1000;
+    for (u32 i = 0; i < m_props.memoryTypeCount; ++i)
+    {
+        if (!(typeBits & (1u << i)))
+            continue;
+        const VkMemoryPropertyFlags flags = m_props.memoryTypes[i].propertyFlags;
+        if (m_props.memoryHeaps[m_props.memoryTypes[i].heapIndex].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+            continue;
+        if (flags & (VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD | VK_MEMORY_PROPERTY_PROTECTED_BIT))
+            continue;
+        // The GPU reads it over the bus either way: a plain type beats a mapped one, write-combined beats cached.
+        const int score = -std::popcount(flags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT));
+        if (score > bestScore)
+        {
+            bestScore = score;
+            best = i;
+        }
+    }
+    return best;
 }
 
 bool MemoryAllocator::Allocate(const VkMemoryRequirements& req, MemoryClass cls, bool dedicated, VkImage image,
@@ -897,6 +926,29 @@ bool MemoryAllocator::Allocate(const VkMemoryRequirements& req, MemoryClass cls,
         LogOnce(kFormat, kFormat, req.memoryTypeBits, unsigned(cls));
         return false;
     }
+    if (AllocateInType(req, type, dedicated, image, buffer, out))
+        return true;
+
+    // Video memory is full. A D3D11 driver pages resources out to system memory by itself and the game only
+    // slows down; Vulkan leaves that to the application, and failing here took the level load down with it on
+    // 2 GB cards. Such a resource lives in system memory instead, read by the GPU over the bus; the upload rings
+    // the resizable BAR put in video memory go back to the staging type.
+    if (cls != MemoryClass::Device && cls != MemoryClass::Upload)
+        return false;
+    const u32 fallback = cls == MemoryClass::Upload ? TypeFor(MemoryClass::Staging, req.memoryTypeBits) :
+        SystemTypeFor(req.memoryTypeBits);
+    if (fallback == type)
+        return false;
+    if (fallback == ~0u || !AllocateInType(req, fallback, dedicated, image, buffer, out))
+        return false;
+    static constexpr char kFormat[] = "! [vulkan] video memory is full: resources go to system memory (type %u)";
+    LogOnce(kFormat, kFormat, fallback);
+    return true;
+}
+
+bool MemoryAllocator::AllocateInType(const VkMemoryRequirements& req, u32 type, bool dedicated, VkImage image,
+    VkBuffer buffer, Allocation& out)
+{
     const bool big = req.size >= kDedicatedThreshold;
     if (dedicated || big)
         return AllocateDedicated(req, type, dedicated ? image : VK_NULL_HANDLE, dedicated ? buffer : VK_NULL_HANDLE, out);
@@ -969,12 +1021,17 @@ bool MemoryAllocator::Allocate(const VkMemoryRequirements& req, MemoryClass cls,
         priority.pNext = info.pNext;
         info.pNext = &priority;
     }
+    const u32 heap = m_props.memoryTypes[type].heapIndex;
+    if (m_heapFull[heap].load(std::memory_order_relaxed))
+        return false;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     const VkResult result = g_vk.vkAllocateMemory(m_device->vk, &info, nullptr, &memory);
     if (result != VK_SUCCESS)
     {
         static constexpr char kFormat[] = "! vkAllocateMemory (block %llu MB, type %u) failed: %s";
         LogOnce(kFormat, kFormat, static_cast<unsigned long long>(blockSize >> 20), type, ResultText(result));
+        if (result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
+            m_heapFull[heap].store(true, std::memory_order_relaxed);
         return false;
     }
     Block block;
@@ -996,7 +1053,7 @@ bool MemoryAllocator::Allocate(const VkMemoryRequirements& req, MemoryClass cls,
     if (used < blockSize)
         block.free.push_back({used, blockSize - used});
     block.used = req.size;
-    m_heapUse[m_props.memoryTypes[type].heapIndex].fetch_add(blockSize, std::memory_order_relaxed);
+    m_heapUse[heap].fetch_add(blockSize, std::memory_order_relaxed);
     u32 index = ~0u;
     for (u32 b = 0; b < m_blocks.size(); ++b)
     {
@@ -1032,6 +1089,7 @@ void MemoryAllocator::Free(const Allocation& allocation)
     {
         g_vk.vkFreeMemory(m_device->vk, allocation.memory, nullptr);
         m_heapUse[heap].fetch_sub(allocation.size, std::memory_order_relaxed);
+        m_heapFull[heap].store(false, std::memory_order_relaxed);
         return;
     }
     std::lock_guard lock(m_lock);
@@ -1068,6 +1126,7 @@ void MemoryAllocator::Free(const Allocation& allocation)
         {
             g_vk.vkFreeMemory(m_device->vk, block.memory, nullptr);
             m_heapUse[heap].fetch_sub(block.size, std::memory_order_relaxed);
+            m_heapFull[heap].store(false, std::memory_order_relaxed);
             block = Block{};
         }
     }

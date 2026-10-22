@@ -188,7 +188,7 @@ void CHUDManager::Update_Actor_Shadow(bool enabled)
     A->update_shadow_caster(enabled);
 }
 
-void CHUDManager::Render_Actor_Shadow(u32 context_id, const Fvector& source)
+void CHUDManager::Render_Actor_Shadow(u32 context_id, const Fvector& source, bool carried_light)
 {
     ZoneScoped;
 
@@ -199,7 +199,7 @@ void CHUDManager::Render_Actor_Shadow(u32 context_id, const Fvector& source)
     if (!A)
         return;
 
-    A->render_shadow_caster(context_id, A->H_Root(), source);
+    A->render_shadow_caster(context_id, A->H_Root(), source, carried_light);
 }
 
 bool CHUDManager::RenderActiveItemUIQuery()

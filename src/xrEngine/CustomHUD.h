@@ -40,7 +40,8 @@ public:
     // The first-person actor's world shadow. Prepared once per frame on the main thread, then
     // handed to every shadow map by hand - the hidden actor is not in the spatial database.
     virtual void Update_Actor_Shadow(bool enabled) = 0;
-    virtual void Render_Actor_Shadow(u32 context_id, const Fvector& source) = 0;
+    // carried_light: the lamp is one the actor carries (torch, glowstick, lighter, detector)
+    virtual void Render_Actor_Shadow(u32 context_id, const Fvector& source, bool carried_light) = 0;
 
     virtual void OnFrame() = 0;
     virtual void Load() = 0;

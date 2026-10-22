@@ -27,6 +27,11 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
 
 ## 2. xrVulkan architecture (details in `vk_layer.h`)
 
+- **Video memory full.** A device resource the driver refuses (`VK_ERROR_OUT_OF_DEVICE_MEMORY`) goes to a system-memory
+  type its requirements allow (`MemoryAllocator::SystemTypeFor`), read by the GPU over the bus, as a D3D11 driver pages
+  out by itself; the heap is marked full until memory of it goes back, so the driver is not asked again for every
+  allocation (1.6.2: a 2 GB card failed the level load, then the render targets).
+
 - **Device and queues.** One graphics queue, an async compute queue and a transfer queue where the
   family exists (`-vk_no_async`, `-vk_no_transfer`), and two more graphics-family queues for FSR frame
   generation's presenter. Creation-time uploads go through the transfer queue; the engine's async compute

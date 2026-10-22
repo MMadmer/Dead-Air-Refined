@@ -240,6 +240,10 @@ void CTorch::Switch(bool light_on)
         light_render->set_active(light_on);
         light_omni->set_active(smart_cast<CActor*>(H_Parent()) ? false : light_on);
     }
+    // The second beam goes out with the torch: UpdateCL stops placing it once the torch is off, and left on it stood
+    // lit where the torch was taken off or put in the backpack
+    if (!light_on)
+        light_render2->set_active(false);
     glow_render->set_active(light_on);
 
     if (light_trace_bone.c_str())

@@ -507,6 +507,17 @@ static class cl_da_gamma : public R_constant_setup
     }
 } binder_da_gamma;
 
+// 1 while the rain's occlusion map is drawn: the crowns go into it at rest. Caught swaying at a new phase on each of the
+// map's slow redraws (r3_R_rain.cpp), they reshuffled the wet and dry patches under the trees a few times a second.
+static class cl_da_rest_pose : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override
+    {
+        const bool rest = RImplementation.get_context(cmd_list.context_id).o.rain_map;
+        cmd_list.set_c(C, rest ? 1.f : 0.f, 0.f, 0.f, 0.f);
+    }
+} binder_da_rest_pose;
+
 // Distant-vegetation billboard shading fix (lod.ps): hemi share, saturation, brightness.
 static class cl_da_lod_tune : public R_constant_setup
 {
@@ -1003,6 +1014,7 @@ void CRender::create()
 #endif
     Resources->RegisterConstantSetup("da_grade_params", &binder_da_grade_params);
     Resources->RegisterConstantSetup("da_gamma", &binder_da_gamma);
+    Resources->RegisterConstantSetup("da_rest_pose", &binder_da_rest_pose);
     Resources->RegisterConstantSetup("da_lod_tune", &binder_da_lod_tune);
     Resources->RegisterConstantSetup("da_foliage", &binder_da_foliage);
     Resources->RegisterConstantSetup("da_macro_var", &binder_da_macro_var);

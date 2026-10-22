@@ -2465,7 +2465,11 @@ void da_grass_frame_latch()
     L.kpx = preset.kpx;
     // One render pixel per metre of view depth (the upscaler's input height).
     const float render_h = float(std::max(Device.dwRenderHeight ? Device.dwRenderHeight : Device.dwHeight, 1u));
-    L.wmin_per_m = L.kpx * g.floor_k * 2.f * std::tan(deg2rad(Device.fFOV) * 0.5f) / render_h;
+    // Without TAA or an upscaler nothing resolves a blade under two pixels wide: the far field shimmered and flickered
+    // with every sway (SMAA works on edges within one frame). The floor widens then: fewer, wider blades, the same
+    // coverage.
+    const float no_temporal_k = da_temporal_active() ? 1.f : 1.75f;
+    L.wmin_per_m = L.kpx * g.floor_k * no_temporal_k * 2.f * std::tan(deg2rad(Device.fFOV) * 0.5f) / render_h;
     // The full-density ring holds the typical 6 mm leaf above its pixel floor (the supply condition).
     L.R0 = std::clamp(0.006f / std::max(L.wmin_per_m, 1e-6f) * (1.f + kBand), 6.f, 24.f);
     // r__detail_density (a spacing) linear in 1/spacing (D4); r__detail_height scales lengths and the fold.

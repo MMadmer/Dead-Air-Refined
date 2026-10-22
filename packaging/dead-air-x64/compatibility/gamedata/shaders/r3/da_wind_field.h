@@ -47,6 +47,11 @@ float2 da_wind_local_dir_at(float2 dir, float dev, float strength)
 
 float2 da_wind_local_dir(float2 dir, float dev) { return da_wind_local_dir_at(dir, dev, da_wind_field.z); }
 
+// A trunk's stiffness limit as a share of the height: the asymptote of its top's bend, about 16 degrees on a young tree
+// and 10 on a tall one. A gale reaches it, nothing passes it (at half the height every tree leaned 30 degrees in a
+// storm; a flat 8 had them lean less than the stock ones).
+float da_trunk_bend_share(float tree_h) { return lerp(0.27f, 0.18f, saturate((tree_h - 6.0f) / 14.0f)); }
+
 // Wind velocity (m/s, world XZ) at a world position, for consumers that want physics rather
 // than a bend: particles, cloth, debris. Height applies the surface-layer profile.
 float2 da_wind_velocity(float3 wp, float ground_y)

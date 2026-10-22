@@ -471,6 +471,7 @@ public:
     xr_vector<ChunkRec> cut_chunks;
     xr_vector<u32> cut_routes;
     u32 cut_elements{};
+    u32 cut_fallback{}; // the elements the cut had no room for this frame: drawn whole, uncut
     u32 cascades{}; // the sun cascades it casts into this frame
     xr_vector<std::pair<float, u32>> view_order;   // the frame's instances in view, by distance
     xr_vector<std::pair<u32, u32>> cascade_order;  // the frame's instances in a cascade's reach (cascade, instance)

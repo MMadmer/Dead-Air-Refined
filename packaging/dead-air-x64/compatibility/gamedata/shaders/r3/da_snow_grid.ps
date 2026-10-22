@@ -68,6 +68,16 @@ f_deffer main(da_sn_grid_v2p I)
 				discard;
 		}
 	}
+	// On land the grid ends per pixel over a hollow finer than its cells (a print, a dropped item's bare floor): left
+	// standing it was a lid, and the snow layer saw through it to whatever lay behind along the view - a weapon on the
+	// ground showed through the snow from some angles.
+	else [branch] if (I.wet < -0.001 && da_sn_debug() < 2)
+	{
+		const float3 b = da_sn_base(I.Pw.xz);
+		const float Dl = da_snow_depth(I.Pw.xz);
+		[branch] if (Dl < 0.03 && I.Pw.y > b.x + Dl + 0.03)
+			discard;
+	}
 	const float3 Nv = normalize(mul(m_V, float4(normalize(I.Nw), 0.0)));
 	const float hemi = da_sn_sky(da_sn_grid_trees(I.Pw.xz));
 	f_deffer o = pack_gbuffer(float4(Nv, hemi), float4(I.Pv, da_mtl_from_code(DA_MTL_SNOW)), float4(0.9, 0.9, 0.9, 0.1));

@@ -52,7 +52,7 @@ using namespace da_veg;
 
 constexpr u32 kCommunities = 24;
 // The generator's version in the disk cache's names: a template another one grew is grown again.
-constexpr u32 kGenVer = 35;
+constexpr u32 kGenVer = 36;
 // The trees' leaf elements over a level's templates at most (with their wood and far tiers some 400 MB of buffers),
 // shared out among them.
 constexpr double kLeafBudget = 9.0e6;
@@ -2976,7 +2976,8 @@ void da_trees_stats()
             Msg("* [trees]   %-9s %8u elements, view %5u chunks, cascades %5u / %5u / %5u, rain %5u", names[d], P.elements[d],
                 P.draw_count[0][d], P.draw_count[1][d], P.draw_count[2][d], P.draw_count[3][d], P.draw_count[kRainPass][d]);
     Msg("* [trees]   %u chunks in the shadowed local lights", light_chunks(kPopTrees));
-    Msg("* [trees]   the GPU cut %s: %u candidate elements this frame", cut_on() ? "on" : "off", P.cut_elements);
+    Msg("* [trees]   the GPU cut %s: %u candidate elements this frame, %u with no room (drawn uncut)", cut_on() ? "on" : "off",
+        P.cut_elements, P.cut_fallback);
     cut_readback_request();
     u32 per_species[kTreeSpecies]{}, dead = 0, red = 0, saplings = 0, growing = 0;
     for (const Instance& I : P.instances)

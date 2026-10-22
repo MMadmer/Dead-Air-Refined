@@ -4119,6 +4119,16 @@ bool read_skeleton(const void* data, size_t bytes, Skeleton& out, const char** w
             return fail("a ring not finite or out of its box");
         if (!std::isfinite(r.fit_err))
             r.fit_err = 0.f;
+        // A stock ring of seven sides or fewer cannot hold a third harmonic: fitted on so few vertices it is a
+        // three-lobed zigzag, and blended toward the next ring's lobes the limb read as twisted into itself. The first
+        // harmonic is the ring's centre off the axis, so it moves into the centre, which is what it draws.
+        if (r.stock_sides && r.stock_sides < 8)
+            r.f[4] = r.f[5] = 0.f;
+        if (std::isfinite(r.f[0]) && std::isfinite(r.f[1]))
+        {
+            r.c = r.c + (r.n * r.f[0] + cross(r.t, r.n) * r.f[1]) * r.r0;
+            r.f[0] = r.f[1] = 0.f;
+        }
         // A profile whose harmonics sum past 0.6 of the mean radius is a thin twig's misfit (a few stock vertices, a
         // first harmonic of ten radii and more): the tube would turn inside out and the pixel floor's growth would carry
         // it across the sky. A twig under 3 cm stays round; a thicker ring keeps its shape at 0.6.
@@ -4180,6 +4190,26 @@ bool read_skeleton(const void* data, size_t bytes, Skeleton& out, const char** w
                 r.r0 = std::min(fallback, cap);
                 ++out.rings_tamed;
             }
+    }
+    // Along each axis the lobes are evened out ring to ring (1-2-1): between two neighbours a lobe could turn by half
+    // its width, and the profile blended across the segment wound the limb into a spiral.
+    for (const SkelAxis& a : out.axes)
+    {
+        if (a.n_rings < 3)
+            continue;
+        float before[4];
+        std::copy_n(out.rings[a.first_ring].f + 2, 4, before);
+        for (uint32_t k = a.first_ring + 1; k + 1 < a.first_ring + a.n_rings; ++k)
+        {
+            float* f = out.rings[k].f + 2;
+            const float* next = out.rings[k + 1].f + 2;
+            for (int j = 0; j < 4; ++j)
+            {
+                const float own = f[j];
+                f[j] = 0.25f * before[j] + 0.5f * own + 0.25f * next[j];
+                before[j] = own;
+            }
+        }
     }
     out.patch_verts.resize(n_pv);
     for (SkelPatchVert& v : out.patch_verts)

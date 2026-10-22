@@ -236,6 +236,12 @@ creature's sink exactly.
 
 ## The snow grid
 
+1.6.2: a vertex takes the depth of its cells (its own tap and four at half a spacing round it, 0.4 / 4 x 0.15) instead of
+its own point's, so a print finer than the ring does not change shape as the rings' centres step after the player; the
+lowest of the taps marks a hollow under the cells, and the pixel shader cuts the grid out over it per pixel (fine depth
+under 3 cm and the grid 3 cm above it) - left standing, the grid was a lid the snow layer saw through to whatever lay
+behind along the view, and a dropped weapon showed through the snow from some angles.
+
 A VS-only clipmap in the G-buffer, drawn after the grass. Rings of 32 x 32 cell tiles, each ring twice the
 spacing of the one inside it and with a hole where that one lies; odd vertices slide onto even ones over the
 outer band of a ring (geomorph), so ring borders meet without T-junctions. Tiles outside the view, beyond the

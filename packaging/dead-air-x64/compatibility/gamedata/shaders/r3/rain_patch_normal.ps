@@ -106,6 +106,7 @@ float2 Rivulets(float u, float v, float t, float rain)
 // difference and does not cancel in a comparison.
 #define DA_FILL_DIRS 8
 #define DA_FILL_CAP  0.10   // metres. Deeper than this is a pond, and ponds are level geometry.
+#define DA_FILL_OVER 1.0    // metres. Higher than this over the point is a crown or an eave, not a bank: it holds no water.
 
 float FillDepth(float2 uv0, float2 duv_x, float2 duv_z, float inv_dz)
 {
@@ -140,7 +141,10 @@ float FillDepth(float2 uv0, float2 duv_x, float2 duv_z, float inv_dz)
                 barrier = 0.0;
                 break;
             }
-            const float h = (s_smap.SampleLevel(smp_nofilter, SMAP_TC(uv), 0).x - d0) * inv_dz;
+            float h = (s_smap.SampleLevel(smp_nofilter, SMAP_TC(uv), 0).x - d0) * inv_dz;
+            // The map holds the topmost surface: in a gap of a crown every ray met the leaves metres up as a wall,
+            // and the gap stood as a mirror of a puddle - reshuffled with the crown at each redraw of the map.
+            h = h > DA_FILL_OVER ? 0.0 : h;
             barrier = max(barrier, h);
             [branch]
             if (barrier >= DA_FILL_CAP)
@@ -423,9 +427,10 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     // camera reads as a smeared screen. Both gates are applied HERE so the apply pass carries
     // a finished number and needs no G-buffer load of its own.
     // max(), not a sum: standing water is glossier than a film, it is not a film plus a puddle.
-    // The film's 0.30 ceiling is the one this pass has always had; the puddle earns more.
+    // The film's ceiling is 0.20: at 0.30 the GGX lobe (r__spec_smooth) put every wet surface a hair from a perfect
+    // mirror, and the whole wet level glared; the puddle earns more.
     const float not_viewmodel = step(0.35, position.z);
-    const float gloss_add = max(da_wetness.x * wetness * 0.30, puddle * 0.60) * cont * not_viewmodel;
+    const float gloss_add = max(da_wetness.x * wetness * 0.20, puddle * 0.50) * cont * not_viewmodel;
 
     // The normal's length carries the finished gloss (0.5 none, 1 full); alpha carries the
     // finished albedo multiplier. Two independent numbers, neither recovered by inverting the

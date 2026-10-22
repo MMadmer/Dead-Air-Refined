@@ -23,6 +23,10 @@ namespace xray::render::RENDER_NAMESPACE
 // query and the caster set is unchanged. The bounds are taken from the spheres and not the frusta
 // on purpose: a tighter volume would drop casters at the edges of lights, quietly.
 static xr_vector<ISpatial*> s_light_dynamic_casters;
+// The lamps' slope-scaled bias stops at this much depth (about 2.5 cm two metres off a lamp, 10 cm at four). Unclamped,
+// a wall the lamp saw edge-on - a flashlight lying on the floor beside it - was pushed back by a metre and more in the
+// map, and the ground behind it took the light through the wall.
+constexpr float kLampSlopeBiasClamp = 0.0005f;
 
 void CRender::render_lights(light_Package& LP)
 {
@@ -279,7 +283,7 @@ void CRender::render_lights(light_Package& LP)
         if (cache == DaSmapCache::fill)
         {
             da_smap_cache_fill_begin(cmd, L);
-            cmd.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
+            cmd.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias, kLampSlopeBiasClamp);
             cmd.set_xform_world(Fidentity);
             cmd.set_xform_view(L->X.S.view);
             cmd.set_xform_project(L->X.S.project);
@@ -291,7 +295,7 @@ void CRender::render_lights(light_Package& LP)
         Target->phase_smap_spot(cmd, L);
         if (cache != DaSmapCache::off)
             da_smap_cache_copy(cmd, L);
-        cmd.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
+        cmd.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias, kLampSlopeBiasClamp);
         cmd.set_xform_world(Fidentity);
         cmd.set_xform_view(L->X.S.view);
         cmd.set_xform_project(L->X.S.project);
@@ -484,7 +488,7 @@ void CRender::render_lights(light_Package& LP)
                 Stats.s_merged++;
                 L_spot_s.push_back(L);
                 Target->phase_smap_spot(dsgraph.cmd_list, L);
-                dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
+                dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias, kLampSlopeBiasClamp);
                 dsgraph.cmd_list.set_xform_world(Fidentity);
                 dsgraph.cmd_list.set_xform_view(L->X.S.view);
                 dsgraph.cmd_list.set_xform_project(L->X.S.project);

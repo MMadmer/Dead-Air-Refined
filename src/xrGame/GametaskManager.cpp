@@ -252,7 +252,7 @@ void CGameTaskManager::UpdateActiveTask()
     }
 
     m_flags.set(eChanged, FALSE);
-    m_actual_frame = Device.dwFrame;
+    ++m_actual_frame;
 }
 
 CGameTask* CGameTaskManager::ActiveTask(ETaskType type)

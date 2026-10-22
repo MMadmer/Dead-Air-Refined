@@ -176,9 +176,19 @@ HRESULT create_texture_from_block_compressed_dds(
         }
     }
 
-    const UINT outputWidth = static_cast<UINT>(std::max<size_t>(1, metadata.width >> skippedMips));
-    const UINT outputHeight = static_cast<UINT>(std::max<size_t>(1, metadata.height >> skippedMips));
+    UINT outputWidth = static_cast<UINT>(std::max<size_t>(1, metadata.width >> skippedMips));
+    UINT outputHeight = static_cast<UINT>(std::max<size_t>(1, metadata.height >> skippedMips));
     const UINT outputDepth = static_cast<UINT>(std::max<size_t>(1, metadata.depth >> skippedMips));
+    // A block-compressed top level has to be whole blocks: Direct3D 12 refuses a 1x1 or a 930x400 one outright (an
+    // error line per texture), Direct3D 11 on some drivers. A single level is stored in whole blocks already, so it
+    // just grows to them; a chain would change its blocks from the second level on and goes the general way.
+    if ((outputWidth | outputHeight) & 3u)
+    {
+        if (outputMipCount != 1)
+            return E_FAIL;
+        outputWidth = (outputWidth + 3u) & ~3u;
+        outputHeight = (outputHeight + 3u) & ~3u;
+    }
     HRESULT createResult = E_FAIL;
 
     switch (metadata.dimension)

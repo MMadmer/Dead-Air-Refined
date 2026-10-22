@@ -30,6 +30,13 @@ DirectX 11, DirectX 12 and Vulkan (`xrRender_R4/R5/R6`). The OpenGL renderer kee
 
 ## 3. Shadow faces in parallel (`r2_R_lights.cpp`)
 
+- The casters draw with the slope-scaled bias (`r__smap_slope_bias`) clamped at 0.0005 of depth (1.6.2,
+  `kLampSlopeBiasClamp`): unclamped, a wall a lamp saw edge-on (a flashlight lying beside it) went back a metre and
+  more in the map, and the ground behind took the light through the wall.
+- A lamp the actor carries (never-demote) takes his shadow model's body but not its weapon and gear
+  (`CActor::render_shadow_caster`): those sit centimetres off the lamp. 1.6.1 kept the whole model out of them and the
+  player lost his shadow on the walls around.
+
 - The frame's faces are culled and recorded up front on worker threads, every worker's share of each atlas batch
   closed into a command list of its own (`FinishCommandList`); the main thread runs the lists in batch order between
   the atlas clears and the batches' lighting - the sun cascades' way. A list takes four faces at least: on DirectX 11

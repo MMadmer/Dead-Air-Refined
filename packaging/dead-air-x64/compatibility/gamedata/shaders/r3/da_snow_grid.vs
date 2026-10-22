@@ -138,7 +138,20 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	const bool steep = max(max(jl.x, jl.y), max(jl.z, jl.w)) > max(0.35, 1.2 * s) || (!shore && dot(slope, slope) > 3.0);
 	const bool cliff = none || (wsh < 0.5 && steep && (!in_window || b0.y < 0.999));
 
-	const float2 D = da_snow_depth2(x);
+	// The depth the vertex stands for is its cells', not its own point's: rings of 12.5 cm and coarser read a 4.7 cm
+	// trail at single points, so a print showed by whichever vertex fell in it and changed its shape each time the
+	// rings' centres stepped after the walking player. The four taps also find a hollow under the cells (a print, a
+	// dropped item's bare floor), which the pixel shader then cuts out of the grid instead of a lid drawn over it.
+	float2 D = da_snow_depth2(x);
+	float hollow = D.x;
+	[branch] if (s > 0.09 && !none)
+	{
+		const float hs = 0.5 * s;
+		const float2 d0 = da_snow_depth2(x + float2(hs, hs)), d1 = da_snow_depth2(x + float2(-hs, hs));
+		const float2 d2 = da_snow_depth2(x + float2(hs, -hs)), d3 = da_snow_depth2(x + float2(-hs, -hs));
+		hollow = min(min(d0.x, d1.x), min(d2.x, d3.x));
+		D = 0.4 * D + 0.15 * (d0 + d1 + d2 + d3);
+	}
 
 	const float3 P0 = float3(x.x, hb, x.y);
 #ifdef DA_SN_SHADOW
@@ -215,8 +228,9 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	o.Nw = Nw;
 	o.Pw = P;
 	o.Pv = mul(m_V, float4(P, 1.0));
-	// a bank vertex beside frozen water asks the pixel shader for its per-pixel cut, like a wet one
-	o.wet = ice_shore ? 1.0 : wsh;
+	// a bank vertex beside frozen water asks the pixel shader for its per-pixel cut, like a wet one; a land vertex
+	// over a hollow asks for the land's (negative)
+	o.wet = ice_shore ? 1.0 : (wsh > 0.0 ? wsh : (hollow < 0.03 && D.x > hollow + 0.03 ? -1.0 : 0.0));
 	o.hpos = mul(m_VP, float4(P, 1.0));
 	o.hpos.z -= da_sn_grid.w * o.hpos.w;
 	o.hcur = mul(m_VP_nojit, float4(P, 1.0));

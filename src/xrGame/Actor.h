@@ -135,7 +135,7 @@ public:
         u16 source_id;
     };
     void update_shadow_caster(bool enabled);
-    void render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source);
+    void render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source, bool carried_light);
     void drop_shadow_caster();
     void feel_sound_new(IGameObject* who, int type, const CSound_UserDataPtr& user_data,
         const Fvector& position, float power) override;
