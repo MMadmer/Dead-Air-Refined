@@ -4,6 +4,7 @@
 #include "IGame_Level.h"
 
 #include "XR_IOConsole.h"
+#include "da_watchdog.h"
 #include "xr_ioc_cmd.h"
 
 #include "CameraManager.h"
@@ -1042,6 +1043,8 @@ void CCC_Register()
     CMD1(CCC_LoadCFG, "cfg_load");
     CMD4(CCC_Float, "animation_blend_min_time", &AnimationBlend::g_min_time, 0.f, 10.f);
     CMD4(CCC_Integer, "r__shells", &ps_shells_max, 0, 1024);
+    // The hang watchdog (da_watchdog.h): a report and the main thread's stack after 15 s without a frame.
+    CMD4(CCC_Integer, "dar_watchdog", &g_dar_watchdog, 0, 1);
     CMD3(CCC_Token, "animation_blend_curve", &AnimationBlend::g_curve, animation_blend_curve_token);
 
 #ifdef DEBUG

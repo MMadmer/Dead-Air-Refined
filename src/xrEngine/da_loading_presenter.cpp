@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "da_loading_presenter.h"
+#include "da_watchdog.h"
 
 #include "da_media.h"
 #include "xrTheora_Surface.h"
@@ -1220,6 +1221,8 @@ private:
 
         capture(time);
         const HRESULT hr = m_chain->Present(1, 0);
+        // the game is loading, not frozen: the main thread is busy behind this screen
+        da_watchdog_beat();
         if (hr == DXGI_STATUS_OCCLUDED)
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
 

@@ -114,6 +114,10 @@ public:
     static AssertionResult ShowMessage(pcstr title, pcstr message, bool simpleMode = true);
 
     static void LogStackTrace(const char* header);
+#ifdef XR_PLATFORM_WINDOWS
+    // Another thread's stack from its context (taken while it was suspended): the hang watchdog's.
+    static void LogStackTrace(const char* header, PCONTEXT threadContext);
+#endif
 
 private:
     static Lock failLock;

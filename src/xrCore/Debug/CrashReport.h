@@ -20,6 +20,7 @@ struct CrashRuntimeTelemetry
 };
 
 struct _EXCEPTION_POINTERS;
+struct _CONTEXT;
 
 namespace CrashReporter
 {
@@ -36,6 +37,8 @@ XRCORE_API void UpdateTelemetry(const CrashRuntimeTelemetry& telemetry);
 XRCORE_API void SamplePerformance(float fps, float frameMilliseconds, float renderMilliseconds);
 XRCORE_API bool WriteCrash(_EXCEPTION_POINTERS* exceptionPointers);
 XRCORE_API bool WriteSession();
+// A report of a game that stopped drawing, the stack of the frozen thread's context (the engine's watchdog).
+XRCORE_API bool WriteHang(const _CONTEXT& frozenThread);
 XRCORE_API pcstr LatestReportPath();
 XRCORE_API pcstr PendingCrashReportPath();
 XRCORE_API bool MarkCrashReportHandled(pcstr reportPath);

@@ -72,6 +72,15 @@ unknown schemas and exposes unsupported or missing fields as absent. The optiona
 component. The collector opens the complete save group before hashing or ZIP
 creation so a concurrent atomic save cannot mix components from two revisions.
 
+## Hang reports
+
+The engine's watchdog (`src/xrEngine/da_watchdog.cpp`, 1.6.2) wakes twice a second. When no frame has been started
+by the main loop, drawn by the loading screen's own presenter or no shader compiled for 15 s, it suspends the main
+thread for its registers, writes that thread's stack into the log (`! [watchdog] ...`) and a
+`dar-report-hang-*.zip` (`CrashReporter::WriteHang`, type `hang`, the stack frames the frozen thread's). A hang is
+offered at the next start like a crash: the player had to kill the game. One report per freeze; a debugger or an
+error being reported keep it quiet; `dar_watchdog 0` turns it off. QA: `tools/qa/water/watchdog_hang.lua`.
+
 ## Diagnostic coverage
 
 The manifest records:

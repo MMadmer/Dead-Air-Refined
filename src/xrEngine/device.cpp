@@ -7,6 +7,7 @@
 #include "xrCore/Threading/TaskManager.hpp"
 
 #include "XR_IOConsole.h"
+#include "da_watchdog.h"
 #include "xr_input.h"
 
 #include "IGame_Level.h"
@@ -315,6 +316,10 @@ void CRenderDevice::DoRender()
 void CRenderDevice::ProcessFrame()
 {
     ZoneScoped;
+
+    // The watchdog starts with the first frame: what the startup takes before it is not a hang.
+    da_watchdog_start();
+    da_watchdog_beat();
 
     // Reflex sleeps here, before input is read, so the frame starts as late as the GPU allows.
     frame_marker(IRender::FrameMarker::FrameStart);
@@ -663,6 +668,7 @@ void CRenderDevice::Run()
 void CRenderDevice::Shutdown()
 {
     ZoneScoped;
+    da_watchdog_stop();
     // the loading screen's own presenter goes before the device it lies over
     da_loading_presenter_shutdown();
     seqAppEnd.Process();

@@ -42,6 +42,8 @@ target_sources_grouped(
     FILES
     da_loading_presenter.cpp
     da_loading_presenter.h
+    da_watchdog.cpp
+    da_watchdog.h
     grizzly_emblem.inl
     grizzly_splash.cpp
     grizzly_splash.h

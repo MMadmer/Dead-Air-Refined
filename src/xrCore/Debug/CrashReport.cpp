@@ -39,6 +39,7 @@ namespace
 {
 constexpr pcstr ReportPrefix = "dar-report-";
 constexpr pcstr CrashReportPrefix = "dar-report-crash-";
+constexpr pcstr HangReportPrefix = "dar-report-hang-";
 constexpr pcstr LegacyReportPrefix = "dar-crash-";
 constexpr pcstr HandledCrashMarkerName = "handled-crash-report.txt";
 constexpr pcstr HandledCrashMarkerTemporaryName = "handled-crash-report.tmp";
@@ -50,7 +51,9 @@ constexpr size_t MaximumHashedLooseFileBytes = 16 * 1024 * 1024;
 enum class ReportKind
 {
     Session,
-    Crash
+    Crash,
+    // The game stopped drawing (the engine's watchdog, da_watchdog.cpp): the stack is the frozen thread's.
+    Hang
 };
 
 struct RuntimeContext
@@ -392,9 +395,10 @@ bool is_report_name(std::string_view name)
     return name.starts_with(ReportPrefix) || name.starts_with(LegacyReportPrefix);
 }
 
+// A hang is offered at the next start like a crash: the player had to kill the game.
 bool is_crash_report_name(std::string_view name)
 {
-    return name.starts_with(CrashReportPrefix) && has_suffix(name, ".zip");
+    return (name.starts_with(CrashReportPrefix) || name.starts_with(HangReportPrefix)) && has_suffix(name, ".zip");
 }
 
 std::string_view file_name(pcstr path)
@@ -554,7 +558,7 @@ void make_report_names(
     xr_sprintf(suffix, sizeof(suffix), "%08x", random_report_suffix());
     reportId = xr_string(timestamp) + "-" + suffix;
 
-    const pcstr kindName = kind == ReportKind::Crash ? "crash-" : "session-";
+    const pcstr kindName = kind == ReportKind::Crash ? "crash-" : kind == ReportKind::Hang ? "hang-" : "session-";
     const xr_string baseName = xr_string(ReportPrefix) + kindName + reportId;
     finalPath = make_path((baseName + ".zip").c_str());
     dumpPath = make_path((baseName + ".tmp.dmp").c_str());
@@ -1837,7 +1841,7 @@ xr_string build_manifest(pcstr reportId, ReportKind kind, _EXCEPTION_POINTERS* e
     json.append("{\"schema\":\"dead-air-refined.session-report/1\",\"report_id\":");
     append_json_string(json, reportId);
     json.append(",\"type\":");
-    append_json_string(json, kind == ReportKind::Crash ? "crash" : "manual");
+    append_json_string(json, kind == ReportKind::Crash ? "crash" : kind == ReportKind::Hang ? "hang" : "manual");
     json.append(",\"created_utc\":");
     append_json_string(json, createdUtc);
     json.append(",\"privacy\":{\"anonymous\":false,\"method\":\"replace-identifiers-preserve-structure\","
@@ -2288,7 +2292,7 @@ bool write_zip(pcstr path, const xr_string& manifest, pcstr dumpPath, std::span<
     return result;
 }
 
-bool write_report(ReportKind kind, _EXCEPTION_POINTERS* exceptionPointers)
+bool write_report(ReportKind kind, _EXCEPTION_POINTERS* exceptionPointers, const CONTEXT* stackContext = nullptr)
 {
     if (reportWriter.test_and_set(std::memory_order_acq_rel))
         return false;
@@ -2322,6 +2326,8 @@ bool write_report(ReportKind kind, _EXCEPTION_POINTERS* exceptionPointers)
         CONTEXT contextCopy{};
         if (exceptionPointers && exceptionPointers->ContextRecord)
             contextCopy = *exceptionPointers->ContextRecord;
+        else if (stackContext)
+            contextCopy = *stackContext;
         else
             RtlCaptureContext(&contextCopy);
         auto stack = BuildAnonymousStackTrace(&contextCopy, MaximumStackFrames);
@@ -2543,6 +2549,11 @@ bool CrashReporter::WriteCrash(_EXCEPTION_POINTERS* exceptionPointers)
     return write_report(ReportKind::Crash, exceptionPointers);
 }
 
+bool CrashReporter::WriteHang(const CONTEXT& frozenThread)
+{
+    return write_report(ReportKind::Hang, nullptr, &frozenThread);
+}
+
 bool CrashReporter::WriteSession()
 {
     const RuntimeContext context = snapshot_context();
@@ -2584,6 +2595,7 @@ void CrashReporter::EndOperation() {}
 void CrashReporter::UpdateTelemetry(const CrashRuntimeTelemetry&) {}
 void CrashReporter::SamplePerformance(float, float, float) {}
 bool CrashReporter::WriteCrash(_EXCEPTION_POINTERS*) { return false; }
+bool CrashReporter::WriteHang(const CONTEXT&) { return false; }
 bool CrashReporter::WriteSession() { return false; }
 pcstr CrashReporter::LatestReportPath() { return ""; }
 pcstr CrashReporter::PendingCrashReportPath() { return ""; }

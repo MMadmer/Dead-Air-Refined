@@ -141,6 +141,16 @@ void xrDebug::LogStackTrace(const char* header)
     }
 }
 
+#ifdef XR_PLATFORM_WINDOWS
+void xrDebug::LogStackTrace(const char* header, PCONTEXT threadContext)
+{
+    xr_vector<xr_string> stackTrace = BuildStackTrace(threadContext, 128);
+    Msg("%s", header);
+    for (const auto& frame : stackTrace)
+        Msg("%s", frame.c_str());
+}
+#endif
+
 static pcstr source_path_for_report(pcstr path)
 {
     if (!path)
