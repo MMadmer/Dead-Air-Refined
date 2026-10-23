@@ -59,23 +59,23 @@
 	<string id="ui_mm_da_motion_blur">
 		<text>Motion blur</text>
 	</string>
-	<string id="ui_mm_da_grass_density">
-		<text>Grass density</text>
+	<string id="ui_mm_da_grass_distance">
+		<text>Grass draw distance</text>
 	</string>
-	<!-- The tiers of the grass density row (r__grass_density): st_opt_<token>. -->
-	<string id="st_opt_grass_density_minimum">
+	<!-- The tiers of the grass distance row (r__grass_distance): st_opt_<token>. -->
+	<string id="st_opt_grass_distance_minimum">
 		<text>Minimum</text>
 	</string>
-	<string id="st_opt_grass_density_low">
+	<string id="st_opt_grass_distance_low">
 		<text>Low</text>
 	</string>
-	<string id="st_opt_grass_density_medium">
+	<string id="st_opt_grass_distance_medium">
 		<text>Medium</text>
 	</string>
-	<string id="st_opt_grass_density_high">
+	<string id="st_opt_grass_distance_high">
 		<text>High</text>
 	</string>
-	<string id="st_opt_grass_density_maximum">
+	<string id="st_opt_grass_distance_maximum">
 		<text>Maximum</text>
 	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
@@ -209,8 +209,8 @@
 	<string id="st_da_x64_video_hint_preset">
 		<text>Overall graphics quality: draw and shadow distances, grass, reflections and effects. Anti-aliasing is a setting of its own. Higher is heavier on the GPU. On DirectX 12 the two highest presets shade flat and dark areas at a reduced rate.</text>
 	</string>
-	<string id="st_da_x64_video_hint_grass_density">
-		<text>How thick the grass grows. A higher level gives denser grass and puts more load on the GPU. Choosing a graphics quality preset sets it to the same level.</text>
+	<string id="st_da_x64_video_hint_grass_distance">
+		<text>How far away grass is drawn. A higher level shows grass farther out and puts more load on the GPU. The grass is equally thick at every level. Choosing a graphics quality preset sets it to the same level.</text>
 	</string>
 	<string id="st_da_x64_video_hint_aa">
 		<text>Smooths jagged edges. FXAA is the lightest and softest, SMAA is sharper, TAA is the smoothest: it builds the picture from several frames and is slightly softer in motion.</text>

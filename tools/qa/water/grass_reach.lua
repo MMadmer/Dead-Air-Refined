@@ -39,7 +39,7 @@ local function on_update()
 		eye = vector():set(device().cam_pos)
 		dir0 = vector():set(device().cam_dir)
 		printf("[qa] reach level " .. level.name() .. " renderer " .. c:get_string("renderer") .. " preset " ..
-			c:get_token("_preset") .. " density " .. c:get_token("r__grass_density"))
+			c:get_token("_preset") .. " distance " .. c:get_token("r__grass_distance"))
 		step = 1
 		go("set")
 	elseif stage == "set" then

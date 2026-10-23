@@ -20,7 +20,7 @@ local VIDEO_LAYOUT = "dead_air_x64_video_options.ltx"
 local RENDERER_DX12 = 7
 local RENDERER_VK = 8
 local FRAMEGEN_FSR, FRAMEGEN_DLSS, FRAMEGEN_DLSS_X3, FRAMEGEN_DLSS_X4 = 1, 2, 3, 4
--- The quality preset's tokens (_preset); the grass density selector's tiers have the same ids.
+-- The quality preset's tokens (_preset); the grass distance selector's tiers have the same ids.
 local PRESET_IDS = { Minimum = 0, Low = 1, Default = 2, High = 3, Extreme = 4 }
 
 -- The DirectX 12 rows (docs\dead-air\dx12-features\PLAN.md 2.6): always shown, greyed with the reason
@@ -241,15 +241,15 @@ function opt_video:Refresh()
 		end
 	end
 
-	-- A new quality preset brings its own grass density (the same tiers, the same token ids); the player may
+	-- A new quality preset brings its own grass distance (the same tiers, the same token ids); the player may
 	-- move it after. The engine does the same on Accept (CCC_Preset). Only a pick not yet accepted counts: the
 	-- dialog reading its groups again (a reopen after Cancel) moves the combo back without a pick.
-	local preset, density = self.rows.preset, self.rows.grass_density
-	if (preset and density) then
+	local preset, distance = self.rows.preset, self.rows.grass_distance
+	if (preset and distance) then
 		local current = preset.ctrl:CurrentID()
 		local accepted = PRESET_IDS[get_console():get_token("_preset")]
 		if (preset.seen_id ~= nil and current ~= preset.seen_id and current ~= accepted) then
-			density.ctrl:SetCurrentID(current)
+			distance.ctrl:SetCurrentID(current)
 		end
 		preset.seen_id = current
 	end

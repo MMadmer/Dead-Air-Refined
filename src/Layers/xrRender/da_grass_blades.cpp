@@ -546,8 +546,18 @@ constexpr u32 kClumpTexels = 3 + 2 * da_community_species;
 constexpr u32 kLmax = 24;
 constexpr float kBand = 0.08f;
 // The blades reach half again as far as the detail radius: past d2 their cover thins (blade_reach), so the longer
-// reach costs the records the radius alone did. 1.5 x 160 m stays inside the 2048 ground window of 0.25 m texels.
+// reach costs the records the radius alone did. The ground window grows to hold it (update_ground).
 constexpr float kReach = 1.5f;
+// What the reach may cost against the detail radius at full cover, by the grass distance tier. The density is the
+// Default tier's on every tier (xrRender_sync_preset_derived), and the tiers above it spend the records their denser
+// field of 1.6.1 drew on a longer radius and on the far field's cover: High keeps 0.41 of it at its detail radius,
+// Maximum 0.72, where 1.6.1 kept 0.38. The far field is cheap (the pixel floor widens its blades, the main view's
+// occlusion takes what lies behind a hill), so no radius alone could spend them. Measured on the l01_escape meadow
+// 35 m above the eye, the open view where the far field costs the most: High 111 k and Maximum 222 k records of the
+// view against 112 k and 222 k before; at the eye 236 k and 340 k against 298 k and 493 k, which the denser near
+// field took. Minimum and Low keep the plain budget: a thinner far field cannot pay for their denser near one (0.07 of
+// the cover at 48 m bought back 11 k of the 13 k records the density added at Minimum, and the GPU timers saw none).
+constexpr float kReachBudget[5] = {1.f, 1.f, 1.f, 1.05f, 1.6f};
 // Compute groups of a frame (64 lanes each): 3 M lanes, far beyond what the presets ask.
 constexpr u32 kMaxGroups = 49152;
 // Deformer stamps the push field takes per frame, 32 bytes each.
@@ -801,11 +811,11 @@ struct State
     u32 hidden{}; // the tiles in view the main view's occlusion hid this frame
     std::atomic<float> green{0.f};
     u32 preset{2};
-    // The grass density selector (r__grass_density, the same tiers as the quality preset): the lattice's density and,
-    // with the quality preset, the record budget.
-    u32 density{2};
-    // The taper scale solved for this detail radius and d2 (blade_reach).
-    float taper_R{-1.f}, taper_d2{-1.f}, taper_inv{};
+    // The grass distance selector (r__grass_distance, the same tiers as the quality preset): with the quality preset,
+    // the record budget.
+    u32 distance{2};
+    // The taper scale solved for this detail radius, d2 and budget (blade_reach).
+    float taper_R{-1.f}, taper_d2{-1.f}, taper_budget{-1.f}, taper_inv{};
     u32 counts_seen[kBins]{};
     u32 overflow_frames{};
     // The record budget's pixel floor: over the buffer the blades of the whole view grow fewer and wider (the
@@ -1030,8 +1040,8 @@ void layout_bins(const float (&need)[kBins])
     }
 }
 
-// The record budget: a denser field than the quality preset's needs its density tier's windows.
-const PresetColumns& budget_columns() { return kPresets[std::max(g.preset, g.density)]; }
+// The record budget: a longer reach than the quality preset's needs its distance tier's windows.
+const PresetColumns& budget_columns() { return kPresets[std::max(g.preset, g.distance)]; }
 
 bool create_bins()
 {
@@ -1086,12 +1096,12 @@ void release_all()
         g_tufts->surface_set(nullptr);
     _RELEASE(g.clump_tex);
     // Every file-scope value belongs to one level (second-load bugs): the next one starts from scratch.
-    const u32 preset = g.preset, density = g.density;
+    const u32 preset = g.preset, distance = g.distance;
     const bool failed = g.failed;
     g.~State();
     new (&g) State();
     g.preset = preset;
-    g.density = density;
+    g.distance = distance;
     g.failed = failed;
 }
 
@@ -1452,12 +1462,13 @@ Fvector3 species_canopy(u32 p, float day)
 }
 
 // The blades' reach for the detail radius R_detail: kReach x R_detail, the cover thinning past d2 so that the far
-// field's records stay those of R_detail at full cover. Measured on the l01_escape meadow (eye and 18 m up), the far
-// field's records per metre of radius go as r x cover / the pixel floor's widening (x1 -> x1.5 from d2 to 2.5 d2,
-// da_grass_gen.cs): the scale of 1 / sqrt(1 + x^2) is solved so that integral over [0, kReach R] matches the one of
-// [0, R] at full cover. The tail is long and the slope gentle (at Extreme 0.38 of the cover at the old 160 m, 0.24 at
-// 240 m, at most 0.8 % a metre): running across a meadow, nothing near the eye changes. r__dbg_grass 256: the stock
-// reach (QA).
+// field's records stay the tier's budget (kReachBudget) of R_detail's at full cover. Measured on the l01_escape meadow
+// (eye and 18 m up), the far field's records per metre of radius go as r x cover / the pixel floor's widening (x1 ->
+// x1.5 from d2 to 2.5 d2, da_grass_gen.cs) up to some 250 m, slower past it: the scale of 1 / sqrt(1 + x^2) is solved
+// so that integral over [0, kReach R] matches the budget of the one of [0, R] at full cover, and a budget the full
+// reach fits in thins nothing. The tail is long and the slope gentle (a 160 m radius on the plain budget keeps 0.38 of
+// the cover at 160 m and 0.24 at 240 m, at most 0.8 % a metre): running across a meadow, nothing near the eye changes.
+// r__dbg_grass 256: the stock reach (QA).
 struct Reach
 {
     float R, d2, taper_inv;
@@ -1469,14 +1480,17 @@ float taper_cover(float d, float d2, float inv)
     return 1.f / std::sqrt(1.f + x * x);
 }
 
+// The radius is the console's, not the loaded detail manager's: the grass distance row moves the blades at once, the
+// stock cards at their next reload.
 Reach blade_reach()
 {
-    const float R = std::max(dm_fade, 8.f);
+    const float R = std::max(dm_current_fade, 8.f);
     const PresetColumns& preset = kPresets[g.preset];
     const float d2 = std::clamp(preset.d2, std::min(preset.d1, R) + 1.f, std::max(R, std::min(preset.d1, R) + 1.f));
     if (ps_r__dbg_grass & 256)
         return {R, d2, 0.f};
-    if (R != g.taper_R || d2 != g.taper_d2)
+    const float budget = kReachBudget[g.distance];
+    if (R != g.taper_R || d2 != g.taper_d2 || budget != g.taper_budget)
     {
         const auto widen = [d2](float r) {
             const float t = std::clamp((r - d2) / (1.5f * d2), 0.f, 1.f);
@@ -1490,9 +1504,15 @@ Reach blade_reach()
             const float r = (float(i) + 0.5f) * R / float(n);
             target += r / widen(r);
         }
-        target *= R / float(n);
+        target *= R / float(n) * budget;
+        float full = 0.f;
+        for (u32 i = 0; i < n; ++i)
+        {
+            const float r = (float(i) + 0.5f) * Rn / float(n);
+            full += r / widen(r);
+        }
         float lo = 1.f, hi = 8.f * Rn;
-        for (u32 it = 0; it < 40; ++it)
+        for (u32 it = 0; it < 40 && full * Rn / float(n) > target; ++it)
         {
             const float mid = 0.5f * (lo + hi);
             float sum = 0.f;
@@ -1505,7 +1525,8 @@ Reach blade_reach()
         }
         g.taper_R = R;
         g.taper_d2 = d2;
-        g.taper_inv = 2.f / (lo + hi);
+        g.taper_budget = budget;
+        g.taper_inv = full * Rn / float(n) > target ? 2.f / (lo + hi) : 0.f;
     }
     return {kReach * R, d2, g.taper_inv};
 }
@@ -1925,8 +1946,12 @@ void draw_bins(CBackend& cmd, const ref_shader& shader, u32 first, u32 last, flo
 void update_ground(CBackend& cmd)
 {
     const Latch& L = g.latch;
-    const float texel = L.R > 240.f ? 0.5f : 0.25f;
-    const u32 size = 2.f * (L.R + 16.f) / texel <= 1024.f ? 1024u : 2048u;
+    // The texel stays a quarter metre at any reach: at half a metre a slope of 27 degrees already reads as a kerb
+    // (grass_ground's 0.25 m step), and a hillside lost its grass at the eye. The longest reach the console allows
+    // (r__detail_radius 300) fits 4096 texels.
+    constexpr float texel = 0.25f;
+    const float span = 2.f * (L.R + 16.f) / texel;
+    const u32 size = span <= 1024.f ? 1024u : (span <= 2048.f ? 2048u : 4096u);
     if (g.ground.size != size || g.gtexel != texel)
     {
         if (!make_texture(g.ground, size, DXGI_FORMAT_R32_FLOAT, 4, false))
@@ -2147,7 +2172,7 @@ bool da_grass_active() { return g.active && psDeviceFlags.is(rsDrawDetails); }
 
 void da_grass_apply_preset(u32 preset) { g.preset = std::min(preset, 4u); }
 
-void da_grass_apply_density(u32 density) { g.density = std::min(density, 4u); }
+void da_grass_apply_distance(u32 distance) { g.distance = std::min(distance, 4u); }
 
 float da_grass_reach() { return blade_reach().R; }
 
@@ -2456,7 +2481,7 @@ void da_grass_frame_latch()
         return;
     }
     // The LOD distances follow the detail radius, the reach goes past it (blade_reach).
-    const float R_detail = std::max(dm_fade, 8.f);
+    const float R_detail = std::max(dm_current_fade, 8.f);
     const Reach reach = blade_reach();
     L.R = reach.R;
     L.d1 = std::min(preset.d1, R_detail);
@@ -2810,8 +2835,8 @@ void da_grass_stats()
         return;
     }
     const Latch& L = g.latch;
-    Msg("* [grass] preset %u, density %u, R %.0f m, R0 %.1f m, d1/d2 %.0f/%.0f m, cover %.2f at %.0f m and %.2f at R, lattice %.3f m (%.0f /m2), %u groups, %u lanes, %u of %u tiles hidden",
-        g.preset, g.density, L.R, L.R0, L.d1, L.d2, taper_cover(L.R / kReach, L.d2, L.taper_inv), L.R / kReach,
+    Msg("* [grass] preset %u, distance %u, R %.0f m, R0 %.1f m, d1/d2 %.0f/%.0f m, cover %.2f at %.0f m and %.2f at R, lattice %.3f m (%.0f /m2), %u groups, %u lanes, %u of %u tiles hidden",
+        g.preset, g.distance, L.R, L.R0, L.d1, L.d2, taper_cover(L.R / kReach, L.d2, L.taper_inv), L.R / kReach,
         taper_cover(L.R, L.d2, L.taper_inv), L.s0, L.dlat, g.group_count, g.lane_count, g.hidden, u32(g.tiles.size()));
     static constexpr pcstr names[kBins] = {"lod0 a", "lod0 b", "lod1 a", "lod1 b", "lod1 c", "lod2 a", "lod2 b", "lod2 c",
         "lod2 d", "sun near", "sun mid", "head 0", "head 1 a", "head 1 b", "head sun", "short"};

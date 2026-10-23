@@ -59,23 +59,23 @@
 	<string id="ui_mm_da_motion_blur">
 		<text>Размытие в движении</text>
 	</string>
-	<string id="ui_mm_da_grass_density">
-		<text>Плотность травы</text>
+	<string id="ui_mm_da_grass_distance">
+		<text>Дальность травы</text>
 	</string>
-	<!-- The tiers of the grass density row (r__grass_density): st_opt_<token>. -->
-	<string id="st_opt_grass_density_minimum">
+	<!-- The tiers of the grass distance row (r__grass_distance): st_opt_<token>. -->
+	<string id="st_opt_grass_distance_minimum">
 		<text>Минимальная</text>
 	</string>
-	<string id="st_opt_grass_density_low">
+	<string id="st_opt_grass_distance_low">
 		<text>Низкая</text>
 	</string>
-	<string id="st_opt_grass_density_medium">
+	<string id="st_opt_grass_distance_medium">
 		<text>Средняя</text>
 	</string>
-	<string id="st_opt_grass_density_high">
+	<string id="st_opt_grass_distance_high">
 		<text>Высокая</text>
 	</string>
-	<string id="st_opt_grass_density_maximum">
+	<string id="st_opt_grass_distance_maximum">
 		<text>Максимальная</text>
 	</string>
 	<!-- Values of the renderer's combos: st_opt_<token> (the combo tries it before the token itself). -->
@@ -209,8 +209,8 @@
 	<string id="st_da_x64_video_hint_preset">
 		<text>Качество графики целиком: дальности прорисовки и теней, трава, отражения и эффекты. Сглаживание выбирается отдельно. Чем выше, тем тяжелее для видеокарты. На DirectX 12 два старших пресета затеняют ровные и тёмные участки в пониженном разрешении.</text>
 	</string>
-	<string id="st_da_x64_video_hint_grass_density">
-		<text>Густота травяного покрова. Чем выше уровень, тем гуще трава и выше нагрузка на видеокарту. При выборе пресета качества графики устанавливается на тот же уровень.</text>
+	<string id="st_da_x64_video_hint_grass_distance">
+		<text>Расстояние, на котором видна трава. Чем выше уровень, тем дальше она прорисовывается и выше нагрузка на видеокарту. Густота травы на всех уровнях одинаковая. При выборе пресета качества графики устанавливается на тот же уровень.</text>
 	</string>
 	<string id="st_da_x64_video_hint_aa">
 		<text>Сглаживание лесенок на краях. FXAA - самое лёгкое и мягкое, SMAA - чётче, TAA - самое гладкое: собирает картинку из нескольких кадров, в движении чуть мягче.</text>

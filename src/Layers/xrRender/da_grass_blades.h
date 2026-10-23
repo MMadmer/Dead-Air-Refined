@@ -23,8 +23,8 @@ void da_grass_render_gbuffer(CBackend& cmd_list);
 void da_grass_render_cascade(CBackend& cmd_list, u32 cascade);
 // xrRender_sync_preset_derived: the grass columns of preset 0..4 (minimum..extreme).
 void da_grass_apply_preset(u32 preset);
-// r__grass_density: the density tier 0..4, the quality preset's tiers.
-void da_grass_apply_density(u32 density);
+// r__grass_distance: the distance tier 0..4, the quality preset's tiers (the record budget of the further one).
+void da_grass_apply_distance(u32 distance);
 // How far the blades reach (m): past the detail radius, their cover thinning from d2 on.
 float da_grass_reach();
 

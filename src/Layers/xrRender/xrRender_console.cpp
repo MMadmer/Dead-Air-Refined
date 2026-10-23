@@ -82,18 +82,18 @@ const xr_token qpreset_token[] =
     { "Extreme", 4 },
     { nullptr, 0 }
 };
-// The grass density selector (Video, below the quality preset), on the preset's tiers with captions of its own
-// (st_opt_<token>). Unset (a user.ltx from before 1.6.1) it takes the quality preset's tier, and a new quality
-// preset brings its own (CCC_Preset).
-constexpr u32 da_grass_density_unset = u32(-1);
-u32 ps_r__grass_density = da_grass_density_unset;
-const xr_token qgrass_density_token[] =
+// The grass distance selector (Video, below the quality preset), on the preset's tiers with captions of its own
+// (st_opt_<token>). Unset (a user.ltx from before 1.6.2, which had the density row in its place) it takes the
+// quality preset's tier, and a new quality preset brings its own (CCC_Preset).
+constexpr u32 da_grass_distance_unset = u32(-1);
+u32 ps_r__grass_distance = da_grass_distance_unset;
+const xr_token qgrass_distance_token[] =
 {
-    { "grass_density_minimum", 0 },
-    { "grass_density_low", 1 },
-    { "grass_density_medium", 2 },
-    { "grass_density_high", 3 },
-    { "grass_density_maximum", 4 },
+    { "grass_distance_minimum", 0 },
+    { "grass_distance_low", 1 },
+    { "grass_distance_medium", 2 },
+    { "grass_distance_high", 3 },
+    { "grass_distance_maximum", 4 },
     { nullptr, 0 }
 };
 
@@ -1434,15 +1434,18 @@ void xrRender_sync_preset_derived()
     // Puddle draw distance ladder, metres, from the 20 every preset had: the mask and the
     // reflection cost per covered pixel, and the far pixels are the cheap ones.
     static constexpr int puddles_dist_by_preset[] = {20, 40, 60, 90, 120};
-    // Grass density ladder (lower = denser: cell grid is iCeil(2/density)+1 squared). The flat
-    // 0.6 left even Extreme with a 25-cell grid; IX-Ray runs 121 cells there. Default keeps a
-    // near-stock look, the top presets grow the field. Applies on level (re)load (cache_Alloc).
-    static constexpr float detail_density_by_preset[] = {0.6f, 0.6f, 0.5f, 0.35f, 0.25f};
-    // Grass draw radius ladder, metres, from the stock 49 every preset had. Slot count grows with
-    // the square, so the top stops at 160 rather than the 200 some open worlds reach: 100 -> 160 m
-    // is +2.0 ms of frame at 1080p on Extreme, the whole price of the distance ladders - the rest
-    // of them measured inside the noise. Applies live (CCC recomputes dm_*).
-    static constexpr int detail_radius_by_preset[] = {49, 70, 100, 130, 160};
+    // Grass density, one for every tier (lower = denser: the stock cell grid is iCeil(2/density)+1 squared, the
+    // blades scale as 1/density). It is the Default tier's, and the grass distance row trades what a denser field
+    // cost for reach: the density ladder of 1.6.1 (0.6 / 0.6 / 0.5 / 0.35 / 0.25) drew a blade count that a
+    // longer radius at this density draws now.
+    constexpr float detail_density = 0.5f;
+    // Grass draw radius by the grass distance row, metres, from the stock 49 every preset had. The blades reach
+    // half again as far (da_grass_blades.cpp, kReach). High and Maximum take the radius the 0.35 and 0.25 densities'
+    // records would buy if they grew with its square (130 x sqrt(0.714 / 0.5), 160 x sqrt(2)); the far field grows
+    // slower than that, and its fuller cover spends the rest (kReachBudget). Minimum and Low keep their radius,
+    // which grows ~20 % more blades for the denser field. The blades follow at once, the stock detail cards at the
+    // next details reload (CCC recomputes dm_*).
+    static constexpr int detail_radius_by_tier[] = {49, 70, 100, 156, 232};
     // The static geometry's distance cut (r__dsgraph_build.cpp): Minimum keeps the old default, which dropped a
     // crate or a barrel at 50 m; from Default on none, as DOOM Eternal culls by screen size alone. Over the
     // rookie village the cut saved nothing measurable.
@@ -1503,10 +1506,9 @@ void xrRender_sync_preset_derived()
     static constexpr int vrs_by_preset[] = {0, 0, 0, 1, 1};
     // [dx12:vrs] end preset
     // [dx12:mesh] begin preset
-    // The grass columns when mesh grass runs this session (mesh.md 3.9): the radius and density the
-    // same frame cost buys through mesh shaders, set by the mesh lane's ladder sweep (M10).
-    static constexpr int detail_radius_mesh_by_preset[] = {49, 70, 100, 130, 160};
-    static constexpr float detail_density_mesh_by_preset[] = {0.6f, 0.6f, 0.5f, 0.35f, 0.25f};
+    // The grass radius when mesh grass runs this session (mesh.md 3.9): what the same frame cost buys through mesh
+    // shaders, set by the mesh lane's ladder sweep (M10), at the one density above.
+    static constexpr int detail_radius_mesh_by_tier[] = {49, 70, 100, 156, 232};
     // [dx12:mesh] end preset
 
     if (ps_Preset >= std::size(budget_by_preset))
@@ -1517,13 +1519,11 @@ void xrRender_sync_preset_derived()
 #else
     constexpr bool mesh_grass = false;
 #endif
+    // The radius is the grass distance row's, not the quality preset's.
+    if (ps_r__grass_distance > 4)
+        ps_r__grass_distance = ps_Preset;
     const int detail_radius =
-        mesh_grass ? detail_radius_mesh_by_preset[ps_Preset] : detail_radius_by_preset[ps_Preset];
-    // The density is the grass density selector's, not the quality preset's.
-    if (ps_r__grass_density > 4)
-        ps_r__grass_density = ps_Preset;
-    const float detail_density = mesh_grass ? detail_density_mesh_by_preset[ps_r__grass_density] :
-                                              detail_density_by_preset[ps_r__grass_density];
+        mesh_grass ? detail_radius_mesh_by_tier[ps_r__grass_distance] : detail_radius_by_tier[ps_r__grass_distance];
     // [dx12:vrs] begin apply
     ps_r__vrs = vrs_by_preset[ps_Preset];
     // [dx12:vrs] end apply
@@ -1624,7 +1624,7 @@ void xrRender_sync_preset_derived()
     // The blade grass and the snow keep their preset columns in their own modules (GRASS.md, SNOW.md);
     // both apply at the next frame.
     da_grass_apply_preset(ps_Preset);
-    da_grass_apply_density(ps_r__grass_density);
+    da_grass_apply_distance(ps_r__grass_distance);
     da_snow_apply_preset(ps_Preset);
     da_veg_apply_preset(ps_Preset);
 #endif
@@ -1638,9 +1638,9 @@ void xrRender_sync_preset_derived()
     constexpr int vrs_mode = 0;
 #endif
     Msg("* [preset] %u: sun shadows=%.0f m (cascades 20/%.0f/%.0f, map %u), grass_shadow=%d m, grass=%d m%s, "
-        "grass density=%u, refl_tier=%u, puddles=%d m, wet=%.0f m, vrs=%d",
+        "grass distance=%u, refl_tier=%u, puddles=%d m, wet=%.0f m, vrs=%d",
         ps_Preset, ps_r__sun_shadow_fade, ps_r__sun_cascade_mid, ps_r__sun_cascade_far, ps_r2_smapsize,
-        ps_r__grass_shadow_dist, detail_radius, mesh_grass ? " (mesh)" : "", ps_r__grass_density, ps_r_water_reflection,
+        ps_r__grass_shadow_dist, detail_radius, mesh_grass ? " (mesh)" : "", ps_r__grass_distance, ps_r_water_reflection,
         ps_r__puddles_dist, ps_r3_dyn_wet_surf_far, vrs_mode);
     string_path ssao_cmd;
     strconcat(sizeof(ssao_cmd), ssao_cmd, "r2_ssao_mode ", ssao_mode_by_preset[ps_Preset]);
@@ -1714,19 +1714,19 @@ public:
     {
         const u32 before = *value;
         CCC_Token::Execute(args);
-        // A new quality preset brings its own grass density; the selector may move it after.
+        // A new quality preset brings its own grass distance; the selector may move it after.
         if (*value != before)
-            ps_r__grass_density = *value;
+            ps_r__grass_distance = *value;
         xrRender_apply_preset();
     }
 };
 
-// r__grass_density: the derived switches again, which take the density from it (the blades follow at once,
+// r__grass_distance: the derived switches again, which take the detail radius from it (the blades follow at once,
 // the stock detail cards at the next detail reload).
-class CCC_GrassDensity final : public CCC_Token
+class CCC_GrassDistance final : public CCC_Token
 {
 public:
-    CCC_GrassDensity(pcstr name, u32* target, const xr_token* tokens) : CCC_Token(name, target, tokens) {}
+    CCC_GrassDistance(pcstr name, u32* target, const xr_token* tokens) : CCC_Token(name, target, tokens) {}
 
     void Execute(pcstr args) override
     {
@@ -2031,7 +2031,7 @@ void xrRender_initconsole()
     ZoneScoped;
 
     CMD3(CCC_Preset, "_preset", &ps_Preset, qpreset_token);
-    CMD3(CCC_GrassDensity, "r__grass_density", &ps_r__grass_density, qgrass_density_token);
+    CMD3(CCC_GrassDistance, "r__grass_distance", &ps_r__grass_distance, qgrass_distance_token);
 
     CMD4(CCC_Integer, "rs_skeleton_update", &psSkeletonUpdate, 2, 128);
 #ifndef MASTER_GOLD

@@ -124,7 +124,7 @@ bool	grass_ground	(float2 xz, out float y, out float3 n)
 	n = float3(0.0f, 1.0f, 0.0f);
 	if (any(rel < 0) || any(rel + 1 >= size))
 		return false;
-	// The window is 1024 or 2048 texels: the toroidal wrap is a mask (two's complement covers negatives).
+	// The window is 1024, 2048 or 4096 texels: the toroidal wrap is a mask (two's complement covers negatives).
 	const int2 t00 = i0 & (size - 1);
 	const int2 t11 = (i0 + 1) & (size - 1);
 	const float h00 = da_grass_ground.Load(int3(t00.x, t00.y, 0));

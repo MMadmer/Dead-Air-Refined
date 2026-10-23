@@ -196,7 +196,8 @@ Per frame:
    tiles hide: 22014 -> 15270 groups, the blades' compute 2.4 -> 1.5 ms and their G-buffer 0.93 -> 0.8 ms on the
    RTX 3070 Laptop at Extreme; in the open 15 tiles hide; the HOM tests cost the main thread about 0.1 ms.
    `r__grass_blades_stats` reports the hidden tiles.
-3. **Ground window** (compute): a toroidal 1024² or 2048² R32F window of 0.25 m texels around the camera,
+3. **Ground window** (compute): a toroidal 1024², 2048² or 4096² R32F window of 0.25 m texels around the camera
+   (the reach of the grass distance row; at 0.5 m texels a 27-degree slope read as a kerb and lost its grass),
    exactly the stock decompress rule - the highest up-facing non-passable surface under the slot's top,
    nothing below its base. Only the strips the window moved onto (8 m steps) are rebaked.
 4. **Push field** (compute): every creature, corpse and settled object stamped this frame
@@ -500,19 +501,43 @@ now than on the reference day of the latched terrain folder; under the near blad
 
 ## Settings and presets
 
-- `r__grass_density` (the player's row "Grass density" under the quality preset, 1.6.1; the preset's five
-  tiers as tokens of its own, `grass_density_minimum` ... `grass_density_maximum`, captioned `st_opt_<token>`): writes `r__detail_density` (a spacing 0.6 / 0.6 / 0.5 / 0.35 / 0.25): density scale
-  `S = clamp(0.25 / spacing, 0.25, 1.6)`, times each species' calibration (`density_cal`); only the near field
-  changes visibly, far coverage is the pixel rule's. Unset (a user.ltx from before 1.6.1) it takes the quality
-  preset's tier, and a new quality preset brings its own (`CCC_Preset`; the menu moves the row when the preset
-  row is picked), which the player may change after. The record budget is the larger tier's of the two. The
-  blades follow at once, the stock detail cards at the next detail reload.
+- `r__grass_distance` (the player's row "Grass draw distance" under the quality preset, 1.6.2; the preset's five
+  tiers as tokens of its own, `grass_distance_minimum` ... `grass_distance_maximum`, captioned `st_opt_<token>`):
+  writes `r__detail_radius` 49 / 70 / 100 / 156 / 232 m (the blades reach 1.5 times as far: 71 / 101 / 149 / 233 /
+  347 m). Unset (a user.ltx from before 1.6.2) it takes the quality preset's tier, and a new quality preset brings
+  its own (`CCC_Preset`; the menu moves the row when the preset row is picked), which the player may change after.
+  The record budget is the larger tier's of the two. The blades follow at once (`blade_reach` reads the console's
+  `dm_current_fade`), the stock detail cards at the next detail reload.
+- `r__detail_density` is one for every tier, 0.5 (a spacing): density scale `S = 0.25 / spacing = 0.5`, times each
+  species' calibration (`density_cal`). It replaced the density row of 1.6.1 (0.6 / 0.6 / 0.5 / 0.35 / 0.25 by the
+  same tiers, with the radius the preset's 49 / 70 / 100 / 130 / 160 m). The records go linearly with the density
+  everywhere (the keep is `dens / lattice density` and the lattice itself scales with `S`), but the far field is
+  cheap: the pixel floor widens its blades and the main view's occlusion takes what lies behind a hill, so past
+  some 250 m a longer radius adds few records, and no radius alone spends what the denser near field cost. High
+  and Maximum spend it on a longer radius and on the far field's cover (`kReachBudget` 1.05 and 1.6: the taper
+  solves for that share of the radius' records at full cover, 0.41 and 0.72 of the cover at the detail radius
+  where 1.6.1 kept 0.38). Minimum and Low keep their radius (Minimum is the stock 49 m, the console's floor) and
+  the plain budget: a thinner far field cannot pay for their denser near one, so they draw a fifth more blades.
+
+  Measured on the l01_escape meadow (`tools/qa/water/grass_distance.lua`, July noon, DX11 1080p on the rig;
+  records of the view at the eye / 35 m up, the GPU frame):
+
+  | Tier | 1.6.1 (density row) | 1.6.2 (distance row) |
+  | --- | --- | --- |
+  | Minimum | 72 k / 4.1 k, 5.5 / 3.5 ms | 85 k / 5.0 k, 5.2 / 3.1 ms |
+  | Low | 89 k / 12.9 k, 7.1 / 5.0 ms | 106 k / 15.4 k, 6.3 / 4.4 ms |
+  | Default | 149 k / 41 k | the same records |
+  | High | 298 k / 112 k, 15.3 / 11.5 ms | 236 k / 111 k, 13.9 / 10.3 ms |
+  | Maximum | 493 k / 222 k, 20.2 / 13.2 ms | 340 k / 222 k, 17.9 / 13.3 ms |
+
+  The open view (35 m up) holds the records of 1.6.1; at the eye the near field had held them, and a hill ends the
+  far field there. The shadow casters follow the density: 133 k -> 67 k at Maximum.
 - `r__detail_height` (the player's row): scales leaf, culm and head lengths and the fold test, live.
-- `r__detail_radius` (preset-owned 49 / 70 / 100 / 130 / 160 m): the LOD distances and the stock cards keep
-  it; the blades reach 1.5 times as far (below), the last 15 % fades their height, the ground tint takes over.
+- `r__detail_radius`: the LOD distances and the stock cards keep it; the blades reach 1.5 times as far (below),
+  the last 15 % fades their height, the ground tint takes over.
 
 **Reach** (1.6.1): at full cover to the detail radius, the far edge of the grass read as a line from any hill.
-The blades now reach `kReach` = 1.5 times the detail radius (Extreme 240 m) for the same records: past `d2` the
+The blades now reach `kReach` = 1.5 times the detail radius (1.6.1 Extreme 240 m, 1.6.2 Maximum 347 m) for the same records (the tier's budget, above): past `d2` the
 cover thins as `1 / sqrt(1 + x^2)`, `x = (d - d2) / scale` (`grass_taper`, density thinning without widening:
 the view's lattice level, early out and keep; the casters keep the stand's full density, so a field's shadow is as
 deep as before). `blade_reach` solves the scale per
@@ -533,8 +558,8 @@ and from above, with the record counts.
 | Head records | 16 k | 16 k | 24 k | 32 k | 48 k |
 
 The record budgets hold a full stand (presence no longer thins it by the palette), its basal pairs and litter
-and the forbs' leaves. Memory at Extreme: 56 MB of blade records, 0.75 MB of heads, the ground window 4 or
-16 MB, the push field 3 MB, the slots up to 10 MB, the triangle cells a few MB.
+and the forbs' leaves. Memory at Extreme: 56 MB of blade records, 0.75 MB of heads, the ground window 4, 16 or
+64 MB (the last at the Maximum distance), the push field 3 MB, the slots up to 10 MB, the triangle cells a few MB.
 
 Measured with the species (l01_escape meadow at A, June, DX12, DLSS Balanced at 2560x1440, RTX 3070 Laptop,
 GPU timers `grass` + `grass_gen`): Minimum and Low 0.60 + 0.54 ms, Default 0.82 + 0.63 ms, High 1.34 + 0.86 ms

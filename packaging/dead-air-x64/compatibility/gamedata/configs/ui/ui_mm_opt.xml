@@ -381,14 +381,14 @@
             <options_item entry="r__rtao" group="mm_opt_video" depend="vid"/>
         </check_rtao>
 
-        <list_grass_density x="200" y="2" width="190" height="20" list_length="5" always_show_scroll="0">
-            <options_item entry="r__grass_density" group="mm_opt_video"/>
+        <list_grass_distance x="200" y="2" width="190" height="20" list_length="5" always_show_scroll="0">
+            <options_item entry="r__grass_distance" group="mm_opt_video"/>
             <list_font r="170" g="170" b="170" font="letterica16"/>
             <text_color>
                 <e r="170" g="170" b="170"/>
                 <d r="70" g="70" b="70"/>
             </text_color>
-        </list_grass_density>
+        </list_grass_distance>
 
         <list_rt_quality x="200" y="2" width="190" height="20" list_length="3" always_show_scroll="0">
             <options_item entry="r__rt_quality" group="mm_opt_video" depend="vid"/>
