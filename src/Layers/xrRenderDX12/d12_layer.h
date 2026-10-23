@@ -628,6 +628,8 @@ public:
     bool Init(Device* device, const wchar_t* libraryPath);
     void Shutdown(); // saves the library
     void Save();
+    // Saves only when pipelines were added since the last save (a level's precache, the shutdown).
+    void SaveIfDirty();
     // Returns null (and logs once) when the driver refuses the state.
     ID3D12PipelineState* Graphics(const GraphicsPsoDesc& desc, u64 hash);
     ID3D12PipelineState* Compute(Shader* cs);

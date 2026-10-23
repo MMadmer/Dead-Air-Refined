@@ -66,6 +66,9 @@ public:
     void BeginScene();
     void EndScene();
     void Present();
+    // The DirectX 12 and Vulkan layers' pipelines to disk now (a level's precache is over), not only at shutdown:
+    // a crash or a killed process kept none of the session's.
+    void SavePipelines();
 
 public:
     void OnAppActivate() override;

@@ -1023,6 +1023,20 @@ std::pair<u32, u32> CHW::GetSurfaceSize() const
 void CHW::BeginScene() { }
 void CHW::EndScene() { }
 
+void CHW::SavePipelines()
+{
+#if defined(XR_D3D12) || defined(XR_VULKAN)
+    if (pDevice)
+    {
+#ifdef XR_D3D12
+        xrd3d12::SavePipelineCache(pDevice);
+#else
+        xrvk::SavePipelineCache(pDevice);
+#endif
+    }
+#endif
+}
+
 void CHW::Present()
 {
     // rs_vsync. Adaptive keeps vsync while frames keep up with the refresh and tears the late ones: Vulkan's

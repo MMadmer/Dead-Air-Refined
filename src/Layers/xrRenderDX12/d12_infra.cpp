@@ -2472,7 +2472,7 @@ bool PipelineCache::Init(Device* device, const wchar_t* libraryPath)
     return true;
 }
 
-void PipelineCache::Shutdown()
+void PipelineCache::SaveIfDirty()
 {
     bool dirty = false;
     {
@@ -2481,6 +2481,11 @@ void PipelineCache::Shutdown()
     }
     if (dirty)
         Save();
+}
+
+void PipelineCache::Shutdown()
+{
+    SaveIfDirty();
     {
         std::unique_lock lock(m_lock);
         for (auto& [key, pso] : m_pipelines)

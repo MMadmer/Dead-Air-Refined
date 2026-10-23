@@ -2021,7 +2021,7 @@ bool IsLayerDevice(ID3D11Device* device)
 void SavePipelineCache(ID3D11Device* device)
 {
     if (IsLayerDevice(device))
-        Device::From(device)->pipelines.Save();
+        Device::From(device)->pipelines.SaveIfDirty();
 }
 
 ID3D12Device* NativeDevice(ID3D11Device* device)
