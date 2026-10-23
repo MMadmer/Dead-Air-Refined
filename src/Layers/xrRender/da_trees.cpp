@@ -308,6 +308,8 @@ constexpr PresetColumns kPresets[5] = {{40.f, 14.f, 4.f, 2.f, 110.f, 3.f, 8.f, 7
     {20.f, 7.f, 1.33f, 0.53f, 80.f, 1.75f, 4.4f, 10.5f, 3, 3.f}, {16.f, 6.f, 0.75f, 0.3f, 72.f, 1.5f, 3.4f, 12.f, 3, 4.f}};
 // The billboard's reference tree (m).
 constexpr float kBbTreeHeight = 20.f;
+// The trees nearer than this (m) take the GPU cut's first phase: in a stand the crowns of the first rows hide the rest.
+constexpr float kCutNearPhase = 40.f;
 // The stock wood's morphs. A ring level's switch moved a trunk's silhouette at once (level 1 drops the spline's rings
 // between bends of 12 degrees: a bent pine's trunk turned from a curve into kinks at eight metres), so over the last
 // kRingBand of its range a level's dropped rings move onto the coarser level's tube. The patches' tessellation lifts
@@ -2662,6 +2664,9 @@ public:
         const float fR = 1.f - fbb;
         const bool leaves = !I.dead && (I.red || leafy(I.species));
         const bool blooms = !I.dead && !I.red && blooming(I.species);
+        // The GPU cut's phase: a near tree is culled against the opaque world and drawn first, its crown hiding the far
+        // ones from their cut (da_veg.cpp da_veg_render_gbuffer).
+        cut_phase = d < kCutNearPhase ? 0 : 1;
         float dt[4];
         tiers(I, T, leaves, dt);
         // (A tree with its billboard keeps its clusters on to it - the billboard is baked from them: from blobs a far
@@ -2796,19 +2801,30 @@ public:
             const float bkeep = floor_keep(std::max(S.arch.bloom_size, S.arch.fruit_size) * I.scale, px, 2.f * cols.kpx);
             emit_thinned(*this, 0, drBloom, rec, T.first[kKindBloom], T.count[kKindBloom], bkeep, bkeep, fc, 1.f);
         }
+        // The clusters and the blobs: through the GPU cut each part out of the view or behind what is drawn by its own
+        // place (a forest's far crowns behind its near ones), the thinned set's runs alike.
+        const auto mass = [&](Draw md, u32 first, u32 n, float share, float keep, float lo, float hi, u32 flags) {
+            if (!gpu)
+            {
+                emit_thinned(*this, 0, md, rec, first, n, share, keep, lo, hi, flags);
+                return;
+            }
+            const Draw dm[4] = {md, md, md, md};
+            thinned_runs(n, share, keep, [&](u32 a, u32 c, float k) {
+                cut(*this, ccMass, dm, rec, first + a, c, k, lo, hi, flags, float(kDrawKind[md]));
+            });
+        };
         if (fc > 0.f && fl < 1.f)
         {
             const float keep = floor_keep(2.f * T.cluster_r * I.scale, px, cols.kpx * 2.f);
             const float thin = view_thin(2.f * T.cluster_r * I.scale * px, 12.f);
-            emit_thinned(*this, 0, drCluster, rec, T.first[kKindCluster], T.count[kKindCluster], keep * thin, keep, fl, std::min(fc, fR),
-                thin_flags(thin));
+            mass(drCluster, T.first[kKindCluster], T.count[kKindCluster], keep * thin, keep, fl, std::min(fc, fR), thin_flags(thin));
         }
         if (fl > 0.f)
         {
             const float keep = floor_keep(2.f * T.blob_r * I.scale, px, cols.kpx * 3.f);
             const float thin = view_thin(2.f * T.blob_r * I.scale * px, 18.f);
-            emit_thinned(*this, 0, drBlob, rec, T.first[kKindBlob], T.count[kKindBlob], keep * thin, keep, 0.f, std::min(fl, fR),
-                kChunkRigid | thin_flags(thin));
+            mass(drBlob, T.first[kKindBlob], T.count[kKindBlob], keep * thin, keep, 0.f, std::min(fl, fR), kChunkRigid | thin_flags(thin));
         }
     }
 

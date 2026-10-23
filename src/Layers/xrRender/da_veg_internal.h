@@ -14,6 +14,7 @@
 #include "xrEngine/da_season.h"
 
 #include <atomic>
+#include <functional>
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -139,17 +140,21 @@ constexpr float kBand = 0.15f;
 constexpr u32 kRq = 33;
 // The trees' GPU cut of the view (r3\da_tree_cut.cs): a candidate chunk's class - its leaves (near, quads, far by their
 // own distance), its grafted wood and its stock tubes (four draws by the sides each element needs at its own depth), its
-// stock patches (near or far by their bark's tile) -, its route's bytes (the class and four draws, three parameters), the
-// candidate chunks a frame and the lists' words at the most (the lists past the chunk records in the chunk buffer:
-// r3\da_shrub_common.h SHRUB_CUT_WORDS).
+// stock patches (near or far by their bark's tile), its clusters and blobs (one draw) -, its route's bytes (the class and
+// four draws, three parameters), the candidate chunks a frame and the lists' words at the most (the lists past the chunk
+// records in the chunk buffer: r3\da_shrub_common.h SHRUB_CUT_WORDS).
 enum CutClass : u32
 {
     ccLeaf,
     ccWood,
     ccStock,
-    ccPatch
+    ccPatch,
+    ccMass
 };
 constexpr u32 kCutRoute = 16, kMaxCutChunks = 1u << 16, kMaxCutWords = 1u << 22;
+// The cut's two phases of the view: the near trees first, culled against the depth the opaque world left, then the far
+// ones against it with the near trees' drawn in (a near crown hides the forest behind it; da_veg_render_gbuffer).
+constexpr u32 kCutPhases = 2;
 
 // Trees: the tables a view or a cascade cuts the wood by (da_trees.cpp pack_tree), each a set's radii falling in its
 // elements' order - the grafted wood's three groups (levels 0-1, 2, 3) axis by axis by its thickest mean radius (a
@@ -467,9 +472,11 @@ public:
     u32 draw_first[kPasses][drCount]{}, draw_count[kPasses][drCount]{};
     u32 elements[drCount]{};
     u32 seen[4]{};
-    // The view's candidates for the trees' GPU cut (da_veg.cpp cut): their chunks, routes (four words each) and elements.
-    xr_vector<ChunkRec> cut_chunks;
-    xr_vector<u32> cut_routes;
+    // The view's candidates for the trees' GPU cut (da_veg.cpp cut) by phase: their chunks, routes (four words each) and
+    // elements; the phase the next cut() goes to (the tree's distance decides it).
+    xr_vector<ChunkRec> cut_chunks[kCutPhases];
+    xr_vector<u32> cut_routes[kCutPhases];
+    u32 cut_phase{};
     u32 cut_elements{};
     u32 cut_fallback{}; // the elements the cut had no room for this frame: drawn whole, uncut
     u32 cascades{}; // the sun cascades it casts into this frame
@@ -554,6 +561,9 @@ constexpr float kThinBand = 0.3f;
 // groups of their own (a group's keep word carries its shrink: the shaders grow an element by 1 / sqrt(keep)), the rest
 // grown by `keep` and a little more, so the set's area holds with the band's.
 void emit_thinned(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float share, float keep, float lo, float hi, u32 flags = 0);
+// The same thinned set's runs (from its first element, how many, their keep), for a caller that emits them otherwise (the
+// trees' cut of their clusters and blobs).
+void thinned_runs(u32 n, float share, float keep, const std::function<void(u32 first, u32 count, float keep)>& run);
 // The trees' GPU cut stands (its shaders and buffers made, r__trees_cut); the chunks of n elements of record rec from
 // element `first` as the view's candidates for it: class cls, the draws its elements may take (d: by the class's rules),
 // the share kept, the crossfade's window (the leaves' its lower end alone), the chunk flags and the class's parameters

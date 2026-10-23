@@ -14,19 +14,20 @@ RWByteAddressBuffer	da_tree_cut_args	: register(u2);	// 20 bytes a draw
 
 uniform float4	da_tree_cut_reg[SHRUB_DRAWS];	// x its list's first word, y its room (whole instances), z indices an
 												// instance, w the class's first index
+uniform float4	da_tree_cut1;					// x the phase's first count and arguments (draws)
 
 [numthreads(SHRUB_CHUNK, 1, 1)]
 void	main	(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 {
-	const uint d = gid.x;
+	const uint d = gid.x, at = uint(da_tree_cut1.x) + d;
 	const float4 reg = da_tree_cut_reg[d];
-	const uint n = min(da_tree_cut_counts.Load(d * 4u), uint(reg.y));
+	const uint n = min(da_tree_cut_counts.Load(at * 4u), uint(reg.y));
 	const uint inst = (n + SHRUB_CHUNK - 1u) / SHRUB_CHUNK;
 	if (n + tid.x < inst * SHRUB_CHUNK)
 		da_tree_cut_chunks.Store(SHRUB_CUT_WORDS + (uint(reg.x) + n + tid.x) * 4u, 0xFFFFFFFFu);
 	if (tid.x == 0u)
 	{
-		da_tree_cut_args.Store4(d * 20u, uint4(uint(reg.z), inst, uint(reg.w), 0u));
-		da_tree_cut_args.Store(d * 20u + 16u, 0u);
+		da_tree_cut_args.Store4(at * 20u, uint4(uint(reg.z), inst, uint(reg.w), 0u));
+		da_tree_cut_args.Store(at * 20u + 16u, 0u);
 	}
 }

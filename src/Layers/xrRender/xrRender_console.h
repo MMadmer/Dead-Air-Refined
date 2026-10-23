@@ -198,6 +198,7 @@ extern ECORE_API int ps_r__shrubs_force_tier; // r__shrubs_force_tier (QA): ever
 extern ECORE_API int ps_r__trees; // r__trees (QA): 0 = the stock trees in place of the upgraded trees
 extern ECORE_API int ps_r__dbg_trees; // r__dbg_trees (QA): draws of the trees left out (da_trees.cpp skip_draw)
 extern ECORE_API int ps_r__trees_cut; // r__trees_cut (QA): 0 = the trees' view without the GPU cut (da_veg.cpp cut)
+extern ECORE_API int ps_r__trees_occlusion; // r__trees_occlusion (QA): 0 = the cut culls nothing by the depth
 extern ECORE_API int ps_r__veg_soft; // r__veg_soft (QA): the vegetation's soft switches, bits (1 thinned, 2 wood, 4 morphs)
 extern ECORE_API int ps_r__dbg_wood; // r__dbg_wood (QA): the wood's bark in false colour (da_shrub_wood.ps shrub_dbg_*)
 extern ECORE_API float ps_r__trees_lod_scale; // r__trees_lod_scale (QA): the trees' tier distances scaled (da_trees.cpp tiers)

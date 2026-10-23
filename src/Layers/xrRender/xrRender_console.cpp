@@ -352,9 +352,10 @@ int ps_r__particle_light = 1;
 // ray), 2 High (20).
 int ps_r__ssr = 2;
 // What hides blade grass from the view (da_grass_blades.cpp), bits: 1 the main view's occlusion (HOM) hides whole tiles,
-// 2 this frame's depth hides each lane (the walls, fences and barrels HOM has no shape for). A hidden one grows only
-// its shadow casters. A session knob for QA, never saved: user.ltx kept the old r__grass_hom 1.
-int ps_r__grass_occlusion = 3;
+// 2 this frame's depth hides each lane (the walls, fences and barrels HOM has no shape for), 4 it hides a group's whole
+// tile before its lanes read anything. A hidden one grows only its shadow casters. A session knob for QA, never saved:
+// user.ltx kept the old r__grass_hom 1.
+int ps_r__grass_occlusion = 7;
 float ps_r__spec_f0 = 0.8f;
 float ps_r__spec_f0_max = 0.16f;
 float ps_r__spec_smooth = 3.f;
@@ -540,6 +541,8 @@ int ps_r__trees = 1;
 int ps_r__dbg_trees = 0;
 // QA: 0 the trees' view drawn as the CPU cut it, without the GPU cut (r3\da_tree_cut.cs) - an A/B.
 int ps_r__trees_cut = 1;
+// The trees' cut culls by the depth drawn so far (da_veg.cpp cut_dispatch: the opaque world, then the near trees); 0 for QA.
+int ps_r__trees_occlusion = 1;
 // QA: the vegetation's soft switches (bits, all on by default; off: the hard switch, an A/B) - 1 the thinned prefixes'
 // soft ends (da_veg.cpp emit_thinned), 2 the crowns' wood prefixes' (da_veg_internal.h wood_runs), 4 the trees' stock
 // wood morphs (the ring levels and the patches' tessellation, da_trees.cpp).
@@ -2139,7 +2142,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__spec_f0", &ps_r__spec_f0, 0.f, 4.f);
     CMD4(CCC_RuntimeInteger, "r__particle_light", &ps_r__particle_light, 0, 3);
     CMD4(CCC_Integer, "r__ssr", &ps_r__ssr, 0, 2);
-    CMD4(CCC_RuntimeInteger, "r__grass_occlusion", &ps_r__grass_occlusion, 0, 3);
+    CMD4(CCC_RuntimeInteger, "r__grass_occlusion", &ps_r__grass_occlusion, 0, 7);
     CMD4(CCC_RuntimeFloat, "r__spec_f0_max", &ps_r__spec_f0_max, 0.02f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__spec_smooth", &ps_r__spec_smooth, 0.f, 8.f);
 #if defined(USE_DX11)
@@ -2413,6 +2416,7 @@ void xrRender_initconsole()
     CMD2(CCC_DaCallArg, "r__snow_window_probe", &da_ground_window_probe);
     CMD4(CCC_RuntimeInteger, "r__dbg_trees", &ps_r__dbg_trees, 0, 262143);
     CMD4(CCC_RuntimeInteger, "r__trees_cut", &ps_r__trees_cut, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__trees_occlusion", &ps_r__trees_occlusion, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__veg_soft", &ps_r__veg_soft, 0, 7);
     CMD4(CCC_RuntimeInteger, "r__dbg_wood", &ps_r__dbg_wood, 0, 6);
     CMD4(CCC_RuntimeFloat, "r__trees_lod_scale", &ps_r__trees_lod_scale, 0.05f, 20.f);

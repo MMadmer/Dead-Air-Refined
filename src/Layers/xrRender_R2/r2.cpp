@@ -22,6 +22,7 @@
 #if RENDER == R_R4
 #include "Layers/xrRender/da_snow.h"
 #include "Layers/xrRender/da_grass_blades.h"
+#include "Layers/xrRender/da_hzb.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRender/da_menu_frame.h"
@@ -1087,6 +1088,7 @@ void CRender::destroy()
     da_trees_bake_destroy();
     da_veg_destroy();
     da_grass_destroy();
+    da_hzb_destroy();
     da_snow_destroy();
     da_menu_frame_destroy();
     da_ui_picture_destroy();

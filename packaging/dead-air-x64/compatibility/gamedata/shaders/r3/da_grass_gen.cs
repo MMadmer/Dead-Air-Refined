@@ -20,13 +20,14 @@
 #include "da_grass_common.h"
 #include "da_water_field.h"
 #include "da_raw_buffer.h"
+#define DA_HZB_SLOT t6
+#include "da_hzb.h"
 
 DA_RAW(da_grass_slots, t0);	// level.details slots, 16 bytes each
-DA_RAW(da_grass_groups, t2);	// 16 bytes per group: tile, level, flags, lanes
+DA_RAW(da_grass_groups, t2);	// 32 bytes per group: tile, level, flags, lanes; the shadow-only level and flags, the tile's heights
 Texture2D<float>	da_grass_ground		: register(t3);	// ground of the slot-box rule, toroidal window
 Texture2D<float2>	da_grass_push		: register(t4);	// push of the creatures, toroidal window
 Texture2D<float2>	da_grass_push_prev	: register(t5);	// the same, previous frame
-Texture2D<float>	da_grass_hzb_tex	: register(t6);	// the depth pyramid of this frame's opaque world (da_grass_hzb.cs)
 DA_RAW_RW(da_grass_blades, u0);
 RWByteAddressBuffer	da_grass_counts		: register(u1);
 DA_RAW_RW(da_grass_heads, u2);
@@ -42,7 +43,8 @@ uniform float4	da_grass_slot;		// x offs_x, y offs_z, z size_x, w size_z
 uniform float4	da_grass_gwin;		// ground window: xy first texel, z size (texels), w texel (m)
 uniform float4	da_grass_pwin;		// push window: x 1/extent, y half extent, zw centre
 uniform float4	da_grass_pwin_prev;
-uniform float4	da_grass_snow;		// x 1 = snow lies (sample its depth), y QA: the species every lane grows + 1, z QA: r__dbg_grass
+uniform float4	da_grass_snow;		// x 1 = snow lies (sample its depth), y QA: the species every lane grows + 1, z QA: r__dbg_grass,
+								// w 1 = the depth hides groups' whole tiles (r__grass_occlusion 4)
 
 uint	grass_dbg	()	{ return uint(da_grass_snow.z + 0.5f); }
 uniform float4	da_grass_planes[6];	// view frustum (world): outside when dot(n, p) + d > r
@@ -54,14 +56,10 @@ uniform float4	da_grass_bin_cap[4];	// records each bin holds
 uniform float4	da_grass_water;
 uniform float4	da_grass_wave[4];		// wave, dir2D of the two wind groups (deffer_detail_w_flat.vs)
 uniform float4	da_grass_wave_prev[4];
-uniform float4	da_grass_hzb;		// x 1 = the occlusion test is on, y the pyramid's levels, zw the depth's size (pixels)
-uniform float4	da_grass_hzb_lv[14];	// each level of the pyramid: xy its first texel, zw its size
-uniform float4	da_grass_view[3];	// world -> view: the rows of x, y and z (dot with the point and 1)
-uniform float4	da_grass_proj;		// the projection's _11, _22, _33, _43
-uniform float4	da_grass_proj2;		// its _31, _32 (the jitter), the near plane, -
 
 groupshared uint	gs_n[GRASS_NBINS];
 groupshared uint	gs_b[GRASS_NBINS];
+groupshared uint	gs_hidden;
 
 float	grass_c	(float4 v, uint i)	{ return i == 0u ? v.x : (i == 1u ? v.y : (i == 2u ? v.z : v.w)); }
 uint	grass_bin_base	(uint b)	{ return uint(grass_c(da_grass_bin_base[b >> 2], b & 3u)); }
@@ -91,39 +89,6 @@ bool	grass_visible	(float3 c, float r)
 			return false;
 	}
 	return true;
-}
-
-// The sphere (c, r) lies behind what the opaque world drew this frame: its nearest depth is farther than the farthest
-// depth of the pyramid over its rectangle on the screen. The rectangle is the sphere's exact perspective bounds (the
-// tangents from the eye, Mara and McGuire 2013) and a pixel more; the level is the one where it spans two texels at
-// most. A sphere the near plane cuts, or off the screen, is never hidden.
-bool	grass_occluded	(float3 c, float r)
-{
-	if (da_grass_hzb.x < 0.5f)
-		return false;
-	const float4 p = float4(c, 1.0f);
-	const float3 v = float3(dot(p, da_grass_view[0]), dot(p, da_grass_view[1]), dot(p, da_grass_view[2]));
-	const float zn = v.z - r;
-	if (zn <= da_grass_proj2.z)
-		return false;
-	const float den = v.z * v.z - r * r;
-	const float2 ux = (v.x * v.z + float2(-r, r) * sqrt(v.x * v.x + den)) / den;
-	const float2 uy = (v.y * v.z + float2(-r, r) * sqrt(v.y * v.y + den)) / den;
-	const float2 nx = ux * da_grass_proj.x + da_grass_proj2.x;
-	const float2 ny = uy * da_grass_proj.y + da_grass_proj2.y;
-	const float2 size = da_grass_hzb.zw;
-	const int2 p0 = max(int2(floor(float2(nx.x * 0.5f + 0.5f, 0.5f - ny.y * 0.5f) * size)) - 1, 0);
-	const int2 p1 = min(int2(floor(float2(nx.y * 0.5f + 0.5f, 0.5f - ny.x * 0.5f) * size)) + 1, int2(size) - 1);
-	if (any(p1 < p0))
-		return false;
-	const uint span = uint(max(p1.x - p0.x, p1.y - p0.y));
-	const uint k = min(span > 0u ? firstbithigh(span) : 0u, uint(da_grass_hzb.y) - 1u);
-	const float4 lv = da_grass_hzb_lv[k];
-	const int2 o = int2(lv.xy), last = int2(lv.zw) - 1;
-	const int2 t0 = min(p0 >> int(k + 1u), last), t1 = min(p1 >> int(k + 1u), last);
-	const float deepest = max(max(da_grass_hzb_tex.Load(int3(o + t0, 0)), da_grass_hzb_tex.Load(int3(o + int2(t1.x, t0.y), 0))),
-		max(da_grass_hzb_tex.Load(int3(o + int2(t0.x, t1.y), 0)), da_grass_hzb_tex.Load(int3(o + t1, 0))));
-	return da_grass_proj.z + da_grass_proj.w / zn > deepest;
 }
 
 // Past d2 the cover thins with distance as 1 / sqrt(1 + x^2), x = (d - d2) / scale: smooth at d2, no step anywhere,
@@ -587,7 +552,7 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const float bound_r = 0.6f * hbound + 0.3f;
 	// Behind a wall, a fence, a barrel or a hill of this frame's depth the lane keeps only its shadow casters.
 	const bool view = (tflags & 1u) != 0u && d < da_grass_cam.w && grass_visible(bound_c, bound_r)
-		&& !grass_occluded(bound_c, bound_r);
+		&& !hzb_sphere_hidden(bound_c, bound_r);
 	const bool sh_near = (tflags & 2u) != 0u && d < da_grass_sh.x;
 	const bool sh_mid = (tflags & 4u) != 0u && d < da_grass_sh.y;
 	if (!view && !sh_near && !sh_mid)
@@ -894,18 +859,41 @@ void	grass_store_cauline	(uint at0, uint count, float wscale, grass_lane L, uint
 [numthreads(64, 1, 1)]
 void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 {
-	if (gi < GRASS_NBINS)
-		gs_n[gi] = 0u;
-	GroupMemoryBarrierWithGroupSync();
-
-	// ---- The lattice point of this lane --------------------------------------------------------
-	const uint4 G = DA_LOAD4(da_grass_groups, gid.x * 16u);
+	const uint4 G = DA_LOAD4(da_grass_groups, gid.x * 32u);
+	const uint4 G2 = DA_LOAD4(da_grass_groups, gid.x * 32u + 16u);
 	const int2 tile = int2(asint(G.x), asint(G.y));
 	const uint level = G.z & 0xFFu;
 	const uint tsize = 32u << ((G.z >> 8) & 0xFu);
-	const uint tflags = G.z >> 16;
+	uint tflags = G.z >> 16;
+	// A tile this frame's depth hides from the view (its box against the pyramid, the group's first lane for all of them)
+	// keeps only the shadow it casts into the view, at the coarser lattice level the shadow's keep needs: the lanes off
+	// that level die before a slot is read, and with no shadow the whole group (expand_tiles grows a tile the HOM hides so).
+	if (gi < GRASS_NBINS)
+		gs_n[gi] = 0u;
+	[branch] if (gi == 0u)
+	{
+		bool hidden = false;
+		[branch] if ((tflags & 1u) != 0u)
+		{
+			const float st = da_grass_lat.x;
+			const float3 lo = float3(float(tile.x) * st - 1.0f, asfloat(G2.y), float(tile.y) * st - 1.0f);
+			const float3 hi = float3(float(tile.x + int(tsize)) * st + 1.0f, asfloat(G2.z), float(tile.y + int(tsize)) * st + 1.0f);
+			hidden = da_grass_snow.w > 0.5f && hzb_box_hidden(lo, hi);
+		}
+		gs_hidden = hidden ? 1u : 0u;
+		uint was;
+		if (hidden)
+			da_grass_counts.InterlockedAdd(GRASS_NBINS * 8u, 1u, was);
+	}
+	GroupMemoryBarrierWithGroupSync();
+
+	// ---- The lattice point of this lane --------------------------------------------------------
+	const bool tile_hidden = gs_hidden != 0u;
+	const uint keep_level = tile_hidden ? max(level, G2.x & 0xFFu) : level;
+	if (tile_hidden)
+		tflags = (G2.x >> 8) & 7u;
 	const uint lane = (G.w & 0xFFFFu) + gi;
-	bool alive = lane < (G.w >> 16);
+	bool alive = lane < (G.w >> 16) && tflags != 0u;
 
 	const uint m = level >> 1;
 	const int step = int(1u << m);
@@ -934,7 +922,7 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	const float s0 = da_grass_lat.x;
 	const float jit = 0.5f * s0 * exp2(0.5f * float(min(grass_exact_level(g), 6u)));
 	const float2 xz = (float2(g) + 0.5f) * s0 + (float2(h[0], h[1]) * 2.0f - 1.0f) * jit;
-	alive = alive && distance(xz, da_grass_cam.xz) < da_grass_cam.w;
+	alive = alive && distance(xz, da_grass_cam.xz) < da_grass_cam.w && (!tile_hidden || grass_exact_level(g) >= keep_level);
 
 	// ---- The community of the slot's objects at this point ---------------------------------------
 	// The stock palette weighs the slot's objects at the point; one that grows blades is picked by its weight.
@@ -1003,7 +991,7 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	// less a hand for the base's 0.2 m step.)
 	L.floor_y = !bed && (S.y >> 28) != 0u ? float(S.x & 0xFFFu) * 0.2f - 200.0f + float(S.y >> 28) * 0.2f - 0.1f : -1e9f;
 	[branch] if (alive)
-		grass_evaluate(L, g, seed, h, xz, p, c, hemi, level, tflags);
+		grass_evaluate(L, g, seed, h, xz, p, c, hemi, keep_level, tflags);
 
 	// ---- Bins -----------------------------------------------------------------------------------
 	const uint lod = L.d < da_grass_lod.x ? 0u : (L.d < da_grass_lod.y ? 1u : 2u);

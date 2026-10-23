@@ -268,6 +268,8 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_snow.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_snow_gpu.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_blades.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_hzb.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_hzb.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_blades.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_grass_data.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/da_shrub_gen.cpp"

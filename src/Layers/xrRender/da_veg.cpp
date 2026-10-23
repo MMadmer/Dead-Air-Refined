@@ -13,6 +13,7 @@
 
 #include "stdafx.h"
 #include "da_veg.h"
+#include "da_hzb.h"
 #include "da_veg_internal.h"
 #include "da_reeds.h"
 #include "da_grass_data.h"
@@ -156,12 +157,14 @@ struct State
     // The trees' GPU cut (r3\da_tree_cut.cs, da_tree_cut_args.cs): its candidate chunks in the frame's chunk buffer, their
     // routes, the words each draw took and its draws' arguments; each draw's list (its first word past the chunk records,
     // its room in whole instances, the vertex class's indices an instance and first index) and the room its candidates
-    // asked so far; the frustum of the view (world planes, outward); QA: a readback of the counts (1 asked, 2 copied).
+    // asked so far, by phase (the near trees, the far ones: kCutPhases); the frustum of the view (world planes, outward);
+    // QA: a readback of the counts (1 asked, 2 copied).
     ref_shader s_cut, s_cut_args;
     GpuBuffer cut_routes_b, cut_counts_b, cut_args_b;
     ID3D11Buffer* cut_staging{};
     u32 cut_first{}, cut_count{}, cut_readback{};
-    u32 cut_reg[drCount][4]{}, cut_room[drCount]{};
+    u32 cut_n[kCutPhases]{};
+    u32 cut_reg[kCutPhases][drCount][4]{}, cut_room[kCutPhases][drCount]{};
     Fvector4 cut_planes[6]{};
     VertexStagingBuffer vb;
     IndexStagingBuffer ib;
@@ -1007,16 +1010,16 @@ void emit(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float keep, fl
     P.elements[d] += n;
 }
 
-void emit_thinned(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float share, float keep, float lo, float hi, u32 flags)
+void thinned_runs(u32 n, float share, float keep, const std::function<void(u32 first, u32 count, float keep)>& run)
 {
-    if (!n || hi <= lo)
+    if (!n)
         return;
     const u32 end = kept(n, share);
     const float target = std::min(share, 1.f) * float(n), band = kThinBand * target;
     // (Whole, or too few to fade: the prefix as it is; QA r__veg_soft without bit 1: the hard end.)
     if (end >= n || band < 1.f || !(ps_r__veg_soft & 1))
     {
-        emit(P, p, d, rec, first, end, keep, lo, hi, flags);
+        run(0, end, keep);
         return;
     }
     // The band's groups: eight at the least over it, a chunk each at the most; a group's shrink by its middle rank.
@@ -1032,13 +1035,21 @@ void emit_thinned(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float 
     }
     // (The survivors' growth makes up the band's lost area: the crown's cover holds through it.)
     const float kg = std::max(keep * area / std::max(target, 1.f), 1e-3f);
-    emit(P, p, d, rec, first, n_full, kg, lo, hi, flags);
+    if (n_full)
+        run(0, n_full, kg);
     for (u32 a = n_full; a < end; a += group)
     {
         const u32 c = std::min(group, end - a);
         if (const float f = shrink(a, c); f > 0.02f)
-            emit(P, p, d, rec, first + a, c, std::min(kg / (f * f), 60000.f), lo, hi, flags);
+            run(a, c, std::min(kg / (f * f), 60000.f));
     }
+}
+
+void emit_thinned(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float share, float keep, float lo, float hi, u32 flags)
+{
+    if (hi <= lo)
+        return;
+    thinned_runs(n, share, keep, [&](u32 a, u32 c, float k) { emit(P, p, d, rec, first + a, c, k, lo, hi, flags); });
 }
 
 bool cut_on()
@@ -1051,30 +1062,32 @@ void cut(Population& P, CutClass cls, const Draw (&d)[4], u32 rec, u32 first, u3
 {
     if (!n || hi <= lo)
         return;
-    // Each draw it may take holds its elements once more (whole instances).
+    // Each draw it may take holds its elements once more (whole instances), in its phase's lists.
+    const u32 ph = std::min(P.cut_phase, kCutPhases - 1);
     u32 mask = 0, words = 0;
     for (const Draw k : d)
         mask |= 1u << k;
-    for (u32 k = 0; k < drCount; ++k)
-        words += (g.cut_room[k] + ((mask >> k) & 1u ? n : 0u) + kChunk - 1) / kChunk * kChunk;
+    for (u32 q = 0; q < kCutPhases; ++q)
+        for (u32 k = 0; k < drCount; ++k)
+            words += (g.cut_room[q][k] + (q == ph && ((mask >> k) & 1u) ? n : 0u) + kChunk - 1) / kChunk * kChunk;
     const u32 chunks = (n + kChunk - 1) / kChunk;
-    if (words > kMaxCutWords || u32(P.cut_chunks.size()) + chunks > kMaxCutChunks)
+    if (words > kMaxCutWords || u32(P.cut_chunks[0].size() + P.cut_chunks[1].size()) + chunks > kMaxCutChunks)
     {
         P.cut_fallback += n;
-        emit(P, 0, d[cls == ccPatch ? 0 : 1], rec, first, n, keep, lo, hi, flags, aux);
+        emit(P, 0, d[cls == ccPatch || cls == ccMass ? 0 : 1], rec, first, n, keep, lo, hi, flags, aux);
         return;
     }
     for (u32 k = 0; k < drCount; ++k)
         if ((mask >> k) & 1u)
-            g.cut_room[k] += n;
+            g.cut_room[ph][k] += n;
     u32 route = u32(cls);
     for (u32 k = 0; k < 4; ++k)
-        route |= u32(d[k]) << (2 + 5 * k);
+        route |= u32(d[k]) << (3 + 5 * k);
     const u32 window = u8f(lo) << 8 | u8f(hi) << 16 | flags;
     for (u32 k = 0; k < n; k += kChunk)
     {
-        P.cut_chunks.push_back(ChunkRec{rec, first + k, std::min(kChunk, n - k) | window, h2(keep, aux)});
-        P.cut_routes.insert(P.cut_routes.end(), {route, std::bit_cast<u32>(p0), std::bit_cast<u32>(p1), std::bit_cast<u32>(p2)});
+        P.cut_chunks[ph].push_back(ChunkRec{rec, first + k, std::min(kChunk, n - k) | window, h2(keep, aux)});
+        P.cut_routes[ph].insert(P.cut_routes[ph].end(), {route, std::bit_cast<u32>(p0), std::bit_cast<u32>(p1), std::bit_cast<u32>(p2)});
     }
     P.cut_elements += n;
 }
@@ -1116,7 +1129,7 @@ void build_frame()
     g.bend_n = g.bend_view_n = 0;
     CFrustum view;
     view.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB | FRUSTUM_P_FAR);
-    std::fill(std::begin(g.cut_room), std::end(g.cut_room), 0u);
+    std::memset(g.cut_room, 0, sizeof(g.cut_room));
     {
         CFrustum all;
         all.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_ALL);
@@ -1137,8 +1150,12 @@ void build_frame()
                 list.clear();
         std::fill(std::begin(P->seen), std::end(P->seen), 0u);
         std::fill(std::begin(P->elements), std::end(P->elements), 0u);
-        P->cut_chunks.clear();
-        P->cut_routes.clear();
+        for (u32 q = 0; q < kCutPhases; ++q)
+        {
+            P->cut_chunks[q].clear();
+            P->cut_routes[q].clear();
+        }
+        P->cut_phase = 0;
         P->cut_elements = 0;
         P->cut_fallback = 0;
         for (auto& pass : P->draw_count)
@@ -1262,16 +1279,22 @@ void build_frame()
             append(*P, 0);
         }
     // The trees' GPU cut: its candidate chunks after the view's draws (they draw in the view: their bends a frame back
-    // too).
+    // too), the near trees' phase first.
     g.cut_first = u32(g.chunks.size());
     g.cut_count = 0;
-    if (Population* P = pop(kPopTrees); pop_on(P) && !P->cut_chunks.empty())
+    std::fill(std::begin(g.cut_n), std::end(g.cut_n), 0u);
+    if (Population* P = pop(kPopTrees); pop_on(P))
     {
         CpuSpan span(*P);
-        const u32 n = std::min(u32(P->cut_chunks.size()), kMaxChunks - std::min(u32(g.chunks.size()), kMaxChunks));
-        g.chunks.insert(g.chunks.end(), P->cut_chunks.begin(), P->cut_chunks.begin() + n);
-        g.cut_count = n;
-        bend_block(kPopTrees, g.cut_first, g.cut_first + n);
+        for (u32 q = 0; q < kCutPhases; ++q)
+        {
+            const u32 n = std::min(u32(P->cut_chunks[q].size()), kMaxChunks - std::min(u32(g.chunks.size()), kMaxChunks));
+            g.chunks.insert(g.chunks.end(), P->cut_chunks[q].begin(), P->cut_chunks[q].begin() + n);
+            g.cut_n[q] = n;
+            g.cut_count += n;
+        }
+        if (g.cut_count)
+            bend_block(kPopTrees, g.cut_first, g.cut_first + g.cut_count);
     }
     g.bend_view_end = u32(g.chunks.size());
     number_bends(0);
@@ -1338,8 +1361,9 @@ void latch_frame()
 // The shaders' constants and resources, then `count` chunks from `first` of draw d of population P. pass: 0 the view,
 // else a shadow map's (sun: the side its quads turn to, texel: its texel in metres, the wood's floor).
 void draw_range(CBackend& cmd, const Population& P, const ref_shader& shader, u32 first, u32 count, u32 pass, u32 d, const Fvector& sun,
-    float texel, bool cut = false)
+    float texel, s32 cut_phase = -1)
 {
+    const bool cut = cut_phase >= 0;
     if (!count || !shader)
         return;
     if (P.skip_draw(d, pass))
@@ -1369,7 +1393,7 @@ void draw_range(CBackend& cmd, const Population& P, const ref_shader& shader, u3
     cmd.set_c("da_shrub_bend_cap", float(g.bend_chunks * kChunk), float(g.bend_view_chunks * kChunk), 0.f, 0.f);
     cmd.SRVSManager.SetPSResource(4, g.tables_b.srv);
     if (cut)
-        cmd.RenderIndirect(g.cut_args_b.buf, d * 20, 1);
+        cmd.RenderIndirect(g.cut_args_b.buf, (u32(cut_phase) * drCount + d) * 20, 1);
     else
         cmd.RenderInstanced(D3DPT_TRIANGLELIST, 0, 0, vc.verts, vc.first, vc.indices / 3, count);
     for (u32 slot = 0; slot < 7; ++slot)
@@ -1392,9 +1416,16 @@ void draw(CBackend& cmd, const Population& P, const ref_shader& shader, u32 pass
     else if (pass)
         texel = cascade_size(pass - 1) / smap;
     draw_range(cmd, P, shader, P.draw_first[pass][d], P.draw_count[pass][d], pass, d, sun, texel);
-    // The trees' GPU cut's list of the draw (the view's: r3\da_tree_cut.cs).
-    if (!pass && P.index == kPopTrees && g.cut_count && g.cut_reg[d][1])
-        draw_range(cmd, P, shader, g.cut_reg[d][0], 1, pass, d, sun, texel, true);
+    // The trees' GPU cut's list of the draw, the near trees' (the view's: r3\da_tree_cut.cs).
+    if (!pass && P.index == kPopTrees && g.cut_n[0] && g.cut_reg[0][d][1])
+        draw_range(cmd, P, shader, g.cut_reg[0][d][0], 1, pass, d, sun, texel, 0);
+}
+
+// The far trees' list of draw d of the cut (the view's second phase).
+void draw_cut_far(CBackend& cmd, const Population& P, const ref_shader& shader, u32 d)
+{
+    if (g.cut_n[1] && g.cut_reg[1][d][1])
+        draw_range(cmd, P, shader, g.cut_reg[1][d][0], 1, 0, d, g.latch.sun, 0.f, 1);
 }
 
 // ======================================================================================================
@@ -1601,6 +1632,7 @@ void release_gpu()
         b->release();
     _RELEASE(g.cut_staging);
     g.cut_count = g.cut_readback = 0;
+    std::fill(std::begin(g.cut_n), std::end(g.cut_n), 0u);
     g.bend_chunks = g.bend_view_chunks = g.bend_view_end = 0;
     g.bend_failed = g.bend_ready = false;
     if (g.geom)
@@ -1692,29 +1724,40 @@ void cut_prepare(ID3D11DeviceContext* ctx)
     if (!g.cut_count || !pop_on(P))
     {
         g.cut_count = 0;
+        std::fill(std::begin(g.cut_n), std::end(g.cut_n), 0u);
         return;
     }
-    u32 words = 0;
-    for (u32 d = 0; d < drCount; ++d)
+    u32 words = 0, routes = 0;
+    for (u32 q = 0; q < kCutPhases; ++q)
     {
-        const u32 room = (g.cut_room[d] + kChunk - 1) / kChunk * kChunk;
-        const VertexClassInfo& vc = g.vclass[kDrawClass[d]];
-        g.cut_reg[d][0] = words;
-        g.cut_reg[d][1] = room;
-        g.cut_reg[d][2] = vc.indices;
-        g.cut_reg[d][3] = vc.first;
-        words += room;
+        for (u32 d = 0; d < drCount; ++d)
+        {
+            const u32 room = (g.cut_room[q][d] + kChunk - 1) / kChunk * kChunk;
+            const VertexClassInfo& vc = g.vclass[kDrawClass[d]];
+            g.cut_reg[q][d][0] = words;
+            g.cut_reg[q][d][1] = room;
+            g.cut_reg[q][d][2] = vc.indices;
+            g.cut_reg[q][d][3] = vc.first;
+            words += room;
+        }
+        // (The phases' routes one after the other, as their chunks are.)
+        if (g.cut_n[q])
+        {
+            const D3D11_BOX box{routes * kCutRoute, 0, 0, (routes + g.cut_n[q]) * kCutRoute, 1, 1};
+            ctx->UpdateSubresource(g.cut_routes_b.buf, 0, &box, P->cut_routes[q].data(), 0, 0);
+        }
+        routes += g.cut_n[q];
     }
-    const D3D11_BOX box{0, 0, 0, g.cut_count * kCutRoute, 1, 1};
-    ctx->UpdateSubresource(g.cut_routes_b.buf, 0, &box, P->cut_routes.data(), 0, 0);
 }
 
-// The trees' GPU cut (r3\da_tree_cut.cs: after the frame's bends, its elements bent as their vertices are) and its draws'
-// arguments (da_tree_cut_args.cs); QA: a readback of the words each draw took, logged when it arrives.
-void cut_dispatch(CBackend& cmd)
+// The trees' GPU cut of phase `phase` (r3\da_tree_cut.cs: after the frame's bends, its elements bent as their vertices
+// are), each element against this frame's depth pyramid (da_hzb.h: the opaque world's, and the near trees' too for the
+// far phase), and its draws' arguments (da_tree_cut_args.cs); QA: a readback of the words each draw took, logged when it
+// arrives.
+void cut_dispatch(CBackend& cmd, u32 phase)
 {
     ID3D11DeviceContext* ctx = HW.get_context(cmd.context_id);
-    if (g.cut_readback == 2)
+    if (phase == 0 && g.cut_readback == 2)
     {
         D3D11_MAPPED_SUBRESOURCE m{};
         if (SUCCEEDED(ctx->Map(g.cut_staging, 0, D3D11_MAP_READ, 0, &m)))
@@ -1723,31 +1766,43 @@ void cut_dispatch(CBackend& cmd)
                 "spray cut", "spray 4", "wood 8", "needle 2", "wood 16", "stock 32", "stock 16", "stock 8", "patch", "wood far",
                 "stock far", "patch far"};
             const u32* took = static_cast<const u32*>(m.pData);
-            xr_string line;
-            for (u32 d = 0; d < drCount; ++d)
-                if (took[d])
-                {
-                    if (!line.empty())
-                        line += ", ";
-                    line += names[d];
-                    line += " ";
-                    line += std::to_string(took[d]).c_str();
-                }
-            Msg("* [trees] the GPU cut drew: %s", line.empty() ? "nothing" : line.c_str());
+            for (u32 q = 0; q < kCutPhases; ++q)
+            {
+                xr_string line;
+                for (u32 d = 0; d < drCount; ++d)
+                    if (const u32 n = took[q * drCount + d])
+                    {
+                        if (!line.empty())
+                            line += ", ";
+                        line += names[d];
+                        line += " ";
+                        line += std::to_string(n).c_str();
+                    }
+                Msg("* [trees] the GPU cut drew of the %s trees: %s", q ? "far" : "near", line.empty() ? "nothing" : line.c_str());
+            }
             ctx->Unmap(g.cut_staging, 0);
         }
         g.cut_readback = 0;
     }
     const Population* P = pop(kPopTrees);
-    if (!g.cut_count || !pop_on(P))
+    if (!g.cut_n[phase] || !pop_on(P))
         return;
+    const bool hzb = ps_r__trees_occlusion && da_hzb_build(cmd);
     const Latch& L = g.latch;
     static constexpr u32 zero[drCount]{};
-    ctx->UpdateSubresource(g.cut_counts_b.buf, 0, nullptr, zero, 0, 0);
-    const auto lists = [&cmd] {
+    {
+        const D3D11_BOX box{phase * drCount * 4, 0, 0, (phase + 1) * drCount * 4, 1, 1};
+        ctx->UpdateSubresource(g.cut_counts_b.buf, 0, &box, zero, 0, 0);
+    }
+    const auto lists = [&cmd, phase] {
         for (u32 d = 0; d < drCount; ++d)
-            cmd.set_ca("da_tree_cut_reg", d, float(g.cut_reg[d][0]), float(g.cut_reg[d][1]), float(g.cut_reg[d][2]), float(g.cut_reg[d][3]));
+        {
+            const u32(&r)[4] = g.cut_reg[phase][d];
+            cmd.set_ca("da_tree_cut_reg", d, float(r[0]), float(r[1]), float(r[2]), float(r[3]));
+        }
+        cmd.set_c("da_tree_cut1", float(phase * drCount), 0.f, 0.f, 0.f);
     };
+    const u32 first = phase ? g.cut_n[0] : 0u, count = g.cut_n[phase];
     const UINT initial[3] = {~0u, ~0u, ~0u};
     ID3D11UnorderedAccessView* none[3]{};
     {
@@ -1755,8 +1810,8 @@ void cut_dispatch(CBackend& cmd)
         cmd.set_States(S.state);
         cmd.set_CS(S.cs);
         cmd.set_Constants(S.constants);
-        const u32 gx = std::min(g.cut_count, 32768u), gy = (g.cut_count + gx - 1) / gx;
-        cmd.set_c("da_tree_cut0", float(g.cut_first), float(g.cut_count), float(gx), 0.f);
+        const u32 gx = std::min(count, 32768u), gy = (count + gx - 1) / gx;
+        cmd.set_c("da_tree_cut0", float(g.cut_first + first), float(count), float(gx), float(first));
         for (u32 k = 0; k < 6; ++k)
             cmd.set_ca("da_tree_cut_planes", k, g.cut_planes[k].x, g.cut_planes[k].y, g.cut_planes[k].z, g.cut_planes[k].w);
         lists();
@@ -1764,6 +1819,7 @@ void cut_dispatch(CBackend& cmd)
         cmd.set_c("da_shrub_fwd", L.fwd.x, L.fwd.y, L.fwd.z, 0.f);
         cmd.set_c("da_shrub_time", L.time, L.time_prev, L.motion ? 1.f : 0.f, 0.f);
         cmd.set_c("da_shrub_bend_cap", float(g.bend_chunks * kChunk), float(g.bend_view_chunks * kChunk), 0.f, 0.f);
+        da_hzb_bind(cmd, 8, hzb);
         cmd.SRVSManager.SetCSResource(0, P->elems_b.srv);
         cmd.SRVSManager.SetCSResource(1, P->axes_b.srv);
         cmd.SRVSManager.SetCSResource(2, g.inst_b.srv);
@@ -1775,7 +1831,7 @@ void cut_dispatch(CBackend& cmd)
         ctx->CSSetUnorderedAccessViews(0, 2, uavs, initial);
         cmd.Compute(gx, gy, 1);
         ctx->CSSetUnorderedAccessViews(0, 2, none, initial);
-        for (u32 slot = 0; slot < 8; ++slot)
+        for (u32 slot = 0; slot < 9; ++slot)
             cmd.SRVSManager.SetCSResource(slot, nullptr);
         cmd.SRVSManager.Apply(cmd.context_id);
         cmd.clear_CS_resources();
@@ -1792,11 +1848,13 @@ void cut_dispatch(CBackend& cmd)
         ctx->CSSetUnorderedAccessViews(0, 3, none, initial);
         cmd.clear_CS_resources();
     }
-    if (g.cut_readback == 1)
+    if (phase + 1 == kCutPhases && g.cut_readback == 1)
     {
         ctx->CopyResource(g.cut_staging, g.cut_counts_b.buf);
         g.cut_readback = 2;
     }
+    // The compute passes leave the G-buffer's targets, viewport and stencil to the draws after them.
+    RImplementation.Target->phase_scene_begin_parallel(cmd, cmd.xforms.m_motion_pass);
 }
 } // namespace
 
@@ -1881,12 +1939,12 @@ void da_veg_level_load()
     }
     else
     {
-        static constexpr u32 zero_args[drCount * 5]{};
+        static constexpr u32 zero_args[kCutPhases * drCount * 5]{};
         D3D11_BUFFER_DESC staging{};
-        staging.ByteWidth = drCount * 4;
+        staging.ByteWidth = kCutPhases * drCount * 4;
         staging.Usage = D3D11_USAGE_STAGING;
         staging.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        if (!make_buffer(g.cut_routes_b, kMaxCutChunks * kCutRoute, nullptr) || !make_buffer(g.cut_counts_b, drCount * 4, nullptr, true) ||
+        if (!make_buffer(g.cut_routes_b, kMaxCutChunks * kCutRoute, nullptr) || !make_buffer(g.cut_counts_b, kCutPhases * drCount * 4, nullptr, true) ||
             !make_buffer(g.cut_args_b, sizeof(zero_args), zero_args, true, false, D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS) ||
             FAILED(HW.pDevice->CreateBuffer(&staging, nullptr, &g.cut_staging)))
         {
@@ -1999,8 +2057,6 @@ void da_veg_bend(CBackend& cmd)
             dx11GpuTimerScope gpu(bend_timer(b.pop));
             bend_dispatch(cmd, *P, b.first, b.count);
         }
-    dx11GpuTimerScope gpu(bend_timer(kPopTrees));
-    cut_dispatch(cmd);
 }
 
 void da_veg_render_gbuffer(CBackend& cmd)
@@ -2015,9 +2071,22 @@ void da_veg_render_gbuffer(CBackend& cmd)
             continue;
         {
             dx11GpuTimerScope gpu(pi == kPopShrubs ? dx11GpuTimers::Shrubs : dx11GpuTimers::Trees);
+            // The trees' cut in two phases: the near trees against the depth the opaque world left, drawn with every chunk
+            // the CPU chose; then the far ones against it with the near crowns in it - what a wall, a hill or a near
+            // crown hides runs no vertex.
+            const bool trees = pi == kPopTrees;
+            if (trees)
+                cut_dispatch(cmd, 0);
             cmd.set_xform_world(Fidentity);
             for (const u32 d : P->view_draws())
                 draw(cmd, *P, g.s_draw[d], 0, d);
+            if (trees && g.cut_n[1])
+            {
+                cut_dispatch(cmd, 1);
+                cmd.set_xform_world(Fidentity);
+                for (const u32 d : P->view_draws())
+                    draw_cut_far(cmd, *P, g.s_draw[d], d);
+            }
             cmd.set_CullMode(CULL_CCW);
         }
         P->render_extra(cmd);

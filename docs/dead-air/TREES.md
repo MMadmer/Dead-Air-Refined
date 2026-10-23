@@ -347,7 +347,19 @@ pattern) from 30 m on.
   shrink) past the chunk records in the chunk buffer (a vertex shader has no resource slot to spare). A group counts its
   draws in shared memory, one atomic a draw a group; the lists' instances of 64 go to indirect draws (`da_tree_cut_args.cs`
   marks their tails). The tree's own choice drew a near crown's far side at its near side's detail: the two trees at
-  the user's fork took 3 ms of the GPU's frame, 0.2 ms after. `r__trees_cut 0` (QA) draws the CPU's cut alone.
+  the user's fork took 3 ms of the GPU's frame, 0.2 ms after. `r__trees_cut 0` (QA) draws the CPU's cut alone. The
+  clusters and the blobs go through it too (`ccMass`: one draw, the thinned set's runs - `thinned_runs` - as candidates).
+- **Occlusion** (1.6.2): the cut runs in the G-buffer stage (`da_veg_render_gbuffer`, not with the bends), in two
+  phases. The trees nearer than `kCutNearPhase` (40 m) first, each element also against the depth pyramid of what is
+  drawn so far (`da_hzb.cpp`, `r3/da_hzb.h`: the opaque world, the LODs and the first-person view - the test of the
+  grass's generation, GRASS.md "Occlusion"), drawn with every chunk the CPU chose; then the pyramid again with them in it
+  and the far trees against it: behind a wall, a hill or the first rows of a stand an element joins no list (its
+  bounding sphere's nearest depth past the farthest one over its rectangle). The phases keep lists, counts and draw
+  arguments of their own (`da_tree_cut1`: the phase's first count). The grass's own pyramid after them holds the trees
+  and the shrubs too. `r__trees_occlusion 0` (QA) culls by the frustum and the wire rule alone. Measured at the eye in
+  the Cordon village (`trees` save, four headings, Extreme, DX11 1080p; `tools/qa/water/tree_hiz.lua`): the cut's
+  elements drawn 1465 k -> 1115 k, facing the houses 272 k -> 98 k and the trees' GPU 2.24 -> 1.61 ms; where the near
+  trees fill the view and nothing stands before them, the same (the two pyramids and the second cut some 0.05-0.1 ms).
 
 - **The stock wood**: tubes of 32, 16 or 8 sides by the thickest ring's silhouette at the distance (half a pixel of
   error: `n = ceil(pi / acos(1 - 0.5 p / r))`), each ring collapsing its class's vertices to its own need - the need by

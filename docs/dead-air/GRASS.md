@@ -209,13 +209,17 @@ Per frame:
    terrain and the big buildings; walls, fences, barrels and the like are not in it. So the blades grow there, once
    the opaque world, the LODs, the trees, the shrubs and the first-person view are in the depth and before the
    blades draw (`r2_R_render.cpp` render_details), against that depth: it is copied (`CRenderTarget::copy_depth`),
-   and `da_grass_hzb.cs` builds its pyramid of farthest depths (level 0 at half the render size, 2 x 2 per level to
-   one texel, the levels side by side in one R32F texture). A lane whose bounding sphere's nearest depth lies past
+   and the stage's depth pyramid (`da_hzb.cpp`, `r3/da_hzb.cs`, the test in `r3/da_hzb.h`; the trees' cut builds it
+   too, TREES.md "Occlusion") holds its farthest depths (level 0 at half the render size, 2 x 2 per level to one
+   texel, the levels side by side in one R32F texture). A group's tile whose box lies behind it keeps only its shadow,
+   at the coarser lattice level the shadow's keep needs (the group's first lane tests the box for all of them; the
+   record carries the tile's heights, its shadow-only level and flags - `expand_tiles` grows a HOM-hidden tile so),
+   the lanes off that level dying before a slot is read; then a lane whose bounding sphere's nearest depth lies past
    the farthest depth over its rectangle on the screen (the sphere's exact perspective bounds, a pixel more, at the
    level where they span two texels) grows only its shadow casters. It is this frame's depth, so nothing lags a
-   frame behind a moving camera or a door. `r__grass_occlusion` (a session knob, 3): bit 1 the HOM's tiles, bit 2
-   the depth. Measured A/B at the eye, four headings a quarter turn apart, Extreme, DX11 1080p on the rig (records
-   of the view; GPU `grass` + `grass_gen`, summed over the headings):
+   frame behind a moving camera or a door. `r__grass_occlusion` (a session knob, 7): bit 1 the HOM's tiles, bit 2
+   the depth's lanes, 4 its groups too. Measured A/B at the eye, four headings a quarter turn apart, Extreme, DX11
+   1080p on the rig (records of the view; GPU `grass` + `grass_gen`, summed over the headings):
 
    | Place | Records, HOM only -> + depth | GPU ms, HOM only -> + depth |
    | --- | --- | --- |
@@ -225,7 +229,9 @@ Per frame:
 
    Facing a house wall 219 k -> 2 k; in the open the pyramid costs some 0.05-0.1 ms the culled lanes do not pay
    back. DirectX 12 and Vulkan cull the same (in the house, two headings: 399 k -> 110 k records, 3.36 -> 2.36 and
-   2.93 -> 1.98 ms). `tools/qa/water/grass_hiz.lua` shoots both modes: the shots match but for the wind's sway.
+   2.93 -> 1.98 ms). The groups' test (bit 4, 3 -> 7) hides up to 93 % of a house's groups; `grass_gen` 3.52 -> 3.10 ms
+   there, the meadow's 6.18 -> 6.11 (the timer holds the ground window, the push field and the tufts as well).
+   `tools/qa/water/grass_hiz.lua` shoots the modes: the shots match but for the wind's sway.
 6. **Generation** (`da_grass_gen.cs`): per lane the community of the slot's objects (picked by their
    bilinear palette weights; presence and cover above), the species (forb patches and scattered forbs, then
    the graminoids' clonal patches or the scattered share), an early out on the species' widest lane against
