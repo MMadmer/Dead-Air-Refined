@@ -94,6 +94,61 @@ plans.backpack = {
 	{ "inv_key5", inv_key, 3000 },
 	{ "det_end", function() press(det_key) end, 3000 },
 }
+-- The user's case: the exoskeleton set (a Desert Eagle in the hand), a glowstick drawn beside it, an antirad eaten
+-- through its scene, then the inventory key.
+local function first_of(sec)
+	local g
+	db.actor:iterate_inventory(function(_, item) if item:section() == sec then g = item end end, nil)
+	return g
+end
+plans.eat = {
+	{ "set_heavy", function() dead_air_x64_debug_menu.act("loadouts", "heavy", "primary", 1, 2) end, 3000 },
+	{ "glow_spawn", function()
+		alife():create("device_glowstick", db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id(), db.actor:id())
+	end, 1500 },
+	{ "glow_slot", function() db.actor:move_to_slot(glowstick(), 9) end, 1000 },
+	{ "deagle", function() db.actor:activate_slot(5) end, 2500 },
+	{ "glow_key", function() press(det_key) end, 3000 },
+	{ "eat_antirad", function() db.actor:eat(first_of("antirad")) end, 1500 },
+	{ "eat_mid", function() end, 2500 },
+	{ "eat_after", function() end, 4000 },
+	{ "inv_key", inv_key, 2000 },
+	{ "inv_key_wait", function() end, 4000 },
+	{ "inv_key2", inv_key, 3000 },
+	{ "inv_key3", inv_key, 5000 },
+}
+-- The antirad taken from the open inventory (the backpack scene holds the hands), then the window closed and opened.
+plans.eat_inv = {
+	{ "set_heavy", function() dead_air_x64_debug_menu.act("loadouts", "heavy", "primary", 1, 2) end, 3000 },
+	{ "glow_spawn", function()
+		alife():create("device_glowstick", db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id(), db.actor:id())
+	end, 1500 },
+	{ "glow_slot", function() db.actor:move_to_slot(glowstick(), 9) end, 1000 },
+	{ "deagle", function() db.actor:activate_slot(5) end, 2500 },
+	{ "glow_key", function() press(det_key) end, 3000 },
+	{ "inv_open", inv_key, 4000 },
+	{ "eat_in_window", function() db.actor:eat(first_of("antirad")) end, 1500 },
+	{ "eat_mid", function() end, 3000 },
+	{ "eat_after", function() end, 4000 },
+	{ "inv_key", inv_key, 2000 },
+	{ "inv_key_wait", function() end, 5000 },
+	{ "inv_key2", inv_key, 3000 },
+	{ "inv_key3", inv_key, 6000 },
+	{ "inv_key4", inv_key, 3000 },
+}
+-- Aiming a one-handed pistol with the glowstick out: the glowstick stays in the left hand.
+plans.aim = {
+	{ "set_heavy", function() dead_air_x64_debug_menu.act("loadouts", "heavy", "primary", 1, 2) end, 3000 },
+	{ "glow_spawn", function()
+		alife():create("device_glowstick", db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id(), db.actor:id())
+	end, 1500 },
+	{ "glow_slot", function() db.actor:move_to_slot(glowstick(), 9) end, 1000 },
+	{ "deagle", function() db.actor:activate_slot(5) end, 2500 },
+	{ "glow_key", function() press(det_key) end, 3000 },
+	{ "aim", function() level.press_action(level.action_id("wpn_zoom")) end, 2000 },
+	{ "aim_hold", function() end, 1500 },
+	{ "aim_release", function() level.release_action(level.action_id("wpn_zoom")) end, 2000 },
+}
 local plan
 
 local function on_update()

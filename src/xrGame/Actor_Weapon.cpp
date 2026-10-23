@@ -12,6 +12,7 @@
 #include "Level.h"
 #include "CharacterPhysicsSupport.h"
 #include "EffectorShot.h"
+#include "player_hud.h"
 #include "WeaponMagazined.h"
 #include "Grenade.h"
 #include "game_base_space.h"
@@ -23,13 +24,28 @@ static const float VEL_A_MAX = 10.f;
 #define GetWeaponParam(pWeapon, func_name, def_value) ((pWeapon) ? (pWeapon->func_name) : def_value)
 
 //возвращает текуший разброс стрельбы (в радианах)с учетом движения
+namespace
+{
+// A lamp, a lighter or a detector in the left hand leaves the weapon to one hand (the item stays in the hand while
+// aiming, CCustomDetector::UpdateVisibility). Without the support hand the hold sways more - a two-handed grip lowers
+// the vertical and lateral tremor of aiming and shoots measurably tighter (Kelleran, ODU 2018), shooters report
+// groups about half the size - and the loose wrist lets the gun rotate further and come back slower after each shot
+// (high-speed footage: much more rotation, most of it after the bullet is out).
+constexpr float kOneHandDispersion = 1.6f;
+constexpr float kOneHandRecoil = 1.5f;
+constexpr float kOneHandRelax = 0.75f;
+
+bool left_hand_busy() { return g_player_hud && g_player_hud->attached_item(1); }
+} // namespace
+
 float CActor::GetWeaponAccuracy() const
 {
     CWeapon* W = smart_cast<CWeapon*>(inventory().ActiveItem());
+    const float hand_k = left_hand_busy() ? kOneHandDispersion : 1.f;
 
     if (IsZoomAimingMode() && W && !GetWeaponParam(W, IsRotatingToZoom(), false))
     {
-        return m_fDispAim;
+        return m_fDispAim * hand_k;
     }
     float dispersion = m_fDispBase * GetWeaponParam(W, Get_PDM_Base(), 1.0f);
 
@@ -58,7 +74,7 @@ float CActor::GetWeaponAccuracy() const
             }
         }
     }
-    return dispersion;
+    return dispersion * hand_k;
 }
 
 void CActor::g_fireParams(const CHudItem* pHudItem, Fvector& fire_pos, Fvector& fire_dir)
@@ -197,21 +213,28 @@ void CActor::HitSector(IGameObject* who, IGameObject* weapon)
 
 void CActor::on_weapon_shot_start(CWeapon* weapon)
 {
-    // CWeaponMagazined* pWM = smart_cast<CWeaponMagazined*> (weapon);
-    CameraRecoil const& camera_recoil = (IsZoomAimingMode()) ? weapon->zoom_cam_recoil : weapon->cam_recoil;
+    CameraRecoil camera_recoil(IsZoomAimingMode() ? weapon->zoom_cam_recoil : weapon->cam_recoil);
+    const bool one_hand = left_hand_busy();
+    if (one_hand)
+    {
+        camera_recoil.Dispersion *= kOneHandRecoil;
+        camera_recoil.DispersionInc *= kOneHandRecoil;
+        camera_recoil.MaxAngleVert *= kOneHandRecoil;
+        camera_recoil.MaxAngleHorz *= kOneHandRecoil;
+        camera_recoil.StepAngleHorz *= kOneHandRecoil;
+        camera_recoil.RelaxSpeed *= kOneHandRelax;
+    }
 
     CCameraShotEffector* effector = smart_cast<CCameraShotEffector*>(Cameras().GetCamEffector(eCEShot));
     if (!effector)
     {
         effector = (CCameraShotEffector*)Cameras().AddCamEffector(xr_new<CCameraShotEffector>(camera_recoil));
     }
-    else
+    else if (effector->m_WeaponID != weapon->ID() || m_shot_one_hand != one_hand)
     {
-        if (effector->m_WeaponID != weapon->ID())
-        {
-            effector->Initialize(camera_recoil);
-        }
+        effector->Initialize(camera_recoil);
     }
+    m_shot_one_hand = one_hand;
 
     effector->m_WeaponID = weapon->ID();
     R_ASSERT(effector);

@@ -91,7 +91,7 @@ bool CCustomDetector::CheckCompatibilityInt(CHudItem* itm, u16* slot_to_activate
         CWeapon* W = smart_cast<CWeapon*>(itm);
         if (W)
             bres = bres && (W->GetState() != CHUDState::eBore) && (W->GetState() != CWeapon::eReload) &&
-                (W->GetState() != CWeapon::eSwitch) && !W->IsZoomed();
+                (W->GetState() != CWeapon::eSwitch);
     }
     return bres;
 }
@@ -440,18 +440,13 @@ void CCustomDetector::UpdateVisibility()
                     HideDetector(true);
                     m_bNeedActivation = true;
                 }
+                // Aiming keeps the item in the left hand: one without an aim pose of its own holds its idle
+                // while the weapon aims in the right (the shots pay for it, CActor::GetWeaponAccuracy). It was put
+                // away for the left hand to steady the pistol, and a lamp went dark at every shot.
                 else if (wpn->IsZoomed())
                 {
-                    if (config.idleZoom)
-                    {
-                        if (GetState() != eIdleZoom)
-                            SwitchState(eIdleZoom);
-                    }
-                    else
-                    {
-                        HideDetector(true);
-                        m_bNeedActivation = true;
-                    }
+                    if (config.idleZoom && GetState() != eIdleZoom)
+                        SwitchState(eIdleZoom);
                 }
                 else if (GetState() == eIdleZoom)
                 {

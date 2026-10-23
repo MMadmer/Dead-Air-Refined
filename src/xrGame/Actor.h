@@ -622,6 +622,8 @@ protected:
     //базовая дисперсия (когда игрок стоит на месте)
     float m_fDispBase;
     float m_fDispAim;
+    // The shot effector took the recoil of a weapon held in one hand (on_weapon_shot_start).
+    bool m_shot_one_hand{};
     //коэффициенты на сколько процентов увеличится базовая дисперсия
     //учитывает скорость актера
     float m_fDispVelFactor;

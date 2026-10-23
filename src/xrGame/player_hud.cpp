@@ -1394,7 +1394,10 @@ void player_hud::scene_stop()
     // path: after the backpack scene a lamp stayed unanimated and undrawn while its light
     // went on burning, and only walking brought it back. The scene lets go of the hands first:
     // replayed under its lock, the idle was refused by that same play_blend, and a glowstick drawn
-    // while the inventory held the backpack stayed out of sight with its light on.
+    // while the inventory held the backpack stayed out of sight with its light on. Only an item at
+    // rest: one halfway through its draw or holster keeps that cycle's clock, which is what moves its
+    // state on - an idle laid over it (the glowstick's is a one-frame pose, no clock at all) left a
+    // glowstick shown by the eating scene "showing" for good, and the backpack waited on it forever.
     m_scene_one_hand = false;
     m_scene_hand = u8(-1);
     m_scene_on = false;
@@ -1402,7 +1405,7 @@ void player_hud::scene_stop()
     m_scene_id = 0;
     for (attachable_hud_item* hi : m_attached_items)
     {
-        if (hi && hi->m_parent_hud_item)
+        if (hi && hi->m_parent_hud_item && hi->m_parent_hud_item->GetState() == CHUDState::eIdle)
             hi->m_parent_hud_item->PlayAnimIdle();
     }
 }
