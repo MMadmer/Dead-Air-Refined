@@ -284,7 +284,9 @@ LPCSTR GetElipsisText(CGameFont* pFont, float width, LPCSTR source_text, pstr bu
         float total = 0.0f;
         u16 pos = 0;
 
-        while (total + el_len < width)
+        // The kept head and the ".." must fit the buffer, and the head never runs past the text's end
+        const int head_max = buff_len - 3;
+        while (total + el_len < width && pos < head_max && source_text[pos])
         {
             const char c = *(source_text + pos);
             float ch_len = pFont->SizeOf_(c);
@@ -340,7 +342,9 @@ void CUILines::Draw(float x, float y)
             m_pFont->SetAligment((CGameFont::EAligment)m_eTextAlign);
             if (uFlags.test(flEllipsis))
             {
-                u32 buff_len = sizeof(char) * xr_strlen(m_text.c_str()) + 1;
+                // Room for the whole text and the "..": a text a character or two too wide kept all but the last
+                // characters, and the dots overran a buffer of the text's own length (an invalid-parameter crash).
+                u32 buff_len = sizeof(char) * xr_strlen(m_text.c_str()) + 3;
 
                 char* p = static_cast<char*>(xr_alloca(buff_len));
                 LPCSTR str = GetElipsisText(m_pFont, m_wndSize.x, m_text.c_str(), p, buff_len);
