@@ -550,16 +550,11 @@ constexpr float kBand = 0.08f;
 // The blades reach half again as far as the detail radius: past d2 their cover thins (blade_reach), so the longer
 // reach costs the records the radius alone did. The ground window grows to hold it (update_ground).
 constexpr float kReach = 1.5f;
-// What the reach may cost against the detail radius at full cover, by the grass distance tier. The density is the
-// Default tier's on every tier (xrRender_sync_preset_derived), and the tiers above it spend the records their denser
-// field of 1.6.1 drew on a longer radius and on the far field's cover: High keeps 0.41 of it at its detail radius,
-// Maximum 0.72, where 1.6.1 kept 0.38. The far field is cheap (the pixel floor widens its blades, the main view's
-// occlusion takes what lies behind a hill), so no radius alone could spend them. Measured on the l01_escape meadow
-// 35 m above the eye, the open view where the far field costs the most: High 111 k and Maximum 222 k records of the
-// view against 112 k and 222 k before; at the eye 236 k and 340 k against 298 k and 493 k, which the denser near
-// field took. Minimum and Low keep the plain budget: a thinner far field cannot pay for their denser near one (0.07 of
-// the cover at 48 m bought back 11 k of the 13 k records the density added at Minimum, and the GPU timers saw none).
-constexpr float kReachBudget[5] = {1.f, 1.f, 1.f, 1.05f, 1.6f};
+// The stand's cover the view keeps at the detail radius on every tier: from d2 it eases down to it and on to some 0.7
+// at the reach, too slowly for the eye to see the field thin. The tiers differ by their reach alone, each drawing the
+// records of its 1.6.1 density (xrRender_sync_preset_derived). A record budget solved per tier (1.6.2's first round)
+// left the Default tier 0.38 of the cover at its radius, a meadow at 60 m already half bare.
+constexpr float kCoverAtRadius = 0.85f;
 // Compute groups of a frame (64 lanes each): 3 M lanes, far beyond what the presets ask.
 constexpr u32 kMaxGroups = 49152;
 // A group's record (da_grass_gen.cs): its tile, level, flags and lanes; the level and flags the tile keeps hidden from the
@@ -824,8 +819,6 @@ struct State
     // The grass distance selector (r__grass_distance, the same tiers as the quality preset): with the quality preset,
     // the record budget.
     u32 distance{2};
-    // The taper scale solved for this detail radius, d2 and budget (blade_reach).
-    float taper_R{-1.f}, taper_d2{-1.f}, taper_budget{-1.f}, taper_inv{};
     u32 counts_seen[kBins]{};
     u32 groups_hidden{};
     u32 overflow_frames{};
@@ -1472,14 +1465,9 @@ Fvector3 species_canopy(u32 p, float day)
     return c;
 }
 
-// The blades' reach for the detail radius R_detail: kReach x R_detail, the cover thinning past d2 so that the far
-// field's records stay the tier's budget (kReachBudget) of R_detail's at full cover. Measured on the l01_escape meadow
-// (eye and 18 m up), the far field's records per metre of radius go as r x cover / the pixel floor's widening (x1 ->
-// x1.5 from d2 to 2.5 d2, da_grass_gen.cs) up to some 250 m, slower past it: the scale of 1 / sqrt(1 + x^2) is solved
-// so that integral over [0, kReach R] matches the budget of the one of [0, R] at full cover, and a budget the full
-// reach fits in thins nothing. The tail is long and the slope gentle (a 160 m radius on the plain budget keeps 0.38 of
-// the cover at 160 m and 0.24 at 240 m, at most 0.8 % a metre): running across a meadow, nothing near the eye changes.
-// r__dbg_grass 256: the stock reach (QA).
+// The blades' reach for the detail radius R_detail: kReach x R_detail, the cover thinning past d2 as 1 / sqrt(1 + x^2)
+// down to kCoverAtRadius at R_detail: smooth at d2, no step anywhere, a long gentle tail (at the Maximum tier 0.98 of
+// the cover at 100 m, 0.71 at the reach). r__dbg_grass 256: the stock reach (QA).
 struct Reach
 {
     float R, d2, taper_inv;
@@ -1500,46 +1488,8 @@ Reach blade_reach()
     const float d2 = std::clamp(preset.d2, std::min(preset.d1, R) + 1.f, std::max(R, std::min(preset.d1, R) + 1.f));
     if (ps_r__dbg_grass & 256)
         return {R, d2, 0.f};
-    const float budget = kReachBudget[g.distance];
-    if (R != g.taper_R || d2 != g.taper_d2 || budget != g.taper_budget)
-    {
-        const auto widen = [d2](float r) {
-            const float t = std::clamp((r - d2) / (1.5f * d2), 0.f, 1.f);
-            return 1.f + 0.5f * t * t * (3.f - 2.f * t);
-        };
-        constexpr u32 n = 512;
-        const float Rn = kReach * R;
-        float target = 0.f;
-        for (u32 i = 0; i < n; ++i)
-        {
-            const float r = (float(i) + 0.5f) * R / float(n);
-            target += r / widen(r);
-        }
-        target *= R / float(n) * budget;
-        float full = 0.f;
-        for (u32 i = 0; i < n; ++i)
-        {
-            const float r = (float(i) + 0.5f) * Rn / float(n);
-            full += r / widen(r);
-        }
-        float lo = 1.f, hi = 8.f * Rn;
-        for (u32 it = 0; it < 40 && full * Rn / float(n) > target; ++it)
-        {
-            const float mid = 0.5f * (lo + hi);
-            float sum = 0.f;
-            for (u32 i = 0; i < n; ++i)
-            {
-                const float r = (float(i) + 0.5f) * Rn / float(n);
-                sum += r * taper_cover(r, d2, 1.f / mid) / widen(r);
-            }
-            (sum * Rn / float(n) > target ? hi : lo) = mid;
-        }
-        g.taper_R = R;
-        g.taper_d2 = d2;
-        g.taper_budget = budget;
-        g.taper_inv = full * Rn / float(n) > target ? 2.f / (lo + hi) : 0.f;
-    }
-    return {kReach * R, d2, g.taper_inv};
+    const float x = std::sqrt(1.f / (kCoverAtRadius * kCoverAtRadius) - 1.f);
+    return {kReach * R, d2, R > d2 ? x / (R - d2) : 0.f};
 }
 
 // The clumps of every community's graminoids for the sky occlusion of the ground at the foot of the tufts
@@ -1774,8 +1724,9 @@ void build_tiles()
                 float total = 0.f;
                 for (u32 id = 0; id < 4; ++id)
                     total += ((info >> (8 * id)) & 15u) ? float((info >> (8 * id + 4)) & 15u) / 15.f : 0.f;
-                // Full presence near the camera, the palette's weight from d1 to d2 on.
-                const float far_k = std::clamp((dn - 0.75f * L.d1) / std::max(L.d2 - 0.75f * L.d1, 1.f), 0.f, 1.f);
+                // The full stand at any distance; r__dbg_grass 512 (QA): 1.6.1's palette weight from d1 to d2 on.
+                const float far_k = ps_r__dbg_grass & 512 ?
+                    std::clamp((dn - 0.75f * L.d1) / std::max(L.d2 - 0.75f * L.d1, 1.f), 0.f, 1.f) : 0.f;
                 for (u32 id = 0; id < 4; ++id)
                 {
                     const u32 comm = (info >> (8 * id)) & 15u;

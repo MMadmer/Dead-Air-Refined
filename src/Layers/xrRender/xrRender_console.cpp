@@ -1445,12 +1445,12 @@ void xrRender_sync_preset_derived()
     // longer radius at this density draws now.
     constexpr float detail_density = 0.5f;
     // Grass draw radius by the grass distance row, metres, from the stock 49 every preset had. The blades reach
-    // half again as far (da_grass_blades.cpp, kReach). High and Maximum take the radius the 0.35 and 0.25 densities'
-    // records would buy if they grew with its square (130 x sqrt(0.714 / 0.5), 160 x sqrt(2)); the far field grows
-    // slower than that, and its fuller cover spends the rest (kReachBudget). Minimum and Low keep their radius,
-    // which grows ~20 % more blades for the denser field. The blades follow at once, the stock detail cards at the
-    // next details reload (CCC recomputes dm_*).
-    static constexpr int detail_radius_by_tier[] = {49, 70, 100, 156, 232};
+    // half again as far (da_grass_blades.cpp, kReach), their cover easing down to 0.85 at the radius. Each tier draws
+    // the records its density of 1.6.1 drew at the Extreme preset's 160 m (0.6 / 0.5 / 0.35 / 0.25), the open view
+    // over the l01_escape meadow: Default 105 m, High 133 m, Maximum 200 m (a 300 m reach). Minimum and Low stay
+    // below their 0.6's records, for the machines that pick them. The blades follow at once, the stock detail cards
+    // at the next details reload (CCC recomputes dm_*).
+    static constexpr int detail_radius_by_tier[] = {60, 90, 105, 133, 200};
     // The static geometry's distance cut (r__dsgraph_build.cpp): Minimum keeps the old default, which dropped a
     // crate or a barrel at 50 m; from Default on none, as DOOM Eternal culls by screen size alone. Over the
     // rookie village the cut saved nothing measurable.
@@ -1513,7 +1513,7 @@ void xrRender_sync_preset_derived()
     // [dx12:mesh] begin preset
     // The grass radius when mesh grass runs this session (mesh.md 3.9): what the same frame cost buys through mesh
     // shaders, set by the mesh lane's ladder sweep (M10), at the one density above.
-    static constexpr int detail_radius_mesh_by_tier[] = {49, 70, 100, 156, 232};
+    static constexpr int detail_radius_mesh_by_tier[] = {60, 90, 105, 133, 200};
     // [dx12:mesh] end preset
 
     if (ps_Preset >= std::size(budget_by_preset))
@@ -2402,7 +2402,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__snow_glint", &ps_r__snow_glint, 0.f, 4.f);
     CMD4(CCC_RuntimeInteger, "r__snow_shells", &ps_r__snow_shells, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__snow_shadow", &ps_r__snow_shadow, 0, 1);
-    CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 511);
+    CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 1023);
     CMD4(CCC_RuntimeInteger, "r__dbg_shrubs", &ps_r__dbg_shrubs, 0, 511);
     CMD4(CCC_RuntimeFloat, "r__shrubs_lod_scale", &ps_r__shrubs_lod_scale, 0.05f, 20.f);
     CMD4(CCC_RuntimeInteger, "r__shrubs_force_tier", &ps_r__shrubs_force_tier, -1, 3);

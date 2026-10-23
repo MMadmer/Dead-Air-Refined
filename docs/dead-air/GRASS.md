@@ -166,8 +166,10 @@ complete), `cover` (a pine floor of needles and moss is not all grass), the litt
 
 **Presence**: near the camera a stand grows at full density wherever its slot's summed palette alpha reaches
 the community's `presence` (the stock rule thinned the blades by the palette like its cards: a meadow painted
-at alpha 0.4 grew 40 % of its grass); from 0.75 `d1` to `d2` it returns to the palette's weight (out there a
-blade is a pixel stroke and the ground tint carries the stand's colour).
+at alpha 0.4 grew 40 % of its grass), and at any distance (1.6.2). 1.6.1 returned to the palette's weight from 0.75
+`d1` to `d2`: a meadow went half bare at 30-40 m and stayed so to the reach, which its denser tiers hid (at the
+Default tier on the l01_escape meadow the full stand draws 1.8 times the far field's records from 35 m up, 1.4
+times at the eye; `r__dbg_grass 512` brings the old rule back).
 
 ## Pipeline
 
@@ -530,8 +532,8 @@ now than on the reference day of the latched terrain folder; under the near blad
 
 - `r__grass_distance` (the player's row "Grass draw distance" under the quality preset, 1.6.2; the preset's five
   tiers as tokens of its own, `grass_distance_minimum` ... `grass_distance_maximum`, captioned `st_opt_<token>`):
-  writes `r__detail_radius` 49 / 70 / 100 / 156 / 232 m (the blades reach 1.5 times as far: 71 / 101 / 149 / 233 /
-  347 m). Unset (a user.ltx from before 1.6.2) it takes the quality preset's tier, and a new quality preset brings
+  writes `r__detail_radius` 60 / 90 / 105 / 133 / 200 m (the blades reach 1.5 times as far: 90 / 135 / 157 / 200 /
+  300 m). Unset (a user.ltx from before 1.6.2) it takes the quality preset's tier, and a new quality preset brings
   its own (`CCC_Preset`; the menu moves the row when the preset row is picked), which the player may change after.
   The record budget is the larger tier's of the two. The blades follow at once (`blade_reach` reads the console's
   `dm_current_fade`), the stock detail cards at the next detail reload.
@@ -540,38 +542,39 @@ now than on the reference day of the latched terrain folder; under the near blad
   same tiers, with the radius the preset's 49 / 70 / 100 / 130 / 160 m). The records go linearly with the density
   everywhere (the keep is `dens / lattice density` and the lattice itself scales with `S`), but the far field is
   cheap: the pixel floor widens its blades and the main view's occlusion takes what lies behind a hill, so past
-  some 250 m a longer radius adds few records, and no radius alone spends what the denser near field cost. High
-  and Maximum spend it on a longer radius and on the far field's cover (`kReachBudget` 1.05 and 1.6: the taper
-  solves for that share of the radius' records at full cover, 0.41 and 0.72 of the cover at the detail radius
-  where 1.6.1 kept 0.38). Minimum and Low keep their radius (Minimum is the stock 49 m, the console's floor) and
-  the plain budget: a thinner far field cannot pay for their denser near one, so they draw a fifth more blades.
+  some 250 m a longer radius adds few records. Every tier keeps the same thinning, too slow to be seen (the cover
+  eases from 1 at `d2` to 0.85 at the detail radius and 0.7 at the reach, `kCoverAtRadius`), and differs by its
+  reach alone: 60 / 90 / 105 / 133 / 200 m (reach 90 / 135 / 157 / 200 / 300 m), each drawing about the records of
+  its 1.6.1 density at the Extreme preset's 160 m (where any density row reached 240 m, the cover 0.38 at 160 m
+  and 0.24 at 240 m). The first round of 1.6.2 had solved the thinning per tier for those records instead and kept
+  the palette's weight out there: the Default tier kept 0.38 of the cover at its radius, a meadow at 60 m half
+  bare.
 
-  Measured on the l01_escape meadow (`tools/qa/water/grass_distance.lua`, July noon, DX11 1080p on the rig;
-  records of the view at the eye / 35 m up, the GPU frame):
+  Measured on the l01_escape meadow at the Extreme preset (`tools/qa/water/grass_distance.lua`, July noon, DX11
+  1080p on the rig; records of the view at the eye / 35 m up, the GPU frame at the eye):
 
-  | Tier | 1.6.1 (density row) | 1.6.2 (distance row) |
+  | Tier | 1.6.1 (density row at 160 m) | 1.6.2 (distance row) |
   | --- | --- | --- |
-  | Minimum | 72 k / 4.1 k, 5.5 / 3.5 ms | 85 k / 5.0 k, 5.2 / 3.1 ms |
-  | Low | 89 k / 12.9 k, 7.1 / 5.0 ms | 106 k / 15.4 k, 6.3 / 4.4 ms |
-  | Default | 149 k / 41 k | the same records |
-  | High | 298 k / 112 k, 15.3 / 11.5 ms | 236 k / 111 k, 13.9 / 10.3 ms |
-  | Maximum | 493 k / 222 k, 20.2 / 13.2 ms | 340 k / 222 k, 17.9 / 13.3 ms |
+  | Low | about 205 k / 93 k | 282 k / 134 k, 17.3 ms |
+  | Default | about 247 k / 111 k | 308 k / 169 k, 17.6 ms |
+  | High | about 352 k / 159 k | 362 k / 245 k, 17.7 ms |
+  | Maximum | 493 k / 222 k, 20.2 ms | 446 k / 359 k, 19.1 ms |
 
-  The open view (35 m up) holds the records of 1.6.1; at the eye the near field had held them, and a hill ends the
-  far field there. The shadow casters follow the density: 133 k -> 67 k at Maximum.
+  (1.6.1's lower densities scaled from its Maximum: the records go with `1 / spacing`.) The far field's full stand
+  costs the open view more than 1.6.1 did; at the eye the near field had held the records, and Maximum is cheaper
+  there. The shadow casters follow the density: 133 k -> 93 k at Maximum.
 - `r__detail_height` (the player's row): scales leaf, culm and head lengths and the fold test, live.
 - `r__detail_radius`: the LOD distances and the stock cards keep it; the blades reach 1.5 times as far (below),
   the last 15 % fades their height, the ground tint takes over.
 
 **Reach** (1.6.1): at full cover to the detail radius, the far edge of the grass read as a line from any hill.
-The blades now reach `kReach` = 1.5 times the detail radius (1.6.1 Extreme 240 m, 1.6.2 Maximum 347 m) for the same records (the tier's budget, above): past `d2` the
+The blades now reach `kReach` = 1.5 times the detail radius (1.6.1 Extreme 240 m, 1.6.2 Maximum 300 m): past `d2` the
 cover thins as `1 / sqrt(1 + x^2)`, `x = (d - d2) / scale` (`grass_taper`, density thinning without widening:
 the view's lattice level, early out and keep; the casters keep the stand's full density, so a field's shadow is as
-deep as before). `blade_reach` solves the scale per
-radius and `d2` so that the far field's records match the stock reach at full cover; on the l01_escape meadow
-they go per metre as `r x cover / widening`, measured: Extreme 0.38 of the cover at 160 m and 0.24 at 240 m,
-the view records +0.8 % at the eye and +1.2 % from 18 m up against the stock reach, the compute lanes fewer. The slope is at most 0.8 % a metre and nothing changes inside `d2`: running
-across a meadow the thinning cannot be seen. The ground tint takes the opening gaps over (`da_gtint2.zw`: the
+deep as before). `blade_reach` sets the scale so that the cover is `kCoverAtRadius` (0.85) at the detail radius;
+1.6.1 solved it for the records of the stock reach at full cover (Extreme 0.38 of the cover at 160 m, 0.24 at
+240 m). The slope is at most 0.2 % a metre and nothing changes inside `d2`: running across a meadow the thinning
+cannot be seen. The ground tint takes the opening gaps over (`da_gtint2.zw`: the
 near-to-far strength follows `1 - cover` too), and the reed billboards hand over at the new reach. QA:
 `r__dbg_grass 256` is the stock reach at full cover; `tools/qa/water/grass_reach.lua` shoots both, at the eye
 and from above, with the record counts.
@@ -632,7 +635,8 @@ the look pass): from 1 % lower (DX12, turning) to 23 % higher (DX11).
   e.g. `cha_ang`), the species gallery's switch; `off` hands back to the communities.
 - `r__dbg_grass <bits>` (runtime): 1 no basal pairs, 2 no litter, 4 each community's first graminoid only,
   8 no early out, 16 no stem leaves, 32 presence by the palette near the camera too, 64 end every lane after
-  the early out, 128 no wind, 256 the stock reach (no thinning, the detail radius).
+  the early out, 128 no wind, 256 the stock reach (no thinning, the detail radius), 512 presence back to the
+  palette's weight from `d1` to `d2` (1.6.1).
 - `qa_season_pin <month>` / `qa_season_year 60` (`SEASONS.md`) drive `D`; grass, stock cards, the ground
   tint and the snow follow it continuously.
 - Log: `* [details] N models: K known by content key, B grown as blades`, `* [grass] season data: N detail

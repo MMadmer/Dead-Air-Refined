@@ -92,8 +92,8 @@ bool	grass_visible	(float3 c, float r)
 }
 
 // Past d2 the cover thins with distance as 1 / sqrt(1 + x^2), x = (d - d2) / scale: smooth at d2, no step anywhere,
-// a long tail. The blades reach half again as far as the detail radius for the records the radius alone took
-// (da_grass_blades.cpp solves the scale), and the ground tint takes the opening gaps over.
+// a long tail. The blades reach half again as far as the detail radius (da_grass_blades.cpp sets the scale), and the
+// ground tint takes the opening gaps over.
 float	grass_taper	(float d)
 {
 	const float x = max(d - da_grass_taper.x, 0.0f) * da_grass_taper.y;
@@ -928,10 +928,9 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 	// The stock palette weighs the slot's objects at the point; one that grows blades is picked by its weight.
 	// Their summed weight is the presence: near the camera, from the community's full-presence alpha on, the
 	// stand grows at its full density (the stock rule thinned the blades by the palette like its cards, so a
-	// meadow painted at alpha 0.4 grew 40 % of its grass), below it the stand thins out to its edge. From d1 to
-	// d2 the presence returns to the palette's weight: out there a blade is a pixel stroke, the pixel rule widens
-	// the survivors and the ground tint carries the stand's colour, so a full stand would only cost (it doubled
-	// the records of the middle and far fields).
+	// meadow painted at alpha 0.4 grew 40 % of its grass), below it the stand thins out to its edge. The same at
+	// any distance: 1.6.1 returned to the palette's weight from d1 to d2, and a meadow went half bare at 30-40 m
+	// and stayed so to the reach (r__dbg_grass 512 brings it back, QA).
 	const int2 sxz = int2(floor(xz * 0.5f)) + int2(da_grass_slot.xy);
 	alive = alive && all(sxz >= 0) && sxz.x < int(da_grass_slot.z) && sxz.y < int(da_grass_slot.w);
 	uint4 S = uint4(0u, 0u, 0u, 0u);
@@ -970,7 +969,7 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 				r -= a[k2];
 			}
 			const float full = max(grass_comm(comm - 1u, 0).w, 0.05f);
-			const float far_k = smoothstep(0.75f * da_grass_lod.x, da_grass_lod.y, distance(xz, da_grass_cam.xz));
+			const float far_k = (grass_dbg() & 512u) != 0u ? smoothstep(0.75f * da_grass_lod.x, da_grass_lod.y, distance(xz, da_grass_cam.xz)) : 0.0f;
 			const float presence = (grass_dbg() & 32u) != 0u ? saturate(total) : lerp(saturate(total / full), saturate(total), far_k);
 			alive = alive && grass_u01(grass_hash(seed ^ 0xD17Au)) < presence * grass_comm(comm - 1u, 5).y;
 		}
