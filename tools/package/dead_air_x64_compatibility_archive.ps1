@@ -52,7 +52,14 @@ function New-DeadAirCompatibilityArchive {
         $packTarget = Join-Path $compatibilityStageGameRoot "shaders_cache_pack"
         New-Item -ItemType Directory -Path $packTarget -Force | Out-Null
         Get-ChildItem -LiteralPath $shaderPack | Copy-Item -Destination $packTarget -Recurse
-        Write-Host ("shader pack: {0} files" -f @(Get-ChildItem -LiteralPath $packTarget -Recurse -File).Count)
+        $packFiles = @(Get-ChildItem -LiteralPath $packTarget -Recurse -File)
+        Write-Host ("shader pack: {0} files" -f $packFiles.Count)
+        # The converter skips a file whose path passes MAX_PATH without a word: the pack's names are long, so the
+        # work root has to be short (the installer's build\installer is).
+        $longest = ($packFiles | ForEach-Object { $_.FullName.Length } | Measure-Object -Maximum).Maximum
+        if ($longest -ge 255) {
+            throw "the shader pack's paths reach $longest characters under ${WorkRoot}: use a shorter -WorkRoot"
+        }
     }
     else {
         Write-Warning "no shader pack (tools\package\build_shader_pack.ps1): the first start compiles every shader"
