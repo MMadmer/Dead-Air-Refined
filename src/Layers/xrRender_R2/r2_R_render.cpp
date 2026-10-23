@@ -318,8 +318,9 @@ void CRender::Render()
 #if RENDER == R_R4
     // The grass rows the calc task produced go to the GPU.
     da_grass_mesh_frame_prepare(RCache);
-    // The season's ground window, snow depth and blade generation, in this order: the snow sits on
-    // the window, the blades read both (da_grass_frame_prepare waits for the detail calc task).
+    // The season's ground window, snow depth and the blades' tiles and push field, in this order: the snow sits on
+    // the window, the blades read both (da_grass_frame_prepare waits for the detail calc task). The blades
+    // themselves grow in the G-buffer stage, against its depth (render_details).
     {
         dx11GpuTimerScope gpu_snow(dx11GpuTimers::SnowPrep);
         da_ground_frame_prepare(RCache);
@@ -382,6 +383,11 @@ void CRender::Render()
         // them: their trunks and crowns hide the grass behind them from its pixel shaders, as the stock trees drawn with
         // the level did (drawn after the grass, the trees cost it and the shrubs a millisecond).
         da_veg_render_gbuffer(dsgraph.cmd_list);
+        // The blades grow against the depth all of it left: what a wall, a fence or a barrel hides grows no blade.
+        {
+            dx11GpuTimerScope gpu_grass_gen(dx11GpuTimers::GrassGen);
+            da_grass_generate(dsgraph.cmd_list);
+        }
         {
             dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
             da_grass_ab_gbuffer_begin();
@@ -401,6 +407,10 @@ void CRender::Render()
     const auto render_details = [&] {
         // The procedural trees, their far billboards and the shrubs first, the grass after them (see above).
         da_veg_render_gbuffer(dsgraph.cmd_list);
+        {
+            dx11GpuTimerScope gpu_grass_gen(dx11GpuTimers::GrassGen);
+            da_grass_generate(dsgraph.cmd_list);
+        }
         {
             dx11GpuTimerScope gpu_grass(dx11GpuTimers::Grass);
             da_grass_ab_gbuffer_begin();

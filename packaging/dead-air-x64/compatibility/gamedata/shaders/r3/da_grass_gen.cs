@@ -26,6 +26,7 @@ DA_RAW(da_grass_groups, t2);	// 16 bytes per group: tile, level, flags, lanes
 Texture2D<float>	da_grass_ground		: register(t3);	// ground of the slot-box rule, toroidal window
 Texture2D<float2>	da_grass_push		: register(t4);	// push of the creatures, toroidal window
 Texture2D<float2>	da_grass_push_prev	: register(t5);	// the same, previous frame
+Texture2D<float>	da_grass_hzb_tex	: register(t6);	// the depth pyramid of this frame's opaque world (da_grass_hzb.cs)
 DA_RAW_RW(da_grass_blades, u0);
 RWByteAddressBuffer	da_grass_counts		: register(u1);
 DA_RAW_RW(da_grass_heads, u2);
@@ -53,6 +54,11 @@ uniform float4	da_grass_bin_cap[4];	// records each bin holds
 uniform float4	da_grass_water;
 uniform float4	da_grass_wave[4];		// wave, dir2D of the two wind groups (deffer_detail_w_flat.vs)
 uniform float4	da_grass_wave_prev[4];
+uniform float4	da_grass_hzb;		// x 1 = the occlusion test is on, y the pyramid's levels, zw the depth's size (pixels)
+uniform float4	da_grass_hzb_lv[14];	// each level of the pyramid: xy its first texel, zw its size
+uniform float4	da_grass_view[3];	// world -> view: the rows of x, y and z (dot with the point and 1)
+uniform float4	da_grass_proj;		// the projection's _11, _22, _33, _43
+uniform float4	da_grass_proj2;		// its _31, _32 (the jitter), the near plane, -
 
 groupshared uint	gs_n[GRASS_NBINS];
 groupshared uint	gs_b[GRASS_NBINS];
@@ -85,6 +91,39 @@ bool	grass_visible	(float3 c, float r)
 			return false;
 	}
 	return true;
+}
+
+// The sphere (c, r) lies behind what the opaque world drew this frame: its nearest depth is farther than the farthest
+// depth of the pyramid over its rectangle on the screen. The rectangle is the sphere's exact perspective bounds (the
+// tangents from the eye, Mara and McGuire 2013) and a pixel more; the level is the one where it spans two texels at
+// most. A sphere the near plane cuts, or off the screen, is never hidden.
+bool	grass_occluded	(float3 c, float r)
+{
+	if (da_grass_hzb.x < 0.5f)
+		return false;
+	const float4 p = float4(c, 1.0f);
+	const float3 v = float3(dot(p, da_grass_view[0]), dot(p, da_grass_view[1]), dot(p, da_grass_view[2]));
+	const float zn = v.z - r;
+	if (zn <= da_grass_proj2.z)
+		return false;
+	const float den = v.z * v.z - r * r;
+	const float2 ux = (v.x * v.z + float2(-r, r) * sqrt(v.x * v.x + den)) / den;
+	const float2 uy = (v.y * v.z + float2(-r, r) * sqrt(v.y * v.y + den)) / den;
+	const float2 nx = ux * da_grass_proj.x + da_grass_proj2.x;
+	const float2 ny = uy * da_grass_proj.y + da_grass_proj2.y;
+	const float2 size = da_grass_hzb.zw;
+	const int2 p0 = max(int2(floor(float2(nx.x * 0.5f + 0.5f, 0.5f - ny.y * 0.5f) * size)) - 1, 0);
+	const int2 p1 = min(int2(floor(float2(nx.y * 0.5f + 0.5f, 0.5f - ny.x * 0.5f) * size)) + 1, int2(size) - 1);
+	if (any(p1 < p0))
+		return false;
+	const uint span = uint(max(p1.x - p0.x, p1.y - p0.y));
+	const uint k = min(span > 0u ? firstbithigh(span) : 0u, uint(da_grass_hzb.y) - 1u);
+	const float4 lv = da_grass_hzb_lv[k];
+	const int2 o = int2(lv.xy), last = int2(lv.zw) - 1;
+	const int2 t0 = min(p0 >> int(k + 1u), last), t1 = min(p1 >> int(k + 1u), last);
+	const float deepest = max(max(da_grass_hzb_tex.Load(int3(o + t0, 0)), da_grass_hzb_tex.Load(int3(o + int2(t1.x, t0.y), 0))),
+		max(da_grass_hzb_tex.Load(int3(o + int2(t0.x, t1.y), 0)), da_grass_hzb_tex.Load(int3(o + t1, 0))));
+	return da_grass_proj.z + da_grass_proj.w / zn > deepest;
 }
 
 // Past d2 the cover thins with distance as 1 / sqrt(1 + x^2), x = (d - d2) / scale: smooth at d2, no step anywhere,
@@ -544,8 +583,11 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	L.d = d;
 	const float hset = da_grass_lat.w;
 	const float hbound = max(P0.y, P1.y + P10.z + 0.5f) * hset + L.emerge;
-	const bool view = (tflags & 1u) != 0u && d < da_grass_cam.w
-		&& grass_visible(root + float3(0.0f, 0.5f * hbound, 0.0f), 0.6f * hbound + 0.3f);
+	const float3 bound_c = root + float3(0.0f, 0.5f * hbound, 0.0f);
+	const float bound_r = 0.6f * hbound + 0.3f;
+	// Behind a wall, a fence, a barrel or a hill of this frame's depth the lane keeps only its shadow casters.
+	const bool view = (tflags & 1u) != 0u && d < da_grass_cam.w && grass_visible(bound_c, bound_r)
+		&& !grass_occluded(bound_c, bound_r);
 	const bool sh_near = (tflags & 2u) != 0u && d < da_grass_sh.x;
 	const bool sh_mid = (tflags & 4u) != 0u && d < da_grass_sh.y;
 	if (!view && !sh_near && !sh_mid)

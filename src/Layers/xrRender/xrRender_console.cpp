@@ -351,8 +351,10 @@ int ps_r__particle_light = 1;
 // The screen-space glossy reflections (r4_rendertarget_phase_ssr.cpp), a preset feature: 0 off, 1 Low (12 steps a
 // ray), 2 High (20).
 int ps_r__ssr = 2;
-// The blade grass's tiles hidden by the main view's occlusion grow only their shadow (da_grass_blades.cpp); 0 for QA.
-int ps_r__grass_hom = 1;
+// What hides blade grass from the view (da_grass_blades.cpp), bits: 1 the main view's occlusion (HOM) hides whole tiles,
+// 2 this frame's depth hides each lane (the walls, fences and barrels HOM has no shape for). A hidden one grows only
+// its shadow casters. A session knob for QA, never saved: user.ltx kept the old r__grass_hom 1.
+int ps_r__grass_occlusion = 3;
 float ps_r__spec_f0 = 0.8f;
 float ps_r__spec_f0_max = 0.16f;
 float ps_r__spec_smooth = 3.f;
@@ -2137,7 +2139,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__spec_f0", &ps_r__spec_f0, 0.f, 4.f);
     CMD4(CCC_RuntimeInteger, "r__particle_light", &ps_r__particle_light, 0, 3);
     CMD4(CCC_Integer, "r__ssr", &ps_r__ssr, 0, 2);
-    CMD4(CCC_Integer, "r__grass_hom", &ps_r__grass_hom, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__grass_occlusion", &ps_r__grass_occlusion, 0, 3);
     CMD4(CCC_RuntimeFloat, "r__spec_f0_max", &ps_r__spec_f0_max, 0.02f, 1.f);
     CMD4(CCC_RuntimeFloat, "r__spec_smooth", &ps_r__spec_smooth, 0.f, 8.f);
 #if defined(USE_DX11)

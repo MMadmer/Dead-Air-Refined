@@ -578,6 +578,8 @@ constexpr float kNearReach = 20.f;
 // Staging copies of the bin counts in flight: enough for a GPU-bound frame queue of any depth to keep
 // one free for the next copy.
 constexpr u32 kReadbacks = 5;
+// Levels of the depth pyramid (da_grass_gen.cs da_grass_hzb_lv): down to one texel for a depth of 16384 pixels.
+constexpr u32 kHzbLevels = 14;
 
 // Vertex classes of the index buffer, 32 blades (or heads) per instance: 13 / 7 / 3-vertex strips, the
 // 43-vertex near head (core 13 + 6 branches of 5) and the 13-vertex middle head (core 7 + 2 of 3).
@@ -680,6 +682,25 @@ public:
     }
 };
 
+// The depth pyramid's pass (da_grass_hzb.cs): its first level reads the depth as the opaque world left it, copied
+// (CRenderTarget::copy_depth) since the depth stays bound for the G-buffer.
+class CBlender_da_grass_hzb : public IBlender
+{
+public:
+    LPCSTR getComment() override { return "INTERNAL: blade grass, depth pyramid"; }
+    BOOL canBeDetailed() override { return FALSE; }
+    BOOL canBeLMAPped() override { return FALSE; }
+    void Compile(CBlender_Compile& C) override
+    {
+        IBlender::Compile(C);
+        if (C.iElement > 0)
+            return;
+        C.r_ComputePass("da_grass_hzb");
+        C.r_dx11Texture("s_depth_copy", r2_RT_depth_copy);
+        C.r_End();
+    }
+};
+
 // The draws: the G-buffer pass (stencil like every deferred surface, no culling: blades are two-sided)
 // and the sun cascades (depth only).
 class CBlender_da_grass_draw : public IBlender
@@ -768,7 +789,8 @@ struct State
     float level_hmax{};
     float max_area_width{};
     // Shaders.
-    ref_shader s_gen, s_args, s_ground, s_stamp, s_resolve, s_tufts, s_blade, s_blade_cut, s_head, s_shadow, s_head_shadow;
+    ref_shader s_gen, s_args, s_ground, s_stamp, s_resolve, s_tufts, s_hzb, s_blade, s_blade_cut, s_head, s_shadow,
+        s_head_shadow;
     // Buffers and textures.
     GpuBuffer slots_b, tables_b, groups_b, stamps_b, cells_b, refs_b, verts_b, tris_b, blades_b, heads_b, counts_b, args_b;
     ID3D11ShaderResourceView* cdb_verts{};
@@ -779,6 +801,14 @@ struct State
     u32 staging_next{};
     u32 rebalance_frame{};
     GpuTexture ground, push[2], stamp, tufts;
+    // The depth pyramid (build_hzb): its levels side by side in one R32F texture, for the depth of this size.
+    ID3D11Texture2D* hzb_tex{};
+    ID3D11ShaderResourceView* hzb_srv{};
+    ID3D11UnorderedAccessView* hzb_uav{};
+    u32 hzb_w{}, hzb_h{}, hzb_levels{};
+    Fvector4 hzb_lv[kHzbLevels]{};
+    // The frame whose blades were prepared (da_grass_frame_prepare) and generated (da_grass_generate).
+    u32 prepared_frame{u32(-1)}, generated_frame{u32(-1)};
     VertexStagingBuffer vb;
     IndexStagingBuffer ib;
     ref_geom geom;
@@ -935,7 +965,7 @@ bool draw_ready(const ref_shader& s)
 // Every shader of the blades ships with the content: an install with older shaders has none of them,
 // and compiling a missing file is fatal.
 constexpr pcstr kShaderFiles[] = {"da_grass_gen.cs", "da_grass_args.cs", "da_grass_ground.cs", "da_grass_tufts.cs",
-    "da_grass_push_stamp.cs", "da_grass_push_resolve.cs", "da_grass_blade.vs", "da_grass_head.vs", "da_grass_shadow.vs",
+    "da_grass_push_stamp.cs", "da_grass_push_resolve.cs", "da_grass_hzb.cs", "da_grass_blade.vs", "da_grass_head.vs", "da_grass_shadow.vs",
     "da_grass_head_shadow.vs", "da_grass_blade.ps", "da_grass_blade_cut.ps", "da_grass_head.ps"};
 
 bool shaders_present()
@@ -951,10 +981,12 @@ bool create_shaders()
     static CBlender_da_grass_compute b_gen("da_grass_gen", true), b_args("da_grass_args", false),
         b_ground("da_grass_ground", false), b_tufts("da_grass_tufts", false), b_stamp("da_grass_push_stamp", false),
         b_resolve("da_grass_push_resolve", false);
+    static CBlender_da_grass_hzb b_hzb;
     static CBlender_da_grass_draw b_blade("da_grass_blade", "da_grass_blade", false),
         b_blade_cut("da_grass_blade", "da_grass_blade_cut", false), b_head("da_grass_head", "da_grass_head", false),
         b_shadow("da_grass_shadow", "null", true), b_head_shadow("da_grass_head_shadow", "null", true);
     g.s_gen.create(&b_gen, "r2" DELIMITER "da_grass_gen");
+    g.s_hzb.create(&b_hzb, "r2" DELIMITER "da_grass_hzb");
     g.s_args.create(&b_args, "r2" DELIMITER "da_grass_args");
     g.s_ground.create(&b_ground, "r2" DELIMITER "da_grass_ground");
     g.s_tufts.create(&b_tufts, "r2" DELIMITER "da_grass_tufts");
@@ -966,7 +998,8 @@ bool create_shaders()
     g.s_shadow.create(&b_shadow, "r2" DELIMITER "da_grass_shadow");
     g.s_head_shadow.create(&b_head_shadow, "r2" DELIMITER "da_grass_head_shadow");
     return compute_ready(g.s_gen) && compute_ready(g.s_args) && compute_ready(g.s_ground) && compute_ready(g.s_tufts) &&
-        compute_ready(g.s_stamp) && compute_ready(g.s_resolve) && draw_ready(g.s_blade) && draw_ready(g.s_blade_cut) &&
+        compute_ready(g.s_stamp) && compute_ready(g.s_resolve) && compute_ready(g.s_hzb) && draw_ready(g.s_blade) &&
+        draw_ready(g.s_blade_cut) &&
         draw_ready(g.s_head) && draw_ready(g.s_shadow) && draw_ready(g.s_head_shadow);
 }
 
@@ -1067,6 +1100,7 @@ void release_all()
     g.s_tufts.destroy();
     g.s_stamp.destroy();
     g.s_resolve.destroy();
+    g.s_hzb.destroy();
     g.s_blade.destroy();
     g.s_blade_cut.destroy();
     g.s_head.destroy();
@@ -1082,6 +1116,9 @@ void release_all()
     g.push[1].release();
     g.stamp.release();
     g.tufts.release();
+    _RELEASE(g.hzb_srv);
+    _RELEASE(g.hzb_uav);
+    _RELEASE(g.hzb_tex);
     if (g.geom)
         g.geom.destroy();
     if (g.ib.IsValid())
@@ -1853,7 +1890,7 @@ void expand_tiles()
 {
     g.groups.clear();
     g.group_count = g.lane_count = g.hidden = 0;
-    const bool hom = ps_r__grass_hom != 0;
+    const bool hom = (ps_r__grass_occlusion & 1) != 0;
     for (const Tile& t : g.tiles)
     {
         u32 level = t.level, flags = t.flags, lanes = t.lanes;
@@ -1940,6 +1977,71 @@ void draw_bins(CBackend& cmd, const ref_shader& shader, u32 first, u32 last, flo
     for (u32 slot = 0; slot < 4; ++slot)
         cmd.SRVSManager.SetVSResource(slot, nullptr);
     cmd.SRVSManager.Apply(cmd.context_id);
+}
+
+// ---- The depth pyramid -----------------------------------------------------------------------------------
+// This frame's pyramid (da_grass_hzb.cs) from the depth the opaque world, the LODs, the trees and the shrubs left: level
+// 0 at half the render size, each next one half the last, rounded up, to one texel, the levels after the first stacked
+// down a column to its right. False without a depth copy (MSAA keeps none) or a texture.
+bool build_hzb(CBackend& cmd)
+{
+    const u32 w = std::max(Device.dwRenderWidth ? Device.dwRenderWidth : Device.dwWidth, 1u);
+    const u32 h = std::max(Device.dwRenderHeight ? Device.dwRenderHeight : Device.dwHeight, 1u);
+    if (!g.hzb_tex || g.hzb_w != w || g.hzb_h != h)
+    {
+        _RELEASE(g.hzb_srv);
+        _RELEASE(g.hzb_uav);
+        _RELEASE(g.hzb_tex);
+        g.hzb_w = w;
+        g.hzb_h = h;
+        g.hzb_levels = 0;
+        u32 lw = (w + 1) / 2, lh = (h + 1) / 2, column = 0;
+        const u32 w0 = lw, h0 = lh;
+        for (u32 k = 0; k < kHzbLevels; ++k)
+        {
+            g.hzb_lv[k].set(k ? float(w0) : 0.f, k ? float(column) : 0.f, float(lw), float(lh));
+            column += k ? lh : 0;
+            ++g.hzb_levels;
+            if (lw == 1 && lh == 1)
+                break;
+            lw = (lw + 1) / 2;
+            lh = (lh + 1) / 2;
+        }
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = w0 + (w0 + 1) / 2;
+        desc.Height = std::max(h0, column);
+        desc.MipLevels = desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R32_FLOAT;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+        if (FAILED(HW.pDevice->CreateTexture2D(&desc, nullptr, &g.hzb_tex)) ||
+            FAILED(HW.pDevice->CreateShaderResourceView(g.hzb_tex, nullptr, &g.hzb_srv)) ||
+            FAILED(HW.pDevice->CreateUnorderedAccessView(g.hzb_tex, nullptr, &g.hzb_uav)))
+        {
+            _RELEASE(g.hzb_srv);
+            _RELEASE(g.hzb_uav);
+            _RELEASE(g.hzb_tex);
+            return false;
+        }
+    }
+    if (!RImplementation.Target->copy_depth(cmd))
+        return false;
+    for (u32 k = 0; k < g.hzb_levels; ++k)
+    {
+        const Fvector4& dst = g.hzb_lv[k];
+        const Fvector4 src = k ? g.hzb_lv[k - 1] : Fvector4{-1.f, 0.f, float(w), float(h)};
+#if defined(XR_NATIVE)
+        // Each level reads the one before from the same texture.
+        if (k)
+            xrnative::UavBarrier(HW.get_context(cmd.context_id), nullptr);
+#endif
+        dispatch(cmd, g.s_hzb, (u32(dst.z) + 7) / 8, (u32(dst.w) + 7) / 8, {}, {g.hzb_uav}, [&] {
+            cmd.set_c("da_hzb_src", src);
+            cmd.set_c("da_hzb_dst", dst);
+        });
+    }
+    return true;
 }
 
 // ---- The ground window and the push field -----------------------------------------------------------
@@ -2703,7 +2805,18 @@ void da_grass_frame_prepare(CBackend& cmd)
     }
     update_ground(cmd);
     update_push(cmd);
+    g.prepared_frame = Device.dwFrame;
+}
 
+// Scene stage, once the opaque world, the LODs, the trees and the shrubs are in the depth (r2_R_render.cpp
+// render_details): this frame's depth pyramid, then the blades against it.
+void da_grass_generate(CBackend& cmd)
+{
+    if (!g.active || g.prepared_frame != Device.dwFrame || g.generated_frame == Device.dwFrame)
+        return;
+    g.generated_frame = Device.dwFrame;
+    ID3D11DeviceContext* ctx = HW.get_context(cmd.context_id);
+    const bool occlusion = (ps_r__grass_occlusion & 2) && g.group_count && build_hzb(cmd);
     const UINT zero[4]{};
     ctx->ClearUnorderedAccessViewUint(g.counts_b.uav, zero);
 #if defined(XR_NATIVE)
@@ -2713,7 +2826,7 @@ void da_grass_frame_prepare(CBackend& cmd)
     if (g.group_count)
         dispatch(cmd, g.s_gen, g.group_count, 1,
             {{0, g.slots_b.srv}, {1, g.tables_b.srv}, {2, g.groups_b.srv}, {3, g.ground.srv}, {4, g.push[g.pcur].srv},
-                {5, g.push[g.pcur ^ 1u].srv}},
+                {5, g.push[g.pcur ^ 1u].srv}, {6, occlusion ? g.hzb_srv : nullptr}},
             {g.blades_b.uav, g.counts_b.uav, g.heads_b.uav}, [&] {
                 cmd.set_c("da_grass_cam", L.cam.x, L.cam.y, L.cam.z, L.R);
                 cmd.set_c("da_grass_fwd", L.fwd.x, L.fwd.y, L.fwd.z, L.wmin_per_m);
@@ -2740,6 +2853,17 @@ void da_grass_frame_prepare(CBackend& cmd)
                     cmd.set_ca("da_grass_wave", i, L.wave[i]);
                     cmd.set_ca("da_grass_wave_prev", i, L.wave_prev[i]);
                 }
+                // The occlusion test's pyramid and the main view's camera (da_grass_gen.cs grass_occluded).
+                cmd.set_c("da_grass_hzb", occlusion ? 1.f : 0.f, float(g.hzb_levels), float(g.hzb_w), float(g.hzb_h));
+                for (u32 k = 0; k < kHzbLevels; ++k)
+                    cmd.set_ca("da_grass_hzb_lv", k, g.hzb_lv[k]);
+                const Fmatrix& V = Device.mView;
+                cmd.set_ca("da_grass_view", 0, V._11, V._21, V._31, V._41);
+                cmd.set_ca("da_grass_view", 1, V._12, V._22, V._32, V._42);
+                cmd.set_ca("da_grass_view", 2, V._13, V._23, V._33, V._43);
+                const Fmatrix& P = Device.mProject;
+                cmd.set_c("da_grass_proj", P._11, P._22, P._33, P._43);
+                cmd.set_c("da_grass_proj2", P._31, P._32, -P._43 / P._33, 0.f);
             });
     dispatch(cmd, g.s_args, 1, 1, {}, {g.counts_b.uav, g.args_b.uav}, [&] {
         set_bins(cmd, "da_grass_bin_cap", L.cap);
@@ -2754,6 +2878,8 @@ void da_grass_frame_prepare(CBackend& cmd)
         set_bins(cmd, "da_grass_args_i", first_index);
     });
     read_back(ctx);
+    // The compute passes leave the G-buffer's targets, viewport and stencil to the draws after them.
+    RImplementation.Target->phase_scene_begin_parallel(cmd, cmd.xforms.m_motion_pass);
 }
 
 void da_grass_render_gbuffer(CBackend& cmd)
@@ -2845,5 +2971,8 @@ void da_grass_stats()
             Msg("* [grass]   %-9s %7u / %7u records", names[b], g.counts_seen[b], g.cap[b]);
     Msg("* [grass] overflowing frames %u, budget floor x%.2f, ground window %u texels of %.2f m, %u MB of records",
         g.overflow_frames, g.floor_k, g.ground.size, g.gtexel, (g.records * kRec + g.heads * kHeadRec) >> 20);
+    Msg("* [grass] occlusion %d: tiles by HOM %s, lanes by this frame's depth %s (pyramid of %u levels for %ux%u)",
+        ps_r__grass_occlusion, (ps_r__grass_occlusion & 1) ? "on" : "off", (ps_r__grass_occlusion & 2) ? "on" : "off",
+        g.hzb_levels, g.hzb_w, g.hzb_h);
 }
 } // namespace xray::render::RENDER_NAMESPACE

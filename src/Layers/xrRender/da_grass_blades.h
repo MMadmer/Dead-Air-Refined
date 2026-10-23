@@ -15,8 +15,11 @@ void da_grass_level_load();   // after Details->Load() and da_snow_level_load()
 void da_grass_level_unload(); // before Details->Unload()
 // Blades are drawn this frame (level has blade classes, compute shaders present, details on).
 bool da_grass_active();
-// Immediate context, after da_snow_frame_prepare(): the generation compute passes of this frame.
+// Immediate context, after da_snow_frame_prepare(): the tiles, the ground window and the push field of this frame.
 void da_grass_frame_prepare(CBackend& cmd_list);
+// Immediate context, in the G-buffer stage once the opaque world, the LODs and the vegetation are drawn and before the
+// blades are: the depth pyramid of what they drew (r__grass_occlusion & 2), then the generation against it.
+void da_grass_generate(CBackend& cmd_list);
 // G-buffer phase, right after the stock Details->Render() (immediate context).
 void da_grass_render_gbuffer(CBackend& cmd_list);
 // Sun cascade `cascade` (0 near, 1 mid), at the details site of render_phase_sun.cpp.

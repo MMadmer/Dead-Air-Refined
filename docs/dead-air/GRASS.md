@@ -192,7 +192,7 @@ Per frame:
    the far ones lose). The groups are laid out on the main thread once the main view's occlusion buffer (HOM)
    is drawn, after DOOM Eternal's culling of its GPU-driven geometry by its occlusion buffer: a tile in view
    that the HOM hides grows only the shadow it casts into the view, at the coarser of its own and the shadow's
-   level, or nothing (`r__grass_hom`, 1; 0 for QA). Among the rookie village's fences and houses 780 of 1915
+   level, or nothing (`r__grass_occlusion` bit 1). Among the rookie village's fences and houses 780 of 1915
    tiles hide: 22014 -> 15270 groups, the blades' compute 2.4 -> 1.5 ms and their G-buffer 0.93 -> 0.8 ms on the
    RTX 3070 Laptop at Extreme; in the open 15 tiles hide; the HOM tests cost the main thread about 0.1 ms.
    `r__grass_blades_stats` reports the hidden tiles.
@@ -205,7 +205,28 @@ Per frame:
    (512², 12.5 cm) outwards and along its motion; the field springs back over a few seconds. A stamp pulls a texel
    toward its push over a tenth of a second (0.06 s), never overwrites it: the frame a standing foot's outward press
    outgrew the fading trail under it, the texel jumped from the trail's heading to the foot's and its blades spun.
-5. **Generation** (`da_grass_gen.cs`): per lane the community of the slot's objects (picked by their
+5. **Occlusion** (1.6.2, compute, in the G-buffer stage): the HOM is the level's coarse occluder mesh - the
+   terrain and the big buildings; walls, fences, barrels and the like are not in it. So the blades grow there, once
+   the opaque world, the LODs, the trees, the shrubs and the first-person view are in the depth and before the
+   blades draw (`r2_R_render.cpp` render_details), against that depth: it is copied (`CRenderTarget::copy_depth`),
+   and `da_grass_hzb.cs` builds its pyramid of farthest depths (level 0 at half the render size, 2 x 2 per level to
+   one texel, the levels side by side in one R32F texture). A lane whose bounding sphere's nearest depth lies past
+   the farthest depth over its rectangle on the screen (the sphere's exact perspective bounds, a pixel more, at the
+   level where they span two texels) grows only its shadow casters. It is this frame's depth, so nothing lags a
+   frame behind a moving camera or a door. `r__grass_occlusion` (a session knob, 3): bit 1 the HOM's tiles, bit 2
+   the depth. Measured A/B at the eye, four headings a quarter turn apart, Extreme, DX11 1080p on the rig (records
+   of the view; GPU `grass` + `grass_gen`, summed over the headings):
+
+   | Place | Records, HOM only -> + depth | GPU ms, HOM only -> + depth |
+   | --- | --- | --- |
+   | Cordon, inside a house | 830 k -> 176 k (-79 %) | 6.45 -> 3.99 |
+   | Swamp, a tower over the reeds | 853 k -> 726 k (-15 %) | 7.39 -> 7.17 |
+   | Cordon, the open meadow | 1285 k -> 1164 k (-9 %) | 9.91 -> 9.65 |
+
+   Facing a house wall 219 k -> 2 k; in the open the pyramid costs some 0.05-0.1 ms the culled lanes do not pay
+   back. DirectX 12 and Vulkan cull the same (in the house, two headings: 399 k -> 110 k records, 3.36 -> 2.36 and
+   2.93 -> 1.98 ms). `tools/qa/water/grass_hiz.lua` shoots both modes: the shots match but for the wind's sway.
+6. **Generation** (`da_grass_gen.cs`): per lane the community of the slot's objects (picked by their
    bilinear palette weights; presence and cover above), the species (forb patches and scattered forbs, then
    the graminoids' clonal patches or the scattered share), an early out on the species' widest lane against
    the pixel rule before its tables are read, the clump (a Voronoi cell of 3x3 jittered points:
@@ -220,11 +241,11 @@ Per frame:
    the near and middle sun cascades get records of their own (their own keep per shadow texel: two texels of
    the near cascade, three of the middle one; the basal pairs cast none, a forb's leaves only up to halfway to
    `d1`, its stem's triangle carries them beyond).
-6. **Arguments** (`da_grass_args.cs`): 32 blades per instance, the record count clamped to the bin's window.
+7. **Arguments** (`da_grass_args.cs`): 32 blades per instance, the record count clamped to the bin's window.
    A lane needing several records (a culm and its cauline leaves) that runs past its bin's window fills the
    slots it reserved below the cap with void records (zero shape), and a head whose culm found no room with no
    culm; the vertex shaders collapse both, so the drawn prefix never holds a stale record.
-7. **Draws**: the view bins near to far (early-Z on deep fields), no alpha, no discard, except two: the
+8. **Draws**: the view bins near to far (early-Z on deep fields), no alpha, no discard, except two: the
    short bin's pixel shader (`da_grass_blade_cut.ps`) cuts the lobes of pinnate and dissected leaves, and the
    seed heads (a few thousand small ribbons) cut their fluffy rim and their grains in their own pixel shader.
 
