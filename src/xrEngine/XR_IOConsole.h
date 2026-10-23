@@ -199,3 +199,7 @@ private:
 }; // class CConsole
 
 ENGINE_API extern CConsole* Console;
+
+// The debug mode (dar_debug_menu, Options -> Game -> Other): the console's key, the editor's, the keys bound to console
+// commands (bind_console) and the debug menu answer only while it is on. Commands keep running from user.ltx and scripts.
+ENGINE_API extern int g_dar_debug_menu;

@@ -24,12 +24,12 @@ public:
             return;
 
         case kCONSOLE:
-            if (Console)
+            if (Console && g_dar_debug_menu)
                 Console->Show();
             return;
 
         case kEDITOR:
-            if (Device.b_is_Ready)
+            if (Device.b_is_Ready && g_dar_debug_menu)
                 Device.editor().SwitchToNextState();
             return;
         }

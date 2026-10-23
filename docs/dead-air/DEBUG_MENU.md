@@ -2,9 +2,16 @@
 
 A window over the running game (it does not pause it) in the look of the main menu's own windows - the palette of
 the Mods window (`sys_*` of `ui_theme.xml`): black panel, thin light lines, graffiti and letterica fonts. Off by
-default: Options -> Game -> Other -> "Debug menu" (`dar_debug_menu`, saved). The key is the action `debug_menu`
-(Options -> Controls, common group); turning the menu on binds it to F7 when the action has no key and F7 is free.
+default: Options -> Game -> Other -> "Debug mode" (`dar_debug_menu`, saved). The key is the action `debug_menu`
+(Options -> Controls, common group); turning the mode on binds it to F7 when the action has no key and F7 is free.
 Esc or the key closes the window.
+
+The same switch gates the other developer keys (1.6.2, `g_dar_debug_menu` of `XR_IOConsole.h`): the console's key (in
+the game, the main menu and before either), the editor's (F10), the keys bound to console commands (`bind_console`)
+and the `alife_command` action. Commands from user.ltx and scripts run regardless; turning the mode off closes an open
+console. The engine's raw developer keys (F7 reload, NumPad 5 demo record) exist in debug builds only, and Dead Air's
+scripted `debug_*` keys (`axr_keybind`) ship commented out. QA: `tools/qa/water/dev_mode.lua` (the runner presses the
+console's key on the hidden desktop and captures the window).
 
 Sources: `src/xrGame/ui/UIDebugMenuWnd.{h,cpp}` (the window), `gamedata/scripts/dead_air_x64_debug_menu.script`
 (what the tabs list and do), `configs/ui/ui_debug_menu.xml` and `_16` (written by `tools/ui/debug_menu_layout.py`),
@@ -42,7 +49,7 @@ An exact name or section ranks first; a tie goes to the shorter section (the ite
 | World | time, weather, events, season, time speed | the 24 hours, every weather file, climate weather, emission and psy storm start/stop, the months and the PC calendar, x1..x100 | Apply (a weather pins the sky until "Climate weather") |
 | Story | the `[info_portions]` files, undeclared | every declared info portion and those the actor holds | Give / Remove |
 | Nearby | stalkers, mutants, items, other | online objects within 80 m, nearest first | Teleport to it, Kill, Remove |
-| Loadouts (1.6.2) | standard, own, actions | the sets of `configs/dead_air_x64_loadouts.ltx`, then the player's own; a new set from the worn gear, the deleted standard ones back | Give / Replace (the choice), Equip, Save current gear, Delete |
+| Loadouts (1.6.2) | standard, own, actions | the sets of `configs/dead_air_x64_loadouts.ltx`, then the player's own; a new set from the worn gear, the deleted standard ones back | Give / Replace (the choice), Equip, Edit contents (+ Add / - Remove / Set amount), Delete |
 
 ## Loadouts
 
@@ -60,9 +67,12 @@ every write goes through the one object that read it.
   its `*_backpack` variant.
 - **Replace** first releases everything but the base equipment (`wpn_upd` - the power bank, the PDA, the torch the
   lamps shine through, the bolt) and quest items.
-- **Save current gear** writes what is worn and carried into the set (ammo in whole boxes, knives' "ammo" left out);
-  **New loadout from current gear** does it as a new `own_<n>` named after the outfit and the main weapon. Names and
-  contents are edited in the appdata file.
+- **Edit contents** opens the set in the tab: its items first (each with **Set amount** and **- Remove**), the ammo
+  boxes per weapon, then the whole item catalogue by category with **+ Add** (the count field picks how many). Every
+  change is saved at once; a shipped set is copied to the appdata file on its first change. **New empty loadout**
+  creates `own_<n>` and opens it the same way; **New loadout from current gear** records what is worn and carried
+  (ammo in whole boxes, knives' "ammo" left out) named after the outfit and the main weapon. Names are edited in the
+  appdata file. A card's count field may ask to start from its own default on every pick (`count.reset`).
 
 ## Script contract (`dead_air_x64_debug_menu.script`)
 

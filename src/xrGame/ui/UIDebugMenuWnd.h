@@ -62,6 +62,7 @@ private:
         int choiceDefault{};
         bool count{};
         int countMin{1}, countMax{1}, countDefault{1};
+        bool countReset{};
         xr_string buttons[3]; // primary, second, third
     };
     struct Tab

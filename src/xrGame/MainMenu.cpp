@@ -463,11 +463,13 @@ void CMainMenu::IR_OnKeyboardPress(int dik)
         return;
 
     case kCONSOLE:
-        Console->Show();
+        if (g_dar_debug_menu)
+            Console->Show();
         return;
 
     case kEDITOR:
-        Device.editor().SwitchToNextState();
+        if (g_dar_debug_menu)
+            Device.editor().SwitchToNextState();
         return;
     }
 

@@ -31,6 +31,7 @@ static Fcolor const tips_select_color  = color_rgba(90, 90, 140, 230);
 static Fcolor const tips_word_color    = color_rgba(5, 100, 56, 200);
 
 ENGINE_API CConsole* Console = NULL;
+ENGINE_API int g_dar_debug_menu = 0;
 
 extern char const* const ioc_prompt;
 char const* const ioc_prompt = ">>>";

@@ -68,16 +68,27 @@ local plan = {
 			"upd " .. count_of("wpn_upd") .. " pda " .. count_of("device_pda") .. " torch " .. count_of("device_torch"))
 		cmd("r__screenshot_every 1")
 	end,
-	function() cmd("r__screenshot_every 0"); dbg("pick_key #new"); dbg("press primary") end,
+	function() cmd("r__screenshot_every 0"); dbg("pick_key #empty"); dbg("press primary") end,
+	function()
+		dbg("state")
+		dbg("pick_key add:medkit"); dbg("count 3"); dbg("press primary")
+	end,
+	function() dbg("pick_key add:wpn_ak74"); dbg("count 1"); dbg("press primary") end,
+	function() dbg("pick_key add:medkit"); dbg("count 2"); dbg("press primary") end,
+	function() dbg("pick_key has:wpn_ak74"); dbg("press second") end,
 	function()
 		local f = ini_file("$app_data_root$", "dead_air_x64_loadouts.ltx")
 		local id
 		f:section_for_each(function(s) if string.find(s, "^own_") and f:line_exist(s, "items") and not f:line_exist(s, "deleted") then id = s end end)
-		say("[qa] lo created " .. tostring(id) .. " items " .. tostring(id and f:r_string_ex(id, "items")))
-		check("create", id ~= nil and string.find(f:r_string_ex(id, "items") or "", "exo_outfit", 1, true) ~= nil, tostring(id))
-		dbg("state")
+		local items = id and f:r_string_ex(id, "items") or ""
+		say("[qa] lo edited " .. tostring(id) .. " items " .. items)
+		check("edit_add_remove", items == "medkit:5", items)
 		_G.qa_lo_created = id
-		if id then dbg("pick_key " .. id); dbg("press third") end
+		dbg("pick_key #done"); dbg("press primary")
+	end,
+	function()
+		dbg("state")
+		if _G.qa_lo_created then dbg("pick_key " .. _G.qa_lo_created); dbg("press third") end
 	end,
 	function()
 		check("delete_own", not file_has(_G.qa_lo_created or "own_1"), tostring(_G.qa_lo_created))

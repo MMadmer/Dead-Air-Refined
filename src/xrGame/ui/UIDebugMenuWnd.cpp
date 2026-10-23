@@ -2,6 +2,7 @@
 // Released under the MIT licence, see License.txt
 
 #include "StdAfx.h"
+#include "xrEngine/XR_IOConsole.h"
 #include "UIDebugMenuWnd.h"
 
 #include "ModSearch.h"
@@ -20,8 +21,8 @@
 
 using luabind::object;
 
-// Options -> Game -> Other (dead_air_x64_gameplay_options.script): the key opens the window only when it is on.
-int g_dar_debug_menu = 0;
+// Options -> Game -> Other (dead_air_x64_gameplay_options.script): the key opens the window only when it is on
+// (g_dar_debug_menu, the engine's: the console's and the editor's keys follow it too).
 
 namespace
 {
@@ -826,6 +827,8 @@ void CUIDebugMenuWnd::Describe()
                 card.countMin = lua_int(count, "min", 1);
                 card.countMax = std::max(lua_int(count, "max", 100), card.countMin);
                 card.countDefault = std::clamp(lua_int(count, "default", 1), card.countMin, card.countMax);
+                // "reset = 1": a new pick starts from the default (a set's count of the item), not from the last one
+                card.countReset = lua_int(count, "reset", 0) != 0;
             }
             card.buttons[0] = dbg_text(lua_str(result, "primary"));
             card.buttons[1] = dbg_text(lua_str(result, "second"));
@@ -899,7 +902,7 @@ void CUIDebugMenuWnd::FillCard()
     {
         tab.choice = card.choiceDefault;
         if (card.count)
-            tab.count = std::clamp(tab.count, card.countMin, card.countMax);
+            tab.count = card.countReset ? card.countDefault : std::clamp(tab.count, card.countMin, card.countMax);
         tab.carded = true;
     }
     SetChoice(tab.choice);

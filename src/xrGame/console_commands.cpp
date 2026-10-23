@@ -103,7 +103,6 @@ extern int g_dar_major_update_notice;
 extern int g_dar_community_links;
 // ui/UIDamageIndicator.cpp - the side a hit came from, round the crosshair
 extern int g_dar_damage_indicator;
-extern int g_dar_debug_menu;
 // UIGameSP.cpp - open the inventory without waiting out the backpack scene.
 extern int g_dar_instant_inventory;
 // ZoneCampfire.cpp - rain puts campfires out.
@@ -288,8 +287,9 @@ public:
     virtual void Execute(LPCSTR args) { full_memory_stats(); }
 };
 
-// dar_debug_menu 0|1 (Options -> Game -> Other): the debug menu's key opens it. Turned on, the key gets F7 when the
-// action has no key and F7 is free.
+// dar_debug_menu 0|1 (Options -> Game -> Other): the debug mode. The debug menu's key opens it, and the console's,
+// the editor's and the console binds answer (XR_IOConsole.h). Turned on, the menu's key gets F7 when the action has no
+// key and F7 is free; turned off, an open console goes.
 class CCC_DebugMenu final : public CCC_Integer
 {
 public:
@@ -300,6 +300,8 @@ public:
         CCC_Integer::Execute(args);
         if (g_dar_debug_menu && !GetActionDik(kDEBUG_MENU, 0) && GetBindedAction(SDL_SCANCODE_F7) == kNOTBINDED)
             Console->Execute("bind debug_menu kF7");
+        else if (!g_dar_debug_menu && Console->bVisible)
+            Console->Hide();
     }
 };
 

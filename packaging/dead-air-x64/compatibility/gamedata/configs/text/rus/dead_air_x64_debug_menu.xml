@@ -392,10 +392,10 @@
 		<text>Удалить</text>
 	</string>
 	<string id="ui_mm_debug_menu">
-		<text>Отладочное меню</text>
+		<text>Режим отладки</text>
 	</string>
 	<string id="ui_mm_debug_menu_hint">
-		<text>Открывает в игре окно отладки клавишей из раздела «Управление»: создание предметов и персонажей, телепорт, режимы игрока, время и погода, сюжетные отметки, объекты поблизости.</text>
+		<text>Включает инструменты отладки: окно отладки по клавише из раздела «Управление» (создание предметов, персонажей и наборов экипировки, телепорт, режимы игрока, время и погода, сюжетные отметки), консоль, редактор и команды консоли, назначенные на клавиши. Выключенным эти клавиши не действуют.</text>
 	</string>
 	<string id="kb_debug_menu">
 		<text>Отладочное меню</text>
@@ -457,17 +457,11 @@
 	<string id="st_dbg_lo_equip">
 		<text>Экипировать</text>
 	</string>
-	<string id="st_dbg_lo_overwrite">
-		<text>Записать текущую</text>
-	</string>
 	<string id="st_dbg_lo_delete">
 		<text>Удалить</text>
 	</string>
 	<string id="st_dbg_lo_created">
 		<text>Набор создан</text>
-	</string>
-	<string id="st_dbg_lo_saved">
-		<text>Набор перезаписан текущей экипировкой</text>
 	</string>
 	<string id="st_dbg_lo_deleted">
 		<text>Набор удалён</text>
@@ -501,5 +495,62 @@
 	</string>
 	<string id="st_dbg_lo_wanderer">
 		<text>Бродяга</text>
+	</string>
+	<string id="st_dbg_lo_edit">
+		<text>Изменить состав</text>
+	</string>
+	<string id="st_dbg_lo_empty">
+		<text>Новый пустой набор</text>
+	</string>
+	<string id="st_dbg_lo_empty_hint">
+		<text>Создаёт пустой набор и сразу открывает его состав для правки: предметы добавляются из каталога кнопкой «+ Добавить».</text>
+	</string>
+	<string id="st_dbg_lo_own_name_fmt">
+		<text>Набор %d</text>
+	</string>
+	<string id="st_dbg_lo_done">
+		<text>« Вернуться к наборам</text>
+	</string>
+	<string id="st_dbg_lo_done_button">
+		<text>Готово</text>
+	</string>
+	<string id="st_dbg_lo_edit_hint">
+		<text>Состав набора показан в первой категории, весь каталог предметов — в остальных. Изменения сохраняются сразу. Название набора правится в файле dead_air_x64_loadouts.ltx в папке appdata.</text>
+	</string>
+	<string id="st_dbg_cat_lo_contents_fmt">
+		<text>Состав: %s</text>
+	</string>
+	<string id="st_dbg_lo_ammo_entry">
+		<text>Пачек патронов к оружию</text>
+	</string>
+	<string id="st_dbg_lo_ammo_hint">
+		<text>Сколько пачек патронов выдавать к каждому оружию набора, если патроны к нему не добавлены в состав отдельно. 0 — не выдавать.</text>
+	</string>
+	<string id="st_dbg_lo_set_count">
+		<text>Задать количество</text>
+	</string>
+	<string id="st_dbg_lo_add">
+		<text>+ Добавить</text>
+	</string>
+	<string id="st_dbg_lo_remove">
+		<text>- Убрать</text>
+	</string>
+	<string id="st_dbg_lo_in_set_fmt">
+		<text>В наборе: %d шт.</text>
+	</string>
+	<string id="st_dbg_lo_in_set_boxes_fmt">
+		<text>В наборе: %d пач.</text>
+	</string>
+	<string id="st_dbg_lo_not_in_set">
+		<text>В наборе нет</text>
+	</string>
+	<string id="st_dbg_lo_changed">
+		<text>Набор изменён</text>
+	</string>
+	<string id="st_dbg_lo_removed">
+		<text>Убрано из набора</text>
+	</string>
+	<string id="st_dbg_lo_editing">
+		<text>Правка состава набора</text>
 	</string>
 </string_table>

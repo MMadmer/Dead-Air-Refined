@@ -919,10 +919,71 @@ local function apply_loadout(set, replace)
 	return made, missing
 end
 
-local LO_NEW, LO_RESTORE = "#new", "#restore"
+local LO_NEW, LO_EMPTY, LO_RESTORE, LO_DONE, LO_AMMO = "#new", "#empty", "#restore", "#done", "#ammo"
+-- The set whose contents the tab shows for editing (nil: the list of sets).
+local lo_editing
+
+-- The edited set, written to the player's file as it changes: a shipped one is copied there first.
+local function edit_set(f, fn)
+	local _, by_id = all_loadouts()
+	local set = by_id[lo_editing]
+	if not set then
+		lo_editing = nil
+		return false
+	end
+	fn(set)
+	if f:line_exist(set.id, "deleted") then f:remove_line(set.id, "deleted") end
+	write_set(f, set)
+	save_user(f)
+	return true
+end
+
+local function set_count(set, sec)
+	for i, it in ipairs(set.items) do
+		if it.sec == sec then return it.count, i end
+	end
+	return 0
+end
+
+local function new_own_id(f)
+	local n = 1
+	while f:section_exist("own_" .. n) do n = n + 1 end
+	return "own_" .. n
+end
+
+local function item_card(sec, extra)
+	local desc = r_string(sec, "description")
+	return { title = section_name(sec), sub = sec, icon = sec,
+		body = (desc ~= "" and (tr(desc) .. "\\n \\n") or "") .. extra }
+end
+
+local function in_set_text(sec, n)
+	return fmt(is_ammo(sec) and "st_dbg_lo_in_set_boxes_fmt" or "st_dbg_lo_in_set_fmt", n)
+end
 
 add_tab("loadouts", "st_dbg_tab_loadouts", {
 	build = function()
+		if lo_editing then
+			local _, by_id = all_loadouts()
+			local set = by_id[lo_editing]
+			if set then
+				local entries = { { key = LO_DONE, name = "st_dbg_lo_done", sec = set.id, cat = 1 },
+					{ key = LO_AMMO, name = "st_dbg_lo_ammo_entry", sec = "ammo_boxes", cat = 1,
+						badge = tostring(set.ammo_boxes or 0) } }
+				for _, it in ipairs(set.items) do
+					entries[#entries + 1] = { key = "has:" .. it.sec, name = section_name(it.sec), sec = it.sec, cat = 1,
+						badge = "x" .. it.count }
+				end
+				-- the whole catalogue of the items tab, its categories after the set's own
+				for _, e in ipairs(build_items().entries) do
+					entries[#entries + 1] = { key = "add:" .. e.sec, name = e.name, sec = e.sec, cat = e.cat + 1, note = e.note }
+				end
+				local cats = { fmt("st_dbg_cat_lo_contents_fmt", set.name ~= "" and tr(set.name) or set.id) }
+				for _, c in ipairs(item_cats) do cats[#cats + 1] = c end
+				return { all = false, categories = cats, entries = entries }
+			end
+			lo_editing = nil
+		end
 		local list, _, hidden = all_loadouts()
 		local entries = {}
 		for _, set in ipairs(list) do
@@ -930,6 +991,7 @@ add_tab("loadouts", "st_dbg_tab_loadouts", {
 				cat = set.shipped and 1 or 2, badge = set.edited and "st_dbg_lo_edited" or "",
 				note = fmt("st_dbg_lo_count_fmt", #set.items) }
 		end
+		entries[#entries + 1] = { key = LO_EMPTY, name = "st_dbg_lo_empty", sec = LOADOUTS_FILE, cat = 3 }
 		entries[#entries + 1] = { key = LO_NEW, name = "st_dbg_lo_new", sec = LOADOUTS_FILE, cat = 3 }
 		if next(hidden) then
 			entries[#entries + 1] = { key = LO_RESTORE, name = "st_dbg_lo_restore", sec = LOADOUTS_FILE, cat = 3 }
@@ -939,10 +1001,40 @@ add_tab("loadouts", "st_dbg_tab_loadouts", {
 	describe = function(key)
 		if key == LO_NEW then
 			return { title = "st_dbg_lo_new", sub = LOADOUTS_FILE, body = "st_dbg_lo_new_hint", primary = "st_dbg_lo_create" }
+		elseif key == LO_EMPTY then
+			return { title = "st_dbg_lo_empty", sub = LOADOUTS_FILE, body = "st_dbg_lo_empty_hint", primary = "st_dbg_lo_create" }
 		elseif key == LO_RESTORE then
 			return { title = "st_dbg_lo_restore", sub = LOADOUTS_FILE, body = "st_dbg_lo_restore_hint", primary = "st_dbg_apply" }
 		end
 		local _, by_id = all_loadouts()
+		if lo_editing then
+			local set = by_id[lo_editing]
+			if not set then return { title = key, body = "st_dbg_gone" } end
+			if key == LO_DONE then
+				return { title = "st_dbg_lo_done", sub = set.id, body = "st_dbg_lo_edit_hint", primary = "st_dbg_lo_done_button" }
+			elseif key == LO_AMMO then
+				return { title = "st_dbg_lo_ammo_entry", sub = "ammo_boxes", body = "st_dbg_lo_ammo_hint",
+					count = { min = 0, max = 50, default = set.ammo_boxes or 0, reset = 1 }, primary = "st_dbg_lo_set_count" }
+			end
+			local sec = string.match(key, "^has:(.+)$")
+			if sec then
+				local n = set_count(set, sec)
+				local card = item_card(sec, in_set_text(sec, n))
+				card.count = { min = 1, max = 500, default = math.max(n, 1), reset = 1 }
+				card.primary, card.second = "st_dbg_lo_set_count", "st_dbg_lo_remove"
+				return card
+			end
+			sec = string.match(key, "^add:(.+)$")
+			if sec then
+				local n = set_count(set, sec)
+				local card = item_card(sec, n > 0 and in_set_text(sec, n) or tr("st_dbg_lo_not_in_set"))
+				card.count = { min = 1, max = 500, default = 1, reset = 1 }
+				card.primary = "st_dbg_lo_add"
+				if n > 0 then card.second = "st_dbg_lo_remove" end
+				return card
+			end
+			return { title = key, body = "st_dbg_gone" }
+		end
 		local set = by_id[key]
 		if not set then return { title = key, body = "st_dbg_gone" } end
 		local lines = {}
@@ -964,15 +1056,42 @@ add_tab("loadouts", "st_dbg_tab_loadouts", {
 		return { title = set.name ~= "" and tr(set.name) or set.id, sub = set.id, icon = icon,
 			body = table.concat(lines, "\\n") .. "\\n \\n" .. tr("st_dbg_lo_hint"),
 			choice = { "st_dbg_lo_give", "st_dbg_lo_replace" }, choice_default = loadout_choice,
-			primary = "st_dbg_lo_equip", second = "st_dbg_lo_overwrite", third = "st_dbg_lo_delete" }
+			primary = "st_dbg_lo_equip", second = "st_dbg_lo_edit", third = "st_dbg_lo_delete" }
 	end,
 	act = function(key, button, count, choice)
-		loadout_choice = choice or loadout_choice
 		local user = user_loadouts()
-		if key == LO_NEW then
-			local n = 1
-			while user:section_exist("own_" .. n) do n = n + 1 end
-			write_set(user, { id = "own_" .. n, name = capture_name(), items = capture(), ammo_boxes = 0 })
+		if lo_editing then
+			if key == LO_DONE then
+				lo_editing = nil
+				return { msg = "st_dbg_done", rebuild = true }
+			elseif key == LO_AMMO then
+				edit_set(user, function(set) set.ammo_boxes = count end)
+				return { msg = "st_dbg_lo_changed", rebuild = true }
+			end
+			local sec = string.match(key, "^has:(.+)$") or string.match(key, "^add:(.+)$")
+			if not sec then return { msg = "st_dbg_gone", rebuild = true } end
+			edit_set(user, function(set)
+				local n, i = set_count(set, sec)
+				if button == "second" then
+					if i then table.remove(set.items, i) end
+				elseif string.find(key, "^add:") then
+					if i then set.items[i].count = n + count else set.items[#set.items + 1] = { sec = sec, count = count } end
+				elseif i then
+					set.items[i].count = count
+				end
+			end)
+			return { msg = button == "second" and "st_dbg_lo_removed" or "st_dbg_lo_changed", rebuild = true }
+		end
+		loadout_choice = choice or loadout_choice
+		if key == LO_NEW or key == LO_EMPTY then
+			local id = new_own_id(user)
+			if key == LO_NEW then
+				write_set(user, { id = id, name = capture_name(), items = capture(), ammo_boxes = 0 })
+			else
+				write_set(user, { id = id, name = fmt("st_dbg_lo_own_name_fmt", tonumber(string.match(id, "%d+")) or 1),
+					items = {}, ammo_boxes = 4 })
+				lo_editing = id
+			end
 			save_user(user)
 			return { msg = "st_dbg_lo_created", rebuild = true }
 		elseif key == LO_RESTORE then
@@ -993,11 +1112,8 @@ add_tab("loadouts", "st_dbg_tab_loadouts", {
 			if #missing > 0 then return fmt("st_dbg_lo_given_missing_fmt", made, #missing) end
 			return fmt(choice == 2 and "st_dbg_lo_replaced_fmt" or "st_dbg_lo_given_fmt", made)
 		elseif button == "second" then
-			set.items, set.ammo_boxes = capture(), 0
-			if user:line_exist(key, "deleted") then user:remove_line(key, "deleted") end
-			write_set(user, set)
-			save_user(user)
-			return { msg = "st_dbg_lo_saved", rebuild = true }
+			lo_editing = key
+			return { msg = "st_dbg_lo_editing", rebuild = true }
 		end
 		-- delete: the player's own set goes, a shipped one is hidden (and its edit dropped)
 		if user:section_exist(key) then

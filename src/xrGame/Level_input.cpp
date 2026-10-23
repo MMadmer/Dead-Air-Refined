@@ -193,7 +193,8 @@ void CLevel::IR_OnKeyboardPress(int key)
 
     if (_curr == kEDITOR)
     {
-        Device.editor().SwitchToNextState();
+        if (g_dar_debug_menu)
+            Device.editor().SwitchToNextState();
         return;
     }
 
@@ -207,7 +208,8 @@ void CLevel::IR_OnKeyboardPress(int key)
         return;
 
     case kCONSOLE:
-        Console->Show();
+        if (g_dar_debug_menu)
+            Console->Show();
         return;
 
     case kQUIT:
@@ -226,6 +228,8 @@ void CLevel::IR_OnKeyboardPress(int key)
     }
     case kALIFE_CMD:
     {
+        if (!g_dar_debug_menu)
+            return;
         luabind::functor<void> functor;
         if (GEnv.ScriptEngine->functor("sim_combat.start_attack", functor))
             functor();
@@ -459,7 +463,7 @@ void CLevel::IR_OnKeyboardPress(int key)
     } // switch (key)
 #endif // DEBUG
 
-    if (g_consoleBindCmds.execute(key))
+    if (g_dar_debug_menu && g_consoleBindCmds.execute(key))
         return;
 
     if (CURRENT_ENTITY())
