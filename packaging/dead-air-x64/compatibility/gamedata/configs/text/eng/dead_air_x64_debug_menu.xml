@@ -403,4 +403,103 @@
 	<string id="kb_debug_menu_hint">
 		<text>Opens and closes the debug menu. Works when the menu is turned on under Game.</text>
 	</string>
+	<string id="st_dbg_tab_loadouts">
+		<text>Loadouts</text>
+	</string>
+	<string id="st_dbg_cat_lo_shipped">
+		<text>Standard</text>
+	</string>
+	<string id="st_dbg_cat_lo_own">
+		<text>Custom</text>
+	</string>
+	<string id="st_dbg_cat_lo_actions">
+		<text>Actions</text>
+	</string>
+	<string id="st_dbg_lo_edited">
+		<text>edited</text>
+	</string>
+	<string id="st_dbg_lo_count_fmt">
+		<text>Entries: %d</text>
+	</string>
+	<string id="st_dbg_lo_new">
+		<text>New loadout from current gear</text>
+	</string>
+	<string id="st_dbg_lo_new_name">
+		<text>My loadout</text>
+	</string>
+	<string id="st_dbg_lo_new_hint">
+		<text>Saves everything worn and carried now as a loadout of its own. Base equipment (power bank, PDA, flashlight, bolt) and quest items are left out, ammo is saved in whole boxes. Edit the name, the contents and the ammo boxes per weapon in dead_air_x64_loadouts.ltx in the appdata folder.</text>
+	</string>
+	<string id="st_dbg_lo_create">
+		<text>Create</text>
+	</string>
+	<string id="st_dbg_lo_restore">
+		<text>Restore deleted standard loadouts</text>
+	</string>
+	<string id="st_dbg_lo_restore_hint">
+		<text>Shows the deleted standard loadouts again. Your changes to them are not restored.</text>
+	</string>
+	<string id="st_dbg_lo_missing">
+		<text>not in the game</text>
+	</string>
+	<string id="st_dbg_lo_ammo_fmt">
+		<text>Ammo for weapons without their own: %d boxes each</text>
+	</string>
+	<string id="st_dbg_lo_hint">
+		<text>"Give" puts the loadout into the inventory and equips everything it can, taking off what is worn. "Replace" first removes everything from the inventory except base equipment and quest items.</text>
+	</string>
+	<string id="st_dbg_lo_give">
+		<text>Give</text>
+	</string>
+	<string id="st_dbg_lo_replace">
+		<text>Replace</text>
+	</string>
+	<string id="st_dbg_lo_equip">
+		<text>Equip</text>
+	</string>
+	<string id="st_dbg_lo_overwrite">
+		<text>Save current gear</text>
+	</string>
+	<string id="st_dbg_lo_delete">
+		<text>Delete</text>
+	</string>
+	<string id="st_dbg_lo_created">
+		<text>Loadout created</text>
+	</string>
+	<string id="st_dbg_lo_saved">
+		<text>Loadout overwritten with current gear</text>
+	</string>
+	<string id="st_dbg_lo_deleted">
+		<text>Loadout deleted</text>
+	</string>
+	<string id="st_dbg_lo_given_fmt">
+		<text>Loadout given, items: %d</text>
+	</string>
+	<string id="st_dbg_lo_replaced_fmt">
+		<text>Gear replaced, items: %d</text>
+	</string>
+	<string id="st_dbg_lo_given_missing_fmt">
+		<text>Given: %d, not in the game: %d</text>
+	</string>
+	<string id="st_dbg_lo_novice">
+		<text>Rookie</text>
+	</string>
+	<string id="st_dbg_lo_stalker">
+		<text>Stalker</text>
+	</string>
+	<string id="st_dbg_lo_scientist">
+		<text>SEVA expedition</text>
+	</string>
+	<string id="st_dbg_lo_heavy">
+		<text>Combat ready in an exoskeleton</text>
+	</string>
+	<string id="st_dbg_lo_artefacts">
+		<text>Artifact hunt</text>
+	</string>
+	<string id="st_dbg_lo_sniper">
+		<text>Sniper scout</text>
+	</string>
+	<string id="st_dbg_lo_wanderer">
+		<text>Drifter</text>
+	</string>
 </string_table>

@@ -668,6 +668,356 @@ add_tab("near", "st_dbg_tab_near", {
 	end,
 })
 
+-- ---- equipment sets --------------------------------------------------------------------------------------------------
+-- The sets of configs\dead_air_x64_loadouts.ltx and the player's own in <appdata>\dead_air_x64_loadouts.ltx (a set of
+-- the same id there replaces the shipped one, [hidden] lists the shipped ones deleted). Giving a set spawns it into the
+-- inventory and puts on what it can wear, taking off what was worn; replacing first takes everything away but the base
+-- equipment.
+local LOADOUTS_FILE = "dead_air_x64_loadouts.ltx"
+-- The base equipment a replace keeps: the power bank, the PDA, the torch the lamps shine through, the bolt.
+local keep_sections = { wpn_upd = true, device_pda = true, device_torch = true, bolt = true }
+-- The slots a set dresses (the knife, both rifles, the pistol, the outfit, the detector, the helmet, the binoculars, the
+-- backpack); an item's own slot is its config's plus one.
+local wear_slots = { [1] = true, [2] = true, [3] = true, [5] = true, [7] = true, [9] = true, [12] = true, [14] = true,
+	[15] = true }
+local RIFLE_SLOT, RIFLE_SLOT_2 = 3, 2
+local loadout_choice = 1
+local equip_pending = {}
+local equip_deadline = 0
+
+-- Saved by hand: a file the engine wrote at its own end would race the next open. A section is never removed (the
+-- script ini has no call for it): a deleted set keeps "deleted = 1", the next "Create" takes another id.
+local function user_loadouts()
+	local f = ini_file("$app_data_root$", LOADOUTS_FILE)
+	f:set_readonly(false)
+	f:save_at_end(false)
+	f:set_override_names(true)
+	return f
+end
+
+local function user_has_set(f, id)
+	return f:section_exist(id) and f:line_exist(id, "items") and not f:line_exist(id, "deleted")
+end
+
+local function save_user(f)
+	f:save_as(getFS():update_path("$app_data_root$", LOADOUTS_FILE))
+end
+
+local function read_set(f, id)
+	local function r(key)
+		return f:line_exist(id, key) and (f:r_string_ex(id, key) or "") or ""
+	end
+	local set = { id = id, name = r("name"), items = {}, ammo_boxes = tonumber(r("ammo_boxes")) or 0 }
+	for part in string.gmatch(r("items"), "[^,]+") do
+		local sec, n = string.match(part, "^%s*([^:%s]+)%s*:?%s*(%d*)%s*$")
+		if sec then
+			set.items[#set.items + 1] = { sec = sec, count = math.max(tonumber(n) or 1, 1) }
+		end
+	end
+	return set
+end
+
+local function write_set(f, set)
+	local parts = {}
+	for _, it in ipairs(set.items) do
+		parts[#parts + 1] = it.count > 1 and (it.sec .. ":" .. it.count) or it.sec
+	end
+	f:w_string(set.id, "name", set.name, "")
+	f:w_string(set.id, "items", table.concat(parts, ", "), "")
+	f:w_string(set.id, "ammo_boxes", tostring(set.ammo_boxes or 0), "")
+end
+
+-- Every set, the shipped ones first in their order, then the player's own.
+local function all_loadouts()
+	local list, by_id = {}, {}
+	local base = ini_file(LOADOUTS_FILE)
+	local user = user_loadouts()
+	local hidden = {}
+	if user:section_exist("hidden") then
+		for i = 0, user:line_count("hidden") - 1 do
+			local _, id = user:r_line("hidden", i, "", "")
+			hidden[id] = true
+		end
+	end
+	local order = base:section_exist("loadouts") and base:line_exist("loadouts", "order") and base:r_string_ex("loadouts", "order") or ""
+	for id in string.gmatch(order, "[^,%s]+") do
+		if base:section_exist(id) and not hidden[id] then
+			local edited = user_has_set(user, id)
+			local set = edited and read_set(user, id) or read_set(base, id)
+			set.shipped, set.edited = true, edited
+			list[#list + 1] = set
+			by_id[id] = set
+		end
+	end
+	user:section_for_each(function(id)
+		if id ~= "hidden" and not by_id[id] and not base:section_exist(id) and user_has_set(user, id) then
+			local set = read_set(user, id)
+			list[#list + 1] = set
+			by_id[id] = set
+		end
+	end)
+	return list, by_id, hidden
+end
+
+local function section_name(sec)
+	local inv = r_string(sec, "inv_name")
+	return inv ~= "" and tr(inv) or sec
+end
+
+local function is_ammo(sec)
+	local class = r_string(sec, "class")
+	return string.find(class, "^AMMO") or string.find(class, "^S_AMMO") or false
+end
+
+-- A knife's "ammo" is its swing: never a box of its own.
+local function knife_ammo(sec)
+	return string.find(sec, "^ammo_knife") ~= nil
+end
+
+local function base_slot(sec)
+	local slot = tonumber(r_string(sec, "slot"))
+	return slot and slot >= 0 and slot + 1 or 0
+end
+
+-- The base equipment and the quest items stay through a replace and out of a captured set.
+local function kept(item)
+	local sec = item:section()
+	return keep_sections[sec] or (ini:line_exist(sec, "quest_item") and ini:r_bool(sec, "quest_item"))
+		or string.find(sec, "^anm_") or string.find(sec, "^animation_")
+end
+
+-- What the actor carries now as a set: the worn and slotted things first, ammo in whole boxes.
+local function capture()
+	local counts, order, rounds = {}, {}, {}
+	local function add(sec, n)
+		if not counts[sec] then
+			order[#order + 1] = sec
+			counts[sec] = 0
+		end
+		counts[sec] = counts[sec] + n
+	end
+	for _, slot in ipairs({ 7, 12, 15, 3, 2, 5, 1, 9, 14 }) do
+		local it = db.actor:item_in_slot(slot)
+		if it and not kept(it) then add(it:section(), 1) end
+	end
+	local slotted = {}
+	for _, slot in ipairs({ 7, 12, 15, 3, 2, 5, 1, 9, 14 }) do
+		local it = db.actor:item_in_slot(slot)
+		if it then slotted[it:id()] = true end
+	end
+	db.actor:iterate_inventory(function(_, it)
+		if slotted[it:id()] or kept(it) then return end
+		if knife_ammo(it:section()) then
+			return
+		elseif is_ammo(it:section()) then
+			if not rounds[it:section()] then order[#order + 1] = it:section() end
+			rounds[it:section()] = (rounds[it:section()] or 0) + it:ammo_get_count()
+		else
+			add(it:section(), 1)
+		end
+	end, nil)
+	local items = {}
+	for _, sec in ipairs(order) do
+		if rounds[sec] then
+			local box = math.max(math.floor(r_float(sec, "box_size", 1)), 1)
+			items[#items + 1] = { sec = sec, count = math.max(math.ceil(rounds[sec] / box), 1) }
+		else
+			items[#items + 1] = { sec = sec, count = counts[sec] }
+		end
+	end
+	return items
+end
+
+-- A new set's name: the outfit and the main weapon worn now.
+local function capture_name()
+	local parts = {}
+	for _, slot in ipairs({ 7, 3, 2, 5 }) do
+		local it = db.actor:item_in_slot(slot)
+		if it and #parts < 2 then parts[#parts + 1] = section_name(it:section()) end
+	end
+	return #parts > 0 and table.concat(parts, " + ") or tr("st_dbg_lo_new_name")
+end
+
+-- The spawned things that are to be worn are put on once they are in the inventory (a spawn lands a few frames later).
+local function equip_tick()
+	if #equip_pending == 0 then return end
+	if time_global() > equip_deadline then
+		equip_pending = {}
+		return
+	end
+	local rest = {}
+	for _, e in ipairs(equip_pending) do
+		local obj = level.object_by_id(e.id)
+		local parent = obj and obj:parent()
+		if parent and parent:id() == db.actor:id() then
+			db.actor:move_to_slot(obj, e.slot)
+		else
+			rest[#rest + 1] = e
+		end
+	end
+	equip_pending = rest
+end
+
+local function apply_loadout(set, replace)
+	local actor = db.actor
+	if replace then
+		local doomed = {}
+		actor:iterate_inventory(function(_, it)
+			if not kept(it) then doomed[#doomed + 1] = it:id() end
+		end, nil)
+		for _, id in ipairs(doomed) do
+			local se = alife():object(id)
+			if se then alife():release(se, true) end
+		end
+	end
+	local pos, lvid, gvid, pid = actor:position(), actor:level_vertex_id(), actor:game_vertex_id(), actor:id()
+	local taken, made, missing = {}, 0, {}
+	local has_ammo = {}
+	for _, it in ipairs(set.items) do
+		if is_ammo(it.sec) then has_ammo[it.sec] = true end
+	end
+	local items = {}
+	for _, it in ipairs(set.items) do items[#items + 1] = it end
+	-- the weapons' ammo the set does not give itself
+	if (set.ammo_boxes or 0) > 0 then
+		for _, it in ipairs(set.items) do
+			local classes = r_string(it.sec, "ammo_class")
+			local first = string.match(classes, "^%s*([^,%s]+)")
+			local covered = false
+			for a in string.gmatch(classes, "[^,%s]+") do
+				if has_ammo[a] then covered = true end
+			end
+			if first and not covered and not knife_ammo(first) and ini:section_exist(first) then
+				has_ammo[first] = true
+				items[#items + 1] = { sec = first, count = set.ammo_boxes }
+			end
+		end
+	end
+	equip_deadline = time_global() + 5000
+	for _, it in ipairs(items) do
+		if not ini:section_exist(it.sec) or knife_ammo(it.sec) then
+			missing[#missing + 1] = it.sec
+		else
+			for _ = 1, it.count do
+				local ok, se = pcall(function() return alife():create(it.sec, pos, lvid, gvid, pid) end)
+				if ok and se then
+					made = made + 1
+					local slot = base_slot(it.sec)
+					if slot == RIFLE_SLOT and taken[RIFLE_SLOT] then slot = RIFLE_SLOT_2 end
+					local grenade = string.find(r_string(it.sec, "class"), "^G_")
+					if wear_slots[slot] and not taken[slot] and not grenade then
+						taken[slot] = true
+						equip_pending[#equip_pending + 1] = { id = se.id, slot = slot }
+					end
+				end
+			end
+		end
+	end
+	if #missing > 0 then
+		printf("! [debug menu] set %s: no such items %s", set.id, table.concat(missing, ", "))
+	end
+	return made, missing
+end
+
+local LO_NEW, LO_RESTORE = "#new", "#restore"
+
+add_tab("loadouts", "st_dbg_tab_loadouts", {
+	build = function()
+		local list, _, hidden = all_loadouts()
+		local entries = {}
+		for _, set in ipairs(list) do
+			entries[#entries + 1] = { key = set.id, name = set.name ~= "" and tr(set.name) or set.id, sec = set.id,
+				cat = set.shipped and 1 or 2, badge = set.edited and "st_dbg_lo_edited" or "",
+				note = fmt("st_dbg_lo_count_fmt", #set.items) }
+		end
+		entries[#entries + 1] = { key = LO_NEW, name = "st_dbg_lo_new", sec = LOADOUTS_FILE, cat = 3 }
+		if next(hidden) then
+			entries[#entries + 1] = { key = LO_RESTORE, name = "st_dbg_lo_restore", sec = LOADOUTS_FILE, cat = 3 }
+		end
+		return { categories = { "st_dbg_cat_lo_shipped", "st_dbg_cat_lo_own", "st_dbg_cat_lo_actions" }, entries = entries }
+	end,
+	describe = function(key)
+		if key == LO_NEW then
+			return { title = "st_dbg_lo_new", sub = LOADOUTS_FILE, body = "st_dbg_lo_new_hint", primary = "st_dbg_lo_create" }
+		elseif key == LO_RESTORE then
+			return { title = "st_dbg_lo_restore", sub = LOADOUTS_FILE, body = "st_dbg_lo_restore_hint", primary = "st_dbg_apply" }
+		end
+		local _, by_id = all_loadouts()
+		local set = by_id[key]
+		if not set then return { title = key, body = "st_dbg_gone" } end
+		local lines = {}
+		for _, it in ipairs(set.items) do
+			local name = section_name(it.sec)
+			if not ini:section_exist(it.sec) then name = name .. " (" .. tr("st_dbg_lo_missing") .. ")" end
+			lines[#lines + 1] = it.count > 1 and (name .. " x" .. it.count) or name
+		end
+		if (set.ammo_boxes or 0) > 0 then
+			lines[#lines + 1] = fmt("st_dbg_lo_ammo_fmt", set.ammo_boxes)
+		end
+		-- the set's face: its outfit, else its first thing the game has
+		local icon
+		for _, it in ipairs(set.items) do
+			if ini:section_exist(it.sec) and (not icon or string.find(r_string(it.sec, "class"), "STLK")) then
+				icon = icon and string.find(r_string(icon, "class"), "STLK") and icon or it.sec
+			end
+		end
+		return { title = set.name ~= "" and tr(set.name) or set.id, sub = set.id, icon = icon,
+			body = table.concat(lines, "\\n") .. "\\n \\n" .. tr("st_dbg_lo_hint"),
+			choice = { "st_dbg_lo_give", "st_dbg_lo_replace" }, choice_default = loadout_choice,
+			primary = "st_dbg_lo_equip", second = "st_dbg_lo_overwrite", third = "st_dbg_lo_delete" }
+	end,
+	act = function(key, button, count, choice)
+		loadout_choice = choice or loadout_choice
+		local user = user_loadouts()
+		if key == LO_NEW then
+			local n = 1
+			while user:section_exist("own_" .. n) do n = n + 1 end
+			write_set(user, { id = "own_" .. n, name = capture_name(), items = capture(), ammo_boxes = 0 })
+			save_user(user)
+			return { msg = "st_dbg_lo_created", rebuild = true }
+		elseif key == LO_RESTORE then
+			if user:section_exist("hidden") then
+				for i = user:line_count("hidden") - 1, 0, -1 do
+					local _, id = user:r_line("hidden", i, "", "")
+					user:remove_line("hidden", id)
+				end
+				save_user(user)
+			end
+			return { msg = "st_dbg_done", rebuild = true }
+		end
+		local _, by_id = all_loadouts()
+		local set = by_id[key]
+		if not set then return { msg = "st_dbg_gone", rebuild = true } end
+		if button == "primary" then
+			local made, missing = apply_loadout(set, choice == 2)
+			if #missing > 0 then return fmt("st_dbg_lo_given_missing_fmt", made, #missing) end
+			return fmt(choice == 2 and "st_dbg_lo_replaced_fmt" or "st_dbg_lo_given_fmt", made)
+		elseif button == "second" then
+			set.items, set.ammo_boxes = capture(), 0
+			if user:line_exist(key, "deleted") then user:remove_line(key, "deleted") end
+			write_set(user, set)
+			save_user(user)
+			return { msg = "st_dbg_lo_saved", rebuild = true }
+		end
+		-- delete: the player's own set goes, a shipped one is hidden (and its edit dropped)
+		if user:section_exist(key) then
+			for _, line in ipairs({ "name", "items", "ammo_boxes" }) do
+				if user:line_exist(key, line) then user:remove_line(key, line) end
+			end
+			user:w_string(key, "deleted", "1", "")
+		end
+		if set.shipped then
+			user:w_string("hidden", key, "1", "")
+		end
+		save_user(user)
+		return { msg = "st_dbg_lo_deleted", rebuild = true }
+	end,
+})
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_update", equip_tick)
+end
+
 -- ---- the window's calls ----------------------------------------------------------------------------------------------
 function tabs()
 	local out = {}

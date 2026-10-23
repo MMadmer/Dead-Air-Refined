@@ -403,4 +403,103 @@
 	<string id="kb_debug_menu_hint">
 		<text>Открывает и закрывает отладочное меню. Работает, когда меню включено в разделе «Игра».</text>
 	</string>
+	<string id="st_dbg_tab_loadouts">
+		<text>Наборы</text>
+	</string>
+	<string id="st_dbg_cat_lo_shipped">
+		<text>Стандартные</text>
+	</string>
+	<string id="st_dbg_cat_lo_own">
+		<text>Свои</text>
+	</string>
+	<string id="st_dbg_cat_lo_actions">
+		<text>Действия</text>
+	</string>
+	<string id="st_dbg_lo_edited">
+		<text>изменён</text>
+	</string>
+	<string id="st_dbg_lo_count_fmt">
+		<text>Позиций: %d</text>
+	</string>
+	<string id="st_dbg_lo_new">
+		<text>Новый набор из текущей экипировки</text>
+	</string>
+	<string id="st_dbg_lo_new_name">
+		<text>Мой набор</text>
+	</string>
+	<string id="st_dbg_lo_new_hint">
+		<text>Записывает всё, что сейчас надето и лежит в инвентаре, как отдельный набор. Базовое снаряжение (УПД, КПК, фонарь, болт) и сюжетные предметы в набор не попадают, патроны записываются целыми пачками. Название, состав и число пачек к оружию правятся в файле dead_air_x64_loadouts.ltx в папке appdata.</text>
+	</string>
+	<string id="st_dbg_lo_create">
+		<text>Создать</text>
+	</string>
+	<string id="st_dbg_lo_restore">
+		<text>Вернуть удалённые стандартные наборы</text>
+	</string>
+	<string id="st_dbg_lo_restore_hint">
+		<text>Снова показывает стандартные наборы, удалённые из списка. Ваши изменения в них не возвращаются.</text>
+	</string>
+	<string id="st_dbg_lo_missing">
+		<text>нет в игре</text>
+	</string>
+	<string id="st_dbg_lo_ammo_fmt">
+		<text>Пачек патронов к оружию без своих: %d</text>
+	</string>
+	<string id="st_dbg_lo_hint">
+		<text>«Выдать» кладёт набор в инвентарь и надевает из него всё, что можно надеть, снимая надетое. «Заменить» сначала убирает из инвентаря всё, кроме базового снаряжения и сюжетных предметов.</text>
+	</string>
+	<string id="st_dbg_lo_give">
+		<text>Выдать</text>
+	</string>
+	<string id="st_dbg_lo_replace">
+		<text>Заменить</text>
+	</string>
+	<string id="st_dbg_lo_equip">
+		<text>Экипировать</text>
+	</string>
+	<string id="st_dbg_lo_overwrite">
+		<text>Записать текущую</text>
+	</string>
+	<string id="st_dbg_lo_delete">
+		<text>Удалить</text>
+	</string>
+	<string id="st_dbg_lo_created">
+		<text>Набор создан</text>
+	</string>
+	<string id="st_dbg_lo_saved">
+		<text>Набор перезаписан текущей экипировкой</text>
+	</string>
+	<string id="st_dbg_lo_deleted">
+		<text>Набор удалён</text>
+	</string>
+	<string id="st_dbg_lo_given_fmt">
+		<text>Набор выдан, предметов: %d</text>
+	</string>
+	<string id="st_dbg_lo_replaced_fmt">
+		<text>Экипировка заменена, предметов: %d</text>
+	</string>
+	<string id="st_dbg_lo_given_missing_fmt">
+		<text>Выдано: %d, нет в игре: %d</text>
+	</string>
+	<string id="st_dbg_lo_novice">
+		<text>Новичок</text>
+	</string>
+	<string id="st_dbg_lo_stalker">
+		<text>Сталкер</text>
+	</string>
+	<string id="st_dbg_lo_scientist">
+		<text>Экспедиция в «СЕВЕ»</text>
+	</string>
+	<string id="st_dbg_lo_heavy">
+		<text>Полная боеготовность в ТБ-1</text>
+	</string>
+	<string id="st_dbg_lo_artefacts">
+		<text>Поиск артефактов</text>
+	</string>
+	<string id="st_dbg_lo_sniper">
+		<text>Снайпер-разведчик</text>
+	</string>
+	<string id="st_dbg_lo_wanderer">
+		<text>Бродяга</text>
+	</string>
 </string_table>

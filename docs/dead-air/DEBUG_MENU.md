@@ -42,6 +42,27 @@ An exact name or section ranks first; a tie goes to the shorter section (the ite
 | World | time, weather, events, season, time speed | the 24 hours, every weather file, climate weather, emission and psy storm start/stop, the months and the PC calendar, x1..x100 | Apply (a weather pins the sky until "Climate weather") |
 | Story | the `[info_portions]` files, undeclared | every declared info portion and those the actor holds | Give / Remove |
 | Nearby | stalkers, mutants, items, other | online objects within 80 m, nearest first | Teleport to it, Kill, Remove |
+| Loadouts (1.6.2) | standard, own, actions | the sets of `configs/dead_air_x64_loadouts.ltx`, then the player's own; a new set from the worn gear, the deleted standard ones back | Give / Replace (the choice), Equip, Save current gear, Delete |
+
+## Loadouts
+
+A set is a name and a list of sections (`section:count`, ammo in boxes) with `ammo_boxes`: boxes of the first ammo of each
+weapon the list gives no ammo for. The shipped ones are `configs/dead_air_x64_loadouts.ltx` (`[loadouts] order`); the
+player's own and their edits of the shipped ones live in `<appdata>/dead_air_x64_loadouts.ltx` in the same form (a section
+of a shipped id replaces it, `[hidden]` lists the deleted shipped ones). The script ini cannot remove a section, so a
+deleted own set keeps `deleted = 1`; and its parse cache forgets a file only when that file's own object saves it, so
+every write goes through the one object that read it.
+
+- **Give** spawns the set into the inventory and wears what it can: the first item of each of the knife, rifle (3, then
+  2), pistol, outfit, detector, helmet, binoculars and backpack slots goes in through `move_to_slot` (past the wear
+  scenes: the set dresses at once), what was worn going to the backpack. A spawn lands a few frames later; the slots
+  are taken on `actor_on_update` within 5 s. An outfit with its own helmet takes none; a SEVA takes a backpack only as
+  its `*_backpack` variant.
+- **Replace** first releases everything but the base equipment (`wpn_upd` - the power bank, the PDA, the torch the
+  lamps shine through, the bolt) and quest items.
+- **Save current gear** writes what is worn and carried into the set (ammo in whole boxes, knives' "ammo" left out);
+  **New loadout from current gear** does it as a new `own_<n>` named after the outfit and the main weapon. Names and
+  contents are edited in the appdata file.
 
 ## Script contract (`dead_air_x64_debug_menu.script`)
 
@@ -65,3 +86,6 @@ what the player holds change while it is closed) and after a button asks for it.
   `press <primary|second|third>`, `state` (logged as `* [debug menu] ...`).
 - `tools/qa/water/debug_menu.lua` (Run-WaterQa): every tab driven and checked in the game's state - spawn into the
   inventory and in front, a squad, a mode, money, the time, the story, nearby, a teleport.
+- `tools/qa/water/loadouts.lua`: a set given (worn and carried), one replacing the inventory (the base kept), one
+  created from the worn gear and deleted, a standard one deleted and restored; `qa_lo_hold` holds the window open for
+  `Capture-HiddenDesktopWindow.ps1`.

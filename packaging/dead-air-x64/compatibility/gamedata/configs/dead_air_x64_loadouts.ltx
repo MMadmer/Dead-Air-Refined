@@ -1,0 +1,44 @@
+; The debug menu's equipment sets (dead_air_x64_debug_menu.script, tab "loadouts"; docs/dead-air/DEBUG_MENU.md).
+; A set: name (a string id or text), items (sections, "section:count"; ammo counts boxes), ammo_boxes (boxes of the first
+; ammo of each weapon the set gives no ammo for). The player's own sets and edits live in
+; <appdata>\dead_air_x64_loadouts.ltx in the same form, a set of the same id there taking this one's place. An outfit
+; that carries its own helmet (helmet_avaliable = false) takes none, and a SEVA takes a backpack only as its *_backpack
+; variant.
+
+[loadouts]
+order = novice, stalker, scientist, heavy, artefacts, sniper, wanderer
+
+[novice]
+name = st_dbg_lo_novice
+items = novice_outfit, backpack_light, wpn_knife, wpn_pm, wpn_bm16, detector_simple, geiger, device_glowstick, bandage:3, medkit:1, antirad:1, bread:2, conserva:1, flask:2
+ammo_boxes = 3
+
+[stalker]
+name = st_dbg_lo_stalker
+items = stalker_outfit, helm_respirator, backpack_stalker, wpn_knife4, wpn_fort, wpn_ak74, detector_advanced, geiger, wpn_binoc, grenade_rgd5:2, bandage:4, medkit:2, antirad:2, kolbasa:2, bread:2, mineral_water:2, flask:1
+ammo_boxes = 4
+
+[scientist]
+name = st_dbg_lo_scientist
+items = scientific_outfit_backpack, backpack_travel, wpn_knife5, wpn_spas12, wpn_ak74, wpn_fort, detector_elite, geiger, wpn_binoc, af_iam:2, medkit:3, medkit_army:1, bandage:5, antirad:3, drug_psy_blockade:2, drug_radioprotector:1, tushonka:2, bread:2, mineral_water:3, flask:2
+ammo_boxes = 5
+
+[heavy]
+name = st_dbg_lo_heavy
+items = exo_outfit, backpack_heavy, wpn_knife5, wpn_groza, wpn_saiga12s, wpn_desert_eagle, geiger, wpn_binoc, grenade_f1:4, grenade_rgd5:2, medkit_army:3, stimpack_army:2, bandage:6, antirad:2, drug_booster:1, tushonka:3, mineral_water:3, energy_drink:2
+ammo_boxes = 6
+
+[artefacts]
+name = st_dbg_lo_artefacts
+items = combat_scientific_outfit_backpack, backpack_travel, wpn_knife3, wpn_ak74u, wpn_pb, detector_scientific, geiger, af_aam:2, af_aac:2, lead_box:2, antirad:5, drug_radioprotector:3, drug_psy_blockade:2, drug_antidot:2, medkit_scientic:2, bandage:4, conserva:2, bread:2, mineral_water:3, flask:2, device_glowstick_green:2
+ammo_boxes = 4
+
+[sniper]
+name = st_dbg_lo_sniper
+items = merc_nighthunter_outfit, helm_cloth_mask, backpack_light, wpn_knife6, wpn_vintorez, wpn_svd, wpn_usp, wpn_binoc, geiger, medkit:2, bandage:3, stimpack:1, kolbasa:1, mineral_water:2
+ammo_boxes = 5
+
+[wanderer]
+name = st_dbg_lo_wanderer
+items = brenchcoat_outfit, backpack_light, wpn_knife3, wpn_toz34, device_lighter, geiger, bandage:2, bread:2, conserva:1, flask:2, vodka:1
+ammo_boxes = 3

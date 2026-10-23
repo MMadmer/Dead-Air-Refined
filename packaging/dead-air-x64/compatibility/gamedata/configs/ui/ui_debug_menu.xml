@@ -21,8 +21,8 @@
             <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
             <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
         </close>
-        <tabs x="104" y="130" width="816" height="30" step="117.43">
-            <tab x="0" y="0" width="111.43" height="30">
+        <tabs x="104" y="130" width="816" height="30" step="102.75">
+            <tab x="0" y="0" width="96.75" height="30">
                 <text font="letterica16" align="c" vert_align="c" color="$sys_text"></text>
                 <normal fill="#00000000" line="#E8E6E066" border="1" radius="2" text="#ECE9E2FF"/>
                 <highlight fill="#E8E6E01F" line="#E8E6E0CC" text="#ECE9E2FF"/>
