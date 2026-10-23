@@ -90,6 +90,10 @@ float4 main(float4 pos2d : SV_Position, nointerpolation uint light : TEXCOORD1) 
 
 	da_spec_aa(gbd.N);	// the lobe widened by the normal's spread over the pixel (lmodel.h)
 
+	// A point lamp's pixel falls in the cube face of the surface itself, the one the meshes are drawn against: the
+	// virtual offset below moved the test 1.5 cm off it, a strip along every face's edge that no mesh covered.
+	float3 face_P = gbd.P;
+
 #ifdef GBUFFER_OPTIMIZATION
 	gbd.P += gbd.N * 0.015f;	// the virtual offset
 #endif
@@ -101,7 +105,10 @@ float4 main(float4 pos2d : SV_Position, nointerpolation uint light : TEXCOORD1) 
 #ifndef USE_MSAA
 	hud = da_hud_pixel(pos2d.xy);
 	[branch] if (hud)
+	{
 		_P.xyz = da_hud_position(pos2d.xy, gbd.P.z) + gbd.N * 0.004f;
+		face_P = _P.xyz;
+	}
 #endif
 
 	float m = xmaterial;
@@ -133,7 +140,7 @@ float4 main(float4 pos2d : SV_Position, nointerpolation uint light : TEXCOORD1) 
 		inside = inside && dot(L2P, ldir.xyz) >= ldir.w * sqrt(d2);
 	}
 	else if (type == DA_LV_FACE)
-		inside = inside && da_lv_face(L2P) == (info.x >> 4);
+		inside = inside && da_lv_face(face_P - lpos.xyz) == (info.x >> 4);
 	[branch] if (!inside)
 		return 0.0f;
 

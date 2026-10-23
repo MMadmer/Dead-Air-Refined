@@ -193,7 +193,7 @@ u32 projector_slot(light* L)
 // reaches 1 / cos of the half cone along its slant, du_sphere and the cube face's cap the range), with a margin.
 bool near_cut(light* L, u32 type)
 {
-    const float reach = type == kSpot ? L->range / std::max(_cos(L->cone * .5f), .1f) : L->range;
+    const float reach = type == kSpot ? L->range / std::max(_cos(L->cone * .5f), .1f) : L->range * (type == kFace ? 1.05f : 1.f);
     Fvector p;
     Device.mView.transform_tiny(p, L->position);
     return p.z - reach <= VIEWPORT_NEAR * 4.f;
@@ -240,7 +240,17 @@ DaLvLight make_record(light* L, u32 type, u32 flags, bool lod)
     }
 
     L->xform_calc();
-    rows(L->m_xform, r.xform, 3);
+    Fmatrix xform = L->m_xform;
+    // A cube face's mesh reaches 5 % past its edges, the pixel's own face test (da_light_volume.ps) keeping one face
+    // to a pixel. Fitted exactly, the face beside a surface pixel at the edge ended its volume on that pixel's own
+    // depth, the depth test dropped it, and a strip along every edge was lit by no face: under a lamp held at the hip,
+    // the dark outline of a square on the ground.
+    if (type == kFace)
+    {
+        xform.i.mul(1.05f);
+        xform.j.mul(1.05f);
+    }
+    rows(xform, r.xform, 3);
     return r;
 }
 } // namespace

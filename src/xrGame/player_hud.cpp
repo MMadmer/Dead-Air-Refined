@@ -1392,17 +1392,19 @@ void player_hud::scene_stop()
     // nothing replays by itself. The weapon comes back anyway - the scripts that run a
     // two-hand scene end it with restore_weapon - but the item in the LEFT hand has no such
     // path: after the backpack scene a lamp stayed unanimated and undrawn while its light
-    // went on burning, and only walking brought it back.
-    for (attachable_hud_item* hi : m_attached_items)
-    {
-        if (hi && hi->m_parent_hud_item)
-            hi->m_parent_hud_item->PlayAnimIdle();
-    }
+    // went on burning, and only walking brought it back. The scene lets go of the hands first:
+    // replayed under its lock, the idle was refused by that same play_blend, and a glowstick drawn
+    // while the inventory held the backpack stayed out of sight with its light on.
     m_scene_one_hand = false;
     m_scene_hand = u8(-1);
     m_scene_on = false;
     m_scene_end = 0;
     m_scene_id = 0;
+    for (attachable_hud_item* hi : m_attached_items)
+    {
+        if (hi && hi->m_parent_hud_item)
+            hi->m_parent_hud_item->PlayAnimIdle();
+    }
 }
 
 bool player_hud::scene_stop(u32 id)
