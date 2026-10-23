@@ -320,6 +320,17 @@ pattern) from 30 m on.
 | High | 20 | 7 | 1.33 | 0.53 | 80 | 1.75 | 4.4 | 10.5 | 3 | 3 |
 | Extreme | 16 | 6 | 0.75 | 0.3 | 72 | 1.5 | 3.4 | 12 | 3 | 4 |
 
+The crowns' density from tier to tier (1.6.2, `tools/qa/water/tree_density.lua`: the camera still, `r__trees_lod_scale`
+walking the tiers' distances, so each crown runs its tiers through at one size on the screen; the share of the sky a
+box over the crown covers, by colour against the sky): the Cordon village's poplars and birches hold 0.79-0.84 from
+the hulls to the blobs, within 0.03. Seen from 35 m up over the meadow, the groves at 150-300 m keep their cover into
+their billboards within 0.02-0.05 at the switch's own size (a billboard drawn three or four times its 128-pixel cell -
+`r__trees_lod_scale` 0.1-0.2 over a near crown - shows its cell's solid inside and reads a fifth denser: not a sight
+of the game). The leaves of two or three render pixels were the mid distance's squares (a poplar's at 20-40 m: its
+own leaves, over the floor, by the quads; an upscaler's input at DLSS Balanced makes them twice that on the screen,
+its sharpening crisper): their cut-out is hashed now under a temporal resolve (SHRUBS.md, the near tier's leaves), the
+same cover, soft. A lower leaf floor changed nothing there (they stand over it) for +0.2 ms.
+
 - **The wood's cut** (`WoodCut`, `da_veg_internal.h`): the template's wood sets ordered by their radius falling, a
   table of their radii at every 32nd - the grafted wood's three groups (levels 0-1, 2, 3) axis by axis by an axis's
   thickest mean radius (the vertex shader shares a joint's ring with the next segment beside it), the stock tubes' three

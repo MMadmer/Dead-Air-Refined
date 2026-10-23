@@ -49,7 +49,17 @@ f_deffer	main	(p_shrub_leaf I)
 	uint lw, lh, le, lm;
 	s_shrub_leaf_d.GetDimensions(0, lw, lh, le, lm);
 	const float cut_lod = (uint(I.tex.w + 0.5f) & 7u) == SHRUB_LEAF_NEEDLES ? 16.0f : log2(max(float(lw), 16.0f) / 16.0f);
-	clip(s_shrub_leaf_d.SampleLevel(smp_base, tc, min(s_shrub_leaf_d.CalculateLevelOfDetail(smp_linear, tc.xy), cut_lod)).a - 0.5f);
+	// Under eight pixels the cut-out turns stochastic over the frames (hashed alpha, Wyman and McGuire 2017): its threshold
+	// an interleaved gradient noise of the pixel and the frame, its alpha the mip its pixels read, so the temporal resolve
+	// (TAA, DLSS, FSR) sums a soft leaf of its own outline and area where the hard cut drew a square of a few pixels - an
+	// upscaler's sharpening squared it more, and a crown at 20-40 m read as a mosaic of them. Hard without a temporal
+	// resolve (one frame of it is noise), and for a needle sprig (its fine mip above).
+	const float frame = da_shrub_time.z > 0.5f ? da_shrub_fwd.w : -1.0f;
+	const float soft = frame >= 0.0f && kind != SHRUB_LEAF_NEEDLES ? saturate((8.0f - I.twig.w) / 5.0f) : 0.0f;
+	const float lod = s_shrub_leaf_d.CalculateLevelOfDetail(smp_linear, tc.xy);
+	const float2 nq = floor(I.hpos.xy) + float2(13.0f, 41.0f) + 7.13f * max(frame, 0.0f);
+	const float noise = frac(52.9829189f * frac(dot(nq, float2(0.06711056f, 0.00583715f))));
+	clip(s_shrub_leaf_d.SampleLevel(smp_base, tc, lerp(min(lod, cut_lod), lod, soft)).a - lerp(0.5f, noise, soft));
 	shrub_leaf_bite(tc.xy, flags, tc.z);
 	// The relief, the gloss and the underside's luminance resolve on a leaf of a few pixels and more; under that, their
 	// means (a flat leaf, the texture's mean gloss).

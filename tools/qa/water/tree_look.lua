@@ -1,8 +1,8 @@
 -- The trees' crowns at distance (docs/dead-air/TREES.md, "Drawing"): from the save's eye the camera moves along its view
 -- (flat, a little over the eye's height) and takes a shot per step of qa_tree_plan. A step is "<metres forward>" and
 -- then console commands, split by "|" ("-20" backs off, "20|r__trees_force_tier 2" forces the thinned quads there);
--- every step starts from the tiers and the antialiasing the save had. Each shot is announced as
--- "[qa] tree shot <n> <step>" and followed by r__trees_stats. A pinned July noon in clear weather, no wind.
+-- every step starts from the tiers and the antialiasing the save had. Each step settles, then "[qa] tree begin <n>" ...
+-- "[qa] tree shot <n> <step>" brackets the r__gpu_log lines that average it; r__trees_stats and the shot follow. A pinned July noon in clear weather, no wind.
 --   qa_tree_plan = "0;10;20;30;20|r__trees_force_tier 1;20|r__trees_force_tier 2;20|r__trees_force_tier 3"
 --   qa_tree_up = 0.3   metres over the eye's height
 --
@@ -47,6 +47,7 @@ local function on_update()
 		eye = vector():set(device().cam_pos)
 		dir0 = vector():set(device().cam_dir)
 		aa0 = c:get_token("r__aa")
+		cmd("r__gpu_log 30")
 		for item in string.gmatch(qa_tree_plan or "0;10;20;30;20|r__trees_force_tier 1;20|r__trees_force_tier 2;20|r__trees_force_tier 3", "[^;]+") do
 			local s = { cmds = {}, label = item }
 			for part in string.gmatch(item, "[^|]+") do
@@ -70,6 +71,9 @@ local function on_update()
 		place(s.fwd)
 		go("settle")
 	elseif stage == "settle" and now - t0 > 3000 then
+		say(string.format("[qa] tree begin %02d", shots + 1))
+		go("measure")
+	elseif stage == "measure" and now - t0 > 2000 then
 		shots = shots + 1
 		say(string.format("[qa] tree shot %02d %s", shots, plan[step].label))
 		cmd("r__trees_stats")
@@ -81,6 +85,7 @@ local function on_update()
 	elseif stage == "done" then
 		cmd("r__trees_force_tier -1")
 		cmd("r__aa " .. aa0)
+		cmd("r__gpu_log 0")
 		level.remove_cam_custom_position_direction()
 		say("[qa] tree DONE")
 		say("DA_WATER_PROBE_DONE")
