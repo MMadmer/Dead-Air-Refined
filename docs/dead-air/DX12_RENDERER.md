@@ -226,7 +226,9 @@ While an upscaler is active the scene samplers get `log2(render/display) - 1` ad
   GPU. Draw submission benchmark on an RTX 3070 Laptop: 0.30 us per draw on the layer against 0.73 us
   on the D3D11 driver.
 - PSOs are keyed by content hashes of shaders and states (stable across runs) and stored in an
-  `ID3D12PipelineLibrary` at `appdata/shaders_cache_grizzly/r5/pipelines.bin`.
+  `ID3D12PipelineLibrary` at `appdata/shaders_cache_grizzly/r5/pipelines.bin`. It is written as a level's
+  precache ends when pipelines were added (`CHW::SavePipelines`, 1.6.2) and at shutdown: a crash keeps the
+  level's.
 - Queries: occlusion and timestamp heaps resolved into readback memory; event queries are fence
   values; `GetData` flushes like D3D11 unless `DONOTFLUSH`. Results are resolved when the list
   closes, one `ResolveQueryData` per run of consecutive slots (`Context::pendingResolves`): a resolve
@@ -365,7 +367,11 @@ preprocessor with the engine's includer and macros, then HLSL 2018, `-Zpr -O3
 -flegacy-resource-reservation`, the three legacy warning classes silenced, macros `GRIZZLY_DXC`, `GRIZZLY_SM`,
 `GRIZZLY_WAVE_LANES` (wave ops), `GRIZZLY_MIN16` (16-bit min precision). Native passes (RT, self-test) compile
 at HLSL 2021 through `da_dxc_compile_native`; mesh and amplification shaders go through the engine path
-at HLSL 2021. Cache `appdata/shaders_cache_grizzly/r5_dxil/<tag>/` next to the FXC cache `r5/`. A shader
+at HLSL 2021. Cache `appdata/shaders_cache_grizzly/r5_dxil/<tag>/` next to the FXC cache `r5/`; where it has no
+valid file, the release's pack `gamedata/shaders_cache_pack/` in the mod's archive is read (1.6.2: a QA sweep of
+every preset with each anti-aliasing mode on every renderer, `tools/package/build_shader_pack.ps1`; each file
+carries its source's CRC with the includes, so a stale one compiles; the DXIL and SPIR-V folders are named after
+the shader model, wave size and 16-bit support, so the rig's NVIDIA card fills those). A shader
 DXC refuses falls back to FXC and its pass to DXBC twins (a pipeline is all DXIL or all DXBC; the layer
 refuses a mix with a named log line). Mesh grass and ray tracing need DXIL, so FXC (`r__dxc 0`,
 `-dx12_no_sm6`) switches them off. Measured: no pass slower than under FXC; cold start with an empty

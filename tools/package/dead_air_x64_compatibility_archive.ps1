@@ -46,6 +46,18 @@ function New-DeadAirCompatibilityArchive {
     New-Item -ItemType Directory -Path $compatibilityStageGameRoot -Force | Out-Null
     Get-ChildItem -LiteralPath $compatibilityGameRoot | Copy-Item -Destination $compatibilityStageGameRoot -Recurse
 
+    # The release's compiled shaders (build_shader_pack.ps1), read where the player's cache has none valid.
+    $shaderPack = Join-Path $RepositoryRoot "artifacts\shader_pack"
+    if (Test-Path -LiteralPath $shaderPack) {
+        $packTarget = Join-Path $compatibilityStageGameRoot "shaders_cache_pack"
+        New-Item -ItemType Directory -Path $packTarget -Force | Out-Null
+        Get-ChildItem -LiteralPath $shaderPack | Copy-Item -Destination $packTarget -Recurse
+        Write-Host ("shader pack: {0} files" -f @(Get-ChildItem -LiteralPath $packTarget -Recurse -File).Count)
+    }
+    else {
+        Write-Warning "no shader pack (tools\package\build_shader_pack.ps1): the first start compiles every shader"
+    }
+
     # These core scripts must shadow the original packed Dead Air copies.
     foreach ($relativePath in $coreCompatibilityOverrides) {
         $sourcePath = Join-Path $RepositoryRoot "res\gamedata\$relativePath"

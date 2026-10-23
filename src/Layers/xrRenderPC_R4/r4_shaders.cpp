@@ -3,6 +3,7 @@
 #include "Layers/xrRender/ShaderResourceTraits.h"
 #include "xrCore/FileCRC32.h"
 #include "da_dxc.h"
+#include "xrEngine/da_watchdog.h"
 
 #ifdef XR_NATIVE
 #include "Layers/xrRenderDX11/dx11Native.h"
@@ -285,6 +286,16 @@ public:
     D3D_SHADER_MACRO* data() { return m_options; }
 };
 
+// The release's own copy of the cache (gamedata\shaders_cache_pack in the mod's archive, a QA sweep of the presets on
+// every renderer, tools\package\build_shader_pack.ps1): read where the player's has no valid file. Every file
+// carries its source's CRC with the includes, so one a shader edit outdated compiles as before.
+static void shader_pack_path(string_path& out, pcstr relative)
+{
+    string_path file;
+    strconcat(sizeof(file), file, "shaders_cache_pack" DELIMITER, relative);
+    FS.update_path(out, "$game_data$", file);
+}
+
 #ifdef XR_NATIVE
 #ifdef XR_VULKAN
 constexpr char k_native_cache_root[] = "r6_spirv";
@@ -296,15 +307,16 @@ constexpr char k_native_cache_root[] = "r5_dxil";
 static HRESULT compile_dxil(pcstr name, pcstr extension, pcstr sh_name, IReader* fs, u32 fileCrc, pcstr entry,
     pcstr target, const D3D_SHADER_MACRO* options, bool disasm, void*& result)
 {
-    // The name the layer reports refused pipelines by, and the cache file.
-    string_path shader_name, cache_file;
+    // The name the layer reports refused pipelines by, the cache file and its copy in the release's pack.
+    string_path shader_name, cache_file, pack_file;
     {
         strconcat(sizeof(shader_name), shader_name, k_native_cache_root, DELIMITER, name, ".", extension, DELIMITER,
             sh_name);
-        string_path file;
-        strconcat(sizeof(file), file, "shaders_cache_grizzly" DELIMITER, da_dxc_cache_dir(), name, ".", extension,
-            DELIMITER, sh_name);
+        string_path relative, file;
+        strconcat(sizeof(relative), relative, da_dxc_cache_dir(), name, ".", extension, DELIMITER, sh_name);
+        strconcat(sizeof(file), file, "shaders_cache_grizzly" DELIMITER, relative);
         FS.update_path(cache_file, "$app_data_root$", file);
+        shader_pack_path(pack_file, relative);
     }
 
     // Refused this session (DXC or the layer): straight to FXC, no cache probe, no recompile.
@@ -312,7 +324,7 @@ static HRESULT compile_dxil(pcstr name, pcstr extension, pcstr sh_name, IReader*
         return E_FAIL;
 
     xr_vector<u8> object, reflection;
-    if (da_dxc_cache_load(cache_file, fileCrc, object, reflection))
+    if (da_dxc_cache_load(cache_file, fileCrc, object, reflection) || da_dxc_cache_load(pack_file, fileCrc, object, reflection))
     {
         const HRESULT hr = create_shader(target, reinterpret_cast<const DWORD*>(object.data()), object.size(),
             reflection.data(), reflection.size(), shader_name, result, disasm, false, true);
@@ -349,6 +361,8 @@ static HRESULT compile_dxil(pcstr name, pcstr extension, pcstr sh_name, IReader*
 HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     pcstr pTarget, u32 Flags, void*& result)
 {
+    // A cold cache compiles for a long while on the main thread (a renderer restart, the first start): it is alive.
+    da_watchdog_beat();
     shader_options_holder options;
     shader_name_holder sh_name;
 
@@ -700,12 +714,13 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     string_path filename;
     strconcat(sizeof(filename), filename, renderer, name, ".", extension);
 
-    string_path file_name;
+    string_path file_name, pack_name;
     {
         string_path file;
         strconcat(sizeof(file), file, "shaders_cache_grizzly" DELIMITER, filename, DELIMITER, sh_name.c_str());
         strconcat(sizeof(filename), filename, filename, DELIMITER, sh_name.c_str());
         FS.update_path(file_name, "$app_data_root$", file);
+        shader_pack_path(pack_name, filename);
     }
 
     string_path shadersFolder;
@@ -745,9 +760,12 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
 #ifndef XR_VULKAN
     Flags &= ~RSC_FXC;
 
-    if (FS.exist(file_name))
+    // The player's cache first, the release's pack where it has nothing valid.
+    for (pcstr cached : {static_cast<pcstr>(file_name), static_cast<pcstr>(pack_name)})
     {
-        IReader* file = FS.r_open(file_name);
+        if (SUCCEEDED(_result) || !FS.exist(cached))
+            continue;
+        IReader* file = FS.r_open(cached);
         if (file->length() > 4)
         {
             const bool dx9compatibility = file->r_u32();
@@ -760,14 +778,14 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
                 if (bytecodeCrc == savedBytecodeCrc)
                 {
 #ifdef DEBUG
-                    Log("* Loading shader:", file_name);
+                    Log("* Loading shader:", cached);
 #endif
                     _result = create_shader(pTarget, (DWORD*)file->pointer(), file->elapsed(), nullptr, 0,
                         filename, result, o.disasm, dx9compatibility, false);
                 }
             }
         }
-        file->close();
+        FS.r_close(file);
     }
 
     if (FAILED(_result))

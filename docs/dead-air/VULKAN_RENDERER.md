@@ -47,7 +47,8 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
   extended dynamic state 1-3 and dynamic vertex input where present (`-vk_no_eds3`,
   `-vk_no_vertex_input`), so the pipeline key is the shaders, the attachment formats and the topology
   class. Pipelines are built through graphics pipeline libraries with fast linking (`-vk_no_gpl` for
-  whole pipelines) and persist in `appdata/shaders_cache_grizzly/r6/pipelines.bin`. A context looks its
+  whole pipelines) and persist in `appdata/shaders_cache_grizzly/r6/pipelines.bin` (written as a level's precache
+  ends and at shutdown, 1.6.2). A context looks its
   layouts and pipelines up in small direct-mapped tables of its own (the device's caches take a lock), and a
   description equal to the bound pipeline's - shaders, state objects and their contents - needs no lookup.
   A rate image going away keeps the rendering (it stays attached, the combiner ignores it): a lamp's
