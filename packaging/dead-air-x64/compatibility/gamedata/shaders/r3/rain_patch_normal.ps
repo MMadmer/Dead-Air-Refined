@@ -269,6 +269,9 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     const float3 vUp = -Ldynamic_dir.xyz;
 
     float puddle = 0.0;
+    // The standing water on everything but the terrain: the reflection pass mirrors only the terrain's, so this one
+    // shines by its gloss.
+    float puddle_shine = 0.0;
     [branch]
     if (position.z < 0.35)
     {
@@ -336,6 +339,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
             // Three centimetres of standing water is a puddle you can see; below that it is a
             // wet patch and the film already draws it.
             puddle = saturate(fill / 0.03) * slope_gate * sky_gate * saturate(da_wetness.z);
+            puddle_shine = puddle;
         }
         // Terrain carries its own standing water, placed by the terrain's G-buffer pass; the same
         // call here gives the same mask. This pass used to salt it with the ground's pops, run-off
@@ -428,9 +432,11 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     // a finished number and needs no G-buffer load of its own.
     // max(), not a sum: standing water is glossier than a film, it is not a film plus a puddle.
     // The film's ceiling is 0.20: at 0.30 the GGX lobe (r__spec_smooth) put every wet surface a hair from a perfect
-    // mirror, and the whole wet level glared; the puddle earns more.
+    // mirror, and the whole wet level glared; the puddle earns more. Not the terrain's puddles: the reflection pass
+    // mirrors those with water's fresnel, and their gloss was the specular model's f0 of 0.16 on top (lmodel.h), a
+    // sixth of a bright overcast in every puddle seen from above - a wet meadow read as snow.
     const float not_viewmodel = step(0.35, position.z);
-    const float gloss_add = max(da_wetness.x * wetness * 0.20, puddle * 0.50) * cont * not_viewmodel;
+    const float gloss_add = max(da_wetness.x * wetness * 0.20, puddle_shine * 0.50) * cont * not_viewmodel;
 
     // The normal's length carries the finished gloss (0.5 none, 1 full); alpha carries the
     // finished albedo multiplier. Two independent numbers, neither recovered by inverting the

@@ -307,8 +307,11 @@ f_deffer 	main	( p_flat I 		)
 		// normal under a directional sun lights a whole puddle as ONE highlight - dot(H,N) is
 		// the same across a plane - and at noon every puddle was a sheet of white whatever the
 		// gloss. On the bumpy normal the sun breaks into the sparkle a rain-rippled puddle
-		// shows. Darkening and the rim stay, the gloss at half; the reflection pass adds the
-		// fresnel-weighted mirror and a tight sun glint.
+		// shows. Darkening and the rim stay, the gloss only the damp ground's: the reflection
+		// pass adds the fresnel-weighted mirror and a tight sun glint. The water's own gloss
+		// (half of r__puddles_gloss, 0.2 in the buffer) is the specular model's f0 of 0.16
+		// (lmodel.h), eight times water's: under a bright overcast every puddle seen from above
+		// mirrored a sixth of the sky and a meadow after a rain read as snow.
 		[branch] if (PDL.dbg_paint)
 		{
 			D.rgb = PDL.dbg_color;
@@ -320,7 +323,6 @@ f_deffer 	main	( p_flat I 		)
 			// identically or the r__puddles_gbuf switch would also change the colour.
 			D.rgb = da_puddle_albedo(D.rgb, PDL);
 			G = max(G, PDL.damp * da_puddle_look.z);
-			G = lerp(G, max(G, saturate(da_puddle_look.x) * 0.5f), PDL.mask);
 		}
 	}
 
