@@ -25,6 +25,9 @@ public:
     void SetHolder(CDialogHolder* h) { m_pParentHolder = h; }
 
     virtual bool StopAnyMove() { return true; }
+    // Every press, hold, wheel and look is the window's: the game's scripts, the game and the actor get none while it
+    // is on top (releases still go on, so nothing held as it opened stays pressed). Level_input.cpp.
+    virtual bool TakesAllInput() const { return false; }
     virtual bool NeedCursor() const { return true; }
     virtual bool NeedCenterCursor() const { return true; }
     virtual bool WorkInPause() const { return m_bWorkInPause; }

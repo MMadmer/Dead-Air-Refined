@@ -34,6 +34,7 @@ public:
     void Update() override;
     void SendMessage(CUIWindow* window, s16 message, void* data) override;
     bool OnKeyboardAction(int dik, EUIMessages keyboardAction) override;
+    bool TakesAllInput() const override { return true; }
     pcstr GetDebugType() override { return "CUIDebugMenuWnd"; }
 
     // The key, the console (dar_debug_menu_open) and QA: shows the window over the game or hides it.

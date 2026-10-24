@@ -38,6 +38,11 @@ start of a part after an underscore, inside it, its letters in order: "wpnak" fi
 was typed in, in the other one (QWERTY <-> JCUKEN) and transliterated from Cyrillic ("medkit" typed in Cyrillic).
 An exact name or section ranks first; a tie goes to the shorter section (the item before its scene's copy).
 
+While the window is open it takes every press, hold, wheel and look (`CUIDialogWnd::TakesAllInput`, checked first
+in `Level_input.cpp`): neither the scripts' key callbacks (`on_key_press`, where the game's and the mods' hotkeys
+live) nor the game nor the actor see them, so a name typed into the search draws, throws and reloads nothing.
+Releases still go on (a key held as it opened lets go); the screenshot key works.
+
 ## Tabs (the script's)
 
 | Tab | Categories | Entries | Buttons |
@@ -96,6 +101,8 @@ what the player holds change while it is closed) and after a button asks for it.
   `press <primary|second|third>`, `state` (logged as `* [debug menu] ...`).
 - `tools/qa/water/debug_menu.lua` (Run-WaterQa): every tab driven and checked in the game's state - spawn into the
   inventory and in front, a squad, a mode, money, the time, the story, nearby, a teleport.
+- `tools/qa/water/debug_menu_typing.lua`: slot keys, the inventory and letters pressed into the open window
+  (`Send-HiddenDesktopKey.ps1`) change no slot, open nothing and reach no `on_key_press`; closed, they do again.
 - `tools/qa/water/loadouts.lua`: a set given (worn and carried), one replacing the inventory (the base kept), one
   created from the worn gear and deleted, a standard one deleted and restored; `qa_lo_hold` holds the window open for
   `Capture-HiddenDesktopWindow.ps1`.

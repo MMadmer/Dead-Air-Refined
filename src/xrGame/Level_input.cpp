@@ -70,12 +70,27 @@ bool is_action_disabled(int key)
 {
     return g_bDisableAllActions && !is_movement_action(GetBindedAction(key));
 }
+
+// The top window takes every press (the debug menu): the scripts' key callbacks ran before the window had the key,
+// so a name typed into its search drew, threw, reloaded and walked through the game's and the mods' hotkeys.
+bool ui_takes_all_input()
+{
+    CUIGameCustom* ui = CurrentGameUI();
+    CUIDialogWnd* top = ui ? ui->TopInputReceiver() : nullptr;
+    return top && top->IsShown() && top->TakesAllInput();
+}
 }
 
 void CLevel::IR_OnMouseWheel(float x, float y)
 {
     if (g_bDisableAllInput || g_bDisableAllActions)
         return;
+
+    if (ui_takes_all_input())
+    {
+        CurrentGameUI()->IR_UIOnMouseWheel(x, y);
+        return;
+    }
 
     /* avo: script callback */
     if (g_actor)
@@ -110,6 +125,12 @@ void CLevel::IR_OnMouseMove(int dx, int dy)
 {
     if (g_bDisableAllInput)
         return;
+
+    if (ui_takes_all_input())
+    {
+        CurrentGameUI()->IR_UIOnMouseMove(dx, dy);
+        return;
+    }
 
     /* avo: script callback */
     if (g_actor)
@@ -156,6 +177,14 @@ void CLevel::IR_OnKeyboardPress(int key)
     bool b_ui_exist = !!CurrentGameUI();
 
     EGameActions _curr = GetBindedAction(key);
+    if (ui_takes_all_input())
+    {
+        if (_curr == kSCREENSHOT)
+            GEnv.Render->Screenshot();
+        else
+            CurrentGameUI()->IR_UIOnKeyboardPress(key);
+        return;
+    }
     const bool actionDisabled = is_action_disabled(key);
 
     // Presses only: the release of a key held before the scene must still reach the game, or it
@@ -521,6 +550,12 @@ void CLevel::IR_OnKeyboardHold(int key)
     if (g_bDisableAllInput || is_action_disabled(key))
         return;
 
+    if (ui_takes_all_input())
+    {
+        CurrentGameUI()->IR_UIOnKeyboardHold(key);
+        return;
+    }
+
     /* avo: script callback */
     if (g_actor)
     {
@@ -605,6 +640,12 @@ void CLevel::IR_OnControllerPress(int key, const ControllerAxisState& state)
     if (is_action_disabled(key))
         return;
 
+    if (ui_takes_all_input())
+    {
+        CurrentGameUI()->IR_UIOnControllerPress(key, state);
+        return;
+    }
+
     /* avo: script callback */
     if (g_actor)
     {
@@ -683,6 +724,12 @@ void CLevel::IR_OnControllerHold(int key, const ControllerAxisState& state)
 
     if (is_action_disabled(key))
         return;
+
+    if (ui_takes_all_input())
+    {
+        CurrentGameUI()->IR_UIOnControllerHold(key, state);
+        return;
+    }
 
     /* avo: script callback */
     if (g_actor)

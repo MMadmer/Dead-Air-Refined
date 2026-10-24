@@ -1097,10 +1097,9 @@ bool CUIDebugMenuWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
     }
     if (inherited::OnKeyboardAction(dik, keyboardAction))
         return true;
-    // Typing into the search or the count is not playing: a key the window did not take went on to the actor,
-    // and a name typed in reloaded, drew, threw and walked. Every press and hold stays here while a field has the input
-    // (the search takes it as the window opens); a release goes on, so a trigger held as the window opened lets go.
-    return keyboardAction != WINDOW_KEY_RELEASED && (m_search->IsInputFocused() || m_countEdit->IsInputFocused());
+    // The window is not playing (TakesAllInput): every press and hold stays here; a release goes on, so a trigger
+    // held as the window opened lets go.
+    return keyboardAction != WINDOW_KEY_RELEASED;
 }
 
 void CUIDebugMenuWnd::OnTab(CUIWindow*, void*) {}

@@ -3199,7 +3199,10 @@ Every window built from an XML layout can be drawn by the `xms_ui_shape` shader 
 rounded panels, borders, buttons with a look per state, segmented bars, item grids and pictograms,
 all computed per pixel at the screen's own resolution, so nothing blurs at 1440p or 4K. The actor
 menu (inventory, trade, loot, upgrade), its item hint, its context menu, the carcass window
-(`ui_mutant_loot`), the dialog window (`talk.xml`) and the save indicator are drawn this way; item icons
+(`ui_mutant_loot`), the dialog window (`talk.xml`) and the save indicator (`ui_save_indicator.xml`: a gas mask on
+a disc at the middle of the right edge, an arc running round it while the game saves, the ring closing ash-white
+with a tick or red with a cross; `dar_save_indicator_demo <saving|done|failed>` shows it without a save) are drawn
+this way; item icons
 and portraits stay textures.
 
 **A node takes a skin** with a `shape` attribute naming a look of the theme, a `<shape>` child, or
