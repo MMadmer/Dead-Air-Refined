@@ -158,7 +158,7 @@ static void TestStreamline(IDXGIAdapter1* adapter)
     prefs.featuresToLoad = features;
     prefs.numFeaturesToLoad = 4;
     prefs.engine = sl::EngineType::eCustom;
-    prefs.engineVersion = "1.6.2";
+    prefs.engineVersion = "1.6.3";
     // A test-only project id; the game passes its own.
     prefs.projectId = "6f0f3e0a-2f7c-4a55-9b7e-3d2b8a4c1e90";
     prefs.renderAPI = sl::RenderAPI::eD3D12;
