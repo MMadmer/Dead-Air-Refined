@@ -537,7 +537,7 @@ int ps_r__trees = 1;
 // blooms, 64 the clusters, 128 the blobs, 256 the billboards, 512 every shadow map and the rain map; 1024, 2048, 4096,
 // 8192 the trees in the leaves', the thinned leaves', the clusters' or the blobs' tier; 16384 the clusters and the blobs
 // unthinned past the floor; 32768 the patches without their runs - their bark's seams: the runs' cost; 65536 the
-// clusters' and the blobs' pixels out at once - their pixels' cost; 131072 the stock patches untessellated everywhere).
+// clusters', the blobs' and the leaves' pixels out at once - their pixels' cost; 131072 the stock patches untessellated everywhere).
 int ps_r__dbg_trees = 0;
 // QA: 0 the trees' view drawn as the CPU cut it, without the GPU cut (r3\da_tree_cut.cs) - an A/B.
 int ps_r__trees_cut = 1;

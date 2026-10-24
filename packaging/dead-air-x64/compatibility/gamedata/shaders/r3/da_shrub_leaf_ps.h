@@ -35,6 +35,10 @@ struct p_shrub_leaf
 
 f_deffer	main	(p_shrub_leaf I)
 {
+	// (QA, r__dbg_trees 65536: every pixel out at once - the draw's vertices, its rasterizing and its shader launches
+	// alone.)
+	[branch] if (da_shrub_chunk0.w > 1.5f)
+		discard;
 	const uint flags = uint(I.tex.w + 0.5f);
 	const uint kind = flags & 7u;
 	const float mirror = (flags & 8u) != 0u ? -1.0f : 1.0f;

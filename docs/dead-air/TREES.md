@@ -700,7 +700,8 @@ youth, dead, red, the hemisphere ratio) and `da_trees_bb_mark` (cleared: its cel
   blooms, 64 the clusters, 128 the blobs, 256 the billboards, 512 every shadow map and the rain map; 1024, 2048, 4096,
   8192 the trees in the leaves', the thinned leaves', the clusters' or the blobs' tier (the view); 16384 the clusters and
   the blobs unthinned past the floor; 32768 the patches without their runs (their bark's seams: the runs' cost); 65536
-  the clusters' and the blobs' pixels out at once (their pixels' cost); 131072 the stock patches untessellated
+  the clusters', the blobs' and the leaves' pixels out at once (their pixels' cost: behind the near poplar on Cordon
+  the trees' leaves are 1.08 ms, 0.82 of it their vertices and rasterizing); 131072 the stock patches untessellated
   everywhere.
 - `r__trees_cut 0|1` (QA, default 1): 0 draws the view as the CPU cut it, without the GPU cut - an A/B.
 - `r__dbg_wood 0..6` (QA): the wood's bark in false colour (`da_shrub_wood.ps`, its main's last block and
