@@ -360,6 +360,8 @@ same cover, soft. A lower leaf floor changed nothing there (they stand over it) 
   marks their tails). The tree's own choice drew a near crown's far side at its near side's detail: the two trees at
   the user's fork took 3 ms of the GPU's frame, 0.2 ms after. `r__trees_cut 0` (QA) draws the CPU's cut alone. The
   clusters and the blobs go through it too (`ccMass`: one draw, the thinned set's runs - `thinned_runs` - as candidates).
+- **The shrubs' phase** (1.6.3): the cut's third phase is the shrubs' view (SHRUBS.md, "The GPU cut"), after both of
+  the trees' phases, against the pyramid with every tree drawn in.
 - **Occlusion** (1.6.2): the cut runs in the G-buffer stage (`da_veg_render_gbuffer`, not with the bends), in two
   phases. The trees nearer than `kCutNearPhase` (40 m) first, each element also against the depth pyramid of what is
   drawn so far (`da_hzb.cpp`, `r3/da_hzb.h`: the opaque world, the LODs and the first-person view - the test of the
@@ -527,7 +529,14 @@ same cover, soft. A lower leaf floor changed nothing there (they stand over it) 
   far level's tubes (no patches: tens of thousands of triangles in the middle map for a texel or two of difference), a
   bare crown's branches and the clusters, their leaves gathered into round clumps three texels across where a leaf is
   under three (`da_shrub_mass.h` `shrub_mass_dapple`: the near cascade's leaves cast a dapple, a solid blot stepped at
-  the seam). The far one: the trunk's far level and the blobs. The rain map: the crowns' blobs (a dead tree shelters
+  the seam). A cluster's or a blob's quad whose leaf cells stand three texels and more casts round clumps (`shrub_mass_dapple`,
+  a clump a cell, Beer-Lambert's cover of the part; `da_shrub_cluster_shadow.ps`, 1.6.3): a part casts from past the near
+  leaves - a crown over 22 m away whose shadow falls into the near map, or into a farther map -, high over what it shades,
+  where its sunflecks are the sun's pinhole images and its leaves' outlines lie inside a penumbra of some nine centimetres
+  a ten metres of height. Their textured outlines, every cell turned its own way, and the twigs were most of the trees'
+  shadow maps: seven million texels a frame in the near map (Cordon village, the white poplar's heading: the sun 5.63 ->
+  4.68 ms; Ghost of Tsushima casts its far trees from cheap shadow proxies of their own, the `*_ll_shadow` alpha maps
+  beside their imposters). The far one: the trunk's far level and the blobs. The rain map: the crowns' blobs (a dead tree shelters
   little). The shadowed local lights within 40 m: the far level's tubes, a bare crown's branches, a leafy crown's
   clusters (a village's lamps drew three hundred thousand of the forks' patches). The clusters a shadow pass draws
   past the pixel floor are thinned - the middle cascade's to two fifths, the near one's (a far crown's past the leaves'

@@ -265,6 +265,22 @@ acceleration structure; the stock bushes they replace stand in for them in the r
 and the puddles reflect a bush where one stands (in its stock look), the occlusion and shadow rays skipping the
 crowns as they skip every swaying crown (the shrubs' shadows come from their own cascade passes).
 
+**The GPU cut** (1.6.3, the trees' cut's last phase: `r3/da_tree_cut.cs` `CUT_KEEP`, `da_veg.cpp` `emit`): every chunk the
+view's walk emits is a candidate of the cut instead of a draw of its own, its route the draw the CPU chose for it (its
+tier by the bush's distance, nothing about the look changes). After the trees are drawn - their trunks and crowns in the
+depth - one lane an element leaves out what its vertex shaders would have thrown away: out of the view by its own bent
+place and reach (the leaf's, the cluster's, a fruit group's three sizes), behind the depth pyramid (`da_hzb.h`: the
+opaque world, the LODs, the first-person view and every tree), the wood under its wire rule (the ratio of its width to
+the floor, its axis's hash, exactly as `da_shrub_wood_vs.h` keeps it); the survivors fill the draws' lists and the
+draws are indirect. Ghost of Tsushima culls its proxy sets' instances on the GPU against the frame's depth
+(`Proxyset Cull Inst Count`, `Max Depth Cull`) the same way. Behind a near poplar the view drew half a million shrub
+elements - 107 000 sprays as 640 000 leaf quads, 95 000 wood segments, 95 000 fruit groups - for a few thousand pixels:
+the vertex shaders ran every one of them and collapsed most. The cut keeps 30 % of the sprays, 9 % of the fruit groups
+and 5 % of the wood segments there (Cordon village, Extreme, DX11 1080p): `shrubs` 3.68 -> 2.18 ms and 1.94 -> 1.06 ms
+in the two bushy headings of `tools/qa/water/veg_cost.lua`, the bend pass 0.44 -> 0.24 ms; a heading with a bush or two
+in view pays the cut's 0.1 ms. The cut's buffers have room for the lists of both populations; past it (or with the cut
+off) the shrubs draw as the CPU chose.
+
 | Tier | Up to | Draws |
 | --- | --- | --- |
 | near | `d0` | wood (all levels; the stems and branches eight-sided tubes, the twigs five-sided), each leaf its species' texture cut out by its coverage (from a mip of sixteen texels a side at the coarsest, by the array's loaded size: a leaf of a few pixels cut by a coarser mip's blot was a square, a front-lit crown at a dozen metres a brick mosaic; not a needle sprig, whose needles under a pixel scattered into a haze; under eight pixels, while a temporal resolve runs - TAA, DLSS, FSR -, the cut-out is hashed: its threshold an interleaved gradient noise of the pixel and the frame and its alpha the mip its pixels read, so the resolve sums a soft leaf of its outline and area - the hard cut drew a crown at 20-40 m as a mosaic of squares, an upscaler's sharpening squared them more; the crown's cover the same, 0.79 of a box over a poplar either way) from an eight-vertex hull fitted to it (folded, drooping, edge-on ones turned a little to the camera; compound and lobed leaves folded along their rachis or midrib too) while a leaf is two dozen pixels long, from the texture's quad past that (four vertices cost less than the fragments the hull saves there); a spray as its six leaves by the species' phyllotaxis (two-ranked hazel sprays lie flat, opposite pairs cross); needle sprigs as two crossed textured quads about their shoot, lit by the billboard's normal (one quad turned to the eye showed a flat frond: a fern); blooms |
@@ -554,11 +570,14 @@ of small cream fertile florets ringed by large flat white sterile flowers.
 - `r__shrubs_force_tier -1..3` (QA): every bush in one tier (0 near, 1 leaves, 2 clusters, 3 blobs), its pixel
   floor still its distance's; -1 as drawn.
 - `r__shrubs_lod_scale <0.05..20>` (QA, default 1): scales the blade distance (the tiers' calibration).
+- `r__shrubs_cut 0|1` (QA, default 1): 0 draws the shrubs' view as the CPU chose it, without the GPU cut - an A/B.
 - `r__dbg_shrubs <mask>` (QA): hides draws - 1 wood, 2 every leaf draw, 4 blooms, 8 clusters, 16 blobs, 32 the
   shadow and rain passes, 64 the blades, 128 the cut quads, 256 the sprays.
 
 The level log prints `* [shrubs] N bushes of M placements, T templates, E elements (K KB), ms`; `r__gpu_log` adds
-`shrubs` (the G-buffer draws, GPU) and `shrubs_cpu` (the frame's bush choice, chunk builds and uploads, CPU).
+`shrubs` (the G-buffer draws and their cut, GPU), `shrubs_cpu` (the frame's bush choice, chunk builds and uploads, CPU)
+and `veg_wait` (the time the render thread waits for the vegetation's frame pick, both populations: 0.65-1.4 ms on
+Cordon at Extreme; `da_veg.cpp da_veg_frame_prepare`).
 
 ## Cost
 

@@ -35,6 +35,7 @@
 #include <bit>
 #include <cmath>
 #include <functional>
+#include <unordered_map>
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -744,6 +745,17 @@ struct Latch
     u32 frame_mod{};
 };
 
+// What a tile's slots hold for the blades, the same in every frame (build_tiles): per community the most presence x
+// cover of its slots (the frame's density of the community multiplies it), the slots' heights. Ghost of Tsushima's grass
+// tiles carry their height range from the data; worked out over every slot of a tile each frame, the tiles of a 300 m
+// reach were some 70 000 slots of the calc task's work a frame (four milliseconds of a core).
+struct TileSummary
+{
+    float pc[da_grass_communities]{};
+    float ymin{flt_max}, ymax{-flt_max};
+    bool any{};
+};
+
 // A tile of the frame's blade grass (build_tiles), nearest first.
 struct Tile
 {
@@ -811,6 +823,9 @@ struct State
     Latch latch;
     Fvector4 tables[kTabTotal]{};
     xr_vector<Tile> tiles, tiles_build; // the calc task's output and the one it builds next
+    // The tiles' summaries by level and place (the calc task's), on the lattice of tile_s0.
+    std::unordered_map<u64, TileSummary> tile_cache;
+    float tile_s0{};
     xr_vector<u32> groups; // the tiles as compute groups, 4 uints per group (expand_tiles)
     u32 group_count{}, lane_count{};
     u32 hidden{}; // the tiles in view the main view's occlusion hid this frame
@@ -1647,6 +1662,57 @@ bool casts_into_view(const Latch& L, Fbox box)
     return L.view.testAABB(box.data(), mask) != fcvNone;
 }
 
+// A slot's presence: the summed weight of its blade objects (da_grass_gen.cs).
+float slot_total(u32 info)
+{
+    float total = 0.f;
+    for (u32 id = 0; id < 4; ++id)
+        total += ((info >> (8 * id)) & 15u) ? float((info >> (8 * id + 4)) & 15u) / 15.f : 0.f;
+    return total;
+}
+
+// The summary of the tile at lattice place (x, z) and level k over [x0, x1] x [z0, z1] metres, worked out once (the slots
+// and the communities' presence and cover are the level's; a new lattice spacing - the height setting - starts over).
+const TileSummary& tile_summary(int x, int z, u32 k, float x0, float z0, float x1, float z1)
+{
+    if (g.tile_s0 != g.latch.s0)
+    {
+        g.tile_cache.clear();
+        g.tile_s0 = g.latch.s0;
+    }
+    const u64 key = (u64(k) << 60) | (u64(u32(x) & 0x3FFFFFFFu) << 30) | u64(u32(z) & 0x3FFFFFFFu);
+    const auto [it, fresh] = g.tile_cache.try_emplace(key);
+    TileSummary& S = it->second;
+    if (!fresh)
+        return S;
+    const int sx0 = std::max(iFloor(x0 / DETAIL_SLOT_SIZE) + g.offs_x, 0);
+    const int sx1 = std::min(iFloor(x1 / DETAIL_SLOT_SIZE) + g.offs_x, int(g.size_x) - 1);
+    const int sz0 = std::max(iFloor(z0 / DETAIL_SLOT_SIZE) + g.offs_z, 0);
+    const int sz1 = std::min(iFloor(z1 / DETAIL_SLOT_SIZE) + g.offs_z, int(g.size_z) - 1);
+    for (int sz = sz0; sz <= sz1; ++sz)
+        for (int sx = sx0; sx <= sx1; ++sx)
+        {
+            const size_t i = size_t(sz) * g.size_x + size_t(sx);
+            const u32 info = g.slot_info[i];
+            if (!(info & 0x0F0F0F0Fu))
+                continue;
+            const float total = slot_total(info);
+            for (u32 id = 0; id < 4; ++id)
+            {
+                const u32 comm = (info >> (8 * id)) & 15u;
+                if (!comm)
+                    continue;
+                const DaGrassCommunity& C = g_data.communities[comm - 1];
+                S.pc[comm - 1] = std::max(S.pc[comm - 1], std::min(total / std::max(C.presence, 0.05f), 1.f) * C.cover);
+            }
+            const DetailSlot& s = g.slots[i];
+            S.ymin = std::min(S.ymin, s.r_ybase());
+            S.ymax = std::max(S.ymax, s.r_ybase() + s.r_yheight());
+            S.any = true;
+        }
+    return S;
+}
+
 void build_tiles()
 {
     const Latch& L = g.latch;
@@ -1708,39 +1774,49 @@ void build_tiles()
             continue;
         }
         // The densest blade grass the tile's slots can grow now, and their height range.
-        const int sx0 = std::max(iFloor(x0 / DETAIL_SLOT_SIZE) + g.offs_x, 0);
-        const int sx1 = std::min(iFloor(x1 / DETAIL_SLOT_SIZE) + g.offs_x, int(g.size_x) - 1);
-        const int sz0 = std::max(iFloor(z0 / DETAIL_SLOT_SIZE) + g.offs_z, 0);
-        const int sz1 = std::min(iFloor(z1 / DETAIL_SLOT_SIZE) + g.offs_z, int(g.size_z) - 1);
         float dmax = 0.f, ymin = flt_max, ymax = -flt_max;
-        for (int sz = sz0; sz <= sz1; ++sz)
-            for (int sx = sx0; sx <= sx1; ++sx)
-            {
-                const size_t i = size_t(sz) * g.size_x + size_t(sx);
-                const u32 info = g.slot_info[i];
-                if (!(info & 0x0F0F0F0Fu))
-                    continue;
-                // The slot's presence is the summed weight of its blade objects (da_grass_gen.cs).
-                float total = 0.f;
-                for (u32 id = 0; id < 4; ++id)
-                    total += ((info >> (8 * id)) & 15u) ? float((info >> (8 * id + 4)) & 15u) / 15.f : 0.f;
-                // The full stand at any distance; r__dbg_grass 512 (QA): 1.6.1's palette weight from d1 to d2 on.
-                const float far_k = ps_r__dbg_grass & 512 ?
-                    std::clamp((dn - 0.75f * L.d1) / std::max(L.d2 - 0.75f * L.d1, 1.f), 0.f, 1.f) : 0.f;
-                for (u32 id = 0; id < 4; ++id)
+        // (The full stand at any distance; r__dbg_grass 512, QA: 1.6.1's palette weight from d1 to d2 on, by the tile's
+        // distance - no summary.)
+        if (!(ps_r__dbg_grass & 512))
+        {
+            const TileSummary& S = tile_summary(x, z, k, x0, z0, x1, z1);
+            if (!S.any)
+                continue;
+            for (u32 c = 0; c < da_grass_communities; ++c)
+                dmax = std::max(dmax, S.pc[c] * L.dens_now[c]);
+            ymin = S.ymin;
+            ymax = S.ymax;
+        }
+        else
+        {
+            const int sx0 = std::max(iFloor(x0 / DETAIL_SLOT_SIZE) + g.offs_x, 0);
+            const int sx1 = std::min(iFloor(x1 / DETAIL_SLOT_SIZE) + g.offs_x, int(g.size_x) - 1);
+            const int sz0 = std::max(iFloor(z0 / DETAIL_SLOT_SIZE) + g.offs_z, 0);
+            const int sz1 = std::min(iFloor(z1 / DETAIL_SLOT_SIZE) + g.offs_z, int(g.size_z) - 1);
+            const float far_k = std::clamp((dn - 0.75f * L.d1) / std::max(L.d2 - 0.75f * L.d1, 1.f), 0.f, 1.f);
+            for (int sz = sz0; sz <= sz1; ++sz)
+                for (int sx = sx0; sx <= sx1; ++sx)
                 {
-                    const u32 comm = (info >> (8 * id)) & 15u;
-                    if (!comm)
+                    const size_t i = size_t(sz) * g.size_x + size_t(sx);
+                    const u32 info = g.slot_info[i];
+                    if (!(info & 0x0F0F0F0Fu))
                         continue;
-                    const DaGrassCommunity& C = g_data.communities[comm - 1];
-                    const float near_p = std::min(total / std::max(C.presence, 0.05f), 1.f);
-                    const float presence = near_p + (std::min(total, 1.f) - near_p) * far_k;
-                    dmax = std::max(dmax, presence * C.cover * L.dens_now[comm - 1]);
+                    const float total = slot_total(info);
+                    for (u32 id = 0; id < 4; ++id)
+                    {
+                        const u32 comm = (info >> (8 * id)) & 15u;
+                        if (!comm)
+                            continue;
+                        const DaGrassCommunity& C = g_data.communities[comm - 1];
+                        const float near_p = std::min(total / std::max(C.presence, 0.05f), 1.f);
+                        const float presence = near_p + (std::min(total, 1.f) - near_p) * far_k;
+                        dmax = std::max(dmax, presence * C.cover * L.dens_now[comm - 1]);
+                    }
+                    const DetailSlot& s = g.slots[i];
+                    ymin = std::min(ymin, s.r_ybase());
+                    ymax = std::max(ymax, s.r_ybase() + s.r_yheight());
                 }
-                const DetailSlot& s = g.slots[i];
-                ymin = std::min(ymin, s.r_ybase());
-                ymax = std::max(ymax, s.r_ybase() + s.r_yheight());
-            }
+        }
         if (dmax <= 0.f)
             continue;
         const u32 j = dmax >= L.dlat ? 0u : u32(std::floor(std::log2(L.dlat / dmax)));
@@ -2356,6 +2432,7 @@ void da_grass_level_load()
     // A reed bed's culms stand that much taller for the water over their roots.
     g.level_hmax += s_reed_emerge_max;
     g.slot_info.assign(size_t(g.size_x) * g.size_z, 0);
+    g.tile_cache.clear();
     bool any = false;
     for (size_t i = 0; i < g.slot_info.size(); ++i)
     {

@@ -27,6 +27,15 @@ void	main	(p_shrub_mass_shadow I)
 			: shrub_mass_blot(I.xy_t.xy, I.part, I.dens, I.misc, I.xy_t.z), I.hpos.xy, 0.0f, 0.0f);
 		return;
 	}
-	const shrub_mass M = shrub_mass_at(I.xy_t.xy, I.part, I.dens, float4(I.misc.xyz, 64.0f), I.xy_t.w, 0.0f, float2(0.0f, 0.0f));
-	shrub_mass_clip(M.cover, I.hpos.xy, 0.0f, 0.0f); // a shadow map: always the plain alpha test (no temporal resolve)
+	// Where a leaf's cell is three texels and more: a round clump a leaf at the same cover (Beer-Lambert). A part casts
+	// from past the near leaves (a crown over 22 m away, its shadow in the near map, or any farther map), high over what it
+	// shades: its sunflecks are the sun's pinhole images and its leaves' outlines lie in a penumbra of some nine
+	// centimetres a ten metres of height. The leaves' own outlines (their texture, every cell's turn, the twigs) were
+	// most of the trees' shadow maps: seven million texels of a near map at a centimetre each.
+	// (The clumps' grid turned its own way per part, as the leaves' cells are: square to every quad, a crown's shadow
+	// showed its rows.)
+	float g_s, g_c;
+	sincos(I.dens.w * 6.2832f, g_s, g_c);
+	const float2 p = float2(I.xy_t.x * g_c - I.xy_t.y * g_s, I.xy_t.x * g_s + I.xy_t.y * g_c);
+	shrub_mass_clip(shrub_mass_dapple(p, I.part, I.dens, I.misc, I.dens.y, I.xy_t.z), I.hpos.xy, 0.0f, 0.0f);
 }

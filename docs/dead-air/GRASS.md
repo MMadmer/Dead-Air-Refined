@@ -197,7 +197,12 @@ Per frame:
    level, or nothing (`r__grass_occlusion` bit 1). Among the rookie village's fences and houses 780 of 1915
    tiles hide: 22014 -> 15270 groups, the blades' compute 2.4 -> 1.5 ms and their G-buffer 0.93 -> 0.8 ms on the
    RTX 3070 Laptop at Extreme; in the open 15 tiles hide; the HOM tests cost the main thread about 0.1 ms.
-   `r__grass_blades_stats` reports the hidden tiles.
+   `r__grass_blades_stats` reports the hidden tiles. What a tile's slots hold is the same in every frame: per community
+   the most presence x cover of its slots and the slots' height range are worked out the first time the tile is walked
+   and kept by its level and place (1.6.3, `TileSummary`; a new lattice spacing - the height row - starts over), the
+   frame multiplying the communities' density of the day in. Worked out over every slot of every tile each frame (a
+   300 m reach is some 70 000 slots) the walk was the calc task's heaviest work: a fifth of a core on Cordon at the
+   Maximum distance, a quarter of that now, the tiles, levels and lanes the same.
 3. **Ground window** (compute): a toroidal 1024², 2048² or 4096² R32F window of 0.25 m texels around the camera
    (the reach of the grass distance row; at 0.5 m texels a 27-degree slope read as a kerb and lost its grass),
    exactly the stock decompress rule - the highest up-facing non-passable surface under the slot's top,

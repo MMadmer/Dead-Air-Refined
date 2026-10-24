@@ -543,6 +543,8 @@ int ps_r__dbg_trees = 0;
 int ps_r__trees_cut = 1;
 // The trees' cut culls by the depth drawn so far (da_veg.cpp cut_dispatch: the opaque world, then the near trees); 0 for QA.
 int ps_r__trees_occlusion = 1;
+// The shrubs' view through the GPU cut (da_veg.cpp emit: out of the view, behind the depth, the wood's wire rule); 0 for QA.
+int ps_r__shrubs_cut = 1;
 // QA: the vegetation's soft switches (bits, all on by default; off: the hard switch, an A/B) - 1 the thinned prefixes'
 // soft ends (da_veg.cpp emit_thinned), 2 the crowns' wood prefixes' (da_veg_internal.h wood_runs), 4 the trees' stock
 // wood morphs (the ring levels and the patches' tessellation, da_trees.cpp).
@@ -2417,6 +2419,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__dbg_trees", &ps_r__dbg_trees, 0, 262143);
     CMD4(CCC_RuntimeInteger, "r__trees_cut", &ps_r__trees_cut, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__trees_occlusion", &ps_r__trees_occlusion, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__shrubs_cut", &ps_r__shrubs_cut, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__veg_soft", &ps_r__veg_soft, 0, 7);
     CMD4(CCC_RuntimeInteger, "r__dbg_wood", &ps_r__dbg_wood, 0, 6);
     CMD4(CCC_RuntimeFloat, "r__trees_lod_scale", &ps_r__trees_lod_scale, 0.05f, 20.f);

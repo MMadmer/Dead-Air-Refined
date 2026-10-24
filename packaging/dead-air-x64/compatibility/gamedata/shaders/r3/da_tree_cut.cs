@@ -7,7 +7,9 @@
 // list of the draw it takes (its route's: shrub_vertex reads the lists). The tree's own choice drew a near crown's far
 // side at its near side's detail, and the vertex shaders ran the part of a near crown out of the view and its
 // sub-pixel twigs only to throw them away: two near trees were three milliseconds. An element the depth drawn so far hides
-// (da_hzb.h: the opaque world's, the near trees' too in the far phase) joins no list either.
+// (da_hzb.h: the opaque world's, the near trees' too in the far phase) joins no list either. The last phase is the shrubs'
+// view (CUT_KEEP): each element keeps the draw the CPU chose by its bush's distance and leaves out only what its vertex
+// shaders would throw away - out of the view, behind the depth with every tree in it, the wood under the wire rule.
 
 #include "common.h"
 #include "da_shrub_common.h"
@@ -35,6 +37,13 @@ uniform float4	da_tree_cut_reg[SHRUB_DRAWS];	// a draw's list: x its first word,
 #define CUT_STOCK	2u
 #define CUT_PATCH	3u
 #define CUT_MASS	4u
+// The shrubs' (the cut's last phase): the draw the CPU chose for the element (its tier by the bush's distance), the cut
+// only leaving out what the vertex shaders would throw away - out of the view by its own bent place, behind the depth drawn
+// so far, the wood's wire rule. y: what it is (CUT_K_*).
+#define CUT_KEEP	5u
+#define CUT_K_LEAF	0u
+#define CUT_K_BLOOM	1u
+#define CUT_K_WOOD	2u
 // The crossfade band of a tier switch (da_veg_internal.h kBand).
 #define CUT_BAND	0.15f
 
@@ -73,19 +82,28 @@ void	main	(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 	[branch] if (group_on && local < (C.z & 0xFFu))
 	{
 		const shrub_inst I = shrub_inst_load(C.x);
-		const shrub_elem E = shrub_elem_load(C.y + local, true);
+		const shrub_elem E = shrub_elem_load(C.y + local, I.tree);
 		// The element's middle and reach (template metres), its arclength on its axis (the bend), its radius (the wood's
 		// rules) and its kind's hash (the crossfades').
 		float3 c = E.p;
 		float reach = 0.0f, s = 0.0f, r_mean = 0.0f, r_max = 0.0f, hash = 0.0f;
-		[branch] if (cls == CUT_LEAF)
+		const uint keep_k = uint(asfloat(R.y) + 0.5f);
+		[branch] if (cls == CUT_KEEP && keep_k == CUT_K_BLOOM)
+		{
+			// (A fruit group hangs from its site on its stalk, up to some three of its sizes across.)
+			const float2 ss = shrub_h2(E.w.y);
+			reach = 3.5f * ss.x * max(rsqrt(max(f16tof32(C.w & 0xFFFFu), 1e-3f)), 1.0f);
+			s = ss.y;
+			hash = float(E.w.z >> 8) / 16777216.0f;
+		}
+		else if (cls == CUT_LEAF || (cls == CUT_KEEP && keep_k == CUT_K_LEAF))
 		{
 			const float2 lw = shrub_h2(E.w.z);
 			reach = 2.2f * max(lw.x, lw.y) * max(rsqrt(max(f16tof32(C.w & 0xFFFFu), 1e-3f)), 1.0f);
 			s = f16tof32(E.w.w & 0xFFFFu);
 			hash = (float(E.w.w >> 24) + 0.5f) / 256.0f;
 		}
-		else if (cls == CUT_WOOD)
+		else if (cls == CUT_WOOD || cls == CUT_KEEP)
 		{
 			const float3 dir = shrub_oct(E.w.x);
 			const float2 lr = shrub_h2(E.w.y), rs = shrub_h2(E.w.z);
@@ -129,7 +147,7 @@ void	main	(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		// with all its reach.
 		const float3 w_rest = shrub_world(I, c);
 		float3 w = w_rest;
-		[branch] if ((cls <= CUT_WOOD || cls == CUT_MASS) && (C.z & SHRUB_CHUNK_RIGID) == 0u)
+		[branch] if ((cls <= CUT_WOOD || cls == CUT_MASS || cls == CUT_KEEP) && (C.z & SHRUB_CHUNK_RIGID) == 0u)
 		{
 			float3 n = float3(0.0f, 1.0f, 0.0f), t = float3(1.0f, 0.0f, 0.0f);
 			shrub_bend(w, n, t, (C.w >> 16) * SHRUB_CHUNK + local, E.axis, s, I, false);
@@ -158,10 +176,18 @@ void	main	(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 				pick = hash >= fh ? 0u : (hash >= fs ? 1u : (hash >= fc ? 2u : 4u));
 				fade = pick == 0u ? cut_fade(hash, fh, 1.0f) : (pick == 1u ? cut_fade(hash, fs, fh) : cut_fade(hash, fc, fs));
 			}
-			else if (cls == CUT_MASS)
+			else if (cls == CUT_MASS || cls == CUT_KEEP)
 			{
 				fade = cut_fade(hash, float((C.z >> 8) & 0xFFu) / 255.0f, float((C.z >> 16) & 0xFFu) / 255.0f);
 				pick = 0u;
+				// A shrub's wire rule (da_shrub_wood_vs.h): a segment under the pixel floor stands by the ratio of its width
+				// to it, its axis's hash deciding (in the view the ratio's square root stands).
+				[branch] if (cls == CUT_KEEP && keep_k == CUT_K_WOOD)
+				{
+					const float h_axis = float(shrub_hash(E.axis * 2654435761u ^ I.seed) >> 8) / 16777216.0f;
+					if (r_mean * I.scale < 0.5f * px * h_axis * h_axis)
+						pick = 4u;
+				}
 			}
 			else
 			{

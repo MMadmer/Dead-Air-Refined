@@ -149,12 +149,16 @@ enum CutClass : u32
     ccWood,
     ccStock,
     ccPatch,
-    ccMass
+    ccMass,
+    // A shrub's element in the draw the CPU chose (p0: 0 a leaf or a spray, 1 a flower or a fruit group, 2 the wood): the
+    // cut leaves out only what the vertex shaders would throw away.
+    ccKeep
 };
 constexpr u32 kCutRoute = 16, kMaxCutChunks = 1u << 16, kMaxCutWords = 1u << 22;
-// The cut's two phases of the view: the near trees first, culled against the depth the opaque world left, then the far
-// ones against it with the near trees' drawn in (a near crown hides the forest behind it; da_veg_render_gbuffer).
-constexpr u32 kCutPhases = 2;
+// The cut's phases of the view: the near trees first, culled against the depth the opaque world left, then the far
+// ones against it with the near trees' drawn in (a near crown hides the forest behind it; da_veg_render_gbuffer), then
+// the shrubs against it with every tree drawn in.
+constexpr u32 kCutPhases = 3, kCutShrubs = 2;
 
 // Trees: the tables a view or a cascade cuts the wood by (da_trees.cpp pack_tree), each a set's radii falling in its
 // elements' order - the grafted wood's three groups (levels 0-1, 2, 3) axis by axis by its thickest mean radius (a

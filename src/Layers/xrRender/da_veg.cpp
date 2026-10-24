@@ -166,6 +166,8 @@ struct State
     u32 cut_n[kCutPhases]{};
     u32 cut_reg[kCutPhases][drCount][4]{}, cut_room[kCutPhases][drCount]{};
     Fvector4 cut_planes[6]{};
+    // The candidate chunks the cut took this frame (every population's: their routes share one buffer).
+    u32 cut_chunk_total{};
     VertexStagingBuffer vb;
     IndexStagingBuffer ib;
     ref_geom geom;
@@ -188,6 +190,10 @@ struct State
     std::atomic<u32> stale_passes{};
 };
 State g;
+// The time the render thread waits for the frame's pick (da_veg_frame_prepare; r__gpu_log veg_wait: the share of the
+// pick the render thread pays).
+std::atomic<u64> g_wait_ticks{};
+std::atomic<u32> g_wait_frames{};
 
 Population* pop(u32 i) { return i == kPopShrubs ? shrubs_population() : i == kPopTrees ? trees_population() : nullptr; }
 
@@ -999,15 +1005,38 @@ u32 frame_record(Population& P, u32 i)
     return slot;
 }
 
-void emit(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float keep, float lo, float hi, u32 flags, float aux)
+// The chunks of draw d straight into pass p's list (the CPU's choice draws them all).
+void emit_direct(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float keep, float lo, float hi, u32 flags, float aux)
 {
-    if (!n || hi <= lo)
-        return;
     xr_vector<ChunkRec>& list = P.pass_chunks[p][d];
     const u32 window = u8f(lo) << 8 | u8f(hi) << 16 | flags;
     for (u32 k = 0; k < n; k += kChunk)
         list.push_back(ChunkRec{rec, first + k, std::min(kChunk, n - k) | window, h2(keep, aux)});
     P.elements[d] += n;
+}
+
+void emit(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float keep, float lo, float hi, u32 flags, float aux)
+{
+    if (!n || hi <= lo)
+        return;
+    // The shrubs' view through the GPU cut (r3\da_tree_cut.cs CUT_KEEP): the draw chosen here, the elements its vertex
+    // shaders would throw away - out of the view by their own bent place, behind the depth drawn so far (the opaque
+    // world and every tree), the wood under the wire rule - left out on the GPU instead of run and collapsed. Behind a
+    // near trunk half a million shrub elements ran their vertices for a few thousand pixels: Ghost of Tsushima culls its
+    // proxy sets' instances on the GPU against the frame's depth.
+    if (!p && P.index == kPopShrubs && P.cut_phase == kCutShrubs)
+    {
+        const u32 kind = kDrawKind[d];
+        const Draw dd = Draw(d);
+        const Draw ds[4] = {dd, dd, dd, dd};
+        if (kind == kKindCluster || kind == kKindBlob)
+            cut(P, ccMass, ds, rec, first, n, keep, lo, hi, flags, float(kind), 0.f, 0.f, aux);
+        else
+            cut(P, ccKeep, ds, rec, first, n, keep, lo, hi, flags, kind == kKindWood ? 2.f : (kind == kKindBloom ? 1.f : 0.f), 0.f, 0.f,
+                aux);
+        return;
+    }
+    emit_direct(P, p, d, rec, first, n, keep, lo, hi, flags, aux);
 }
 
 void thinned_runs(u32 n, float share, float keep, const std::function<void(u32 first, u32 count, float keep)>& run)
@@ -1052,6 +1081,9 @@ void emit_thinned(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float 
     thinned_runs(n, share, keep, [&](u32 a, u32 c, float k) { emit(P, p, d, rec, first + a, c, k, lo, hi, flags); });
 }
 
+// The population a phase of the cut culls (the trees' near and far phases, the shrubs').
+u32 cut_owner(u32 phase) { return phase == kCutShrubs ? kPopShrubs : kPopTrees; }
+
 bool cut_on()
 {
     return ps_r__trees_cut && g.s_cut && g.s_cut_args && g.cut_routes_b.srv && g.cut_counts_b.uav && g.cut_args_b.uav && g.chunks_b.uav;
@@ -1071,12 +1103,13 @@ void cut(Population& P, CutClass cls, const Draw (&d)[4], u32 rec, u32 first, u3
         for (u32 k = 0; k < drCount; ++k)
             words += (g.cut_room[q][k] + (q == ph && ((mask >> k) & 1u) ? n : 0u) + kChunk - 1) / kChunk * kChunk;
     const u32 chunks = (n + kChunk - 1) / kChunk;
-    if (words > kMaxCutWords || u32(P.cut_chunks[0].size() + P.cut_chunks[1].size()) + chunks > kMaxCutChunks)
+    if (words > kMaxCutWords || g.cut_chunk_total + chunks > kMaxCutChunks)
     {
         P.cut_fallback += n;
-        emit(P, 0, d[cls == ccPatch || cls == ccMass ? 0 : 1], rec, first, n, keep, lo, hi, flags, aux);
+        emit_direct(P, 0, d[cls == ccPatch || cls == ccMass || cls == ccKeep ? 0 : 1], rec, first, n, keep, lo, hi, flags, aux);
         return;
     }
+    g.cut_chunk_total += chunks;
     for (u32 k = 0; k < drCount; ++k)
         if ((mask >> k) & 1u)
             g.cut_room[ph][k] += n;
@@ -1124,6 +1157,7 @@ void build_frame()
     const Latch& L = g.latch;
     g.records = 0;
     g.inst_records.clear();
+    g.cut_chunk_total = 0;
     g.chunks.clear();
     g.bend_blocks.clear();
     g.bend_n = g.bend_view_n = 0;
@@ -1155,7 +1189,7 @@ void build_frame()
             P->cut_chunks[q].clear();
             P->cut_routes[q].clear();
         }
-        P->cut_phase = 0;
+        P->cut_phase = P->index == kPopShrubs && cut_on() && ps_r__shrubs_cut ? kCutShrubs : 0u;
         P->cut_elements = 0;
         P->cut_fallback = 0;
         for (auto& pass : P->draw_count)
@@ -1278,23 +1312,23 @@ void build_frame()
             CpuSpan span(*P);
             append(*P, 0);
         }
-    // The trees' GPU cut: its candidate chunks after the view's draws (they draw in the view: their bends a frame back
-    // too), the near trees' phase first.
+    // The GPU cut: its candidate chunks after the view's draws (they draw in the view: their bends a frame back too), the
+    // near trees' phase first, then the far trees', then the shrubs'.
     g.cut_first = u32(g.chunks.size());
     g.cut_count = 0;
     std::fill(std::begin(g.cut_n), std::end(g.cut_n), 0u);
-    if (Population* P = pop(kPopTrees); pop_on(P))
+    for (u32 q = 0; q < kCutPhases; ++q)
     {
+        Population* P = pop(cut_owner(q));
+        if (!pop_on(P))
+            continue;
         CpuSpan span(*P);
-        for (u32 q = 0; q < kCutPhases; ++q)
-        {
-            const u32 n = std::min(u32(P->cut_chunks[q].size()), kMaxChunks - std::min(u32(g.chunks.size()), kMaxChunks));
-            g.chunks.insert(g.chunks.end(), P->cut_chunks[q].begin(), P->cut_chunks[q].begin() + n);
-            g.cut_n[q] = n;
-            g.cut_count += n;
-        }
-        if (g.cut_count)
-            bend_block(kPopTrees, g.cut_first, g.cut_first + g.cut_count);
+        const u32 start = u32(g.chunks.size());
+        const u32 n = std::min(u32(P->cut_chunks[q].size()), kMaxChunks - std::min(start, kMaxChunks));
+        g.chunks.insert(g.chunks.end(), P->cut_chunks[q].begin(), P->cut_chunks[q].begin() + n);
+        g.cut_n[q] = n;
+        g.cut_count += n;
+        bend_block(P->index, start, start + n);
     }
     g.bend_view_end = u32(g.chunks.size());
     number_bends(0);
@@ -1419,6 +1453,9 @@ void draw(CBackend& cmd, const Population& P, const ref_shader& shader, u32 pass
     // The trees' GPU cut's list of the draw, the near trees' (the view's: r3\da_tree_cut.cs).
     if (!pass && P.index == kPopTrees && g.cut_n[0] && g.cut_reg[0][d][1])
         draw_range(cmd, P, shader, g.cut_reg[0][d][0], 1, pass, d, sun, texel, 0);
+    // The shrubs' (their every view draw goes through the cut while it runs).
+    if (!pass && P.index == kPopShrubs && g.cut_n[kCutShrubs] && g.cut_reg[kCutShrubs][d][1])
+        draw_range(cmd, P, shader, g.cut_reg[kCutShrubs][d][0], 1, pass, d, sun, texel, s32(kCutShrubs));
 }
 
 // The far trees' list of draw d of the cut (the view's second phase).
@@ -1720,8 +1757,7 @@ dx11GpuTimers::Slot bend_timer(u32 pi) { return pi == kPopShrubs ? dx11GpuTimers
 void cut_prepare(ID3D11DeviceContext* ctx)
 {
     std::memset(g.cut_reg, 0, sizeof(g.cut_reg));
-    const Population* P = pop(kPopTrees);
-    if (!g.cut_count || !pop_on(P))
+    if (!g.cut_count)
     {
         g.cut_count = 0;
         std::fill(std::begin(g.cut_n), std::end(g.cut_n), 0u);
@@ -1744,7 +1780,7 @@ void cut_prepare(ID3D11DeviceContext* ctx)
         if (g.cut_n[q])
         {
             const D3D11_BOX box{routes * kCutRoute, 0, 0, (routes + g.cut_n[q]) * kCutRoute, 1, 1};
-            ctx->UpdateSubresource(g.cut_routes_b.buf, 0, &box, P->cut_routes[q].data(), 0, 0);
+            ctx->UpdateSubresource(g.cut_routes_b.buf, 0, &box, pop(cut_owner(q))->cut_routes[q].data(), 0, 0);
         }
         routes += g.cut_n[q];
     }
@@ -1778,13 +1814,14 @@ void cut_dispatch(CBackend& cmd, u32 phase)
                         line += " ";
                         line += std::to_string(n).c_str();
                     }
-                Msg("* [trees] the GPU cut drew of the %s trees: %s", q ? "far" : "near", line.empty() ? "nothing" : line.c_str());
+                Msg("* [trees] the GPU cut drew of the %s: %s", q == kCutShrubs ? "shrubs" : (q ? "far trees" : "near trees"),
+                    line.empty() ? "nothing" : line.c_str());
             }
             ctx->Unmap(g.cut_staging, 0);
         }
         g.cut_readback = 0;
     }
-    const Population* P = pop(kPopTrees);
+    const Population* P = pop(cut_owner(phase));
     if (!g.cut_n[phase] || !pop_on(P))
         return;
     const bool hzb = ps_r__trees_occlusion && da_hzb_build(cmd);
@@ -1802,7 +1839,10 @@ void cut_dispatch(CBackend& cmd, u32 phase)
         }
         cmd.set_c("da_tree_cut1", float(phase * drCount), 0.f, 0.f, 0.f);
     };
-    const u32 first = phase ? g.cut_n[0] : 0u, count = g.cut_n[phase];
+    u32 first = 0;
+    for (u32 q = 0; q < phase; ++q)
+        first += g.cut_n[q];
+    const u32 count = g.cut_n[phase];
     const UINT initial[3] = {~0u, ~0u, ~0u};
     ID3D11UnorderedAccessView* none[3]{};
     {
@@ -1848,7 +1888,11 @@ void cut_dispatch(CBackend& cmd, u32 phase)
         ctx->CSSetUnorderedAccessViews(0, 3, none, initial);
         cmd.clear_CS_resources();
     }
-    if (phase + 1 == kCutPhases && g.cut_readback == 1)
+    u32 last = 0;
+    for (u32 q = 0; q < kCutPhases; ++q)
+        if (g.cut_n[q])
+            last = q;
+    if (phase == last && g.cut_readback == 1)
     {
         ctx->CopyResource(g.cut_staging, g.cut_counts_b.buf);
         g.cut_readback = 2;
@@ -1899,6 +1943,11 @@ void da_veg_level_load()
 {
     release_all();
     g.failed = false;
+    dx11GpuTimers::RegisterField("veg_wait", [] {
+        const u64 ticks = g_wait_ticks.exchange(0, std::memory_order_relaxed);
+        const u32 frames = g_wait_frames.exchange(0, std::memory_order_relaxed);
+        return frames ? float(double(ticks) * 1000.0 / double(CPU::qpc_freq) / frames) : 0.f;
+    });
     if (!g_pGameLevel)
         return;
     const bool shaders = shaders_present();
@@ -2012,10 +2061,13 @@ void da_veg_frame_begin()
 
 void da_veg_frame_prepare(CBackend& cmd)
 {
+    const u64 t0 = CPU::QPC();
     if (Task* task = std::exchange(g_frame_task, nullptr))
         TaskScheduler->Wait(*task);
     else if (da_veg_active())
         frame_pick();
+    g_wait_ticks.fetch_add(CPU::QPC() - t0, std::memory_order_relaxed);
+    g_wait_frames.fetch_add(1, std::memory_order_relaxed);
     if (!da_veg_active())
         return;
     Population* first = pop_on(pop(kPopShrubs)) ? pop(kPopShrubs) : pop(kPopTrees);
@@ -2077,6 +2129,8 @@ void da_veg_render_gbuffer(CBackend& cmd)
             const bool trees = pi == kPopTrees;
             if (trees)
                 cut_dispatch(cmd, 0);
+            else
+                cut_dispatch(cmd, kCutShrubs);
             cmd.set_xform_world(Fidentity);
             for (const u32 d : P->view_draws())
                 draw(cmd, *P, g.s_draw[d], 0, d);
