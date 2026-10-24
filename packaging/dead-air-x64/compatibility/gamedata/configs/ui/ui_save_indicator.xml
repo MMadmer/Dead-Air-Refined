@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The save indicator (CUISaveIndicator): a gas mask drawn per pixel by the xms_ui_shape shader at
-     the right edge of the screen, just above the ammo counter. It blinks while a game is being saved,
-     then rises to its full alpha with a tick (or a cross, if the save failed) and fades out.
-     right, y and size are 768-line units: the gap to the screen's right edge, the icon's centre,
-     its height. fill is the mask at its full alpha; line and border are a faint glow round it that
-     keeps it readable on a dark scene. pulse_low is the share of the full alpha a blink dips to;
-     the times are seconds. -->
+<!-- The save indicator (CUISaveIndicator): an ash-white gas mask on a dark disc at the middle of the screen's right
+     edge, drawn per pixel by the xms_ui_shape shader, big and bright enough to be caught from the corner of the eye.
+     It slides in, an arc runs round the disc while the game is saved, then the arc closes into a ring: a success sends
+     a ping out of it and pops a tick up on the mask; a failure turns ring, mask and disc red, shudders and pops a cross.
+     right, y, size and slide are 768-line units: the gap to the screen's right edge, the disc's centre, its diameter,
+     how far it slides in. mask is the mask's height as a share of the disc's, arc the running arc's length (radians);
+     the times are seconds (hold and hold_failed: how long the outcome stays).
+     plate: the disc (fill) and its rim (line, border); ring: the arc's and the ring's colour (fill) and thickness
+     (border); mask: the mask's colour; failed: the ring's and the mask's colour (fill) and the disc's (line) on a
+     failure. -->
 <w>
-    <save_indicator right="12" y="698" size="34" fill="#000000bf" line="#ffffff1a" border="4"
-        fade_in="0.3" pulse_period="1.4" pulse_low="0.25" rise="0.2" badge_in="0.3" hold="1.2" fade_out="0.6"/>
+    <save_indicator right="24" y="384" size="72" slide="32" mask="0.66" arc="2.2"
+        enter="0.25" spin="1.1" close="0.25" badge_in="0.3" ping="0.55" shake="0.45" hold="1.6" hold_failed="3" exit="0.4">
+        <plate fill="#0c0c0ce0" line="#e2e0da40" border="1.5"/>
+        <ring fill="#e2e0da" border="4"/>
+        <mask fill="#e2e0da"/>
+        <failed fill="#e5483d" line="#3a0e0bf0"/>
+    </save_indicator>
 </w>

@@ -323,6 +323,26 @@ public:
     void Save(IWriter*) override {}
 };
 
+// dar_save_indicator_demo <saving|done|failed>: the save indicator as a save would drive it, with no save (QA, a look
+// at it). "saving" spins three seconds and reports a success.
+class CCC_SaveIndicatorDemo final : public IConsole_Command
+{
+public:
+    CCC_SaveIndicatorDemo(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!MainMenu())
+            return;
+        CUISaveIndicator& indicator = MainMenu()->SaveIndicator();
+        indicator.Request(!xr_strcmp(args, "saving") ? 3000 : 0);
+        if (!xr_strcmp(args, "done"))
+            indicator.Finish(true);
+        else if (!xr_strcmp(args, "failed"))
+            indicator.Finish(false);
+    }
+    void Save(IWriter*) override {}
+};
+
 class CCC_SessionReport : public IConsole_Command
 {
 public:
@@ -3982,6 +4002,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_DebugMenu, "dar_debug_menu");
     CMD1(CCC_DebugMenuOpen, "dar_debug_menu_open");
     CMD1(CCC_DebugMenuDo, "dar_debug_menu_do");
+    CMD1(CCC_SaveIndicatorDemo, "dar_save_indicator_demo");
     CMD4(CCC_Integer, "dar_instant_inventory", &g_dar_instant_inventory, 0, 1);
     CMD4(CCC_Integer, "dar_rain_douses_fires", &g_dar_rain_douses_fires, 0, 1);
     // the dialog window at the screen's left edge (0), where its layout puts it (1, the middle) or at the right

@@ -13,6 +13,8 @@ namespace
 constexpr u32 requestGraceMs = 500;
 // the frames the save's thumbnail is taken from must not carry the icon
 constexpr u32 thumbnailFrames = 2;
+// an arc this long (radians) is a whole ring: the shader fades it along a Gaussian of this width
+constexpr float fullRing = 60.f;
 
 float smooth(float x)
 {
@@ -32,46 +34,72 @@ u32 scale_alpha(u32 argb, float factor)
 {
     return subst_alpha(argb, iFloor(color_get_A(argb) * std::clamp(factor, 0.f, 1.f) + 0.5f));
 }
+
+u32 mix(u32 a, u32 b, float t)
+{
+    t = std::clamp(t, 0.f, 1.f);
+    const auto channel = [&](u32 x, u32 y) { return u32(iFloor(float(x) + (float(y) - float(x)) * t + 0.5f)); };
+    return color_rgba(channel(color_get_R(a), color_get_R(b)), channel(color_get_G(a), color_get_G(b)),
+        channel(color_get_B(a), color_get_B(b)), channel(color_get_A(a), color_get_A(b)));
+}
 } // namespace
 
 void CUISaveIndicator::ReadLook()
 {
     m_lookRead = true;
-    m_look.shape.kind = SUIShapeStyle::Kind::GasMask;
-    m_look.shape.fill = color_rgba(0, 0, 0, 191);
-    m_look.shape.line = color_rgba(255, 255, 255, 26);
-    m_look.shape.border = 4.f;
+    // black against ash, the mod's own
+    m_look.plate.kind = SUIShapeStyle::Kind::Box;
+    m_look.plate.fill = color_rgba(12, 12, 12, 224);
+    m_look.plate.line = color_rgba(226, 224, 218, 64);
+    m_look.plate.border = 1.5f;
+    m_look.ring.kind = SUIShapeStyle::Kind::HitArc;
+    m_look.ring.fill = color_rgba(226, 224, 218, 255);
+    m_look.ring.border = 4.f;
+    m_look.mask.kind = SUIShapeStyle::Kind::GasMask;
+    m_look.mask.fill = color_rgba(226, 224, 218, 255);
 
     CUIXml xml;
     if (!xml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "ui_save_indicator.xml", false))
         return;
     constexpr pcstr node = "save_indicator";
-    UIShape::Read(xml, node, 0, m_look.shape);
-    // the shape is the indicator's whatever the layout says
-    m_look.shape.kind = SUIShapeStyle::Kind::GasMask;
+    UIShape::Read(xml, "save_indicator:plate", 0, m_look.plate);
+    UIShape::Read(xml, "save_indicator:ring", 0, m_look.ring);
+    UIShape::Read(xml, "save_indicator:mask", 0, m_look.mask);
+    // the shapes are the indicator's whatever the layout says
+    m_look.plate.kind = SUIShapeStyle::Kind::Box;
+    m_look.ring.kind = SUIShapeStyle::Kind::HitArc;
+    m_look.mask.kind = SUIShapeStyle::Kind::GasMask;
+    m_look.failed = UIShape::ParseColor(xml.ReadAttrib("save_indicator:failed", 0, "fill", nullptr), m_look.failed);
+    m_look.failedPlate = UIShape::ParseColor(xml.ReadAttrib("save_indicator:failed", 0, "line", nullptr), m_look.failedPlate);
     const auto read = [&](pcstr name, float& value) { value = xml.ReadAttribFlt(node, 0, name, value); };
     read("right", m_look.right);
     read("y", m_look.y);
     read("size", m_look.size);
-    read("fade_in", m_look.fadeIn);
-    read("pulse_period", m_look.pulsePeriod);
-    read("pulse_low", m_look.pulseLow);
-    read("rise", m_look.rise);
+    read("slide", m_look.slide);
+    read("mask", m_look.maskShare);
+    read("arc", m_look.arc);
+    read("enter", m_look.enter);
+    read("spin", m_look.spin);
+    read("close", m_look.close);
     read("badge_in", m_look.badgeIn);
+    read("ping", m_look.ping);
+    read("shake", m_look.shake);
     read("hold", m_look.hold);
-    read("fade_out", m_look.fadeOut);
+    read("hold_failed", m_look.holdFailed);
+    read("exit", m_look.exit);
 }
 
 void CUISaveIndicator::Enter(Phase phase, u32 now)
 {
     m_phase = phase;
     m_phaseAt = now;
-    m_from = m_opacity;
+    m_from = m_shown;
 }
 
-void CUISaveIndicator::Request()
+void CUISaveIndicator::Request(u32 holdMs)
 {
     const u32 now = Device.dwTimeContinual;
+    m_holdMs = holdMs;
     m_requestFrame = Device.dwFrame;
     if (m_phase != Phase::Saving)
     {
@@ -98,59 +126,94 @@ void CUISaveIndicator::Render()
     m_drawnFrame = Device.dwFrame;
     if (!m_lookRead)
         ReadLook();
+    const Look& look = m_look;
 
     const u32 now = Device.dwTimeContinual;
     if (m_phase == Phase::Saving)
     {
-        const bool inFlight = CALifeStorageManager::save_in_flight() ||
+        const bool inFlight = CALifeStorageManager::save_in_flight() || now - m_requestedAt < m_holdMs ||
             (!m_finished && now - m_requestedAt < requestGraceMs);
         if (!inFlight)
+        {
+            m_angle = std::fmod(Seconds(now) / std::max(look.spin, 0.1f), 1.f) * PI_MUL_2;
             Enter(Phase::Result, now);
+        }
     }
 
-    const float start = m_from;
-    float opacity;
-    SUIShapeStyle shape = m_look.shape;
+    const float t = Seconds(now);
+    const float enter = std::max(look.enter, 0.01f);
+    SUIShapeStyle plate = look.plate, ring = look.ring, mask = look.mask;
+    float shown, angle, arc, failure = 0.f, ping = -1.f, dx = 0.f;
     if (m_phase == Phase::Saving)
     {
-        // up from where it was, then a smooth blink between the full alpha and pulse_low of it
-        const float t = Seconds(now);
-        if (t < m_look.fadeIn)
-            opacity = start + (1.f - start) * smooth(t / m_look.fadeIn);
-        else
-        {
-            const float wave = 0.5f - 0.5f * std::cos(PI_MUL_2 * (t - m_look.fadeIn) / std::max(m_look.pulsePeriod, 0.1f));
-            opacity = 1.f - (1.f - m_look.pulseLow) * wave;
-        }
-        m_opacity = opacity;
+        // in from where it was, the arc running round
+        shown = m_from + (1.f - m_from) * smooth(t / enter);
+        angle = t / std::max(look.spin, 0.1f) * PI_MUL_2;
+        arc = look.arc;
+        m_shown = shown;
         if (Device.dwFrame <= m_requestFrame + thumbnailFrames)
             return;
     }
     else
     {
-        // up to the full alpha, the badge pops, a hold, the fade
-        const float t = Seconds(now);
-        const float fadeAt = m_look.rise + m_look.hold;
-        if (t >= fadeAt + m_look.fadeOut)
+        // the ring closes where the arc was, the outcome shows, a hold, out
+        const float close = std::max(look.close, 0.01f);
+        const float exitAt = close + (m_failed ? look.holdFailed : look.hold);
+        if (t >= exitAt + look.exit)
         {
             m_phase = Phase::Idle;
-            m_opacity = 0.f;
+            m_shown = 0.f;
             return;
         }
-        opacity = t < fadeAt ? start + (1.f - start) * smooth(t / std::max(m_look.rise, 0.01f)) :
-                               1.f - smooth((t - fadeAt) / std::max(m_look.fadeOut, 0.01f));
-        shape.badge = m_failed ? SUIShapeStyle::Badge::Failed : SUIShapeStyle::Badge::Done;
-        shape.badgeScale = pop(t / std::max(m_look.badgeIn, 0.01f));
-        m_opacity = opacity;
+        shown = t < exitAt ? m_from + (1.f - m_from) * smooth(t / enter) : 1.f - smooth((t - exitAt) / std::max(look.exit, 0.01f));
+        const float closing = smooth(t / close);
+        angle = m_angle;
+        arc = look.arc + (fullRing - look.arc) * closing;
+        const float outcome = (t - close * 0.5f) / std::max(look.badgeIn, 0.01f);
+        mask.badge = m_failed ? SUIShapeStyle::Badge::Failed : SUIShapeStyle::Badge::Done;
+        mask.badgeScale = outcome > 0.f ? pop(outcome) : 0.f;
+        if (m_failed)
+        {
+            failure = closing;
+            // a short shudder sideways, dying out
+            const float s = (t - close * 0.5f) / std::max(look.shake, 0.01f);
+            if (s > 0.f && s < 1.f)
+                dx = std::sin(s * PI_MUL_2 * 3.5f) * 4.f * (1.f - s);
+        }
+        else
+            ping = (t - close * 0.5f) / std::max(look.ping, 0.01f);
+        m_shown = shown;
     }
-
-    shape.fill = scale_alpha(shape.fill, opacity);
-    shape.line = scale_alpha(shape.line, opacity);
 
     // square on screen: layout x units are narrower than y units in a 16:9 layout
     const float kx = UI().ClientToScreenScaledY(1.f) / std::max(UI().ClientToScreenScaledX(1.f), 0.001f);
-    const float width = m_look.size * kx;
-    const float rightEdge = UI_BASE_WIDTH - m_look.right * kx;
-    const float top = m_look.y - m_look.size * 0.5f;
-    UIShape::Draw(m_shader, Frect().set(rightEdge - width, top, rightEdge, top + m_look.size), shape);
+    const float half = look.size * 0.5f;
+    const float cx = UI_BASE_WIDTH - (look.right + half - (1.f - smooth(shown)) * look.slide - dx) * kx;
+    const float cy = look.y;
+    const auto square = [&](float halfHeight) {
+        return Frect().set(cx - halfHeight * kx, cy - halfHeight, cx + halfHeight * kx, cy + halfHeight);
+    };
+
+    plate.radius = half;
+    plate.fill = scale_alpha(mix(plate.fill, look.failedPlate, failure), shown);
+    plate.line = scale_alpha(plate.line, shown);
+    UIShape::Draw(m_shader, square(half), plate);
+
+    ring.fraction = angle;
+    ring.gap = arc;
+    ring.fill = scale_alpha(mix(ring.fill, look.failed, failure), shown);
+    UIShape::Draw(m_shader, square(half), ring);
+
+    mask.fill = scale_alpha(mix(mask.fill, look.failed, failure), shown);
+    mask.line = scale_alpha(mask.line, shown);
+    UIShape::Draw(m_shader, square(half * look.maskShare), mask);
+
+    // a success sends a ring out of the disc
+    if (ping > 0.f && ping < 1.f)
+    {
+        SUIShapeStyle wave = look.ring;
+        wave.gap = fullRing;
+        wave.fill = scale_alpha(look.ring.fill, (1.f - ping) * (1.f - ping) * shown);
+        UIShape::Draw(m_shader, square(half * (1.f + 0.6f * smooth(ping))), wave);
+    }
 }
