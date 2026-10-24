@@ -11,6 +11,7 @@ target_sources(xrVulkan PRIVATE
     vk_infra.cpp
     vk_spirv.cpp
     vk_pipeline.cpp
+    vk_prewarm.cpp
     vk_device.cpp
     vk_objects.cpp
     vk_context_state.cpp

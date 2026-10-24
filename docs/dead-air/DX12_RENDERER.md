@@ -229,6 +229,19 @@ While an upscaler is active the scene samplers get `log2(render/display) - 1` ad
   `ID3D12PipelineLibrary` at `appdata/shaders_cache_grizzly/r5/pipelines.bin`. It is written as a level's
   precache ends when pipelines were added (`CHW::SavePipelines`, 1.6.2) and at shutdown: a crash keeps the
   level's.
+- Pipeline prewarm (1.6.2, `d12_prewarm.cpp`). Every graphics PSO is journaled by content next to the library
+  (`r5/pipelines.journal`: the shaders' content hashes, the D3D12 states, the input layout; driver-independent,
+  so it outlives a driver update that throws the library away). Live graphics shaders are listed by content
+  hash (`PublishShader`; a job holds a shader only while its counter is above zero). `CHW::PrewarmPipelines`
+  runs as the level's shaders were created (`level_Load`), as the precache starts (the game's objects are
+  spawned) and as it ends: each journaled PSO whose shaders all exist goes to 1-6 below-normal threads, which
+  load it from the library or compile it under the same key the context will ask for (a description that
+  hashes to another key is skipped). The release's journal, `gamedata/shaders_cache_pack/r5/pipelines.journal`
+  (the QA sweep's), is merged in once per device; its PSOs join this machine's journal once built here. Past
+  4096 PSOs, those no level built for 32 sessions are left out at the next save. The log: `pipeline prewarm: N
+  pipelines queued, M compiled on demand so far` per call and `pipeline prewarm: N pipelines in X ms (...)` per
+  pass. QA (`tools/qa/water/pipeline_prewarm.lua`, the meadow without the library): 185 PSOs compiled by the
+  contexts during the load, 45 with the journal, the other 128 by the prewarm.
 - Queries: occlusion and timestamp heaps resolved into readback memory; event queries are fence
   values; `GetData` flushes like D3D11 unless `DONOTFLUSH`. Results are resolved when the list
   closes, one `ResolveQueryData` per run of consecutive slots (`Context::pendingResolves`): a resolve

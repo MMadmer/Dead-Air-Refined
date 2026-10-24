@@ -423,9 +423,13 @@ bool D3DXRenderBase::OwnFrameLimit(u32 fpsLimit)
 void D3DXRenderBase::ResourcesDestroyNecessaryTextures()
 {
     Resources->DestroyNecessaryTextures();
-    // The device calls this as a level's precache ends, behind the loading screen: the pipelines it built go to disk.
+    // The device calls this as a level's precache ends, behind the loading screen: what the precache created joins
+    // the prewarm, and the pipelines built so far go to disk.
+    HW.PrewarmPipelines();
     HW.SavePipelines();
 }
+
+void D3DXRenderBase::PrewarmPipelines() { HW.PrewarmPipelines(); }
 void D3DXRenderBase::ClearTarget()
 {
     RCache.ClearRT(RCache.get_RT(), {}); // black

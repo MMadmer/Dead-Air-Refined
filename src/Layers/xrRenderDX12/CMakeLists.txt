@@ -8,6 +8,7 @@ target_sources(xrD3D12 PRIVATE
     d12_layer.h
     ../xrRender/present_pacing.h
     d12_infra.cpp
+    d12_prewarm.cpp
     d12_device.cpp
     d12_objects.cpp
     d12_context_state.cpp

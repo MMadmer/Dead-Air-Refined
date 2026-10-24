@@ -218,9 +218,10 @@ D3D12_SHADER_BYTECODE Bytecode(const Shader* shader)
     return {shader->bytecode.data(), shader->bytecode.size()};
 }
 
-const char* NameOf(const Shader* shader)
+std::string NameOf(const Shader* shader)
 {
-    return shader && !shader->name.empty() ? shader->name.c_str() : "-";
+    std::string name = shader ? ShaderName(shader) : std::string();
+    return name.empty() ? "-" : name;
 }
 
 // The message doubles as the once-key.
@@ -283,7 +284,7 @@ ID3D12PipelineState* PipelineCache::GraphicsMesh(const GraphicsPsoDesc& desc, u6
             "! mesh pipeline %016llx refused: %s (ms '%s', as '%s')", static_cast<unsigned long long>(hash),
             !root ? "no mesh root signature" : (as && as->kind != kKindAmplification) ? "the geometry slot holds no amplification shader"
                                                                                        : "tessellation stages bound",
-            NameOf(ms), NameOf(as));
+            NameOf(ms).c_str(), NameOf(as).c_str());
         return Insert(hash, nullptr, nullptr);
     }
 
@@ -321,7 +322,8 @@ ID3D12PipelineState* PipelineCache::GraphicsMesh(const GraphicsPsoDesc& desc, u6
     {
         LogOnce(reinterpret_cast<const void*>(static_cast<uintptr_t>(hash ^ kMeshKeySalt ^ 1)),
             "! mesh pipeline %016llx refused by the driver: ms '%s', as '%s', ps '%s', %u RTVs, DSV %d",
-            static_cast<unsigned long long>(hash), NameOf(ms), NameOf(as), NameOf(desc.ps), desc.numRTVs, int(desc.dsvFormat));
+            static_cast<unsigned long long>(hash), NameOf(ms).c_str(), NameOf(as).c_str(), NameOf(desc.ps).c_str(), desc.numRTVs,
+            int(desc.dsvFormat));
         return Insert(hash, nullptr, nullptr);
     }
     // NativeStream keeps its own reference under its key; the engine key gets one of its own.

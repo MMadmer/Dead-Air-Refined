@@ -6,7 +6,8 @@
 # staged in artifacts\shader_pack; New-DeadAirCompatibilityArchive packs it as gamedata\shaders_cache_pack. The engine
 # reads a file there where the player's own cache has none valid, so the first start after an update compiles only
 # what the sweep did not reach. Bytecode does not depend on the GPU, but the DXIL and SPIR-V folders are named after
-# the device's shader model, wave size and 16-bit support: the rig's card fills the NVIDIA ones.
+# the device's shader model, wave size and 16-bit support: the rig's card fills the NVIDIA ones. The pipeline
+# journals of r5 and r6 come along.
 #
 #   pwsh -File tools\package\build_shader_pack.ps1 [-Renderers r4,r5,r6] [-Save qa_meadow] [-Seconds 900]
 [CmdletBinding()]
@@ -36,7 +37,8 @@ foreach ($renderer in $Renderers) {
 
 if (Test-Path -LiteralPath $pack) { Remove-Item -LiteralPath $pack -Recurse -Force }
 New-Item -ItemType Directory -Path $pack -Force | Out-Null
-# The pipeline libraries are the driver's, not bytecode: they stay out.
+# The pipeline libraries are the driver's, not bytecode: they stay out. The journals (pipelines.journal, by content)
+# go in: the first start's prewarm builds the pipelines the sweep met (d12_prewarm.cpp, vk_prewarm.cpp).
 Get-ChildItem -LiteralPath $cache -Directory | Copy-Item -Destination $pack -Recurse
 Get-ChildItem -LiteralPath $pack -Recurse -File -Include "pipelines.bin", "*.vkcache", "*.tmp" | Remove-Item -Force
 $files = Get-ChildItem -LiteralPath $pack -Recurse -File

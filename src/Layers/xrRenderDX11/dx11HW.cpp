@@ -207,6 +207,7 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
 
     presentTestState = PresentTestState::None;
     deviceRemovedReported = false;
+    pipelineJournalSent = false;
 
     CreateD3D();
     if (!Valid)
@@ -1034,6 +1035,38 @@ void CHW::SavePipelines()
         xrvk::SavePipelineCache(pDevice);
 #endif
     }
+#endif
+}
+
+void CHW::PrewarmPipelines()
+{
+#if defined(XR_D3D12) || defined(XR_VULKAN)
+    if (!pDevice)
+        return;
+    // The release's journal (the QA sweep's, tools/package/build_shader_pack.ps1): the first start's pipelines.
+#ifdef XR_D3D12
+    constexpr pcstr shipped_name = "shaders_cache_pack" DELIMITER "r5" DELIMITER "pipelines.journal";
+#else
+    constexpr pcstr shipped_name = "shaders_cache_pack" DELIMITER "r6" DELIMITER "pipelines.journal";
+#endif
+    // Once per device: the layer merges it with the first call.
+    IReader* shipped = nullptr;
+    if (!pipelineJournalSent)
+    {
+        string_path shipped_path;
+        FS.update_path(shipped_path, "$game_data$", shipped_name);
+        shipped = FS.exist(shipped_path) ? FS.r_open(shipped_path) : nullptr;
+        pipelineJournalSent = true;
+    }
+    const void* data = shipped ? shipped->pointer() : nullptr;
+    const size_t size = shipped ? size_t(shipped->length()) : 0;
+#ifdef XR_D3D12
+    xrd3d12::PrewarmPipelines(pDevice, data, size);
+#else
+    xrvk::PrewarmPipelines(pDevice, data, size);
+#endif
+    if (shipped)
+        FS.r_close(shipped);
 #endif
 }
 

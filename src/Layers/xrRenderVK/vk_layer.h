@@ -34,6 +34,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace xrvk
@@ -988,16 +989,35 @@ public:
     static Shader* From(ID3D11DeviceChild* shader, Stage stage);
 };
 
+// A live graphics shader for the pipeline prewarm (vk_prewarm.cpp): the object's counter lets a job hold it while
+// it builds, unless its last reference already went.
+struct ShaderRef
+{
+    Shader* shader = nullptr;
+    Device* device = nullptr;
+    std::atomic<ULONG>* refs = nullptr;
+    IUnknown* object = nullptr;
+};
+void PublishShader(const ShaderRef& ref);
+void WithdrawShader(const Shader* shader);
+void WithdrawShaders(const Device* device); // its pipeline cache goes: a shader it leaked is not used again
+bool OnPrewarmThread();
+// The debug name a shader got after it was published: read and written under one lock.
+std::string ShaderName(const Shader* shader);
+void SetShaderName(Shader* shader, const char* name);
+
 template <class Iface, Stage S>
 class ShaderObject final : public DeviceChild<Iface>, public Shader
 {
 public:
     explicit ShaderObject(Device* device) : DeviceChild<Iface>(device) { stage = S; }
+    // Once its module is made: the prewarm may build pipelines of it.
+    void Publish() { PublishShader({this, this->m_device, &this->m_refs, static_cast<Iface*>(this)}); }
 
 protected:
     void OnDebugName(const char* debugName) override
     {
-        name = debugName;
+        SetShaderName(this, debugName);
         // Capture tools (RenderDoc, Nsight) show the engine's shader names.
         if (module)
             this->Owner()->Name(VK_OBJECT_TYPE_SHADER_MODULE, u64(module), debugName);
@@ -1029,6 +1049,9 @@ public:
     bool slotInstance[kMaxVBs]{};
     u32 slotStepRate[kMaxVBs]{};
     u64 hash = 0;
+    // The description it was made from: the pipeline journal makes it again (vk_prewarm.cpp).
+    std::vector<D3D11_INPUT_ELEMENT_DESC> desc11; // SemanticName points into `names11`
+    std::vector<std::string> names11;
     explicit InputLayout(Device* device) : DeviceChild(device) {}
 };
 
@@ -1090,6 +1113,10 @@ public:
     VkPipeline Compute(Shader* cs, const PipelineLayout* layout);
     // A shader object goes: pipelines keyed by its pointer are no longer looked up (their content keys stay).
     void Forget(Shader* shader);
+    // Builds on background threads the graphics pipelines the journal (next to the cache file) and the release's
+    // journal (`shipped`, read once per device) hold whose shaders exist now. Returns at once; called as a level's
+    // shaders were created and again as its precache ends (vk_prewarm.cpp).
+    void Prewarm(const void* shipped, size_t shippedSize);
     VkPipelineCache Handle() const { return m_cache; }
     u32 Count() const { return m_count.load(); }
 
@@ -1103,6 +1130,21 @@ private:
     VkPipeline Library(std::unordered_map<u64, VkPipeline>& map, u64 key, const std::function<VkPipeline()>& create);
     const PipelineLayout* PartialLayout(const PipelineLayout* full, bool preRaster);
     void WorkerLoop();
+
+    // ---- the journal and the prewarm (vk_prewarm.cpp) ----
+    struct Journal;
+    Journal* m_journal = nullptr;
+    std::atomic<u32> m_builtOnDemand{0}; // by a context, the draw waiting
+    // Built by the prewarm, not drawn yet (m_lock); the count spares the cached lookups the set.
+    std::unordered_set<u64> m_unconfirmed;
+    std::atomic<u32> m_unconfirmedCount{0};
+    void OpenJournal();
+    void CloseJournal(); // stops the prewarm; the caller saves
+    void FreeJournal();
+    void Record(const GraphicsPipelineDesc& desc, u64 hash);
+    void SaveJournal();
+    void PrewarmLoop();
+    void PrewarmOne(u64 key);
     Device* m_device = nullptr;
     VkPipelineCache m_cache = VK_NULL_HANDLE;
     std::wstring m_path;

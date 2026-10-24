@@ -636,6 +636,8 @@ HRESULT CreateShader(Device* device, Stage stage, const void* bytecode, SIZE_T s
                     }
                 }
             }
+            if (stage != Stage::CS)
+                shader->Publish();
         }
         catch (...)
         {
@@ -2022,6 +2024,12 @@ void SavePipelineCache(ID3D11Device* device)
 {
     if (IsLayerDevice(device))
         Device::From(device)->pipelines.SaveIfDirty();
+}
+
+void PrewarmPipelines(ID3D11Device* device, const void* shipped, size_t shippedSize)
+{
+    if (IsLayerDevice(device))
+        Device::From(device)->pipelines.Prewarm(shipped, shippedSize);
 }
 
 ID3D12Device* NativeDevice(ID3D11Device* device)

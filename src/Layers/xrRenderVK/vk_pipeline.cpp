@@ -374,6 +374,7 @@ bool PipelineCache::Init(Device* device, const wchar_t* path)
 {
     m_device = device;
     m_path = path ? path : L"";
+    OpenJournal();
     std::vector<u8> initial;
     if (!m_path.empty())
     {
@@ -431,6 +432,8 @@ bool PipelineCache::Init(Device* device, const wchar_t* path)
 
 void PipelineCache::Shutdown()
 {
+    // The prewarm first: it hands the optimizer work.
+    CloseJournal();
     if (m_worker)
     {
         {
@@ -467,18 +470,38 @@ void PipelineCache::Shutdown()
     if (m_cache)
         g_vk.vkDestroyPipelineCache(m_device->vk, m_cache, nullptr);
     m_cache = VK_NULL_HANDLE;
+    FreeJournal();
 }
 
 void PipelineCache::Save()
 {
+    SaveJournal();
     if (!m_cache || m_path.empty() || !m_device)
         return;
+    // The main thread at a precache's end and a prewarm pass's end may both write the file.
+    static std::mutex saving;
+    std::lock_guard save(saving);
+    // Pipelines built meanwhile on other threads grow the cache between the two calls (VK_INCOMPLETE): room for them,
+    // and asked again.
     size_t size = 0;
-    if (g_vk.vkGetPipelineCacheData(m_device->vk, m_cache, &size, nullptr) != VK_SUCCESS || !size)
-        return;
-    std::vector<u8> file(sizeof(CacheHeader) + size);
-    if (g_vk.vkGetPipelineCacheData(m_device->vk, m_cache, &size, file.data() + sizeof(CacheHeader)) != VK_SUCCESS)
-        return;
+    std::vector<u8> file;
+    for (u32 attempt = 0;; ++attempt)
+    {
+        if (attempt == 4)
+        {
+            Log("~ pipeline cache not saved: it kept growing while it was read");
+            return;
+        }
+        if (g_vk.vkGetPipelineCacheData(m_device->vk, m_cache, &size, nullptr) != VK_SUCCESS || !size)
+            return;
+        size += size / 8 + (256u << 10);
+        file.resize(sizeof(CacheHeader) + size);
+        const VkResult result = g_vk.vkGetPipelineCacheData(m_device->vk, m_cache, &size, file.data() + sizeof(CacheHeader));
+        if (result == VK_SUCCESS)
+            break;
+        if (result != VK_INCOMPLETE)
+            return;
+    }
     file.resize(sizeof(CacheHeader) + size);
     CacheHeader header{};
     header.magic = kCacheMagic;
@@ -502,10 +525,27 @@ void PipelineCache::Forget(Shader*)
 
 VkPipeline PipelineCache::Graphics(const GraphicsPipelineDesc& desc, u64 hash, const PipelineLayout* layout)
 {
+    const bool prewarm = OnPrewarmThread();
     {
         std::shared_lock lock(m_lock);
         if (const auto it = m_pipelines.find(hash); it != m_pipelines.end())
-            return it->second;
+        {
+            if (prewarm || !m_unconfirmedCount.load(std::memory_order_relaxed) || !m_unconfirmed.count(hash))
+                return it->second;
+        }
+    }
+    // A prewarmed pipeline's first draw (or a miss).
+    if (!prewarm && m_unconfirmedCount.load(std::memory_order_relaxed))
+    {
+        std::unique_lock lock(m_lock);
+        if (m_unconfirmed.erase(hash))
+        {
+            m_unconfirmedCount.store(u32(m_unconfirmed.size()), std::memory_order_relaxed);
+            const VkPipeline pipeline = m_pipelines[hash];
+            lock.unlock();
+            Record(desc, hash);
+            return pipeline;
+        }
     }
     const auto start = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
@@ -520,18 +560,41 @@ VkPipeline PipelineCache::Graphics(const GraphicsPipelineDesc& desc, u64 hash, c
     const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
     m_compileNs.fetch_add(u64(ns), std::memory_order_relaxed);
     m_device->Count(Device::StatPipelines);
-    std::unique_lock lock(m_lock);
-    const auto [it, inserted] = m_pipelines.emplace(hash, pipeline);
-    if (!inserted)
     {
-        // Another thread made the same one meanwhile: keep the first, drop ours.
-        if (pipeline && pipeline != it->second)
-            g_vk.vkDestroyPipeline(m_device->vk, pipeline, nullptr);
-        return it->second;
+        std::unique_lock lock(m_lock);
+        // The prewarm's failure is not kept: what a context asks for later may still build (a damaged journal, memory
+        // the loading's threads took).
+        if (!pipeline && prewarm)
+        {
+            const auto it = m_pipelines.find(hash);
+            return it != m_pipelines.end() ? it->second : VK_NULL_HANDLE;
+        }
+        const auto [it, inserted] = m_pipelines.emplace(hash, pipeline);
+        if (!inserted)
+        {
+            // Another thread made the same one meanwhile: keep the first, drop ours.
+            if (pipeline && pipeline != it->second)
+                g_vk.vkDestroyPipeline(m_device->vk, pipeline, nullptr);
+            pipeline = it->second;
+        }
+        else if (pipeline)
+        {
+            m_count.fetch_add(1, std::memory_order_relaxed);
+            // Built ahead: the journal learns at its first draw that it is still drawn.
+            if (prewarm)
+            {
+                m_unconfirmed.insert(hash);
+                m_unconfirmedCount.store(u32(m_unconfirmed.size()), std::memory_order_relaxed);
+            }
+        }
     }
-    if (pipeline)
-        m_count.fetch_add(1, std::memory_order_relaxed);
     (void)linked;
+    if (!prewarm)
+    {
+        m_builtOnDemand.fetch_add(1, std::memory_order_relaxed);
+        if (pipeline)
+            Record(desc, hash);
+    }
     return pipeline;
 }
 
@@ -632,7 +695,7 @@ VkPipeline PipelineCache::CreateGraphics(const GraphicsPipelineDesc& d, const Pi
     if (result != VK_SUCCESS)
     {
         LogOnce(reinterpret_cast<const void*>(uintptr_t(d.Hash())), "! a graphics pipeline was refused (%s): vs %s, ps %s",
-            ResultText(result), d.vs ? d.vs->name.c_str() : "-", d.ps ? d.ps->name.c_str() : "-");
+            ResultText(result), d.vs ? ShaderName(d.vs).c_str() : "-", d.ps ? ShaderName(d.ps).c_str() : "-");
         return VK_NULL_HANDLE;
     }
     return pipeline;
@@ -953,7 +1016,7 @@ VkPipeline PipelineCache::Compute(Shader* cs, const PipelineLayout* layout)
     if (result != VK_SUCCESS)
     {
         LogOnce(reinterpret_cast<const void*>(uintptr_t(key)), "! a compute pipeline was refused (%s): %s", ResultText(result),
-            cs->name.c_str());
+            ShaderName(cs).c_str());
         pipeline = VK_NULL_HANDLE;
     }
     std::unique_lock lock(m_lock);

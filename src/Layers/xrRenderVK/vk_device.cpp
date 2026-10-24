@@ -742,6 +742,8 @@ HRESULT CreateShader(Device* device, Stage stage, const void* bytecode, SIZE_T s
             if (stage == Stage::CS)
                 shader->computeLayout =
                     device->layouts.Compute(shader->setLayout, shader->iface.bindless, shader->iface.pushConstants);
+            else
+                shader->Publish();
         }
         catch (...)
         {
@@ -905,6 +907,13 @@ HRESULT STDMETHODCALLTYPE Device::CreateInputLayout(const D3D11_INPUT_ELEMENT_DE
         InputLayout* object = new InputLayout(this);
         try
         {
+            // Names first: the descriptions' pointers must not see the vector grow.
+            object->names11.reserve(count);
+            for (UINT i = 0; i < count; ++i)
+                object->names11.emplace_back(elements[i].SemanticName);
+            object->desc11.assign(elements, elements + count);
+            for (UINT i = 0; i < count; ++i)
+                object->desc11[i].SemanticName = object->names11[i].c_str();
             u32 slotOffset[kMaxVBs]{};
             object->elements.resize(count);
             u64 hash = Hash64(&count, sizeof(count), kSeedInputLayout);
@@ -2554,6 +2563,12 @@ void SavePipelineCache(ID3D11Device* device)
 {
     if (IsLayerDevice(device))
         Device::From(device)->pipelines.Save();
+}
+
+void PrewarmPipelines(ID3D11Device* device, const void* shipped, size_t shippedSize)
+{
+    if (IsLayerDevice(device))
+        Device::From(device)->pipelines.Prewarm(shipped, shippedSize);
 }
 
 const NativeCaps* GetNativeCaps(ID3D11Device* device)

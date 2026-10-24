@@ -87,6 +87,10 @@ bool IsLayerDevice(ID3D11Device* device);
 // Saves the pipeline library now (it is also saved when the device is destroyed).
 void SavePipelineCache(ID3D11Device* device);
 
+// Builds in the background the graphics pipelines the journal of earlier sessions and the release's journal
+// (`shipped`: shaders_cache_pack/r5/pipelines.journal, may be null) know whose shaders exist now. Returns at once.
+void PrewarmPipelines(ID3D11Device* device, const void* shipped, size_t shippedSize);
+
 // ---- capabilities (d12_native.cpp) ------------------------------------------------------------
 
 struct NativeCaps

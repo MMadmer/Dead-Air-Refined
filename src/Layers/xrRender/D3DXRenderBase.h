@@ -48,6 +48,7 @@ public:
     virtual void ResourcesDestroyNecessaryTextures() override;
     virtual void ResourcesStoreNecessaryTextures() override;
     virtual void ResourcesDumpMemoryUsage() override;
+    virtual void PrewarmPipelines() override;
     //	HWSupport
     virtual bool HWSupportsShaderYUV2RGB() override;
     //	Device state

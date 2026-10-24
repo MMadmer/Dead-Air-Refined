@@ -69,6 +69,9 @@ public:
     // The DirectX 12 and Vulkan layers' pipelines to disk now (a level's precache is over), not only at shutdown:
     // a crash or a killed process kept none of the session's.
     void SavePipelines();
+    // The DirectX 12 and Vulkan layers build in the background the pipelines their journals know whose shaders
+    // exist now (a level's shaders were created, its precache is over).
+    void PrewarmPipelines();
 
 public:
     void OnAppActivate() override;
@@ -118,6 +121,7 @@ public:
     u32 CurrentBackBuffer{};
 
     ID3DDevice* pDevice = nullptr; // render device
+    bool pipelineJournalSent = false; // the release's pipeline journal went to this device's layer
 
     D3D_DRIVER_TYPE m_DriverType;
 

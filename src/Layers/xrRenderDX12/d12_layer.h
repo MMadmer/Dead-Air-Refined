@@ -41,6 +41,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace xrd3d12
@@ -633,6 +634,10 @@ public:
     // Returns null (and logs once) when the driver refuses the state.
     ID3D12PipelineState* Graphics(const GraphicsPsoDesc& desc, u64 hash);
     ID3D12PipelineState* Compute(Shader* cs);
+    // Builds on background threads the graphics pipelines the journal (next to the library) and the release's
+    // journal (`shipped`, read once per device) hold whose shaders exist now. Returns at once; called as a level's
+    // shaders were created and again as its precache ends (d12_prewarm.cpp).
+    void Prewarm(const void* shipped, size_t shippedSize);
     // Pipelines of native passes (d12_native.cpp), named in the library by `key`: the caller's content
     // hash (code, root signature and every state). `persist` false = memory only (foreign root
     // signatures, whose content is unknown).
@@ -656,6 +661,23 @@ private:
     // Caches a pipeline built outside the locks; when another thread was first, `pso` is released
     // and the cached one returned. Only the winner goes into the library (`storeName` non-null).
     ID3D12PipelineState* Insert(u64 key, ID3D12PipelineState* pso, const wchar_t* storeName);
+    // Graphics() without the journal; `compiled`: the driver compiled it (neither cached nor in the library).
+    ID3D12PipelineState* Build(const GraphicsPsoDesc& desc, u64 hash, bool& compiled);
+
+    // ---- the journal and the prewarm (d12_prewarm.cpp) ----
+    struct Journal;
+    Journal* m_journal = nullptr;
+    std::atomic<u32> m_compiledOnDemand{0}; // by the context, the draw waiting
+    // Built by the prewarm, not drawn yet (m_lock); the count spares the cached lookups the set.
+    std::unordered_set<u64> m_unconfirmed;
+    std::atomic<u32> m_unconfirmedCount{0};
+    void OpenJournal();
+    void CloseJournal(); // stops the prewarm; the caller saves
+    void FreeJournal();
+    void Record(const GraphicsPsoDesc& desc, u64 hash);
+    void SaveJournal();
+    void PrewarmLoop();
+    void PrewarmOne(u64 key);
 };
 
 // ============================================================================================
@@ -1120,14 +1142,38 @@ public:
     static Shader* From(ID3D11DeviceChild* shader, Stage stage);
 };
 
+// A live graphics shader for the pipeline prewarm (d12_prewarm.cpp): the object's counter lets a job hold it while
+// it builds, unless its last reference already went.
+struct ShaderRef
+{
+    Shader* shader = nullptr;
+    Device* device = nullptr;
+    std::atomic<ULONG>* refs = nullptr;
+    IUnknown* object = nullptr;
+};
+void PublishShader(const ShaderRef& ref);
+void WithdrawShader(const Shader* shader);
+void WithdrawShaders(const Device* device); // its pipeline cache goes: a shader it leaked is not used again
+bool OnPrewarmThread();
+// The debug name a shader got after it was published: read and written under one lock.
+std::string ShaderName(const Shader* shader);
+void SetShaderName(Shader* shader, const char* name);
+
 template <class Iface, Stage S>
 class ShaderObject final : public DeviceChild<Iface>, public Shader
 {
 public:
     explicit ShaderObject(Device* device) : DeviceChild<Iface>(device) { stage = S; }
+    // Once its code is in: the prewarm may build pipelines of it.
+    void Publish() { PublishShader({this, this->m_device, &this->m_refs, static_cast<Iface*>(this)}); }
 
 protected:
-    void OnDebugName(const char* debugName) override { name = debugName; }
+    void OnDebugName(const char* debugName) override { SetShaderName(this, debugName); }
+    void Destroy() override
+    {
+        WithdrawShader(this);
+        delete this;
+    }
 };
 using VertexShader = ShaderObject<ID3D11VertexShader, Stage::VS>;
 using HullShader = ShaderObject<ID3D11HullShader, Stage::HS>;

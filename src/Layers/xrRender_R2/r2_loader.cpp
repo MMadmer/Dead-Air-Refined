@@ -94,6 +94,10 @@ void CRender::level_Load(IReader* fs)
         }
         chunk->close();
     }
+#if RENDER == R_R4
+    // The level's shaders exist: the pipelines of earlier sessions with them build while the rest loads.
+    HW.PrewarmPipelines();
+#endif
 
     // Texture I/O and GPU creation can run while the main thread parses the rest of the level.
     Resources->BeginDeferredUpload();

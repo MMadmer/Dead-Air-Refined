@@ -432,4 +432,8 @@ public:
     // The engine's frame limit (0 = none), once per frame. true: the renderer paces the frame rate
     // itself (the driver's limiter while frame generation runs) and the engine's limiter stands aside.
     virtual bool OwnFrameLimit(u32 /*fpsLimit*/) { return false; }
+
+    // The DirectX 12 and Vulkan renderers build in the background the pipelines of earlier sessions whose shaders
+    // exist now.
+    virtual void PrewarmPipelines() {}
 };

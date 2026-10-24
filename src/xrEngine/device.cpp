@@ -167,6 +167,8 @@ void CRenderDevice::PreCache(u32 amount, bool wait_user_input)
         destroy_precache_light();
         return;
     }
+    // The game's objects are spawned: the pipelines of their shaders build beside the precache's frames.
+    GEnv.Render->PrewarmPipelines();
     if (!precache_light && g_pGameLevel && g_loading_events.empty())
     {
         precache_light = GEnv.Render->light_create();

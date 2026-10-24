@@ -233,7 +233,11 @@ bool GrowCpuHeap(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE type, u32 bloc
 
 // ---- pipelines --------------------------------------------------------------------------------
 
-std::mutex g_libraryLock; // ID3D12PipelineLibrary loads of one name must not race
+// ID3D12PipelineLibrary synchronizes itself, except loads of one name: a load takes its name's stripe, so the prewarm's
+// threads and a context never wait on each other's loads. g_libraryLock: stores and the serialization.
+std::mutex g_libraryLock;
+std::mutex g_libraryLoadLocks[64];
+std::mutex& LibraryLoadLock(u64 key) { return g_libraryLoadLocks[(key ^ (key >> 29)) & 63]; }
 
 D3D12_BLEND_DESC DefaultBlend()
 {
@@ -2431,6 +2435,7 @@ bool PipelineCache::Init(Device* device, const wchar_t* libraryPath)
     m_device = device;
     m_path = libraryPath ? libraryPath : L"";
     m_dirty = false;
+    OpenJournal();
     if (!device->d12_1 || m_path.empty())
     {
         Log("pipeline library: %s, pipelines are not persisted", device->d12_1 ? "no path" : "ID3D12Device1 unavailable");
@@ -2481,10 +2486,12 @@ void PipelineCache::SaveIfDirty()
     }
     if (dirty)
         Save();
+    SaveJournal();
 }
 
 void PipelineCache::Shutdown()
 {
+    CloseJournal();
     SaveIfDirty();
     {
         std::unique_lock lock(m_lock);
@@ -2504,12 +2511,16 @@ void PipelineCache::Shutdown()
     m_libraryBlob.clear();
     m_libraryBlob.shrink_to_fit();
     m_count.store(0);
+    FreeJournal();
 }
 
 void PipelineCache::Save()
 {
     if (!m_library || m_path.empty())
         return;
+    // The main thread at a precache's end and a prewarm pass's end may both write the file.
+    static std::mutex saving;
+    std::lock_guard save(saving);
     try
     {
         std::vector<u8> data;
@@ -2556,6 +2567,41 @@ ID3D12PipelineState* PipelineCache::Graphics(const GraphicsPsoDesc& desc, u64 ha
 {
     if (!m_device)
         return nullptr;
+    {
+        std::shared_lock lock(m_lock);
+        if (const auto it = m_pipelines.find(hash); it != m_pipelines.end())
+        {
+            if (!m_unconfirmedCount.load(std::memory_order_relaxed) || !m_unconfirmed.count(hash))
+                return it->second;
+        }
+    }
+    // A prewarmed pipeline's first draw (or a miss).
+    if (m_unconfirmedCount.load(std::memory_order_relaxed))
+    {
+        std::unique_lock lock(m_lock);
+        if (m_unconfirmed.erase(hash))
+        {
+            m_unconfirmedCount.store(u32(m_unconfirmed.size()), std::memory_order_relaxed);
+            ID3D12PipelineState* pso = m_pipelines[hash];
+            lock.unlock();
+            Record(desc, hash);
+            return pso;
+        }
+    }
+    bool compiled = false;
+    ID3D12PipelineState* pso = Build(desc, hash, compiled);
+    if (compiled)
+        m_compiledOnDemand.fetch_add(1, std::memory_order_relaxed);
+    if (pso)
+        Record(desc, hash);
+    return pso;
+}
+
+ID3D12PipelineState* PipelineCache::Build(const GraphicsPsoDesc& desc, u64 hash, bool& compiled)
+{
+    compiled = false;
+    if (!m_device)
+        return nullptr;
     try
     {
         {
@@ -2578,8 +2624,8 @@ ID3D12PipelineState* PipelineCache::Graphics(const GraphicsPsoDesc& desc, u64 ha
                 static const char* const kStageNames[] = {"vs", "hs", "ds", "gs", "ps", "cs"};
                 m_device->Count(Device::StatMixedPso);
                 LogOnce(KeyOf(hash), "! graphics pipeline %016llx mixes DXIL (%s '%s') and DXBC (%s '%s') stages: refused",
-                    static_cast<unsigned long long>(hash), kStageNames[u32(dxil->stage)], dxil->name.c_str(),
-                    kStageNames[u32(dxbc->stage)], dxbc->name.c_str());
+                    static_cast<unsigned long long>(hash), kStageNames[u32(dxil->stage)], ShaderName(dxil).c_str(),
+                    kStageNames[u32(dxbc->stage)], ShaderName(dxbc).c_str());
                 return Insert(hash, nullptr, nullptr);
             }
         }
@@ -2625,7 +2671,7 @@ ID3D12PipelineState* PipelineCache::Graphics(const GraphicsPsoDesc& desc, u64 ha
         bool loaded = false;
         if (m_library)
         {
-            std::lock_guard library(g_libraryLock);
+            std::lock_guard library(LibraryLoadLock(hash));
             loaded = SUCCEEDED(m_library->LoadGraphicsPipeline(name, &d, IID_PPV_ARGS(&pso)));
             if (!loaded)
                 pso = nullptr;
@@ -2649,11 +2695,12 @@ ID3D12PipelineState* PipelineCache::Graphics(const GraphicsPsoDesc& desc, u64 ha
                     static_cast<unsigned long long>(desc.inputLayout ? desc.inputLayout->hash : 0), int(desc.topology),
                     desc.numRTVs, int(desc.rtvFormats[0]), int(desc.rtvFormats[1]), int(desc.rtvFormats[2]),
                     int(desc.rtvFormats[3]), int(desc.dsvFormat), desc.sample.Count, desc.sample.Quality);
-                if (desc.vs && desc.ps && (!desc.vs->name.empty() || !desc.ps->name.empty()))
+                if (desc.vs && desc.ps)
                     LogOnce(KeyOf(hash ^ 1), "graphics pipeline %016llx: vs '%s', ps '%s'", static_cast<unsigned long long>(hash),
-                        desc.vs->name.c_str(), desc.ps->name.c_str());
+                        ShaderName(desc.vs).c_str(), ShaderName(desc.ps).c_str());
             }
         }
+        compiled = pso && !loaded;
         return Insert(hash, pso, loaded ? nullptr : name);
     }
     catch (...)
@@ -2689,7 +2736,7 @@ ID3D12PipelineState* PipelineCache::Compute(Shader* cs)
         bool loaded = false;
         if (m_library)
         {
-            std::lock_guard library(g_libraryLock);
+            std::lock_guard library(LibraryLoadLock(key));
             loaded = SUCCEEDED(m_library->LoadComputePipeline(name, &d, IID_PPV_ARGS(&pso)));
             if (!loaded)
                 pso = nullptr;
@@ -2733,7 +2780,7 @@ ID3D12PipelineState* PipelineCache::NativeCompute(u64 key, const D3D12_COMPUTE_P
         bool loaded = false;
         if (m_library && persist)
         {
-            std::lock_guard library(g_libraryLock);
+            std::lock_guard library(LibraryLoadLock(key));
             loaded = SUCCEEDED(m_library->LoadComputePipeline(name, &desc, IID_PPV_ARGS(&pso)));
             if (!loaded)
                 pso = nullptr;
@@ -2775,7 +2822,7 @@ ID3D12PipelineState* PipelineCache::NativeStream(u64 key, const D3D12_PIPELINE_S
         if (m_library && persist && SUCCEEDED(m_library->QueryInterface(IID_PPV_ARGS(&library1))) && library1)
         {
             {
-                std::lock_guard library(g_libraryLock);
+                std::lock_guard library(LibraryLoadLock(key));
                 loaded = SUCCEEDED(library1->LoadPipeline(name, &desc, IID_PPV_ARGS(&pso)));
             }
             library1->Release();
@@ -2802,6 +2849,7 @@ ID3D12PipelineState* PipelineCache::NativeStream(u64 key, const D3D12_PIPELINE_S
 ID3D12PipelineState* PipelineCache::Insert(u64 key, ID3D12PipelineState* pso, const wchar_t* storeName)
 {
     // Failures are cached as null, so a refused state is not rebuilt at every draw.
+    const bool prewarm = OnPrewarmThread();
     {
         std::unique_lock lock(m_lock);
         if (const auto it = m_pipelines.find(key); it != m_pipelines.end())
@@ -2810,9 +2858,19 @@ ID3D12PipelineState* PipelineCache::Insert(u64 key, ID3D12PipelineState* pso, co
                 pso->Release();
             return it->second;
         }
+        // The prewarm's failure is not kept: what a context asks for later may still build (a damaged journal, memory
+        // the loading's threads took).
+        if (!pso && prewarm)
+            return nullptr;
         try
         {
             m_pipelines.emplace(key, pso);
+            // Built ahead: the journal learns at its first draw that it is still drawn.
+            if (pso && prewarm)
+            {
+                m_unconfirmed.insert(key);
+                m_unconfirmedCount.store(u32(m_unconfirmed.size()), std::memory_order_relaxed);
+            }
         }
         catch (...)
         {

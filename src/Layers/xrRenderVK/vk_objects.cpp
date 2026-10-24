@@ -1772,6 +1772,7 @@ void Shader::ReleaseObjects(Device* device)
 template <class Iface, Stage S>
 void ShaderObject<Iface, S>::Destroy()
 {
+    WithdrawShader(this);
     ReleaseObjects(DeviceChild<Iface>::m_device);
     delete this;
 }
