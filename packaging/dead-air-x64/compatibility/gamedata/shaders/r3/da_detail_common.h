@@ -171,10 +171,11 @@ float2	detail_bend_tail	(float3 root, detail_wind w, float H, float frac, float 
 // harmonic wave rocked every blade from almost upright to its full lean about once a second whatever the wind
 // did, and read as twitching. field, wv (wave) and, below, dir (dir2D) pick the wind: this frame's, or the previous
 // frame's for the motion vectors.
+float	detail_sway_mean	(float4 field)	{ return 0.42f + 0.38f * saturate(field.z); }
+
 float	detail_sway	(float3 root, float4 field, float4 wv)
 {
-	const float wind_k = saturate(field.z);
-	const float sway_mean = 0.42f + 0.38f * wind_k;
+	const float sway_mean = detail_sway_mean(field);
 	return	sway_mean + (1.0f - sway_mean) * da_wind_turb(root.x, root.z, field.x, field.y,
 		wv.w + dot(wv.xyz, float3(13.0f, 7.0f, 3.0f)));
 }

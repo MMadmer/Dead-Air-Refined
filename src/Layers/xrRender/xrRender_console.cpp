@@ -2404,7 +2404,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__snow_glint", &ps_r__snow_glint, 0.f, 4.f);
     CMD4(CCC_RuntimeInteger, "r__snow_shells", &ps_r__snow_shells, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__snow_shadow", &ps_r__snow_shadow, 0, 1);
-    CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 1023);
+    CMD4(CCC_RuntimeInteger, "r__dbg_grass", &ps_r__dbg_grass, 0, 2047);
     CMD4(CCC_RuntimeInteger, "r__dbg_shrubs", &ps_r__dbg_shrubs, 0, 511);
     CMD4(CCC_RuntimeFloat, "r__shrubs_lod_scale", &ps_r__shrubs_lod_scale, 0.05f, 20.f);
     CMD4(CCC_RuntimeInteger, "r__shrubs_force_tier", &ps_r__shrubs_force_tier, -1, 3);

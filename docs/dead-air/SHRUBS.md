@@ -436,6 +436,12 @@ berry glows) as through a blade, and the sun's shadow is looked up as the leaves
 occlusion taken twice and cut again by its colour and an underside term, a fruit beside lit leaves went black: an
 elder's green bunch at a tenth of its leaves, a raspberry at a quarter of its colour.
 
+**A far fruit group** (1.6.3): under four pixels across a group is drawn as its mean (`da_shrub_bloom.ps`) - the
+cover of its fruits over the quad's disc (each fruit's area, a sub-pixel one at its own cover), in the bunch's mean
+colour of its ripening, cut against the pixel's noise; the band round four pixels is dithered by that noise, so the
+temporal resolve blends the two and no group switches whole. Each fruit and stalk tested at every pixel of a group
+was most of a fruiting stand's cost far off (a few thousand pixels for a third of a millisecond).
+
 | Preset | `d0` | `d1` | `d2` | `R` | pixel floor | sun cascades |
 | --- | --- | --- | --- | --- | --- | --- |
 | Minimum | 4 | 14 | 40 | 150 | 3 px | 1 |

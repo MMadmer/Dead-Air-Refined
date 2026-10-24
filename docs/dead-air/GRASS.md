@@ -462,6 +462,10 @@ species (`SEASON_DATA.md`):
   the occlusion in any weather (the sun's shade is the casters'), easing out with the blades' thinning. Cost
   at 1080p: 0.01-0.02 ms in the scene (the shade computed in the terrain's pixel shader cost 0.12 ms looking
   down into a meadow). QA: `tools/qa/water/ground_ao.lua`.
+- The ground's sheen under the grass (1.6.3, Ghost of Tsushima's `TerrainGrassSpecNear`/`Far`): by the blade cover,
+  the soil's gloss is halved near the camera, where the blades shade it between them, and taken to a third as they
+  thin out toward their reach (the litter's `thin` or the blend from `d2` to the radius, `da_gtint.zw`), where the
+  stand's matte leaves stand for it: a slope against the sun past the drawn blades shone like wet earth.
 - Wet blades: the rain apply pass darkens and glosses them like any surface (foliage porosity 0.35);
   fill-map puddles never stand on foliage. The snow layer skips foliage (the blades carry their own snow).
 
@@ -502,6 +506,14 @@ calm still rocked every blade. The motors are not scaled: a boot or a blast move
 Tall thin blades carry the stock tufts' wave at 0.65 and a light bob (0.05 per unit of wind at 3.2 rad/s).
 Measured (escape, DX11, frames 1.2 s apart): calm 2.33 mean difference against 2.15 for a frozen wind
 clock (the TAA floor), wind 0.9 9.6.
+
+The gusts carry farther with the distance (1.6.3, after Ghost of Tsushima's grass, whose high-frequency gusts grow
+over a range "for a more noticeable look at a distance"): from 20 m to 120 m the gusts and lulls round the mean lean
+and a passing tongue's lean go to 1.75 times theirs (`grass_gust_k`, `da_grass_gen.cs`); the mean lean, the motors,
+the push field and the bob stay. A blade far off swayed under a pixel and a gust ran across the far meadow unseen. The
+same factor goes into the previous frame's force, so the motion vectors follow. Measured (`tools/qa/water/grass_gust.lua`,
+`qa_meadow`, wind 0.6, r__capture over 3 s): the far field's frame-to-frame motion 17-30 % up, the near unchanged;
+`r__dbg_grass 1024` switches the boost off.
 
 ## Seasons
 
@@ -641,7 +653,7 @@ the look pass): from 1 % lower (DX12, turning) to 23 % higher (DX11).
 - `r__dbg_grass <bits>` (runtime): 1 no basal pairs, 2 no litter, 4 each community's first graminoid only,
   8 no early out, 16 no stem leaves, 32 presence by the palette near the camera too, 64 end every lane after
   the early out, 128 no wind, 256 the stock reach (no thinning, the detail radius), 512 presence back to the
-  palette's weight from `d1` to `d2` (1.6.1).
+  palette's weight from `d1` to `d2` (1.6.1), 1024 no distance boost of the gusts (1.6.3).
 - `qa_season_pin <month>` / `qa_season_year 60` (`SEASONS.md`) drive `D`; grass, stock cards, the ground
   tint and the snow follow it continuously.
 - Log: `* [details] N models: K known by content key, B grown as blades`, `* [grass] season data: N detail

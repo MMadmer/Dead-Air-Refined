@@ -291,12 +291,21 @@ struct grass_force
 	float	push;
 };
 
-grass_force	grass_force_at	(float3 root, float hemi, uint grp, float stiff, float4 W, float2 downhill, float H, bool prev)
+// The gusts' share of the lean grows with the distance (Ghost of Tsushima's high-frequency gusts, "increased over a
+// range to give a more noticeable look at a distance"): from 20 m to 120 m the gusts and lulls round the mean lean and a
+// passing tongue's lean go to 1.75 times theirs - a blade far off sways under a pixel, and a gust ran across the far
+// meadow unseen. The mean lean, the motors and the push stay. r__dbg_grass 1024 (QA): none.
+float	grass_gust_k	(float d)	{ return (grass_dbg() & 1024u) != 0u ? 1.0f : 1.0f + 0.75f * smoothstep(20.0f, 120.0f, d); }
+
+grass_force	grass_force_at	(float3 root, float hemi, uint grp, float stiff, float4 W, float2 downhill, float H, bool prev, float gust_k)
 {
 	const float4 wave = prev ? da_grass_wave_prev[grp * 2u] : da_grass_wave[grp * 2u];
 	const float4 dir = prev ? da_grass_wave_prev[grp * 2u + 1u] : da_grass_wave[grp * 2u + 1u];
 	const float4 field = prev ? da_wind_field_prev : da_wind_field;
 	detail_wind w = detail_wind_at(root, hemi, field, wave, dir);
+	const float sway_mean = detail_sway_mean(field);
+	w.dp = sway_mean + (w.dp - sway_mean) * gust_k;
+	w.flow.y *= gust_k;
 	// The wave, the gust lean and the bob follow the real wind (field.z, 0..1.25): the gust field's
 	// amplitude never drops below 0.6, so without this a dead calm still rocked every blade. The motors stay
 	// whole: a boot or a blast moves grass in any weather.
@@ -712,7 +721,7 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const float H = max(rest.height * cos(rest.tilt), 0.02f);
 	L.f_cur = (grass_force)0;
 	[branch] if ((grass_dbg() & 128u) == 0u)
-		L.f_cur = grass_force_at(root, hemi, grp, stiff, P13, downhill, H, false);
+		L.f_cur = grass_force_at(root, hemi, grp, stiff, P13, downhill, H, false, grass_gust_k(d));
 	L.cur = grass_apply(rest, L.f_cur, P13);
 	L.f_prev = L.f_cur;
 	L.prev = L.cur;
@@ -720,7 +729,8 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	// by under half a pixel a frame (the bob, the fast motion, still has its previous time in the vertex shader).
 	[branch] if (da_grass_time.z > 0.5f && L.rec_v && d < 0.5f * (da_grass_lod.x + da_grass_lod.y) && (grass_dbg() & 128u) == 0u)
 	{
-		L.f_prev = grass_force_at(root, hemi, grp, stiff, P13, downhill, max(rest_prev.height * cos(rest_prev.tilt), 0.02f), true);
+		L.f_prev = grass_force_at(root, hemi, grp, stiff, P13, downhill, max(rest_prev.height * cos(rest_prev.tilt), 0.02f), true,
+			grass_gust_k(d));
 		L.prev = grass_apply(rest_prev, L.f_prev, P13);
 	}
 

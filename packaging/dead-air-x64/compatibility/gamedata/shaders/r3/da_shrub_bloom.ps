@@ -860,7 +860,20 @@ f_deffer	main	(p_shrub_bloom I)
 			// Its fruits and stalks keep their own sub-pixel cover (fruit_cover, fruit_stalk).
 			resolve = 1.0f;
 			hard = 1.0f;
-			[branch] if (fruit_bound(q, G, px))
+			// A group under four pixels across is its mean: the fruits it carries over the quad's disc (each a fruit's
+			// area, a sub-pixel one grown to the pixel at its own cover - the same share), in their mean colour of the
+			// bunch's ripening, cut against the pixel's noise. Every fruit and stalk tested at each of its pixels was most of
+			// a fruiting stand's cost far off: a few thousand pixels of fruit for a third of a millisecond. (Each pixel takes
+			// the mean by its noise over a band round four pixels: the temporal resolve blends the two, no group switches
+			// whole.)
+			[branch] if (px > lerp(0.42f, 0.6f, ign))
+			{
+				mean_cover = saturate(G.n * I.fb.w * G.rb * G.rb * G.shrink * G.shrink / G.elong);
+				resolve = 0.0f;
+				colour = G.n > 1.5f && G.shape != FS_NUT ? lerp(I.c1.rgb, I.c0.rgb, saturate((stage - 0.7f) * 5.0f + 0.3f)) : I.c0.rgb;
+				gloss = 0.02f;
+			}
+			else [branch] if (fruit_bound(q, G, px))
 			{
 				const uint parts = uint(G.n);
 				float zb = -1e3f;
