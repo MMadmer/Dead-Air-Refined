@@ -279,7 +279,8 @@ the vertex shaders ran every one of them and collapsed most. The cut keeps 30 % 
 and 5 % of the wood segments there (Cordon village, Extreme, DX11 1080p): `shrubs` 3.68 -> 2.18 ms and 1.94 -> 1.06 ms
 in the two bushy headings of `tools/qa/water/veg_cost.lua`, the bend pass 0.44 -> 0.24 ms; a heading with a bush or two
 in view pays the cut's 0.1 ms. The cut's buffers have room for the lists of both populations; past it (or with the cut
-off) the shrubs draw as the CPU chose.
+off) the shrubs draw as the CPU chose; only the view goes through it - the sun's casters and a local light's draw as
+chosen.
 
 | Tier | Up to | Draws |
 | --- | --- | --- |

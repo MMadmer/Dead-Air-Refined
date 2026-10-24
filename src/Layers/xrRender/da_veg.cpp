@@ -162,12 +162,14 @@ struct State
     ref_shader s_cut, s_cut_args;
     GpuBuffer cut_routes_b, cut_counts_b, cut_args_b;
     ID3D11Buffer* cut_staging{};
-    u32 cut_first{}, cut_count{}, cut_readback{};
+    // (cut_readback_phases: the phases the copied frame ran, a bit each - an idle phase's counts are a past frame's.)
+    u32 cut_first{}, cut_count{}, cut_readback{}, cut_readback_frame{}, cut_readback_phases{};
     u32 cut_n[kCutPhases]{};
     u32 cut_reg[kCutPhases][drCount][4]{}, cut_room[kCutPhases][drCount]{};
     Fvector4 cut_planes[6]{};
-    // The candidate chunks the cut took this frame (every population's: their routes share one buffer).
-    u32 cut_chunk_total{};
+    // The candidate chunks the cut took this frame (every population's: their routes share one buffer), and the words
+    // its lists hold (cut_room's, each list rounded up to whole chunks).
+    u32 cut_chunk_total{}, cut_words{};
     VertexStagingBuffer vb;
     IndexStagingBuffer ib;
     ref_geom geom;
@@ -1096,12 +1098,14 @@ void cut(Population& P, CutClass cls, const Draw (&d)[4], u32 rec, u32 first, u3
         return;
     // Each draw it may take holds its elements once more (whole instances), in its phase's lists.
     const u32 ph = std::min(P.cut_phase, kCutPhases - 1);
-    u32 mask = 0, words = 0;
+    const auto whole = [](u32 w) { return (w + kChunk - 1) / kChunk * kChunk; };
+    u32 mask = 0;
     for (const Draw k : d)
         mask |= 1u << k;
-    for (u32 q = 0; q < kCutPhases; ++q)
-        for (u32 k = 0; k < drCount; ++k)
-            words += (g.cut_room[q][k] + (q == ph && ((mask >> k) & 1u) ? n : 0u) + kChunk - 1) / kChunk * kChunk;
+    u32 words = g.cut_words;
+    for (u32 k = 0; k < drCount; ++k)
+        if ((mask >> k) & 1u)
+            words += whole(g.cut_room[ph][k] + n) - whole(g.cut_room[ph][k]);
     const u32 chunks = (n + kChunk - 1) / kChunk;
     if (words > kMaxCutWords || g.cut_chunk_total + chunks > kMaxCutChunks)
     {
@@ -1109,6 +1113,7 @@ void cut(Population& P, CutClass cls, const Draw (&d)[4], u32 rec, u32 first, u3
         emit_direct(P, 0, d[cls == ccPatch || cls == ccMass || cls == ccKeep ? 0 : 1], rec, first, n, keep, lo, hi, flags, aux);
         return;
     }
+    g.cut_words = words;
     g.cut_chunk_total += chunks;
     for (u32 k = 0; k < drCount; ++k)
         if ((mask >> k) & 1u)
@@ -1157,7 +1162,7 @@ void build_frame()
     const Latch& L = g.latch;
     g.records = 0;
     g.inst_records.clear();
-    g.cut_chunk_total = 0;
+    g.cut_chunk_total = g.cut_words = 0;
     g.chunks.clear();
     g.bend_blocks.clear();
     g.bend_n = g.bend_view_n = 0;
@@ -1248,6 +1253,10 @@ void build_frame()
             for (const auto& [d, i] : P->view_order)
                 if (!P->needs_record(i, d) || record_room(*P, i))
                     P->view(i, d);
+            // Only the shrubs' view goes through the cut: their casters of a local light draw pass 0 as chosen here
+            // (routed into the cut's list, a bush cast no shadow under a flashlight).
+            if (P->index == kPopShrubs)
+                P->cut_phase = 0;
         }
     for (u32 pi = 0; pi < kPops; ++pi)
         if (Population* P = pop(pi); pop_on(P))
@@ -1793,7 +1802,8 @@ void cut_prepare(ID3D11DeviceContext* ctx)
 void cut_dispatch(CBackend& cmd, u32 phase)
 {
     ID3D11DeviceContext* ctx = HW.get_context(cmd.context_id);
-    if (phase == 0 && g.cut_readback == 2)
+    // (Read at the first cut of a later frame than the copy's: with the trees off the shrubs' phase is the only one.)
+    if (g.cut_readback == 2 && g.cut_readback_frame != Device.dwFrame)
     {
         D3D11_MAPPED_SUBRESOURCE m{};
         if (SUCCEEDED(ctx->Map(g.cut_staging, 0, D3D11_MAP_READ, 0, &m)))
@@ -1805,7 +1815,7 @@ void cut_dispatch(CBackend& cmd, u32 phase)
             for (u32 q = 0; q < kCutPhases; ++q)
             {
                 xr_string line;
-                for (u32 d = 0; d < drCount; ++d)
+                for (u32 d = 0; d < drCount && (g.cut_readback_phases >> q & 1u); ++d)
                     if (const u32 n = took[q * drCount + d])
                     {
                         if (!line.empty())
@@ -1815,7 +1825,7 @@ void cut_dispatch(CBackend& cmd, u32 phase)
                         line += std::to_string(n).c_str();
                     }
                 Msg("* [trees] the GPU cut drew of the %s: %s", q == kCutShrubs ? "shrubs" : (q ? "far trees" : "near trees"),
-                    line.empty() ? "nothing" : line.c_str());
+                    !(g.cut_readback_phases >> q & 1u) ? "not run" : (line.empty() ? "nothing" : line.c_str()));
             }
             ctx->Unmap(g.cut_staging, 0);
         }
@@ -1888,14 +1898,19 @@ void cut_dispatch(CBackend& cmd, u32 phase)
         ctx->CSSetUnorderedAccessViews(0, 3, none, initial);
         cmd.clear_CS_resources();
     }
-    u32 last = 0;
+    u32 last = 0, ran = 0;
     for (u32 q = 0; q < kCutPhases; ++q)
         if (g.cut_n[q])
+        {
             last = q;
+            ran |= 1u << q;
+        }
     if (phase == last && g.cut_readback == 1)
     {
         ctx->CopyResource(g.cut_staging, g.cut_counts_b.buf);
         g.cut_readback = 2;
+        g.cut_readback_frame = Device.dwFrame;
+        g.cut_readback_phases = ran;
     }
     // The compute passes leave the G-buffer's targets, viewport and stencil to the draws after them.
     RImplementation.Target->phase_scene_begin_parallel(cmd, cmd.xforms.m_motion_pass);

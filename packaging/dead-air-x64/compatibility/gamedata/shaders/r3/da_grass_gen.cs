@@ -294,7 +294,8 @@ struct grass_force
 // The gusts' share of the lean grows with the distance (Ghost of Tsushima's high-frequency gusts, "increased over a
 // range to give a more noticeable look at a distance"): from 20 m to 120 m the gusts and lulls round the mean lean and a
 // passing tongue's lean go to 1.75 times theirs - a blade far off sways under a pixel, and a gust ran across the far
-// meadow unseen. The mean lean, the motors and the push stay. r__dbg_grass 1024 (QA): none.
+// meadow unseen. The mean lean, the motors and the push stay; a deepened lull stops at upright (taken past it, a far
+// blade leaned into the wind). r__dbg_grass 1024 (QA): none.
 float	grass_gust_k	(float d)	{ return (grass_dbg() & 1024u) != 0u ? 1.0f : 1.0f + 0.75f * smoothstep(20.0f, 120.0f, d); }
 
 grass_force	grass_force_at	(float3 root, float hemi, uint grp, float stiff, float4 W, float2 downhill, float H, bool prev, float gust_k)
@@ -304,7 +305,7 @@ grass_force	grass_force_at	(float3 root, float hemi, uint grp, float stiff, floa
 	const float4 field = prev ? da_wind_field_prev : da_wind_field;
 	detail_wind w = detail_wind_at(root, hemi, field, wave, dir);
 	const float sway_mean = detail_sway_mean(field);
-	w.dp = sway_mean + (w.dp - sway_mean) * gust_k;
+	w.dp = max(sway_mean + (w.dp - sway_mean) * gust_k, min(w.dp, 0.0f));
 	w.flow.y *= gust_k;
 	// The wave, the gust lean and the bob follow the real wind (field.z, 0..1.25): the gust field's
 	// amplitude never drops below 0.6, so without this a dead calm still rocked every blade. The motors stay

@@ -1,0 +1,175 @@
+# Ghost of Tsushima as the vegetation reference (1.6.3)
+
+Ghost of Tsushima (Sucker Punch; the Director's Cut on PC) draws dense grass, pampas, flowering meadows and wind-swept
+forests at a high frame rate. Besides DOOM Eternal (the GPU-driven geometry, `DX12_RENDERER.md`), it is the mod's
+reference for everything the wind and the plants do. This file is what its renderer does with them, read from its data
+and its executable, what the mod took in 1.6.3 and what it did not, and why. The plants themselves: `GRASS.md`,
+`SHRUBS.md`, `TREES.md`; the wind: `WEATHER.md`.
+
+## How it was read
+
+Statically only: the executable of the installed copy is a third-party build and was never run.
+
+- **Archives.** `*.dsar` is a container of LZ4 blocks around a PSARC; the PSARC's manifest lists its entries' names,
+  matched to its table by the MD5 of each name (the manifest's lines split by position did not line up with the
+  table). The packages (`.xpps`, `KCAP` chunks) hold the shaders, the materials and the tuning sets.
+- **Shaders.** 20 043 DXIL blobs (10 386 pixel, 7 346 compute, 2 282 vertex, 29 tessellation), shader model 6.6,
+  bindless; a draw's or a dispatch's data is a ByteAddressBuffer (`t1 space1`) read at an offset from the root
+  constants (`cb14`), so every input is a raw load at a fixed offset and a shader's parameters are read from its
+  disassembly (`dxc -dumpbin`). The grass's compute and vertex shaders, the proxy sets' culling and the imposters'
+  passes were read through.
+- **The executable** (IDA): the tuning tables with their help strings (the wind, the gusts, `GRASS_PARAMETERS`,
+  `TREE_WIND_PRESET`), the frame's job names (`JOBAK_*`) and the GPU buffers' debug names.
+
+## The wind
+
+One wind for the world (`WindDirection`, `WindSpeed`, `WindZVelocity` for set pieces) and two scrolling gust maps over
+the landscape:
+
+- the **gust map**: `GustMapScale` (its size, cm), `GustDensity` (how many gusts in it), `GustTravelSpeed` (its scroll,
+  a multiple of the wind's speed), `GustAmplitude` (the gusts' peak strength, a multiple of the speed),
+  `GustVarianceRate` (how fast the map itself changes);
+- the **high-frequency map**: `GustMapScaleHighFreq`, `GustTravelSpeedHighFreq`, `GustAmplitudeHighFreq`,
+  `GustMinimumHighFreq`, `GustMapRotationHighFreq` (turned against the big one so the two never line up) and
+  `GustScaleRangeHighFreq` / `GustScaleAmountHighFreq`: "the range over which the high frequency gusts increase to give
+  a more noticeable look at a distance" and how much - the far field's gusts are scaled up on purpose.
+
+Cloth takes it by `ClothWindFactor`; particles by wind spheres (`PARTICLE_WIND_SPHERE`); the GPU keeps wind records
+(`Wind Records In/Out/CPU`) for the systems that read it back. Polycuts pin the clocks and offsets
+(`WindTimeOverride`, `GustOffsetOverride`), so a cutscene's grass moves the same every time.
+
+The mod's wind is the same idea in its own terms (`WEATHER.md`): one travelling gust field with eddies of 8 and 4 m
+ridden downwind (`da_wind_turb`), the stock wave groups, the motors for boots, shots and blasts. 1.6.3 took the
+distance boost (below, "Grass").
+
+## Grass
+
+**Data.** `GRASS_PARAMETERS` per grass kind: the procedural placement (`PROC_SCALE_*`, `PROC_ANGLE_*`,
+`PROC_JITTER_MAX`, `PROC_ALIGN_TO_TERRAIN`, `PROC_FACE_DOWNHILL`), the blade (`BASE_WIDTH`, `BASE_TILT`, `BASE_BEND`,
+`BEND_POINT`, `BEND_INVERSION_FREQ`, `HEIGHT_SCALE/MIN/MAX`, `SIDE_CURVE`, `HEIGHT_CLUMPING`, `HEIGHT_VARIANCE`), the
+clumps (`CLUMP_SIZE`, `CLUMP_DENSITY`, `CLUMP_ALT_COLOR_FREQUENCY`, `FACE_CLUMP_DIRECTIONAL`, `FACE_CLUMP_OUTWARD`, and
+facing the wind, the slope, a river's current or the waves), the shading (`SPEC_SCALE`, `GLOSS_SCALE`,
+`TRANSLUCENCY_SCALE`, `POROSITY`, `AO_SHORT`, `AO_TALL`), the wind (`WIND_SCALE`, `WIND_SCALE_HIGH_FREQ`,
+`ANIMATION_SPEED`), the interaction (`DISPLACEMENT_BEND_SCALE`, `DISPLACEMENT_TWIST_SCALE`) and the far blades
+(`DISTANT_SIZE`, `DISTANT_FADE_LIMITS`, `DISTANT_HEIGHT_ADJUST`). Clumps are Voronoi cells (`VORONOI_SIZE`, `_EDGE`,
+`_MAX_ROTATE`, `_SOFTNESS`).
+
+**Generation.** A compute pass per tile of 256 x 256 lanes writes the blades of the view - tiles four to a batch,
+their outputs in ping-pong buffers (eight sets of 65 536 blades) - as structures of arrays: `posGrass_uHeight`,
+`sWidth_gTilt_gBend_grassk`, `normalFacing_rSideCurve_uWind`, `uVoronoi_uWindPrev_uClumpColor_uHash`. The previous
+frame's wind travels with the blade (`uWindPrev`) for the motion vectors. A pass turns the counts into indirect draws
+(`Grass Indirect Args`, `Blade Count`). The tiles are culled on the CPU by the occlusion buffer (`JOBAK_OcclusionBuffer`)
+before they are dispatched.
+
+**Level of detail.** A blade is a curve drawn as a strip: 15 vertices within 12.5 m x `LodAdjust` (the grass quality,
+0..2), 7 past that, nothing past 210 m x `LodAdjust`, faded out between 190 and 210 m on a random threshold per blade.
+The lattice ranks are nested: a far tile's blades are a subset of the near tile's, so the density thins without a
+blade jumping. The grass casts into the sun's cascades in passes of its own (a high and a low level of detail,
+`INCLUDE_GRASS_IN_SHADOW_MAP`, a `shadow_proxy` set for the far cascades).
+
+**Wind and interaction.** The wind is noise evaluated in the shader per blade (a 3D Perlin of position and time), the
+gust maps on top, scaled per kind. Characters, horses, arrows and effects press it through a displacement texture of
+256 x 256 texels over 100 m around the camera, sampled bicubically (`PsysGrassDisplacement`, `FX_PARTICLE_DISPLACEMENT`),
+which bends and twists the blades by the kind's scales.
+
+**Look.** The blades bend away from the camera a little (`BendAwayFromCamera`: from above, a meadow shows its blades'
+sides rather than their cut ends); the ground under the grass has its own specular multipliers
+(`TerrainGrassSpecNearValue` below 1 "to create the illusion of shadow under nearby grass", `TerrainGrassSpecFarValue`
+"to maintain a grassy appearance when grass geometry is not drawn due to LOD", blended between `FadeStart` and
+`FadeEnd`, both scaled by `LodAdjust` with the grass's reach).
+
+**The mod against it.** The mod's blade grass (1.6.0, `GRASS.md`) is built the same way and needed no rebuild: tiles
+generated on the GPU into bins drawn indirectly, cubic Bezier blades of 13, 7 and 3 vertices by distance, a quincunx
+lattice whose density halves per doubling of the distance (nested), Voronoi clumps with their pull, facing and colour,
+the previous frame's force per blade for the motion vectors, the HOM and the frame's depth culling the tiles and lanes
+(GoT's grass tiles go by the CPU's occlusion buffer), a push field of 64 m around the camera for the trampling (GoT's
+displacement texture), casters of their own per sun cascade. 1.6.3 took:
+
+| GoT | 1.6.3 | Measured |
+| --- | --- | --- |
+| Per-tile data culled once on the CPU | `TileSummary` (`da_grass_blades.cpp`): what a tile's slots hold - per community the most presence x cover, the height range - worked out the first time the tile is walked and kept by level and place; the day's densities multiplied in each frame | the calc task's walk over every 2 m slot of a 300 m reach: -73 % of its profiler samples; the tiles, levels and lanes the same |
+| `GustScaleRangeHighFreq` / `GustScaleAmountHighFreq` | `grass_gust_k` (`da_grass_gen.cs`): from 20 to 120 m the gusts and lulls round the mean lean go to 1.75 times theirs | the far field's frame-to-frame motion +17-30 % (`grass_gust.lua`), the near unchanged; `grass_gen` +0.01-0.02 ms |
+| `TerrainGrassSpecNear` / `Far` | `deffer_impl_flat.ps`: the soil's gloss under the blade cover at half near the camera, a third where the blades thin out toward their reach | a far slope against the sun keeps the grass's dull sheen |
+
+`BendAwayFromCamera` was not taken: the mod's blades already turn their flat side toward their lean
+(`grass_lean`), and a camera-dependent bend would differ between the view and the casters - the shadow would not follow
+the blade (the rule in `TREES.md`: shadows follow the sway).
+
+## Trees and shrubs
+
+**Wind presets.** `TREE_WIND_PRESET` per species: three levels - trunk, branch, subbranch - each with
+`STIFFNESS`, `SWAY_DISTANCE`, `SWAY_WAVINESS`, `SWAY_SPEED` and, for the branches, `SWAY_ANGLE_MAXIMUM`; the materials
+switch `TreeWind`, `TreeWindTrunk`, `TreeWindBranch`, `TreeWindSubBranch`, `TreeWindHighFreq` (the high-frequency gust
+map on the leaves), `FaceWindDirXy`, `InteractiveDeformation`, and for the coast `TreeWindUseOceanWaves` /
+`TreeWindClampVertsToOcean`. The vertex shader bends a vertex by the levels its painted weights name: a sway per level
+with its own speed and waviness, limited per level.
+
+**Proxy sets.** The scattered vegetation and props are proxy sets, culled on the GPU: a job culls them on the CPU
+first (`JOBAK_ProxySetCull`, `JOBAK_ProxySetPreRender`, `JOBAK_ProxySetFillStreams`), then the GPU against the frame's
+depth (`Proxyset Cull Inst Count`, `Proxyset Streams Inst Count`, `Max Depth Cull Scratch`, `Cpu Max Depth Cull 0/1`)
+into indirect draws (a command signature of `DrawIndexed`), with fades of their own (`Proxyset Fade`, `Proxyset Temp
+Fade`).
+
+**Imposters.** Far trees are imposters (`OBJECT_IMPOSTERS`, `VIEW_IMPOSTER`), baked with a dilation pass
+(`FX_DILATE_IMPOSTER`) and their own shadow and occlusion (`FX_COPY_IMPOSTER_SHADOW_AND_AO`); the far shadow cascades
+use separate low-detail alpha textures (`*_ll_shadow`).
+
+**Shadows.** Four cascades (`CSM0`-`CSM3`, each with its own polygon and normal offsets); a mesh is drawn into the
+shadow map no finer than a level of detail (`LodDistanceMinInShadowMap`) and can be left out of the low-resolution
+cascades altogether (`SKIP_DRAW_IN_LOW_RES_SHADOW`); screen-space directional shadows add the contact detail the maps
+lack (`DirectionalScreenSpaceShadows`, `ScreenSpaceShadowHardWeight`/`Decay`/`Contrast`).
+
+**The mod against it.** The trees (1.6.0, `TREES.md`) already had the GPU cut with the depth pyramid (DOOM Eternal's
+and GoT's way), billboards of eight views baked from the tree itself (the imposters), chain bends per axis cached a
+frame in the bend buffer. 1.6.3 took:
+
+| GoT | 1.6.3 | Measured |
+| --- | --- | --- |
+| Proxy sets culled on the GPU against the frame's depth | The shrubs through the trees' GPU cut, its third phase (`CUT_KEEP`, `da_tree_cut.cs`, `da_veg.cpp` `emit`): an element keeps the CPU's draw and leaves out only what its vertex shaders threw away - out of the view by its own bent place, behind the depth pyramid with every tree in it, the wood under its wire rule. `r__shrubs_cut` (QA) | behind a near poplar on Cordon the view had run 107 000 sprays, 95 000 wood segments and 95 000 fruit groups for a few thousand pixels: `shrubs` 3.68 -> 2.18 ms and 1.94 -> 1.06 ms in the bushy headings, the bend pass 0.44 -> 0.24 ms |
+| Coarser, cheaper casters in the far cascades (`LodDistanceMinInShadowMap`, `_ll_shadow`) | A cluster's or a blob's quad whose leaf cells are three shadow texels and more casts round clumps of the same Beer-Lambert cover (`da_shrub_cluster_shadow.ps`): a high crown's sunflecks are the sun's pinhole images | `sun` 5.63 -> 4.68 ms in that heading (the textured cells were seven million texels of the near map) |
+| `DISTANT_SIZE` / `DISTANT_FADE_LIMITS` (a far blade drawn by its mean) | A fruit group under four pixels across drawn as its mean cover in the bunch's mean colour (`da_shrub_bloom.ps`), dithered over the band by the pixel's noise | a fruiting stand's far cost was mostly every fruit and stalk tested at each pixel |
+
+Not taken:
+
+- **Harmonic sway per level** (`SWAY_SPEED`, `SWAY_WAVINESS`): the mod's limbs bow to the gusts passing their base and
+  ring a little at their own frequency (`shrub_axis_turn_of`); a harmonic sway as the whole motion swung every twig
+  three to fourteen times a second in any breeze and read as twitching (`SHRUBS.md`).
+- **The distance boost of the gusts for the crowns**: a tree's bend is its own (cached per slot, its shadow from the
+  same bend); one walked toward from 120 m would calm down by half as the player nears it. In GoT the boost is the
+  grass's and the leaves' high-frequency map, not the trees' presets.
+- **Screen-space shadows**: a general feature, not the vegetation's; the mod's contact detail on the plants comes from
+  their own casters and the crown light.
+- **The ocean's waves** in the trees' wind: no sea in the Zone.
+
+## Cost: 1.6.3 against the engine before it
+
+The engine of 040c592b2 (the version bump, before any of the above) against 1.6.3 on the rig, each with its own
+shaders, run in turn: `veg_cost.lua` at the save's eye, four headings a quarter turn apart, a July noon, Extreme, DX11
+1080p, the RTX 3070 Laptop. GPU ms per heading (`r__gpu_log`), the frame rate (`r__fps_log`); the old engine's two runs
+averaged:
+
+| Place, heading | frame | shrubs | shrubs' bend | sun | FPS |
+| --- | --- | --- | --- | --- | --- |
+| Cordon village, behind a poplar (h90) | 22.81 -> 20.07 | 3.69 -> 1.94 | 0.47 -> 0.34 | 5.44 -> 4.59 | 43.6 -> 49.5 |
+| Cordon village, bushes ahead (h0) | 17.36 -> 15.92 | 1.94 -> 1.03 | 0.31 -> 0.31 | 4.34 -> 4.37 | 57.4 -> 62.1 |
+| Cordon village, four headings summed | 73.8 -> 68.7 | 7.15 -> 4.05 | 1.10 -> 0.90 | 18.66 -> 17.74 | 220.9 -> 233.8 (+6 %) |
+| The meadow (`qa_meadow`), four headings summed | 68.8 -> 66.3 | 6.39 -> 4.50 | 0.63 -> 0.55 | 14.17 -> 13.67 | 230.1 -> 239.2 (+4 %) |
+
+The village's street lamps burn by day: the bushes in their shadow maps cost the old engine's (`lights` 2.8 -> 2.7 ms
+summed), the bend pass bends them too. The grass, its generation and the trees stay within a few hundredths (the boosted
+gusts and the sheen are free); the shrubs' frame pick on its worker (`shrubs_cpu`) is some 0.05-0.25 ms a heading dearer
+for the cut's routes (Cordon summed 2.12 -> 2.49 ms, the meadow 2.58 -> 2.9-3.65, noisy); it runs on a worker, and the
+render thread waits for it only when it is late (`veg_wait`, 0.1-1.2 ms a heading in 1.6.3). The shots of both match but
+for the wind's sway. Not covered: the other presets and renderers by number (DX12 and Vulkan were run for their output
+and the local lights' casters, `tools/qa/water/veg_light.lua`).
+
+## Measuring
+
+- `tools/qa/water/veg_cost.lua` (scenario): at the save's eye, headings a quarter turn apart, each mode of a plan in turn
+  (an A/B in one run), the `r__gpu_log` lines between its markers, the populations' stats and a shot per mode;
+  `tools/qa/Parse-VegCost.py <run>` averages them per heading and mode.
+- `tools/qa/water/grass_gust.lua`: `r__capture` of the meadow per mode, for the far field's motion frame to frame.
+- `r__gpu_log` fields: `grass`, `grass_gen`, `shrubs`, `shrubs_bend`, `trees`, `trees_bend`, `trees_bb`, `sun`, and
+  the CPU's `trees_cpu`, `shrubs_cpu`, `veg_wait` (the render thread waiting for the vegetation's frame pick).
+- QA switches: `r__shrubs_cut 0` (the shrubs as the CPU chose them), `r__dbg_grass 1024` (no distance boost of the
+  gusts).

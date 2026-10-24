@@ -754,6 +754,8 @@ struct TileSummary
     float pc[da_grass_communities]{};
     float ymin{flt_max}, ymax{-flt_max};
     bool any{};
+    // The walk that last asked for it (State::tile_epoch).
+    u32 seen{};
 };
 
 // A tile of the frame's blade grass (build_tiles), nearest first.
@@ -826,6 +828,8 @@ struct State
     // The tiles' summaries by level and place (the calc task's), on the lattice of tile_s0.
     std::unordered_map<u64, TileSummary> tile_cache;
     float tile_s0{};
+    u32 tile_epoch{};
+    size_t tile_kept{};
     xr_vector<u32> groups; // the tiles as compute groups, 4 uints per group (expand_tiles)
     u32 group_count{}, lane_count{};
     u32 hidden{}; // the tiles in view the main view's occlusion hid this frame
@@ -1678,11 +1682,13 @@ const TileSummary& tile_summary(int x, int z, u32 k, float x0, float z0, float x
     if (g.tile_s0 != g.latch.s0)
     {
         g.tile_cache.clear();
+        g.tile_kept = 0;
         g.tile_s0 = g.latch.s0;
     }
     const u64 key = (u64(k) << 60) | (u64(u32(x) & 0x3FFFFFFFu) << 30) | u64(u32(z) & 0x3FFFFFFFu);
     const auto [it, fresh] = g.tile_cache.try_emplace(key);
     TileSummary& S = it->second;
+    S.seen = g.tile_epoch;
     if (!fresh)
         return S;
     const int sx0 = std::max(iFloor(x0 / DETAIL_SLOT_SIZE) + g.offs_x, 0);
@@ -1722,6 +1728,14 @@ void build_tiles()
         g.tiles.clear();
         g.green.store(0.f, std::memory_order_relaxed);
         return;
+    }
+    // The summaries the walk has left behind go once the cache is twice what the last sweep kept: a walk across a level
+    // left tens of thousands of tiles in it.
+    ++g.tile_epoch;
+    if (g.tile_cache.size() > std::max<size_t>(16384, 2 * g.tile_kept))
+    {
+        std::erase_if(g.tile_cache, [](const auto& e) { return e.second.seen + 1 < g.tile_epoch; });
+        g.tile_kept = g.tile_cache.size();
     }
     const float s0 = L.s0;
     const float near_reach = L.shadow_near ? kNearReach : 0.f;
@@ -2433,6 +2447,7 @@ void da_grass_level_load()
     g.level_hmax += s_reed_emerge_max;
     g.slot_info.assign(size_t(g.size_x) * g.size_z, 0);
     g.tile_cache.clear();
+    g.tile_kept = 0;
     bool any = false;
     for (size_t i = 0; i < g.slot_info.size(); ++i)
     {

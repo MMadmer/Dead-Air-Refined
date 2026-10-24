@@ -200,9 +200,11 @@ Per frame:
    `r__grass_blades_stats` reports the hidden tiles. What a tile's slots hold is the same in every frame: per community
    the most presence x cover of its slots and the slots' height range are worked out the first time the tile is walked
    and kept by its level and place (1.6.3, `TileSummary`; a new lattice spacing - the height row - starts over), the
-   frame multiplying the communities' density of the day in. Worked out over every slot of every tile each frame (a
-   300 m reach is some 70 000 slots) the walk was the calc task's heaviest work: a fifth of a core on Cordon at the
-   Maximum distance, a quarter of that now, the tiles, levels and lanes the same.
+   frame multiplying the communities' density of the day in; the summaries no walk has asked for since the last frame
+   go once the cache holds twice what its last sweep kept (16384 at least: a walk across a level left tens of
+   thousands of tiles in it). Worked out over every slot of every tile each frame (a 300 m reach is some 70 000 slots)
+   the walk was the calc task's heaviest work: a fifth of a core on Cordon at the Maximum distance, a quarter of that
+   now, the tiles, levels and lanes the same.
 3. **Ground window** (compute): a toroidal 1024², 2048² or 4096² R32F window of 0.25 m texels around the camera
    (the reach of the grass distance row; at 0.5 m texels a 27-degree slope read as a kerb and lost its grass),
    exactly the stock decompress rule - the highest up-facing non-passable surface under the slot's top,
@@ -510,7 +512,8 @@ clock (the TAA floor), wind 0.9 9.6.
 The gusts carry farther with the distance (1.6.3, after Ghost of Tsushima's grass, whose high-frequency gusts grow
 over a range "for a more noticeable look at a distance"): from 20 m to 120 m the gusts and lulls round the mean lean
 and a passing tongue's lean go to 1.75 times theirs (`grass_gust_k`, `da_grass_gen.cs`); the mean lean, the motors,
-the push field and the bob stay. A blade far off swayed under a pixel and a gust ran across the far meadow unseen. The
+the push field and the bob stay, and a deepened lull stops at upright (taken past it, a far blade leaned into the
+wind). A blade far off swayed under a pixel and a gust ran across the far meadow unseen. The
 same factor goes into the previous frame's force, so the motion vectors follow. Measured (`tools/qa/water/grass_gust.lua`,
 `qa_meadow`, wind 0.6, r__capture over 3 s): the far field's frame-to-frame motion 17-30 % up, the near unchanged;
 `r__dbg_grass 1024` switches the boost off.
