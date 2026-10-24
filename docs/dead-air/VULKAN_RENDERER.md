@@ -49,13 +49,15 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
   class. Pipelines are built through graphics pipeline libraries with fast linking (`-vk_no_gpl` for
   whole pipelines) and persist in `appdata/shaders_cache_grizzly/r6/pipelines.bin` (written as a level's precache
   ends and at shutdown, 1.6.2). The pipeline prewarm (1.6.2, `vk_prewarm.cpp`) journals every graphics pipeline
-  by content in `r6/pipelines.journal` (the shaders' content hashes, input layout, blend and raster contents,
-  formats; the device's dynamic-state features in the header, another set keys the same draws otherwise) and,
-  as the level's shaders were created, the precache starts and ends, builds those whose shaders all exist on
-  1-6 below-normal threads through `PipelineCache::Graphics`: the libraries compile early, the fast link is
-  ready and the optimizer links the optimized one. The release's journal `gamedata/shaders_cache_pack/r6/`
-  is merged in once per device. QA (the meadow without `pipelines.bin`): 181 pipelines built by the contexts
-  during the load, 40 with the journal. A context looks its
+  by content in `r6/pipelines.journal` (the shaders' content hashes, the D3D11 descriptions of the input layout,
+  blend and raster states, the formats, and per pipeline the device's dynamic-state features: another set keys
+  the same draws otherwise) and, as the level's shaders were created, the precache starts and ends, builds those
+  of this device's features whose shaders all exist on 1-6 below-normal threads through `PipelineCache::Graphics`:
+  the states are made again through the device and must hash to what the pipeline had, the libraries compile
+  early, the fast link is ready and the optimizer links the optimized one. The rules of the DirectX 12 journal
+  hold (no cached failure, the stamp at a context's first draw, 48 sessions); the release's journal
+  `gamedata/shaders_cache_pack/r6/` is merged in once per device. QA (the meadow without `pipelines.bin`): 175
+  pipelines built by the contexts during the load, 41 with the journal. A context looks its
   layouts and pipelines up in small direct-mapped tables of its own (the device's caches take a lock), and a
   description equal to the bound pipeline's - shaders, state objects and their contents - needs no lookup.
   A rate image going away keeps the rendering (it stays attached, the combiner ignores it): a lamp's
