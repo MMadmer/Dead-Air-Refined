@@ -464,10 +464,11 @@ species (`SEASON_DATA.md`):
   the occlusion in any weather (the sun's shade is the casters'), easing out with the blades' thinning. Cost
   at 1080p: 0.01-0.02 ms in the scene (the shade computed in the terrain's pixel shader cost 0.12 ms looking
   down into a meadow). QA: `tools/qa/water/ground_ao.lua`.
-- The ground's sheen under the grass (1.6.3, Ghost of Tsushima's `TerrainGrassSpecNear`/`Far`): by the blade cover,
-  the soil's gloss is halved near the camera, where the blades shade it between them, and taken to a third as they
-  thin out toward their reach (the litter's `thin` or the blend from `d2` to the radius, `da_gtint.zw`), where the
-  stand's matte leaves stand for it: a slope against the sun past the drawn blades shone like wet earth.
+- The ground's sheen under the grass (1.6.3, Ghost of Tsushima's `TerrainGrassSpecNearValue`/`FarValue`, live 1 and
+  0 from 0 to 50 m scaled with its grass quality): by the blade cover, the soil keeps its gloss by the camera, where
+  the blades' own casters shade it, and loses it linearly to none at `d2` (the preset's 25-45 m, where the blades
+  start to thin, `da_gtint2.z`): the stand's matte leaves stand for it, so a slope against the sun past the drawn
+  blades no longer shines like wet earth.
 - Wet blades: the rain apply pass darkens and glosses them like any surface (foliage porosity 0.35);
   fill-map puddles never stand on foliage. The snow layer skips foliage (the blades carry their own snow).
 
@@ -510,13 +511,15 @@ Measured (escape, DX11, frames 1.2 s apart): calm 2.33 mean difference against 2
 clock (the TAA floor), wind 0.9 9.6.
 
 The gusts carry farther with the distance (1.6.3, after Ghost of Tsushima's grass, whose high-frequency gusts grow
-over a range "for a more noticeable look at a distance"): from 20 m to 120 m the gusts and lulls round the mean lean
-and a passing tongue's lean go to 1.75 times theirs (`grass_gust_k`, `da_grass_gen.cs`); the mean lean, the motors,
-the push field and the bob stay, and a deepened lull stops at upright (taken past it, a far blade leaned into the
-wind). A blade far off swayed under a pixel and a gust ran across the far meadow unseen. The
-same factor goes into the previous frame's force, so the motion vectors follow. Measured (`tools/qa/water/grass_gust.lua`,
-`qa_meadow`, wind 0.6, r__capture over 3 s): the far field's frame-to-frame motion 17-30 % up, the near unchanged;
-`r__dbg_grass 1024` switches the boost off.
+over a range "for a more noticeable look at a distance"; its live range is 25-75 m): from 25 m to 75 m the gusts and
+lulls round the mean lean and a passing tongue's lean go to 2.5 times theirs (`grass_gust_k`, `da_grass_gen.cs`); the
+mean lean, the motors, the push field and the bob stay, and a deepened lull stops at upright (taken past it, a far
+blade leaned into the wind). A blade far off swayed under a pixel and a gust ran across the far meadow unseen. GoT's
+amount is 5 on a gust map that is faint by the camera; the mod's gusts are whole there, and five times a storm's
+tongue would press the far stand flat. The same factor goes into the previous frame's force, so the motion vectors
+follow. Measured (`tools/qa/water/grass_gust.lua`, `qa_meadow`, wind 0.6, r__capture over 3 s, the wind reseeded
+before each mode, two runs): the field from 25 to 75 m 6-8 % more motion frame to frame, the near within 4 %; past
+it the run-to-run spread is as large as the boost (the far blades are a pixel or two). `r__dbg_grass 1024` switches the boost off.
 
 ## Seasons
 

@@ -253,11 +253,12 @@ f_deffer 	main	( p_flat I 		)
 			* lerp(lerp(0.4f, 0.65f, grain), lerp(0.6f, 0.75f, grain), under);
 		D.rgb = lerp(D.rgb, litter, lerp(0.65f, 0.85f, under) * g_near * da_gcanopy[gp].w);
 		D.rgb *= 1.0f - max(lerp(0.25f, 0.1f, under) * g_near * da_gcanopy_ref[gp].w * spread, foot);
-		// The ground's sheen under the grass (Ghost of Tsushima's TerrainGrassSpecNear and Far): near the camera the
-		// blades shade the soil between them - its gloss at half; as they thin out toward their reach the stand's matte
-		// leaves stand for it - a third of the soil's, so a far meadow past the blades keeps the grass's dull sheen
-		// instead of the bare ground's (a slope against the sun shone like wet earth where no blade is drawn).
-		G *= lerp(1.0f, lerp(0.5f, 0.33f, saturate(max(thin, (gdist - da_gtint.z) / max(da_gtint.w - da_gtint.z, 1.0f)))), cover);
+		// The ground's sheen under the grass, as Ghost of Tsushima's (live TerrainGrassSpecNearValue 1, FarValue 0 from
+		// FadeStart 0 to FadeEnd 50 m, scaled with its grass quality): the soil keeps its gloss by the camera, where the
+		// blades' own casters shade it, and loses it toward d2 (the preset's 25-45 m, where the blades start to thin), so
+		// a far meadow has the stand's matte look instead of the bare ground's (a slope against the sun shone like wet
+		// earth where no blade is drawn).
+		G *= lerp(1.0f, saturate(1.0f - gdist / max(da_gtint2.z, 1.0f)), cover);
 	}
 
 	// Puddles and wet ground. Placed here, after everything else: by this point the normal

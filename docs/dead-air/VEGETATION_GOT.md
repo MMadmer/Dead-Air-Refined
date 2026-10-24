@@ -8,7 +8,8 @@ and its executable, what the mod took in 1.6.3 and what it did not, and why. The
 
 ## How it was read
 
-Statically only: the executable of the installed copy is a third-party build and was never run.
+From its files and, in the 1.6.3 round 4, from the running game (started by its owner; its memory read, no code put
+in it).
 
 - **Archives.** `*.dsar` is a container of LZ4 blocks around a PSARC; the PSARC's manifest lists its entries' names,
   matched to its table by the MD5 of each name (the manifest's lines split by position did not line up with the
@@ -20,6 +21,15 @@ Statically only: the executable of the installed copy is a third-party build and
   passes were read through.
 - **The executable** (IDA): the tuning tables with their help strings (the wind, the gusts, `GRASS_PARAMETERS`,
   `TREE_WIND_PRESET`), the frame's job names (`JOBAK_*`) and the GPU buffers' debug names.
+- **The render parameters, live.** 353 of them (the wind, the gusts, the terrain's grass sheen, the shadows' LOD):
+  names, types and defaults in tables of the image, the frame's blended values in the render-parameter manager's
+  array of 32-byte entries (value, index, type, blend mode, set flag), read from the process. Units are centimetres.
+- **The tuning sets.** A package's data type is indexed by records of `{u64 offset, u64 type hash, u64 field hash}`;
+  the field's record (`{u16 type, u16 kind, ...}`) ends with its value, the offset counted from the package's data
+  section (the u32 at `0x28` of the `KCAP` header). A field hash is the polynomial `h = h * 101 + c` over the name in
+  lower case, from 0 (the executable's field descriptors pair each name with the next field's hash - read them by the
+  hash, not by the neighbouring name). The grass kinds are in `core_tsu.sprig.xpps` (45), the tree presets in
+  `core_common.sprig.xpps` (37); a set stores only the fields it changes.
 
 ## The wind
 
@@ -33,6 +43,10 @@ the landscape:
   `GustMinimumHighFreq`, `GustMapRotationHighFreq` (turned against the big one so the two never line up) and
   `GustScaleRangeHighFreq` / `GustScaleAmountHighFreq`: "the range over which the high frequency gusts increase to give
   a more noticeable look at a distance" and how much - the far field's gusts are scaled up on purpose.
+
+Live, in the open world by day: `WindSpeed` 1, `GustAmplitude` 1, `GustMapScale` 2500 (25 m), `GustVarianceRate` 0.1;
+the high-frequency map `GustMapScaleHighFreq` 500-1000 m, `GustMapRotationHighFreq` 260, `GustAmplitudeHighFreq` 3000,
+`GustMinimumHighFreq` 0.5, `GustScaleRangeHighFreq` 25-75 m, `GustScaleAmountHighFreq` 5.
 
 Cloth takes it by `ClothWindFactor`; particles by wind spheres (`PARTICLE_WIND_SPHERE`); the GPU keeps wind records
 (`Wind Records In/Out/CPU`) for the systems that read it back. Polycuts pin the clocks and offsets
@@ -53,6 +67,12 @@ facing the wind, the slope, a river's current or the waves), the shading (`SPEC_
 `ANIMATION_SPEED`), the interaction (`DISPLACEMENT_BEND_SCALE`, `DISPLACEMENT_TWIST_SCALE`) and the far blades
 (`DISTANT_SIZE`, `DISTANT_FADE_LIMITS`, `DISTANT_HEIGHT_ADJUST`). Clumps are Voronoi cells (`VORONOI_SIZE`, `_EDGE`,
 `_MAX_ROTATE`, `_SOFTNESS`).
+
+The shipped kinds (45; the median of those that set the field): `WIND_SCALE` 0.65 (a few stiff kinds 0.1),
+`WIND_SCALE_HIGH_FREQ` 1 (0.03 for the stiff ones), `DISPLACEMENT_BEND_SCALE` and `_TWIST_SCALE` 1, `CLUMP_SIZE` 0.6-1.2 m,
+`PROC_SCALE` 0.8-1.2, `PROC_ANGLE` +-30 to +-180 degrees, `DISTANT_FADE_LIMITS` 6-11 m for 16 kinds and 120-170 or
+150-200 m for six, `DISTANT_HEIGHT_ADJUST` pairs such as 1.375-2.75 and 0-1.5 (by its name a far blade's height, for
+the thinned lattice; the mod's pixel floor widens its far blades to the same end, `GRASS.md`).
 
 **Generation.** A compute pass per tile of 256 x 256 lanes writes the blades of the view - tiles four to a batch,
 their outputs in ping-pong buffers (eight sets of 65 536 blades) - as structures of arrays: `posGrass_uHeight`,
@@ -76,7 +96,8 @@ which bends and twists the blades by the kind's scales.
 sides rather than their cut ends); the ground under the grass has its own specular multipliers
 (`TerrainGrassSpecNearValue` below 1 "to create the illusion of shadow under nearby grass", `TerrainGrassSpecFarValue`
 "to maintain a grassy appearance when grass geometry is not drawn due to LOD", blended between `FadeStart` and
-`FadeEnd`, both scaled by `LodAdjust` with the grass's reach).
+`FadeEnd`, both scaled by `LodAdjust` with the grass's reach). Live: near 1 (no darkening by the camera), far 0, from
+0 to 50 m at `LodAdjust` 1.
 
 **The mod against it.** The mod's blade grass (1.6.0, `GRASS.md`) is built the same way and needed no rebuild: tiles
 generated on the GPU into bins drawn indirectly, cubic Bezier blades of 13, 7 and 3 vertices by distance, a quincunx
@@ -88,8 +109,8 @@ displacement texture), casters of their own per sun cascade. 1.6.3 took:
 | GoT | 1.6.3 | Measured |
 | --- | --- | --- |
 | Per-tile data culled once on the CPU | `TileSummary` (`da_grass_blades.cpp`): what a tile's slots hold - per community the most presence x cover, the height range - worked out the first time the tile is walked and kept by level and place; the day's densities multiplied in each frame | the calc task's walk over every 2 m slot of a 300 m reach: -73 % of its profiler samples; the tiles, levels and lanes the same |
-| `GustScaleRangeHighFreq` / `GustScaleAmountHighFreq` | `grass_gust_k` (`da_grass_gen.cs`): from 20 to 120 m the gusts and lulls round the mean lean go to 1.75 times theirs | the far field's frame-to-frame motion +17-30 % (`grass_gust.lua`), the near unchanged; `grass_gen` +0.01-0.02 ms |
-| `TerrainGrassSpecNear` / `Far` | `deffer_impl_flat.ps`: the soil's gloss under the blade cover at half near the camera, a third where the blades thin out toward their reach | a far slope against the sun keeps the grass's dull sheen |
+| `GustScaleRangeHighFreq` / `GustScaleAmountHighFreq` (live 25-75 m, 5) | `grass_gust_k` (`da_grass_gen.cs`): from 25 to 75 m the gusts and lulls round the mean lean and a tongue's lean go to 2.5 times theirs (GoT's 5 is on a map faint by the camera; the mod's gusts are whole there) | the field from 25 to 75 m 6-8 % more motion frame to frame (`grass_gust.lua`, the wind reseeded per mode), the near within 4 %; `grass_gen` +0.01-0.02 ms |
+| `TerrainGrassSpecNear` / `Far` (live 1 and 0, 0-50 m) | `deffer_impl_flat.ps`: the soil's gloss under the blade cover whole by the camera and gone at `d2` (the preset's 25-45 m: Extreme's `d1`/`d2` of 12/45 m are GoT's 12.5 m blade LOD and 50 m sheen fade) | a far slope against the sun keeps the grass's matte look |
 
 `BendAwayFromCamera` was not taken: the mod's blades already turn their flat side toward their lean
 (`grass_lean`), and a camera-dependent bend would differ between the view and the casters - the shadow would not follow
@@ -102,7 +123,9 @@ the blade (the rule in `TREES.md`: shadows follow the sway).
 switch `TreeWind`, `TreeWindTrunk`, `TreeWindBranch`, `TreeWindSubBranch`, `TreeWindHighFreq` (the high-frequency gust
 map on the leaves), `FaceWindDirXy`, `InteractiveDeformation`, and for the coast `TreeWindUseOceanWaves` /
 `TreeWindClampVertsToOcean`. The vertex shader bends a vertex by the levels its painted weights name: a sway per level
-with its own speed and waviness, limited per level.
+with its own speed and waviness, limited per level. The shipped presets (37, typical values): stiffness 0.8 at every
+level; sway distance 1-20 (trunk), 0.5 (branch), 0.5-0.6 (subbranch); waviness 0-0.2, 0.1, 0.1; speed 10 (trunk),
+10-25 (branch), 20-40 (subbranch); the angle limit 0.5-1 (branch) and 0.25-1 (subbranch).
 
 **Proxy sets.** The scattered vegetation and props are proxy sets, culled on the GPU: a job culls them on the CPU
 first (`JOBAK_ProxySetCull`, `JOBAK_ProxySetPreRender`, `JOBAK_ProxySetFillStreams`), then the GPU against the frame's
@@ -192,7 +215,9 @@ for the wind's sway. The local lights' casters: `tools/qa/water/veg_light.lua` (
 - `tools/qa/water/veg_cost.lua` (scenario): at the save's eye, headings a quarter turn apart, each mode of a plan in turn
   (an A/B in one run), the `r__gpu_log` lines between its markers, the populations' stats and a shot per mode;
   `tools/qa/Parse-VegCost.py <run>` averages them per heading and mode.
-- `tools/qa/water/grass_gust.lua`: `r__capture` of the meadow per mode, for the far field's motion frame to frame.
+- `tools/qa/water/grass_gust.lua`: `r__capture` of the meadow per mode, for the far field's motion frame to frame;
+  `wind_seed` before each mode, so both start from the same wind (a capture a few seconds later caught another gust).
+  Even so two captures differ by a few per cent (the near band's spread is the noise floor).
 - `r__gpu_log` fields: `grass`, `grass_gen`, `shrubs`, `shrubs_bend`, `trees`, `trees_bend`, `trees_bb`, `sun`, and
   the CPU's `trees_cpu`, `shrubs_cpu`, `veg_wait` (the render thread waiting for the vegetation's frame pick).
 - QA switches: `r__shrubs_cut 0` (the shrubs as the CPU chose them), `r__dbg_grass 1024` (no distance boost of the

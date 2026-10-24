@@ -58,6 +58,9 @@ local function on_update()
 		for one in string.gmatch(s.cmds, "[^|]+") do
 			cmd(one)
 		end
+		-- Every mode from the same wind: the reseed restarts all its clocks, so two modes' captures differ by the
+		-- mode alone (a capture a few seconds later caught another gust).
+		cmd("wind_seed 1833.7")
 		go("settle")
 	elseif stage == "settle" and now - t0 > 2000 then
 		say("[qa] gust capture " .. plan[step].label)

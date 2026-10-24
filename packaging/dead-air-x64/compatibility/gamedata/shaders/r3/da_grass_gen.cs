@@ -291,12 +291,14 @@ struct grass_force
 	float	push;
 };
 
-// The gusts' share of the lean grows with the distance (Ghost of Tsushima's high-frequency gusts, "increased over a
-// range to give a more noticeable look at a distance"): from 20 m to 120 m the gusts and lulls round the mean lean and a
-// passing tongue's lean go to 1.75 times theirs - a blade far off sways under a pixel, and a gust ran across the far
-// meadow unseen. The mean lean, the motors and the push stay; a deepened lull stops at upright (taken past it, a far
-// blade leaned into the wind). r__dbg_grass 1024 (QA): none.
-float	grass_gust_k	(float d)	{ return (grass_dbg() & 1024u) != 0u ? 1.0f : 1.0f + 0.75f * smoothstep(20.0f, 120.0f, d); }
+// The gusts grow with the distance, as Ghost of Tsushima's ("increased over a range to give a more noticeable look at a
+// distance"; its live GustScaleRangeHighFreq is 25-75 m): from 25 m to 75 m the gusts and lulls round the mean lean and
+// a passing tongue's lean go to 2.5 times theirs - a blade far off sways under a pixel, and a gust ran across the far
+// meadow unseen. GoT's GustScaleAmountHighFreq is 5, on a gust map that is faint by the camera; the mod's gusts are
+// whole there, and five times a storm's tongue would press the far stand to the bend's cap, flat. The mean lean, the
+// motors and the push stay; a deepened lull stops at upright (taken past it, a far blade leaned into the wind).
+// r__dbg_grass 1024 (QA): none.
+float	grass_gust_k	(float d)	{ return (grass_dbg() & 1024u) != 0u ? 1.0f : 1.0f + 1.5f * smoothstep(25.0f, 75.0f, d); }
 
 grass_force	grass_force_at	(float3 root, float hemi, uint grp, float stiff, float4 W, float2 downhill, float H, bool prev, float gust_k)
 {
