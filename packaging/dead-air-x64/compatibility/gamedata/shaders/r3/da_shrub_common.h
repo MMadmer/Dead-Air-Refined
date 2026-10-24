@@ -684,8 +684,11 @@ void	shrub_axis_turn_of	(shrub_axis X, shrub_inst I, shrub_wind W, out float3 ba
 	// fourteen times a second in any breeze: the crowns twitched.)
 	const float mean = 0.45f + 0.35f * saturate(W.field.z);
 	const float gust = da_wind_turb(base.x, base.z, W.field.x, W.field.y, 0.0f);
+	// Each plant rings up to a fifth faster than its species' axis, as Ghost of Tsushima varies a tree preset's speed
+	// per instance: two bushes of a kind side by side drifted in and out of step at one frequency.
+	const float f_inst = shrub_fq(X.freq * (1.0f + 0.2f * frac(float(I.seed) * (3.17f / 65536.0f) + 0.41f)));
 	const float ring = 0.1f * (0.35f + 0.65f * abs(gust)) * rsqrt(max(X.freq, 0.5f)) *
-		sin(6.2831853f * (shrub_fq(X.freq) * W.time + X.phase + float(I.seed) * (1.0f / 65536.0f)));
+		sin(6.2831853f * (f_inst * W.time + X.phase + float(I.seed) * (1.0f / 65536.0f)));
 	const float sway = mean + (1.0f - mean) * gust + ring;
 	float2 push = W.dir * (X.flex * W.pressure * (sway + 0.5f * W.lean));
 	// (A rigid axis - a prickle, a dead stub - rides its wood: no motor turns it.)

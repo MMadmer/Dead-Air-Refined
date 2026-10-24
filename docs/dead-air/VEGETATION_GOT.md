@@ -160,6 +160,7 @@ frame in the bend buffer. 1.6.3 took:
 | Proxy sets culled on the GPU against the frame's depth | The shrubs through the trees' GPU cut, its third phase (`CUT_KEEP`, `da_tree_cut.cs`, `da_veg.cpp` `emit`): an element keeps the CPU's draw and leaves out only what its vertex shaders threw away - out of the view by its own bent place, behind the depth pyramid with every tree in it, the wood under its wire rule. `r__shrubs_cut` (QA) | behind a near poplar on Cordon the view had run 107 000 sprays, 95 000 wood segments and 95 000 fruit groups for a few thousand pixels: `shrubs` 3.68 -> 2.18 ms and 1.94 -> 1.06 ms in the bushy headings, the bend pass 0.44 -> 0.24 ms |
 | Coarser, cheaper casters in the far cascades (`LodDistanceMinInShadowMap`, `_ll_shadow`) | A cluster's or a blob's quad whose leaf cells are three shadow texels and more casts round clumps of the same Beer-Lambert cover (`da_shrub_cluster_shadow.ps`): a high crown's sunflecks are the sun's pinhole images. Then the shader itself: the part's constants worked out once in its vertex shader (the rim's phases, the clumps' chance, the needle bristles), a texel past the outline's widest reach dropped before any work, one inside its least taking no outline, the rim's waves as powers of the texel's direction instead of an arc tangent and three sines, the ramps from the quad's derivatives | `sun` 5.63 -> 4.68 ms in that heading (the textured cells were seven million texels of the near map); the shader's rewrite 0.2-0.3 ms more a heading |
 | `DISTANT_SIZE` / `DISTANT_FADE_LIMITS` (a far blade drawn by its mean) | A fruit group under four pixels across drawn as its mean cover in the bunch's mean colour (`da_shrub_bloom.ps`), dithered over the band by the pixel's noise | a fruiting stand's far cost was mostly every fruit and stalk tested at each pixel |
+| A tree preset's speed varied per instance by up to a fifth (its vertex shader) | `shrub_axis_turn_of` (`da_shrub_common.h`): a plant's limbs ring up to a fifth faster than its species' axis, by its seed (still a whole number of cycles per 64 s, so the clock's wrap stays seamless) | two bushes of a kind side by side no longer drift in and out of step at one frequency; the ring's size is the same |
 
 Not taken:
 
@@ -214,6 +215,18 @@ again beside it (`veg_cost.lua`, two headings, one round each), FPS:
 | DX12 | 52.4 -> 56.3 | 40.3 -> 45.6 | +10 % | 43.32 -> 39.41 | 5.43 -> 3.06 | 11.54 -> 10.12 |
 | Vulkan | 48.6 -> 50.9 | 43.1 -> 46.9 | +7 % | 42.37 -> 38.86 | 5.53 -> 3.17 | 9.24 -> 7.74 |
 
+And at four headings a quarter turn apart, DX11, the new build run twice for the noise (round 4 with the limbs'
+per-instance ring), FPS summed over the headings, GPU ms summed:
+
+| Place | FPS | Frame | Shrubs | Sun | Grass's look (`Grass-Quality.py`: cover, detail, luma) |
+| --- | --- | --- | --- | --- | --- |
+| Cordon village | 222.3 -> 232.3 / 225.9 (+2-5 %) | 73.09 -> 69.13 / 70.74 | 7.11 -> 4.09 / 4.11 | 18.58 -> 17.10 / 17.12 | +0.5 %, -1.1 %, -0.6 % |
+| The meadow (`qa_meadow`) | 228.0 -> 242.2 (+6 %) | 69.56 -> 65.58 | 6.45 -> 4.47 | 14.20 -> 13.09 | +1.5 %, +3.1 %, +0.5 % |
+
+The village's heading behind the poplar alone: 43.9 -> 49.9 / 48.7 FPS. The new build's two runs differ by 3 % in the
+FPS and by 4.9 %, 2.7 % and 1.2 % in the grass's cover, detail and luma: the old engine's grass against the new is
+within that.
+
 The shots of both match within the frame-to-frame difference of one build (the wind's sway: the bark's edges on the
 swaying trunk, the leaves against the sky, the blades), the crowns' shadows on the ground included. The first two
 rounds (the shrubs' cut, the crowns' sunflecks, the grass's tiles, the far gusts, the sheen, the fruit) at four headings
@@ -237,7 +250,8 @@ for the wind's sway. The local lights' casters: `tools/qa/water/veg_light.lua` (
 
 - `tools/qa/water/veg_cost.lua` (scenario): at the save's eye, headings a quarter turn apart, each mode of a plan in turn
   (an A/B in one run), the `r__gpu_log` lines between its markers, the populations' stats and a shot per mode;
-  `tools/qa/Parse-VegCost.py <run>` averages them per heading and mode. `qa_veg_hour` sets the hour (a low sun for
+  `tools/qa/Parse-VegCost.py <run>` averages them per heading and mode; `tools/qa/Grass-Quality.py <run A> <run B>`
+  compares the grass's cover, detail, luma and chroma in the two runs' shots, view by view. `qa_veg_hour` sets the hour (a low sun for
   the sheen); a mode of `wind_seed 1833.7|wind_freeze 1` holds the wind still for a shot A/B of two shader sets.
 - `tools/qa/water/grass_gust.lua`: `r__capture` of the meadow per mode, for the far field's motion frame to frame;
   `wind_seed` before each mode, so both start from the same wind (a capture a few seconds later caught another gust).
