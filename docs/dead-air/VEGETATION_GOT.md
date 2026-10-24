@@ -110,7 +110,7 @@ displacement texture), casters of their own per sun cascade. 1.6.3 took:
 | --- | --- | --- |
 | Per-tile data culled once on the CPU | `TileSummary` (`da_grass_blades.cpp`): what a tile's slots hold - per community the most presence x cover, the height range - worked out the first time the tile is walked and kept by level and place; the day's densities multiplied in each frame | the calc task's walk over every 2 m slot of a 300 m reach: -73 % of its profiler samples; the tiles, levels and lanes the same |
 | `GustScaleRangeHighFreq` / `GustScaleAmountHighFreq` (live 25-75 m, 5) | `grass_gust_k` (`da_grass_gen.cs`): from 25 to 75 m the gusts and lulls round the mean lean and a tongue's lean go to 2.5 times theirs (GoT's 5 is on a map faint by the camera; the mod's gusts are whole there) | the field from 25 to 75 m 6-8 % more motion frame to frame (`grass_gust.lua`, the wind reseeded per mode), the near within 4 %; `grass_gen` +0.01-0.02 ms |
-| `TerrainGrassSpecNear` / `Far` (live 1 and 0, 0-50 m) | `deffer_impl_flat.ps`: the soil's gloss under the blade cover whole by the camera and gone at `d2` (the preset's 25-45 m: Extreme's `d1`/`d2` of 12/45 m are GoT's 12.5 m blade LOD and 50 m sheen fade) | a far slope against the sun keeps the grass's matte look |
+| `TerrainGrassSpecNear` / `Far` (live 1 and 0, 0-50 m) | `deffer_impl_flat.ps`: the soil's gloss under the blade cover whole by the camera and gone at `d2` (the preset's 25-45 m: Extreme's `d1`/`d2` of 12/45 m are GoT's 12.5 m blade LOD and 50 m sheen fade) | a far slope against the sun keeps the grass's matte look; an A/B at the village with the wind frozen (`veg_cost.lua`, noon and `qa_veg_hour = 18`): the ground's mean brightness +0.1 of a level near the camera, the rest within the frame-to-frame noise |
 
 `BendAwayFromCamera` was not taken: the mod's blades already turn their flat side toward their lean
 (`grass_lean`), and a camera-dependent bend would differ between the view and the casters - the shadow would not follow
@@ -126,6 +126,15 @@ map on the leaves), `FaceWindDirXy`, `InteractiveDeformation`, and for the coast
 with its own speed and waviness, limited per level. The shipped presets (37, typical values): stiffness 0.8 at every
 level; sway distance 1-20 (trunk), 0.5 (branch), 0.5-0.6 (subbranch); waviness 0-0.2, 0.1, 0.1; speed 10 (trunk),
 10-25 (branch), 20-40 (subbranch); the angle limit 0.5-1 (branch) and 0.25-1 (subbranch).
+
+How the vertex shader (`vs_SetMaterial_techMoving`, the trees' moving technique) uses them, per level:
+`angle = (1 - STIFFNESS) x [min(lean, ANGLE_MAXIMUM x 45 deg) x saturate(|wind| / 66 m/s) + (0.1 + 0.25 x gust) x
+SWAY_DISTANCE x 45 deg x sin(SWAY_SPEED x t + the instance's random phase - 0.01 x SWAY_WAVINESS x cm from the pivot)]`
+(the subbranches' sine 0.3 + 0.3 x gust, times the vertex's share of its stem); the trunk leans with the wind times
+the square of its height share, with a slow ring of a few hundredths of 45 degrees. A preset's speed is varied per
+instance by whole steps up to a fifth of it, so neighbours do not swing together. In other words a static lean
+capped per level, plus a sine at the level's speed whose amplitude grows with the gust: with a time in seconds the
+subbranches ring at 3-6 Hz by up to 16 degrees in a full gust, the branches at 1.6-4 Hz by 2-8 degrees.
 
 **Proxy sets.** The scattered vegetation and props are proxy sets, culled on the GPU: a job culls them on the CPU
 first (`JOBAK_ProxySetCull`, `JOBAK_ProxySetPreRender`, `JOBAK_ProxySetFillStreams`), then the GPU against the frame's
@@ -156,7 +165,12 @@ Not taken:
 
 - **Harmonic sway per level** (`SWAY_SPEED`, `SWAY_WAVINESS`): the mod's limbs bow to the gusts passing their base and
   ring a little at their own frequency (`shrub_axis_turn_of`); a harmonic sway as the whole motion swung every twig
-  three to fourteen times a second in any breeze and read as twitching (`SHRUBS.md`).
+  three to fourteen times a second in any breeze and read as twitching (`SHRUBS.md`). Against GoT's live presets
+  (round 4): its limits match the mod's (a branch 22-45 degrees, a subbranch 11-45; the mod's axis and chain 35
+  degrees each), its static lean grows with the wind as the mod's mean lean does, its ring grows with the gust as the
+  mod's does, but its subbranches ring at 3-6 Hz by up to 16 degrees where the mod's twigs ring by a few degrees
+  (0.1 of the push over the root of the axis's frequency) - the motion the mod dropped as twitching. The wave along a
+  branch (`WAVINESS` 0.1: a tenth of a radian a metre) would not show on a ring of a few degrees.
 - **The distance boost of the gusts for the crowns**: a tree's bend is its own (cached per slot, its shadow from the
   same bend); one walked toward from 120 m would calm down by half as the player nears it. In GoT the boost is the
   grass's and the leaves' high-frequency map, not the trees' presets.
@@ -191,6 +205,15 @@ behind the poplar (h90):
 | Vulkan, h0 | 19.51 -> 18.20 | 1.89 -> 1.07 | 4.20 -> 3.95 | 51.0 -> 52.7 (+3 %) |
 | Vulkan, h90 | 22.47 -> 20.12 | 3.53 -> 2.01 | 4.94 -> 3.95 | 44.4 -> 48.6 (+10 %) |
 
+The final build (round 4, 1dd9aa3e6, the live values' gusts and sheen in), the same rig and views, the old engine run
+again beside it (`veg_cost.lua`, two headings, one round each), FPS:
+
+| Renderer | h0 | h90 | Both headings | Frame (ms, summed) | Shrubs (ms) | Sun (ms) |
+| --- | --- | --- | --- | --- | --- | --- |
+| DX11 | 52.2 -> 59.4 | 43.4 -> 49.1 | +14 % | 41.76 -> 36.56 | 5.69 -> 3.00 | 9.96 -> 8.71 |
+| DX12 | 52.4 -> 56.3 | 40.3 -> 45.6 | +10 % | 43.32 -> 39.41 | 5.43 -> 3.06 | 11.54 -> 10.12 |
+| Vulkan | 48.6 -> 50.9 | 43.1 -> 46.9 | +7 % | 42.37 -> 38.86 | 5.53 -> 3.17 | 9.24 -> 7.74 |
+
 The shots of both match within the frame-to-frame difference of one build (the wind's sway: the bark's edges on the
 swaying trunk, the leaves against the sky, the blades), the crowns' shadows on the ground included. The first two
 rounds (the shrubs' cut, the crowns' sunflecks, the grass's tiles, the far gusts, the sheen, the fruit) at four headings
@@ -214,7 +237,8 @@ for the wind's sway. The local lights' casters: `tools/qa/water/veg_light.lua` (
 
 - `tools/qa/water/veg_cost.lua` (scenario): at the save's eye, headings a quarter turn apart, each mode of a plan in turn
   (an A/B in one run), the `r__gpu_log` lines between its markers, the populations' stats and a shot per mode;
-  `tools/qa/Parse-VegCost.py <run>` averages them per heading and mode.
+  `tools/qa/Parse-VegCost.py <run>` averages them per heading and mode. `qa_veg_hour` sets the hour (a low sun for
+  the sheen); a mode of `wind_seed 1833.7|wind_freeze 1` holds the wind still for a shot A/B of two shader sets.
 - `tools/qa/water/grass_gust.lua`: `r__capture` of the meadow per mode, for the far field's motion frame to frame;
   `wind_seed` before each mode, so both start from the same wind (a capture a few seconds later caught another gust).
   Even so two captures differ by a few per cent (the near band's spread is the noise floor).

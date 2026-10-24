@@ -7,6 +7,7 @@
 --   qa_veg_turns = 4       how many headings, a quarter turn apart from the save's
 --   qa_veg_up = 0          how far above the eye the camera stands (m)
 --   qa_veg_pitch = -0.05   the camera's pitch (rad)
+--   qa_veg_hour = 13       the hour of the day (a low sun: the soil's and the leaves' sheen against it)
 --
 --   tools\qa\Run-WaterQa.ps1 -Name veg-base -Scenario veg_cost -Save trees -KeepShaderCache -Seconds 150
 local c = get_console()
@@ -40,7 +41,7 @@ local function on_update()
 		cmd("r__season july")
 		cmd("r__clouds_cover 0")
 		cmd("wind_force 0.3")
-		to_hour(13)
+		to_hour(qa_veg_hour or 13)
 		cmd("r__gpu_log 30")
 		cmd("r__fps_log 1")
 		eye = vector():set(device().cam_pos)
