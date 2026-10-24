@@ -13,29 +13,91 @@ struct p_shrub_mass_shadow
 	float4	dens	: TEXCOORD6;
 	float4	misc	: TEXCOORD7;
 	float4	xy_t	: TEXCOORD8;	// z: the share of the part's leaves on (da_shrub_cluster_vs.h)
+	nointerpolation float4	k0	: TEXCOORD9;
+	nointerpolation float4	k1	: TEXCOORD10;
+	nointerpolation float4	k2	: TEXCOORD11;
 };
+
+float2	cmul	(float2 a, float2 b)	{ return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
 
 void	main	(p_shrub_mass_shadow I)
 {
-	// Where a cell is under three texels its leaf is under one: the leaves gather into clumps three texels across, a
-	// dapple (the leaves' cells, their texture and their gradients were most of a cascade's cost for no texel of
-	// difference; the mean blot's solid shadow stepped from the near cascade's leaves at its seam round the player); a
-	// part under two clumps across its mean blot alone.
-	[branch] if (I.misc.w < 3.0f * I.dens.y)
+	// A part under two clumps across: its mean blot alone.
+	[branch] if (I.misc.w < 6.0f)
 	{
-		shrub_mass_clip(I.misc.w >= 6.0f ? shrub_mass_dapple(I.xy_t.xy, I.part, I.dens, I.misc, I.misc.w / 3.0f, I.xy_t.z)
-			: shrub_mass_blot(I.xy_t.xy, I.part, I.dens, I.misc, I.xy_t.z), I.hpos.xy, 0.0f, 0.0f);
+		shrub_mass_clip(shrub_mass_blot(I.xy_t.xy, I.part, I.dens, I.misc, I.xy_t.z), I.hpos.xy, 0.0f, 0.0f);
 		return;
 	}
-	// Where a leaf's cell is three texels and more: a round clump a leaf at the same cover (Beer-Lambert). A part casts
-	// from past the near leaves (a crown over 22 m away, its shadow in the near map, or any farther map), high over what it
-	// shades: its sunflecks are the sun's pinhole images and its leaves' outlines lie in a penumbra of some nine
-	// centimetres a ten metres of height. The leaves' own outlines (their texture, every cell's turn, the twigs) were
-	// most of the trees' shadow maps: seven million texels of a near map at a centimetre each.
-	// (The clumps' grid turned its own way per part, as the leaves' cells are: square to every quad, a crown's shadow
-	// showed its rows.)
-	float g_s, g_c;
-	sincos(I.dens.w * 6.2832f, g_s, g_c);
-	const float2 p = float2(I.xy_t.x * g_c - I.xy_t.y * g_s, I.xy_t.x * g_s + I.xy_t.y * g_c);
-	shrub_mass_clip(shrub_mass_dapple(p, I.part, I.dens, I.misc, I.dens.y, I.xy_t.z), I.hpos.xy, 0.0f, 0.0f);
+	// Its leaves gathered into clumps: where a cell is under three texels, clumps three texels across (the leaves'
+	// cells, their texture and their gradients were most of a cascade's cost for no texel of difference; the mean blot's
+	// solid shadow stepped from the near cascade's leaves at its seam round the player); where a leaf's cell is three
+	// texels and more, a round clump a leaf at the same cover (Beer-Lambert). A part casts from past the near leaves (a
+	// crown over 22 m away, its shadow in the near map, or any farther map), high over what it shades: its sunflecks are
+	// the sun's pinhole images and its leaves' outlines lie in a penumbra of some nine centimetres a ten metres of height.
+	// The leaves' own outlines (their texture, every cell's turn, the twigs) were most of the trees' shadow maps: seven
+	// million texels of a near map at a centimetre each.
+	// (The ramps of shrub_mass_outline and shrub_mass_dapple worked out from the quad's own derivatives, taken here: a
+	// texel past the outline's greatest radius - a fifth of the quad - is dropped before any work, one inside its least
+	// takes no outline, and the rim's waves are powers of the texel's direction, not its angle's sines.)
+	// (A leaf's cells - and the outline with them - turned their own way per part, as the leaves' are: square to every
+	// quad, a crown's shadow showed its rows.)
+	const bool leaf_cells = I.misc.w >= 3.0f * I.dens.y;
+	const float2 rot = leaf_cells ? I.k0.xy : float2(1.0f, 0.0f);
+	const float2 p0 = I.xy_t.xy, dx0 = ddx(p0), dy0 = ddy(p0);
+	const float2 p = float2(p0.x * rot.x - p0.y * rot.y, p0.x * rot.y + p0.y * rot.x);
+	const float2 dx = float2(dx0.x * rot.x - dx0.y * rot.y, dx0.x * rot.y + dx0.y * rot.x);
+	const float2 dy = float2(dy0.x * rot.x - dy0.y * rot.y, dy0.x * rot.y + dy0.y * rot.x);
+	const float r = length(p), texel = length(dx) + length(dy);
+	[branch] if (r >= I.k2.y)
+	{
+		clip(-1.0f);
+		return;
+	}
+	const float rr = max(r, 1e-4f);
+	const float2 dr = float2(dot(p, dx), dot(p, dy)) / rr;
+	float inside = 1.0f;
+	// (Inside the least radius by the ramp's widest - the rim's steepest turn across a texel - the ramp is whole.)
+	[branch] if (r > I.k2.z - (1.0f + (0.8f + 7.0f * I.k1.z) / rr) * texel)
+	{
+		// The direction a = atan2(p.x, p.y) as a unit complex number; the rim's three waves sin(n a + phase).
+		const float2 z1 = float2(p.y, p.x) / rr;
+		const float2 z3 = cmul(cmul(z1, z1), z1), z7 = cmul(cmul(z3, z3), z1), z13 = cmul(cmul(z7, z3), z3);
+		const float2 w3 = cmul(z3, I.k0.xy), w7 = cmul(z7, I.k0.zw), w13 = cmul(z13, I.k1.xy);
+		float rim = 1.0f - 0.13f * (0.5f + 0.5f * w3.y) - 0.08f * (0.5f + 0.5f * w7.y) - 0.05f * (0.5f + 0.5f * w13.y);
+		float rim_a = -0.195f * w3.x - 0.28f * w7.x - 0.325f * w13.x;
+		[branch] if (I.k1.z > 0.0f)
+		{
+			const float f = frac(atan2(p.x, p.y) * (22.0f / 6.2832f) + I.k2.x);
+			rim += I.k1.z * (0.5f - abs(f - 0.5f) * 2.0f);
+			rim_a += I.k1.z * (f < 0.5f ? 2.0f : -2.0f) * (22.0f / 6.2832f);
+		}
+		// (The ramp no wider than the rim's whole range and a texel: by the angle's derivative alone it grew without
+		// bound at the part's middle.)
+		const float2 da = float2(p.y * dx.x - p.x * dx.y, p.y * dy.x - p.x * dy.y) / (rr * rr);
+		const float fw = min(abs(rim_a * da.x - dr.x) + abs(rim_a * da.y - dr.y), I.k2.y - I.k2.z + texel);
+		inside = saturate((rim - r) / max(fw, 1e-4f) + 0.5f);
+	}
+	// The clumps: a cell's clump a disc 0.62 of it in radius, jittered by a fifth, there at the chance that keeps the
+	// part's cover (k1.w).
+	const float cells = leaf_cells ? I.dens.y : I.misc.w / 3.0f;
+	const float2 pg = p * (0.5f * cells), gx = dx * (0.5f * cells), gy = dy * (0.5f * cells);
+	const float2 i = floor(pg - 0.5f);
+	float best = -1.0f;
+	float2 bv = float2(0.0f, 0.0f);
+	[unroll] for (int y = 0; y <= 1; ++y)
+		[unroll] for (int x = 0; x <= 1; ++x)
+		{
+			const float2 c = i + float2(x, y);
+			const float h = shrub_m_hash(c, I.dens.w + 5.0f);
+			const float2 v = pg - (c + 0.5f + (float2(frac(h * 7.3f), frac(h * 13.7f)) - 0.5f) * 0.4f);
+			const float d = 0.62f - length(v);
+			if (frac(h * 3.3f) <= I.k1.w && d > best)
+			{
+				best = d;
+				bv = v;
+			}
+		}
+	const float bl = max(length(bv), 1e-4f);
+	const float fb = (abs(dot(bv, gx)) + abs(dot(bv, gy))) / bl;
+	shrub_mass_clip(saturate(best / max(fb, 1e-4f) + 0.5f) * inside, I.hpos.xy, 0.0f, 0.0f);
 }

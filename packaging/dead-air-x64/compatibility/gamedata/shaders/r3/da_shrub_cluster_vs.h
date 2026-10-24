@@ -33,6 +33,14 @@ struct v2p_shrub_mass
 	float4	xy_t		: TEXCOORD8;	// x, y across and along the quad (-1..1), z translucency where the light comes through
 										// (the shadow maps: the share of the part's leaves on), w a leaf's width over its
 										// length
+#ifdef SHRUB_SHADOW
+	// The part's constants for da_shrub_cluster_shadow.ps: its rim's three phases as unit complex numbers (k0.xy also
+	// the clumps' grid turn), the needle bristles' depth, the clumps' chance (Beer-Lambert), the bristles' phase and
+	// the outline's least and greatest radius.
+	nointerpolation float4	k0	: TEXCOORD9;
+	nointerpolation float4	k1	: TEXCOORD10;
+	nointerpolation float4	k2	: TEXCOORD11;
+#endif
 };
 
 v2p_shrub_mass	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
@@ -131,6 +139,16 @@ v2p_shrub_mass	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 	// share of its leaves on the same over the quad: worked out here, not every texel.)
 	O.misc.w = 2.0f * r / max(da_shrub_time.w, 1e-5f);
 	O.xy_t.z = shrub_mass_on_share(O.part, O.misc);
+	const float ph = V.hash * 6.2832f;
+	float s0, c0, s1, c1, s2, c2;
+	sincos(ph, s0, c0);
+	sincos(ph * 3.1f, s1, c1);
+	sincos(ph * 7.3f, s2, c2);
+	// (shrub_mass_outline's bristles: up to 0.08 either way of the rim, faded in from 16 to 40 texels.)
+	const float bristle = needles ? 0.16f * saturate((O.misc.w - 16.0f) / 24.0f) : 0.0f;
+	O.k0 = float4(c0, s0, c1, s1);
+	O.k1 = float4(c2, s2, bristle, saturate(-log(1.0f - min(cover * O.xy_t.z, 0.97f)) / 1.21f));
+	O.k2 = float4(V.hash * 5.0f, 1.0f + 0.5f * bristle, 0.74f - 0.5f * bristle, 0.0f);
 	O.hpos = mul(m_WVP, float4(q, 1.0f));
 	return O;
 #else

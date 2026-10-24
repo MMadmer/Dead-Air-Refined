@@ -536,7 +536,11 @@ same cover, soft. A lower leaf floor changed nothing there (they stand over it) 
   a ten metres of height. Their textured outlines, every cell turned its own way, and the twigs were most of the trees'
   shadow maps: seven million texels a frame in the near map (Cordon village, the white poplar's heading: the sun 5.63 ->
   4.68 ms; Ghost of Tsushima casts its far trees from cheap shadow proxies of their own, the `*_ll_shadow` alpha maps
-  beside their imposters). The far one: the trunk's far level and the blobs. The rain map: the crowns' blobs (a dead tree shelters
+  beside their imposters). The shader takes the part's constants from its vertex shader (the rim's phases as unit
+  complex numbers, the clumps' chance, the needle bristles), drops a texel past the outline's widest reach before any
+  work (a fifth of the quad), skips the outline inside its least, and takes the rim's waves as powers of the texel's
+  direction and its ramps from the quad's derivatives - an arc tangent, three sines and two derivative pairs a texel
+  were most of its cost: 0.2-0.3 ms less a heading. The far one: the trunk's far level and the blobs. The rain map: the crowns' blobs (a dead tree shelters
   little). The shadowed local lights within 40 m: the far level's tubes, a bare crown's branches, a leafy crown's
   clusters (a village's lamps drew three hundred thousand of the forks' patches). The clusters a shadow pass draws
   past the pixel floor are thinned - the middle cascade's to two fifths, the near one's (a far crown's past the leaves'

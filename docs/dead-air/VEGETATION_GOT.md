@@ -126,7 +126,7 @@ frame in the bend buffer. 1.6.3 took:
 | GoT | 1.6.3 | Measured |
 | --- | --- | --- |
 | Proxy sets culled on the GPU against the frame's depth | The shrubs through the trees' GPU cut, its third phase (`CUT_KEEP`, `da_tree_cut.cs`, `da_veg.cpp` `emit`): an element keeps the CPU's draw and leaves out only what its vertex shaders threw away - out of the view by its own bent place, behind the depth pyramid with every tree in it, the wood under its wire rule. `r__shrubs_cut` (QA) | behind a near poplar on Cordon the view had run 107 000 sprays, 95 000 wood segments and 95 000 fruit groups for a few thousand pixels: `shrubs` 3.68 -> 2.18 ms and 1.94 -> 1.06 ms in the bushy headings, the bend pass 0.44 -> 0.24 ms |
-| Coarser, cheaper casters in the far cascades (`LodDistanceMinInShadowMap`, `_ll_shadow`) | A cluster's or a blob's quad whose leaf cells are three shadow texels and more casts round clumps of the same Beer-Lambert cover (`da_shrub_cluster_shadow.ps`): a high crown's sunflecks are the sun's pinhole images | `sun` 5.63 -> 4.68 ms in that heading (the textured cells were seven million texels of the near map) |
+| Coarser, cheaper casters in the far cascades (`LodDistanceMinInShadowMap`, `_ll_shadow`) | A cluster's or a blob's quad whose leaf cells are three shadow texels and more casts round clumps of the same Beer-Lambert cover (`da_shrub_cluster_shadow.ps`): a high crown's sunflecks are the sun's pinhole images. Then the shader itself: the part's constants worked out once in its vertex shader (the rim's phases, the clumps' chance, the needle bristles), a texel past the outline's widest reach dropped before any work, one inside its least taking no outline, the rim's waves as powers of the texel's direction instead of an arc tangent and three sines, the ramps from the quad's derivatives | `sun` 5.63 -> 4.68 ms in that heading (the textured cells were seven million texels of the near map); the shader's rewrite 0.2-0.3 ms more a heading |
 | `DISTANT_SIZE` / `DISTANT_FADE_LIMITS` (a far blade drawn by its mean) | A fruit group under four pixels across drawn as its mean cover in the bunch's mean colour (`da_shrub_bloom.ps`), dithered over the band by the pixel's noise | a fruiting stand's far cost was mostly every fruit and stalk tested at each pixel |
 
 Not taken:
@@ -137,6 +137,17 @@ Not taken:
 - **The distance boost of the gusts for the crowns**: a tree's bend is its own (cached per slot, its shadow from the
   same bend); one walked toward from 120 m would calm down by half as the player nears it. In GoT the boost is the
   grass's and the leaves' high-frequency map, not the trees' presets.
+- **Octagons for the clusters and blobs** (tried): the quad less its empty corners left a sixth of the view's and the
+  maps' pixels out, but doubled the vertices, and the cascades' parts are a few texels each - the vertex shader (the
+  bend, the sway, the cover) costs more there than the corners' texels, dropped at once by the rewritten shader: the sun
+  0.1-0.2 ms a heading dearer.
+- **The two populations' candidates gathered side by side** (tried, `veg_wait`): no gain to measure, and the waiting
+  worker may take up an unrelated long task (the main view's walk) and finish the pick later than alone.
+- **The leaves' place a frame back for the motion vectors**: measured at some 0.4 ms a heading (the shrubs' and the
+  trees' leaves within 15 m, their flutter, bend and sway once more), kept - a leaf's tip moves a pixel a frame near the
+  camera and the temporal resolve smears it without. It is worked out only while something reads the vectors (TAA, an
+  upscaler, frame generation, the ray traced histories, the motion blur: `da_motion_vectors_active`); with none the
+  leaves, the clusters, the wood, the blades and the bend pass skip it.
 - **Screen-space shadows**: a general feature, not the vegetation's; the mod's contact detail on the plants comes from
   their own casters and the crown light.
 - **The ocean's waves** in the trees' wind: no sea in the Zone.
@@ -144,9 +155,23 @@ Not taken:
 ## Cost: 1.6.3 against the engine before it
 
 The engine of 040c592b2 (the version bump, before any of the above) against 1.6.3 on the rig, each with its own
-shaders, run in turn: `veg_cost.lua` at the save's eye, four headings a quarter turn apart, a July noon, Extreme, DX11
-1080p, the RTX 3070 Laptop. GPU ms per heading (`r__gpu_log`), the frame rate (`r__fps_log`); the old engine's two runs
-averaged:
+shaders, run in turn: `veg_cost.lua` at the save's eye, a July noon, Extreme, 1080p, the RTX 3070 Laptop. GPU ms per
+heading (`r__gpu_log`), the frame rate (`r__fps_log`). The final build, Cordon village, the bushes ahead (h0) and
+behind the poplar (h90):
+
+| Renderer, heading | frame | shrubs | sun | FPS |
+| --- | --- | --- | --- | --- |
+| DX11 (bright sun), h0 | 17.45 -> 16.43 | 1.95 -> 1.03 | 4.34 -> 4.19 | 57.0 -> 60.3 (+6 %) |
+| DX11 (bright sun), h90 | 23.39 -> 19.90 | 3.76 -> 1.94 | 5.53 -> 4.40 | 42.5 -> 50.0 (+18 %) |
+| DX12, h0 | 19.29 -> 17.73 | 1.95 -> 1.07 | 5.37 -> 4.97 | 49.0 -> 55.9 (+14 %) |
+| DX12, h90 | 24.70 -> 21.89 | 3.62 -> 2.01 | 6.34 -> 5.21 | 40.3 -> 45.4 (+13 %) |
+| Vulkan, h0 | 19.51 -> 18.20 | 1.89 -> 1.07 | 4.20 -> 3.95 | 51.0 -> 52.7 (+3 %) |
+| Vulkan, h90 | 22.47 -> 20.12 | 3.53 -> 2.01 | 4.94 -> 3.95 | 44.4 -> 48.6 (+10 %) |
+
+The shots of both match within the frame-to-frame difference of one build (the wind's sway: the bark's edges on the
+swaying trunk, the leaves against the sky, the blades), the crowns' shadows on the ground included. The first two
+rounds (the shrubs' cut, the crowns' sunflecks, the grass's tiles, the far gusts, the sheen, the fruit) at four headings
+a quarter turn apart, DX11, the old engine's two runs averaged:
 
 | Place, heading | frame | shrubs | shrubs' bend | sun | FPS |
 | --- | --- | --- | --- | --- | --- |
@@ -160,8 +185,7 @@ summed), the bend pass bends them too. The grass, its generation and the trees s
 gusts and the sheen are free); the shrubs' frame pick on its worker (`shrubs_cpu`) is some 0.05-0.25 ms a heading dearer
 for the cut's routes (Cordon summed 2.12 -> 2.49 ms, the meadow 2.58 -> 2.9-3.65, noisy); it runs on a worker, and the
 render thread waits for it only when it is late (`veg_wait`, 0.1-1.2 ms a heading in 1.6.3). The shots of both match but
-for the wind's sway. Not covered: the other presets and renderers by number (DX12 and Vulkan were run for their output
-and the local lights' casters, `tools/qa/water/veg_light.lua`).
+for the wind's sway. The local lights' casters: `tools/qa/water/veg_light.lua` (DX11 and Vulkan).
 
 ## Measuring
 
