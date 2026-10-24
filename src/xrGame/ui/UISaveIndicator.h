@@ -40,10 +40,10 @@ private:
         // 768-line units: the gap to the screen's right edge, the disc's centre, its diameter, the way it slides in
         float right{24.f};
         float y{384.f};
-        float size{72.f};
-        float slide{32.f};
+        float size{52.f};
+        float slide{24.f};
         // the mask's height as a share of the disc's, the arc's length (radians)
-        float maskShare{0.66f};
+        float maskShare{0.76f};
         float arc{2.2f};
         // seconds
         float enter{0.25f};

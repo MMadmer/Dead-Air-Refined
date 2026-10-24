@@ -10,10 +10,10 @@
      (border); mask: the mask's colour; failed: the ring's and the mask's colour (fill) and the disc's (line) on a
      failure. -->
 <w>
-    <save_indicator right="24" y="384" size="72" slide="32" mask="0.66" arc="2.2"
+    <save_indicator right="24" y="384" size="52" slide="24" mask="0.76" arc="2.2"
         enter="0.25" spin="1.1" close="0.25" badge_in="0.3" ping="0.55" shake="0.45" hold="1.6" hold_failed="3" exit="0.4">
         <plate fill="#0c0c0ce0" line="#e2e0da40" border="1.5"/>
-        <ring fill="#e2e0da" border="4"/>
+        <ring fill="#e2e0da" border="2.5"/>
         <mask fill="#e2e0da"/>
         <failed fill="#e5483d" line="#3a0e0bf0"/>
     </save_indicator>

@@ -54,7 +54,7 @@ void CUISaveIndicator::ReadLook()
     m_look.plate.border = 1.5f;
     m_look.ring.kind = SUIShapeStyle::Kind::HitArc;
     m_look.ring.fill = color_rgba(226, 224, 218, 255);
-    m_look.ring.border = 4.f;
+    m_look.ring.border = 2.5f;
     m_look.mask.kind = SUIShapeStyle::Kind::GasMask;
     m_look.mask.fill = color_rgba(226, 224, 218, 255);
 
