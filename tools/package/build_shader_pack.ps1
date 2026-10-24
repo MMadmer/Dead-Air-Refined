@@ -27,14 +27,19 @@ $pack = Join-Path $repo "artifacts\shader_pack"
 if (Test-Path -LiteralPath $cache) { Remove-Item -LiteralPath $cache -Recurse -Force }
 foreach ($renderer in $Renderers) {
     Write-Host "== sweep on $renderer"
+    # -no_shader_pack: the rig's database is the live install's, whose archive holds the last pack; read, it would
+    # leave the cache (and so the new pack) nearly empty.
     & (Join-Path $repo "tools\qa\Run-WaterQa.ps1") -Name "shader-pack-$renderer" -Scenario shader_sweep -Save $Save `
-        -Seconds $Seconds -KeepShaderCache -ExtraArgs "-$renderer" | Out-Null
+        -Seconds $Seconds -KeepShaderCache -ExtraArgs "-$renderer -no_shader_pack" | Out-Null
     $log = Join-Path $Rig "appdata\logs\grizzly_admin.log"
     if (-not (Select-String -LiteralPath $log -Pattern "\[qa\] sweep DONE" -Quiet)) {
         throw "the sweep on $renderer did not finish (see $log)"
     }
 }
 
+# A sweep that took its shaders from somewhere else compiled few: the old pack stays.
+$swept = @(Get-ChildItem -LiteralPath $cache -Recurse -File).Count
+if ($swept -lt 500) { throw "the sweep left $swept files in ${cache}: the pack is kept as it was" }
 if (Test-Path -LiteralPath $pack) { Remove-Item -LiteralPath $pack -Recurse -Force }
 New-Item -ItemType Directory -Path $pack -Force | Out-Null
 # The pipeline libraries are the driver's, not bytecode: they stay out. The journals (pipelines.journal, by content)

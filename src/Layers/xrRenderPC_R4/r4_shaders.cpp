@@ -288,9 +288,14 @@ public:
 
 // The release's own copy of the cache (gamedata\shaders_cache_pack in the mod's archive, a QA sweep of the presets on
 // every renderer, tools\package\build_shader_pack.ps1): read where the player's has no valid file. Every file
-// carries its source's CRC with the includes, so one a shader edit outdated compiles as before.
+// carries its source's CRC with the includes, so one a shader edit outdated compiles as before. Empty with
+// -no_shader_pack: the sweep that builds the pack compiles everything (the QA rig shares the live install's archive).
 static void shader_pack_path(string_path& out, pcstr relative)
 {
+    static const bool disabled = !!strstr(Core.Params, "-no_shader_pack");
+    out[0] = 0;
+    if (disabled)
+        return;
     string_path file;
     strconcat(sizeof(file), file, "shaders_cache_pack" DELIMITER, relative);
     FS.update_path(out, "$game_data$", file);
@@ -324,7 +329,8 @@ static HRESULT compile_dxil(pcstr name, pcstr extension, pcstr sh_name, IReader*
         return E_FAIL;
 
     xr_vector<u8> object, reflection;
-    if (da_dxc_cache_load(cache_file, fileCrc, object, reflection) || da_dxc_cache_load(pack_file, fileCrc, object, reflection))
+    if (da_dxc_cache_load(cache_file, fileCrc, object, reflection) ||
+        (pack_file[0] && da_dxc_cache_load(pack_file, fileCrc, object, reflection)))
     {
         const HRESULT hr = create_shader(target, reinterpret_cast<const DWORD*>(object.data()), object.size(),
             reflection.data(), reflection.size(), shader_name, result, disasm, false, true);
@@ -763,7 +769,7 @@ HRESULT CRender::shader_compile(pcstr name, IReader* fs, pcstr pFunctionName,
     // The player's cache first, the release's pack where it has nothing valid.
     for (pcstr cached : {static_cast<pcstr>(file_name), static_cast<pcstr>(pack_name)})
     {
-        if (SUCCEEDED(_result) || !FS.exist(cached))
+        if (SUCCEEDED(_result) || !cached[0] || !FS.exist(cached))
             continue;
         IReader* file = FS.r_open(cached);
         if (file->length() > 4)

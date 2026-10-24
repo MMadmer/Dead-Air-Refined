@@ -386,7 +386,8 @@ preprocessor with the engine's includer and macros, then HLSL 2018, `-Zpr -O3
 at HLSL 2021 through `da_dxc_compile_native`; mesh and amplification shaders go through the engine path
 at HLSL 2021. Cache `appdata/shaders_cache_grizzly/r5_dxil/<tag>/` next to the FXC cache `r5/`; where it has no
 valid file, the release's pack `gamedata/shaders_cache_pack/` in the mod's archive is read (1.6.2: a QA sweep of
-every preset with each anti-aliasing mode on every renderer, `tools/package/build_shader_pack.ps1`; each file
+every preset with each anti-aliasing mode on every renderer, `tools/package/build_shader_pack.ps1`, run with
+`-no_shader_pack` so the rig compiles what the live archive's pack would give it; each file
 carries its source's CRC with the includes, so a stale one compiles; the DXIL and SPIR-V folders are named after
 the shader model, wave size and 16-bit support, so the rig's NVIDIA card fills those). A shader
 DXC refuses falls back to FXC and its pass to DXBC twins (a pipeline is all DXIL or all DXBC; the layer
