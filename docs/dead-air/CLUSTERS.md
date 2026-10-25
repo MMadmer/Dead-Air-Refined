@@ -39,7 +39,10 @@ triangles are simplified to two triangles under the cluster size a parent (126 a
 worth of the group's triangles, with every position on an edge the group shares with another group of its level locked
 (and a mesh's open border always: the next visual's border lies on it); the result is cut into the parents. A cut that
 needs more parents than that simplifies again from the group's own triangles aiming two lower, down to half the cluster
-size. A group that keeps more than 85 % of its triangles is stuck (locked all round): its clusters stay roots.
+size. A group that keeps more than 85 % of its triangles is stuck (locked all round): its clusters go on into the next
+level as they are, grouped again there with their neighbours, whose borders that level locks (left as roots, a border
+between them and a neighbour's parents would be no group's and simplify away: a crack). A level where no group simplifies,
+or that does not shrink, leaves what is left as roots.
 
 **Errors and spheres.** A first-level cluster's error is nought, its sphere its own. A group's error is the largest of its
 children's and its simplification's; its sphere bounds its children's. The parents take the group's error and sphere as
