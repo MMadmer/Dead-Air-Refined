@@ -335,7 +335,6 @@ struct SPrecipRuntime
 {
     s64 block = std::numeric_limits<s64>::min();
     int phase = phase_rain;
-    bool thunder = true;
     bool glaze = false;
     bool precipitating = false;
     float t_day = 10.f;
@@ -354,6 +353,19 @@ SPrecipRuntime s_rt;
 // QA overrides (qa_precip, qa_air_temp): never saved.
 int s_qa_phase = -1;
 float s_qa_air = flt_max;
+
+// What falls: the climate's six-hour draw while it drives the weather. With it off a cycle picked by hand snows all
+// winter (snow_only, WINTER.md D6) and otherwise rains or snows by the air, the climate's draw only between -1 and
+// +2.5 C where both fall: its phase, sampled for the air's sake, had an October storm come down as sleet - flakes in
+// place of the rain's streaks.
+int phase_by_air(const SDaClimateSample& w, bool climate, bool snow_only, float t_air)
+{
+    if (climate)
+        return w.phase;
+    if (snow_only)
+        return phase_snow;
+    return t_air >= 2.5f ? phase_rain : t_air <= -1.f ? phase_snow : w.phase;
+}
 
 // Hermite step of x from a to b, 0..1.
 float smooth_step(float a, float b, float x)
@@ -915,7 +927,7 @@ void da_precip_tick(CEnvironment& env)
         if (!qa)
         {
             // The six-hour block's draw of the climate (the same one the snowpack's history took).
-            s_rt.phase = w.phase;
+            s_rt.phase = phase_by_air(w, climate, k.snow_only(D), t_air);
             s_rt.glaze = w.glaze;
         }
         else
@@ -934,12 +946,11 @@ void da_precip_tick(CEnvironment& env)
             const float glaze_p = clampr(k.glaze.at(D), 0.f, 1.f) / std::max(1.f - clampr(k.p_snow.at(D), 0.f, 1.f), 0.05f);
             s_rt.glaze = s_rt.phase != phase_snow && hash01(b * 0xC2B2AE35u ^ 0x61A2u) < glaze_p;
         }
-        s_rt.thunder = hash01(b * 0x85EBCA6Bu ^ 0x7417u) < clampr(k.thunder.at(D), 0.f, 1.f);
     }
     // The phase follows the climate's draw as its blocks turn over between two ticks of ours.
-    if (!qa && s_rt.phase != w.phase)
+    if (!qa && s_rt.phase != phase_by_air(w, climate, k.snow_only(D), t_air))
     {
-        s_rt.phase = w.phase;
+        s_rt.phase = phase_by_air(w, climate, k.snow_only(D), t_air);
         s_rt.glaze = w.glaze;
     }
 
@@ -973,8 +984,9 @@ void da_precip_tick(CEnvironment& env)
     const float d15 = density * std::sqrt(density);
     s_precip.snow_rate = precipitating ? clampr(d15 * (1.f - s_precip.liquid), 0.f, 1.f) : 0.f;
     s_precip.air_temp = t_air;
-    // The climate's lightning comes with its thunder sky; the cycles' own (the climate off) by the six-hour draw.
-    s_precip.thunder_ok = climate ? w.thunder && phase == phase_rain : s_rt.thunder && phase == phase_rain;
+    // The climate's lightning comes with its thunder sky; with the climate off a cycle's own bolts strike while it
+    // rains, as the stock weathers do (a draw by the month's thunder share left an autumn storm picked by hand silent).
+    s_precip.thunder_ok = phase == phase_rain && (!climate || w.thunder);
     s_rt.precipitating = precipitating;
 
     // ---- Frost and dew --------------------------------------------------------------------------------

@@ -122,8 +122,11 @@ what (`da_precip()`, ticked in `CEnvironment::OnFrame` after the weather lerp):
   then, as Chornobyl's do, and draw the phase on the hour's own fit (`[climate] phase_bias`, `phase_sigma`). A pure function of game time: a reload replays it. While it falls the air is
   kept consistent with it (no snow at +8 C, no rain at -6 C); freezing rain (`glaze`) holds the air below 0.
 - **liquid** (rain 1, sleet 0.5, snow 0) eases over seconds; `snow_rate = density^1.5 (1 - liquid)`.
-- **Thunder**: a block keeps its lightning with the probability `thunder_weight` (July 1, January 0.02), and
-  only while it rains.
+- **Thunder**: only while it rains. With the climate on, its thunder sky brings the bolts (its blocks keep them with
+  the probability `thunder_weight`, July 1, January 0.02); with it off, a cycle's own bolts strike as in the stock
+  weathers - a storm picked by hand in autumn thunders.
+- With the climate off, outside `snow_only` the air picks the phase: rain from +2.5 C, snow from -1 C, the climate's
+  draw between them (its phase alone had an October storm fall as sleet).
 - **Frost and dew** for the grass: hoarfrost below +0.5 C on dry nights, dew on dry nights above freezing.
 
 Everything the rain drives follows the liquid share:

@@ -502,12 +502,17 @@ static class cl_da_wind_field_prev : public R_constant_setup
 // The weather's clouds_color alpha was the OPACITY of the stock cloud texture, never a sky
 // fraction: a "clear" cycle authors ~0.3 and means "faint clouds", not "70% blue". Mapped to
 // coverage it spans scattered fair-weather cumulus at the low end and a closed deck at the
-// top, so no weather ever shows an empty sky for hours. r__clouds_cover pins the raw value.
-static float da_cloud_cover_from_weather(float alpha)
+// top, so no weather ever shows an empty sky for hours. Rain falls from a closed deck: the stock
+// layer drew an overcast cycle's clouds as a black sheet over 86 % of the sky, and the deck of 0.67
+// it became left a third of a storm's sky its bright texture - a storm read as a dull grey day.
+// The weather's rain closes it (a storm's to 0.93). r__clouds_cover pins the raw value.
+static float da_cloud_cover_from_weather(const CEnvDescriptorMixer& e)
 {
     if (ps_r__clouds_cover >= 0.f)
         return ps_r__clouds_cover;
-    return clampr(0.2f + 0.55f * clampr(alpha, 0.f, 1.f), 0.f, 1.f);
+    const float alpha = clampr(e.clouds_color.w, 0.f, 1.f);
+    const float cover = 0.2f + 0.55f * alpha;
+    return clampr(cover + (0.97f - cover) * clampr(e.rain_density * 1.5f, 0.f, 1.f) * alpha, 0.f, 1.f);
 }
 
 static class cl_da_cloud_params : public R_constant_setup
@@ -518,7 +523,7 @@ static class cl_da_cloud_params : public R_constant_setup
         const float run = env.eff_cloud_run;
         const float a = env.eff_wind_dir_aloft;
         // r__clouds_cover pins the coverage for tuning and QA; -1 follows the weather.
-        const float cover = da_cloud_cover_from_weather(env.CurrentEnv.clouds_color.w);
+        const float cover = da_cloud_cover_from_weather(env.CurrentEnv);
         cmd_list.set_c(C, cover, env.eff_cloud_altitude, _sin(a) * run, _cos(a) * run);
     }
 } binder_da_cloud_params;
@@ -693,7 +698,7 @@ static class cl_da_cloud_params2 : public R_constant_setup
         const auto& env = g_pGamePersistent->Environment();
         // Thin cirrus barely dims the sun, a heavy deck cuts more than half of it. Overcast
         // weathers author their own dim sun on top.
-        const float cover = da_cloud_cover_from_weather(env.CurrentEnv.clouds_color.w);
+        const float cover = da_cloud_cover_from_weather(env.CurrentEnv);
         // The map's alpha holds the column's transmittance through the volume; this is only
         // the switch (0 = no shadow) and the strength the deck casts with.
         const float density = cover > 0.02f ? 1.f : 0.f;

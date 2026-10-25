@@ -29,6 +29,8 @@ uniform float4		da_gamma;
 // visordrops.h is the base game's: a fixed lattice of cells with a hash threshold, no clock and
 // no memory. What replaces it keeps a field of the water itself (da_visor_drops.ps) and this
 // header is the optics of looking through it.
+// The visor's water is laid over the toned frame (ACESFilm below).
+#define DA_VISOR_TONE(x) ACESFilm(x)
 #include "da_visor.h"
 
 // Contrast-adaptive sharpening after the native temporal pass, the way DOOM Eternal sharpens its TAA (AMD's RCAS):

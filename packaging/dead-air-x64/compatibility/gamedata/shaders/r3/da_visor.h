@@ -1,6 +1,12 @@
 #ifndef DA_VISOR_H
 #define DA_VISOR_H
 
+//	The tone curve between the frame the drops look at (img) and the pixel they are laid over
+//	(scene): the caller's, the identity where it comes later.
+#ifndef DA_VISOR_TONE
+#define DA_VISOR_TONE(x) (x)
+#endif
+
 //	The water standing on the actor's visor, drawn. The field it reads is solved elsewhere
 //	(da_visor_drops.ps, a fixed step into $user$visor_drops0); this is the optics of looking
 //	through it - from the INSIDE of the glass, which decides more than it seems to.
@@ -264,14 +270,17 @@ float3 da_visor_water(Texture2D img, float2 uv, float3 scene)
 		const float2 fg = float2(-(tx1.y - tx0.y), (ty1.y - ty0.y)) * inv2mm;
 		const float2 foff = fg * (DA_VS_FILM_BEND * 0.004f);
 		//	img is the frame BEFORE the tone curve and scene is after it. The bend and the blur are
-		//	carried over as the ratio of the bent, blurred sample to the plain one, both taken from
-		//	img, so the finished pixel stays the base: returning the raw sample itself put an untoned
-		//	- darker - copy of the frame wherever there was any film at all, and a wiped visor showed
-		//	grey smears on a bright sky. The blur grows with the film, as a smear does.
+		//	carried over as the difference the tone curve (DA_VISOR_TONE, the caller's) makes of the
+		//	bent, blurred sample and the plain one, so the finished pixel stays the base: returning
+		//	the raw sample itself put an untoned - darker - copy of the frame wherever there was any
+		//	film at all. Carried as their ratio, clamped to 0.5-2, a bright pixel beside a dark one
+		//	dimmed by half while the dark one could not brighten past twice: in the rain, with the
+		//	whole visor filmed, the hands and the weapon took a black outline against the world.
+		//	The blur grows with the film, as a smear does.
 		const float thick = smoothstep(DA_VS_FILM_ON, DA_VS_FILM_FULL, film);
 		const float3 bent = da_visor_gather(img, saturate(uv + foff), 0.0005f + 0.005f * thick);
 		const float3 plain = img.SampleLevel(smp_rtlinear, uv, 0).rgb;
-		const float3 through = scene * clamp((bent + 1e-3f) / (plain + 1e-3f), 0.5f, 2.0f);
+		const float3 through = max(scene + DA_VISOR_TONE(bent) - DA_VISOR_TONE(plain), 0.0f);
 		const float haze = thick * DA_VS_FILM_HAZE;
 		const float lum = dot(through, float3(0.30f, 0.59f, 0.11f));
 		//	Wet glass scatters forward: contrast drops, the blacks lift a little and the colour goes

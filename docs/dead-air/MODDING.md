@@ -1610,9 +1610,11 @@ The cloud deck is a world object: one coverage field, rendered once per frame in
 map around the camera, is what the sky shows, what the sun passes shade the ground with and
 what the sun shafts read. Coverage comes from the weather's `clouds_color` alpha - mapped,
 because that alpha was the opacity of the old cloud texture and not a sky fraction: a "clear"
-cycle gets scattered fair-weather cumulus, a storm a closed deck. The deck is drawn as a
-full-screen pass over the sky pixels; the stock cloud dome (whose cap never reached the
-zenith) is no longer used.
+cycle gets scattered fair-weather cumulus; the weather's `rain_density` closes it (a storm's
+to 0.93). The deck is drawn as a full-screen pass over the sky pixels; the stock cloud dome
+(whose cap never reached the zenith) is no longer used. Where the deck is lost in the
+weather's fog, an overcast still darkens the sky down to the horizon, as that dome did at
+the cycle's opacity: up to 70 % in a storm, nothing in fair weather.
 
 Quality follows the preset like the other preset-driven switches:
 
