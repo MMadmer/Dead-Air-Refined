@@ -17,10 +17,10 @@ void R_LOD::set_LOD(float LOD)
     }
 }
 
-void R_LOD::set_fade(float cover)
+void R_LOD::set_fade(float cover, bool inverted)
 {
-    // y turns the dither's pattern every frame, so TAA blends it into a partial coverage.
+    // y turns the dither's pattern every frame, so TAA blends it into a partial coverage; z keeps the other pixels.
     if (c_fade)
-        cmd_list.set_c(c_fade, cover, float(Device.dwFrame & 63), 0.f, 0.f);
+        cmd_list.set_c(c_fade, cover, float(Device.dwFrame & 63), inverted ? 1.f : 0.f, 0.f);
 }
 } // namespace xray::render::RENDER_NAMESPACE

@@ -437,6 +437,8 @@ public:
     ICF void set_CS(ID3D11ComputeShader* _cs, LPCSTR _n = nullptr);
     ICF void set_CS(ref_cs& _cs) { set_CS(_cs->sh, _cs->cName.c_str()); }
     ICF void Compute(u32 ThreadGroupCountX, u32 ThreadGroupCountY, u32 ThreadGroupCountZ);
+    // A dispatch whose group counts a compute pass wrote (three u32 at offset in args).
+    ICF void ComputeIndirect(ID3D11Buffer* args, u32 offset);
 #endif
 
 public:

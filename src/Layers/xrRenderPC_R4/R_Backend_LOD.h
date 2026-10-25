@@ -16,7 +16,8 @@ public:
     void set_LOD(R_constant* C) { c_LOD = C; }
     void set_LOD(float LOD);
     void set_fade(R_constant* C) { c_fade = C; set_fade(1.f); }
-    void set_fade(float cover);
+    // inverted: the complementary pixels (the level of detail fading in over the one fading out, da_autolod.h).
+    void set_fade(float cover, bool inverted = false);
 
     CBackend& cmd_list;
 };

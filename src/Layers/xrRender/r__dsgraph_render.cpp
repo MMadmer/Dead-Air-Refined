@@ -12,6 +12,7 @@
 #include "xrCore/Threading/ParallelFor.hpp"
 #if RENDER == R_R4
 #include "da_temporal.h"
+#include "da_clusters.h"
 #endif
 #ifdef XR_NATIVE
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
@@ -399,6 +400,11 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             {
                 cmd_list.set_Pass(it->first);
                 cmd_list.apply_lmaterial();
+#ifdef USE_DX11
+                // The pass's clusters the view kept (da_clusters.h): one indirect draw a vertex buffer.
+                if (_priority == 0)
+                    da_clusters_draw_pass(*this, it->first, iPass);
+#endif
 
                 mapNormalItems& items = it->second;
                 items.ssa = 0;
@@ -468,6 +474,13 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             cachedNormalItems[_priority][iPass] = nullptr;
         }
     }
+#ifdef USE_DX11
+    // The main view's second cluster pass: what the last frame's pyramid hid, against this frame's first draws.
+    if (_priority == 0 && o.is_main_pass && o.phase == CRender::PHASE_NORMAL && o.smap_draw == 0)
+        da_clusters_second_pass(*this);
+    if (_priority == 0)
+        da_clusters_view_end(*this);
+#endif
     // The fill drew its statics; the moving casters wait for the live map.
     if (o.smap_draw == 1)
     {

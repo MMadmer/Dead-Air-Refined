@@ -71,6 +71,8 @@ public:
     // The level shader it was compiled with (the index into the level's shader table, 0 = none): the procedural
     // shrubs key the stock bushes by their shader strings (da_shrubs.cpp).
     u16 level_shader{};
+    // Its slot in the level's cluster hierarchy (da_clusters.cpp), u32(-1) while it draws as a whole.
+    u32 da_cluster{u32(-1)};
 
     virtual void Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo) {} // LOD - Level Of Detail  [0..1], Ignored
     virtual void Load(const char* N, IReader* data, u32 dwFlags);

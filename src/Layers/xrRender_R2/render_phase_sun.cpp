@@ -6,6 +6,7 @@
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_snow.h"
+#include "Layers/xrRender/da_clusters.h"
 #include "Layers/xrRenderPC_R4/da_grass_mesh.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
 #endif
@@ -435,6 +436,11 @@ void render_sun::render()
 #endif
             if (bNormal || bSpecial || renderDetails || grassBlades || shrubs || snow)
             {
+#if RENDER == R_R4
+                // The cascade's clusters culled on its context before its map is set (da_clusters.h).
+                da_clusters_cull(dsgraph, da_clusters_shadow_view(Fidentity, sun->X.D[cascade_ind].combine,
+                    float(RImplementation.o.smapsize), 2));
+#endif
                 RImplementation.Target->phase_smap_direct(dsgraph.cmd_list, sun, cascade_ind);
                 dsgraph.cmd_list.StateManager.OverrideDepthBias(true, ps_r__smap_depth_bias, ps_r__smap_slope_bias);
                 dsgraph.cmd_list.set_xform_world(Fidentity);

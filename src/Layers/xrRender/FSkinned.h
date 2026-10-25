@@ -6,6 +6,7 @@
 #include "FVisual.h"
 #include "FProgressive.h"
 #include "SkeletonX.h"
+#include "da_autolod.h"
 
 struct SEnumVerticesCallback;
 
@@ -43,7 +44,7 @@ class CSkeletonX_ST : public Fvisual, public CSkeletonX_ext
 
 public:
     CSkeletonX_ST() {}
-    virtual ~CSkeletonX_ST() {}
+    virtual ~CSkeletonX_ST();
     virtual void Render(CBackend& cmd_list, float LOD, bool use_fast_geo) override;
     virtual void Load(const char* N, IReader* data, u32 dwFlags);
     virtual void Copy(dxRender_Visual* pFrom);
@@ -56,6 +57,12 @@ public:
         const Fmatrix& view, CSkeletonWallmark& wm, const Fvector& normal, float size, u16 bone_id);
 
 private:
+    // The automatic levels of detail (da_autolod.h): the chain its copies share, this instance's choice.
+    DaAutoLod* autolod{};
+    DaAutoLodState autolod_state;
+
+    void request_autolod(const void* verts, IReader* data);
+
     CSkeletonX_ST(const CSkeletonX_ST& other);
     void operator=(const CSkeletonX_ST& other);
 };

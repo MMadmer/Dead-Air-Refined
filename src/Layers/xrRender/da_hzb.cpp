@@ -45,6 +45,12 @@ struct State
     Fvector4 lv[kLevels]{};
     // The frame of the last pyramid: a pass binding it later in another frame finds it stale and binds it off.
     u32 frame{u32(-1)};
+    // The last frame's pyramid, a copy, and the camera it was built under.
+    ID3D11Texture2D* prev_tex{};
+    ID3D11ShaderResourceView* prev_srv{};
+    u32 prev_frame{u32(-1)};
+    u32 prev_w{}, prev_h{};
+    Fmatrix prev_view{}, prev_project{};
 };
 State g;
 
@@ -53,7 +59,24 @@ void release_texture()
     _RELEASE(g.srv);
     _RELEASE(g.uav);
     _RELEASE(g.tex);
+    _RELEASE(g.prev_srv);
+    _RELEASE(g.prev_tex);
+    g.prev_frame = u32(-1);
     g.w = g.h = g.levels = 0;
+}
+
+// The constants of r3\da_hzb.h for a camera.
+void bind_constants(CBackend& cmd, bool on, const Fmatrix& V, const Fmatrix& P)
+{
+    cmd.set_c("da_hzb", on ? 1.f : 0.f, float(g.levels), float(g.w), float(g.h));
+    for (u32 k = 0; k < kLevels; ++k)
+        cmd.set_ca("da_hzb_lv", k, g.lv[k]);
+    // The camera's world to view rows and the projection's terms (TAA's jitter in _31, _32).
+    cmd.set_ca("da_hzb_view", 0, V._11, V._21, V._31, V._41);
+    cmd.set_ca("da_hzb_view", 1, V._12, V._22, V._32, V._42);
+    cmd.set_ca("da_hzb_view", 2, V._13, V._23, V._33, V._43);
+    cmd.set_c("da_hzb_proj", P._11, P._22, P._33, P._43);
+    cmd.set_c("da_hzb_proj2", P._31, P._32, -P._43 / P._33, 0.f);
 }
 
 // Level 0 at half the render size, each next one half the last, rounded up, to one texel; the levels after the first
@@ -146,18 +169,47 @@ bool da_hzb_build(CBackend& cmd)
 void da_hzb_bind(CBackend& cmd, u32 slot, bool on)
 {
     on = on && g.srv && g.frame == Device.dwFrame;
-    cmd.set_c("da_hzb", on ? 1.f : 0.f, float(g.levels), float(g.w), float(g.h));
-    for (u32 k = 0; k < kLevels; ++k)
-        cmd.set_ca("da_hzb_lv", k, g.lv[k]);
-    // The main view's camera, world to view rows and the projection's terms (TAA's jitter in _31, _32).
-    const Fmatrix& V = Device.mView;
-    cmd.set_ca("da_hzb_view", 0, V._11, V._21, V._31, V._41);
-    cmd.set_ca("da_hzb_view", 1, V._12, V._22, V._32, V._42);
-    cmd.set_ca("da_hzb_view", 2, V._13, V._23, V._33, V._43);
-    const Fmatrix& P = Device.mProject;
-    cmd.set_c("da_hzb_proj", P._11, P._22, P._33, P._43);
-    cmd.set_c("da_hzb_proj2", P._31, P._32, -P._43 / P._33, 0.f);
+    bind_constants(cmd, on, Device.mView, Device.mProject);
     cmd.SRVSManager.SetCSResource(slot, on ? g.srv : nullptr);
+}
+
+void da_hzb_keep_previous(CBackend& cmd)
+{
+    if (!g.tex || g.frame != Device.dwFrame)
+        return;
+    if (!g.prev_tex)
+    {
+        D3D11_TEXTURE2D_DESC desc;
+        g.tex->GetDesc(&desc);
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        if (FAILED(HW.pDevice->CreateTexture2D(&desc, nullptr, &g.prev_tex)) ||
+            FAILED(HW.pDevice->CreateShaderResourceView(g.prev_tex, nullptr, &g.prev_srv)))
+        {
+            _RELEASE(g.prev_srv);
+            _RELEASE(g.prev_tex);
+            return;
+        }
+    }
+    HW.get_context(cmd.context_id)->CopyResource(g.prev_tex, g.tex);
+    g.prev_frame = Device.dwFrame;
+    g.prev_w = g.w;
+    g.prev_h = g.h;
+    g.prev_view = Device.mView;
+    g.prev_project = Device.mProject;
+}
+
+bool da_hzb_bind_previous_ready()
+{
+    const u32 w = std::max(Device.dwRenderWidth ? Device.dwRenderWidth : Device.dwWidth, 1u);
+    const u32 h = std::max(Device.dwRenderHeight ? Device.dwRenderHeight : Device.dwHeight, 1u);
+    return g.prev_srv && g.prev_frame + 1 == Device.dwFrame && g.prev_w == w && g.prev_h == h && g.w == w && g.h == h;
+}
+
+void da_hzb_bind_previous(CBackend& cmd, u32 slot)
+{
+    const bool on = da_hzb_bind_previous_ready();
+    bind_constants(cmd, on, g.prev_view, g.prev_project);
+    cmd.SRVSManager.SetCSResource(slot, on ? g.prev_srv : nullptr);
 }
 
 void da_hzb_unbind(CBackend& cmd, u32 slot)

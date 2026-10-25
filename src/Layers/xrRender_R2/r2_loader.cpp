@@ -28,6 +28,7 @@
 #include "Layers/xrRender/da_snow.h"
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_clusters.h"
 #include "Layers/xrRender/da_reeds.h"
 #include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
@@ -177,6 +178,9 @@ void CRender::level_Load(IReader* fs)
     g_pGamePersistent->LoadPump();
     // Every tree of the level is known now, module overlays included: the GPU registry.
     da_gpu_trees_level_load();
+    // The level's static visuals by clusters: their hierarchy from the disk cache or built on worker threads while the
+    // game starts; the stock draws stand in until it is on the GPU.
+    da_clusters_level_load();
 #endif
 
     // HOM
@@ -312,6 +316,7 @@ void CRender::level_Unload()
     // scene, the tree registry puts its nodes back into the sector roots.
     da_rt_level_unload();
     da_gpu_trees_level_unload();
+    da_clusters_level_unload();
 #endif
 
 #if defined(USE_DX11)

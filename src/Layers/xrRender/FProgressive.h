@@ -24,6 +24,10 @@ public:
     virtual void Load(const char* N, IReader* data, u32 dwFlags);
     virtual void Copy(dxRender_Visual* pFrom);
     virtual void Release();
+    // The sliding windows: the first is the full detail (the cluster hierarchy's source, da_clusters.cpp).
+    const FSlideWindowItem& windows() const { return nSWI; }
+    // The fast geometry's (positions alone), null without one.
+    const FSlideWindowItem* windows_fast() const { return xSWI; }
 
 private:
     FProgressive(const FProgressive& other);

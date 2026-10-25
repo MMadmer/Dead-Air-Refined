@@ -8,6 +8,8 @@
 --   qa_veg_up = 0          how far above the eye the camera stands (m)
 --   qa_veg_pitch = -0.05   the camera's pitch (rad)
 --   qa_veg_hour = 13       the hour of the day (a low sun: the soil's and the leaves' sheen against it)
+--   qa_veg_wait = 0        ms to wait at the start (a background build after the load: the cluster hierarchy)
+--   qa_veg_stats = ""      console commands after each mode's measure ("|"), besides the vegetation's
 --
 --   tools\qa\Run-WaterQa.ps1 -Name veg-base -Scenario veg_cost -Save trees -KeepShaderCache -Seconds 150
 local c = get_console()
@@ -59,7 +61,9 @@ local function on_update()
 		end
 		say("[qa] veg level " .. level.name() .. " renderer " .. c:get_string("renderer") .. " preset " ..
 			c:get_token("_preset"))
-		go("next")
+		go("wait")
+	elseif stage == "wait" then
+		if now - t0 > (qa_veg_wait or 0) then go("next") end
 	elseif stage == "next" then
 		step = step + 1
 		local s = plan[step]
@@ -82,6 +86,9 @@ local function on_update()
 		cmd("r__trees_stats")
 		cmd("r__shrubs_stats")
 		cmd("r__grass_blades_stats")
+		for one in string.gmatch(qa_veg_stats or "", "[^|]+") do
+			cmd(one)
+		end
 		cmd("r__screenshot_every 1")
 		go("shot")
 	elseif stage == "shot" then

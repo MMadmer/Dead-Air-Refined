@@ -36,7 +36,12 @@ void CSkeletonX_ST::Copy(dxRender_Visual* P)
     inherited1::Copy(P);
     CSkeletonX_ST* X = (CSkeletonX_ST*)P;
     _Copy((CSkeletonX*)X);
+    da_autolod_release(autolod);
+    autolod = X->autolod;
+    da_autolod_addref(autolod);
+    autolod_state = {};
 }
+CSkeletonX_ST::~CSkeletonX_ST() { da_autolod_release(autolod); }
 //////////////////////////////////////////////////////////////////////
 void CSkeletonX_PM::Render(CBackend& cmd_list, float LOD, bool use_fast_geo)
 {
@@ -51,7 +56,31 @@ void CSkeletonX_PM::Render(CBackend& cmd_list, float LOD, bool use_fast_geo)
     FSlideWindow& SW = nSWI.sw[lod_id];
     _Render(cmd_list, rm_geom, SW.num_verts, SW.offset, SW.num_tris);
 }
-void CSkeletonX_ST::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo) { _Render(cmd_list, rm_geom, vCount, 0, dwPrimitives); }
+void CSkeletonX_ST::Render(CBackend& cmd_list, float /*LOD*/, bool use_fast_geo)
+{
+    // A level of the automatic chain, or two crossfading by complementary dithers in the G-buffer (da_fade.h).
+    DaAutoLodDraw draw;
+    if (RenderMode != RM_SKINNING_SOFT && da_autolod_choose(autolod, cmd_list, vis.sphere, autolod_state, draw))
+    {
+        ref_geom& geom = const_cast<ref_geom&>(*draw.geom);
+        if (draw.count == 1)
+        {
+            _Render(cmd_list, geom, vCount, draw.first[0], draw.tris[0]);
+            return;
+        }
+        // (A rigid mesh's draw leaves its bone's world set: the second starts from the model's again.)
+        const Fmatrix world = cmd_list.xforms.m_w, world_prev = cmd_list.xforms.m_w_prev;
+        cmd_list.LOD.set_fade(draw.t, true);
+        _Render(cmd_list, geom, vCount, draw.first[0], draw.tris[0]);
+        cmd_list.set_xform_world(world);
+        cmd_list.xforms.set_W_prev(world_prev);
+        cmd_list.LOD.set_fade(1.f - draw.t);
+        _Render(cmd_list, geom, vCount, draw.first[1], draw.tris[1]);
+        cmd_list.LOD.set_fade(1.f);
+        return;
+    }
+    _Render(cmd_list, rm_geom, vCount, 0, dwPrimitives);
+}
 //////////////////////////////////////////////////////////////////////
 void CSkeletonX_PM::Release() { inherited1::Release(); }
 void CSkeletonX_ST::Release() { inherited1::Release(); }
@@ -73,6 +102,84 @@ void CSkeletonX_ST::Load(const char* N, IReader* data, u32 dwFlags)
     RImplementation.shader_option_skinning(-1);
     vBase = 0;
     _Load_hw(*this, _verts_);
+    // A mesh without levels of its own gets the automatic chain (da_autolod.h), built on worker threads.
+    if (RenderMode != RM_SKINNING_SOFT)
+        request_autolod(_verts_, data);
+}
+
+namespace
+{
+// A vertex's bind pose, its attributes (the normal, the tangent, the binormal, the texture coordinates) and its strongest
+// bone, by the link count of its format.
+template <typename V>
+void autolod_vertex(const V& v, u16 bone, float* pos, float* attr, u16* bones)
+{
+    pos[0] = v.P.x;
+    pos[1] = v.P.y;
+    pos[2] = v.P.z;
+    const float a[11] = {v.N.x, v.N.y, v.N.z, v.T.x, v.T.y, v.T.z, v.B.x, v.B.y, v.B.z, v.u, v.v};
+    std::copy(a, a + 11, attr);
+    *bones = bone;
+}
+u16 strongest(const vertBoned1W& v) { return u16(v.matrix); }
+u16 strongest(const vertBoned2W& v) { return v.w > 0.5f ? v.matrix1 : v.matrix0; }
+u16 strongest(const vertBoned3W& v)
+{
+    const float w[3] = {v.w[0], v.w[1], 1.f - v.w[0] - v.w[1]};
+    return v.m[w[1] > w[0] ? (w[2] > w[1] ? 2 : 1) : (w[2] > w[0] ? 2 : 0)];
+}
+u16 strongest(const vertBoned4W& v)
+{
+    const float w[4] = {v.w[0], v.w[1], v.w[2], 1.f - v.w[0] - v.w[1] - v.w[2]};
+    u32 k = 0;
+    for (u32 i = 1; i < 4; ++i)
+        k = w[i] > w[k] ? i : k;
+    return v.m[k];
+}
+template <typename V>
+void autolod_fill(const void* verts, u32 count, xr_vector<float>& pos, xr_vector<float>& attr, xr_vector<u16>& bones)
+{
+    const V* src = static_cast<const V*>(verts);
+    pos.resize(size_t(count) * 3);
+    attr.resize(size_t(count) * 11);
+    bones.resize(count);
+    for (u32 i = 0; i < count; ++i)
+        autolod_vertex(src[i], strongest(src[i]), &pos[size_t(i) * 3], &attr[size_t(i) * 11], &bones[i]);
+}
+} // namespace
+
+void CSkeletonX_ST::request_autolod(const void* verts, IReader* data)
+{
+    if (!data->find_chunk(OGF_INDICES))
+        return;
+    const u32 count = data->r_u32();
+    const u16* indices = static_cast<const u16*>(data->pointer());
+    xr_vector<float> pos, attr;
+    xr_vector<u16> bones;
+    switch (RenderMode)
+    {
+    case RM_SINGLE:
+    case RM_SINGLE_HQ:
+    case RM_SKINNING_1B:
+    case RM_SKINNING_1B_HQ: autolod_fill<vertBoned1W>(verts, vCount, pos, attr, bones); break;
+    case RM_SKINNING_2B:
+    case RM_SKINNING_2B_HQ: autolod_fill<vertBoned2W>(verts, vCount, pos, attr, bones); break;
+    case RM_SKINNING_3B:
+    case RM_SKINNING_3B_HQ: autolod_fill<vertBoned3W>(verts, vCount, pos, attr, bones); break;
+    case RM_SKINNING_4B:
+    case RM_SKINNING_4B_HQ: autolod_fill<vertBoned4W>(verts, vCount, pos, attr, bones); break;
+    default: return;
+    }
+    DaAutoLodSource s;
+    s.positions = pos.data();
+    s.attributes = attr.data();
+    s.bones = bones.data();
+    s.vertex_count = vCount;
+    s.indices = indices;
+    s.index_count = count;
+    s.geom = &*rm_geom;
+    s.radius = vis.sphere.R;
+    autolod = da_autolod_request(s);
 }
 
 template <typename T>

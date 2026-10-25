@@ -108,6 +108,12 @@ public:
 
 private:
     static constexpr u32 RingSize = 4, Pairs = 8;
+    // The geometry's own count (r__gpu_log only): the pipeline statistics of the G-buffer, the sun (its cascades with
+    // its accumulation) and the local lights (their shadow maps with theirs) - what reaches the input assembler, the
+    // rasterizer and the pixel shader. Taken on the GPU, so the command lists the scene records on deferred contexts
+    // count too. The three never overlap; each is taken over its first bracket of the frame.
+    static constexpr u32 StatSlots = 3;
+    static int stat_index(Slot slot) { return slot == Scene ? 0 : slot == Sun ? 1 : slot == Lights ? 2 : -1; }
 
     struct FrameQueries
     {
@@ -115,7 +121,13 @@ private:
         ID3D11Query* begin[Count][Pairs]{};
         ID3D11Query* end[Count][Pairs]{};
         u8 issued[Count]{};
+        ID3D11Query* stats[StatSlots]{};
+        u8 stats_state[StatSlots]{}; // 0 none, 1 begun, 2 ended
         bool pending{};
+    };
+    struct StatSums
+    {
+        double ia_prims{}, raster_prims{}, drawn_prims{}, vs{}, ps{};
     };
 
     // Resolve the oldest frame if its results are ready; returns without waiting otherwise.
@@ -127,6 +139,8 @@ private:
     // Sums since the last log line; the log line consumes them.
     mutable double m_sum[Count]{};
     mutable u32 m_sum_frames{};
+    mutable StatSums m_stat_sum[StatSlots]{};
+    mutable u32 m_stat_frames{};
     bool m_valid{};
     bool m_enabled{};
     bool m_in_frame{};

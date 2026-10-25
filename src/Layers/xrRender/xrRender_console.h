@@ -199,6 +199,18 @@ extern ECORE_API int ps_r__trees; // r__trees (QA): 0 = the stock trees in place
 extern ECORE_API int ps_r__dbg_trees; // r__dbg_trees (QA): draws of the trees left out (da_trees.cpp skip_draw)
 extern ECORE_API int ps_r__trees_cut; // r__trees_cut (QA): 0 = the trees' view without the GPU cut (da_veg.cpp cut)
 extern ECORE_API int ps_r__trees_occlusion; // r__trees_occlusion (QA): 0 = the cut culls nothing by the depth
+extern ECORE_API int ps_r__clusters; // r__clusters: the level's static geometry by clusters (da_clusters.cpp); 0 the stock draws
+extern ECORE_API int ps_r__clusters_min_tris; // r__clusters_min_tris: visuals under this many triangles draw as a whole (from the next load)
+extern ECORE_API float ps_r__clusters_px; // r__clusters_px: the main view's error on the screen a cluster may carry (pixels)
+extern ECORE_API float ps_r__clusters_shadow_px; // r__clusters_shadow_px: the shadow maps' (texels)
+extern ECORE_API int ps_r__clusters_hzb; // r__clusters_hzb: the main view's two passes against the depth pyramid
+extern ECORE_API int ps_r__clusters_fast; // r__clusters_fast (QA): 0 = the shadow maps take the full geometry's clusters
+extern ECORE_API int ps_r__clusters_views; // r__clusters_views (QA): the views drawn by clusters, bits (1 main, 2 sun, 4 lamps)
+extern ECORE_API int ps_r__clusters_stats_frames; // frames of r__clusters_stats left to log
+extern ECORE_API int ps_r__autolod; // r__autolod: the automatic levels of detail of the models drawn whole (da_autolod.cpp)
+extern ECORE_API int ps_r__autolod_min_tris; // r__autolod_min_tris: meshes under this many triangles keep their one level
+extern ECORE_API float ps_r__autolod_px; // r__autolod_px: the deviation a level may show at its switch (pixels)
+extern ECORE_API float ps_r__autolod_scale; // r__autolod_scale (QA): the screen sizes scaled
 extern ECORE_API int ps_r__shrubs_cut; // r__shrubs_cut (QA): 0 = the shrubs' view draws as the CPU chose it, without the GPU cut
 extern ECORE_API int ps_r__veg_soft; // r__veg_soft (QA): the vegetation's soft switches, bits (1 thinned, 2 wood, 4 morphs)
 extern ECORE_API int ps_r__dbg_wood; // r__dbg_wood (QA): the wood's bark in false colour (da_shrub_wood.ps shrub_dbg_*)

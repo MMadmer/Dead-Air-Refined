@@ -345,6 +345,17 @@ IC void CBackend::Compute(u32 ThreadGroupCountX, u32 ThreadGroupCountY, u32 Thre
     constants.flush();
     HW.get_context(context_id)->Dispatch(ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
 }
+
+IC void CBackend::ComputeIndirect(ID3D11Buffer* args, u32 offset)
+{
+    stat.compute.calls++;
+
+    SRVSManager.Apply(context_id);
+    StateManager.Apply();
+    //  State manager may alter constants
+    constants.flush();
+    HW.get_context(context_id)->DispatchIndirect(args, offset);
+}
 #endif
 
 IC void CBackend::Render(D3DPRIMITIVETYPE T, u32 baseV, u32 startV, u32 countV, u32 startI, u32 PC)

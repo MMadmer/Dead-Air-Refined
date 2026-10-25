@@ -68,6 +68,25 @@ void dx11GpuTimers::LogLine() const
         "(ao=%.3f forward=%.3f bloom=%.3f aa=%.3f post=%.3f)%s frames=%u",
         ms(Frame), ms(Scene), ms(Sun), ms(Lights), ms(Clouds), ms(CloudsMarch), ms(Combine), ms(CombineAO),
         ms(CombineForward), ms(CombineBloom), ms(CombineAA), ms(CombinePost), extra, frames);
+
+    // Per frame, thousands of primitives into the input assembler, to the rasterizer (after the culling of the
+    // vertex stages), drawn (after the clipping), thousands of vertex shader runs, millions of pixel shader runs.
+    if (m_stat_frames)
+    {
+        const double k = 1.0 / m_stat_frames;
+        string512 line{};
+        for (u32 i = 0; i < StatSlots; ++i)
+        {
+            const StatSums& s = m_stat_sum[i];
+            string128 part;
+            xr_sprintf(part, " %s ia=%.0fk rast=%.0fk drawn=%.0fk vs=%.0fk ps=%.2fM", i == 0 ? "scene" : i == 1 ? "sun" : "lights",
+                s.ia_prims * k * 1e-3, s.raster_prims * k * 1e-3, s.drawn_prims * k * 1e-3, s.vs * k * 1e-3, s.ps * k * 1e-6);
+            xr_strcat(line, part);
+            m_stat_sum[i] = {};
+        }
+        Msg("* [tris]%s frames=%u", line, m_stat_frames);
+        m_stat_frames = 0;
+    }
 }
 
 pcstr dx11GpuTimers::name(Slot slot)
@@ -132,6 +151,8 @@ void dx11GpuTimers::OnDeviceCreate()
     disjoint.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
     D3D11_QUERY_DESC stamp{};
     stamp.Query = D3D11_QUERY_TIMESTAMP;
+    D3D11_QUERY_DESC stats{};
+    stats.Query = D3D11_QUERY_PIPELINE_STATISTICS;
 
     bool ok = true;
     for (FrameQueries& f : m_ring)
@@ -143,6 +164,10 @@ void dx11GpuTimers::OnDeviceCreate()
                 ok = ok && SUCCEEDED(HW.pDevice->CreateQuery(&stamp, &f.begin[i][k]));
                 ok = ok && SUCCEEDED(HW.pDevice->CreateQuery(&stamp, &f.end[i][k]));
             }
+        // Optional: a device without pipeline statistics keeps its timers.
+        for (u32 i = 0; i < StatSlots; ++i)
+            if (FAILED(HW.pDevice->CreateQuery(&stats, &f.stats[i])))
+                f.stats[i] = nullptr;
         f.pending = false;
         std::fill(std::begin(f.issued), std::end(f.issued), u8(0));
     }
@@ -168,6 +193,8 @@ void dx11GpuTimers::OnDeviceDestroy()
                 _RELEASE(f.begin[i][k]);
                 _RELEASE(f.end[i][k]);
             }
+        for (u32 i = 0; i < StatSlots; ++i)
+            _RELEASE(f.stats[i]);
         f.pending = false;
     }
     m_enabled = false;
@@ -189,6 +216,7 @@ void dx11GpuTimers::FrameBegin()
     auto* ctx = HW.get_context(HW.IMM_CTX_ID);
     ctx->Begin(f.disjoint);
     std::fill(std::begin(f.issued), std::end(f.issued), u8(0));
+    std::fill(std::begin(f.stats_state), std::end(f.stats_state), u8(0));
     m_in_frame = true;
     Begin(Frame);
 }
@@ -213,6 +241,12 @@ void dx11GpuTimers::Begin(Slot slot)
     FrameQueries& f = m_ring[m_write];
     if (f.issued[slot] < Pairs)
         HW.get_context(HW.IMM_CTX_ID)->End(f.begin[slot][f.issued[slot]]);
+    const int si = stat_index(slot);
+    if (si >= 0 && ps_r__gpu_log > 0 && f.stats[si] && f.stats_state[si] == 0)
+    {
+        HW.get_context(HW.IMM_CTX_ID)->Begin(f.stats[si]);
+        f.stats_state[si] = 1;
+    }
 }
 
 void dx11GpuTimers::End(Slot slot)
@@ -222,6 +256,12 @@ void dx11GpuTimers::End(Slot slot)
     FrameQueries& f = m_ring[m_write];
     if (f.issued[slot] < Pairs)
         HW.get_context(HW.IMM_CTX_ID)->End(f.end[slot][f.issued[slot]++]);
+    const int si = stat_index(slot);
+    if (si >= 0 && f.stats_state[si] == 1)
+    {
+        HW.get_context(HW.IMM_CTX_ID)->End(f.stats[si]);
+        f.stats_state[si] = 2;
+    }
 }
 
 void dx11GpuTimers::Resolve(FrameQueries& f)
@@ -254,6 +294,24 @@ void dx11GpuTimers::Resolve(FrameQueries& f)
     for (u32 i = 0; i < Count; ++i)
         m_sum[i] += m_ms[i];
     ++m_sum_frames;
+    // The pipeline statistics, when every one of the three was taken this frame.
+    D3D11_QUERY_DATA_PIPELINE_STATISTICS st[StatSlots]{};
+    bool all = true;
+    for (u32 i = 0; i < StatSlots && all; ++i)
+        all = f.stats[i] && f.stats_state[i] == 2 &&
+            ctx->GetData(f.stats[i], &st[i], sizeof(st[i]), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK;
+    if (all)
+    {
+        for (u32 i = 0; i < StatSlots; ++i)
+        {
+            m_stat_sum[i].ia_prims += double(st[i].IAPrimitives);
+            m_stat_sum[i].raster_prims += double(st[i].CInvocations);
+            m_stat_sum[i].drawn_prims += double(st[i].CPrimitives);
+            m_stat_sum[i].vs += double(st[i].VSInvocations);
+            m_stat_sum[i].ps += double(st[i].PSInvocations);
+        }
+        ++m_stat_frames;
+    }
     m_valid = true;
 }
 } // namespace xray::render::RENDER_NAMESPACE

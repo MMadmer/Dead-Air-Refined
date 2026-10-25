@@ -14,6 +14,8 @@
 #include "Layers/xrRender/dxUIShader.h"
 #if defined(USE_DX11)
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
+#include "Layers/xrRender/da_clusters.h"
+#include "Layers/xrRender/da_autolod.h"
 #endif
 
 #if defined(USE_DX11)
@@ -1089,6 +1091,9 @@ void CRender::destroy()
     da_veg_destroy();
     da_grass_destroy();
     da_hzb_destroy();
+    da_clusters_destroy();
+    // (After the model pool: the models gave their chains back.)
+    da_autolod_destroy();
     da_snow_destroy();
     da_menu_frame_destroy();
     da_ui_picture_destroy();

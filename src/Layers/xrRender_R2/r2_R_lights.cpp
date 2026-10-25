@@ -2,6 +2,7 @@
 
 #include "xrCore/Threading/ParallelFor.hpp"
 #include "Layers/xrRender/da_veg.h"
+#include "Layers/xrRender/da_clusters.h"
 #if RENDER == R_R4
 #include "Layers/xrRenderPC_R4/da_particle_light.h"
 #include "Layers/xrRenderPC_R4/da_smap_cache.h"
@@ -279,6 +280,8 @@ void CRender::render_lights(light_Package& LP)
 
         PIX_EVENT_CTX(dsgraph.cmd_list, SHADOWED_LIGHT);
         auto& cmd = dsgraph.cmd_list;
+        // The face's clusters culled before its maps are set (da_clusters.h).
+        da_clusters_cull(dsgraph, da_clusters_shadow_view(L->X.S.view, L->X.S.project, float(L->X.S.size), 4));
         // The statics into the light's slot first, with the face's bias and transforms.
         if (cache == DaSmapCache::fill)
         {

@@ -40,6 +40,8 @@
 #include "Layers/xrRender/da_ground.h"
 #include "Layers/xrRender/da_trees_bake.h"
 #include "Layers/xrRender/da_snow.h"
+#include "Layers/xrRender/da_clusters.h"
+#include "Layers/xrRender/da_autolod.h"
 #endif
 
 // How many of the eight wave rows the water shader evaluates - a quality tier, set from the
@@ -543,6 +545,25 @@ int ps_r__dbg_trees = 0;
 int ps_r__trees_cut = 1;
 // The trees' cut culls by the depth drawn so far (da_veg.cpp cut_dispatch: the opaque world, then the near trees); 0 for QA.
 int ps_r__trees_occlusion = 1;
+// The level's static geometry by clusters (CLUSTERS.md, da_clusters.cpp): the hierarchy built after the load, the views'
+// cut on the GPU by the error on the screen (1 pixel in the view, 2 texels in the shadow maps). The main view's two
+// passes against the depth pyramid are off: on the stock levels the pyramid costs more than it hides (CLUSTERS.md,
+// "Cost"). QA switches; the visuals under the floor draw as a whole.
+int ps_r__clusters = 1;
+int ps_r__clusters_min_tris = 0;
+float ps_r__clusters_px = 1.f;
+float ps_r__clusters_shadow_px = 2.f;
+int ps_r__clusters_hzb = 0;
+int ps_r__clusters_views = 1;
+int ps_r__clusters_fast = 1;
+int ps_r__clusters_stats_frames = 0;
+// The automatic levels of detail (CLUSTERS.md, da_autolod.cpp): a model mesh without its own gets a chain reduced from
+// the full level, switched by its screen size where a level's deviation is r__autolod_px pixels, crossfaded over half a
+// second. From the next model load for the switch and the floor; the pixels and the scale at once.
+int ps_r__autolod = 1;
+int ps_r__autolod_min_tris = 400;
+float ps_r__autolod_px = 2.f;
+float ps_r__autolod_scale = 1.f;
 // The shrubs' view through the GPU cut (da_veg.cpp emit: out of the view, behind the depth, the wood's wire rule); 0 for QA.
 int ps_r__shrubs_cut = 1;
 // QA: the vegetation's soft switches (bits, all on by default; off: the hard switch, an A/B) - 1 the thinned prefixes'
@@ -2419,6 +2440,19 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__dbg_trees", &ps_r__dbg_trees, 0, 262143);
     CMD4(CCC_RuntimeInteger, "r__trees_cut", &ps_r__trees_cut, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__trees_occlusion", &ps_r__trees_occlusion, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__clusters", &ps_r__clusters, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__clusters_min_tris", &ps_r__clusters_min_tris, 0, 4096);
+    CMD4(CCC_RuntimeFloat, "r__clusters_px", &ps_r__clusters_px, 0.25f, 16.f);
+    CMD4(CCC_RuntimeFloat, "r__clusters_shadow_px", &ps_r__clusters_shadow_px, 0.25f, 32.f);
+    CMD4(CCC_RuntimeInteger, "r__clusters_hzb", &ps_r__clusters_hzb, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__clusters_views", &ps_r__clusters_views, 0, 7);
+    CMD4(CCC_RuntimeInteger, "r__clusters_fast", &ps_r__clusters_fast, 0, 1);
+    CMD2(CCC_DaCall, "r__clusters_stats", &da_clusters_stats);
+    CMD4(CCC_RuntimeInteger, "r__autolod", &ps_r__autolod, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__autolod_min_tris", &ps_r__autolod_min_tris, 64, 65535);
+    CMD4(CCC_RuntimeFloat, "r__autolod_px", &ps_r__autolod_px, 0.25f, 32.f);
+    CMD4(CCC_RuntimeFloat, "r__autolod_scale", &ps_r__autolod_scale, 0.05f, 20.f);
+    CMD2(CCC_DaCall, "r__autolod_stats", &da_autolod_stats);
     CMD4(CCC_RuntimeInteger, "r__shrubs_cut", &ps_r__shrubs_cut, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__veg_soft", &ps_r__veg_soft, 0, 7);
     CMD4(CCC_RuntimeInteger, "r__dbg_wood", &ps_r__dbg_wood, 0, 6);

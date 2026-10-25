@@ -13,6 +13,9 @@
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_trees_bake.h"
+#include "Layers/xrRender/da_clusters.h"
+#include "Layers/xrRender/da_autolod.h"
+#include "Layers/xrRender/da_hzb.h"
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_async.h"
 #include "Layers/xrRenderPC_R4/da_vrs.h"
@@ -348,6 +351,12 @@ void CRender::Render()
     const bool async_early = da_async_fork_early(RCache);
 #endif
 
+#if RENDER == R_R4
+    // The cluster hierarchy's frame: a finished build to the GPU, the frame's pools empty (before any view culls).
+    da_clusters_frame_begin(RCache);
+    // The models' finished automatic levels of detail to the GPU.
+    da_autolod_frame_begin();
+#endif
     Target->phase_scene_prepare();
 
     // Insert the first-person body only after scene building has
@@ -432,6 +441,10 @@ void CRender::Render()
     {
         PIX_EVENT(DEFER_PART0_NO_SPLIT);
         // level, DO NOT SPLIT
+#if RENDER == R_R4
+        // The main view's clusters culled before its targets are set (da_clusters.h).
+        da_clusters_cull(dsgraph, da_clusters_main_view());
+#endif
         Target->phase_scene_begin();
 #if defined(XR_NATIVE)
         details_job.start();
@@ -446,6 +459,9 @@ void CRender::Render()
     {
         PIX_EVENT(DEFER_PART0_SPLIT);
         // level, SPLIT
+#if RENDER == R_R4
+        da_clusters_cull(dsgraph, da_clusters_main_view());
+#endif
         Target->phase_scene_begin();
 #if defined(XR_NATIVE)
         details_job.start();
@@ -820,6 +836,8 @@ void CRender::Render()
 #if RENDER == R_R4
     // This frame's view-projections become the previous ones of the next frame's motion vectors.
     da_temporal_frame_end();
+    // The frame's last depth pyramid, the next frame's previous one (the cluster hierarchy's first pass).
+    da_hzb_keep_previous(RCache);
 #endif
 
     VERIFY(dsgraph.mapDistort.empty());

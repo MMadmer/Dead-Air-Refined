@@ -4,6 +4,7 @@
 #include "xrCore/Threading/TaskManager.hpp"
 #if RENDER == R_R4
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
+#include "Layers/xrRender/da_clusters.h"
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_reeds.h"
@@ -84,6 +85,8 @@ void CRender::Calculate()
     ZoneScopedN("r2_calculate");
 
 #if RENDER == R_R4
+    // The cluster hierarchy's frame (da_clusters.h): before any view culls - the sun's cascades may from the task run below.
+    da_clusters_frame_prepare();
     // A changed r__gpu_driven moves the GPU-driven trees between the sector roots and their own list,
     // before any view walks the graph.
     da_gpu_trees_apply_switch();
