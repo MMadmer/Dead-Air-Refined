@@ -32,7 +32,10 @@ v2p_splash main (v_rain I)
 	O.Color = I.Color.bgra; // swizzle vertex colour
 	O.wpos  = I.P.xyz;
 	O.fog   = saturate(calc_fogging(I.P));
-	O.light = da_particle_lighting(I.P.xyz);
+	// A splash crown is water too: it shows the sky round it (da_particle_drop_light).
+	O.light = 1.0f;
+	[branch] if (da_particle_light.x > 0.5f)
+		O.light = da_particle_drop_light(I.P.xyz, normalize(I.P.xyz - eye_position), 0.0f);
 
 	return O;
 }

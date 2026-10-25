@@ -3,6 +3,7 @@
 -- strike, how do the hands look.
 --   qa_storm_weather = "af3_dark_storm"   the cycle
 --   qa_storm_hour = 14
+--   qa_storm_settle = 6000   ms of the storm before the shots (the puddles fill over a minute or two)
 --   qa_storm_boot = "wind_seed 1833.7|wind_freeze 1"   commands once the weather is set ("|")
 --   qa_storm_shots = ";hud_weapon 0;hud_weapon 1|r2_ssao st_opt_off;hud_weapon 0"
 --                    one entry per shot (";"), the commands run before it ("|"); default: four plain shots
@@ -40,7 +41,7 @@ local function on_update()
 		local shots = qa_storm_shots or ";;;"
 		for item in string.gmatch(shots .. ";", "([^;]*);") do plan[#plan + 1] = item end
 		go("settle")
-	elseif stage == "settle" and now - t0 > 6000 then
+	elseif stage == "settle" and now - t0 > (qa_storm_settle or 6000) then
 		say("[qa] storm weather " .. tostring(level.get_weather()))
 		cmd("qa_rain_state")
 		cmd("qa_snow_state")

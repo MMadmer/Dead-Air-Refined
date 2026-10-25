@@ -32,6 +32,15 @@ uniform float4 da_particle_light;
 //	Metres over which a flake dissolves into whatever it crosses.
 #define FLAKE_SOFT 0.12
 
+// By day the sheet keeps the floor it had before it was lit (half its authored grey): the sky behind a storm's rain is
+// dark, and lit by it alone the drops went near black on the dark ground - no rain to see. The floor fades with the
+// sky's light toward the night, where only a lamp or a flashlight catches the drops.
+float3 da_drop_day_floor(float3 light)
+{
+	const float day = saturate(dot(L_hemi_color.rgb, float3(0.3f, 0.59f, 0.11f)) * 4.0f);
+	return max(light, 0.55f * day);
+}
+
 float4 main (v2p_rain I) : SV_Target
 {
 	const float2 q  = I.Tex0 * 2.0 - 1.0;
@@ -47,7 +56,7 @@ float4 main (v2p_rain I) : SV_Target
 	float3 col;
 	// Lit like the particles (da_rain.vs), so a night's snowfall is dark but where a light catches it.
 	[branch] if (da_particle_light.x > 0.5)
-		col = saturate(I.Color.rgb * I.light);
+		col = saturate(I.Color.rgb * da_drop_day_floor(I.light));
 	else
 	{
 		const float3 skyc = L_hemi_color.rgb / (1.0 + L_hemi_color.rgb);

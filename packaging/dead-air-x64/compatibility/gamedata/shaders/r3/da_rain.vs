@@ -43,7 +43,7 @@ v2p_rain main (v_rain I)
 	// Lit like the particles; a drop and a flake are lenses, with a forward lobe on the High rung of the rain's ladder.
 	O.light      = 1.0f;
 	[branch] if (da_particle_light.x > 0.5f)
-		O.light = da_particle_exposed(da_particle_irradiance(I.P.xyz, normalize(I.P.xyz - eye_position), da_rain2.z >= 2.5f ? 3.0f : 0.0f));
+		O.light = da_particle_drop_light(I.P.xyz, normalize(I.P.xyz - eye_position), da_rain2.z >= 2.5f ? 3.0f : 0.0f);
 
 	return O;
 }

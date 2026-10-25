@@ -178,6 +178,10 @@ float FillDepth(float2 uv0, float2 duv_x, float2 duv_z, float inv_dz)
 #endif
 #endif
 
+// The first-person hands: closer than this, metres of true eye depth.
+#define DA_RAIN_HUD_Z 1.1
+float rain_world_z(float z, float own) { return z < DA_RAIN_HUD_Z ? own : z; }
+
 #ifdef GBUFFER_OPTIMIZATION
 #ifdef MSAA_OPTIMIZATION
 float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1, float4 Color : COLOR, float4 pos2d : SV_Position, uint iSample : SV_SAMPLEINDEX) : SV_Target
@@ -207,6 +211,11 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
 #endif
 
     const float4 position = float4(gbd.P, 1.0);
+    // The first-person hands and what they hold: closer than 1.1 m, as the TAA, the SSR and the motion blur tell them
+    // (their G-buffer depth is the true eye depth). At 0.35 m a sleeve or a stock further off took the world's wet
+    // gloss, and the world's continuity gate (below) dropped it again on the two pixels of the silhouette: in the rain
+    // the hands and the weapon wore a black outline.
+    const bool viewmodel = position.z < DA_RAIN_HUD_Z;
     float3 normal = normalize(gbd.N);
     // The viewmodel KEEPS its rain normals (water streaks on the barrel are a feature) - only
     // the new gloss boost is masked for it, below.
@@ -252,13 +261,15 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     // it too, so rings and pops stay on ground and stone.
     float cont = 1.0;
     [branch]
-    if (position.z >= 0.35)
+    if (!viewmodel)
     {
         const float2 px = 2.0 / pos_decompression_params2.xy;
-        const float zl = RAIN_LOAD_AT(tc - float2(px.x, 0.0)).P.z;
-        const float zr = RAIN_LOAD_AT(tc + float2(px.x, 0.0)).P.z;
-        const float zu = RAIN_LOAD_AT(tc - float2(0.0, px.y)).P.z;
-        const float zd = RAIN_LOAD_AT(tc + float2(0.0, px.y)).P.z;
+        // A neighbour on the hands is no break in the world's surface behind them: taken as this pixel's own depth, or
+        // the ground round the weapon lost its sheen in a dark ring.
+        const float zl = rain_world_z(RAIN_LOAD_AT(tc - float2(px.x, 0.0)).P.z, position.z);
+        const float zr = rain_world_z(RAIN_LOAD_AT(tc + float2(px.x, 0.0)).P.z, position.z);
+        const float zu = rain_world_z(RAIN_LOAD_AT(tc - float2(0.0, px.y)).P.z, position.z);
+        const float zd = rain_world_z(RAIN_LOAD_AT(tc + float2(0.0, px.y)).P.z, position.z);
         const float lap = abs(zl + zr - 2.0 * position.z) + abs(zu + zd - 2.0 * position.z);
         cont = saturate(1.0 - lap / (0.03 + 0.012 * position.z));
     }
@@ -273,7 +284,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     // shines by its gloss.
     float puddle_shine = 0.0;
     [branch]
-    if (position.z < 0.35)
+    if (viewmodel)
     {
         // ---- Viewmodel branch: its own rain, in VIEW space. -------------------------------
         // The world coordinates of HUD pixels are stretched by the FOV trick and swing with
@@ -435,7 +446,7 @@ float4 main(float2 tc : TEXCOORD0, float2 tcJ : TEXCOORD1) : SV_Target
     // mirror, and the whole wet level glared; the puddle earns more. Not the terrain's puddles: the reflection pass
     // mirrors those with water's fresnel, and their gloss was the specular model's f0 of 0.16 on top (lmodel.h), a
     // sixth of a bright overcast in every puddle seen from above - a wet meadow read as snow.
-    const float not_viewmodel = step(0.35, position.z);
+    const float not_viewmodel = viewmodel ? 0.0 : 1.0;
     const float gloss_add = max(da_wetness.x * wetness * 0.20, puddle_shine * 0.50) * cont * not_viewmodel;
 
     // The normal's length carries the finished gloss (0.5 none, 1 full); alpha carries the

@@ -49,16 +49,22 @@ float da_particle_sun_vis(float3 Pw)
 	return vis;
 }
 
-float3 da_particle_irradiance(float3 Pw, float3 Vn, float lobe)
+// The sky round a point: the irradiance cube looked up and to the side, in the weather's tint.
+float3 da_particle_sky()
 {
-	const float vis = da_particle_sun_vis(Pw);
-	// A puff takes the sun on its lit half (the diffuse's 0.7 of lmodel.h), and the sky and the ambient from all round:
-	// the irradiance cube looked up and to the side, squared like the scene's (hmodel.h).
 	const float3 up = lerp(env_s0.SampleLevel(smp_rtlinear, float3(0.0f, 1.0f, 0.0f), 0).rgb,
 		env_s1.SampleLevel(smp_rtlinear, float3(0.0f, 1.0f, 0.0f), 0).rgb, da_particle_env.w);
 	const float3 side = lerp(env_s0.SampleLevel(smp_rtlinear, float3(0.7f, 0.0f, 0.7f), 0).rgb,
 		env_s1.SampleLevel(smp_rtlinear, float3(0.7f, 0.0f, 0.7f), 0).rgb, da_particle_env.w);
-	const float3 sky = da_particle_env.rgb * (0.5f * (up + side));
+	return da_particle_env.rgb * (0.5f * (up + side));
+}
+
+float3 da_particle_irradiance(float3 Pw, float3 Vn, float lobe)
+{
+	const float vis = da_particle_sun_vis(Pw);
+	// A puff takes the sun on its lit half (the diffuse's 0.7 of lmodel.h), and the sky and the ambient from all round,
+	// the sky squared like the scene's (hmodel.h).
+	const float3 sky = da_particle_sky();
 	const float sun_lobe = 1.0f + lobe * pow(saturate(dot(Vn, -L_sun_dir_w.xyz)), 8.0f);
 	float3 E = da_particle_sun.rgb * (0.35f * vis * sun_lobe) + sky * sky + da_particle_amb.rgb;
 	[loop]
@@ -85,6 +91,14 @@ float3 da_particle_exposed(float3 E)
 	const float scale = s_tonemap.Load(int3(0, 0, 0)).x;
 	const float w2 = da_particle_light.w * da_particle_light.w;
 	return min(da_particle_tm(E * scale, w2) / da_particle_tm(1.0f, w2), 1.5f);
+}
+
+// A drop of water: lit like a puff, and a lens besides - it shows the sky round it to the eye, not the sky's light
+// squared as a surface takes it. Without that a storm's rain, all sky and no sun, went near black on the dark ground
+// and could not be seen at all; at night the sky is dark and so are the drops, but where a light catches them.
+float3 da_particle_drop_light(float3 Pw, float3 Vn, float lobe)
+{
+	return da_particle_exposed(da_particle_irradiance(Pw, Vn, lobe) + da_particle_sky());
 }
 
 float3 da_particle_lighting(float3 Pw)
