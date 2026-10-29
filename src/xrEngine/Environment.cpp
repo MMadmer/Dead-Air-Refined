@@ -142,10 +142,10 @@ void CEnvironment::QaRainReport() const
 {
     if (eff_Rain)
         eff_Rain->QaReport();
-    // The sheet's wind (dxRainRender.cpp) and what the walkers' footprints would add to it.
+    // The sheet's wind (dxRainRender.cpp) and what the footprints and the shots' wakes would add to it.
     const Fvector& eye = Device.vCameraPosition;
     const Fvector sheet = WindAt(eye, 6.f, false), all = WindAt(eye, 6.f);
-    Msg("[qa] rain wind at the eye %.2f %.2f m/s, with the footprints %.2f %.2f", sheet.x, sheet.z, all.x, all.z);
+    Msg("[qa] rain wind at the eye %.2f %.2f m/s, with the footprints and the shots %.2f %.2f", sheet.x, sheet.z, all.x, all.z);
 }
 
 float CEnvironment::GetWetness() const { return GetCurrentWetness(); }
@@ -721,7 +721,7 @@ float CEnvironment::SampleWindDeviation(float x, float z) const
 
 float CEnvironment::WindSpeedMs() const { return eff_wind_norm * DA_WIND_MS_PER_NORM; }
 
-Fvector CEnvironment::SampleWindMotorsVec(const Fvector& p, bool presses) const
+Fvector CEnvironment::SampleWindMotorsVec(const Fvector& p, bool local) const
 {
     // The shader's da_wind_motors_bend, direction kept, in metres per second of air: a blast
     // ring pushes outward from its centre, a line motor drags along the shot, a press pushes
@@ -736,8 +736,8 @@ Fvector CEnvironment::SampleWindMotorsVec(const Fvector& p, bool presses) const
         const float* arow = &A.m[i % 4][0];
         if (prow[3] <= 0.f || _abs(arow[0]) <= 0.001f)
             continue;
-        // A press is packed with w = 0 (line > 0.5, blast -1).
-        if (!presses && _abs(arow[3]) < 0.5f)
+        // A press is packed with w = 0, a shot's wake above 0.5, a blast -1.
+        if (!local && arow[3] > -0.5f)
             continue;
         float dx = p.x - prow[0];
         float dz = p.z - prow[2];
@@ -780,7 +780,7 @@ Fvector CEnvironment::SampleWindMotorsVec(const Fvector& p, bool presses) const
     return out;
 }
 
-Fvector CEnvironment::WindAt(const Fvector& pos, float height_above_ground, bool presses) const
+Fvector CEnvironment::WindAt(const Fvector& pos, float height_above_ground, bool local) const
 {
     const float g = da_wind_field_gust(pos.x, pos.z, eff_wind_field_ofs.x, eff_wind_field_ofs.y);
     const float dev = da_wind_field_dev(pos.x, pos.z, eff_wind_field_ofs.x, eff_wind_field_ofs.y);
@@ -788,7 +788,7 @@ Fvector CEnvironment::WindAt(const Fvector& pos, float height_above_ground, bool
     const float speed = WindSpeedMs() * da_wind_field_amp(g) * da_wind_profile(height_above_ground, eff_wind_z0);
     Fvector v;
     v.set(_sin(heading) * speed, 0.f, _cos(heading) * speed);
-    v.add(SampleWindMotorsVec(pos, presses));
+    v.add(SampleWindMotorsVec(pos, local));
     return v;
 }
 

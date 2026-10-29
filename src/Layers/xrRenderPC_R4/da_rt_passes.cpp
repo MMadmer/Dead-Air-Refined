@@ -24,8 +24,9 @@
 namespace xray::render::RENDER_NAMESPACE
 {
 #if defined(DA_RT_LANE)
-// The combine's haze bounds (Blender_Recorder_StandartBinding.cpp).
+// The combine's haze bounds and an overcast's share off the sky (Blender_Recorder_StandartBinding.cpp).
 void da_rt_fog_bounds(float& near_m, float& far_m);
+float da_sky_overcast();
 #endif
 
 namespace
@@ -209,7 +210,9 @@ DaRtShade da_rt_shade()
     s.fog_color.set(env.fog_color.x, env.fog_color.y, env.fog_color.z, 0.f);
     s.fog.set(ps_r__fog_sky * ps_r__fog, ps_r__fog_sky_mip, ps_r__fog_height * ps_r__fog, ps_r__fog_height_falloff);
     s.fog2.set(ps_r__fog_max, ps_r__fog_height_base, ps_r__fog_sky_flat, 0.f);
-    s.sky_tint.set(env.sky_color.x, env.sky_color.y, env.sky_color.z, 0.f);
+    // (The raster haze's tint, r2.cpp: an overcast's darkened sky the far hits converge to as the frame's do.)
+    const float overcast = da_sky_overcast(), sky_k = 1.f - overcast;
+    s.sky_tint.set(env.sky_color.x * sky_k, env.sky_color.y * sky_k, env.sky_color.z * sky_k, overcast);
     const CEnvironment& environment = g_pGamePersistent->Environment();
     s.rain2.set(environment.rain_rate_mmh, environment.rain_ext_km, 0.f, 0.f);
     s.tonemap.set(0.f, ps_r__tonemap_white, ps_r__tonemap_hue, ps_r__tonemap_desat);

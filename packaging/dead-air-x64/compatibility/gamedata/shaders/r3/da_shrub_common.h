@@ -395,7 +395,7 @@ float	shrub_elem_hash	(shrub_elem E, uint kind)
 	return float(E.w.z >> 16) / 65536.0f;
 }
 
-// An instance (SHRUB_INST_REC, 96 bytes): rows 0..2 of the template-to-world 3x4 transform; then x species (8) |
+// An instance (SHRUB_INST_REC, 112 bytes): rows 0..2 of the template-to-world 3x4 transform; then x species (8) |
 // flags (8: 1 dead, 2 a tree, 4 a Red Forest pine's dead rust-red needles kept all year) | phenology offset (8,
 // signed: a share of the species' spread) | a young tree's spring lead (8: its share of the policy's), y the
 // template's first axis, z hemi (8) | sun (8) | a tree's ground at its trunk over its root (16, signed cm), w the element
@@ -403,7 +403,7 @@ float	shrub_elem_hash	(shrub_elem E, uint kind)
 // tree's trunk sway on its stock root's oscillator (da_trees.cpp record_tail): x the downwind push per metre now, y a
 // frame back (f16 pairs), z the tree's height above its root | its climbable top (f16), w the template's first aux slot
 // (24) | its youth (8); then x the plant's first record in the frame's axis bends (da_shrub_axis_bend.cs, all ones
-// none: its chunks bend by their slots), yzw unused.
+// none: its chunks bend by their slots), y its template's axes, zw unused.
 struct shrub_inst
 {
 	float3x4	xf;
@@ -429,6 +429,7 @@ struct shrub_inst
 	float		tree_h, climb_top;
 	uint		aux0;
 	uint		axis_bend;
+	uint		axis_count;
 };
 
 shrub_inst	shrub_inst_load	(uint index)
@@ -462,7 +463,9 @@ shrub_inst	shrub_inst_load	(uint index)
 	I.tree_h = hc.x; I.climb_top = hc.y;
 	I.aux0 = t.w & 0xFFFFFFu;
 	I.youth = float(t.w >> 24) / 255.0f;
-	I.axis_bend = da_shrub_inst.Load(base + 96u);
+	const uint2 ab = da_shrub_inst.Load2(base + 96u);
+	I.axis_bend = ab.x;
+	I.axis_count = ab.y;
 	return I;
 }
 
@@ -790,9 +793,10 @@ void	shrub_bend	(inout float3 q, inout float3 n, inout float3 t, uint slot, uint
 	uint b;
 	[branch] if (slot == SHRUB_SLOT_AXIS)
 	{
-		// (A plant bent by its axes: the record of the element's axis, this frame's or a frame back.)
+		// (A plant bent by its axes: the record of the element's axis, this frame's or a frame back; an axis past its
+		// template's would be another plant's.)
 		const uint r = I.axis_bend + axis;
-		[branch] if (I.axis_bend == 0xFFFFFFFFu || r >= uint(prev ? da_shrub_bend_axis.z : da_shrub_bend_axis.y))
+		[branch] if (I.axis_bend == 0xFFFFFFFFu || axis >= I.axis_count || r >= uint(prev ? da_shrub_bend_axis.z : da_shrub_bend_axis.y))
 		{
 			shrub_bend_chain(q, n, t, axis, s, I, prev);
 			return;

@@ -54,7 +54,10 @@ local function on_update()
 		-- The ground under him is the physics' (y as it lands), the step along his heading.
 		local dt = walk_t and (now - walk_t) * 0.001 or 0
 		walk_t = now
-		local dir = device().cam_dir
+		-- (Along the ground, unit: the camera's direction came back unscaled on DirectX 12.)
+		local d3 = device().cam_dir
+		local len = math.max(math.sqrt(d3.x * d3.x + d3.z * d3.z), 1e-6)
+		local dir = vector():set(d3.x / len, 0, d3.z / len)
 		local p = db.actor:position()
 		db.actor:set_actor_position(vector():set(p.x + dir.x * qa_storm_walk * dt, p.y, p.z + dir.z * qa_storm_walk * dt))
 		if now - t0 > 3000 then

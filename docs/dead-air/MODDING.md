@@ -2271,8 +2271,9 @@ ripple field at 4.
 
 A drop is born by one ray down its column from the cloud end, and that ray is the whole of what
 the rain knows about roofs. The drop's line (`Item::D`) is solved at birth from the gusting wind at
-the eye (`WindAt`, without the walkers' footprints: the player's own, a hand's width from the eye,
-pushed the whole sheet the way he walked) and the drop's own share of the gust, the ray clears that line, and the drop
+the eye (`WindAt` with the blasts alone of the motors: the player's own footprints and his own shots' wakes,
+a hand's width from the eye, pushed the whole sheet the way he walked or aimed) and the drop's own share of the gust,
+the ray clears that line, and the drop
 falls along it and nothing else until it dies where the ray stopped (`Item::Phit`). A gust reaches
 the sheet through births - a drop lives a fraction of a second - so nothing is steered in flight
 and no drop is ever asked again. Two slips rained on the floor of the player's own new-game start

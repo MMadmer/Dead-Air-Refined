@@ -54,6 +54,8 @@ constexpr u32 kBendRec = 36, kBendMaxChunks = 1u << 15, kBendMaxViewChunks = 1u 
 // its template has axes has each axis bent once (its chunks' slot field kChunkAxes, the record's word 24 its first axis
 // record); the most axis records of a frame and of the view's a frame back, a job's record and the most jobs.
 constexpr u32 kChunkAxes = 0xFFFFu, kAxisBendMax = 1u << 20, kAxisBendViewMax = 1u << 19, kAxisJobRec = 16, kMaxAxisJobs = 1u << 16;
+// (A job a plant's run of 64 axes at most: every frame's fit.)
+static_assert(kMaxInstances + kAxisBendMax / kChunk <= kMaxAxisJobs);
 // The culling grid's cell (m).
 constexpr float kCell = 32.f;
 // Instance record flags (word 12, bits 8..15): a dead plant, a tree (the wide element layout, the trunk sway), a Red

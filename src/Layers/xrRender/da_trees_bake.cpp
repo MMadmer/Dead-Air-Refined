@@ -914,6 +914,7 @@ bool tree_item(const Population& P, u32 set, u32 row, TreeBake::Item& it, xr_vec
     rec[23] = (T.aux_first & 0xFFFFFFu) | (u8f(tb.youth) << 24);
     // (No axis records: the bake's chunks are rigid.)
     rec[24] = ~0u;
+    rec[25] = T.axis_count;
     recs.insert(recs.end(), std::begin(rec), std::end(rec));
     for (u32 k = 0; k < 3; ++k)
     {

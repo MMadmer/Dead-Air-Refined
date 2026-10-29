@@ -88,8 +88,8 @@ void dxRainRender::Render(CEffect_Rain& owner)
         // The wind every drop born this frame is solved on (Born). Sampled once at the camera and
         // shared by the whole sheet: the gust field varies over tens of metres while the sheet
         // is thirty across, so a per-drop sample would buy nothing for thousands of noise
-        // evaluations a frame. Without the footprints: the actor's own, springing back behind him, pushed the
-        // whole sheet the way he walked.
+        // evaluations a frame. The blasts alone of the motors: the actor's own footprints and his own shots' wakes,
+        // a hand's width from the eye, pushed the whole sheet the way he walked or aimed.
         const Fvector wind_v = env.WindAt(vEye, 6.f, false);
 
         // born _new_ if needed

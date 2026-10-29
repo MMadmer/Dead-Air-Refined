@@ -1014,6 +1014,7 @@ u32 frame_record(Population& P, u32 i)
     P.record_tail(i, rec + 20);
     // (Its axis records, if the frame bends it by its axes: choose_axis_bends.)
     rec[24] = ~0u;
+    rec[25] = T.axis_count;
     g.rec_axes.push_back(T.axis_count);
     g.rec_axis.push_back(~0u);
     g.rec_pop.push_back(u8(P.index));
@@ -1193,8 +1194,16 @@ void choose_axis_bends()
     static xr_vector<u8> view;
     elems.assign(n, 0u);
     view.assign(n, 0u);
+    // (The rain's occlusion map bends nothing: its chunks count for no plant.)
+    static xr_vector<u8> rain;
+    rain.assign(g.chunks.size(), 0u);
+    for (u32 pi = 0; pi < kPops; ++pi)
+        if (const Population* P = pop(pi); pop_on(P))
+            for (u32 d = 0; d < drCount; ++d)
+                for (u32 k = 0; k < P->draw_count[kRainPass][d]; ++k)
+                    rain[P->draw_first[kRainPass][d] + k] = 1u;
     for (u32 i = 0; i < u32(g.chunks.size()); ++i)
-        if (const ChunkRec& c = g.chunks[i]; !(c.packed & kChunkRigid) && c.inst < n)
+        if (const ChunkRec& c = g.chunks[i]; !(c.packed & kChunkRigid) && c.inst < n && !rain[i])
         {
             elems[c.inst] += c.packed & 0xFFu;
             view[c.inst] |= i < g.bend_view_end ? 1u : 0u;
