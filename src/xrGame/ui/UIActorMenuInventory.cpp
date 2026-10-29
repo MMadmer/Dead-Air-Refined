@@ -229,6 +229,49 @@ bool FindItemInList(CUIDragDropListEx* lst, PIItem pItem, CUICellItem*& ci_res)
     return false;
 }
 
+// The cells whose items are gone without the inventory telling the menu - a trader's stock or a box's contents released by
+// a script while they are shown: the event that drops a cell (OnInventoryAction) covers the actor's lists alone, and
+// the cell's next frame read the freed item (its condition bar: the 1.6.2 reports' "crash out of nowhere"). Every list,
+// every stacked child; the removal compares pointers, it reads no item.
+bool RemoveItemFromList(CUIDragDropListEx* lst, PIItem pItem);
+
+void CUIActorMenu::PruneDeadCells()
+{
+    bool removed = false;
+    for (CUIDragDropListEx* lst : m_pLists)
+    {
+        if (!lst)
+            continue;
+        for (u32 i = 0; i < lst->ItemsCount();)
+        {
+            CUICellItem* ci = lst->GetItemIdx(i);
+            PIItem dead = nullptr;
+            for (u32 j = 0; j < ci->ChildsCount() && !dead; ++j)
+                if (auto* child = smart_cast<CUIInventoryCellItem*>(ci->Child(j)); child && !CInventoryItem::IsAlive(child->object()))
+                    dead = child->object();
+            if (auto* cell = smart_cast<CUIInventoryCellItem*>(ci); !dead && cell && !CInventoryItem::IsAlive(cell->object()))
+                dead = cell->object();
+            if (!dead)
+            {
+                ++i;
+                continue;
+            }
+            if (CurrentIItem() == dead)
+                SetCurrentItem(nullptr);
+            if (CUIDragDropListEx::m_drag_item)
+                if (auto* drag = smart_cast<CUIInventoryCellItem*>(CUIDragDropListEx::m_drag_item->ParentItem()); drag && drag->object() == dead)
+                    drag->OwnerList()->DestroyDragItem();
+            Msg("! [actor menu] a cell outlived its item: removed from the list");
+            if (RemoveItemFromList(lst, dead))
+                removed = true;
+            else
+                ++i;
+        }
+    }
+    if (removed)
+        UpdateItemsPlace();
+}
+
 bool RemoveItemFromList(CUIDragDropListEx* lst, PIItem pItem)
 { // fixme
     CUICellItem* ci = NULL;

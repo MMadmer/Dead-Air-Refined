@@ -36,7 +36,11 @@ constexpr pcstr DESCRIPTION_KEY = "description";
 namespace
 {
 xr_flat_hash_map<const CInventoryItem*, float> conditionDrainRates;
+// Every item made and not yet destroyed (made and destroyed on the main thread, as the rates above).
+phmap::flat_hash_set<const CInventoryItem*> liveItems;
 }
+
+bool CInventoryItem::IsAlive(const CInventoryItem* item) { return liveItems.contains(item); }
 
 net_updateInvData* CInventoryItem::NetSync()
 {
@@ -47,6 +51,7 @@ net_updateInvData* CInventoryItem::NetSync()
 
 CInventoryItem::CInventoryItem()
 {
+    liveItems.insert(this);
     m_flags.set(Fbelt, FALSE);
     m_flags.set(Fruck, TRUE);
     m_flags.set(FRuckDefault, TRUE);
@@ -70,6 +75,7 @@ CInventoryItem::CInventoryItem()
 
 CInventoryItem::~CInventoryItem()
 {
+    liveItems.erase(this);
     conditionDrainRates.erase(this);
     delete_data(m_net_updateData);
 

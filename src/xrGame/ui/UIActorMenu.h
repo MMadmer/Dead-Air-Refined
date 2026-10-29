@@ -333,6 +333,7 @@ protected:
     bool IsPicked(CUICellItem* cell) const;
     u8 CellPickState(CUICellItem* cell);
     void PrunePicks();
+    void PruneDeadCells();
     void OpenCompare();
     u32 ComparePrice(CInventoryItem& item);
     void UpdatePristineInfo(CUICellItem* cell_item);

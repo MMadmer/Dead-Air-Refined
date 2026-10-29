@@ -52,6 +52,8 @@ struct Linear
 // [ai_errors] of dead_air_x64_ai.ltx; the initial values are the compiled-in defaults of plan 2.5.
 struct Config
 {
+    // Out of combat, a reported enemy farther than this, never seen by the NPC itself, is not one to fight.
+    float report_engage_m{150.f};
     float extrap_s{.6f};
     float extrap_band[4]{.8f, 1.f, 1.2f, 1.4f};
     bool see_me_unknown{true};
@@ -134,6 +136,7 @@ void load_config()
     };
 
     g_cfg.extrap_s = read("extrap_s", g_cfg.extrap_s);
+    g_cfg.report_engage_m = read("report_engage_m", g_cfg.report_engage_m);
     read_floats("extrap_band", g_cfg.extrap_band, 4);
     g_cfg.see_me_unknown = read("see_me_unknown", 1.f) != 0.f;
     g_cfg.see_me_cone_deg = read("see_me_cone_deg", g_cfg.see_me_cone_deg);
@@ -1290,7 +1293,11 @@ void add_candidates(CAI_Stalker& npc, bool in_combat)
         // heard-only enemy is a danger to investigate; one the NPC has seen itself stays a candidate whatever its
         // newest estimate is, as the stock visual memory kept him (r4a5: the merc pair's belief turned into a heard
         // one, and once out of combat they never came back to fight or search).
-        const bool candidate = in_combat || visual_class(belief.e.source) || belief.t_seen_own;
+        // A report of an enemy far off (a mate's sighting, the HQ's relay) alerts a calm NPC and leaves it at its post:
+        // the checkpoint's guards on Cordon went over to the rookies' village after one man seen on a hill there.
+        const bool far_report = !belief.t_seen_own && belief.e.source != Source::seen &&
+            npc.Position().distance_to(believed_position(npc, belief)) > g_cfg.report_engage_m;
+        const bool candidate = in_combat || (visual_class(belief.e.source) && !far_report) || belief.t_seen_own;
         if (belief.enemy && candidate && count < std::size(ids))
             ids[count++] = belief.e.target;
     }

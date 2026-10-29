@@ -80,6 +80,7 @@ struct Config
     u32 bark_pause_hi_ms{15000};
     float sneak_dist{8.f};
     float investigate_same_m{10.f};
+    float investigate_reach_m{100.f};
     u32 investigate_told_ms{30000};
     u32 investigate_max_ms{45000};
     u32 torch_check_ms{1000};
@@ -179,6 +180,7 @@ void load_config()
     }
     cfg.sneak_dist = read("sneak_dist", cfg.sneak_dist);
     cfg.investigate_same_m = read("investigate_same_m", cfg.investigate_same_m);
+    cfg.investigate_reach_m = read("investigate_reach_m", cfg.investigate_reach_m);
     cfg.investigate_told_ms = read_ms("investigate_told_s", cfg.investigate_told_ms);
     cfg.investigate_max_ms = read_ms("investigate_max_s", cfg.investigate_max_ms);
     cfg.torch_check_ms = read_ms("torch_check_s", cfg.torch_check_ms);
@@ -1894,6 +1896,13 @@ bool investigate_leave(CAI_Stalker& npc, bool completed, bool stock_leave)
     {
         start_going(npc, *inv, true);
         return true;
+    }
+    // A danger farther than the reach is watched from where the NPC stands: nobody walks a quarter of a kilometre to a
+    // report or a glimpse (the checkpoint's guards on Cordon left their post for a man seen on a hill).
+    if (distance_xz(npc.Position(), inv->spot) > config().investigate_reach_m)
+    {
+        inv->role = InvestigateRole::hold;
+        return false;
     }
 
     // A mate said he goes, asked to be covered, or the leader sent this NPC: the word of a mate replaces the stock

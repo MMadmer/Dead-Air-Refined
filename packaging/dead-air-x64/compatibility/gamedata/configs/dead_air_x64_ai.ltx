@@ -1302,6 +1302,7 @@ stalker_nebo_3                  = heavy
 ; assumes; the realised position is a disk sample of radius err * realise around the truth, snapped to the level
 ; graph. Estimates age: err grows by age_growth per second since the observation, up to age_cap. The hearing sense
 ; reads the heard_*, hit_*, near_miss_*, muzzle_flash and flashlight keys too.
+report_engage_m                 = 150       ; out of combat a reported enemy farther off, never seen by the NPC, is not fought
 extrap_s                        = 0.6       ; a lost target is extrapolated with its last seen velocity
 extrap_band                     = 0.8, 1.0, 1.2, 1.4 ; extrap_s multiplier by rank band R1..R4
 see_me_unknown                  = 1         ; enemy_sees_me estimate while the enemy is not in own vision
@@ -1978,6 +1979,7 @@ plan_build_stale_s              = 2         ; a build its owner stops asking for
 ; Investigation of a suspicion (profile investigate): pair - one goes and asks a mate he sees to cover him; single -
 ; one goes and says so, mates who hear it hold; none - wait in cover and call out; advance - straight at the source.
 investigate_same_m              = 10        ; a danger this close to the spot under investigation is the same one
+investigate_reach_m             = 100       ; a danger farther off is watched from where the NPC stands, nobody walks there
 investigate_told_s              = 30        ; a mate who said he goes (or asked for cover) is waited for this long
 investigate_max_s               = 45        ; an investigator that has not seen the spot by then gives up
 

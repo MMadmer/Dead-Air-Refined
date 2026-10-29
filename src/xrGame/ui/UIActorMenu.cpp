@@ -235,6 +235,7 @@ void CUIActorMenu::Update()
         UpdatePendingSort();
         SyncInventoryTools();
         PrunePicks();
+        PruneDeadCells();
     }
 
     switch (m_currMenuMode)

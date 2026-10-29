@@ -32,7 +32,20 @@ IC void CLevelManagerTemplate::build_path(const _vertex_id_type start_vertex_id,
 {
     START_PROFILE("Build Path/Level Path");
 
-    THROW(ai().level_graph().valid_vertex_id(start_vertex_id) && ai().level_graph().valid_vertex_id(dest_vertex_id));
+    // An end off the level's graph (an NPC standing off it, a target a script set off it) fails the search like any
+    // other: thrown on the parallel path worker, it took the game down (the Army Warehouses' reports, 1.6.1-1.6.2).
+    if (!ai().level_graph().valid_vertex_id(start_vertex_id) || !ai().level_graph().valid_vertex_id(dest_vertex_id))
+    {
+        static u32 hits = 0;
+        if (++hits <= 5 || hits % 200 == 0)
+            Msg("! Level path: %s asked a path off the level graph (%u -> %u, case %u)",
+                this->m_object ? this->m_object->object().cName().c_str() : "?", start_vertex_id, dest_vertex_id, hits);
+        this->m_failed = true;
+        this->m_current_index = _index_type(-1);
+        this->m_intermediate_index = _index_type(-1);
+        this->m_actuality = false;
+        return;
+    }
 
     inherited::build_path(start_vertex_id, dest_vertex_id);
 

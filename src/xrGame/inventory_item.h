@@ -98,6 +98,9 @@ protected:
 public:
     CInventoryItem();
     virtual ~CInventoryItem();
+    // Is there such an item now (no read of it): a UI cell can learn its item is gone without touching freed memory
+    // (CUIActorMenu::PruneDeadCells).
+    static bool IsAlive(const CInventoryItem* item);
 
 public:
     virtual void Load(LPCSTR section);

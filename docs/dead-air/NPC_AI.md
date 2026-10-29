@@ -463,7 +463,11 @@ and watches for an update. The per-squad step runs the search part at the next m
 
 A suspicion (a glimpse, a heard shot or step, a hit, a report) becomes a danger at the NPC's own estimate. By the
 profile's `investigate`: `pair` - one goes, a mate covers it, a leader sends two men; `single` - the first one done
-holding goes and says so; `none` - wait in cover and call out; `advance` - straight at the source (Monolith).
+holding goes and says so; `none` - wait in cover and call out; `advance` - straight at the source (Monolith). A danger
+farther than `investigate_reach_m` (100 m) is watched from where the NPC stands whatever the style but `advance`, and out
+of combat a reported enemy (a mate's sighting, the HQ's relay) farther than `[ai_errors] report_engage_m` (150 m) that
+the NPC never saw itself alerts it without making it one to fight: the guards of Cordon's checkpoint went over to the
+rookies' village after one man was seen on the hill by it.
 
 ## The Lua side
 
