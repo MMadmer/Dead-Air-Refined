@@ -7,10 +7,13 @@
 --   qa_storm_boot = "wind_seed 1833.7|wind_freeze 1"   commands once the weather is set ("|")
 --   qa_storm_shots = ";hud_weapon 0;hud_weapon 1|r2_ssao st_opt_off;hud_weapon 0"
 --                    one entry per shot (";"), the commands run before it ("|"); default: four plain shots
+--   qa_storm_walk = 0        m/s the actor walks ahead before the shots (moved frame by frame), the rain's wind reported
+--                            while he walks: the sheet must not follow him
 --
 --   tools\qa\Run-WaterQa.ps1 -Name storm -Scenario storm_check -Save qa_meadow -PreCommands 'r__season_weather 0'
 local c = get_console()
 local stage, t0, frames, shot = "start", 0, 0, 0
+local walk_t
 local plan = {}
 
 local function cmd(s) c:execute(s) end
@@ -46,6 +49,26 @@ local function on_update()
 		cmd("qa_rain_state")
 		cmd("qa_snow_state")
 		cmd("qa_climate_state")
+		go((qa_storm_walk or 0) > 0 and "walk" or "next")
+	elseif stage == "walk" then
+		-- The ground under him is the physics' (y as it lands), the step along his heading.
+		local dt = walk_t and (now - walk_t) * 0.001 or 0
+		walk_t = now
+		local dir = device().cam_dir
+		local p = db.actor:position()
+		db.actor:set_actor_position(vector():set(p.x + dir.x * qa_storm_walk * dt, p.y, p.z + dir.z * qa_storm_walk * dt))
+		if now - t0 > 3000 then
+			say("[qa] storm walking " .. qa_storm_walk .. " m/s toward " .. string.format("%.2f %.2f", dir.x, dir.z))
+			cmd("qa_rain_state")
+			-- A walking eye sits a few centimetres off his feet (the head's sway and lean): the camera put 12 cm ahead.
+			local h = dir:getH()
+			level.set_cam_custom_position_direction(vector():set(p.x + dir.x * 0.12, p.y + 1.7, p.z + dir.z * 0.12),
+				vector():set(h, -0.05, 0), 0, false, false)
+			go("walk_eye")
+		end
+	elseif stage == "walk_eye" and now - t0 > 400 then
+		say("[qa] storm eye 12 cm ahead of the feet")
+		cmd("qa_rain_state")
 		go("next")
 	elseif stage == "next" then
 		shot = shot + 1

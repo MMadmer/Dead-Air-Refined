@@ -410,15 +410,20 @@ static class cl_da_fog2 : public R_constant_setup
     }
 } binder_da_fog2;
 
+float da_sky_overcast(); // Blender_Recorder_StandartBinding.cpp
+
 // Skydome tint for the sky-matched haze in combine_1: the dome is painted with the weather
 // sky_color (per-vertex on the dome), NOT env_color - fog that converges to the sky must
-// use the same tint or silhouettes converge to a colour the visible sky never had.
+// use the same tint or silhouettes converge to a colour the visible sky never had. The deck's
+// pass then darkens a fogged overcast sky by w (da_clouds.ps), so the tint carries that too.
 static class cl_da_sky_tint : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
     {
         const auto& env = g_pGamePersistent->Environment().CurrentEnv;
-        cmd_list.set_c(C, env.sky_color.x, env.sky_color.y, env.sky_color.z, 0.f);
+        const float overcast = da_sky_overcast();
+        const float k = 1.f - overcast;
+        cmd_list.set_c(C, env.sky_color.x * k, env.sky_color.y * k, env.sky_color.z * k, overcast);
     }
 } binder_da_sky_tint;
 

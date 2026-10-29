@@ -515,6 +515,16 @@ static float da_cloud_cover_from_weather(const CEnvDescriptorMixer& e)
     return clampr(cover + (0.97f - cover) * clampr(e.rain_density * 1.5f, 0.f, 1.f) * alpha, 0.f, 1.f);
 }
 
+// How far an overcast darkens the sky where the fog hides the deck (da_clouds.ps): none in fair weather, 70 % under
+// a closed storm deck. The haze takes the same share off its sky colour (da_sky_tint, r2.cpp): a fogged tree that
+// converged to the undarkened sky stood out white against the storm's.
+float da_sky_overcast()
+{
+    const float cover = da_cloud_cover_from_weather(g_pGamePersistent->Environment().CurrentEnv);
+    const float t = clampr((cover - 0.4f) / (0.95f - 0.4f), 0.f, 1.f);
+    return 0.7f * t * t * (3.f - 2.f * t);
+}
+
 static class cl_da_cloud_params : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override

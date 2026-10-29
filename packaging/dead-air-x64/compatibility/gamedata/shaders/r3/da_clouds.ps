@@ -1,6 +1,7 @@
 #include "common.h"
 #include "da_clouds_vol.h"
 #include "da_clouds_hist.h"
+#include "da_fog_common.h"
 
 // The deck on the sky: a full-screen pass over the sky pixels (stencil), blended over the
 // skybox as premultiplied colour + transmittance (ONE, SRCALPHA).
@@ -31,8 +32,9 @@ float4 main(v2p I, float4 pos2d : SV_Position) : SV_Target
 	// cloud layer did (black, at the weather's opacity, over the sky down to the horizon): a rain's
 	// or a storm's fog bank hid the deck and left the sky its bright texture, and a storm read as a
 	// dull grey day. Fair weather keeps its sky; the heavier the overcast (the rain closes it,
-	// da_cloud_params.x), the darker.
-	const float overcast = 0.7f * smoothstep(0.4f, 0.95f, da_cloud_params.x);
+	// da_cloud_params.x), the darker. The share comes with the haze's sky tint (r2.cpp, da_sky_overcast),
+	// which takes it off its own colour: a fogged silhouette converges to this darkened sky, not the bright one.
+	const float overcast = da_sky_tint.w;
 	[branch] if (horizon <= 0.0f || da_cloud_params.x <= 0.001f)
 		return float4(0, 0, 0, 1.0f - overcast);
 

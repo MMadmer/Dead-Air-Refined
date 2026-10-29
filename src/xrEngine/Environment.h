@@ -396,10 +396,11 @@ public:
     // Wind velocity (m/s, world space, y = 0) at a point: the global heading turned by the
     // local eddy, the gust-field amplitude, the surface-layer profile for the height above
     // ground, and the directional push of any live motor (a blast ring, a walker). This is
-    // what particles, debris and bodies integrate.
-    Fvector WindAt(const Fvector& pos, float height_above_ground = 1.5f) const;
+    // what particles, debris and bodies integrate. presses = false leaves out the walkers' footprints: the rain
+    // sheet is sampled at the eye, where the actor's own springing-back steps behind him push the air forward.
+    Fvector WindAt(const Fvector& pos, float height_above_ground = 1.5f, bool presses = true) const;
     // Directional push of the live motors at a point (m/s equivalent).
-    Fvector SampleWindMotorsVec(const Fvector& p) const;
+    Fvector SampleWindMotorsVec(const Fvector& p, bool presses = true) const;
     // 0..1 how exposed a point is to the wind: 0 under a roof or indoors, 0.35 in the lee of
     // a wall or a bank (the wind still swirls round), 1 in the open. Two static rays: one up,
     // one upwind. Callers gate their own frequency.

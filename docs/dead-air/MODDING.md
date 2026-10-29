@@ -1614,7 +1614,9 @@ cycle gets scattered fair-weather cumulus; the weather's `rain_density` closes i
 to 0.93). The deck is drawn as a full-screen pass over the sky pixels; the stock cloud dome
 (whose cap never reached the zenith) is no longer used. Where the deck is lost in the
 weather's fog, an overcast still darkens the sky down to the horizon, as that dome did at
-the cycle's opacity: up to 70 % in a storm, nothing in fair weather.
+the cycle's opacity: up to 70 % in a storm, nothing in fair weather. The haze takes the same
+share off the sky colour its fogged silhouettes converge to (`da_sky_tint`, its `w` the share the
+deck's pass reads): converging to the undarkened sky, a storm's far trees stood white against it.
 
 Quality follows the preset like the other preset-driven switches:
 
@@ -2269,7 +2271,8 @@ ripple field at 4.
 
 A drop is born by one ray down its column from the cloud end, and that ray is the whole of what
 the rain knows about roofs. The drop's line (`Item::D`) is solved at birth from the gusting wind at
-the eye (`WindAt`) and the drop's own share of the gust, the ray clears that line, and the drop
+the eye (`WindAt`, without the walkers' footprints: the player's own, a hand's width from the eye,
+pushed the whole sheet the way he walked) and the drop's own share of the gust, the ray clears that line, and the drop
 falls along it and nothing else until it dies where the ray stopped (`Item::Phit`). A gust reaches
 the sheet through births - a drop lives a fraction of a second - so nothing is steered in flight
 and no drop is ever asked again. Two slips rained on the floor of the player's own new-game start
