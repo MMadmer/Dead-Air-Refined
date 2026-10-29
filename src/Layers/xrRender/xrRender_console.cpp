@@ -570,6 +570,8 @@ int ps_r__shrubs_cut = 1;
 // soft ends (da_veg.cpp emit_thinned), 2 the crowns' wood prefixes' (da_veg_internal.h wood_runs), 4 the trees' stock
 // wood morphs (the ring levels and the patches' tessellation, da_trees.cpp).
 int ps_r__veg_soft = 7;
+// QA: the plants with more elements to bend than axes bent once an axis (da_veg.cpp choose_axis_bends); 0 for an A/B.
+int ps_r__veg_axis_bends = 1;
 // QA: the wood's bark in false colour (TREES.md; da_shrub_wood.ps, its main's last block and shrub_dbg_*): 1 what draws
 // it, 2 its counts of tiles round the stem, 3 the upper bark's zone, 4 the first mapping's checker, 5 the second's.
 int ps_r__dbg_wood = 0;
@@ -2455,6 +2457,7 @@ void xrRender_initconsole()
     CMD2(CCC_DaCall, "r__autolod_stats", &da_autolod_stats);
     CMD4(CCC_RuntimeInteger, "r__shrubs_cut", &ps_r__shrubs_cut, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__veg_soft", &ps_r__veg_soft, 0, 7);
+    CMD4(CCC_RuntimeInteger, "r__veg_axis_bends", &ps_r__veg_axis_bends, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__dbg_wood", &ps_r__dbg_wood, 0, 6);
     CMD4(CCC_RuntimeFloat, "r__trees_lod_scale", &ps_r__trees_lod_scale, 0.05f, 20.f);
     CMD4(CCC_RuntimeFloat, "r__trees_detail", &ps_r__trees_detail, 0.25f, 8.f);

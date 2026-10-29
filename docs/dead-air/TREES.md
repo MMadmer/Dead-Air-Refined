@@ -704,6 +704,8 @@ youth, dead, red, the hemisphere ratio) and `da_trees_bb_mark` (cleared: its cel
   the trees' leaves are 1.08 ms, 0.82 of it their vertices and rasterizing); 131072 the stock patches untessellated
   everywhere.
 - `r__trees_cut 0|1` (QA, default 1): 0 draws the view as the CPU cut it, without the GPU cut - an A/B.
+- `r__veg_axis_bends 0|1` (QA, default 1): 0 bends every plant by its chunks' slots, none once an axis (SHRUBS.md, "Bends
+  by axis"); `r__trees_stats` prints the frame's plants bent by their axes and their axis records.
 - `r__dbg_wood 0..6` (QA): the wood's bark in false colour (`da_shrub_wood.ps`, its main's last block and
   `shrub_dbg_*`) - 1 what draws it (a
   tube or grafted wood green, a stock patch red, a cut end white; the second mapping's weight blue over it, a patch's

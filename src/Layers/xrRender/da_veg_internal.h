@@ -26,7 +26,7 @@ class FTreeVisual;
 namespace da_veg
 {
 // ---- The layout of the shaders' buffers (r3\da_shrub_common.h mirrors every number here) ---------------------
-constexpr u32 kRec = 32, kAxisRec = 32, kInstRec = 96, kChunkRec = 16, kChunk = 64;
+constexpr u32 kRec = 32, kAxisRec = 32, kInstRec = 112, kChunkRec = 16, kChunk = 64;
 // The species rows of the one tables buffer: the shrubs' first, the trees' after them (a record's species is 8 bits).
 constexpr u32 kShrubSpecies = 48, kTreeSpecies = 80, kSpecies = kShrubSpecies + kTreeSpecies;
 constexpr u32 kProfF4 = 22, kSeasF4 = 16;
@@ -50,6 +50,10 @@ constexpr u32 kMaxInstances = 16384, kMaxChunks = 1u << 18;
 // frame's and the view's a frame back (past these the vertex shaders walk the chain of axes themselves: a forest's
 // shadow passes ran past 16384 chunks).
 constexpr u32 kBendRec = 36, kBendMaxChunks = 1u << 15, kBendMaxViewChunks = 1u << 14;
+// The plants bent by their axes (r3\da_shrub_axis_bend.cs): a plant with at least as many elements to bend this frame as
+// its template has axes has each axis bent once (its chunks' slot field kChunkAxes, the record's word 24 its first axis
+// record); the most axis records of a frame and of the view's a frame back, a job's record and the most jobs.
+constexpr u32 kChunkAxes = 0xFFFFu, kAxisBendMax = 1u << 20, kAxisBendViewMax = 1u << 19, kAxisJobRec = 16, kMaxAxisJobs = 1u << 16;
 // The culling grid's cell (m).
 constexpr float kCell = 32.f;
 // Instance record flags (word 12, bits 8..15): a dead plant, a tree (the wide element layout, the trunk sway), a Red
@@ -69,8 +73,8 @@ constexpr u32 kAuxSlot = 32;
 
 // The vertex classes of the index buffer, one chunk (64 elements) each: five-, eight-, sixteen- and thirty-two-sided
 // tube segments (two rings, each closing on a copy of its first vertex for the bark's wrap), a leaf's hull (base,
-// three pairs, tip), a quad, a near spray's six hulls, its six diamonds, a near needle sprig's two crossed quads, a
-// triangle (the trees' stock patches).
+// three pairs, tip), a quad, a near spray's six hulls, a near needle sprig's two crossed quads, a triangle (the trees'
+// stock patches, a far leaf: r3\da_shrub_leaf_vs.h shrub_leaf_corner), a spray's six far leaves' triangles.
 enum VertexClass : u32
 {
     vcTube,
@@ -78,11 +82,11 @@ enum VertexClass : u32
     vcLeaf8,
     vcQuad,
     vcSpray,
-    vcSpray4,
     vcQuad2,
     vcTube16,
     vcTube32,
     vcTri,
+    vcSpray3,
     vcCount
 };
 // The most leaves a near spray stands as (r3\da_shrub_leaf_vs.h).
@@ -104,7 +108,7 @@ enum Draw : u32
     drBlob,
     drSpray,
     drSprayCut,
-    drSpray4,   // a spray past d0: its own leaves as textured quads
+    drSpray4,   // a spray past d0: its own leaves, a textured triangle each
     drWood8,    // the wood within d0: eight-sided tubes
     drNeedle2,  // a needle sprig near: two crossed quads, a brush round its shoot
     // The trees': the grafted wood of sixteen sides near, the stock wood's tubes (its rings with their profiles) of
@@ -122,8 +126,8 @@ enum Draw : u32
 };
 constexpr u32 kDrawKind[drCount] = {kKindWood, kKindLeaf, kKindLeaf, kKindLeaf, kKindBloom, kKindCluster, kKindBlob, kKindLeaf,
     kKindLeaf, kKindLeaf, kKindWood, kKindLeaf, kKindWood, kKindStock, kKindStock, kKindStock, kKindPatch, kKindWood, kKindStock, kKindPatch};
-constexpr VertexClass kDrawClass[drCount] = {vcTube, vcLeaf8, vcQuad, vcQuad, vcQuad, vcQuad, vcQuad, vcSpray, vcSpray,
-    vcSpray4, vcTube8, vcQuad2, vcTube16, vcTube32, vcTube16, vcTube8, vcTri, vcTube, vcTube8, vcTri};
+constexpr VertexClass kDrawClass[drCount] = {vcTube, vcLeaf8, vcQuad, vcTri, vcQuad, vcQuad, vcQuad, vcSpray, vcSpray,
+    vcSpray3, vcTube8, vcQuad2, vcTube16, vcTube32, vcTube16, vcTube8, vcTri, vcTube, vcTube8, vcTri};
 // The order a pass's draws take the frame's chunks in: a full chunk buffer cuts the last ones, so the stock wood and its
 // patches come first, the wood next, the foliage after (cut in the enum's order, a near tree lost its trunk and limbs
 // and kept its twigs floating).
@@ -598,6 +602,10 @@ u32 frame_chunks();
 u32 frame_bends();
 u32 bend_capacity();
 u32 bend_view_capacity();
+// The frame's plants bent by their axes, their axis records and the view's of them.
+u32 axis_bend_plants();
+u32 axis_bend_records();
+u32 axis_bend_view_records();
 u32 lights_cast();
 u32 lights_offered();
 u32 lights_near();

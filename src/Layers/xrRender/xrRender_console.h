@@ -213,6 +213,7 @@ extern ECORE_API float ps_r__autolod_px; // r__autolod_px: the deviation a level
 extern ECORE_API float ps_r__autolod_scale; // r__autolod_scale (QA): the screen sizes scaled
 extern ECORE_API int ps_r__shrubs_cut; // r__shrubs_cut (QA): 0 = the shrubs' view draws as the CPU chose it, without the GPU cut
 extern ECORE_API int ps_r__veg_soft; // r__veg_soft (QA): the vegetation's soft switches, bits (1 thinned, 2 wood, 4 morphs)
+extern ECORE_API int ps_r__veg_axis_bends; // r__veg_axis_bends (QA): 0 = every plant bends by its chunks' slots, none by its axes
 extern ECORE_API int ps_r__dbg_wood; // r__dbg_wood (QA): the wood's bark in false colour (da_shrub_wood.ps shrub_dbg_*)
 extern ECORE_API float ps_r__trees_lod_scale; // r__trees_lod_scale (QA): the trees' tier distances scaled (da_trees.cpp tiers)
 extern ECORE_API float ps_r__shrubs_far_detail; // r__shrubs_far_detail (QA): the shrubs' leaf tier longer

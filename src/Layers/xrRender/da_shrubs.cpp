@@ -932,7 +932,7 @@ public:
         {
             if (leaves)
             {
-                // The blades (a spray's own leaves) give way to diamonds (a spray's leaves as diamonds) over the band past
+                // The blades (a spray's own leaves) give way to its far leaves (a textured triangle each) over the band past
                 // the blade distance, element by element, as every tier does. A spray stands as its leaves in both: a quad
                 // turned to the eye showed all its leaves face on where the near ones turn every way, and a bush read
                 // twice as dense and in flakes until one walked up to it. Its pixel floor is its leaves'.

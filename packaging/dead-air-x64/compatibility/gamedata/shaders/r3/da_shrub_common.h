@@ -28,7 +28,7 @@ ByteAddressBuffer	da_shrub_aux	: register(t6);	// the trees' rings and patch ver
 
 #define SHRUB_REC			32
 #define SHRUB_AXIS_REC		32
-#define SHRUB_INST_REC		96
+#define SHRUB_INST_REC		112
 #define SHRUB_CHUNK			64		// elements per chunk
 #define SHRUB_BEND_REC		36		// a chunk slot's bend (the frame's slots, then the view's a frame back)
 #define SHRUB_BLOB_GROW		1.4f	// a blob's radius over its clusters' spread (da_shrub_gen.cpp kBlobGrow)
@@ -70,6 +70,8 @@ uniform float4	da_shrub_sun;	// xyz towards the sun (world), w snow on the branc
 uniform float4	da_shrub_up;
 uniform float4	da_shrub_bend_cap;	// x the bend buffer's slots of this frame, y of a frame back (the view's); past them the
 							// vertex shaders walk the chain of axes themselves
+uniform float4	da_shrub_bend_axis;	// the plants bent by their axes (da_shrub_axis_bend.cs): x the bend buffer's first axis
+							// record, y the axis records of this frame, z of them a frame back (the view's plants first)
 
 // ---- Tables ----------------------------------------------------------------------------------------------
 // The shrubs' species rows 0..47, the trees' 48..127.
@@ -400,7 +402,8 @@ float	shrub_elem_hash	(shrub_elem E, uint kind)
 // sizes' scale (f16) | seed (16); then the wind at its root (heading, push) now and a frame back (f16 pairs); then a
 // tree's trunk sway on its stock root's oscillator (da_trees.cpp record_tail): x the downwind push per metre now, y a
 // frame back (f16 pairs), z the tree's height above its root | its climbable top (f16), w the template's first aux slot
-// (24) | its youth (8).
+// (24) | its youth (8); then x the plant's first record in the frame's axis bends (da_shrub_axis_bend.cs, all ones
+// none: its chunks bend by their slots), yzw unused.
 struct shrub_inst
 {
 	float3x4	xf;
@@ -425,6 +428,7 @@ struct shrub_inst
 	float2		tpush, tpush_prev;
 	float		tree_h, climb_top;
 	uint		aux0;
+	uint		axis_bend;
 };
 
 shrub_inst	shrub_inst_load	(uint index)
@@ -458,6 +462,7 @@ shrub_inst	shrub_inst_load	(uint index)
 	I.tree_h = hc.x; I.climb_top = hc.y;
 	I.aux0 = t.w & 0xFFFFFFu;
 	I.youth = float(t.w >> 24) / 255.0f;
+	I.axis_bend = da_shrub_inst.Load(base + 96u);
 	return I;
 }
 
@@ -478,6 +483,18 @@ float4	shrub_seas_lead	(uint sp, float lead)
 // The share of a tree's leaves that hang on withered through the winter (marcescence): its species' on a sapling, a
 // twelfth of it on an old tree.
 float	shrub_marcescent	(shrub_inst I, uint sp)	{ return I.tree ? shrub_prof(sp, 18).x * lerp(0.08f, 1.0f, I.youth) : 0.0f; }
+// A leaf's constants to its pixels (da_shrub_leaf_vs.h, da_shrub_leaf_ps.h): four 8-bit values, the colour's three at
+// half scale (a lit, snowed leaf's albedo in the G-buffer's encoding runs a little over one).
+uint	shrub_leaf_u8x4	(float3 rgb, float w)
+{
+	const uint4 q = uint4(round(saturate(float4(rgb * 0.5f, w)) * 255.0f));
+	return q.x | (q.y << 8) | (q.z << 16) | (q.w << 24);
+}
+float4	shrub_leaf_u8x4_f	(uint v)
+{
+	return float4(float3(v & 0xFFu, (v >> 8) & 0xFFu, (v >> 16) & 0xFFu) * (2.0f / 255.0f), float(v >> 24) * (1.0f / 255.0f));
+}
+
 // The far tiers' plant state in one interpolated value (da_shrub_mass.h shrub_mass_unpack): 0 alive, 1 dead, 2 a Red
 // Forest pine's red needles, the marcescent share and the spring lead at eight bits each.
 float	shrub_mass_state	(shrub_inst I, uint sp)
@@ -509,6 +526,15 @@ float3	shrub_world_nrm	(shrub_inst I, float3 n)
 #define SHRUB_CHUNK_RIGID	0x80000000u
 #define SHRUB_CHUNK_FAR		0x40000000u
 #define SHRUB_SLOT_RIGID	0xFFFFFFFFu
+// A chunk of a plant bent by its axes: its slot field all ones, its elements read their axis's record.
+#define SHRUB_CHUNK_AXES	0xFFFFu
+#define SHRUB_SLOT_AXIS		0xFFFFFFFEu
+uint	shrub_chunk_slot	(uint4 C, uint local)
+{
+	if ((C.z & SHRUB_CHUNK_RIGID) != 0u)
+		return SHRUB_SLOT_RIGID;
+	return (C.w >> 16) == SHRUB_CHUNK_AXES ? SHRUB_SLOT_AXIS : (C.w >> 16) * SHRUB_CHUNK + local;
+}
 struct shrub_vtx
 {
 	bool		valid;
@@ -548,7 +574,7 @@ shrub_vtx	shrub_vertex	(uint vid, uint iid, uint kind)
 		cut_fade = float(word >> 24) / 255.0f;
 	}
 	const uint4 C = da_shrub_chunks.Load4(chunk * 16u);
-	V.slot = (C.z & SHRUB_CHUNK_RIGID) != 0u ? SHRUB_SLOT_RIGID : (C.w >> 16) * SHRUB_CHUNK + local;
+	V.slot = shrub_chunk_slot(C, local);
 	V.aux = (C.z & SHRUB_CHUNK_RIGID) != 0u ? f16tof32(C.w >> 16) : 0.0f;
 	V.far = (C.z & SHRUB_CHUNK_FAR) != 0u;
 	V.thin = 1.0f - float((C.z >> 24) & 0x3Fu) / 63.0f;
@@ -761,13 +787,28 @@ void	shrub_bend	(inout float3 q, inout float3 n, inout float3 t, uint slot, uint
 	// reshuffled the wet patches under them.)
 	[branch] if (slot == SHRUB_SLOT_RIGID || da_shrub_draw.w > 3.5f)
 		return;
-	const uint cap = uint(prev ? da_shrub_bend_cap.y : da_shrub_bend_cap.x);
-	[branch] if (slot >= cap)
+	uint b;
+	[branch] if (slot == SHRUB_SLOT_AXIS)
 	{
-		shrub_bend_chain(q, n, t, axis, s, I, prev);
-		return;
+		// (A plant bent by its axes: the record of the element's axis, this frame's or a frame back.)
+		const uint r = I.axis_bend + axis;
+		[branch] if (I.axis_bend == 0xFFFFFFFFu || r >= uint(prev ? da_shrub_bend_axis.z : da_shrub_bend_axis.y))
+		{
+			shrub_bend_chain(q, n, t, axis, s, I, prev);
+			return;
+		}
+		b = (uint(da_shrub_bend_axis.x) + (prev ? uint(da_shrub_bend_axis.y) : 0u) + r) * SHRUB_BEND_REC;
 	}
-	const uint b = (prev ? uint(da_shrub_bend_cap.x) + slot : slot) * SHRUB_BEND_REC;
+	else
+	{
+		const uint cap = uint(prev ? da_shrub_bend_cap.y : da_shrub_bend_cap.x);
+		[branch] if (slot >= cap)
+		{
+			shrub_bend_chain(q, n, t, axis, s, I, prev);
+			return;
+		}
+		b = (prev ? uint(da_shrub_bend_cap.x) + slot : slot) * SHRUB_BEND_REC;
+	}
 	const float4 Q = asfloat(da_shrub_bend.Load4(b));
 	const float3 T = asfloat(da_shrub_bend.Load3(b + 16u));
 	const uint2 kA = da_shrub_bend.Load2(b + 28u);

@@ -150,7 +150,7 @@ void	main	(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 		[branch] if ((cls <= CUT_WOOD || cls == CUT_MASS || cls == CUT_KEEP) && (C.z & SHRUB_CHUNK_RIGID) == 0u)
 		{
 			float3 n = float3(0.0f, 1.0f, 0.0f), t = float3(1.0f, 0.0f, 0.0f);
-			shrub_bend(w, n, t, (C.w >> 16) * SHRUB_CHUNK + local, E.axis, s, I, false);
+			shrub_bend(w, n, t, shrub_chunk_slot(C, local), E.axis, s, I, false);
 		}
 		[branch] if (I.tree)
 			w = shrub_tree_sway(w, I, shrub_root_height(I, w_rest), false);

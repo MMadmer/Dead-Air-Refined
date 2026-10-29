@@ -28,25 +28,29 @@ struct v2p_shrub_leaf
 #ifdef SHRUB_SHADOW
 	float4	tex			: TEXCOORD0;	// u, v, layer, flags (shrub_leaf_flags)
 #else
-	float4	hpos_cur	: TEXCOORD0;
-	float4	hpos_prev	: TEXCOORD1;
-	float4	pv_u		: TEXCOORD2;	// view-space position, across the blade (-1..1)
-	float4	n_v			: TEXCOORD3;	// face normal (view space, the upper side), along the blade (0..1)
-	float4	s_g			: TEXCOORD4;	// side (view space, toward the texture's +u), gloss
-	float4	alb_h		: TEXCOORD5;	// upper albedo (G-buffer encoding), hemi x occlusion
-	float4	und_t		: TEXCOORD6;	// underside albedo, translucency
-	float4	tex			: TEXCOORD7;	// u, v, layer, kind (SHRUB_LEAF_*) + 8 if mirrored + 16 x bite (0..15)
-	float4	twig		: TEXCOORD8;	// a card's twig albedo (G-buffer encoding), the leaf's size on the screen (px)
-	float4	crown		: TEXCOORD9;	// the crown's normal (view space), w its share of the shading normal
-	float	fold		: TEXCOORD10;	// the fold along the midrib (rad: the halves turned up), shaded
+	float3	hpos_cur	: TEXCOORD0;	// the clip position's x, y, w (da_velocity's)
+	float3	hpos_prev	: TEXCOORD1;
+	float3	pv			: TEXCOORD2;	// view-space position
+	float2	uv			: TEXCOORD3;	// the leaf texture's
+	// The leaf's constants, flat: a leaf of a few pixels is a pair of triangles, and its eleven interpolated vectors' set-up
+	// was most of its cost. x the face normal (view space, the upper side), y the side (view space, toward the texture's
+	// +u), z the crown's normal (view space), all octahedral; w the upper albedo (G-buffer encoding) and hemi x occlusion
+	// (shrub_leaf_u8x4).
+	nointerpolation uint4	a	: TEXCOORD4;
+	// x the underside albedo and the translucency, y a card's twig albedo and the layer, z the leaf's width on the screen
+	// (px) and the gloss (f16 each), w the flags (kind + 8 if mirrored + 16 x bite) and the fold along the midrib (rad, f16).
+	nointerpolation uint4	b	: TEXCOORD5;
 #endif
 };
 
 // The leaf's corner: x across (-1..1 of the texture's width), y along (0 base .. 1 tip). The hull: four rows of a
 // pair (the base, two rows at the texture's places, the tip) at the widths that hold the texture's outline; a
-// quad: the texture's square.
-float2	shrub_leaf_corner	(uint corner, bool quad, uint s)
+// quad: the texture's square; a triangle: the one round the square (the pixel shaders cut the leaf out of it as out of
+// the square).
+float2	shrub_leaf_corner	(uint corner, bool quad, uint s, bool tri)
 {
+	if (tri)
+		return corner == 0u ? float2(-2.0f, 0.0f) : (corner == 1u ? float2(2.0f, 0.0f) : float2(0.0f, 2.0f));
 	if (quad)
 		return float2((corner & 1u) != 0u ? 1.0f : -1.0f, corner >= 2u ? 1.0f : 0.0f);
 	const float4 H0 = shrub_prof(s, 9), H1 = shrub_prof(s, 10);
@@ -67,7 +71,7 @@ v2p_shrub_leaf	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 	const uint per = uint(da_shrub_draw.x);
 	// Near, a spray stands as its leaves: leaf j of the element, each its own hash, a little of its own season.
 	// (Past d0 the same leaves stand as quads: four vertices each, the farther spray draw.)
-	const uint lv = per == 4u * SHRUB_SPRAY_LEAVES ? 4u : 8u;
+	const uint lv = per == 4u * SHRUB_SPRAY_LEAVES ? 4u : (per == 3u * SHRUB_SPRAY_LEAVES ? 3u : 8u);
 	const bool spray3 = per == lv * SHRUB_SPRAY_LEAVES;
 	const uint j = spray3 ? V.corner / lv : 0u;
 	// The quad draws: the far quads (drLeafCut) and the near lobed sprays' quads (drSprayCut); a near needle sprig's two
@@ -207,13 +211,17 @@ v2p_shrub_leaf	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 		nrm = normalize(cross(dir, side));
 	}
 
-	const float2 c = shrub_leaf_corner(corner, cut || cross2 || (spray3 ? lv : per) == 4u, sp);
+	// (The far quads' and a far spray's leaves: one triangle each, half a quad's primitives - a leaf of a few pixels was
+	// a pair of triangles, and the leaves cost their setting up more than their pixels.)
+	const bool tri = (spray3 ? lv : per) == 3u;
+	const float2 c = shrub_leaf_corner(corner, cut || cross2 || (spray3 ? lv : per) == 4u, sp, tri);
 	// The blade's shape: the midrib drooping to the tip. Its fold along the midrib (a compound leaf's along its rachis)
 	// is shaded (the pixel shader turns each half's normal up toward the midrib): the hull has no vertex on the midrib
 	// to fold the geometry about, and a quad's lifted halves floated the leaf off its petiole.
 	const float droop = round_kind ? 0.0f : P5.x;
 	const float fold = round_kind ? 0.0f : P1.w;
-	float3 off = dir * (c.y * Ll) - nrm * (droop * Ll * c.y * c.y) + side * (c.x * 0.5f * Wl);
+	// (A triangle's plane droops to the tip as the leaf does: its apex past the tip a straight line on.)
+	float3 off = dir * (c.y * Ll) - nrm * (droop * Ll * c.y * (tri ? 1.0f : c.y)) + side * (c.x * 0.5f * Wl);
 	// The texture: the species' leaf a or b (a far spray's billboard its card), mirrored by the leaf's own hash.
 	const float layer = card ? T8.z : shrub_leaf_layer(sp, hash);
 	const float mirror = frac(hash * 11.3f) < 0.5f ? -1.0f : 1.0f;
@@ -262,10 +270,10 @@ v2p_shrub_leaf	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 			qp = shrub_tree_sway(qp, I, h_rest, true);
 	}
 	O.hpos = mul(m_WVP, float4(q, 1.0f));
-	O.hpos_cur = mul(m_WVP_nojit, float4(q, 1.0f));
-	O.hpos_prev = mul(m_WVP_prev, float4(qp, 1.0f));
-	O.pv_u = float4(mul(m_WV, float4(q, 1.0f)).xyz, c.x);
-	O.n_v = float4(mul((float3x3)m_WV, n), c.y);
+	O.hpos_cur = mul(m_WVP_nojit, float4(q, 1.0f)).xyw;
+	O.hpos_prev = mul(m_WVP_prev, float4(qp, 1.0f)).xyw;
+	O.pv = mul(m_WV, float4(q, 1.0f)).xyz;
+	O.uv = uv;
 
 	// Colour: the season's, per leaf; the underside lighter and, for the willows' silvery ones, bluer.
 	float4 col = shrub_leaf_colour_k(sp, K0, rank, fall, light, hash, 0.0f);
@@ -286,24 +294,24 @@ v2p_shrub_leaf	main	(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 	// near cascade, the self-shadow its shadow maps lose.
 	const float4 cl = shrub_crown_light(light, sp, false, col.rgb);
 	const float far_k = shrub_far_shade(light, view_z);
-	O.alb_h = float4(shrub_to_albedo(upper * cl.yzw * far_k), saturate(I.hemi) * cl.x);
+	const uint alb_h = shrub_leaf_u8x4(shrub_to_albedo(upper * cl.yzw * far_k), saturate(I.hemi) * cl.x);
 	// (A withered leaf is dry and thick: little light through it - backlit at the living leaves' share it glowed red.)
-	O.und_t = float4(shrub_to_albedo(under * cl.yzw * far_k), shrub_translucency(P1.x * (withered ? 0.15f : lerp(1.0f, 0.6f, col.w)), to_eye));
+	const uint und_t = shrub_leaf_u8x4(shrub_to_albedo(under * cl.yzw * far_k),
+		shrub_translucency(P1.x * (withered ? 0.15f : lerp(1.0f, 0.6f, col.w)), to_eye));
 	// The G-buffer's gloss scales the sun's specular five times over (combine_1.ps): the species' cuticle gloss
 	// (0 matte .. 0.4 a cherry's) maps to a few hundredths, as the blades' (da_grass_blades.cpp row 14).
 	// A needle brush's shine scatters over its needles' every angle: a third of a blade's.
 	const float gloss = (0.01f + 0.075f * P1.y) * lerp(1.0f, 0.3f, col.w) * lerp(1.0f, 0.5f, smoothstep(10.0f, 40.0f, view_z))
 		* (kind == SHRUB_LEAF_NEEDLES ? 0.35f : 1.0f);
-	// The texture's +u in view space (a mirrored leaf's runs the other way).
-	O.s_g = float4(mul((float3x3)m_WV, t) * mirror, gloss);
-	// (Its bite: 0..15 by its hash, the pixel shader bites the margin of the low few.)
-	O.tex = float4(uv, layer, shrub_leaf_flags(spray3 ? SHRUB_LEAF_SIMPLE : kind, mirror, hash));
-	// A card's or a sprig's twig: the young twig colour in the crown's light.
-	O.twig = float4(shrub_to_albedo(shrub_seas(sp, 10).rgb * cl.yzw * far_k), px_w);
-	// Part of the light's turn across the bush is the crown's (the production foliage's bent normals): a third near,
-	// where each leaf's own facing and relief read, half from 15 m.
-	O.crown = float4(mul((float3x3)m_WV, normalize(shrub_world_nrm(I, crown_t))), lerp(0.3f, 0.5f, smoothstep(5.0f, 15.0f, view_z)));
-	O.fold = fold;
+	// The texture's +u in view space (a mirrored leaf's runs the other way). The crown's normal: part of the light's turn
+	// across the bush is the crown's (the production foliage's bent normals; its share by the depth, the pixel shader's).
+	O.a = uint4(shrub_oct_pack(normalize(mul((float3x3)m_WV, n))), shrub_oct_pack(normalize(mul((float3x3)m_WV, t) * mirror)),
+		shrub_oct_pack(normalize(mul((float3x3)m_WV, shrub_world_nrm(I, crown_t)))), alb_h);
+	// (Its bite: 0..15 by its hash, the pixel shader bites the margin of the low few.) A card's or a sprig's twig: the
+	// young twig colour in the crown's light.
+	const uint flags = uint(shrub_leaf_flags(spray3 ? SHRUB_LEAF_SIMPLE : kind, mirror, hash) + 0.5f);
+	O.b = uint4(und_t, (shrub_leaf_u8x4(shrub_to_albedo(shrub_seas(sp, 10).rgb * cl.yzw * far_k), 0.0f) & 0xFFFFFFu) | (uint(layer + 0.5f) << 24),
+		f32tof16(px_w) | (f32tof16(gloss) << 16), flags | (f32tof16(fold) << 16));
 	return O;
 #endif
 }

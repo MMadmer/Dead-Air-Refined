@@ -256,7 +256,17 @@ a translation - and for the view's elements the same a frame back (the motion ve
 record instead of walking the chain of axes for every vertex (a near willow's sprays walked it for each of their
 forty-eight vertices, twice: a millisecond of vertex work). The buffer (36 bytes a slot) is sized in `Calculate`
 with a quarter's headroom for the local lights' chunks appended later and never reallocated later in the frame;
-slots past it (a frame of more chunks than it grew to) walk the chain themselves. The main pass's vertex shaders
+slots past it (a frame of more chunks than it grew to) walk the chain themselves. **Bends by axis** (1.6.3,
+`da_shrub_axis_bend.cs`, `da_veg.cpp` `choose_axis_bends`): every element of a twig - its leaves, its segments, its
+fruit - came out of that pass with the very same record, its own walk of the same chain; a plant whose chunks (every
+pass's) bend at least as many elements as its template has axes - a near tree's leaves and twigs, a bush's sprays - has
+each axis bent once instead (one lane an axis, a job a run of 64 of one plant's), its chunks take no slot (their slot
+field all ones) and its elements read their axis's record (the instance record's word 24 its first one; the view's
+plants first, their records a frame back after them). A shared transform cannot tear a leaf off: the leaves of one
+twig read the record they each computed alike before. Cordon village (Extreme, the four headings of
+`tools/qa/water/veg_cost.lua`): the bending chunks 31 200 -> 6 000, `trees_bend` 0.64 -> 0.25 ms a heading (DirectX 11),
+0.58 -> 0.2 (DirectX 12), 0.95 -> 0.32 (Vulkan); the local lights' casters a tenth of a millisecond; the frame 0.4-1 ms.
+`r__veg_axis_bends 0` (QA) bends every plant by its slots. The main pass's vertex shaders
 drop an element out of the view with all its reach (its size, the pixel floor's growth and the most the wind can
 carry it; the side planes' distances by the projection's own scales, so a scope's narrow view culls nothing it
 shows) before any of that. **Ray tracing** (DirectX 12): the shrubs live in the frame's buffers and in no
@@ -306,6 +316,18 @@ Default, 1.3 on High, 1 on Extreme; `r__shrubs_far_detail` divides them, QA - at
 bush stood in clusters from ten metres on, their cells a mosaic at 25 m; 0.1-0.25 ms); its clusters draw it from there. A
 spray drawn as one quad turned to the eye (the first version) showed all its leaves face on where the near ones
 turn every way, and a bush read twice as dense and in flakes until one walked up to it.
+
+**The far leaves' triangles and their flat constants** (1.6.3). A leaf past the hulls is a few pixels: its two triangles'
+setting up cost more than its pixels (behind the near poplar the trees' leaves were 1.1 ms, 0.84 of it before the pixel
+shader, most of that the vertex shader's eleven interpolated vectors and the primitives themselves - working each leaf
+out once instead of at each of its four vertices bought a tenth of it). The far quads (`drLeafCut`) and a far spray's
+leaves (`drSpray4`) are one triangle each, round the texture's square (`shrub_leaf_corner`: twice its area, the pixel
+shaders cutting the leaf out of it as out of the square; its plane drooping to the tip in a straight line), and the
+leaf's constants reach its pixels flat (`nointerpolation`: the normals and the side octahedral, the albedos, the
+translucency, the twig and the hemi in bytes, the colour's at half scale, the gloss, the width and the fold in halves)
+beside its interpolated position, texture coordinates and the two clip positions' x, y, w: eleven floats where it was
+forty-five. Cordon village at the eye (Extreme, DirectX 11, four headings): the trees' leaves 0.84 -> 0.6 ms a heading,
+the shrubs' 0.48 -> 0.35, the look the same.
 
 **Textures** (`tools/shrubs/textures`: our own procedural sets, no photographs). **Leaves**: 89 layers of 512 px
 (BC7, two arrays), one per leaf of a species - an `a` and often a `b` leaf, a spray's card (its stretch of shoot
@@ -578,6 +600,7 @@ of small cream fertile florets ringed by large flat white sterile flowers.
   floor still its distance's; -1 as drawn.
 - `r__shrubs_lod_scale <0.05..20>` (QA, default 1): scales the blade distance (the tiers' calibration).
 - `r__shrubs_cut 0|1` (QA, default 1): 0 draws the shrubs' view as the CPU chose it, without the GPU cut - an A/B.
+- `r__veg_axis_bends 0|1` (QA, default 1): 0 bends every plant, the trees too, by its chunks' slots (none by its axes).
 - `r__dbg_shrubs <mask>` (QA): hides draws - 1 wood, 2 every leaf draw, 4 blooms, 8 clusters, 16 blobs, 32 the
   shadow and rain passes, 64 the blades, 128 the cut quads, 256 the sprays.
 

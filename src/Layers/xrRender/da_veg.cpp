@@ -154,6 +154,17 @@ struct State
     u32 bend_n{}, bend_view_n{};
     bool bend_failed{}, bend_ready{};
     xr_vector<BendBlock> bend_blocks;
+    // The plants bent by their axes (r3\da_shrub_axis_bend.cs): each frame record's template axes, its population and
+    // its first axis record (~0u: its chunks bend by their slots); the jobs (four words: the record, its first axis, up to
+    // 64 axes, 1 in the view) by population; the axis records this frame and the view's plants' of them (their records a
+    // frame back follow), and the bend buffer's room past the slots for both.
+    ref_shader s_axis_bend;
+    GpuBuffer axis_jobs_b;
+    xr_vector<u32> rec_axes, rec_axis;
+    xr_vector<u8> rec_pop;
+    xr_vector<u32> axis_jobs;
+    u32 axis_jobs_first[kPops]{}, axis_jobs_count[kPops]{};
+    u32 axis_n{}, axis_view_n{}, axis_cap{}, axis_view_cap{};
     // The trees' GPU cut (r3\da_tree_cut.cs, da_tree_cut_args.cs): its candidate chunks in the frame's chunk buffer, their
     // routes, the words each draw took and its draws' arguments; each draw's list (its first word past the chunk records,
     // its room in whole instances, the vertex class's indices an instance and first index) and the room its candidates
@@ -1001,6 +1012,11 @@ u32 frame_record(Population& P, u32 i)
     wind(L.wind_field, rec[16], rec[17]);
     wind(L.wind_field_prev, rec[18], rec[19]);
     P.record_tail(i, rec + 20);
+    // (Its axis records, if the frame bends it by its axes: choose_axis_bends.)
+    rec[24] = ~0u;
+    g.rec_axes.push_back(T.axis_count);
+    g.rec_axis.push_back(~0u);
+    g.rec_pop.push_back(u8(P.index));
     const size_t at = g.inst_records.size();
     g.inst_records.resize(at + kInstRec);
     CopyMemory(g.inst_records.data() + at, rec, kInstRec);
@@ -1148,13 +1164,63 @@ float cascade_reach(const Population& P, u32 c)
     return 0.75f * cascade_size(c) + (P.index == kPopShrubs ? std::min(shadow, 60.f) : std::min(shadow, 250.f));
 }
 
-// The bend slots of the frame's chunks from `first` on, in their order (r3\da_shrub_bend.cs and shrub_vertex read the
-// slot from the chunk's keep word).
-void number_bends(u32 first)
+// The bend slots of the frame's chunks [first, end), in their order (r3\da_shrub_bend.cs and shrub_vertex read the
+// slot from the chunk's keep word); a plant bent by its axes takes none (kChunkAxes).
+void number_bends(u32 first, u32 end = ~0u)
 {
-    for (u32 i = first; i < g.chunks.size(); ++i)
+    for (u32 i = first; i < std::min(end, u32(g.chunks.size())); ++i)
         if (ChunkRec& c = g.chunks[i]; !(c.packed & kChunkRigid))
-            c.keep = (c.keep & 0xFFFFu) | (std::min(g.bend_n++, 0xFFFFu) << 16);
+        {
+            const bool axes = c.inst < g.rec_axis.size() && g.rec_axis[c.inst] != ~0u;
+            c.keep = (c.keep & 0xFFFFu) | ((axes ? kChunkAxes : std::min(g.bend_n++, kChunkAxes - 1)) << 16);
+        }
+}
+
+// The plants the frame bends by their axes (r3\da_shrub_axis_bend.cs): one whose chunks - every pass's - bend at least
+// as many elements as its template has axes, a near tree's leaves and twigs or a bush's sprays, has each axis bent once
+// (an axis walks its chain as an element on it did, and every element of a twig came out with the same record); the
+// view's plants first, so that their records a frame back are the first ones's. The others keep their slots.
+void choose_axis_bends()
+{
+    g.axis_jobs.clear();
+    g.axis_n = g.axis_view_n = 0;
+    std::fill(std::begin(g.axis_jobs_first), std::end(g.axis_jobs_first), 0u);
+    std::fill(std::begin(g.axis_jobs_count), std::end(g.axis_jobs_count), 0u);
+    if (!g.s_axis_bend || g.bend_failed || !ps_r__veg_axis_bends)
+        return;
+    const u32 n = g.records;
+    static xr_vector<u32> elems;
+    static xr_vector<u8> view;
+    elems.assign(n, 0u);
+    view.assign(n, 0u);
+    for (u32 i = 0; i < u32(g.chunks.size()); ++i)
+        if (const ChunkRec& c = g.chunks[i]; !(c.packed & kChunkRigid) && c.inst < n)
+        {
+            elems[c.inst] += c.packed & 0xFFu;
+            view[c.inst] |= i < g.bend_view_end ? 1u : 0u;
+        }
+    for (const u8 in_view : {u8(1), u8(0)})
+        for (u32 r = 0; r < n; ++r)
+        {
+            const u32 axes = g.rec_axes[r];
+            if (view[r] != in_view || !axes || elems[r] < axes || g.axis_n + axes > kAxisBendMax ||
+                (in_view && g.axis_view_n + axes > kAxisBendViewMax))
+                continue;
+            g.rec_axis[r] = g.axis_n;
+            CopyMemory(g.inst_records.data() + size_t(r) * kInstRec + 24 * 4, &g.axis_n, 4);
+            g.axis_n += axes;
+            if (in_view)
+                g.axis_view_n = g.axis_n;
+        }
+    for (u32 pi = 0; pi < kPops; ++pi)
+    {
+        g.axis_jobs_first[pi] = u32(g.axis_jobs.size() / 4);
+        for (u32 r = 0; r < n; ++r)
+            if (g.rec_axis[r] != ~0u && g.rec_pop[r] == pi)
+                for (u32 a = 0; a < g.rec_axes[r]; a += kChunk)
+                    g.axis_jobs.insert(g.axis_jobs.end(), {r, a, std::min(kChunk, g.rec_axes[r] - a), u32(view[r])});
+        g.axis_jobs_count[pi] = u32(g.axis_jobs.size() / 4) - g.axis_jobs_first[pi];
+    }
 }
 
 void build_frame()
@@ -1162,6 +1228,9 @@ void build_frame()
     const Latch& L = g.latch;
     g.records = 0;
     g.inst_records.clear();
+    g.rec_axes.clear();
+    g.rec_axis.clear();
+    g.rec_pop.clear();
     g.cut_chunk_total = g.cut_words = 0;
     g.chunks.clear();
     g.bend_blocks.clear();
@@ -1340,8 +1409,6 @@ void build_frame()
         bend_block(P->index, start, start + n);
     }
     g.bend_view_end = u32(g.chunks.size());
-    number_bends(0);
-    g.bend_view_n = g.bend_n;
     for (u32 pi = 0; pi < kPops; ++pi)
         if (Population* P = pop(pi); pop_on(P))
         {
@@ -1349,6 +1416,10 @@ void build_frame()
             for (u32 p = 1; p < kPasses; ++p)
                 append(*P, p);
         }
+    // (Every pass's chunks counted, then the slots: the view's first, its records a frame back by the same numbers.)
+    choose_axis_bends();
+    number_bends(0, g.bend_view_end);
+    g.bend_view_n = g.bend_n;
     number_bends(g.bend_view_end);
 }
 
@@ -1401,6 +1472,16 @@ void latch_frame()
     }
 }
 
+// The bend buffer's regions for the shaders that read it (da_shrub_common.h shrub_bend): the slots this frame and a
+// frame back, the axis records past them (none where the buffer has no room for them: those plants walk their chains).
+void set_bend_caps(CBackend& cmd)
+{
+    cmd.set_c("da_shrub_bend_cap", float(g.bend_chunks * kChunk), float(g.bend_view_chunks * kChunk), 0.f, 0.f);
+    const bool room = g.axis_n <= g.axis_cap && g.axis_view_n <= g.axis_view_cap;
+    cmd.set_c("da_shrub_bend_axis", float((g.bend_chunks + g.bend_view_chunks) * kChunk), room ? float(g.axis_n) : 0.f,
+        room ? float(g.axis_view_n) : 0.f, 0.f);
+}
+
 // The shaders' constants and resources, then `count` chunks from `first` of draw d of population P. pass: 0 the view,
 // else a shadow map's (sun: the side its quads turn to, texel: its texel in metres, the wood's floor).
 void draw_range(CBackend& cmd, const Population& P, const ref_shader& shader, u32 first, u32 count, u32 pass, u32 d, const Fvector& sun,
@@ -1433,7 +1514,7 @@ void draw_range(CBackend& cmd, const Population& P, const ref_shader& shader, u3
     cmd.SRVSManager.SetVSResource(4, g.tables_b.srv);
     cmd.SRVSManager.SetVSResource(5, g.bend_b.srv);
     cmd.SRVSManager.SetVSResource(6, P.aux_b.srv ? P.aux_b.srv : g.dummy_b.srv);
-    cmd.set_c("da_shrub_bend_cap", float(g.bend_chunks * kChunk), float(g.bend_view_chunks * kChunk), 0.f, 0.f);
+    set_bend_caps(cmd);
     cmd.SRVSManager.SetPSResource(4, g.tables_b.srv);
     if (cut)
         cmd.RenderIndirect(g.cut_args_b.buf, (u32(cut_phase) * drCount + d) * 20, 1);
@@ -1482,7 +1563,7 @@ void draw_cut_far(CBackend& cmd, const Population& P, const ref_shader& shader, 
 constexpr pcstr kShaderFiles[] = {"da_shrub_wood.vs", "da_shrub_wood.ps", "da_shrub_leaf.vs", "da_shrub_leaf.ps",
     "da_shrub_bloom.vs", "da_shrub_bloom.ps", "da_shrub_cluster.vs", "da_shrub_cluster.ps",
     "da_shrub_wood_shadow.vs", "da_shrub_leaf_shadow.vs", "da_shrub_leaf_shadow.ps", "da_shrub_cluster_shadow.vs",
-    "da_shrub_cluster_shadow.ps", "da_shrub_bend.cs"};
+    "da_shrub_cluster_shadow.ps", "da_shrub_bend.cs", "da_shrub_axis_bend.cs", "da_shrub_bend_rec.h"};
 // The trees' own (their stock tubes and patches, their billboard atlas's fill; everything else is the shrubs', the
 // billboards the stock lod shaders).
 constexpr pcstr kTreeShaderFiles[] = {"da_tree_stock.vs", "da_tree_stock_shadow.vs", "da_tree_patch.vs", "da_tree_patch_shadow.vs",
@@ -1548,6 +1629,11 @@ bool create_shaders(bool trees)
     g.s_bend.create(&b_bend, "r2" DELIMITER "da_shrub_bend");
     if (!g.s_bend || !g.s_bend->E[0] || g.s_bend->E[0]->passes.empty() || !g.s_bend->E[0]->passes[0]->cs)
         return false;
+    // (Optional: without it every plant bends by its chunks' slots.)
+    static CBlender_da_shrub_compute b_axis_bend("da_shrub_axis_bend");
+    g.s_axis_bend.create(&b_axis_bend, "r2" DELIMITER "da_shrub_axis_bend");
+    if (g.s_axis_bend && (!g.s_axis_bend->E[0] || g.s_axis_bend->E[0]->passes.empty() || !g.s_axis_bend->E[0]->passes[0]->cs))
+        g.s_axis_bend.destroy();
     for (u32 d : {drWood, drLeaf8, drLeafCut, drBloom, drCluster})
         if (!ready(g.s_draw[d]))
             return false;
@@ -1632,22 +1718,20 @@ bool create_geometry()
             for (const u16 i : one)
                 indices.push_back(u16(e * 8 * kSprayLeaves + i));
     }
-    // A spray past d0: the same leaves as diamonds (base 0, sides 1 and 2, tip 3).
-    {
-        constexpr u16 diamond[] = {0, 1, 2, 2, 1, 3};
-        u16 one[kSprayLeaves * std::size(diamond)];
-        for (u32 j = 0; j < kSprayLeaves; ++j)
-            for (u32 k = 0; k < std::size(diamond); ++k)
-                one[j * std::size(diamond) + k] = u16(j * 4 + diamond[k]);
-        g.vclass[vcSpray4] = {4 * kSprayLeaves * kChunk, u32(std::size(one)) * kChunk, u32(indices.size())};
-        for (u32 e = 0; e < kChunk; ++e)
-            for (const u16 i : one)
-                indices.push_back(u16(e * 4 * kSprayLeaves + i));
-    }
-    // The trees' near tubes (a trunk's silhouette at arm's length) and their stock triangles.
+    // The trees' near tubes (a trunk's silhouette at arm's length) and their stock triangles (and a far leaf's triangle).
     add_tube(vcTube16, 16);
     add_tube(vcTube32, 32);
     add_class(vcTri, 3, {0, 1, 2});
+    // A spray's leaves past d0: a triangle each (r3\da_shrub_leaf_vs.h shrub_leaf_corner).
+    {
+        u16 one[kSprayLeaves * 3];
+        for (u32 k = 0; k < std::size(one); ++k)
+            one[k] = u16(k);
+        g.vclass[vcSpray3] = {3 * kSprayLeaves * kChunk, u32(std::size(one)) * kChunk, u32(indices.size())};
+        for (u32 e = 0; e < kChunk; ++e)
+            for (const u16 i : one)
+                indices.push_back(u16(e * 3 * kSprayLeaves + i));
+    }
     static const VertexElement decl[] = {{0, 0, D3DDECLTYPE_FLOAT1, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0}, D3DDECL_END()};
     // The placeholder stream covers the largest class's vertices.
     u32 verts = 0;
@@ -1672,14 +1756,18 @@ void release_gpu()
         g.s_shadow[d].destroy();
     }
     g.s_bend.destroy();
+    g.s_axis_bend.destroy();
     g.s_cut.destroy();
     g.s_cut_args.destroy();
-    for (GpuBuffer* b : {&g.inst_b, &g.chunks_b, &g.tables_b, &g.bend_b, &g.dummy_b, &g.cut_routes_b, &g.cut_counts_b, &g.cut_args_b})
+    for (GpuBuffer* b : {&g.inst_b, &g.chunks_b, &g.tables_b, &g.bend_b, &g.dummy_b, &g.cut_routes_b, &g.cut_counts_b, &g.cut_args_b,
+             &g.axis_jobs_b})
         b->release();
     _RELEASE(g.cut_staging);
     g.cut_count = g.cut_readback = 0;
     std::fill(std::begin(g.cut_n), std::end(g.cut_n), 0u);
     g.bend_chunks = g.bend_view_chunks = g.bend_view_end = 0;
+    g.axis_n = g.axis_view_n = g.axis_cap = g.axis_view_cap = 0;
+    g.axis_jobs.clear();
     g.bend_failed = g.bend_ready = false;
     if (g.geom)
         g.geom.destroy();
@@ -1712,20 +1800,56 @@ void bend_reserve()
         return;
     const u32 need = std::min(g.bend_n + g.bend_n / 4 + 256u, kBendMaxChunks);
     const u32 need_view = std::min(g.bend_view_n, kBendMaxViewChunks);
-    if (need <= g.bend_chunks && need_view <= g.bend_view_chunks)
+    if (need <= g.bend_chunks && need_view <= g.bend_view_chunks && g.axis_n <= g.axis_cap && g.axis_view_n <= g.axis_view_cap)
         return;
     const u32 cap = std::max(g.bend_chunks, std::min(std::max(need + need / 4, 2048u), kBendMaxChunks));
     const u32 cap_view = std::max(g.bend_view_chunks, std::min(std::max(need_view + need_view / 4, 1024u), kBendMaxViewChunks));
-    if (!make_buffer(g.bend_b, (cap + cap_view) * kChunk * kBendRec, nullptr, true))
+    // (The axis records past the slots: this frame's and the view's plants' a frame back.)
+    const u32 axis_cap = std::max(g.axis_cap, g.axis_n ? std::min(std::max(g.axis_n + g.axis_n / 4, 65536u), kAxisBendMax) : 0u);
+    const u32 axis_view_cap =
+        std::max(g.axis_view_cap, g.axis_view_n ? std::min(std::max(g.axis_view_n + g.axis_view_n / 4, 32768u), kAxisBendViewMax) : 0u);
+    if (!make_buffer(g.bend_b, ((cap + cap_view) * kChunk + axis_cap + axis_view_cap) * kBendRec, nullptr, true))
     {
-        Msg("! [veg] the bend buffer (%u + %u chunks) could not be created: the vertex shaders bend themselves", cap, cap_view);
+        Msg("! [veg] the bend buffer (%u + %u chunks, %u + %u axes) could not be created: the vertex shaders bend themselves", cap,
+            cap_view, axis_cap, axis_view_cap);
         g.bend_b.release();
-        g.bend_chunks = g.bend_view_chunks = 0;
+        g.bend_chunks = g.bend_view_chunks = g.axis_cap = g.axis_view_cap = 0;
         g.bend_failed = true;
         return;
     }
     g.bend_chunks = cap;
     g.bend_view_chunks = cap_view;
+    g.axis_cap = axis_cap;
+    g.axis_view_cap = axis_view_cap;
+}
+
+// The axis records of population P's plants bent by their axes (r3\da_shrub_axis_bend.cs): jobs [first, first + count).
+void axis_dispatch(CBackend& cmd, const Population& P, u32 first, u32 count)
+{
+    if (!count || !g.s_axis_bend || !g.bend_b.uav || g.axis_n > g.axis_cap || g.axis_view_n > g.axis_view_cap)
+        return;
+    const Latch& L = g.latch;
+    SPass& S = *g.s_axis_bend->E[0]->passes[0];
+    cmd.set_States(S.state);
+    cmd.set_CS(S.cs);
+    cmd.set_Constants(S.constants);
+    const u32 gx = std::min(count, 32768u), gy = (count + gx - 1) / gx;
+    cmd.set_c("da_shrub_axis0", float(first), float(count), float(gx), 0.f);
+    set_bend_caps(cmd);
+    cmd.set_c("da_shrub_time", L.time, L.time_prev, L.motion ? 1.f : 0.f, 0.f);
+    cmd.SRVSManager.SetCSResource(1, P.axes_b.srv);
+    cmd.SRVSManager.SetCSResource(2, g.inst_b.srv);
+    cmd.SRVSManager.SetCSResource(7, g.axis_jobs_b.srv);
+    ID3D11DeviceContext* ctx = HW.get_context(cmd.context_id);
+    const UINT initial = ~0u;
+    ctx->CSSetUnorderedAccessViews(0, 1, &g.bend_b.uav, &initial);
+    cmd.Compute(gx, gy, 1);
+    ID3D11UnorderedAccessView* none = nullptr;
+    ctx->CSSetUnorderedAccessViews(0, 1, &none, &initial);
+    for (u32 slot = 0; slot < 8; ++slot)
+        cmd.SRVSManager.SetCSResource(slot, nullptr);
+    cmd.SRVSManager.Apply(cmd.context_id);
+    cmd.clear_CS_resources();
 }
 
 // The bends of chunks [first, first + count) of the frame, all of population P (r3\da_shrub_bend.cs), and of the
@@ -1741,7 +1865,7 @@ void bend_dispatch(CBackend& cmd, const Population& P, u32 first, u32 count)
     cmd.set_Constants(S.constants);
     const u32 gx = std::min(count, 32768u), gy = (count + gx - 1) / gx;
     cmd.set_c("da_shrub_bend0", float(first), float(count), float(gx), float(g.bend_view_end));
-    cmd.set_c("da_shrub_bend_cap", float(g.bend_chunks * kChunk), float(g.bend_view_chunks * kChunk), 0.f, 0.f);
+    set_bend_caps(cmd);
     cmd.set_c("da_shrub_time", L.time, L.time_prev, L.motion ? 1.f : 0.f, 0.f);
     cmd.SRVSManager.SetCSResource(0, P.elems_b.srv);
     cmd.SRVSManager.SetCSResource(1, P.axes_b.srv);
@@ -1868,7 +1992,7 @@ void cut_dispatch(CBackend& cmd, u32 phase)
         cmd.set_c("da_shrub_cam", L.cam.x, L.cam.y, L.cam.z, 1.f / std::max(L.px_per_m, 1.f));
         cmd.set_c("da_shrub_fwd", L.fwd.x, L.fwd.y, L.fwd.z, 0.f);
         cmd.set_c("da_shrub_time", L.time, L.time_prev, L.motion ? 1.f : 0.f, 0.f);
-        cmd.set_c("da_shrub_bend_cap", float(g.bend_chunks * kChunk), float(g.bend_view_chunks * kChunk), 0.f, 0.f);
+        set_bend_caps(cmd);
         da_hzb_bind(cmd, 8, hzb);
         cmd.SRVSManager.SetCSResource(0, P->elems_b.srv);
         cmd.SRVSManager.SetCSResource(1, P->axes_b.srv);
@@ -1994,6 +2118,9 @@ void da_veg_level_load()
     if (!make_buffer(g.inst_b, kMaxInstances * kInstRec, nullptr) || !make_buffer(g.tables_b, kTabTotal * 16, nullptr) ||
         !make_buffer(g.dummy_b, 64, nullptr))
         return fail("the frame buffers could not be created");
+    // (The axis bends' jobs: without them every plant bends by its slots.)
+    if (g.s_axis_bend && !make_buffer(g.axis_jobs_b, kMaxAxisJobs * kAxisJobRec, nullptr))
+        g.s_axis_bend.destroy();
     // The chunk buffer: the frame's chunk records, the trees' GPU cut's lists past them (written by the cut: a vertex
     // shader has no resource slot to spare). Without the cut's room the records alone, the CPU's cut standing.
     if (!g.s_cut || !make_buffer(g.chunks_b, kMaxChunks * kChunkRec + kMaxCutWords * 4, nullptr, true))
@@ -2103,6 +2230,11 @@ void da_veg_frame_prepare(CBackend& cmd)
         const D3D11_BOX box{0, 0, 0, u32(g.chunks.size()) * kChunkRec, 1, 1};
         ctx->UpdateSubresource(g.chunks_b.buf, 0, &box, g.chunks.data(), 0, 0);
     }
+    if (!g.axis_jobs.empty() && g.axis_jobs_b.buf)
+    {
+        const D3D11_BOX box{0, 0, 0, u32(g.axis_jobs.size()) * 4, 1, 1};
+        ctx->UpdateSubresource(g.axis_jobs_b.buf, 0, &box, g.axis_jobs.data(), 0, 0);
+    }
     cut_prepare(ctx);
     bend_reserve();
     g.bend_ready = true;
@@ -2123,6 +2255,12 @@ void da_veg_bend(CBackend& cmd)
         {
             dx11GpuTimerScope gpu(bend_timer(b.pop));
             bend_dispatch(cmd, *P, b.first, b.count);
+        }
+    for (u32 pi = 0; pi < kPops; ++pi)
+        if (const Population* P = pop(pi); P && g.axis_jobs_count[pi])
+        {
+            dx11GpuTimerScope gpu(bend_timer(pi));
+            axis_dispatch(cmd, *P, g.axis_jobs_first[pi], g.axis_jobs_count[pi]);
         }
 }
 
@@ -2386,6 +2524,15 @@ u32 frame_chunks() { return u32(g.chunks.size()); }
 u32 frame_bends() { return g.bend_n; }
 u32 bend_capacity() { return g.bend_chunks; }
 u32 bend_view_capacity() { return g.bend_view_chunks; }
+u32 axis_bend_plants()
+{
+    u32 n = 0;
+    for (const u32 a : g.rec_axis)
+        n += a != ~0u;
+    return n;
+}
+u32 axis_bend_records() { return g.axis_n; }
+u32 axis_bend_view_records() { return g.axis_view_n; }
 u32 lights_cast() { return u32(g.lights.size()); }
 u32 lights_offered() { return g.lights_offered; }
 u32 lights_near() { return g.lights_near; }

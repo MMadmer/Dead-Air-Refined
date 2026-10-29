@@ -2981,9 +2981,11 @@ void da_trees_stats()
         P.preset, c.hull_px, c.quad_px, c.leaf_px, c.clu_px, P.R, c.bb_px, c.kpx, c.leaf_kpx, c.crown * ps_r__trees_detail, c.shadow_kpx,
         c.cascades, P.detached ? "standing" : "the stock trees stand (r__trees 0)");
     Msg("* [trees] %u trees on %u placements, %u templates; this frame %u leaves, %u thinned, %u clusters, %u blobs, %u billboards; %u "
-        "records, %u chunks, %u of them bending (bend slots for %u chunks, %u a frame back; both populations)",
+        "records, %u chunks, %u of them bending (bend slots for %u chunks, %u a frame back; both populations); %u plants bent by "
+        "their axes, %u axis records (%u the view's)",
         u32(P.instances.size()), u32(P.placements.size()), u32(P.templates.size()), P.seen[0], P.seen[1], P.seen[2], P.seen[3], P.bb_drawn,
-        frame_records(), frame_chunks(), frame_bends(), bend_capacity(), bend_view_capacity());
+        frame_records(), frame_chunks(), frame_bends(), bend_capacity(), bend_view_capacity(), axis_bend_plants(), axis_bend_records(),
+        axis_bend_view_records());
     static constexpr pcstr names[drCount] = {"wood", "leaf 8", "leaf 4", "leaf cut", "bloom", "cluster", "blob", "spray",
         "spray cut", "spray 4", "wood 8", "needle 2", "wood 16", "stock 32", "stock 16", "stock 8", "patch", "wood far", "stock far",
         "patch far"};
