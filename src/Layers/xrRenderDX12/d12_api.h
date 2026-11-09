@@ -419,6 +419,9 @@ public:
     virtual void Destroy(IDXGISwapChain4* swapChain) = 0;
     // Called on the render thread right before every Present of the native swap chain.
     virtual void BeforePresent(IDXGISwapChain4* /*swapChain*/) {}
+    // True when the chain may present from another thread than the one that records the frame. Frame generation
+    // keeps queue submissions and presents on the render thread.
+    virtual bool PresentsAnywhere() const { return false; }
 };
 
 // Rebuilds the native swap chain of `swapChain` (a wrapper from CreateSwapChainForHwnd) through
@@ -428,6 +431,14 @@ HRESULT RecreateSwapChain(IDXGISwapChain* swapChain, SwapChainProvider* provider
 
 // The native swap chain currently behind the wrapper.
 IDXGISwapChain4* NativeSwapChain(IDXGISwapChain* swapChain);
+
+// Executes command lists, signals the frame fence and presents from a thread of its own, in call order. On by
+// default; frame generation and exclusive fullscreen stay on the calling thread by themselves.
+void SetSubmitThread(ID3D11Device* device, bool enabled);
+
+// Called around the next real Present of `swapChain` on the thread that performs it: `end` false, then true.
+using PresentMarker = void (*)(void* token, bool end);
+void SetPresentMarker(IDXGISwapChain* swapChain, PresentMarker marker, void* token);
 
 // ---- later additions, one block per lane ------------------------------------------------------
 // [dx12:infra] begin api

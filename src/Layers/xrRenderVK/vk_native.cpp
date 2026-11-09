@@ -135,6 +135,8 @@ int SubmitToQueue(ID3D11Device* device, Queue queue, UINT count, const void* sub
         return VK_ERROR_INITIALIZATION_FAILED;
     Device* d = Device::From(device);
     const bool compute = queue == Queue::Compute && d->computeQueue;
+    // What was submitted before reaches the queue first.
+    d->submitter.Drain();
     std::lock_guard lock(compute ? d->computeQueueLock : d->graphicsQueueLock);
     const VkResult result = g_vk.vkQueueSubmit(compute ? d->computeQueue : d->graphicsQueue, count,
         static_cast<const VkSubmitInfo*>(submits), static_cast<VkFence>(fence));

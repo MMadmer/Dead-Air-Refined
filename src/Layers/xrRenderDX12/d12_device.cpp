@@ -1694,6 +1694,7 @@ void Device::Shutdown()
     // Past StageFence the fence initialised and the releaser is bound to it.
     if (stage > StageFence && queue)
         WaitIdle();
+    SetSubmitThread(false);
     if (immediate)
     {
         immediate->ClearState();
@@ -2042,6 +2043,12 @@ ID3D12CommandQueue* NativeQueue(ID3D11Device* device)
     return IsLayerDevice(device) ? Device::From(device)->queue : nullptr;
 }
 
+void SetSubmitThread(ID3D11Device* device, bool enabled)
+{
+    if (IsLayerDevice(device))
+        Device::From(device)->submitWanted.store(enabled, std::memory_order_relaxed);
+}
+
 void Flush(ID3D11DeviceContext* immediate, bool wait)
 {
     if (!immediate)
@@ -2053,7 +2060,11 @@ void Flush(ID3D11DeviceContext* immediate, bool wait)
     {
         const u64 value = context->Submit();
         if (wait)
+        {
             context->device()->fence.Wait(value);
+            // A queued Present has run too: the callers hook and shut down what it goes through.
+            context->device()->submitter.Drain();
+        }
     }
     catch (...)
     {

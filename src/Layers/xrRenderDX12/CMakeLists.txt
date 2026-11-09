@@ -7,6 +7,7 @@ target_sources(xrD3D12 PRIVATE
     d12_api.h
     d12_layer.h
     ../xrRender/present_pacing.h
+    ../xrRender/submit_fifo.h
     d12_infra.cpp
     d12_prewarm.cpp
     d12_device.cpp

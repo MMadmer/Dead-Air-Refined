@@ -456,6 +456,33 @@ struct ChunkRec
     u32 inst, first, packed, keep;
 };
 
+// The runs a population's frame walk is cut into for the workers (da_veg.cpp build_frame).
+constexpr u32 kFrameSinks = 12;
+
+// One run's share of a walk: what view() and cascade() produce goes here instead of into the population and the frame,
+// and the runs are merged in the walk's order. The chunks carry the instance's index until then.
+struct FrameSink
+{
+    struct Cut
+    {
+        CutClass cls;
+        Draw d[4];
+        u32 rec, first, n;
+        float keep, lo, hi;
+        u32 flags;
+        float p0, p1, p2, aux;
+        u32 phase;
+    };
+    xr_vector<ChunkRec> chunks[kPasses][drCount];
+    xr_vector<Cut> cuts;
+    u32 elements[drCount]{};
+    u32 seen[4]{};
+    u32 cut_phase{};
+    u32 index{};
+};
+// The run this thread is walking, null outside the workers' walks.
+FrameSink* frame_sink();
+
 // One population of the core: its templates on the GPU, its instances and their grid, its frame's chunk lists. The
 // core walks the grid and calls the population for each instance a pass needs.
 class Population
@@ -478,6 +505,8 @@ public:
     // The frame: each instance's record (or ~0u), the chunks of every pass and draw, their place in the frame's chunk
     // buffer.
     xr_vector<u32> frame_slot;
+    // The instances the workers' walk asked a record for (frame_record under a sink).
+    xr_vector<u8> frame_want;
     xr_vector<ChunkRec> pass_chunks[kPasses][drCount];
     u32 draw_first[kPasses][drCount]{}, draw_count[kPasses][drCount]{};
     u32 elements[drCount]{};
@@ -495,6 +524,30 @@ public:
     // r__gpu_log: the CPU time of its frame's choice and chunk builds since the last line.
     std::atomic<u64> cpu_ticks{};
     std::atomic<u32> cpu_frames{};
+
+    // A view's tier, counted for the population's stats wherever the walk runs.
+    void note_seen(u32 tier)
+    {
+        if (FrameSink* sink = frame_sink())
+            ++sink->seen[tier];
+        else
+            ++seen[tier];
+    }
+    // The phase of the next cut(), wherever the walk runs.
+    u32 frame_cut_phase() const
+    {
+        const FrameSink* sink = frame_sink();
+        return sink ? sink->cut_phase : cut_phase;
+    }
+    void set_frame_cut_phase(u32 phase)
+    {
+        if (FrameSink* sink = frame_sink())
+            sink->cut_phase = phase;
+        else
+            cut_phase = phase;
+    }
+    // Run k of the walk merged: what the population keeps of its own from the walk.
+    virtual void merge_sink(u32 /*k*/) {}
 
     // Its name in the logs.
     virtual pcstr name() const = 0;

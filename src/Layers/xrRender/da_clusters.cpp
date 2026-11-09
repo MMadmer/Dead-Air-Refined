@@ -1301,7 +1301,7 @@ void da_clusters_cull(R_dsgraph_structure& g_, const DaClusterView& desc)
     barrier(ctx);
 }
 
-void da_clusters_draw_pass(R_dsgraph_structure& g_, SPass* pass, u32 pass_index)
+void da_clusters_draw_pass(R_dsgraph_structure& g_, CBackend& cmd, SPass* pass, u32 pass_index)
 {
     ViewState& V = g.views[g_.context_id];
     if (V.frame != Device.dwFrame || V.consumed || V.draws.empty())
@@ -1311,7 +1311,6 @@ void da_clusters_draw_pass(R_dsgraph_structure& g_, SPass* pass, u32 pass_index)
         [](const DrawRec& d, const std::pair<u32, SPass*>& k) {
             return d.pass_index != k.first ? d.pass_index < k.first : d.pass < k.second;
         });
-    CBackend& cmd = g_.cmd_list;
     for (auto it = lo; it != V.draws.end() && it->pass_index == pass_index && it->pass == pass; ++it)
     {
         xr_vector<ref_geom>& geoms = g.geoms[it->fast ? 1 : 0];

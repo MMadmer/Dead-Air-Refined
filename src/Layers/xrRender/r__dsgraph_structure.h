@@ -317,6 +317,13 @@ struct R_dsgraph_structure
 #if RENDER == R_R4
     // The main view's moving objects over deferred contexts (r__dsgraph_render.cpp); false: too few of them, draw as usual.
     bool render_matrix_parallel(bool fade);
+    void render_static_parallel(bool fade);
+    size_t matrix_gather();
+    void matrix_prepare();
+    // The moving objects' lists render_static_parallel recorded beside the statics, for their place after them.
+    static constexpr u32 MATRIX_CHUNKS = 3;
+    ID3D11CommandList* matrix_lists[MATRIX_CHUNKS]{};
+    u32 matrix_lists_n{};
 #endif
     void render_hud();
     void render_hud_ui();

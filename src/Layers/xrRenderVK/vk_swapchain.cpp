@@ -150,6 +150,7 @@ HRESULT SwapChain::CreateBackBuffer()
 HRESULT SwapChain::CreateNative(UINT syncInterval)
 {
     Device* dev = m_device;
+    dev->submitter.Drain();
     VkSurfaceCapabilitiesKHR caps{};
     VkResult result = g_vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(dev->physical, m_surface, &caps);
     if (result != VK_SUCCESS)
@@ -352,6 +353,7 @@ HRESULT SwapChain::CreateNative(UINT syncInterval)
 void SwapChain::DestroyNative(bool last)
 {
     Device* dev = m_device;
+    dev->submitter.Drain();
     if (m_swapchain || !m_buffers.empty())
     {
         // Every frame that used the images has to finish first (present included).
@@ -380,6 +382,7 @@ bool SwapChain::Acquire()
 {
     if (m_acquired)
         return true;
+    AwaitPresent();
     for (int attempt = 0; attempt < 3; ++attempt)
     {
         if (m_outOfDate || !m_swapchain)
@@ -495,6 +498,10 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
         return DXGI_ERROR_DEVICE_REMOVED;
     if (flags & DXGI_PRESENT_TEST)
         return IsIconic(m_hwnd) ? DXGI_STATUS_OCCLUDED : S_OK;
+    // A chain provider owns the queue order and may present from its own thread: nothing moves then.
+    const bool allowThread = dev->submitWanted.load(std::memory_order_relaxed) && !m_provider && !m_chainProvider;
+    if (allowThread != dev->submitter.Running())
+        dev->SetSubmitThread(allowThread);
     Context* imm = dev->immediate;
     syncInterval = (std::min)(syncInterval, 1u);
     if (syncInterval != m_syncInterval)
@@ -556,31 +563,63 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
         m_presentId - queued >= m_chainFirstId)
         g_vk.vkWaitForPresentKHR(dev->vk, m_swapchain, m_presentId - queued, kPresentWaitNs);
 
-    VkPresentInfoKHR info{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-    info.waitSemaphoreCount = 1;
-    info.pWaitSemaphores = &done;
-    info.swapchainCount = 1;
-    info.pSwapchains = &m_swapchain;
-    info.pImageIndices = &m_current;
     // An SDK's frame id when it named one (present ids only grow).
     const u64 id = (std::max)(m_presentId + 1, m_requestedPresentId);
     m_requestedPresentId = 0;
+    const VkPresentModeKHR mode = m_syncInterval ? m_vsyncMode : m_tearingMode;
+    SubmitJob& job = dev->submitJob;
+    job.Clear();
+    job.present = this;
+    job.done = done;
+    job.swapchain = m_swapchain;
+    job.image = m_current;
+    job.presentId = id;
+    job.usePresentId = dev->caps.presentWait && !m_chainProvider;
+    job.mode = mode;
+    job.useMode = m_switchModes;
+    job.marker = std::exchange(m_marker, nullptr);
+    job.markerToken = m_markerToken;
+    if (dev->submitter.Running())
+    {
+        m_presentPending.store(true, std::memory_order_release);
+        dev->submitter.Push(job);
+    }
+    else
+        PresentFromThread(job);
+    m_presentId = id;
+    m_mode = mode;
+    m_acquired = false;
+    ++m_presentCount;
+    dev->EndFrame(value);
+    return dev->lost ? DXGI_ERROR_DEVICE_REMOVED : S_OK;
+}
+
+void SwapChain::PresentFromThread(const SubmitJob& job)
+{
+    Device* dev = m_device;
+    VkPresentInfoKHR info{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+    info.waitSemaphoreCount = 1;
+    info.pWaitSemaphores = &job.done;
+    info.swapchainCount = 1;
+    info.pSwapchains = &job.swapchain;
+    info.pImageIndices = &job.image;
     VkPresentIdKHR presentId{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};
-    if (dev->caps.presentWait && !m_chainProvider)
+    if (job.usePresentId)
     {
         presentId.swapchainCount = 1;
-        presentId.pPresentIds = &id;
+        presentId.pPresentIds = &job.presentId;
         info.pNext = &presentId;
     }
-    const VkPresentModeKHR mode = m_syncInterval ? m_vsyncMode : m_tearingMode;
     VkSwapchainPresentModeInfoEXT modeInfo{VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODE_INFO_EXT};
-    if (m_switchModes)
+    if (job.useMode)
     {
         modeInfo.swapchainCount = 1;
-        modeInfo.pPresentModes = &mode;
+        modeInfo.pPresentModes = &job.mode;
         modeInfo.pNext = info.pNext;
         info.pNext = &modeInfo;
     }
+    if (job.marker)
+        job.marker(job.markerToken, false);
     VkResult result;
     if (m_chainProvider)
         result = VkResult(m_chainProvider->Present(dev->graphicsQueue, &info));
@@ -589,19 +628,13 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present(UINT syncInterval, UINT flags)
         std::lock_guard lock(dev->graphicsQueueLock);
         result = g_vk.vkQueuePresentKHR(dev->graphicsQueue, &info);
     }
-    m_presentId = id;
-    m_mode = mode;
-    m_acquired = false;
-    ++m_presentCount;
-    dev->EndFrame(value);
+    if (job.marker)
+        job.marker(job.markerToken, true);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         m_outOfDate = true;
     else if (result == VK_ERROR_DEVICE_LOST)
-    {
         dev->ReportLost(result);
-        return DXGI_ERROR_DEVICE_REMOVED;
-    }
-    return S_OK;
+    m_presentPending.store(false, std::memory_order_release);
 }
 
 HRESULT STDMETHODCALLTYPE SwapChain::Present1(UINT syncInterval, UINT flags, const DXGI_PRESENT_PARAMETERS*)
@@ -840,6 +873,21 @@ void SetNextPresentId(IDXGISwapChain* chain, UINT64 id)
 {
     if (SwapChain* s = LayerChain(chain))
         s->m_requestedPresentId = id;
+}
+
+void SetPresentMarker(IDXGISwapChain* chain, PresentMarker marker, void* token)
+{
+    if (SwapChain* s = LayerChain(chain))
+    {
+        s->m_marker = marker;
+        s->m_markerToken = token;
+    }
+}
+
+void SetSubmitThread(ID3D11Device* device, bool enabled)
+{
+    if (IsLayerDevice(device))
+        Device::From(device)->submitWanted.store(enabled, std::memory_order_relaxed);
 }
 
 bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive)

@@ -915,7 +915,7 @@ public:
             return;
         const float px = L.px_per_m / std::max(d, 0.1f);
         const u32 rec = frame_record(*this, i);
-        ++seen[f1 < 1.f ? 0 : (f2 < 1.f ? 1 : 2)];
+        note_seen(f1 < 1.f ? 0 : (f2 < 1.f ? 1 : 2));
         // The wood by level, each finer level dissolving out by its segments' hashes over the band where its tier ends:
         // the finest twigs past d0, the twigs past d1 (a bare bush keeps them to d2), the branches past d2, the stems at d2
         // and a half. The wire rule thins what is under a pixel within a tier (da_shrub_wood_vs.h). Within d0 the stems

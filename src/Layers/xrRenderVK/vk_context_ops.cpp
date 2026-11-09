@@ -460,6 +460,8 @@ Context::Context(Device* device, bool deferred, u32 index) : DeviceChild(device)
 
 Context::~Context()
 {
+    // A queued job may still use a command buffer of this context's pool.
+    m_device->submitter.Drain();
     ReleaseBindings();
     for (Query* q : endedQueries)
         q->Release();
@@ -620,7 +622,9 @@ u64 Context::Submit(VkSemaphore waitAcquire, VkSemaphore signalPresent)
         return timeline.NextValue() - 1;
 
     const VkCommandBuffer own = CloseOwn();
-    std::vector<VkCommandBufferSubmitInfo> buffers;
+    SubmitJob& job = dev->submitJob;
+    job.Clear();
+    std::vector<VkCommandBufferSubmitInfo>& buffers = job.buffers;
     buffers.reserve(m_queued.size() + 1);
     for (const Queued& q : m_queued)
     {
@@ -635,8 +639,8 @@ u64 Context::Submit(VkSemaphore waitAcquire, VkSemaphore signalPresent)
         buffers.push_back(info);
     }
 
-    VkSemaphoreSubmitInfo waits[3]{};
-    u32 waitCount = 0;
+    VkSemaphoreSubmitInfo* const waits = job.waits;
+    u32& waitCount = job.waitCount;
     // Creation-time copies first: everything after them may read what they wrote.
     const u64 initDone = dev->init.LastSubmitted();
     if (initDone > m_initWaited)
@@ -670,8 +674,8 @@ u64 Context::Submit(VkSemaphore waitAcquire, VkSemaphore signalPresent)
         ++waitCount;
     }
     const u64 value = timeline.Take();
-    VkSemaphoreSubmitInfo signals[2]{};
-    u32 signalCount = 0;
+    VkSemaphoreSubmitInfo* const signals = job.signals;
+    u32& signalCount = job.signalCount;
     signals[signalCount] = {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     signals[signalCount].semaphore = timeline.Handle();
     signals[signalCount].value = value;
@@ -684,26 +688,12 @@ u64 Context::Submit(VkSemaphore waitAcquire, VkSemaphore signalPresent)
         signals[signalCount].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
         ++signalCount;
     }
-    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
-    submit.waitSemaphoreInfoCount = waitCount;
-    submit.pWaitSemaphoreInfos = waits;
-    submit.commandBufferInfoCount = u32(buffers.size());
-    submit.pCommandBufferInfos = buffers.data();
-    submit.signalSemaphoreInfoCount = signalCount;
-    submit.pSignalSemaphoreInfos = signals;
-    VkResult result;
-    {
-        std::lock_guard lock(dev->graphicsQueueLock);
-        result = g_vk.vkQueueSubmit2(dev->graphicsQueue, 1, &submit, VK_NULL_HANDLE);
-    }
-    if (result != VK_SUCCESS)
-    {
-        dev->ReportLost(result);
-        VkSemaphoreSignalInfo info{VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO};
-        info.semaphore = timeline.Handle();
-        info.value = value;
-        g_vk.vkSignalSemaphore(dev->vk, &info);
-    }
+    job.submit = true;
+    job.value = value;
+    if (dev->submitter.Running())
+        dev->submitter.Push(job);
+    else
+        dev->RunSubmitJob(job);
     Stat(Device::StatSubmits);
 
     for (const Queued& q : m_queued)
@@ -747,6 +737,52 @@ u64 Context::Submit(VkSemaphore waitAcquire, VkSemaphore signalPresent)
         dev->EndFrame(value);
     }
     return value;
+}
+
+void Device::SetSubmitThread(bool enabled)
+{
+    if (enabled == submitter.Running())
+        return;
+    try
+    {
+        if (enabled)
+            submitter.Start([this](SubmitJob& job) { RunSubmitJob(job); }, L"xrVulkan submit");
+        else
+            submitter.Stop();
+    }
+    catch (const std::system_error&)
+    {
+        Once("the submit thread cannot start: submissions stay on the render thread");
+    }
+}
+
+void Device::RunSubmitJob(SubmitJob& job)
+{
+    if (job.submit)
+    {
+        VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+        submit.waitSemaphoreInfoCount = job.waitCount;
+        submit.pWaitSemaphoreInfos = job.waits;
+        submit.commandBufferInfoCount = u32(job.buffers.size());
+        submit.pCommandBufferInfos = job.buffers.data();
+        submit.signalSemaphoreInfoCount = job.signalCount;
+        submit.pSignalSemaphoreInfos = job.signals;
+        VkResult result;
+        {
+            std::lock_guard lock(graphicsQueueLock);
+            result = g_vk.vkQueueSubmit2(graphicsQueue, 1, &submit, VK_NULL_HANDLE);
+        }
+        if (result != VK_SUCCESS)
+        {
+            ReportLost(result);
+            VkSemaphoreSignalInfo info{VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO};
+            info.semaphore = timeline.Handle();
+            info.value = job.value;
+            g_vk.vkSignalSemaphore(vk, &info);
+        }
+    }
+    if (job.present)
+        job.present->PresentFromThread(job);
 }
 
 // ================================================================================================

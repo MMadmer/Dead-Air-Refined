@@ -187,6 +187,9 @@ public: //	Public class members (must be encapsulated further)
 
     fastdelegate::FastDelegate2<CBackend&,u32> bind;
 
+    // Binding advances a video and loads a texture not loaded yet: both belong to the immediate context's thread.
+    bool bind_anywhere() const { return flags.bLoaded && !pAVI && !pTheora && !pMedia; }
+
     CAviPlayerCustom* pAVI;
     CTheoraSurface* pTheora;
     CDaMediaSource* pMedia{};

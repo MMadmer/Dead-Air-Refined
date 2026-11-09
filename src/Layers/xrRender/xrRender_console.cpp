@@ -497,6 +497,7 @@ int ps_r__dxc = 1;
 // [dx12:dxc] end variables
 // [dx12:async] begin variables
 u32 ps_r__async_compute = 1;
+int ps_r__submit_thread = 1;
 const xr_token qasync_compute_token[] =
 {
     { "st_async_off", 0 },
@@ -2182,6 +2183,9 @@ void xrRender_initconsole()
         // QA: the main view's moving objects on deferred contexts or on the immediate one
         extern int ps_r__mt_dynamic;
         CMD4(CCC_RuntimeInteger, "r__mt_dynamic", &ps_r__mt_dynamic, 0, 1);
+        // QA: the main view's plain statics on deferred contexts or on the immediate one
+        extern int ps_r__mt_static;
+        CMD4(CCC_RuntimeInteger, "r__mt_static", &ps_r__mt_static, 0, 1);
     }
 #endif
     CMD4(CCC_RuntimeInteger, "r__sun_cache_ms", &ps_r__sun_cache_ms, 0, 1000);
@@ -2397,6 +2401,7 @@ void xrRender_initconsole()
     // [dx12:dxc] end commands
     // [dx12:async] begin commands
     CMD3(CCC_Token, "r__async_compute", &ps_r__async_compute, qasync_compute_token);
+    CMD4(CCC_RuntimeInteger, "r__submit_thread", &ps_r__submit_thread, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__async_path", &ps_r__async_path, 0, 3);
     CMD2(CCC_DaCall, "r__async_verify", &da_async_verify_request);
     // [dx12:async] end commands
@@ -2463,6 +2468,11 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeFloat, "r__autolod_scale", &ps_r__autolod_scale, 0.05f, 20.f);
     CMD2(CCC_DaCall, "r__autolod_stats", &da_autolod_stats);
     CMD4(CCC_RuntimeInteger, "r__shrubs_cut", &ps_r__shrubs_cut, 0, 1);
+    {
+        // QA: the vegetation's frame walked by the workers or by its task alone
+        extern int ps_r__veg_mt;
+        CMD4(CCC_RuntimeInteger, "r__veg_mt", &ps_r__veg_mt, 0, 1);
+    }
     CMD4(CCC_RuntimeInteger, "r__veg_soft", &ps_r__veg_soft, 0, 7);
     CMD4(CCC_RuntimeInteger, "r__veg_axis_bends", &ps_r__veg_axis_bends, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__dbg_wood", &ps_r__dbg_wood, 0, 6);

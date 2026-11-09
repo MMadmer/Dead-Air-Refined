@@ -42,7 +42,10 @@
 // The wind field's maths, shared with the vertex shaders (one file, two compilers).
 #include "../../../packaging/dead-air-x64/compatibility/gamedata/shaders/r3/da_wind_core.h"
 
+#include "xrCore/Threading/ParallelFor.hpp"
+
 #include <DirectXPackedVector.h>
+#include <atomic>
 #include <bit>
 #include <unordered_map>
 
@@ -979,14 +982,31 @@ float ground_at(float x, float z, float y_top, float span, float fallback, bool 
 }
 
 // ---- The frame ----
+namespace
+{
+thread_local FrameSink* t_frame_sink = nullptr;
+} // namespace
+
+FrameSink* frame_sink() { return t_frame_sink; }
+
 bool record_room(const Population& P, u32 i) { return g.records < kMaxInstances || P.frame_slot[i] != ~0u; }
 
-u32 frame_record(Population& P, u32 i)
+namespace
 {
-    u32& slot = P.frame_slot[i];
-    if (slot != ~0u)
-        return slot;
-    slot = g.records++;
+// A record's slot and the frame's lists for it, in the walk's order.
+u32 frame_record_alloc(const Population& P, u32 i)
+{
+    const u32 slot = g.records++;
+    g.rec_axes.push_back(P.templates[P.instances[i].tmpl].axis_count);
+    g.rec_axis.push_back(~0u);
+    g.rec_pop.push_back(u8(P.index));
+    g.inst_records.resize(g.inst_records.size() + kInstRec);
+    return slot;
+}
+
+// A slot's record: nothing shared but its own bytes, so a worker's job.
+void frame_record_fill(Population& P, u32 i, u32 slot)
+{
     const Instance& I = P.instances[i];
     const Template& T = P.templates[I.tmpl];
     u32 rec[kInstRec / 4]{};
@@ -1015,23 +1035,35 @@ u32 frame_record(Population& P, u32 i)
     // (Its axis records, if the frame bends it by its axes: choose_axis_bends.)
     rec[24] = ~0u;
     rec[25] = T.axis_count;
-    g.rec_axes.push_back(T.axis_count);
-    g.rec_axis.push_back(~0u);
-    g.rec_pop.push_back(u8(P.index));
-    const size_t at = g.inst_records.size();
-    g.inst_records.resize(at + kInstRec);
-    CopyMemory(g.inst_records.data() + at, rec, kInstRec);
+    CopyMemory(g.inst_records.data() + size_t(slot) * kInstRec, rec, kInstRec);
+}
+} // namespace
+
+u32 frame_record(Population& P, u32 i)
+{
+    // A worker's walk: the instance is marked and its chunks carry its index until the runs merge (build_frame).
+    if (frame_sink())
+    {
+        std::atomic_ref<u8>(P.frame_want[i]).store(1, std::memory_order_relaxed);
+        return i;
+    }
+    u32& slot = P.frame_slot[i];
+    if (slot != ~0u)
+        return slot;
+    slot = frame_record_alloc(P, i);
+    frame_record_fill(P, i, slot);
     return slot;
 }
 
 // The chunks of draw d straight into pass p's list (the CPU's choice draws them all).
 void emit_direct(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float keep, float lo, float hi, u32 flags, float aux)
 {
-    xr_vector<ChunkRec>& list = P.pass_chunks[p][d];
+    FrameSink* sink = frame_sink();
+    xr_vector<ChunkRec>& list = sink ? sink->chunks[p][d] : P.pass_chunks[p][d];
     const u32 window = u8f(lo) << 8 | u8f(hi) << 16 | flags;
     for (u32 k = 0; k < n; k += kChunk)
         list.push_back(ChunkRec{rec, first + k, std::min(kChunk, n - k) | window, h2(keep, aux)});
-    P.elements[d] += n;
+    (sink ? sink->elements[d] : P.elements[d]) += n;
 }
 
 void emit(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float keep, float lo, float hi, u32 flags, float aux)
@@ -1043,7 +1075,7 @@ void emit(Population& P, u32 p, u32 d, u32 rec, u32 first, u32 n, float keep, fl
     // world and every tree), the wood under the wire rule - left out on the GPU instead of run and collapsed. Behind a
     // near trunk half a million shrub elements ran their vertices for a few thousand pixels: Ghost of Tsushima culls its
     // proxy sets' instances on the GPU against the frame's depth.
-    if (!p && P.index == kPopShrubs && P.cut_phase == kCutShrubs)
+    if (!p && P.index == kPopShrubs && P.frame_cut_phase() == kCutShrubs)
     {
         const u32 kind = kDrawKind[d];
         const Draw dd = Draw(d);
@@ -1113,6 +1145,12 @@ void cut(Population& P, CutClass cls, const Draw (&d)[4], u32 rec, u32 first, u3
 {
     if (!n || hi <= lo)
         return;
+    // The cut's room is spent in the walk's order: a worker's run replays its calls at the merge.
+    if (FrameSink* sink = frame_sink())
+    {
+        sink->cuts.push_back(FrameSink::Cut{cls, {d[0], d[1], d[2], d[3]}, rec, first, n, keep, lo, hi, flags, p0, p1, p2, aux, sink->cut_phase});
+        return;
+    }
     // Each draw it may take holds its elements once more (whole instances), in its phase's lists.
     const u32 ph = std::min(P.cut_phase, kCutPhases - 1);
     const auto whole = [](u32 w) { return (w + kChunk - 1) / kChunk * kChunk; };
@@ -1153,6 +1191,9 @@ void cut_readback_request()
         g.cut_readback = 1;
 }
 } // namespace da_veg
+
+// QA: 0 walks the vegetation on the frame's task alone.
+int ps_r__veg_mt = 1;
 
 namespace
 {
@@ -1232,6 +1273,147 @@ void choose_axis_bends()
     }
 }
 
+FrameSink g_frame_sinks[kPops][kFrameSinks];
+
+void sink_reset(FrameSink& sink, u32 index)
+{
+    for (auto& pass : sink.chunks)
+        for (xr_vector<ChunkRec>& list : pass)
+            list.clear();
+    sink.cuts.clear();
+    std::fill(std::begin(sink.elements), std::end(sink.elements), 0u);
+    std::fill(std::begin(sink.seen), std::end(sink.seen), 0u);
+    sink.index = index;
+}
+
+template <class Visit>
+void for_walk(const Population& P, bool cascades, const Visit& visit)
+{
+    if (cascades)
+        for (const auto& [c, i] : P.cascade_order)
+            visit(i);
+    else
+        for (const auto& [d, i] : P.view_order)
+            visit(i);
+}
+
+// Every record the walk can ask for fits: the runs need not know how many the runs before them took. Past that the walk
+// goes on one thread, the near instances first to the last slot.
+bool walk_fits(bool cascades)
+{
+    static xr_vector<u8> counted;
+    u32 fresh = 0;
+    for (u32 pi = 0; pi < kPops; ++pi)
+    {
+        const Population* P = pop(pi);
+        if (!pop_on(P))
+            continue;
+        counted.assign(P->instances.size(), 0);
+        for_walk(*P, cascades, [&](u32 i) {
+            if (!counted[i] && P->frame_slot[i] == ~0u)
+            {
+                counted[i] = 1;
+                ++fresh;
+            }
+        });
+    }
+    return g.records + fresh <= kMaxInstances;
+}
+
+void walk_parallel(bool cascades, float smap)
+{
+    const auto run = [&](const TaskRange<u32>& range) {
+        for (u32 job = range.begin(); job != range.end(); ++job)
+        {
+            const u32 pi = job / kFrameSinks, k = job % kFrameSinks;
+            FrameSink& sink = g_frame_sinks[pi][k];
+            sink_reset(sink, k);
+            Population* P = pop(pi);
+            if (!pop_on(P))
+                continue;
+            const u64 n = cascades ? P->cascade_order.size() : P->view_order.size();
+            const size_t first = size_t(n * k / kFrameSinks), last = size_t(n * (k + 1) / kFrameSinks);
+            if (first == last)
+                continue;
+            CpuSpan span(*P);
+            sink.cut_phase = P->cut_phase;
+            t_frame_sink = &sink;
+            if (cascades)
+                for (size_t q = first; q != last; ++q)
+                    P->cascade(P->cascade_order[q].first, P->cascade_order[q].second, cascade_size(P->cascade_order[q].first) / smap);
+            else
+                for (size_t q = first; q != last; ++q)
+                    P->view(P->view_order[q].second, P->view_order[q].first);
+            t_frame_sink = nullptr;
+        }
+    };
+    xr_parallel_for(TaskRange<u32>(0, kPops * kFrameSinks, 1), run);
+
+    // The slots in the walk's order, as one thread would have given them.
+    static xr_vector<std::pair<Population*, u32>> fresh;
+    fresh.clear();
+    for (u32 pi = 0; pi < kPops; ++pi)
+    {
+        Population* P = pop(pi);
+        if (!pop_on(P))
+            continue;
+        for_walk(*P, cascades, [&](u32 i) {
+            if (P->frame_want[i] && P->frame_slot[i] == ~0u)
+            {
+                P->frame_slot[i] = frame_record_alloc(*P, i);
+                fresh.emplace_back(P, i);
+            }
+        });
+    }
+    xr_parallel_for(TaskRange<size_t>(0, fresh.size()), [](const TaskRange<size_t>& range) {
+        for (size_t q = range.begin(); q != range.end(); ++q)
+            frame_record_fill(*fresh[q].first, fresh[q].second, fresh[q].first->frame_slot[fresh[q].second]);
+    });
+
+    // The runs' chunks from instances to their records, then into the population in the walk's order.
+    xr_parallel_for(TaskRange<u32>(0, kPops * kFrameSinks, 1), [](const TaskRange<u32>& range) {
+        for (u32 job = range.begin(); job != range.end(); ++job)
+        {
+            const Population* P = pop(job / kFrameSinks);
+            if (!pop_on(P))
+                continue;
+            FrameSink& sink = g_frame_sinks[job / kFrameSinks][job % kFrameSinks];
+            for (auto& pass : sink.chunks)
+                for (xr_vector<ChunkRec>& list : pass)
+                    for (ChunkRec& chunk : list)
+                        chunk.inst = P->frame_slot[chunk.inst];
+            for (FrameSink::Cut& c : sink.cuts)
+                c.rec = P->frame_slot[c.rec];
+        }
+    });
+    for (u32 pi = 0; pi < kPops; ++pi)
+    {
+        Population* P = pop(pi);
+        if (!pop_on(P))
+            continue;
+        CpuSpan span(*P);
+        const u32 phase = P->cut_phase;
+        for (u32 k = 0; k < kFrameSinks; ++k)
+        {
+            FrameSink& sink = g_frame_sinks[pi][k];
+            for (u32 p = 0; p < kPasses; ++p)
+                for (u32 d = 0; d < drCount; ++d)
+                    P->pass_chunks[p][d].insert(P->pass_chunks[p][d].end(), sink.chunks[p][d].begin(), sink.chunks[p][d].end());
+            for (u32 d = 0; d < drCount; ++d)
+                P->elements[d] += sink.elements[d];
+            for (u32 s = 0; s < 4; ++s)
+                P->seen[s] += sink.seen[s];
+            for (const FrameSink::Cut& c : sink.cuts)
+            {
+                P->cut_phase = c.phase;
+                cut(*P, c.cls, c.d, c.rec, c.first, c.n, c.keep, c.lo, c.hi, c.flags, c.p0, c.p1, c.p2, c.aux);
+            }
+            P->merge_sink(k);
+        }
+        P->cut_phase = phase;
+    }
+}
+
 void build_frame()
 {
     const Latch& L = g.latch;
@@ -1255,13 +1437,15 @@ void build_frame()
                                               : Fvector4{0.f, 0.f, 0.f, -1e9f};
     }
     const float smap = float(std::max(u32(RImplementation.o.smapsize), 256u));
-    for (u32 pi = 0; pi < kPops; ++pi)
+    const bool mt = ps_r__veg_mt && TaskScheduler->GetWorkersCount() > 1;
+    const auto pick = [&](u32 pi)
     {
         Population* P = pop(pi);
         if (!pop_on(P))
-            continue;
+            return;
         CpuSpan span(*P);
         P->frame_slot.assign(P->instances.size(), ~0u);
+        P->frame_want.assign(P->instances.size(), 0);
         for (auto& pass : P->pass_chunks)
             for (xr_vector<ChunkRec>& list : pass)
                 list.clear();
@@ -1323,27 +1507,44 @@ void build_frame()
             }
         });
         std::sort(P->view_order.begin(), P->view_order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    }
+    };
+    if (mt)
+        xr_parallel_for(TaskRange<u32>(0, kPops, 1), [&](const TaskRange<u32>& range) {
+            for (u32 pi = range.begin(); pi != range.end(); ++pi)
+                pick(pi);
+        });
+    else
+        for (u32 pi = 0; pi < kPops; ++pi)
+            pick(pi);
+
+    if (mt && walk_fits(false))
+        walk_parallel(false, smap);
+    else
+        for (u32 pi = 0; pi < kPops; ++pi)
+            if (Population* P = pop(pi); pop_on(P))
+            {
+                CpuSpan span(*P);
+                for (const auto& [d, i] : P->view_order)
+                    if (!P->needs_record(i, d) || record_room(*P, i))
+                        P->view(i, d);
+            }
+    // Only the shrubs' view goes through the cut: their casters of a local light draw pass 0 as chosen here (routed into
+    // the cut's list, a bush cast no shadow under a flashlight).
     for (u32 pi = 0; pi < kPops; ++pi)
-        if (Population* P = pop(pi); pop_on(P))
-        {
-            CpuSpan span(*P);
-            for (const auto& [d, i] : P->view_order)
-                if (!P->needs_record(i, d) || record_room(*P, i))
-                    P->view(i, d);
-            // Only the shrubs' view goes through the cut: their casters of a local light draw pass 0 as chosen here
-            // (routed into the cut's list, a bush cast no shadow under a flashlight).
-            if (P->index == kPopShrubs)
-                P->cut_phase = 0;
-        }
-    for (u32 pi = 0; pi < kPops; ++pi)
-        if (Population* P = pop(pi); pop_on(P))
-        {
-            CpuSpan span(*P);
-            for (const auto& [c, i] : P->cascade_order)
-                if (record_room(*P, i))
-                    P->cascade(c, i, cascade_size(c) / smap);
-        }
+        if (Population* P = pop(pi); pop_on(P) && P->index == kPopShrubs)
+            P->cut_phase = 0;
+
+    if (mt && walk_fits(true))
+        walk_parallel(true, smap);
+    else
+        for (u32 pi = 0; pi < kPops; ++pi)
+            if (Population* P = pop(pi); pop_on(P))
+            {
+                CpuSpan span(*P);
+                for (const auto& [c, i] : P->cascade_order)
+                    if (record_room(*P, i))
+                        P->cascade(c, i, cascade_size(c) / smap);
+            }
     // The rain's occlusion map: the crowns within its reach, from above, in a frame that draws it (rain falls, and the
     // camera moved or the map aged).
     if (RImplementation.rain_map_this_frame())

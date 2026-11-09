@@ -1306,6 +1306,8 @@ Context::Context(Device* device, bool deferred, u32 index) : DeviceChild(device)
 
 Context::~Context()
 {
+    // A queued job may hand a list back to this context.
+    m_device->submitter.Drain();
     ReleaseBindings(*this);
     if (vrs)
         VrsDestroy(); // [dx12:vrs] hook
@@ -1423,6 +1425,9 @@ ID3D12CommandAllocator* Context::AcquireAllocator(u32 type)
 
 void Context::OpenList()
 {
+    // One allocator records one list at a time: the submit thread is still closing the previous one.
+    while (m_closePending.load(std::memory_order_acquire))
+        YieldProcessor();
     // A compute recording (async job) records a COMPUTE list where the device has a compute queue.
     const u32 type = recordCompute && m_device->computeQueue ? 1 : 0;
     ID3D12CommandAllocator* allocator = AcquireAllocator(type);
@@ -1546,8 +1551,94 @@ u64 Context::Submit(ID3D12CommandList* const* extra, u32 extraCount)
     // Creation-time uploads run before any work that may read what they write.
     m_device->FlushUploads();
 
-    ID3D12GraphicsCommandList* own = CloseOwn();
+    SubmitJob& job = m_device->submitJob;
     std::unique_lock queuedLock(m_queuedLock);
+    const bool onThread = !extraCount && PrepareThreadedSubmit(job);
+    queuedLock.unlock();
+    ID3D12GraphicsCommandList* own = CloseOwn(!onThread);
+    queuedLock.lock();
+    const u64 value = onThread ? SubmitThreaded(job, own) : SubmitDirect(own, extra, extraCount);
+    queuedLock.unlock();
+
+    for (Query* q : endedQueries)
+    {
+        // A query begun again since its End is not finished; its next End is in a later list.
+        if (!q->active)
+            q->fence = value;
+        q->Release();
+    }
+    endedQueries.clear();
+    for (Resource* r : pendingReadback)
+    {
+        r->lastGpuWrite = value;
+        r->gpuWritePending = false;
+        ReleaseResource(r);
+    }
+    pendingReadback.clear();
+
+    // Frames end at Present. Work that never presents (long loads, captures) would keep its frame
+    // memory forever: past a budget the submission ends a frame by itself. Not while an async job holds
+    // frame memory this fence does not cover (a later submission or Present ends the frame then).
+    constexpr u64 kEmergencyBytes = 256ull << 20;
+    if ((m_device->uploadPages.BytesInFlight() > kEmergencyBytes || (dynamicHeap && dynamicHeap->PendingBytes() > kEmergencyBytes / 2)) &&
+        !m_device->AsyncJobsPending())
+    {
+        static constexpr char kFormat[] = "no Present for a long time: frame memory is recycled at a submission";
+        LogOnce(kFormat, kFormat);
+        m_device->EndFrame(value);
+    }
+    return value;
+}
+
+bool Context::PrepareThreadedSubmit(SubmitJob& job)
+{
+    if (!m_device->submitter.Running())
+        return false;
+    // Async compute jobs put queue operations between the lists: those stay on this thread.
+    for (const QueuedList& queued : m_queued)
+    {
+        if (queued.job)
+            return false;
+    }
+    try
+    {
+        job.Clear();
+        job.lists.reserve(m_queued.size() + 1);
+        job.handback.reserve(m_queued.size() + 1);
+    }
+    catch (const std::bad_alloc&)
+    {
+        return false;
+    }
+    return true;
+}
+
+u64 Context::SubmitThreaded(SubmitJob& job, ID3D12GraphicsCommandList* own)
+{
+    for (const QueuedList& queued : m_queued)
+    {
+        if (!queued.list)
+            continue;
+        job.lists.push_back(queued.list);
+        job.handback.push_back({queued.list, queued.owner});
+    }
+    m_queued.clear();
+    if (own)
+    {
+        job.own = own;
+        job.ownContext = this;
+        job.handback.push_back({own, this});
+        m_closePending.store(true, std::memory_order_release);
+    }
+    m_device->DecayTrackedBuffers();
+    m_device->Count(Device::StatSubmits);
+    return m_device->fence.SignalWith(m_device->submitter, job);
+}
+
+u64 Context::SubmitDirect(ID3D12GraphicsCommandList* own, ID3D12CommandList* const* extra, u32 extraCount)
+{
+    m_device->submitter.Drain();
+    FenceTimeline& fence = m_device->fence;
 
     // Queued lists first, then the own list, then `extra`: the order they were recorded in. One
     // ExecuteCommandLists for all of them: tracked buffers decay to COMMON between two calls, which
@@ -1630,41 +1721,70 @@ u64 Context::Submit(ID3D12CommandList* const* extra, u32 extraCount)
             ReleaseLater(m_device, queued.list);
     }
     m_queued.clear();
-    queuedLock.unlock();
-
-    for (Query* q : endedQueries)
-    {
-        // A query begun again since its End is not finished; its next End is in a later list.
-        if (!q->active)
-            q->fence = value;
-        q->Release();
-    }
-    endedQueries.clear();
-    for (Resource* r : pendingReadback)
-    {
-        r->lastGpuWrite = value;
-        r->gpuWritePending = false;
-        ReleaseResource(r);
-    }
-    pendingReadback.clear();
     if (own)
         ReturnList(own);
-
-    // Frames end at Present. Work that never presents (long loads, captures) would keep its frame
-    // memory forever: past a budget the submission ends a frame by itself. Not while an async job holds
-    // frame memory this fence does not cover (a later submission or Present ends the frame then).
-    constexpr u64 kEmergencyBytes = 256ull << 20;
-    if ((m_device->uploadPages.BytesInFlight() > kEmergencyBytes || (dynamicHeap && dynamicHeap->PendingBytes() > kEmergencyBytes / 2)) &&
-        !m_device->AsyncJobsPending())
-    {
-        static constexpr char kFormat[] = "no Present for a long time: frame memory is recycled at a submission";
-        LogOnce(kFormat, kFormat);
-        m_device->EndFrame(value);
-    }
     return value;
 }
 
-ID3D12GraphicsCommandList* Context::CloseOwn()
+void Device::SetSubmitThread(bool enabled)
+{
+    if (enabled == submitter.Running())
+        return;
+    try
+    {
+        if (enabled)
+        {
+            submitter.Start([this](SubmitJob& job) { RunSubmitJob(job); }, L"xrD3D12 submit");
+            fence.AttachSubmitter(&submitter);
+        }
+        else
+        {
+            fence.AttachSubmitter(nullptr);
+            submitter.Stop();
+        }
+    }
+    catch (const std::system_error&)
+    {
+        static constexpr char kFormat[] = "the submit thread cannot start: submissions stay on the render thread";
+        LogOnce(kFormat, kFormat);
+    }
+}
+
+void Device::RunSubmitJob(SubmitJob& job)
+{
+    if (job.own)
+    {
+        const HRESULT hr = job.own->Close();
+        job.ownContext->OwnListClosed();
+        if (SUCCEEDED(hr))
+            job.lists.push_back(job.own);
+        else
+            ReportFailure(this, hr, "ID3D12GraphicsCommandList::Close");
+    }
+    if (!job.lists.empty())
+        queue->ExecuteCommandLists(UINT(job.lists.size()), job.lists.data());
+    // A list may be reset as soon as ExecuteCommandLists returned.
+    for (const SubmitJob::Handback& back : job.handback)
+    {
+        if (back.owner)
+            back.owner->ReturnList(back.list);
+        else
+            ReleaseLater(this, back.list);
+    }
+    if (job.signal)
+    {
+        const HRESULT hr = queue->Signal(fence.Native(), job.signal);
+        if (FAILED(hr))
+        {
+            static constexpr char kFormat[] = "ID3D12CommandQueue::Signal failed (0x%08X)";
+            LogOnce(kFormat, kFormat, unsigned(hr));
+        }
+    }
+    if (job.present)
+        job.present->PresentFromThread(job);
+}
+
+ID3D12GraphicsCommandList* Context::CloseOwn(bool close)
 {
     ID3D12GraphicsCommandList* own = m_list;
     SetOpenList(nullptr, false);
@@ -1676,6 +1796,8 @@ ID3D12GraphicsCommandList* Context::CloseOwn()
     ResolvePendingQueries(*this, own);
     if (annotation)
         annotation->Suspend(own);
+    if (!close)
+        return own;
     const HRESULT hr = own->Close();
     if (FAILED(hr))
     {

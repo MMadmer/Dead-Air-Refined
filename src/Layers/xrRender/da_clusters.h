@@ -46,7 +46,7 @@ DaClusterView da_clusters_shadow_view(const Fmatrix& view, const Fmatrix& projec
 // leave its lists for the GPU.
 void da_clusters_cull(R_dsgraph_structure& g, const DaClusterView& view);
 // render_graph: the view's cluster draws of the pass just set, then the view done with them.
-void da_clusters_draw_pass(R_dsgraph_structure& g, SPass* pass, u32 pass_index);
+void da_clusters_draw_pass(R_dsgraph_structure& g, CBackend& cmd, SPass* pass, u32 pass_index);
 void da_clusters_view_end(R_dsgraph_structure& g);
 // The main view's second pass, after its first static draws: the clusters the last frame's pyramid hid, against the
 // pyramid of this frame's own first draws. Leaves the G-buffer's targets set again.

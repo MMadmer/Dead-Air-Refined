@@ -20,6 +20,7 @@ target_sources(xrVulkan PRIVATE
     vk_native.cpp
     vk_raytracing.cpp
     ../xrRender/present_pacing.h
+    ../xrRender/submit_fifo.h
 )
 
 target_include_directories(xrVulkan

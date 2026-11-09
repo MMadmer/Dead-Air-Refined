@@ -175,6 +175,7 @@ extern ECORE_API int ps_r__dxc; // r__dxc: engine shaders through DXC, next star
 // [dx12:dxc] end variables
 // [dx12:async] begin variables
 extern ECORE_API u32 ps_r__async_compute; // r__async_compute: 0 off, 1 auto, 2 on
+extern ECORE_API int ps_r__submit_thread; // r__submit_thread: queue submissions and presents off the game thread
 extern ECORE_API const xr_token qasync_compute_token[];
 extern ECORE_API int ps_r__async_path; // r__async_path: 0 the setting, 1 pixel, 2 inline, 3 async
 // [dx12:async] end variables

@@ -23,6 +23,7 @@
 #include "vk_api.h"
 #include "vk_loader.h"
 #include "../xrRender/present_pacing.h"
+#include "../xrRender/submit_fifo.h"
 
 #include <array>
 #include <atomic>
@@ -137,6 +138,40 @@ void InitFormatSupport(VkPhysicalDevice physical, bool allowD24);
 // ============================================================================================
 
 // A timeline semaphore; values are handed out by Next() and signalled by the submissions that carry them.
+// One step of the submit thread: a submission, then a present. Empty parts are skipped.
+struct SubmitJob
+{
+    bool submit = false;
+    std::vector<VkCommandBufferSubmitInfo> buffers;
+    VkSemaphoreSubmitInfo waits[3]{};
+    u32 waitCount = 0;
+    VkSemaphoreSubmitInfo signals[2]{};
+    u32 signalCount = 0;
+    u64 value = 0;
+
+    SwapChain* present = nullptr;
+    VkSemaphore done = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+    u32 image = 0;
+    u64 presentId = 0;
+    bool usePresentId = false;
+    VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
+    bool useMode = false;
+    PresentMarker marker = nullptr;
+    void* markerToken = nullptr;
+
+    void Clear()
+    {
+        submit = false;
+        buffers.clear();
+        waitCount = signalCount = 0;
+        present = nullptr;
+        marker = nullptr;
+        markerToken = nullptr;
+    }
+};
+using SubmitFifo = xrsubmit::Fifo<SubmitJob>;
+
 class Timeline
 {
 public:
@@ -1693,6 +1728,12 @@ public:
     VkPhysicalDeviceMeshShaderPropertiesEXT meshProperties{};
     VkPhysicalDeviceFragmentShadingRatePropertiesKHR shadingRateProperties{};
     Timeline timeline;            // the graphics queue's submissions
+    // Submits and presents off the game thread.
+    SubmitFifo submitter;
+    SubmitJob submitJob; // the game thread's own: its vector keeps its capacity
+    std::atomic<bool> submitWanted{true};
+    void SetSubmitThread(bool enabled);
+    void RunSubmitJob(SubmitJob& job);
     DeferredReleaser releaser;
     MemoryAllocator memory;
     UploadPagePool uploadPages;    // Upload class: per-context frame data
@@ -1855,12 +1896,21 @@ public:
     static constexpr VkPipelineStageFlags2 kAcquireStages = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
     static HRESULT Create(Device* device, IDXGIFactory2* factory, HWND hwnd, const DXGI_SWAP_CHAIN_DESC1& desc,
         const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreen, SwapChain** out);
+    // The submit thread's half of Present.
+    void PresentFromThread(const SubmitJob& job);
 
 private:
     SwapChain() = default;
+    // A swapchain is externally synchronized: nothing touches it while the queued present runs.
+    void AwaitPresent() const
+    {
+        if (m_presentPending.load(std::memory_order_acquire))
+            m_device->submitter.Drain();
+    }
     HRESULT CreateNative(UINT syncInterval);
     friend bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive);
     friend void SetNextPresentId(IDXGISwapChain* chain, UINT64 id);
+    friend void SetPresentMarker(IDXGISwapChain* chain, PresentMarker marker, void* token);
     friend bool SetSwapChainProvider(IDXGISwapChain* chain, SwapChainProvider* provider);
     // `last`: the chain's provider makes none after it.
     void DestroyNative(bool last = false);
@@ -1904,7 +1954,10 @@ private:
     VkSemaphore m_pendingAcquire = VK_NULL_HANDLE;
     std::vector<VkSemaphore> m_renderDone;
     bool m_acquired = false;
-    bool m_outOfDate = false;
+    std::atomic<bool> m_outOfDate{false};
+    std::atomic<bool> m_presentPending{false};
+    PresentMarker m_marker = nullptr;
+    void* m_markerToken = nullptr;
 };
 
 // ============================================================================================

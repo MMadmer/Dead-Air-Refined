@@ -48,6 +48,7 @@ using mapNormalDirect = xr_vector<_NormalItem>;
 struct mapNormalItems : public mapNormalDirect
 {
     float ssa;
+    bool recorded{}; // already drawn by render_static_parallel
 };
 
 using mapNormal_T = xr_fixed_map<SPass*, mapNormalItems>;

@@ -868,6 +868,14 @@ u64 FenceTimeline::Signal(ID3D12CommandQueue* queue)
     {
         std::lock_guard lock(m_signalLock);
         const u64 value = m_next.load(std::memory_order_relaxed);
+        if (m_submitter)
+        {
+            SubmitJob job;
+            job.signal = value;
+            m_submitter->Push(job);
+            m_next.store(value + 1, std::memory_order_release);
+            return value;
+        }
         const HRESULT hr = queue && m_fence ? queue->Signal(m_fence, value) : E_POINTER;
         if (FAILED(hr))
         {
@@ -882,6 +890,25 @@ u64 FenceTimeline::Signal(ID3D12CommandQueue* queue)
     {
         return m_next.load(std::memory_order_acquire) - 1;
     }
+}
+
+void FenceTimeline::AttachSubmitter(SubmitFifo* submitter)
+{
+    std::lock_guard lock(m_signalLock);
+    // Values already queued go out before a direct signal may overtake them.
+    if (m_submitter)
+        m_submitter->Drain();
+    m_submitter = submitter;
+}
+
+u64 FenceTimeline::SignalWith(SubmitFifo& submitter, SubmitJob& job)
+{
+    std::lock_guard lock(m_signalLock);
+    const u64 value = m_next.load(std::memory_order_relaxed);
+    job.signal = value;
+    submitter.Push(job);
+    m_next.store(value + 1, std::memory_order_release);
+    return value;
 }
 
 u64 FenceTimeline::Completed()

@@ -594,14 +594,33 @@ old and new builds alternated on one save measure the same (50.17 against 50.19 
   `r__mt_dynamic 0` is the switch. The context pool grew to twelve for it.
 - **The task manager** wakes a worker only when one sleeps (`SetEvent` was a system call per task) and pauses in its
   spin.
+- **The vegetation's frame walk** (`frame_pick`) runs on the workers, each run into a sink of its own. The records are
+  given out afterwards in the walk's order, so the frame comes out byte for byte the single-threaded one (a hash of both
+  matched on R4, R5 and R6). The game thread's wait for it went from 0.74 ms to 0.10 ms. `r__veg_mt 0` is the switch.
+- **The submit thread.** Closing the immediate list, `ExecuteCommandLists`, the frame fence's signals and `Present`
+  leave the game thread through one FIFO a layer (`xrRender/submit_fifo.h`), in call order. The game thread reserves
+  the fence value and goes on. `Present` and `Submit` took 0.8 ms of it and take 0.1 ms now. Frame generation keeps
+  everything on the render thread (it owns the queue order and presents from its own thread), and exclusive fullscreen
+  presents there too: DXGI talks to the window thread from inside `Present`. `r__submit_thread 0` is the switch.
+- **The main view's statics** without trees record on four deferred contexts, whole passes in their sort order, so the
+  G-buffer gets the same draws in the same order. The moving objects record in the same section and their lists wait
+  for their old place after the statics, the trees and the cluster second pass. A worker closes each list. The game
+  thread still records its share, which leaves 0.2 ms of gain. `r__mt_static 0` is the switch.
+
+Together the game thread's idle share at the sync point went from 11.7 % to 18 %, about 1.3 ms of a 20 ms frame. With the
+GPU as the limit that shows as waiting, not as frames: 48.7 FPS without these threads, 49.0 with them, in one session.
 
 **Left alone on purpose.**
 - *Lua.* One VM, and every mod assumes it. The collector ran on a worker once and its finalizers crashed the game
   (`Level.cpp`, the comment over `script_gc`). A collector step during the GPU wait is not free either: `CALifeUpdateManager`
   runs Lua on a worker in that same window.
-- *`frame_pick` of the vegetation*, the game thread's longest wait (0.74 ms). Its passes share the record allocator and
-  the cut budget in near-to-far order; two populations in parallel would save 0.3 ms and give up that order.
-- *A submission thread.* `Submit` and `Present` are 0.4 ms together.
+- *The vegetation's lamp shadows* (`da_veg_lights_prepare`, 0.15 ms). Measured through the same sinks as the frame walk
+  they took the game thread 0.3 ms: a few lamps do not pay for the sinks and the merge.
+- *The foot probes of the NPCs' IK* (`CIKLimb::Update`, 0.2 ms). Their result is read by the bone callbacks during the
+  render, so a worker would either race them or plant the feet a frame late, and it would call `PickBone` beside bones
+  being calculated.
+- *The bones' global lock* and *`Feel::Touch`.* The lock also serializes the physics callbacks; the touch callbacks go
+  into game logic and scripts.
 - *A render thread overlapping the next simulation.* It would draw objects scripts are free to delete.
 
 **Traps of the measurement.** The snow cover differs from load to load of the same save: 1 ms of GPU, -2 FPS, so read

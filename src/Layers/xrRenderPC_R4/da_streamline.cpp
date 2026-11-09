@@ -395,6 +395,8 @@ class sl_swapchain_provider final : public xrd3d12::SwapChainProvider
 public:
     explicit sl_swapchain_provider(bool dlssg) : m_dlssg(dlssg) {}
 
+    bool PresentsAnywhere() const override { return !m_dlssg; }
+
     HRESULT Create(IDXGIFactory2* factory, ID3D12CommandQueue* queue, HWND hwnd, const DXGI_SWAP_CHAIN_DESC1& desc,
         const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreen, IDXGISwapChain4** swapChain) override
     {
@@ -457,6 +459,15 @@ void sl_marker(sl::PCLMarker marker)
     if (g_sl.pcl && g_sl.token)
         g_sl.fn.pclSetMarker(marker, *g_sl.token);
 }
+
+#if defined(XR_D3D12) || defined(XR_VULKAN)
+// The present markers belong to the real present, which may run on the layer's submit thread.
+void sl_present_marker(void* token, bool end)
+{
+    if (g_sl.pcl)
+        g_sl.fn.pclSetMarker(end ? sl::PCLMarker::ePresentEnd : sl::PCLMarker::ePresentStart, *static_cast<sl::FrameToken*>(token));
+}
+#endif
 
 void sl_new_frame()
 {
@@ -730,6 +741,9 @@ void da_streamline_shutdown()
 #ifdef XR_D3D12
     if (g_sl.device)
         xrd3d12::Flush(HW.get_context(CHW::IMM_CTX_ID), true);
+#elif defined(XR_VULKAN)
+    if (g_sl.device)
+        xrvk::Flush(HW.get_context(CHW::IMM_CTX_ID), true);
 #endif
     const sl::Result result = slShutdown();
     if (result != sl::Result::eOk)
@@ -804,9 +818,21 @@ void da_streamline_frame_marker(IRender::FrameMarker marker)
         if (g_sl.reflex && g_sl.token && HW.m_pSwapChain)
             xrvk::SetNextPresentId(HW.m_pSwapChain, u64(uint32_t(*g_sl.token)));
 #endif
+#ifdef XR_D3D12
+        if (g_sl.pcl && g_sl.token && HW.m_pSwapChain)
+            xrd3d12::SetPresentMarker(HW.m_pSwapChain, sl_present_marker, g_sl.token);
+#elif defined(XR_VULKAN)
+        if (g_sl.pcl && g_sl.token && HW.m_pSwapChain)
+            xrvk::SetPresentMarker(HW.m_pSwapChain, sl_present_marker, g_sl.token);
+#else
         sl_marker(sl::PCLMarker::ePresentStart);
+#endif
         break;
-    case Marker::PresentEnd: sl_marker(sl::PCLMarker::ePresentEnd); break;
+    case Marker::PresentEnd:
+#if !defined(XR_D3D12) && !defined(XR_VULKAN)
+        sl_marker(sl::PCLMarker::ePresentEnd);
+#endif
+        break;
     }
 }
 

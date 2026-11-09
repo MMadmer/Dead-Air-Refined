@@ -594,6 +594,26 @@ public:
 #endif
     }
 
+#ifdef USE_DX11
+    // submit() in two halves: the thread that recorded the list closes it, the immediate context's thread executes it.
+    ICF ID3D11CommandList* finish()
+    {
+        VERIFY(context_id != CHW::IMM_CTX_ID);
+        ID3D11CommandList* list{ nullptr };
+        CHK_DX(HW.get_context(context_id)->FinishCommandList(false, &list));
+        return list;
+    }
+
+    // A lost device finishes no list: there is nothing to execute then.
+    static ICF void execute(ID3D11CommandList* list)
+    {
+        if (!list)
+            return;
+        HW.get_context(CHW::IMM_CTX_ID)->ExecuteCommandList(list, false);
+        list->Release();
+    }
+#endif
+
     void gpu_mark_begin(const wchar_t* name);
     void gpu_mark_end();
 

@@ -28,6 +28,7 @@
 
 #include "d12_api.h"
 #include "../xrRender/present_pacing.h"
+#include "../xrRender/submit_fifo.h"
 
 #include <d3dcompiler.h>
 
@@ -174,6 +175,40 @@ UINT InitShaderCompiler(ID3D12Device* device);
 // Synchronisation (d12_infra.cpp)
 // ============================================================================================
 
+// One step of the submit thread, in this order: close `own`, execute `lists` and `own` in one call, hand the lists
+// back, signal, present. Empty parts are skipped.
+struct SubmitJob
+{
+    struct Handback
+    {
+        ID3D12GraphicsCommandList* list;
+        Context* owner; // null: through the deferred releaser
+    };
+    ID3D12GraphicsCommandList* own = nullptr;
+    Context* ownContext = nullptr;
+    std::vector<ID3D12CommandList*> lists;
+    std::vector<Handback> handback;
+    u64 signal = 0;
+    SwapChain* present = nullptr;
+    UINT syncInterval = 0;
+    UINT presentFlags = 0;
+    PresentMarker marker = nullptr;
+    void* markerToken = nullptr;
+
+    void Clear()
+    {
+        own = nullptr;
+        ownContext = nullptr;
+        lists.clear();
+        handback.clear();
+        signal = 0;
+        present = nullptr;
+        marker = nullptr;
+        markerToken = nullptr;
+    }
+};
+using SubmitFifo = xrsubmit::Fifo<SubmitJob>;
+
 class FenceTimeline
 {
 public:
@@ -181,6 +216,10 @@ public:
     void Shutdown();
     // Signals the next value on the queue and returns it.
     u64 Signal(ID3D12CommandQueue* queue);
+    // While a submit thread is attached every signal goes through it: values reach the queue in order.
+    void AttachSubmitter(SubmitFifo* submitter);
+    // Reserves the next value for `job` and queues the job.
+    u64 SignalWith(SubmitFifo& submitter, SubmitJob& job);
     // The value the next Signal() will use (resources released now are safe after it).
     u64 NextValue() const { return m_next.load(std::memory_order_acquire); }
     u64 Completed();
@@ -196,6 +235,7 @@ private:
     HANDLE m_event = nullptr;
     std::mutex m_waitLock;
     std::mutex m_signalLock;
+    SubmitFifo* m_submitter = nullptr;
 };
 
 // Objects released by the engine while the GPU may still use them live until the fence passes.
@@ -1437,6 +1477,7 @@ public:
     void InvalidateApplied();
     // A closed D3D12 list of this context was submitted: it can be Reset again. Thread-safe.
     void ReturnList(ID3D12GraphicsCommandList* list);
+    void OwnListClosed() { m_closePending.store(false, std::memory_order_release); }
 
     // Interfaces of the open list (queried once per pooled list; null where the runtime lacks them).
     ID3D12GraphicsCommandList4* List4() const { return m_list4; }
@@ -1651,7 +1692,13 @@ private:
     std::mutex m_queuedLock; // a deferred context's destructor may run on another thread
     std::vector<ID3D12CommandList*> m_submitBatch; // Submit: more lists than its stack array holds
     // Closes the open list for submission (queries split, annotation scopes ended); null = none.
-    ID3D12GraphicsCommandList* CloseOwn();
+    // `close` false leaves the Close to the submit thread.
+    ID3D12GraphicsCommandList* CloseOwn(bool close = true);
+    // Clears `job` and makes room for the queued lists; false when this submission has to run on this thread.
+    bool PrepareThreadedSubmit(SubmitJob& job);
+    u64 SubmitThreaded(SubmitJob& job, ID3D12GraphicsCommandList* own);
+    u64 SubmitDirect(ID3D12GraphicsCommandList* own, ID3D12CommandList* const* extra, u32 extraCount);
+    std::atomic<bool> m_closePending{false}; // the submit thread has not closed the last own list yet
     // Closed lists that were submitted (a list may be Reset right after ExecuteCommandLists), by type.
     std::mutex m_spareLock;
     std::vector<ID3D12GraphicsCommandList*> m_spareLists[2];
@@ -1730,6 +1777,12 @@ public:
     UINT disabledFeatures = 0;               // NativeFeature bits of the creation
     ID3D12CommandQueue* queue = nullptr;
     FenceTimeline fence;
+    // Executes, signals and presents off the game thread.
+    SubmitFifo submitter;
+    SubmitJob submitJob; // the game thread's own: its vectors keep their capacity
+    std::atomic<bool> submitWanted{true};
+    void SetSubmitThread(bool enabled);
+    void RunSubmitJob(SubmitJob& job);
     // Creation-time uploads signal their own timeline: a value of `fence` taken by one of them
     // would complete before the submission that carries work the releaser tagged with it.
     FenceTimeline initFence;
@@ -1941,14 +1994,28 @@ public:
     HRESULT Recreate(SwapChainProvider* provider);
     IDXGISwapChain4* Native() const { return m_native; }
     // Current back buffer (for the proxy).
-    u32 CurrentIndex() const { return m_current; }
-    Texture2D* CurrentBuffer() const { return m_buffers[m_current]; }
+    u32 CurrentIndex() const
+    {
+        AwaitPresent();
+        return m_current.load(std::memory_order_relaxed);
+    }
+    Texture2D* CurrentBuffer() const { return m_buffers[CurrentIndex()]; }
+    // The submit thread's half of Present1.
+    void PresentFromThread(const SubmitJob& job);
     u32 BufferCount() const { return u32(m_buffers.size()); }
 
 private:
     SwapChain() = default;
+    friend void SetPresentMarker(IDXGISwapChain* swapChain, PresentMarker marker, void* token);
     HRESULT CreateNative();
     void AttachPacer();
+    // The current buffer is known once the queued Present has run.
+    void AwaitPresent() const
+    {
+        if (m_presentPending.load(std::memory_order_acquire))
+            m_device->submitter.Drain();
+    }
+    HRESULT PresentNative(UINT syncInterval, UINT flags, const DXGI_PRESENT_PARAMETERS* params, PresentMarker marker, void* token);
     void AcquireBuffers();
     void ReleaseBuffers();
     std::atomic<ULONG> m_refs{1};
@@ -1963,7 +2030,11 @@ private:
     bool m_hasFullscreenDesc = false;
     std::vector<Texture2D*> m_buffers; // the real buffers (layer textures, tracked states)
     Texture2D* m_proxy = nullptr;      // what GetBuffer(0) returns; resolves to m_buffers[m_current]
-    u32 m_current = 0;
+    std::atomic<u32> m_current{0};
+    std::atomic<bool> m_presentPending{false};
+    std::atomic<HRESULT> m_presentResult{S_OK}; // what the last threaded Present answered, reported a frame late
+    PresentMarker m_marker = nullptr;
+    void* m_markerToken = nullptr;
     UINT m_presentCount = 0;
     // Vsync pacing on the native chain's waitable object; a provider that paces itself strips the
     // flag from its chain (present_pacing.h).

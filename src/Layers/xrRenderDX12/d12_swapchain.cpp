@@ -540,14 +540,18 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present1(UINT syncInterval, UINT flags, con
             (!(m_desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) || syncInterval || IsFullscreen(m_native)))
             flags &= ~UINT(DXGI_PRESENT_ALLOW_TEARING);
 
-        const auto presentNative = [&] {
-            return params ? m_native->Present1(syncInterval, flags, params) : m_native->Present(syncInterval, flags);
-        };
         // An occlusion test presents nothing: no submission, no frame boundary.
         if (flags & DXGI_PRESENT_TEST)
-            return presentNative();
+        {
+            m_device->submitter.Drain();
+            return params ? m_native->Present1(syncInterval, flags, params) : m_native->Present(syncInterval, flags);
+        }
 
         Device* device = m_device;
+        // Frame generation owns the queue order and presents from its own thread: nothing moves then.
+        const bool allowThread = device->submitWanted.load(std::memory_order_relaxed) && (!m_provider || m_provider->PresentsAnywhere());
+        if (allowThread != device->submitter.Running())
+            device->SetSubmitThread(allowThread);
         Context* immediate = device->immediate;
         u64 fenceValue = 0;
         if (immediate)
@@ -570,24 +574,60 @@ HRESULT STDMETHODCALLTYPE SwapChain::Present1(UINT syncInterval, UINT flags, con
         m_pacer.BeforePresent(syncInterval > 0);
         if (m_provider)
             m_provider->BeforePresent(m_native);
-        const HRESULT hr = presentNative();
+        // Exclusive fullscreen talks to the window thread from inside Present: that one must not wait for it.
+        HRESULT hr = S_OK;
+        if (device->submitter.Running() && !params && !IsFullscreen(m_native))
+        {
+            SubmitJob& job = device->submitJob;
+            job.Clear();
+            job.present = this;
+            job.syncInterval = syncInterval;
+            job.presentFlags = flags;
+            job.marker = std::exchange(m_marker, nullptr);
+            job.markerToken = m_markerToken;
+            m_presentPending.store(true, std::memory_order_release);
+            device->submitter.Push(job);
+            hr = m_presentResult.exchange(S_OK, std::memory_order_relaxed);
+        }
+        else
+        {
+            device->submitter.Drain();
+            hr = PresentNative(syncInterval, flags, params, std::exchange(m_marker, nullptr), m_markerToken);
+        }
         device->EndFrame(fenceValue);
 
-        const u32 current = m_native->GetCurrentBackBufferIndex();
-        m_current = current < m_buffers.size() ? current : 0;
         // Bound back buffer views now resolve to another buffer.
         if (immediate)
             immediate->InvalidateApplied();
         ++m_presentCount;
-
-        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
-            device->ReportRemoval(device->d12->GetDeviceRemovedReason());
         return hr;
     }
     catch (const std::bad_alloc&)
     {
         return E_OUTOFMEMORY;
     }
+}
+
+HRESULT SwapChain::PresentNative(UINT syncInterval, UINT flags, const DXGI_PRESENT_PARAMETERS* params, PresentMarker marker, void* token)
+{
+    if (marker)
+        marker(token, false);
+    const HRESULT hr = params ? m_native->Present1(syncInterval, flags, params) : m_native->Present(syncInterval, flags);
+    if (marker)
+        marker(token, true);
+    const u32 current = m_native->GetCurrentBackBufferIndex();
+    m_current.store(current < m_buffers.size() ? current : 0, std::memory_order_relaxed);
+    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+        m_device->ReportRemoval(m_device->d12->GetDeviceRemovedReason());
+    return hr;
+}
+
+void SwapChain::PresentFromThread(const SubmitJob& job)
+{
+    const HRESULT hr = PresentNative(job.syncInterval, job.presentFlags, nullptr, job.marker, job.markerToken);
+    if (hr != S_OK)
+        m_presentResult.store(hr, std::memory_order_relaxed);
+    m_presentPending.store(false, std::memory_order_release);
 }
 
 HRESULT STDMETHODCALLTYPE SwapChain::GetBuffer(UINT buffer, REFIID riid, void** surface)
@@ -807,6 +847,15 @@ HRESULT RecreateSwapChain(IDXGISwapChain* swapChain, SwapChainProvider* provider
 IDXGISwapChain4* NativeSwapChain(IDXGISwapChain* swapChain)
 {
     return swapChain ? static_cast<SwapChain*>(swapChain)->Native() : nullptr;
+}
+
+void SetPresentMarker(IDXGISwapChain* swapChain, PresentMarker marker, void* token)
+{
+    if (!swapChain)
+        return;
+    SwapChain* chain = static_cast<SwapChain*>(swapChain);
+    chain->m_marker = marker;
+    chain->m_markerToken = token;
 }
 
 ID3D12Resource* NativeResource(ID3D11Resource* resource)

@@ -1309,7 +1309,14 @@ public:
         float alpha;
     };
     xr_vector<BbItem> bb_frame;
+    xr_vector<BbItem> bb_sink[kFrameSinks];
     u32 bb_drawn{};
+
+    void merge_sink(u32 k) override
+    {
+        bb_frame.insert(bb_frame.end(), bb_sink[k].begin(), bb_sink[k].end());
+        bb_sink[k].clear();
+    }
 
     pcstr name() const override { return "trees"; }
     float reach() const override { return std::max(R, latch().far_plane); }
@@ -2658,7 +2665,10 @@ public:
         if (tier >= 0)
             fbb = tier >= 5 && bbs ? 1.f : 0.f;
         if (fbb > 0.f)
-            bb_frame.push_back(BbItem{d, i, fbb});
+        {
+            const FrameSink* sink = frame_sink();
+            (sink ? bb_sink[sink->index] : bb_frame).push_back(BbItem{d, i, fbb});
+        }
         if (fbb >= 1.f)
             return;
         const float fR = 1.f - fbb;
@@ -2666,7 +2676,7 @@ public:
         const bool blooms = !I.dead && !I.red && blooming(I.species);
         // The GPU cut's phase: a near tree is culled against the opaque world and drawn first, its crown hiding the far
         // ones from their cut (da_veg.cpp da_veg_render_gbuffer).
-        cut_phase = d < kCutNearPhase ? 0 : 1;
+        set_frame_cut_phase(d < kCutNearPhase ? 0 : 1);
         float dt[4];
         tiers(I, T, leaves, dt);
         // (A tree with its billboard keeps its clusters on to it - the billboard is baked from them: from blobs a far
@@ -2691,7 +2701,7 @@ public:
         if (ps_r__dbg_trees & (1024 << seen_tier))
             return;
         const u32 rec = frame_record(*this, i);
-        ++seen[seen_tier];
+        note_seen(seen_tier);
         // The floor at the tree's nearest depth (the shaders' at every segment's own is no finer). The far wood
         // (r3\da_shrub_wood_far.ps: the bark's mean worked out per vertex, five interpolants for seventeen): the whole
         // tree where its bark tile is under four pixels even there, else every element under a pixel and a half's radius

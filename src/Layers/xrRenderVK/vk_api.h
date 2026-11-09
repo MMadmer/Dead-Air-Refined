@@ -142,6 +142,14 @@ bool SetAdaptiveVsync(IDXGISwapChain* chain, bool adaptive);
 // an SDK that pairs its latency markers with the presents (Streamline's Reflex on VK_NV_low_latency2) names the frame.
 void SetNextPresentId(IDXGISwapChain* chain, UINT64 id);
 
+// Submits and presents from a thread of its own, in call order. On by default; a chain provider (frame generation)
+// keeps everything on the calling thread.
+void SetSubmitThread(ID3D11Device* device, bool enabled);
+
+// Called around the next real present of `chain` on the thread that performs it: `end` false, then true.
+using PresentMarker = void (*)(void* token, bool end);
+void SetPresentMarker(IDXGISwapChain* chain, PresentMarker marker, void* token);
+
 // Whether the adapter can run the Vulkan renderer: a Vulkan 1.3 device with the features the layer needs.
 // Creates and destroys a throw-away instance and device; `reason` gets a short text when it cannot.
 bool ProbeAdapter(const LUID& adapterLuid, char* reason, size_t reasonSize);

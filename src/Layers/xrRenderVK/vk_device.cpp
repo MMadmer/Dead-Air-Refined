@@ -2301,6 +2301,7 @@ void Device::Shutdown()
             // The last frame's work and the creation-time copies.
             WaitIdle();
         }
+        SetSubmitThread(false);
         g_vk.vkDeviceWaitIdle(vk);
         pipelines.Shutdown();
         if (immediate)
@@ -2448,6 +2449,7 @@ void Device::WaitIdle()
     }
     init.Flush();
     init.timeline().Wait(vk, init.timeline().NextValue() - 1);
+    submitter.Drain();
     std::lock_guard lock(graphicsQueueLock);
     g_vk.vkQueueWaitIdle(graphicsQueue);
 }
@@ -2587,7 +2589,11 @@ void Flush(ID3D11DeviceContext* immediate, bool wait)
     {
         const u64 value = context->Submit();
         if (wait)
+        {
             context->device()->timeline.Wait(context->device()->vk, value);
+            // A queued Present has run too: the callers hook and shut down what it goes through.
+            context->device()->submitter.Drain();
+        }
     }
     catch (...)
     {

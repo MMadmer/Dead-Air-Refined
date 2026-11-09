@@ -1077,6 +1077,11 @@ void CHW::Present()
     // DXGI decided here from the present rate. Frame generation paces its own presents: adaptive is vsync there.
     bool bUseVSync = psDeviceFlags.test(rsVSync);
     const bool adaptive = bUseVSync && psVSyncMode == VSyncAdaptive;
+#ifdef XR_D3D12
+    xrd3d12::SetSubmitThread(pDevice, ps_r__submit_thread != 0);
+#elif defined(XR_VULKAN)
+    xrvk::SetSubmitThread(pDevice, ps_r__submit_thread != 0);
+#endif
 #ifdef XR_VULKAN
     xrvk::SetAdaptiveVsync(m_pSwapChain, adaptive);
 #else
