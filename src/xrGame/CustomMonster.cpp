@@ -332,7 +332,9 @@ void CCustomMonster::shedule_Update(u32 DT)
     // *** general stuff
     if (g_Alive())
     {
-        if (false && g_mt_config.test(mtAiVision))
+        // No concurrency key on purpose: the traces fill caches on the object being looked at
+        // (get_new_local_point_on_mesh), so the NPCs take their turns, off the main thread, beside the render.
+        if (g_mt_config.test(mtAiVision))
 #ifndef DEBUG
             Device.add_to_seq_parallel(fastdelegate::FastDelegate0<>(this, &CCustomMonster::Exec_Visibility));
 #else // DEBUG

@@ -10,7 +10,9 @@ dx11SamplerStateCache SSManager;
 
 dx11SamplerStateCache::dx11SamplerStateCache() : m_uiMaxAnisotropy(1), m_uiMipLODBias(0.0f)
 {
-    static const int iMaxRSStates = 10;
+    // Far above the states a level uses: the parallel contexts index this array while a shader
+    // created during the frame adds to it, and growing it would move it from under them.
+    static const int iMaxRSStates = 256;
     m_StateArray.reserve(iMaxRSStates);
 }
 

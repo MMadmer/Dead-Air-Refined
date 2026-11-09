@@ -35,24 +35,26 @@ IDeviceState* dx11StateCache<IDeviceState, StateDecs>::GetState(SimulatorStates&
 template <class IDeviceState, class StateDecs>
 IDeviceState* dx11StateCache<IDeviceState, StateDecs>::GetState(StateDecs& desc)
 {
-    IDeviceState* pResult;
-
     dx11StateUtils::ValidateState(desc);
 
-    u32 crc = dx11StateUtils::GetHash(desc);
+    const u32 crc = dx11StateUtils::GetHash(desc);
 
-    pResult = FindState(desc, crc);
-
-    if (!pResult)
     {
-        StateRecord rec;
-        rec.m_crc = crc;
-        CreateState(desc, &rec.m_pState);
-        pResult = rec.m_pState;
-        m_StateArray.push_back(rec);
+        std::shared_lock read(m_lock);
+        if (IDeviceState* found = FindState(desc, crc))
+            return found;
     }
 
-    return pResult;
+    std::unique_lock write(m_lock);
+    // Another context may have created it between the two locks.
+    if (IDeviceState* found = FindState(desc, crc))
+        return found;
+
+    StateRecord rec;
+    rec.m_crc = crc;
+    CreateState(desc, &rec.m_pState);
+    m_StateArray.push_back(rec);
+    return rec.m_pState;
 }
 
 template <class IDeviceState, class StateDecs>

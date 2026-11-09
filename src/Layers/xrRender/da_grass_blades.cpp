@@ -1898,9 +1898,12 @@ void build_tiles()
     g.green.store(slots > 0.f ? green / slots : 0.f, std::memory_order_relaxed);
 }
 
-// The frame's tiles as compute groups, on the main thread once the main view's occlusion (HOM) is drawn, after
-// DOOM Eternal's culling of its GPU-driven geometry by the occlusion buffer: a meadow behind a house or a hill grows
-// only the shadow it casts, at the shadow's coarser level, or nothing. The budget goes to what is left, nearest first.
+// da_grass_frame_ensure_latch's worker turning the tiles into groups; da_grass_frame_prepare joins it.
+Task* g_expand_task = nullptr;
+
+// The frame's tiles as compute groups, once the main view's occlusion (HOM) is drawn, after DOOM Eternal's culling of
+// its GPU-driven geometry by the occlusion buffer: a meadow behind a house or a hill grows only the shadow it casts,
+// at the shadow's coarser level, or nothing. The budget goes to what is left, nearest first.
 void expand_tiles()
 {
     g.groups.clear();
@@ -2714,17 +2717,30 @@ bool da_grass_brushes(const Fvector& feet, float, float min_height, float below_
 
 void da_grass_frame_ensure_latch()
 {
-    if (!da_grass_active() || g.latch.frame == Device.dwFrame)
+    if (!da_grass_active())
         return;
     CDetailManager* dm = RImplementation.Details;
     if (!dm || !dm->m_blades)
         return;
-    dm->WaitForCalc();
-    da_grass_frame_latch();
+    if (g.latch.frame != Device.dwFrame)
+    {
+        dm->WaitForCalc();
+        da_grass_frame_latch();
+    }
+    // Calculate has joined the occlusion raster by now: the groups are built beside the views' walks.
+    if (g.active && !g_expand_task)
+        g_expand_task = &TaskScheduler->AddTask([dm] {
+            dm->WaitForCalc();
+            expand_tiles();
+        });
 }
 
 void da_grass_frame_prepare(CBackend& cmd)
 {
+    // Joined before any way out: a task slot left for a later frame would be recycled under it.
+    Task* expanding = std::exchange(g_expand_task, nullptr);
+    if (expanding)
+        TaskScheduler->Wait(*expanding);
     if (!da_grass_active())
         return;
     CDetailManager* dm = RImplementation.Details;
@@ -2739,7 +2755,8 @@ void da_grass_frame_prepare(CBackend& cmd)
     }
     if (!g.active)
         return;
-    expand_tiles();
+    if (!expanding)
+        expand_tiles();
     ID3D11DeviceContext* ctx = HW.get_context(cmd.context_id);
     if (g.tab_upload)
     {

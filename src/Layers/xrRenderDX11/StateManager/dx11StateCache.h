@@ -1,5 +1,7 @@
 #pragma once
 
+#include <shared_mutex>
+
 namespace xray::render::RENDER_NAMESPACE
 {
 template <class IDeviceState, class StateDecs>
@@ -36,6 +38,8 @@ private:
 private:
     //	This must be cleared on device destroy
     xr_vector<StateRecord> m_StateArray;
+    // The parallel contexts share the cache: a miss on one grows the array under another one's search.
+    std::shared_mutex m_lock;
 };
 
 extern dx11StateCache<ID3DRasterizerState, D3D_RASTERIZER_DESC> RSManager;

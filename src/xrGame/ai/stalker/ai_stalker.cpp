@@ -955,7 +955,8 @@ void CAI_Stalker::shedule_Update(u32 DT)
 #if 0 // def DEBUG
 		memory().visual().check_visibles();
 #endif
-        if (false && g_mt_config.test(mtAiVision))
+        // Without a concurrency key, as in CCustomMonster::shedule_Update: the NPCs' traces take turns off the main thread.
+        if (g_mt_config.test(mtAiVision))
             Device.add_to_seq_parallel(fastdelegate::FastDelegate0<>(this, &CCustomMonster::Exec_Visibility));
         else
         {
