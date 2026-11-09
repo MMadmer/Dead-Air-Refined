@@ -23,6 +23,9 @@ static Fvector g_visor_prev_eye{};
 static bool g_visor_have_eye = false;
 static Fvector2 g_visor_air{}; // the apparent wind in the plane of the glass, smoothed, m/s
 static float g_visor_wipe_last = -1.f; // where the hand was at the last step drawn, -1 for none
+// Seconds nothing has wetted the glass. Past visor_dry_after it holds no water and is not stepped.
+constexpr float visor_dry_after = 200.f; // a millimetre of water, the deepest it stands, at DA_VD_DRY
+static float g_visor_dry_for = visor_dry_after;
 
 // The visor is the actor's, and the actor is a level's. Nothing recreates the target between
 // levels, so the prime test below - keyed on the surface - would never fire again and the next
@@ -35,6 +38,7 @@ void da_visor_drops_reset()
     g_visor_have_eye = false;
     g_visor_air.set(0.f, 0.f);
     g_visor_wipe_last = -1.f;
+    g_visor_dry_for = visor_dry_after;
 }
 
 // One or more fixed steps of the water standing on the actor's visor.
@@ -97,6 +101,33 @@ void CRenderTarget::phase_visor_drops()
         RCache.ClearRT(rt_VisorDropsTmp, {});
         g_visor_primed = rt_VisorDrops->pSurface;
         g_visor_acc = 0.f;
+        g_visor_dry_for = visor_dry_after;
+    }
+
+    // The wetting rate. visor_rate is this mod's own driver (shelter and the mask are already in it);
+    // r2_lenswater_val, the console float every older mask driver writes, is taken only until the mod's own has
+    // spoken. Not both, and not the max of both: the base driver keeps writing its own ramp once a second, and in
+    // anything but heavy rain that ramp is zero, so sharing the float put the rain on and off at one hertz.
+    // env.visor.dunk is the actor's own head coming out of the water, and the wetter of the two wins.
+    const float driven = (env.visor.rate >= 0.f) ? env.visor.rate : ps_r2_lenswater_value;
+    const float wet = (env.visor.qa_wet >= 0.f)
+        ? clampr(env.visor.qa_wet, 0.f, 1.f)
+        : clampr(std::max(driven, env.visor.dunk), 0.f, 1.f);
+
+    // Dry glass under a dry sky has nothing to step: a dozen full passes a frame over an empty field cost a mask a tenth
+    // of the frame rate. The last water left is cleared the moment the glass stops being stepped.
+    const bool was_dry = g_visor_dry_for >= visor_dry_after;
+    g_visor_dry_for = (wet > 0.f || env.visor.qa_blob > 0.f) ? 0.f : g_visor_dry_for + Device.fTimeDelta;
+    if (g_visor_dry_for >= visor_dry_after)
+    {
+        if (!was_dry)
+        {
+            RCache.ClearRT(rt_VisorDrops, {});
+            RCache.ClearRT(rt_VisorDropsTmp, {});
+        }
+        g_visor_acc = 0.f;
+        g_visor_have_eye = false;
+        return;
     }
 
     // How much of the glass one cell is, and from it the step. The transport is a flux and a flux
@@ -185,16 +216,6 @@ void CRenderTarget::phase_visor_drops()
     const float gux = (g_len > 1e-4f) ? px / g_len : 0.f;
     const float guy = (g_len > 1e-4f) ? -py / g_len : 1.f;
 
-    // The wetting rate, and the hand. visor_rate is this mod's own driver (shelter and the mask
-    // are already in it); r2_lenswater_val, the console float every older mask driver writes, is
-    // taken only until the mod's own has spoken. Not both, and not the max of both: the base
-    // driver keeps writing its own ramp once a second, and in anything but heavy rain that ramp
-    // is zero, so sharing the float put the rain on and off at one hertz. env.visor.dunk is the
-    // actor's own head coming out of the water, and the wetter of the two wins.
-    const float driven = (env.visor.rate >= 0.f) ? env.visor.rate : ps_r2_lenswater_value;
-    const float wet = (env.visor.qa_wet >= 0.f)
-        ? clampr(env.visor.qa_wet, 0.f, 1.f)
-        : clampr(std::max(driven, env.visor.dunk), 0.f, 1.f);
     // The hand is placed per step. This frame's steps share the way from where it was at the last
     // step drawn to where it is now: one position for all of a frame's steps held the edge still and
     // then jumped it, and every jump printed a column into the smear. Carrying the last position over

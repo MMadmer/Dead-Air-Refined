@@ -47,7 +47,18 @@ void CRocketLauncher::SpawnRocket(const shared_str& rocket_section, CGameObject*
 
 void CRocketLauncher::AttachRocket(u16 rocket_id, CGameObject* parent_rocket_launcher)
 {
-    CCustomRocket* pRocket = smart_cast<CCustomRocket*>(Level().Objects.net_Find(rocket_id));
+    CGameObject* object = smart_cast<CGameObject*>(Level().Objects.net_Find(rocket_id));
+    CCustomRocket* pRocket = smart_cast<CCustomRocket*>(object);
+    // A script may spawn into a parent id it kept from before: the id now names a launcher and the item is no rocket.
+    if (!pRocket)
+    {
+        Msg("! [launcher] %s was given an object that is no rocket: %s", parent_rocket_launcher->cName().c_str(),
+            object ? object->cName().c_str() : "(gone)");
+        if (object)
+            object->DestroyObject();
+        return;
+    }
+
     pRocket->m_pOwner = smart_cast<CGameObject*>(parent_rocket_launcher->H_Root());
     VERIFY(pRocket->m_pOwner);
     pRocket->H_SetParent(parent_rocket_launcher);
@@ -78,7 +89,7 @@ void CRocketLauncher::DetachRocket(u16 rocket_id, bool bLaunch)
 
     if (It_l != m_launched_rockets.end())
     {
-        (*It)->m_bLaunched = bLaunch;
+        (*It_l)->m_bLaunched = bLaunch;
         (*It_l)->H_SetParent(NULL);
         m_launched_rockets.erase(It_l);
     }

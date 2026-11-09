@@ -240,10 +240,6 @@ void CTorch::Switch(bool light_on)
         light_render->set_active(light_on);
         light_omni->set_active(smart_cast<CActor*>(H_Parent()) ? false : light_on);
     }
-    // The second beam goes out with the torch: UpdateCL stops placing it once the torch is off, and left on it stood
-    // lit where the torch was taken off or put in the backpack
-    if (!light_on)
-        light_render2->set_active(false);
     glow_render->set_active(light_on);
 
     if (light_trace_bone.c_str())
@@ -255,6 +251,15 @@ void CTorch::Switch(bool light_on)
         pVisual->LL_SetBoneVisible(bi, light_on, TRUE);
         pVisual->CalculateBones(TRUE);
     }
+}
+
+// The torch leaves its owner or dies, and the second beam goes out with it: UpdateCL stops placing it once the torch is
+// off, and left on it stood lit where the torch was taken off. Not in Switch: scripts call that whenever the torch reads
+// as off, which a flickering beam does every few frames, and the headlamp has to survive it.
+void CTorch::TurnOff()
+{
+    Switch(false);
+    light_render2->set_active(false);
 }
 
 void CTorch::Switch2(bool light_on)
@@ -364,10 +369,34 @@ void CTorch::SetTorchOffsetZ(float value)
         m_torch_offset.z = value;
 }
 
+void CTorch::ApplyAnimationColor()
+{
+    int frame;
+    // BGR order
+    const u32 clr = lanim->CalculateBGR(Device.fTimeGlobal, frame);
+
+    Fcolor fclr;
+    fclr.set((float)color_get_B(clr), (float)color_get_G(clr), (float)color_get_R(clr), 1.f);
+    fclr.mul_rgb(fBrightness / 255.f);
+    if (can_use_dynamic_lights())
+    {
+        light_render->set_color(fclr);
+        light_omni->set_color(fclr);
+    }
+    glow_render->set_color(fclr);
+}
+
 void CTorch::SetTorchAnimation(LPCSTR value)
 {
-    if (!OnClient())
-        lanim = LALib.FindItem(value);
+    if (OnClient())
+        return;
+
+    CLAItem* animation = LALib.FindItem(value);
+    // A script may take the animation off in the frame it went on, before UpdateCL has read a colour from it (callbacks
+    // run in hash order). The beam keeps this moment's colour: without it the hand lamp stayed as black as "no lamp" left it.
+    if (lanim && !animation)
+        ApplyAnimationColor();
+    lanim = animation;
 }
 
 void CTorch::SetTorchTexture(LPCSTR value)
@@ -534,7 +563,7 @@ bool CTorch::net_Spawn(CSE_Abstract* DC)
 
 void CTorch::net_Destroy()
 {
-    Switch(false);
+    TurnOff();
     SwitchNightVision(false);
 
     inherited::net_Destroy();
@@ -549,7 +578,7 @@ void CTorch::OnH_B_Independent(bool just_before_destroy)
 {
     inherited::OnH_B_Independent(just_before_destroy);
 
-    Switch(false);
+    TurnOff();
     SwitchNightVision(false);
 
     m_sounds.StopAllSounds();
@@ -561,7 +590,7 @@ void CTorch::OnMoveToRuck(const SInvItemPlace& prev)
     if (prev.type != eItemPlaceSlot)
         return;
 
-    Switch(false);
+    TurnOff();
     SwitchNightVision(false);
 }
 
@@ -598,7 +627,7 @@ void CTorch::UpdateCL()
             DrainCondition(Device.fTimeDelta);
             if (GetCondition() <= 0.f)
             {
-                Switch(false);
+                TurnOff();
                 return;
             }
             smart_cast<IKinematics*>(H_Parent()->Visual())->CalculateBones_Invalidate();
@@ -698,22 +727,8 @@ void CTorch::UpdateCL()
         return;
 
     // calc color animator
-    if (!lanim)
-        return;
-
-    int frame;
-    // возвращает в формате BGR
-    u32 clr = lanim->CalculateBGR(Device.fTimeGlobal, frame);
-
-    Fcolor fclr;
-    fclr.set((float)color_get_B(clr), (float)color_get_G(clr), (float)color_get_R(clr), 1.f);
-    fclr.mul_rgb(fBrightness / 255.f);
-    if (can_use_dynamic_lights())
-    {
-        light_render->set_color(fclr);
-        light_omni->set_color(fclr);
-    }
-    glow_render->set_color(fclr);
+    if (lanim)
+        ApplyAnimationColor();
 }
 
 void CTorch::create_physic_shell() { CPhysicsShellHolder::create_physic_shell(); }
@@ -770,7 +785,7 @@ bool CTorch::can_be_attached() const
 void CTorch::afterDetach()
 {
     inherited::afterDetach();
-    Switch(false);
+    TurnOff();
 }
 
 void CTorch::enable(bool value)
@@ -778,7 +793,7 @@ void CTorch::enable(bool value)
     inherited::enable(value);
 
     if (!enabled() && m_switched_on)
-        Switch(false);
+        TurnOff();
 }
 
 CNightVisionEffector::CNightVisionEffector(const shared_str& section)

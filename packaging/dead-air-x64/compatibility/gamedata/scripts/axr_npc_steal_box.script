@@ -89,7 +89,8 @@ function evaluator_npc_steal_box:evaluate()
 		local obj = level.object_by_id(id)
 		local se_obj = obj and alife():object(obj:id())
 		
-		if (se_obj and looting[obj:id()] ~= true) then
+		-- A saved id can outlive its stash and name anything by now; a treasure spawned into that crashes.
+		if (se_obj and IsInvbox(obj) and looting[obj:id()] ~= true) then
 		
 			local name = obj:name()
 		

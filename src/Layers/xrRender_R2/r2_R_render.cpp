@@ -701,7 +701,10 @@ void CRender::Render()
     }
     // The visor is read at the very end of the frame, in the combine, but its field is stepped
     // here with the other fixed-step simulations: one place in the frame owns the clock.
-    Target->phase_visor_drops();
+    {
+        dx11GpuTimerScope gpu_visor(dx11GpuTimers::Visor);
+        Target->phase_visor_drops();
+    }
 #endif
 
     // The cloud deck field for this frame: the sun passes below shade the ground with it, the

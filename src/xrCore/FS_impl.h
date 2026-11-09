@@ -128,17 +128,14 @@ IC size_t IReaderBase<T>::find_chunk(u32 ID, bool* bCompressed)
         {
             dwType = r_u32();
             dwSize = r_u32();
-            if (dwSize > impl().elapsed())
-                break;
             if ((dwType & (~CFS_CompressMark)) == ID)
             {
                 success = true;
                 break;
             }
-            else
-            {
-                impl().advance(dwSize);
-            }
+            if (dwSize > impl().elapsed())
+                break;
+            impl().advance(dwSize);
         }
 
         if (!success)
@@ -150,8 +147,14 @@ IC size_t IReaderBase<T>::find_chunk(u32 ID, bool* bCompressed)
 
     if (dwSize > impl().elapsed())
     {
-        m_last_pos = 0;
-        return 0;
+        if (dwType & CFS_CompressMark)
+        {
+            m_last_pos = 0;
+            return 0;
+        }
+        // Some mods' models end in a chunk that claims more than the file holds (the M82 of Revolution II: its motion
+        // reference). What is there is good, and refusing the chunk left the model without its motions, which is fatal.
+        dwSize = size_t(impl().elapsed());
     }
     if (bCompressed)
         *bCompressed = dwType & CFS_CompressMark;

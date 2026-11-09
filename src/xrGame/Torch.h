@@ -32,6 +32,7 @@ protected:
 
 private:
     inline bool can_use_dynamic_lights();
+    void ApplyAnimationColor();
 
 public:
     CTorch();
@@ -52,6 +53,7 @@ public:
     void Switch();
     void Switch(bool light_on);
     void Switch2(bool light_on);
+    void TurnOff();
     bool torch_active() const;
 
     void SetTorchSpot(bool spot);

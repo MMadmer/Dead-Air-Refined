@@ -152,7 +152,10 @@ void CActor::IR_OnKeyboardPress(int cmd)
     }
     case kTORCH:
     {
-        SwitchTorch();
+        luabind::functor<void> scriptedTorch;
+        // Dead Air switches its lamps in the same raw-key callback. Toggling here too undid what it had just turned on.
+        if (!GEnv.ScriptEngine->functor("itms_manager.on_key_press", scriptedTorch))
+            SwitchTorch();
         break;
     }
 
