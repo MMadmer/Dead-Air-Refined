@@ -99,6 +99,8 @@ protected:
 
 public:
     BOOL has_visible_bones();
+    // Skinned on the CPU into the shared dynamic vertex stream.
+    bool soft_skinned() const { return RenderMode == RM_SKINNING_SOFT; }
     CSkeletonX()
     {
         Parent = nullptr;

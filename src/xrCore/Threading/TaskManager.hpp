@@ -31,6 +31,8 @@ private:
     std::mutex workersLock;
 
     inline static Event newWorkArrived;
+    // Workers about to sleep on newWorkArrived: a pushed task costs a system call only when one is there to wake.
+    inline static std::atomic_size_t sleepingWorkersCount{};
     std::atomic_size_t activeWorkersCount{};
 
     std::atomic_bool shouldPause{};

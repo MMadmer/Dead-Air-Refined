@@ -2177,6 +2177,13 @@ void xrRender_initconsole()
         CMD4(CCC_RuntimeInteger, "r__tree_batch", &ps_r__tree_batch, 0, 1);
     }
 #endif
+#if RENDER == R_R4
+    {
+        // QA: the main view's moving objects on deferred contexts or on the immediate one
+        extern int ps_r__mt_dynamic;
+        CMD4(CCC_RuntimeInteger, "r__mt_dynamic", &ps_r__mt_dynamic, 0, 1);
+    }
+#endif
     CMD4(CCC_RuntimeInteger, "r__sun_cache_ms", &ps_r__sun_cache_ms, 0, 1000);
 
     // R1

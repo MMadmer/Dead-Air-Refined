@@ -1586,7 +1586,7 @@ void da_rt_collect_dynamic(xr_vector<DaRtRigidCandidate>& rigid, xr_vector<DaRtS
         const float distance = camera.distance_to(data.xform.c);
         float hemi = 0.5f;
         if (data.pROS)
-            hemi = 0.75f * static_cast<CROS_impl*>(data.pROS)->get_hemi();
+            hemi = 0.75f * static_cast<CROS_impl*>(data.pROS)->peek_hemi();
         Walk walk{rigid, skinned, tier, distance, hemi};
         walk.visual(v, data.xform);
     }
@@ -1605,13 +1605,27 @@ void da_rt_collect_dynamic(xr_vector<DaRtRigidCandidate>& rigid, xr_vector<DaRtS
     skinned.resize(keep);
 }
 
+// The frame's moving objects, gathered by a worker from Calculate on (da_rt_frame_collect).
+struct DaRtCollectJob
+{
+    Task* task{};
+    u32 frame{u32(-1)};
+    xr_vector<DaRtRigidCandidate> rigid;
+    xr_vector<DaRtSkinCandidate> skin;
+} g_rt_collect;
+
 // The moving objects of this frame into the structures, the tables and the top-level build.
 void da_rt_update_dynamic(DaRtSection& section)
 {
     const DaRtTier& tier = da_rt_tier();
-    xr_vector<DaRtRigidCandidate> rigid;
-    xr_vector<DaRtSkinCandidate> skin;
-    da_rt_collect_dynamic(rigid, skin, tier);
+    xr_vector<DaRtRigidCandidate>& rigid = g_rt_collect.rigid;
+    xr_vector<DaRtSkinCandidate>& skin = g_rt_collect.skin;
+    if (g_rt_collect.frame != Device.dwFrame)
+    {
+        rigid.clear();
+        skin.clear();
+        da_rt_collect_dynamic(rigid, skin, tier);
+    }
 
     DaRtFrameDynamic frame;
     const u32 frame_index = Device.dwFrame;
@@ -2003,10 +2017,40 @@ void da_rt_textures_replaced()
 #endif
 }
 
+void da_rt_frame_collect()
+{
+#if defined(DA_RT_LANE)
+    if (!da_rt_available() || !g_scene.level || !g_scene.ready || !da_rt_wanted())
+        return;
+    if (!da_rt_live(RtEffect::AO) && !da_rt_live(RtEffect::Reflections))
+        return;
+    g_rt_collect.frame = Device.dwFrame;
+    g_rt_collect.rigid.clear();
+    g_rt_collect.skin.clear();
+    g_rt_collect.task = &TaskScheduler->AddTask([] {
+        da_rt_collect_dynamic(g_rt_collect.rigid, g_rt_collect.skin, da_rt_tier());
+    });
+#endif
+}
+
 void da_rt_frame_scene(CBackend& cmd_list)
 {
     UNUSED(cmd_list);
 #if defined(DA_RT_LANE)
+    // Joined before any way out: a task slot left for a later frame would be recycled under it.
+    if (Task* task = std::exchange(g_rt_collect.task, nullptr))
+        TaskScheduler->Wait(*task);
+    // Used up by the end of this call on every path: the candidates hold texture references, which must not outlive the
+    // level or the resource manager.
+    struct CollectDrop
+    {
+        ~CollectDrop()
+        {
+            g_rt_collect.rigid.clear();
+            g_rt_collect.skin.clear();
+            g_rt_collect.frame = u32(-1);
+        }
+    } collect_drop;
     if (!da_rt_available() || !g_scene.level)
         return;
     if (!da_rt_wanted())

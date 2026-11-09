@@ -259,6 +259,8 @@ void CKinematics::Bone_GetAnimPos(Fmatrix& pos, u16 id, u8 mask_channel, bool ig
     ZoneScoped;
 
     R_ASSERT(id < LL_BoneCount());
+    // The AI's vision asks this from a worker while the render thread updates the same model's blends.
+    UCalc_mtlock lock;
     CBoneInstance bi = LL_GetBoneInstance(id);
     BoneChain_Calculate(&LL_GetData(id), bi, mask_channel, ignore_callbacks);
 #ifndef MASTER_GOLD

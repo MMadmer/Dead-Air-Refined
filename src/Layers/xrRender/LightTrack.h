@@ -98,6 +98,9 @@ public:
             update_smooth();
         return hemi_smooth;
     }
+    // The last smoothed value without the frame's update: asking get_hemi first would use up the update without the
+    // object it needs (update_smooth stamps the frame), and the model would keep its old light.
+    ICF float peek_hemi() const { return hemi_smooth; }
     ICF float get_sun()
     {
         if (dwFrameSmooth != Device.dwFrame)

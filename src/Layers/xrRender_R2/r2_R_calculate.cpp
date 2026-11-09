@@ -9,6 +9,7 @@
 #include "Layers/xrRender/da_veg.h"
 #include "Layers/xrRender/da_reeds.h"
 #if RENDER == R_R4
+#include "Layers/xrRenderPC_R4/da_rt.h"
 #include "Layers/xrRenderPC_R4/da_particle_light.h"
 #endif
 #endif
@@ -232,13 +233,16 @@ void CRender::Calculate()
 #endif
 
 #if RENDER == R_R4
+    // Work for the workers ahead of the wait for the vegetation below, which spins on whatever is in the queue: the
+    // blades' tiles and the ray tracing's moving objects (the main view's walk has posed them).
+    da_grass_frame_ensure_latch();
+    da_rt_frame_collect();
     // Everything the sun cascades draw of the shrubs and the blades is ready before r_sun.run(): with the
     // multithreaded draw its task draws the cascades on a worker while Render has not begun. The shrubs' frame
     // built in Render came after it now and then (a bush's whole shadow off for a frame); the blades' latch is
     // normally taken before Calculate, but not in a frame without the detail manager's update (a save's
     // screenshot under the menu).
     da_veg_frame_prepare(RCache);
-    da_grass_frame_ensure_latch();
     // The torch whose beam the froxel volume lights, read by the far cascade's recording.
     da_froxel_capture_torch();
 #endif

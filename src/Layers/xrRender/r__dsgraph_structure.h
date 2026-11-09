@@ -314,6 +314,10 @@ struct R_dsgraph_structure
 
     // render primitives
     void render_graph(u32 _priority);
+#if RENDER == R_R4
+    // The main view's moving objects over deferred contexts (r__dsgraph_render.cpp); false: too few of them, draw as usual.
+    bool render_matrix_parallel(bool fade);
+#endif
     void render_hud();
     void render_hud_ui();
     void render_lods(bool _setup_zb, bool _clear);

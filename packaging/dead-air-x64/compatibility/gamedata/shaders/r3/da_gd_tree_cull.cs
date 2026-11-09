@@ -13,7 +13,7 @@
 //   hierarchies and its own (stamps per context), the FLOD switch, then its instances.
 
 #define GD_NONE 0xFFFFFFFFu
-#define GD_CONTEXTS 9u
+#define GD_CONTEXTS 12u
 #define GD_EPS 0.00001f
 
 #define GD_SMAP 1u

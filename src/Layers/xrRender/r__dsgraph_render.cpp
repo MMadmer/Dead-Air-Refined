@@ -13,6 +13,8 @@
 #if RENDER == R_R4
 #include "da_temporal.h"
 #include "da_clusters.h"
+#include "LightTrack.h"
+#include "FSkinned.h"
 #endif
 #ifdef XR_NATIVE
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
@@ -343,6 +345,181 @@ bool cmp_pass(const T& left, const T& right)
     return left->first < right->first;
 }
 
+#if RENDER == R_R4
+// QA: 0 draws the main view's moving objects on the immediate context.
+int ps_r__mt_dynamic = 1;
+
+namespace
+{
+constexpr u32 kMatrixChunks = 3;
+// Below this the lists' setup costs the main thread more than the draws they take off it (measured: 30 items, 0.4 ms
+// against 0.2 ms).
+constexpr size_t kMatrixChunkMinItems = 64;
+
+// All of an object's parts share a context: whichever draws first advances the model's previous pose for the others.
+u32 matrix_chunk(const IRenderable* object, u32 chunks)
+{
+    return (u32(uintptr_t(object) >> 8) * 2654435761u >> 16) % chunks;
+}
+
+// What a deferred context may record: a model's own geometry. Particles and software skinning fill the shared dynamic
+// vertex stream, which only the immediate context may lock and map.
+bool matrix_item_deferrable(const _MatrixItem& item)
+{
+    switch (item.pVisual->Type)
+    {
+    case MT_NORMAL:
+    case MT_PROGRESSIVE: return true;
+    case MT_SKELETON_GEOMDEF_ST: return !static_cast<CSkeletonX_ST*>(item.pVisual)->soft_skinned();
+    case MT_SKELETON_GEOMDEF_PM: return !static_cast<CSkeletonX_PM*>(item.pVisual)->soft_skinned();
+    default: return false;
+    }
+}
+} // namespace
+
+bool R_dsgraph_structure::render_matrix_parallel(bool fade)
+{
+    if (!ps_r__mt_dynamic || !o.is_main_pass || o.phase != CRender::PHASE_NORMAL || context_id != IMM_CTX_ID ||
+        !RImplementation.o.mt_render)
+        return false;
+
+    static xr_vector<mapMatrix_T::value_type*> passes[SHADER_PASSES_MAX];
+    size_t total = 0;
+    for (u32 iPass = 0; iPass < SHADER_PASSES_MAX; ++iPass)
+    {
+        passes[iPass].clear();
+        mapMatrixPasses[0][iPass].get_any_p(passes[iPass]);
+        for (const auto* pass : passes[iPass])
+            for (const auto& item : pass->second)
+                total += matrix_item_deferrable(item);
+    }
+    if (total < kMatrixChunkMinItems)
+        return false;
+
+    u32 contexts[kMatrixChunks];
+    u32 chunks = 0;
+    while (chunks < kMatrixChunks)
+    {
+        const u32 id = RImplementation.alloc_context();
+        if (id == INVALID_CONTEXT_ID)
+            break;
+        contexts[chunks++] = id;
+    }
+    if (chunks < 2)
+    {
+        for (u32 k = 0; k < chunks; ++k)
+            RImplementation.release_context(contexts[k]);
+        return false;
+    }
+
+    ZoneScopedN("dsgraph_render_dynamic_parallel");
+    for (auto& list : passes)
+    {
+        if (list.size() > 1)
+            std::sort(list.begin(), list.end(), cmp_pass<mapMatrix_T::value_type*>);
+        sort_pass_items(list);
+        // The objects' light (CROS_impl) takes its queries and its cache here, once a frame an object: the contexts read it.
+        for (const auto* pass : list)
+            for (const auto& item : pass->second)
+                if (item.pObject && item.pObject->renderable_ROS())
+                    static_cast<CROS_impl*>(item.pObject->renderable_ROS())->update_smooth(item.pObject);
+    }
+
+    const auto draw_item = [fade](CBackend& cmd, const _MatrixItem& item)
+    {
+        cmd.set_xform_world(item.Matrix);
+        RImplementation.apply_object(cmd, item.pObject);
+        cmd.apply_lmaterial();
+        const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
+        cmd.LOD.set_LOD(LOD);
+        const float cover = fade ? fade_cover(item.pVisual) : 1.f;
+        if (cover < 1.f)
+            cmd.LOD.set_fade(cover);
+        item.pVisual->Render(cmd, LOD, false);
+        if (cover < 1.f)
+            cmd.LOD.set_fade(1.f);
+    };
+
+    const bool velocity = cmd_list.xforms.m_motion_pass;
+    const auto record = [&](const TaskRange<u32>& range)
+    {
+        for (u32 k = range.begin(); k != range.end(); ++k)
+        {
+            CBackend& cmd = RImplementation.get_context(contexts[k]).cmd_list;
+            RImplementation.Target->phase_scene_begin_parallel(cmd, velocity);
+            cmd.set_xform_view(Device.mView);
+            cmd.set_xform_project(da_jitter_project(Device.mProject));
+            cmd.xforms.set_VP_motion(da_vp_nojit(), da_vp_prev());
+            SSManager.UseSceneBias(cmd.context_id, da_upscaler_active());
+            for (const auto& list : passes)
+            {
+                for (const auto* pass : list)
+                {
+                    bool bound = false;
+                    for (const auto& item : pass->second)
+                    {
+                        if (!matrix_item_deferrable(item) || matrix_chunk(item.pObject, chunks) != k)
+                            continue;
+                        if (!bound)
+                        {
+                            cmd.set_Pass(pass->first);
+                            bound = true;
+                        }
+                        draw_item(cmd, item);
+                    }
+                }
+            }
+            SSManager.UseSceneBias(cmd.context_id, false);
+        }
+    };
+    xr_parallel_for(TaskRange<u32>(0, chunks, 1), record);
+
+    for (u32 k = 0; k < chunks; ++k)
+    {
+        RImplementation.get_context(contexts[k]).cmd_list.submit();
+        RImplementation.release_context(contexts[k]);
+    }
+
+    // The executed lists cleared the immediate context: its cached state goes, the G-buffer's targets come back.
+    cmd_list.Invalidate();
+    RImplementation.Target->phase_scene_begin_parallel(cmd_list, velocity);
+
+    // What stayed on the immediate context (its depth against the lists' is settled by the depth test).
+    for (const auto& list : passes)
+    {
+        for (const auto* pass : list)
+        {
+            bool bound = false;
+            for (const auto& item : pass->second)
+            {
+                if (matrix_item_deferrable(item))
+                    continue;
+                if (!bound)
+                {
+                    cmd_list.set_Pass(pass->first);
+                    bound = true;
+                }
+                draw_item(cmd_list, item);
+            }
+        }
+    }
+
+    for (u32 iPass = 0; iPass < SHADER_PASSES_MAX; ++iPass)
+    {
+        for (auto* pass : passes[iPass])
+        {
+            pass->second.ssa = 0;
+            pass->second.clear();
+        }
+        passes[iPass].clear();
+        mapMatrixPasses[0][iPass].clear();
+        cachedMatrixPasses[0][iPass] = nullptr;
+        cachedMatrixItems[0][iPass] = nullptr;
+    }
+    return true;
+}
+#endif
+
 void R_dsgraph_structure::render_graph(u32 _priority)
 {
     PIX_EVENT_CTX(cmd_list, dsgraph_render_graph);
@@ -492,6 +669,9 @@ void R_dsgraph_structure::render_graph(u32 _priority)
     // Perform sorting based on ScreenSpaceArea
     // Sorting by SSA and changes minimizations
     // Render several passes
+#if RENDER == R_R4
+    if (_priority != 0 || !render_matrix_parallel(fade))
+#endif
     {
         ZoneScopedN("dsgraph_render_dynamic");
         PIX_EVENT_CTX(cmd_list, dsgraph_render_dynamic);

@@ -576,3 +576,34 @@ of trusting the buffer's own flag, and the comment above it says why: the flag d
 list once and every draw after that read stale GPU constants - the lamp blackout. The list is
 sixteen pointers. A generation stamp would make it O(1) and could put the bug back; the half a
 percent is not worth it.
+
+## Stage 8 - the threads (November 2026)
+
+Measured on `l01_escape` (R5, 1440p, DLSS balanced), every thread of the process and then the game thread by line:
+**2 cores of 16 busy, the GPU at 100 %**. The game thread holds a 20 ms frame like this: 4 ms waiting for the GPU at
+the sync point, 4.5 ms of simulation (2.5 ms of it Lua), the rest the render in many small pieces. What shadows draw
+was on the workers already. Nothing below changes the frame rate while the GPU is the limit, and that is expected:
+old and new builds alternated on one save measure the same (50.17 against 50.19 FPS, GPU frame 19.8 ms both).
+
+- **AI vision** (`Exec_Visibility`) goes through the parallel queue again, without a concurrency key: it fills caches
+  on the object looked at, so the NPCs take turns. `mt_ai_vision` switches it. Two to three percent of the game thread.
+- **The grass's compute groups** and **the ray tracing's moving objects** are built on workers from `Calculate`.
+- **The main view's moving objects** record on deferred contexts from 64 draws up, split by object (a model's parts
+  share its previous pose). Under that the lists cost more than they save: 30 draws took the game thread 0.4 ms instead
+  of 0.2 ms. Particles and software skinning stay on the immediate context, they map the shared vertex stream.
+  `r__mt_dynamic 0` is the switch. The context pool grew to twelve for it.
+- **The task manager** wakes a worker only when one sleeps (`SetEvent` was a system call per task) and pauses in its
+  spin.
+
+**Left alone on purpose.**
+- *Lua.* One VM, and every mod assumes it. The collector ran on a worker once and its finalizers crashed the game
+  (`Level.cpp`, the comment over `script_gc`). A collector step during the GPU wait is not free either: `CALifeUpdateManager`
+  runs Lua on a worker in that same window.
+- *`frame_pick` of the vegetation*, the game thread's longest wait (0.74 ms). Its passes share the record allocator and
+  the cut budget in near-to-far order; two populations in parallel would save 0.3 ms and give up that order.
+- *A submission thread.* `Submit` and `Present` are 0.4 ms together.
+- *A render thread overlapping the next simulation.* It would draw objects scripts are free to delete.
+
+**Traps of the measurement.** The snow cover differs from load to load of the same save: 1 ms of GPU, -2 FPS, so read
+`snow_prep` in the `[gpu]` line before believing a difference. A long session throttles the laptop: compare builds
+alternating, on the same minute, not against an hour-old number.

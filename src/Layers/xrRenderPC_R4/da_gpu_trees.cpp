@@ -89,7 +89,7 @@ constexpr u32 kFlagRtSkip = 1u << 1;
 constexpr u32 kFlagNodeList = 1u << 2;
 constexpr u32 kFlagFilter = 1u << 3;
 constexpr u32 kFrameMask = 0xFFFFFFu; // the shaders count frames in 24 bits (exact as a float)
-static_assert(R__NUM_CONTEXTS == 9, "da_gd_tree_cull.cs keeps value-filter stamps for 9 contexts");
+static_assert(R__NUM_CONTEXTS == 12, "da_gd_tree_cull.cs keeps value-filter stamps for 12 contexts");
 
 // One pass of a registered element and its GD variant; its bins and groups are contiguous.
 struct PassEntry

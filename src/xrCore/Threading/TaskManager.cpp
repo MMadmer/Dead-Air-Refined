@@ -99,16 +99,16 @@ public:
 
     Task* pop() noexcept
     {
+        // A lost race means someone took a task, not that the queue is empty: the worker going to sleep has to see the
+        // next one.
         size_t head_pos = m_head_pos.load(std::memory_order_acquire);
-        Task* task = m_storage[head_pos & TASK_STORAGE_MASK];
-        if (!task)
-            return nullptr;
-
-        const bool success = m_head_pos.compare_exchange_weak(head_pos, head_pos + 1, std::memory_order_acq_rel);
-        if (success)
+        while (Task* task = m_storage[head_pos & TASK_STORAGE_MASK])
         {
-            m_storage[head_pos & TASK_STORAGE_MASK] = nullptr;
-            return task;
+            if (m_head_pos.compare_exchange_weak(head_pos, head_pos + 1, std::memory_order_acq_rel))
+            {
+                m_storage[head_pos & TASK_STORAGE_MASK] = nullptr;
+                return task;
+            }
         }
         return nullptr;
     }
@@ -246,14 +246,22 @@ void TaskManager::TaskWorkerStart()
                 continue;
         }
 
-        SetThreadStatus(false);
+        // Announced before the last look at the queues: PushTask reads the count after it pushed, so one of the two
+        // always sees the other and no task waits for a worker that went to sleep past it. The look runs while the
+        // worker still counts as active: unregistering a worker waits for the active ones before it edits the list.
+        sleepingWorkersCount.fetch_add(1, std::memory_order_seq_cst);
+        const bool found_work = !shouldPause.load(std::memory_order_consume) &&
+            !shouldStop.load(std::memory_order_consume) && ExecuteOneTask();
+        if (!found_work)
         {
+            SetThreadStatus(false);
             do
             {
                 newWorkArrived.Wait();
             } while (shouldPause.load(std::memory_order_consume));
+            SetThreadStatus(true);
         }
-        SetThreadStatus(true);
+        sleepingWorkersCount.fetch_sub(1, std::memory_order_relaxed);
     }
 
     SetThreadStatus(false);
@@ -278,7 +286,7 @@ Task* TaskManager::TryToSteal() const
     {
         if (Task* task = worker.steal())
         {
-            if (!worker.empty())
+            if (!worker.empty() && sleepingWorkersCount.load(std::memory_order_seq_cst))
                 newWorkArrived.Set();
             return task;
         }
@@ -314,7 +322,10 @@ Task* TaskManager::AllocateTask() noexcept
 void TaskManager::PushTask(Task& task) noexcept
 {
     s_tl_worker.push(&task);
-    newWorkArrived.Set();
+    // Dekker's pair of the worker's announcement in TaskWorkerStart.
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    if (sleepingWorkersCount.load(std::memory_order_seq_cst))
+        newWorkArrived.Set();
     ++s_tl_worker.pushedTasks;
 }
 
@@ -334,7 +345,10 @@ void TaskManager::Wait(const Task& task, bool updateSystemEvents /*= false*/) co
     ZoneScoped;
     while (!task.IsFinished())
     {
-        ExecuteOneTask();
+        // Nothing to steal: the pause keeps this spin off the queues' cache lines and hands the core's other thread its
+        // share of the time, which on a laptop the GPU pays for.
+        if (!ExecuteOneTask())
+            _mm_pause();
         if (s_tl_worker.id == 0 && (xrDebug::ProcessingFailure() || updateSystemEvents))
             SDL_PumpEvents(); // Necessary to prevent dead locks
     }

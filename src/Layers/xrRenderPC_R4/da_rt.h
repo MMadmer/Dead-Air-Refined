@@ -60,6 +60,7 @@ void da_rt_level_unload();
 void da_rt_textures_replaced();
 
 // The frame (r2_R_render.cpp, phase_combine).
+void da_rt_frame_collect();                 // Calculate, once the main view's walk has posed the models: a worker's job
 void da_rt_frame_scene(CBackend& cmd_list); // before async fork A: acceleration structures
 void da_rt_sun_pass(CBackend& cmd_list);    // before the sun accumulation
 bool da_rt_ao_pass(CBackend& cmd_list);     // the AO slot: true = RTAO ran instead of GTAO/SSAO
