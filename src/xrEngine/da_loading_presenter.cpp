@@ -507,6 +507,7 @@ struct LayerState
     GpuTexture image; // a Shader layer's own texture where it is a picture
     std::unique_ptr<Program> program;
     bool tried{};
+    bool silent{};
 
     void reset()
     {
@@ -875,7 +876,7 @@ private:
 
     float volume() const { return std::clamp(psSoundVFactor * psSoundVMusic, 0.f, 1.f); }
 
-    std::unique_ptr<Source> open_source(pcstr texture)
+    std::unique_ptr<Source> open_source(pcstr texture, float vol)
     {
         string_path fn;
         switch (da_media_resolve(texture, fn))
@@ -885,7 +886,7 @@ private:
             if (!m_mf)
                 return nullptr;
             auto video = std::make_unique<VideoSource>(m_device);
-            if (video->open(m_manager, fn, volume()))
+            if (video->open(m_manager, fn, vol))
                 return video;
             Msg("! [loading] %s: Media Foundation cannot play this video", fn);
             return nullptr;
@@ -1026,6 +1027,7 @@ private:
             return;
         const bool sameItem = state.revision != ~0u;
         state.revision = layer.revision;
+        state.silent = layer.silent;
         const u32 w = u32(std::max(layer.rect.right - layer.rect.left, 0)), h = u32(std::max(layer.rect.bottom - layer.rect.top, 0));
         if (layer.pixels && w && h && layer.pixels->size() >= size_t(w) * h)
             make_texture(m_device, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, layer.pixels->data(), w * 4, false, state.picture);
@@ -1043,7 +1045,7 @@ private:
             return;
         if (layer.kind == DaLoadingLayer::Kind::Media || layer.kind == DaLoadingLayer::Kind::Shader)
         {
-            state.source = open_source(layer.texture.c_str());
+            state.source = open_source(layer.texture.c_str(), layer.silent ? 0.f : volume());
             if (layer.kind == DaLoadingLayer::Kind::Shader)
             {
                 state.program = build(layer.shader.c_str());
@@ -1217,7 +1219,7 @@ private:
         const float vol = volume();
         for (auto& [id, state] : m_layers)
             if (state.source)
-                state.source->volume(vol);
+                state.source->volume(state.silent ? 0.f : vol);
 
         capture(time);
         const HRESULT hr = m_chain->Present(1, 0);
@@ -1314,7 +1316,7 @@ private:
                 const float k = 1.f - std::min(float(now - m_fadeFrom) / 250.f, 1.f);
                 for (auto& [id, state] : m_layers)
                     if (state.source)
-                        state.source->volume(volume() * k);
+                        state.source->volume(state.silent ? 0.f : volume() * k);
                 if (k <= 0.f)
                 {
                     m_fadeFrom = 0;
@@ -1413,6 +1415,7 @@ bool da_loading_presenter_shown()
 
 void da_loading_presenter_shutdown()
 {
+    da_thread_music_shutdown();
     std::lock_guard guard(presenter_lock);
     if (presenter)
     {

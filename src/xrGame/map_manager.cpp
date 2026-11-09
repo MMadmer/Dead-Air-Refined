@@ -1,5 +1,6 @@
 #include "pch_script.h"
 #include "map_manager.h"
+#include "xrCore/XMS/xms_xml.h"
 #include "alife_registry_wrappers.h"
 #include "InventoryOwner.h"
 #include "Level.h"
@@ -138,10 +139,21 @@ CMapLocation* CMapManager::AddRelationLocation(CInventoryOwner* pInvOwner)
 
 void CMapManager::Destroy(CMapLocation* ml) { m_deffered_destroy_queue.push_back(ml); }
 
+void CMapManager::SetSpotPatch(pcstr patch, pcstr owner_id)
+{
+    if (m_spotPatch == (patch ? patch : ""))
+        return;
+    m_spotPatch = patch ? patch : "";
+    m_spotPatchOwner = owner_id ? owner_id : "";
+    OnUIReset();
+}
+
 void CMapManager::OnUIReset()
 {
     m_uiSpotXml.ClearInternal();
     m_uiSpotXml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "map_spots.xml");
+    if (!m_spotPatch.empty())
+        XMS::ApplyXmlPatchText(m_uiSpotXml, m_spotPatch.c_str(), m_spotPatchOwner.c_str());
     for (const SLocationKey& locationKey : Locations())
     {
         locationKey.location->LoadSpot(locationKey.spot_type.c_str());

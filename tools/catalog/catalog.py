@@ -88,7 +88,7 @@ HOLDS_HEADER = ("; Versions withdrawn automatically because VirusTotal blocks th
                 "[holds]\n")
 
 ALLOWED_EXTENSIONS = {
-    "ltx", "ltxp", "xml", "xmlp", "script", "txt", "md", "json", "csv", "ini", "cfg", "seq", "nqasset", "behasset",
+    "ltx", "ltxp", "xml", "xmlp", "script", "txt", "md", "json", "csv", "ini", "cfg", "seq", "gif", "mp4", "webm", "wmv", "html", "htm", "css", "png", "jpg", "jpeg", "nqasset", "behasset", "npcasset",
     "pdaasset", "xspawn", "xcform", "dds", "thm", "ogg", "ogm", "ogf", "omf", "skl", "skls", "anm", "ppe", "xr", "ps",
     "vs", "gs", "hs", "ds", "cs", "h", "hlsl", "s", "spawn", "graph", "ai", "gct", "cform", "details", "env_mod",
     "fog_vol", "game", "geom", "geomx", "hom", "ps_static", "snd_env", "snd_static", "som", "sectors", "wallmarks",
@@ -951,7 +951,7 @@ def vt_checks(release, key, policy, memory=None, wait_days=0):
                 rows.append(row)
             elif reason == "unknown":
                 findings.append(Finding("block", "VirusTotal does not know %s: scan the release with your own VirusTotal "
-                                                 "key in XFined Editor (Mod > Submit to Mod Browser) and submit again" % name))
+                                                 "key in Grizzly Editor (Mod > Submit to Mod Browser) and submit again" % name))
             else:
                 pending.append(reason)
     except (VtQuota, VtKeyRefused) as error:
@@ -986,7 +986,7 @@ def release_checks(repo, sub, author=None):
     except urllib.error.HTTPError as error:
         if error.code in (404, 410):
             findings.append(Finding("block", "the latest release of %s has no %s.update.ltx: publish the module "
-                                             "with XFined Editor first" % (sub.github, sub.id)))
+                                             "with Grizzly Editor first" % (sub.github, sub.id)))
         else:
             findings.append(Finding("wait", "GitHub answered HTTP %d for the release of %s" % (error.code, sub.github)))
         return findings, None
@@ -1002,7 +1002,7 @@ def release_checks(repo, sub, author=None):
     if version_tuple(release.version) < (1, 0, 0, 0):
         findings.append(Finding("block", "release %s is below 1.0.0" % release.version))
     if not release.card:
-        findings.append(Finding("block", "the release has no [card] (Package Release in XFined Editor writes it)"))
+        findings.append(Finding("block", "the release has no [card] (Package Release in Grizzly Editor writes it)"))
     try:
         release.verify_key(sub.key)
     except ValueError as error:
@@ -1159,9 +1159,9 @@ def withdrawal_id(text):
     return None if set(sections) - {"withdraw"} else first(sections, "withdraw", "id")
 
 
-NO_BLOCK = {"submission": "the issue holds no ```ini block with the submission: submit from XFined Editor "
+NO_BLOCK = {"submission": "the issue holds no ```ini block with the submission: submit from Grizzly Editor "
                           "(Mod > Submit to Mod Browser)",
-            "withdrawal": "the issue names no module: withdraw from XFined Editor (Mod > Submit to Mod Browser)"}
+            "withdrawal": "the issue names no module: withdraw from Grizzly Editor (Mod > Submit to Mod Browser)"}
 
 
 def judge_issue(api, repo, issue, settings, counts, vt_key, policy, memory, folder):
@@ -1195,7 +1195,7 @@ def judge_withdrawal(repo, text, login):
 
     module_id = withdrawal_id(text)
     if module_id is None:
-        return refused("the withdrawal holds more than [withdraw]: withdraw from XFined Editor (Mod > Submit to "
+        return refused("the withdrawal holds more than [withdraw]: withdraw from Grizzly Editor (Mod > Submit to "
                        "Mod Browser)")
     if not module_id:
         return refused(NO_BLOCK["withdrawal"])
@@ -1247,7 +1247,7 @@ def verdict_body(outcome, memory):
                 lines.append("- and %d more" % (len(chosen) - 40))
             lines.append("")
     if outcome.state == "refused":
-        lines += ["Fix what blocks and %s again from XFined Editor (Mod > Submit to Mod Browser)." %
+        lines += ["Fix what blocks and %s again from Grizzly Editor (Mod > Submit to Mod Browser)." %
                   ("withdraw it" if withdrawal else "submit"), ""]
     lines.append("<sub>Judged on %s by the catalog's own checks (MOD_CATALOG.md, section %s); nobody reviews by "
                  "hand.</sub>" % (stamp().replace("T", " ").replace("Z", " UTC"), "10.2" if withdrawal else "7"))
@@ -1319,7 +1319,7 @@ def cmd_judge(args):
             if pull:
                 previous, previous_state, _ = previous_verdict(api, number)
                 outcome = Outcome("refused", [Finding("block", "submissions are issues, not pull requests: submit "
-                                                               "from XFined Editor (Mod > Submit to Mod Browser)")])
+                                                               "from Grizzly Editor (Mod > Submit to Mod Browser)")])
                 say(api, number, previous, previous_state, "refused", verdict_body(outcome, {}))
                 api.call("PATCH", "repos/%s/pulls/%d" % (api.repo, number), {"state": "closed"})
                 lines.append("#%d: a pull request - closed" % number)

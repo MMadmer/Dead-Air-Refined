@@ -3,6 +3,8 @@
 
 #include "StdAfx.h"
 #include "ModOptOut.h"
+#include "UIModsWnd.h"
+#include "xrCore/XMS/xms_core.h"
 
 namespace
 {
@@ -85,7 +87,11 @@ void load_section(const CInifile& ini)
 
 void ModOptOut::LoadFromConfig()
 {
-    // Two sources, because mods reach configs in two different ways: an XMS module
+    for (const XMS::Module& m : XMS::Modules())
+        if (!m.disabled && m.disable_game_updates)
+            ModOptOut::DisableAutoUpdate(ModsDisplayText(m.name.empty() ? m.id : m.name).c_str());
+
+    // Two more sources, because mods reach configs in two different ways: an XMS module
     // patches the shared section through .ltxp without touching anyone else's lines,
     // while a plain addon just drops its own file into configs.
     if (pSettings)

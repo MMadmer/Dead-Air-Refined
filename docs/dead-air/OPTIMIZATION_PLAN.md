@@ -34,7 +34,7 @@ plan is Tier C, deliberately.
   to a save changes layout, order or size.
 - The modding contract (`MODDING.md`): exported Lua names are never withdrawn,
   console command names and their value ranges stay, XMS module behaviour stays.
-- XFined Editor reads the same file formats through the same code. Anything
+- Anything
   touching `xrCDB` build/serialize, level graph format or `.ogf`/`.omf` parsing
   keeps its on-disk representation byte-identical.
 - Original Dead Air data and mods built against it must load unchanged.

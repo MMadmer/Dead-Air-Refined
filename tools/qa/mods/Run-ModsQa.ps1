@@ -10,7 +10,7 @@
     (Start-ContentAssetMock.ps1) stands in for github.com: throttled and dropping every connection
     mid-body, so a large file only arrives by resuming. The fixture writes descriptors, file indexes
     and packages on its own, from the contract text - an independent second reading of it next to
-    XFined Editor's packager.
+    the packager that made the module.
 
     The engine is driven through its console only (xms_mods, xms_update, xms_update_status appended
     to the QA user.ltx). Nothing is clicked: every verdict comes from the engine log, the mock's byte

@@ -406,7 +406,7 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const RendererMo
     Core.Initialize("Grizzly", commandLine, true, *fsgame ? fsgame : nullptr);
     StartupProfileCheckpoint("Filesystem initialized");
 
-    // The shader caches under the engine's old names (as OpenXRay, as XFined-Ray) are read by nothing any more:
+    // The shader caches under the engine's old names are read by nothing any more:
     // they go in the background, hundreds of megabytes a player would never find to delete.
     {
         xr_vector<std::filesystem::path> stale;

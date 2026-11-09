@@ -17,7 +17,7 @@ namespace XMS
 struct ProvidedMode
 {
     xr_string id;    // [a-z0-9_.-]+
-    xr_string title; // string-table id for the new-game checkbox
+    xr_string title; // what the new-game screen lists it as: text or a string table id
 };
 
 // One [vfs] / [redirects] manifest line. For [vfs] `from` is the VIRTUAL
@@ -69,6 +69,92 @@ struct WorldRules
     }
 };
 
+// [screens], [screen.<id>] and [track.<id>] of a manifest: the module's loading and menu screens, each a
+// stack of layers, and their music. Contract: docs/dead-air/MODDING.md, "Screens and music".
+enum ScreenSurface : u8
+{
+    ScreenLoading,
+    ScreenMenu,  // the main menu
+    ScreenPause, // the same menu over a loaded level
+    ScreenSurfaceCount,
+};
+
+// what of the loading screen's own interface a module's screen leaves out
+enum ScreenHide : u32
+{
+    ScreenHideBar = 1 << 0,
+    ScreenHidePercent = 1 << 1,
+    ScreenHideStage = 1 << 2,
+    ScreenHideTip = 1 << 3,
+};
+
+struct ScreenLayer
+{
+    enum Kind : u8
+    {
+        Empty,   // a layer nothing was put on yet: not drawn
+        Texture, // a picture, a GIF, a video, a sequence
+        Shader,  // a shader of the module's, a .s with its .ps
+        Page,    // an HTML page, drawn once into a picture
+    };
+    enum Fit : u8
+    {
+        Cover,   // fills its place, the picture cut to its proportions
+        Contain, // whole, inside its place
+        Stretch, // fills its place, whatever its proportions
+    };
+    Kind kind{Empty};
+    Fit fit{Cover};
+    bool sound{true}; // a video's own sound, where the screen asks for it
+    float opacity{1.f};
+    float x{0.f}, y{0.f}, w{100.f}, h{100.f}; // the place on the screen, per cent of its width and height
+    xr_string file; // inside the module, '\' separators
+    xr_string name; // Texture: the texture name it is mounted under; Shader: the shader's name
+    xr_string base; // Shader: the texture name it draws over; empty for none
+    xr_string base_file; // what `base` is mounted from, inside the module
+};
+
+struct ScreenDecl
+{
+    enum Music : u8
+    {
+        MusicAny,    // whatever the surface's music is
+        MusicNone,   // silence
+        MusicVideo,  // a video layer's own sound (the loading screen only)
+        MusicTracks, // one of the tracks named in `tracks`
+    };
+    xr_string id;
+    u32 show{(1u << ScreenLoading) | (1u << ScreenMenu) | (1u << ScreenPause)};
+    xr_vector<xr_string> levels; // where it may show; empty = everywhere
+    xr_vector<xr_string> modes;  // the game modes it may show in; empty = every game
+    float weight{1.f};
+    Music music{MusicAny};
+    xr_vector<xr_string> tracks;
+    u32 hide{}; // ScreenHide
+    xr_vector<ScreenLayer> layers; // bottom first
+};
+
+struct TrackDecl
+{
+    xr_string id;
+    xr_string file; // inside the module, '\' separators
+    xr_string name; // the sound name it is mounted under
+    u32 play{};     // the surfaces whose shuffle it joins; none: only where a screen names it
+    float weight{1.f};
+    float volume{1.f};
+};
+
+struct ScreensRules
+{
+    // indexed by Loading = 0, Menu = 1: the pause menu is the menu
+    bool only_screens[2]{};
+    bool only_music[2]{};
+    bool next_track[2]{}; // a track that ends gives way to another instead of starting again
+    xr_vector<ScreenDecl> screens;
+    xr_vector<TrackDecl> tracks;
+    static u32 Side(ScreenSurface s) { return s == ScreenLoading ? 0 : 1; }
+};
+
 // One console command of a module: a [commands] line `name = <script>.<function>` and its
 // [command.<name>] section. The game registers it once every stock command exists and calls
 // the function with the text typed after the name. Contract: MODDING.md, "Console commands".
@@ -98,6 +184,7 @@ struct Module
     // the tags of the fixed vocabulary, as the manifest spells them
     xr_string thumbnail;
     xr_string tags;
+    bool disable_game_updates{false}; // [module]: a last resort - the game neither updates itself nor takes bug reports
     bool legacy_root{false}; // lives in the "mods" folder JSGME manages, not in "modules"
     xr_vector<ProvidedMode> provides_modes;
     xr_vector<xr_string> requires_ids;
@@ -112,6 +199,7 @@ struct Module
     // modules, base configs) - the UE redirector idea in manifest form
     xr_vector<PathMap> redirect_maps;
     WorldRules world;
+    ScreensRules screens;
     // [pda] layout: the module's PDA interface, a .pdaasset path relative to the module root
     // ('\' separators, never climbing out). Empty = the module leaves the PDA alone. Only the
     // last applying module that declares one is used (XmsPda); contract: MODDING.md "PDA layouts".

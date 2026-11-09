@@ -1287,7 +1287,7 @@ struct ModCandidate
     xr_string tag;
 };
 
-// The release of one version. XFined Editor tags a version v<version>, or v<version>-r<N> when it
+// The release of one version. A version is tagged v<version>, or v<version>-r<N> when it
 // went out again after a deletion, and never has two releases of one version out (MOD_UPDATES 2.5);
 // the game reads no release list, so it asks for those names until one answers. False when the
 // network failed - nothing is concluded from that.

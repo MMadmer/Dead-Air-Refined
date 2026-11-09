@@ -1,7 +1,7 @@
--- XFined Editor characters: the game's half.
+-- A module's characters.
 --
--- A character built by the editor may keep a shop: its spawn section names the trade config
--- the build wrote for it (xms_trade = misc\trade\<module>\<id>.ltx). The stock logic reads a
+-- A module's character may keep a shop: its spawn section names the trade config
+-- the game made of its asset (xms_trade = misc\trade\<module>\<id>.ltx). The stock logic reads a
 -- trader's config from the logic the NPC runs ([logic] trade = ..., xr_logic.configure_schemes)
 -- and falls back to trade_generic.ltx - and every logic a module hands an NPC (a standing
 -- order, a behaviour step, a smart terrain's job) is written without that line. So the

@@ -1,6 +1,6 @@
 # The mod catalog: the in-game Mod Browser, its trust and its sandbox
 
-This document is the contract between Dead Air: Refined, XFined Editor, the catalog
+This document is the contract between Dead Air: Refined, the authoring tool, the catalog
 repository and every module listed in it. It builds on [MOD_UPDATES.md](MOD_UPDATES.md):
 a listed module is an ordinary XMS module with ordinary GitHub releases; the catalog adds
 who may publish it, what the player is shown before installing it, and what its scripts
@@ -55,13 +55,13 @@ copy on any host is as good as the original (section 13).
 |---|---|---|
 | Catalog workflows | the catalog key and a VirusTotal key, as repository secrets | listing what passes section 7; withdrawing what VirusTotal blocks or does not know |
 | Maintainer (optional) | the catalog repository, as its owner, and the catalog key file | revocations by hand; moderation of reviews |
-| Author | an author key, made and kept by XFined Editor, and their own VirusTotal key | the content of their releases; scanning every release on VirusTotal before it goes out; withdrawing their own module when they want it out |
+| Author | an author key, made and kept by the authoring tool, and their own VirusTotal key | the content of their releases; scanning every release on VirusTotal before it goes out; withdrawing their own module when they want it out |
 | Mirrors, hosts, proxies | nothing secret | nothing - everything they serve is verified |
 | Player | optionally their own VirusTotal key | - |
 
 ## 3. Keys and signatures
 
-- Algorithm: ECDSA over P-256 with SHA-256 (FIPS 186-4). The game and the editor use
+- Algorithm: ECDSA over P-256 with SHA-256 (FIPS 186-4). The game and the authoring tool use
   Windows CNG (`bcrypt.dll`, `ncrypt.dll`); the catalog tools use CNG on Windows and a
   plain big-integer verifier elsewhere. No third-party cryptography is shipped.
 - A public key is written `p256:<X||Y>`: the 64 bytes of the uncompressed point without
@@ -91,7 +91,7 @@ author's, from the catalog) and compares ids.
 ## 4. The author's release
 
 A catalog module publishes releases exactly as MOD_UPDATES.md section 2 says. Two optional
-descriptor sections are added there (2.1), both written by XFined Editor's Package Release:
+descriptor sections are added there (2.1), both written by the authoring tool's Package Release:
 
 ```ini
 [card]
@@ -153,9 +153,7 @@ scalar), the last 32 key the tag (`HMAC-SHA256(key, nonce || encrypted scalar)`,
 before anything is decrypted). Both Windows CNG and a language's standard library have
 every piece of it.
 
-XFined Editor creates the author's key file on first use - `Documents\XFined Editor\Keys\
-author.xkey` unless the author picks another place, never inside a project - and says to
-keep a copy. It remembers where the file is and asks for its password once per session.
+The author's key file is created on first use, never inside a project. Keep a copy. It remembers where the file is and asks for its password once per session.
 Another computer imports the same file.
 
 The catalog's rules never replace a lost author key. A submission that brings another key
@@ -323,7 +321,7 @@ MOD_UPDATES.md section 1 gains two optional keys.
 A path inside the module to a DDS picture: 256 x 256, DXT1 or DXT5, one mip level or the
 full chain, at most 180 KiB, of exactly the size those dimensions give. Anything else is
 not shown. The Mods window shows it next to an installed module, the Mod Browser next to a
-listed one. XFined Editor makes it (`thumbnail.dds` at the module root) from any picture
+listed one. The authoring tool makes it (`thumbnail.dds` at the module root) from any picture
 the author picks.
 
 ### 6.2 `[module] tags`
@@ -334,7 +332,7 @@ A comma list from this vocabulary; other words are ignored:
 
 ## 7. Listing requirements
 
-A module is listed when all of these hold. XFined Editor checks them before it submits,
+A module is listed when all of these hold. The authoring tool checks them before it submits,
 and the catalog's `accept` workflow judges the submission by them (10.2):
 
 1. `[update] github` names a public repository whose Latest release carries the module's
@@ -363,8 +361,7 @@ and the catalog's `accept` workflow judges the submission by them (10.2):
    listing one again counts like a new one.
 9. At most `max_new_per_day` modules not listed yet - new ids and withdrawn ones listed
    again - are listed a day; the rest wait.
-10. VirusTotal: the author scanned every package with their own VirusTotal key (XFined
-    Editor does it on Submit), so VirusTotal has a report of it, and no package's verdict
+10. VirusTotal: the author scanned every package with their own VirusTotal key, so VirusTotal has a report of it, and no package's verdict
     (section 11) is `block`. A `warn` is listed, and the game asks the player before it
     installs. The catalog only reads the report, once, and uploads nothing: a package
     VirusTotal does not know is refused, one VirusTotal is still analysing waits. When the
@@ -394,12 +391,12 @@ dormant_days       = 30
 ## 8. Content policy
 
 Enforced by the game for every catalog module it installs or updates, by the catalog's CI
-and by XFined Editor before a submission. The list is code on every side, never data a
+and by the authoring tool before a submission. The list is code on every side, never data a
 module could change.
 
 - Paths: MOD_UPDATES 2.2, and no component starting with a dot.
 - A file has no extension or one of: `ltx ltxp xml xmlp script txt md json csv ini cfg seq
-  nqasset behasset pdaasset xspawn xcform dds thm ogg ogm ogf omf skl skls anm ppe xr ps vs
+  gif mp4 webm wmv html htm css png jpg jpeg nqasset behasset npcasset pdaasset xspawn xcform dds thm ogg ogm ogf omf skl skls anm ppe xr ps vs
   gs hs ds cs h hlsl s spawn graph ai gct cform details env_mod fog_vol game geom geomx hom
   ps_static snd_env snd_static som sectors wallmarks lanims`.
 - Whatever its name, a file must not start like a program or a container: a PE image
@@ -497,7 +494,7 @@ refused outright.
 
 ## 10. Submission and acceptance
 
-### 10.1 The author, in XFined Editor
+### 10.1 The author
 
 **Mod > Submit to Mod Browser...** (MCP `mod_catalog`) checks section 7 on the project and
 its latest release, scans the packages on VirusTotal with the author's own key - uploading
@@ -510,10 +507,10 @@ contributor's fork, a run it flags) and turns `pull_request_target` off by defau
 public repositories, and the catalog has nobody to approve anything. An issue starts the
 catalog's workflow with none of that.
 
-The issue's form is a contract between the editor and the catalog. Its title is
+The issue's form is a contract between the authoring tool and the catalog. Its title is
 `Submit <module id>`; its body starts with the line `<!-- xms-catalog submission -->`, then
 one line of text, then a fenced `ini` block holding exactly the text of `mods/<id>.ltx`,
-then the editor's report. The `ini` block:
+then the authoring tool's report. The `ini` block:
 
 ```ini
 [mod]
@@ -531,8 +528,7 @@ One module and one account have at most one open submission: submitting again ed
 issue, which makes the catalog judge it again; with none open, a new one is opened. The
 window follows the issue and shows the catalog's verdict (10.2).
 
-**Withdraw...** in the same window (MCP `mod_catalog action=withdraw`, the bridge tool
-`xfined_mod_catalog_withdraw`) takes a listed module out of the Mod Browser - a rights
+**Withdraw...** takes a listed module out of the Mod Browser - a rights
 problem, a module its author gives up. The window asks once, naming what happens, with
 Cancel as the default. It opens an issue titled `Withdraw <module id>` from the author's
 GitHub account, or edits the account's open one; the body starts with the line
@@ -544,7 +540,7 @@ names the module and nothing else:
 id = darf-overnight-delivery
 ```
 
-The editor reads `mods/<id>.ltx` from the catalog's default branch first and sends nothing
+The authoring tool reads `mods/<id>.ltx` from the catalog's default branch first and sends nothing
 when the catalog does not hold the module, when the file names another owner's repository
 - only the account the module was listed from may withdraw it - or when it is withdrawn
 already. Neither the author key nor a VirusTotal key is needed: an author who lost the key
@@ -621,11 +617,11 @@ withdrawals), `moderation.ltx` (12.4), `public/` (what mirrors serve: `index.ltx
 Only a person with write access changes a workflow: `merge` commits nothing but one
 `mods/<id>.ltx` an issue - a listing, or the `withdrawn` line of a withdrawal - and the
 VirusTotal rows the judge read into `public/vt.txt`, and nothing a submitter sends is ever
-run - only read. Forks of the catalog or of XFined Editor change none of this: the
+run - only read. Forks of the catalog or of the authoring tool change none of this: the
 catalog's checks run in its own repository with its own secrets, it believes nothing an
 editor reports, and the game takes an index only when a key built into it signed it.
 
-**The verdict** is a comment on the submission's or the withdrawal's issue, and XFined Editor shows it (10.1):
+**The verdict** is a comment on the submission's or the withdrawal's issue, and the authoring tool shows it (10.1):
 its form is a contract between the two as well. The body starts with the line
 `<!-- xms-catalog verdict=accepted|waiting|refused -->` (one of the three), the next line
 says the verdict in plain text, then come a blank line and the report in Markdown:
@@ -692,7 +688,7 @@ author's scan - it reads the report that scan left, once.
 
 **Where it runs.**
 
-- The author, in XFined Editor, with their own key, and required: Submit to Mod Browser
+- The author, in the authoring tool, with their own key, and required: Submit to Mod Browser
   scans the packages before the submission is sent (10.1), and Publish Release scans every
   release of a listed module before anything goes out on GitHub - uploading a package
   VirusTotal does not know and waiting for its report. A package VirusTotal blocks is not
@@ -928,7 +924,7 @@ update replaces the folder whole and would take it along. The comparison is one 
 the sorted lines `<path in ASCII lower case>\t<size>\t<sha256>\n`, made the same way for the
 folder and for the index. It never looks at the packages: a package's bytes carry its entries'
 modification times and a descriptor's ECDSA signature is different at every packaging, so
-neither says anything about content - the index's per-file SHA-256 does. XFined Editor writes
+neither says anything about content - the index's per-file SHA-256 does. The authoring tool writes
 no time, random value or path of the author's machine into a module's files, so an unchanged
 project exports the same files every time; generated files that read the linked game (a mode's
 menu layout, a baked spawn) follow that game, and a copy exported against another installation
@@ -936,7 +932,7 @@ may honestly differ.
 
 **Which release.** The one of the installed `mod.ltx` version. The same version as the latest
 release is the latest release; an older one is fetched by its tag, `v<version>` - or
-`v<version>-r<N>` (2 to 5), which XFined Editor uses when a version goes out again after a
+`v<version>-r<N>` (2 to 5), which the authoring tool uses when a version goes out again after a
 deletion (MOD_UPDATES 2.5) - from `https://github.com/<owner>/<repo>/releases/download/<tag>/`,
 the descriptor first and the index it names. No GitHub API is asked. A version above the latest
 release, below the lowest listed one or with no release under those tags is no release of the

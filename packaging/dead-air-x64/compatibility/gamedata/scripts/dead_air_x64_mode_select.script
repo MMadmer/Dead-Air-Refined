@@ -1,20 +1,18 @@
 -- The module-mode dropdown on the new-game screen.
 --
 -- Campaigns installed as XMS modules do not add checkboxes to the РЕЖИМЫ
--- column; they register here and show up in ONE dropdown, drawn in the band
--- between the loadout section and the modes/options block. No modules - no
--- dropdown, the screen stays exactly stock.
+-- column; the modes their manifests declare show up in ONE dropdown, drawn in
+-- the band between the loadout section and the modes/options block. No modules
+-- - no dropdown, the screen stays exactly stock.
 --
--- This file never runs unless something references it: module registrars
--- call add_mode() and the _G auto-loader pulls it in. It is mechanism only -
--- what it draws comes from add_mode(), where it draws comes from
--- dead_air_x64_mode_exclusive.ltx, and it touches no stock control by name.
+-- This file never runs unless something references it: the engine's bootstrap
+-- calls add_mode() for every declared mode (xms.offer_modes) and the _G
+-- auto-loader pulls it in. It is mechanism only - what it draws comes from
+-- add_mode(), where it draws comes from dead_air_x64_mode_exclusive.ltx, and it
+-- touches no stock control by name.
 --
--- Compatibility contract, both directions:
---   * a module built for plain DA (no Refined layer) falls back to its own
---     checkbox - the registrar script the editor generates tries add_mode()
---     first and only then takes the checkbox path;
---   * a legacy module that still creates a checkbox keeps working: its box
+-- Compatibility:
+--   * a module that creates a checkbox of its own keeps working: its box
 --     lands in self.xms_checks, which the exclusivity group already covers;
 --   * a mod that replaces the screen entirely just loses the dropdown -
 --     every touch below is guarded, and nothing else depends on it.

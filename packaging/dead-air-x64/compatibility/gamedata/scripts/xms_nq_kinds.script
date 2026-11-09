@@ -1087,8 +1087,7 @@ K["item.spawn"] = {
 		for ri, r in ipairs(rows) do
 			local made = r.ref and by_row[ri] or nil
 			if (made and made[1]) then
-				-- a ref names ONE object; the editor refuses a ref on a row that makes
-				-- several, a hand-written asset gets the first and a warning
+				-- a ref names ONE object: on a row that makes several it gets the first and a warning
 				if (#made > 1) then
 					util.warn("%s/%s: item.spawn: ref '%s' names the first of %d items",
 						ctx.uid, ctx.node_id, r.ref, #made)

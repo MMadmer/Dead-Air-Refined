@@ -9,12 +9,19 @@ libraries opened, or syntax-checks files without running them.
 Script arguments are exposed to Lua as the global table `arg` (arg[0] = script path).
 """
 import ctypes
+import glob
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GAME_DIR = os.environ.get("NQ_GAME_DIR", r"D:\Games\Dead Air")
 DLL_CANDIDATES = [os.path.join(GAME_DIR, "LuaJIT.dll"), os.path.join(GAME_DIR, "lua51.dll")]
+
+# The example quests are the editor's repository, which sits beside the game's folder whatever it is called.
+if "NQ_EXAMPLES" not in os.environ:
+    for found in glob.glob(os.path.join(os.path.dirname(GAME_DIR), "*", "docs", "nq", "examples")):
+        os.environ["NQ_EXAMPLES"] = found
+        break
 
 LUA_MULTRET = -1
 LUA_GLOBALSINDEX = -10002

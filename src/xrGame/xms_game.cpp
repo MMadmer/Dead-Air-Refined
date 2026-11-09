@@ -4,6 +4,7 @@
 #include "pch_script.h"
 
 #include "xms_game.h"
+#include "ui/UIModsWnd.h"
 #include "xms_world.h"
 #include "xms_pda.h"
 #include "save_extension_gameplay.h"
@@ -323,8 +324,8 @@ void SyncModesFromNewGameOptions()
     }
 
     // The screen writes one key per checkbox and leaves the unticked ones
-    // empty. new_game_metro_mode -> "metro", matching the ids the editor
-    // offers and a module's [module] mode.
+    // empty. new_game_metro_mode -> "metro", matching the ids of
+    // a module's [module] mode.
     //
     // Both halves of the name are required. That section holds plenty of other
     // new_game_* keys the same screen writes as booleans - good_wpn, good_loot,
@@ -770,7 +771,7 @@ void xms_native_set_modes(pcstr csv) { XMS::SetActiveModes(csv); }
 pcstr xms_native_active_modes() { return XMS::ActiveModesCsv(); }
 bool xms_native_mode_active(pcstr id) { return XMS::ModeActive(id); }
 
-// every mode any installed module declares: {id, title, provider}
+// every mode any installed module declares: {id, title, caption, provider}
 luabind::object xms_native_known_modes(lua_State* L)
 {
     luabind::object result = luabind::newtable(L);
@@ -784,6 +785,7 @@ luabind::object xms_native_known_modes(lua_State* L)
             luabind::object entry = luabind::newtable(L);
             entry["id"] = mode.id.c_str();
             entry["title"] = mode.title.c_str();
+            entry["caption"] = ModsDisplayText(mode.title.empty() ? mode.id : mode.title).c_str();
             entry["provider"] = m.id.c_str();
             result[index++] = entry;
         }
@@ -1067,32 +1069,40 @@ function xms.registry.get(name)
     return reg
 end
 
+-- ---- the modes modules declare ----------------------------------------------
+-- [provides_mode] in a manifest is all it takes for the new-game screen to offer a mode.
+function xms.offer_modes()
+    local known = xms.known_modes()
+    if #known == 0 then return end
+    local screen = dead_air_x64_mode_select
+    if not (screen and screen.add_mode) then
+        xms.log("! xms modes: the new-game screen has no list of module modes")
+        return
+    end
+    for i = 1, #known do screen.add_mode(known[i].id, known[i].caption) end
+    xms.log("module mode(s) offered on the new-game screen: " .. #known)
+end
+local ok_modes, modes_err = pcall(xms.offer_modes)
+if not ok_modes then xms.log("! xms.offer_modes: " .. tostring(modes_err)) end
+
 -- ---- module registrars ------------------------------------------------------
--- A module ships a startup script to run something before anything else asks
--- for it - adding its game mode to the new-game screen, registering a scheme,
--- whatever. Loaded here, in load order, once the whole api above exists:
--- without this a module's scripts sit on disk with nobody to require them.
--- Two reserved names, so a tool and a human never overwrite each other:
---   mode_register  generated (XFined Editor rewrites it on every export)
---   register       the author's own, never touched by anything
--- Generated first, so the author's script can override what it set up.
+-- A module ships scripts\register.script to run something before anything else
+-- asks for it - registering a scheme, wrapping a function, whatever. Loaded here,
+-- in load order, once the whole api above exists: without this a module's scripts
+-- sit on disk with nobody to require them.
 --
 -- A registrar runs once per SCRIPT ENGINE, not once per process: the engine
 -- rebuilds the Lua state for a new game, a save load and every level change,
 -- and each of those states needs its own wrappers. Registrars must therefore
 -- be idempotent and must not read the active mode set - on the load path the
 -- state is rebuilt before the save's modes are restored.
-local REGISTRARS = { "mode_register", "register" }
 function xms.load_registrars()
     for _, m in ipairs(xms.modules() or {}) do
         if m.enabled then
-            for i = 1, #REGISTRARS do
-                local name = REGISTRARS[i]
-                local source = xms_native_read_script(m.id, name)
-                if source and source ~= "" then
-                    xms.log("registrar: " .. m.id .. "/" .. name)
-                    xms.require(m.id, name)
-                end
+            local source = xms_native_read_script(m.id, "register")
+            if source and source ~= "" then
+                xms.log("registrar: " .. m.id .. "/register")
+                xms.require(m.id, "register")
             end
         end
     end
@@ -1100,6 +1110,7 @@ end
 -- guarded: one module's broken registrar must not take the bootstrap with it
 local ok_reg, reg_err = pcall(xms.load_registrars)
 if not ok_reg then xms.log("! xms.load_registrars: " .. tostring(reg_err)) end
+
 
 xms.log("bootstrap ready, api " .. tostring(xms.api))
 )xms";

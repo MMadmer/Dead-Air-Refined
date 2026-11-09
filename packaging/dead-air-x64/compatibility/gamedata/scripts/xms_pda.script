@@ -2,7 +2,7 @@
 --
 -- The engine (CUIPdaLayout) asks build() for the layout of the module that owns the PDA;
 -- this reads the module's .pdaasset in the NQ loader's sandbox, runs it through the reader
--- the editor shares (xms_pda_layout.script), converts every text to cp1251 and hands back
+-- (xms_pda_layout.script), converts every text to cp1251 and hands back
 -- the flat item list. It is also the script side of xms.pda (rows, texts, vars) and of the
 -- signal: and lua: actions of a layout.
 -- Contract: docs/dead-air/MODDING.md, "PDA layouts".
@@ -103,6 +103,42 @@ local function engine_items(items)
 	return out
 end
 
+-- ---------------------------------------------------------------------------- the map spots
+-- The look of the game's map spots while this layout is on, as a patch of ui\map_spots.xml:
+-- every stock node it names is replaced whole, its texture first and static_border on top.
+local function xml_text(s)
+	return (string.gsub(s, '[&<>"]', { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }))
+end
+
+local function rgba(c)
+	return string.format('r="%d" g="%d" b="%d" a="%d"', math.floor(c / 65536) % 256, math.floor(c / 256) % 256,
+		c % 256, math.floor(c / 16777216) % 256)
+end
+
+function spot_patch(spots)
+	if not (spots and #spots > 0) then return nil end
+	local out = { '<xms-patch target="ui\\map_spots.xml">' }
+	for _, s in ipairs(spots) do
+		out[#out + 1] = string.format('<replace node="%s"><%s x="0" y="0" width="%g" height="%g" stretch="1" alignment="c"%s location_level="%d">',
+			s.name, s.name, s.size, s.size, s.heading and ' heading="1"' or "", s.level)
+		-- a piece of a texture file, or a whole texture id
+		local piece = s.rect and string.format(' x="%g" y="%g" width="%g" height="%g"', s.rect.x, s.rect.y, s.rect.w, s.rect.h) or ""
+		out[#out + 1] = string.format("<texture%s %s>%s</texture>", piece, rgba(s.color), xml_text(s.icon))
+		if (s.inner) then
+			out[#out + 1] = string.format('<static_border x="%g" y="%g" width="%g" height="%g" stretch="1"><texture %s>%s</texture></static_border>',
+				s.inner.x, s.inner.y, s.inner.size, s.inner.size, rgba(s.inner.color), xml_text(s.inner.icon))
+		end
+		-- a minimap spot shows arrows when its place is above or below the player
+		if (s.arrows) then
+			out[#out + 1] = string.format("<texture_below>%s_below</texture_below><texture_above>%s_above</texture_above>",
+				xml_text(s.arrows), xml_text(s.arrows))
+		end
+		out[#out + 1] = string.format("</%s></replace>", s.name)
+	end
+	out[#out + 1] = "</xms-patch>"
+	return table.concat(out)
+end
+
 -- ---------------------------------------------------------------------------- the engine
 -- Reads, checks and converts the layout of a module. nil when it cannot be used - the
 -- engine keeps the stock PDA then, and the log says why.
@@ -135,6 +171,7 @@ function build(mod_id, rel)
 	for k, v in pairs(lay.vars) do out.vars[k] = to_cp1251(v) end
 	for i, p in ipairs(lay.pages) do out.pages[i] = { id = p.id, title = to_cp1251(p.title), stock = p.stock } end
 	out.items = engine_items(lay.items)
+	out.spot_patch = spot_patch(lay.map_spots)
 	return out
 end
 

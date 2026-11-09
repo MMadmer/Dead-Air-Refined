@@ -100,6 +100,7 @@ target_sources_grouped(
     TARGET xrSound
     NAME "Target\\OpenAL"
     FILES
+    da_thread_music.cpp
     SoundRender_TargetA.cpp
     SoundRender_TargetA.h
 )

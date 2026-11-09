@@ -1,6 +1,6 @@
 # Submitting a module
 
-Use XFined Editor: **Mod > Submit to Mod Browser**. It checks everything the catalog checks,
+Use Grizzly Editor: **Mod > Submit to Mod Browser**. It checks everything the catalog checks,
 scans the package on VirusTotal with your own key, and opens an issue here from your GitHub
 account. The scan is required and it is yours: make a free account at virustotal.com and save
 its API key in the editor's VirusTotal section. The catalog only reads the report your scan
@@ -31,14 +31,14 @@ Notes:
   safe: every release of the module has to be signed with it. A module is bound to its key for
   good: with the key lost, updates stop, and the module can only be listed again under a new id.
 - `version` is the lowest version the browser offers.
-- Updates need no submission: publish a new release with XFined Editor (Publish Release scans it
+- Updates need no submission: publish a new release with Grizzly Editor (Publish Release scans it
   with your key first) and the browser picks it up within six hours. A release VirusTotal does
   not know - published without the editor, or without the scan - is withdrawn until you scan it.
 - Pull requests are not submissions: one is closed with a pointer here.
 
 ## Withdrawing a module
 
-XFined Editor withdraws a module too: **Mod > Submit to Mod Browser** opens a withdrawal issue
+Grizzly Editor withdraws a module too: **Mod > Submit to Mod Browser** opens a withdrawal issue
 here from your GitHub account. Only the account that owns the module's repository can withdraw
 it. The catalog answers in the issue the same way; accepted, the module leaves the browser within
 minutes, and installed copies keep working. The module id stays bound to your key: submitting the

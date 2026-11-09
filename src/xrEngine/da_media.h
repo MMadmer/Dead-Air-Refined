@@ -34,6 +34,10 @@ ENGINE_API void da_media_forget(pcstr id);
 // of its own under the same name.
 ENGINE_API DaMediaKind da_media_resolve(pcstr name, string_path& fn);
 
+// The picture size of the texture `name`, whichever of these files it stands for; false when it has none of its own
+// to tell (a sequence) or the file cannot be read.
+ENGINE_API bool da_media_size(pcstr name, u32& width, u32& height);
+
 // The clock textures move by (ms): real time less the time the application was inactive. Unlike
 // Device.dwTimeContinual it also runs while a level loads, between the frames of the loading screen.
 ENGINE_API u32 da_media_time();

@@ -31,6 +31,9 @@ public:
 
     bool Valid() const { return m_d2d && m_dwrite && m_wic; }
     void SetViewport(float width, float height, float scale);
+    // A page of a module's screen: its pictures and style sheets may also be files next to it, under this folder
+    // (physical, with its trailing delimiter). Nothing above it and nothing on the network.
+    void SetLocalFolder(pcstr folder) { m_folder = folder; }
 
     // The part of the page something is drawn on: the boxes of every draw of `doc`, CSS pixels.
     litehtml::position Measure(const litehtml::document::ptr& doc);
@@ -72,7 +75,7 @@ public:
     void on_mouse_event(const litehtml::element::ptr&, litehtml::mouse_event) override {}
     void set_cursor(const char*) override {}
     void transform_text(litehtml::string& text, litehtml::text_transform tt) override;
-    void import_css(litehtml::string&, const litehtml::string&, litehtml::string&) override {}
+    void import_css(litehtml::string& text, const litehtml::string& url, litehtml::string& baseurl) override;
     void set_clip(const litehtml::position& pos, const litehtml::border_radiuses& bdr_radius) override;
     void del_clip() override;
     void get_viewport(litehtml::position& viewport) const override;
@@ -94,6 +97,7 @@ private:
         u32 height{};
     };
 
+    bool read_local(const char* src, xr_vector<u8>& bytes) const;
     // the box drawn into: measured, or clipped to the layer's rounded border box while `draw` runs
     bool measure(const litehtml::position& box);
     template <typename Draw>
@@ -117,6 +121,7 @@ private:
     float m_width{};
     float m_height{};
     float m_scale{ 1.f };
+    xr_string m_folder;
 
     xr_map<xr_string, Picture> m_pictures;
 };

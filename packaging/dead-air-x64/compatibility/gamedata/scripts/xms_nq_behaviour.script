@@ -247,7 +247,7 @@ local function apply_now(id, tag, text)
 		if (db and db.dynamic_ltx) then db.dynamic_ltx[tag] = ini end
 		local section = "logic@" .. tag
 		-- gulag_name "" on purpose: paths in a behaviour are the names the author
-		-- gave them in the editor, not names to be prefixed with a smart's
+		-- gave them, not names to be prefixed with a smart's
 		xr_logic.configure_schemes(go, ini, "*" .. tag, modules.stype_stalker, section, "")
 		local sect = xr_logic.determine_section_to_activate(go, ini, section, actor())
 		xr_logic.activate_by_section(go, ini, sect, "", false)
@@ -576,8 +576,7 @@ K["behaviour.run"] = {
 			error("behaviour.run: behaviour graph '" .. scen_uid .. "' has no start node")
 		end
 		-- A graph may run another one, never itself - directly or through a chain
-		-- (the editor's E113). Checked here too: a module is not always built by
-		-- the editor, and the alternative is instances spawning instances forever.
+		-- (E113): the alternative is instances spawning instances forever.
 		do
 			local up, hops = ctx.qs, 0
 			while (up and hops < 16) do
@@ -1078,7 +1077,7 @@ K["npc.patrol"] = {
 -- graph holds the NPC and resumes the moment the graph lets it go.
 --
 -- Given by a quest (order.*) or by the NPC's own spawn: [xms_order] in its custom
--- data, which is what the level editor writes for a placed NPC.
+-- data.
 --   state.orders[id] = { kind, tag, text, path, dest, at, lvl, wander, by, applied }
 local ORDER_PREFIX = "xms_ord_"
 local ORDER_TICK = 500				-- ms between two passes over the orders
@@ -1326,7 +1325,7 @@ K["order.attack"] = {
 }
 
 -- ---- orders from the NPC's own spawn: [xms_order] in its custom data -------
--- What the level editor writes for a placed NPC. Adopted ONCE per NPC (the id is
+-- Adopted ONCE per NPC (the id is
 -- remembered in the state), so a quest that dismissed the order later is not undone
 -- by the next load. Keys: order = guard|patrol|follow|animpoint, route, look, radius, move, cover, camp,
 -- target (actor or a story id), distance, hostile = true (to the player).

@@ -8,8 +8,8 @@
 // A module names a .pdaasset in mod.ltx ([pda] layout = <path in the module>). When it
 // applies to the running game, the PDA keeps its device and its live map and shows the
 // module's screens instead of the stock tabs: CUIPdaLayout builds them from the flat
-// item list xms_pda.script produces (the reader itself, xms_pda_layout.script, is shared
-// with the editor's preview). Nothing of the game is written: without a layout the PDA
+// item list xms_pda.script produces (the reader itself is xms_pda_layout.script).
+// Nothing of the game is written: without a layout the PDA
 // is the stock one, byte for byte, and the stock sections stay reachable from a layout
 // (stock:<section>).
 //

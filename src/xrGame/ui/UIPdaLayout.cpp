@@ -14,6 +14,7 @@
 #include "GametaskManager.h"
 #include "GameTask.h"
 #include "map_location.h"
+#include "map_manager.h"
 #include "map_spot.h"
 #include "UIMap.h"
 
@@ -210,7 +211,7 @@ void CUIPdaItem::InitParts()
 {
     // The parts are placed in canvas units and scaled per axis like everything else of the
     // layout: a square icon stays square in 16:9, where the virtual width is stretched.
-    // docs/pda/PDA_FORMAT.md, "Buttons", is the same rule; the editor's preview mirrors it.
+    // docs/pda/PDA_FORMAT.md, "Buttons", is the same rule.
     const float scale = m_owner.Scale();
     const Fvector2 k = m_owner.Scale2();
     const Fvector2 size = GetWndSize();
@@ -566,6 +567,12 @@ bool CUIPdaLayout::Build(const XMS::Module& owner, CUIWindow* host, const Frect&
         return false; // xms_pda.build logged why
 
     m_module = owner.id;
+    if (g_pGameLevel)
+    {
+        Level().MapManager().SetSpotPatch(get_str(result, "spot_patch").c_str(), owner.id.c_str());
+        if (!get_str(result, "spot_patch").empty())
+            Msg("* XMS PDA: [%s] the layout restyles the map spots", owner.id.c_str());
+    }
     m_id = get_str(result, "id");
     m_title = get_str(result, "title");
     {

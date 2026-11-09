@@ -33,6 +33,8 @@
 #include "xrCore/ProductVersion.h"
 #include "xrScriptEngine/script_engine.hpp"
 #include "ui/ModOptOut.h"
+#include "ui/UIXmsScreenLayers.h"
+#include "xms_screens.h"
 #include "xrGame/game_type.h"
 
 #include "DemoInfo.h"
@@ -212,6 +214,7 @@ void CMainMenu::Activate(bool bActivate)
 
         m_Flags.set(flRestoreCursor, GetUICursor().IsVisible());
 
+        ChooseScreen();
         if (!ReloadUI())
             return;
 
@@ -264,6 +267,7 @@ void CMainMenu::Activate(bool bActivate)
         m_Flags.set(flFrameCapture, FALSE);
 
         Device.seqRender.Remove(this);
+        ForgetScreen();
 
         const bool show = Console->bVisible;
         if (show)
@@ -559,6 +563,35 @@ bool CMainMenu::OnRenderPPUI_query()
     return IsActive() && !m_Flags.test(flGameSaveScreenshot) && !m_Flags.test(flFrameCapture) && b_shniaganeed_pp;
 }
 
+// Which screen and music this opening of the menu gets; the windows the menu makes next ask for it.
+void CMainMenu::ChooseScreen()
+{
+    XmsScreens::Choice& choice = XmsScreens::CurrentMenu();
+    choice = XmsScreens::Choose(g_pGameLevel ? XMS::ScreenPause : XMS::ScreenMenu, g_pGameLevel ? g_pGameLevel->name().c_str() : nullptr);
+    g_ui_backdrop_replaced = choice.module != nullptr;
+    Msg("* [screens] menu: %s.%s, %u track(s)", choice.module ? choice.module->id.c_str() : "game", choice.screen ? choice.screen->id.c_str() : "own", u32(choice.tracks.size()));
+    if (!choice.module)
+        return;
+    if (!m_screenLayers)
+        m_screenLayers = std::make_unique<CUIXmsScreenLayers>();
+    m_screenLayers->Build(*choice.module, *choice.screen, false);
+}
+
+void CMainMenu::ForgetScreen()
+{
+    g_ui_backdrop_replaced = false;
+    if (m_screenLayers)
+        m_screenLayers->Clear();
+}
+
+void CMainMenu::DrawScreen()
+{
+    if (!m_screenLayers || !m_screenLayers->Built())
+        return;
+    m_screenLayers->FollowDisplay();
+    m_screenLayers->Draw();
+}
+
 void CMainMenu::OnRender()
 {
     ZoneScoped;
@@ -570,6 +603,7 @@ void CMainMenu::OnRender()
     StartupProfileMenuRendered();
     if (!OnRenderPPUI_query())
     {
+        DrawScreen();
         DoRenderDialogs();
         DrawCommunityPanel();
         DrawProductVersion();
@@ -590,6 +624,7 @@ void CMainMenu::OnRenderPPUI_main()
 
     if (OnRenderPPUI_query())
     {
+        DrawScreen();
         DoRenderDialogs();
         DrawCommunityPanel();
         DrawProductVersion();

@@ -87,6 +87,7 @@ protected:
     enum_page_id m_page;
     CUIWindow* m_selected;
     CMMSound* m_sound;
+    bool m_backdrop_marked{};
 
     enum
     {

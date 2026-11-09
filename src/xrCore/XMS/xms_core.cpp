@@ -366,6 +366,239 @@ ModuleCommand& command_entry(Module& m, pcstr name)
     return c;
 }
 
+// ---- [screens], [screen.<id>], [track.<id>] ---------------------------------------------------
+
+u32 surface_mask(pcstr value)
+{
+    xr_vector<xr_string> names;
+    split_list(lower_copy(value).c_str(), names);
+    u32 mask = 0;
+    for (const xr_string& name : names)
+    {
+        if (name == "loading")
+            mask |= 1u << ScreenLoading;
+        else if (name == "menu")
+            mask |= 1u << ScreenMenu;
+        else if (name == "pause")
+            mask |= 1u << ScreenPause;
+    }
+    return mask;
+}
+
+float number_of(pcstr value, float fallback, float lo, float hi)
+{
+    char* end = nullptr;
+    const float number = float(strtod(value, &end));
+    return end == value ? fallback : std::clamp(number, lo, hi);
+}
+
+void parse_screens_key(ScreensRules& s, pcstr key, pcstr value)
+{
+    const bool only = 0 == _stricmp(value, "only");
+    const bool next = 0 == _stricmp(value, "next");
+    if (0 == xr_strcmp(key, "loading_screens"))
+        s.only_screens[0] = only;
+    else if (0 == xr_strcmp(key, "menu_screens"))
+        s.only_screens[1] = only;
+    else if (0 == xr_strcmp(key, "loading_music"))
+        s.only_music[0] = only;
+    else if (0 == xr_strcmp(key, "menu_music"))
+        s.only_music[1] = only;
+    else if (0 == xr_strcmp(key, "loading_music_end"))
+        s.next_track[0] = next;
+    else if (0 == xr_strcmp(key, "menu_music_end"))
+        s.next_track[1] = next;
+}
+
+// `layer` starts a new layer and the layer keys after it are that layer's, the way [provides_mode] pairs its lines
+void parse_screen_key(ScreenDecl& d, pcstr key, pcstr value)
+{
+    if (0 == xr_strcmp(key, "layer"))
+        d.layers.emplace_back().file = value;
+    else if (0 == xr_strcmp(key, "show"))
+        d.show = surface_mask(value);
+    else if (0 == xr_strcmp(key, "levels"))
+        split_list(lower_copy(value).c_str(), d.levels);
+    else if (0 == xr_strcmp(key, "modes"))
+        split_list(lower_copy(value).c_str(), d.modes);
+    else if (0 == xr_strcmp(key, "weight"))
+        d.weight = number_of(value, 1.f, 0.f, 1000.f);
+    else if (0 == xr_strcmp(key, "music"))
+    {
+        d.tracks.clear();
+        if (0 == _stricmp(value, "any") || !value[0])
+            d.music = ScreenDecl::MusicAny;
+        else if (0 == _stricmp(value, "none"))
+            d.music = ScreenDecl::MusicNone;
+        else if (0 == _stricmp(value, "video"))
+            d.music = ScreenDecl::MusicVideo;
+        else
+        {
+            d.music = ScreenDecl::MusicTracks;
+            split_list(lower_copy(value).c_str(), d.tracks);
+        }
+    }
+    else if (0 == xr_strcmp(key, "hide"))
+    {
+        xr_vector<xr_string> names;
+        split_list(lower_copy(value).c_str(), names);
+        d.hide = 0;
+        for (const xr_string& name : names)
+        {
+            if (name == "bar")
+                d.hide |= ScreenHideBar;
+            else if (name == "percent")
+                d.hide |= ScreenHidePercent;
+            else if (name == "stage")
+                d.hide |= ScreenHideStage;
+            else if (name == "tip")
+                d.hide |= ScreenHideTip;
+        }
+    }
+    else if (!d.layers.empty())
+    {
+        ScreenLayer& layer = d.layers.back();
+        if (0 == xr_strcmp(key, "fit"))
+            layer.fit = 0 == _stricmp(value, "contain") ? ScreenLayer::Contain :
+                0 == _stricmp(value, "stretch") ? ScreenLayer::Stretch : ScreenLayer::Cover;
+        else if (0 == xr_strcmp(key, "opacity"))
+            layer.opacity = number_of(value, 1.f, 0.f, 1.f);
+        else if (0 == xr_strcmp(key, "rect"))
+            sscanf(value, "%f %f %f %f", &layer.x, &layer.y, &layer.w, &layer.h);
+        else if (0 == xr_strcmp(key, "texture"))
+            layer.base_file = value;
+        else if (0 == xr_strcmp(key, "sound"))
+            layer.sound = !(0 == _stricmp(value, "false") || 0 == _stricmp(value, "0") || 0 == _stricmp(value, "no") ||
+                0 == _stricmp(value, "off"));
+    }
+}
+
+void parse_track_key(TrackDecl& t, pcstr key, pcstr value)
+{
+    if (0 == xr_strcmp(key, "file"))
+        t.file = value;
+    else if (0 == xr_strcmp(key, "play"))
+        t.play = surface_mask(value);
+    else if (0 == xr_strcmp(key, "weight"))
+        t.weight = number_of(value, 1.f, 0.f, 1000.f);
+    else if (0 == xr_strcmp(key, "volume"))
+        t.volume = number_of(value, 1.f, 0.f, 1.f);
+}
+
+template <typename Entry>
+Entry& entry_of(xr_vector<Entry>& list, pcstr id)
+{
+    for (Entry& e : list)
+        if (e.id == id)
+            return e;
+    Entry& e = list.emplace_back();
+    e.id = id;
+    return e;
+}
+
+bool plain_id(const xr_string& id)
+{
+    return !id.empty() && std::all_of(id.begin(), id.end(), [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; });
+}
+
+xr_string extension_of(const xr_string& file)
+{
+    const size_t dot = file.rfind('.');
+    const size_t slash = file.rfind('\\');
+    return dot == xr_string::npos || (slash != xr_string::npos && dot < slash) ? xr_string() : lower_copy(file.c_str() + dot);
+}
+
+bool is_screen_texture(const xr_string& ext)
+{
+    static constexpr pcstr known[] = { ".dds", ".seq", ".gif", ".mp4", ".webm", ".wmv", ".ogm" };
+    return std::any_of(std::begin(known), std::end(known), [&](pcstr e) { return ext == e; });
+}
+
+// Everything a screen shows is mounted under a name of its own: the module keeps any folder layout it likes, and two
+// modules with a "night.mp4" each cannot meet. A shader keeps its own name - the .s says which .ps it runs.
+void finish_screens(Module& m)
+{
+    ScreensRules& s = m.screens;
+    xr_string folder = m.id;
+    std::replace(folder.begin(), folder.end(), '.', '_');
+
+    const auto mount = [&](const xr_string& virt, const xr_string& file) { m.vfs_maps.push_back({ lower_copy(virt.c_str()), file }); };
+    const auto refused = [&](pcstr what, const xr_string& file) {
+        Msg("! XMS: module [%s] %s ignored - [%s] is not a path inside the module", m.id.c_str(), what, file.c_str());
+    };
+
+    for (size_t i = s.screens.size(); i-- > 0;)
+    {
+        if (!plain_id(s.screens[i].id))
+        {
+            Msg("! XMS: module [%s] screen [%s] ignored - an id takes a-z, 0-9 and _", m.id.c_str(), s.screens[i].id.c_str());
+            s.screens.erase(s.screens.begin() + i);
+            continue;
+        }
+        ScreenDecl& d = s.screens[i];
+        u32 n = 0;
+        for (ScreenLayer& layer : d.layers)
+        {
+            const u32 index = n++;
+            if (layer.file.empty())
+                continue;
+            if (!normalize_rel_path(layer.file))
+            {
+                refused("screen layer", layer.file);
+                layer.file.clear();
+                continue;
+            }
+            const xr_string ext = extension_of(layer.file);
+            if (is_screen_texture(ext))
+            {
+                layer.kind = ScreenLayer::Texture;
+                layer.name = "xms_screens\\" + folder + "\\" + d.id + "_" + xr_string(std::to_string(index).c_str());
+                mount("textures\\" + layer.name + ext, layer.file);
+            }
+            else if (ext == ".s" || ext == ".ps")
+            {
+                const xr_string stem = layer.file.substr(0, layer.file.size() - ext.size());
+                const size_t slash = stem.rfind('\\');
+                layer.kind = ScreenLayer::Shader;
+                layer.name = lower_copy(slash == xr_string::npos ? stem.c_str() : stem.c_str() + slash + 1);
+                if (0 != _strnicmp(stem.c_str(), "gamedata\\shaders\\r3\\", 20))
+                {
+                    mount("shaders\\r3\\" + layer.name + ".s", stem + ".s");
+                    mount("shaders\\r3\\" + layer.name + ".ps", stem + ".ps");
+                }
+                if (!layer.base_file.empty())
+                {
+                    const xr_string base_ext = extension_of(layer.base_file);
+                    if (normalize_rel_path(layer.base_file) && is_screen_texture(base_ext))
+                    {
+                        layer.base = "xms_screens\\" + folder + "\\" + d.id + "_" + xr_string(std::to_string(index).c_str()) + "_base";
+                        mount("textures\\" + layer.base + base_ext, layer.base_file);
+                    }
+                    else
+                        refused("shader texture", layer.base_file);
+                }
+            }
+            else if (ext == ".html" || ext == ".htm")
+                layer.kind = ScreenLayer::Page;
+            else
+                Msg("! XMS: module [%s] screen layer [%s] ignored - the game does not know this kind of file", m.id.c_str(), layer.file.c_str());
+        }
+    }
+
+    for (size_t i = s.tracks.size(); i-- > 0;)
+    {
+        TrackDecl& t = s.tracks[i];
+        if (!plain_id(t.id) || !normalize_rel_path(t.file) || extension_of(t.file) != ".ogg")
+        {
+            Msg("! XMS: module [%s] track [%s] ignored - it needs an id of a-z, 0-9 and _, and an .ogg inside the module", m.id.c_str(), t.id.c_str());
+            s.tracks.erase(s.tracks.begin() + i);
+            continue;
+        }
+        t.name = "xms_screens\\" + folder + "\\" + t.id;
+        mount("sounds\\" + t.name + ".ogg", t.file);
+    }
+}
+
 void parse_manifest(Module& m, char* text)
 {
     // a BOM in front of "[module]" would hide the section header
@@ -395,6 +628,8 @@ void parse_manifest(Module& m, char* text)
                 thumbnail = value;
             else if (0 == xr_strcmp(key, "tags"))
                 m.tags = lower_copy(value);
+            else if (0 == xr_strcmp(key, "disable_game_updates"))
+                m.disable_game_updates = 0 == _stricmp(value, "true") || 0 == _stricmp(value, "1");
         }
         else if (0 == xr_strcmp(section, "update"))
         {
@@ -449,6 +684,12 @@ void parse_manifest(Module& m, char* text)
                 c.cheat = 0 == _stricmp(value, "true") || 0 == _stricmp(value, "1") || 0 == _stricmp(value, "yes") ||
                     0 == _stricmp(value, "on");
         }
+        else if (0 == xr_strcmp(section, "screens"))
+            parse_screens_key(m.screens, key, value);
+        else if (0 == strncmp(section, "screen.", 7) && section[7])
+            parse_screen_key(entry_of(m.screens.screens, section + 7), key, value);
+        else if (0 == strncmp(section, "track.", 6) && section[6])
+            parse_track_key(entry_of(m.screens.tracks, section + 6), key, value);
         else if (0 == xr_strcmp(section, "vfs"))
             m.vfs_maps.push_back({lower_copy(key), value});
         else if (0 == xr_strcmp(section, "redirects"))
@@ -509,6 +750,7 @@ void parse_manifest(Module& m, char* text)
             Msg("! XMS: module [%s] PDA layout ignored - [pda] layout must be a path inside the module",
                 m.id.c_str());
     }
+    finish_screens(m);
 }
 
 // Manifest paths arrive in whatever style the author typed. Virtual sides are

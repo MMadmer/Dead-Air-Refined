@@ -16,6 +16,8 @@
 #include "xrUICore/ProgressBar/UIProgressBar.h"
 #include "xrEngine/da_media.h"
 #include "xrEngine/da_loading_presenter.h"
+#include "UIXmsScreenLayers.h"
+#include "xms_screens.h"
 
 UILoadingScreen::UILoadingScreen()
     : CUIWindow("UILoadingScreen"),
@@ -29,6 +31,10 @@ UILoadingScreen::UILoadingScreen()
 
 void UILoadingScreen::Initialize()
 {
+    m_screen = xr_new<CUIXmsScreenLayers>();
+    m_screen->SetAutoDelete(true);
+    AttachChild(m_screen);
+
     CUIXml uiXml;
     const bool loaded = uiXml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "ui_mm_loading_screen.xml", false);
 
@@ -52,16 +58,22 @@ void UILoadingScreen::Initialize()
     if (uiXml.NavigateToNode(temp))
         xmlNode = temp;
 
+    const auto init_background = [&] {
+        const size_t before = GetChildWndList().size();
+        CUIXmlInit::InitWindow(uiXml, xmlNode, 0, this);
+        m_stock_background.assign(std::next(GetChildWndList().begin(), before), GetChildWndList().end());
+    };
+
     // The bar is the screen's one progress, its place, size and form the layout's (a shader of its own over the
     // whole bar with <progress whole="1">); the built-in layouts put it under the background.
     if (uiXml.ReadAttribInt("loading_progress", 0, "under_background", 1))
     {
         loadingProgress = UIHelper::CreateProgressBar(uiXml, "loading_progress", this, false);
-        CUIXmlInit::InitWindow(uiXml, xmlNode, 0, this);
+        init_background();
     }
     else
     {
-        CUIXmlInit::InitWindow(uiXml, xmlNode, 0, this);
+        init_background();
         loadingProgress = UIHelper::CreateProgressBar(uiXml, "loading_progress", this, false);
     }
 
@@ -122,6 +134,56 @@ void UILoadingScreen::SetLevelLogo(const char* name)
     m_dirty = true;
 }
 
+void UILoadingScreen::SetLevelName(const char* name)
+{
+    m_level = name ? name : "";
+    if (m_screen_waits && IsShown() && !m_level.empty())
+        ChooseScreen();
+}
+
+// Which screen and music this loading gets. A screen limited to levels or game modes needs them known, and they are
+// not at the first frame of a new game or a save: nothing is shown until then rather than a picture that changes.
+void UILoadingScreen::ChooseScreen()
+{
+    ScopeLock scope(&loadingLock);
+
+    m_screen_waits = m_level.empty() && XmsScreens::WaitsForLevel();
+    XmsScreens::Choice choice;
+    if (!m_screen_waits)
+        choice = XmsScreens::Choose(XMS::ScreenLoading, m_level.c_str());
+
+    const bool own = choice.module && choice.screen;
+    if (!m_screen_waits)
+        Msg("* [screens] loading: %s.%s, level [%s]", own ? choice.module->id.c_str() : "game", own ? choice.screen->id.c_str() : "own", m_level.c_str());
+    if (own)
+        m_screen->Build(*choice.module, *choice.screen, choice.video_sound);
+    else
+        m_screen->Clear();
+    for (CUIWindow* w : m_stock_background)
+        w->Show(!own && !m_screen_waits);
+
+    const u32 hide = own ? choice.screen->hide : 0;
+    const auto keep = [&](CUIWindow* w, u32 what) {
+        if (w)
+            w->Show(!(hide & what));
+    };
+    keep(loadingProgress, XMS::ScreenHideBar);
+    keep(loadingProgressPercent, XMS::ScreenHidePercent);
+    keep(loadingStage, XMS::ScreenHideStage);
+    keep(loadingHeader, XMS::ScreenHideTip);
+    keep(loadingTipNumber, XMS::ScreenHideTip);
+    keep(loadingTip, XMS::ScreenHideTip);
+
+    xr_vector<DaThreadMusicTrack> tracks;
+    tracks.reserve(choice.tracks.size());
+    for (const XmsScreens::Track& track : choice.tracks)
+        tracks.push_back({ track.name, track.weight, track.volume });
+    da_thread_music_play(tracks, choice.next_track);
+
+    m_published.clear();
+    m_dirty = true;
+}
+
 void UILoadingScreen::SetStageTitle(const char* title)
 {
     // Only if enabled by user or forced to be displayed by XML
@@ -151,19 +213,27 @@ void UILoadingScreen::SetStageTip(const char* header, const char* tipNumber, con
 void UILoadingScreen::Show(bool show)
 {
     // A loading starts its bar and its shaders' clock from nothing.
-    if (show && !IsShown())
+    // a window starts out shown, so the first loading of a session is told by this and not by IsShown()
+    if (show && !m_loading)
     {
+        m_loading = true;
         g_da_ui_shader.opened = m_eased_at = da_media_time();
         g_da_ui_shader.progress = g_da_ui_shader.progress_eased = 0.f;
         da_loading_presenter_progress(0.f);
         m_published.clear();
         m_dirty = true;
+        ChooseScreen();
     }
     CUIWindow::Show(show);
     if (!show)
     {
+        m_loading = false;
         // the game's frames are the screen again
         da_loading_presenter_hide();
+        da_thread_music_stop();
+        m_screen->Clear();
+        m_level.clear();
+        m_screen_waits = false;
         if (loadingLogo)
             loadingLogo->GetStaticItem()->GetShader()->destroy();
         if (loadingStage)
@@ -190,6 +260,7 @@ struct ScreenItem
     CUIStatic* st{};
     CUIProgressBar* bar{};
     xr_string signature;
+    bool silent{};
 };
 
 Irect to_screen(const Frect& r)
@@ -228,7 +299,7 @@ DaLoadingLayer::Kind texture_kind(CUIStatic* st)
     }
 }
 
-void collect(CUIWindow* parent, CUIStatic* percent, xr_vector<ScreenItem>& items)
+void collect(CUIWindow* parent, CUIStatic* percent, const CUIXmsScreenLayers* layers, xr_vector<ScreenItem>& items)
 {
     for (CUIWindow* w : parent->GetChildWndList())
     {
@@ -287,7 +358,8 @@ void collect(CUIWindow* parent, CUIStatic* percent, xr_vector<ScreenItem>& items
         {
             items.push_back({ texture_kind(st), false, [st] { st->DrawTexture(); }, r, st, nullptr,
                 describe(r, st->GetTextureColor(), st->GetStaticItem()->TextureName().c_str()) });
-            collect(st, percent, items);
+            items.back().silent = layers->Silent(st);
+            collect(st, percent, layers, items);
             items.push_back({ st == percent ? DaLoadingLayer::Kind::Percent : DaLoadingLayer::Kind::Picture, true,
                 [st] {
                     st->DrawText();
@@ -300,7 +372,7 @@ void collect(CUIWindow* parent, CUIStatic* percent, xr_vector<ScreenItem>& items
         if (w->GetShapeSkin())
             items.push_back({ DaLoadingLayer::Kind::Picture, false, [w] { w->DrawShapeSkinAlone(); }, r, nullptr, nullptr,
                 describe(r, 0, "skin") });
-        collect(w, percent, items);
+        collect(w, percent, layers, items);
     }
 }
 
@@ -337,7 +409,7 @@ bool UILoadingScreen::Publish()
         items.push_back({ DaLoadingLayer::Kind::Picture, false, [this] { DrawShapeSkinAlone(); }, r, nullptr, nullptr,
             describe(r, 0, "skin") });
     }
-    collect(this, loadingProgressPercent, items);
+    collect(this, loadingProgressPercent, m_screen, items);
 
     // the layers: items [first, last), a run of still pictures one, anything else one of its own
     xr_vector<std::pair<size_t, size_t>> runs;
@@ -430,6 +502,7 @@ bool UILoadingScreen::Publish()
             layer.texture = item->TextureName();
             layer.shader = item->ShaderName();
             layer.color = item->GetTextureColor();
+            layer.silent = head.silent;
             layer.uv = was.uv;
             layer.rect = was.drawn;
         }

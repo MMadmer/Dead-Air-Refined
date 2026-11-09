@@ -36,7 +36,13 @@ public:
 
     void OnUIReset() override;
 
+    // The look a module's PDA layout gives the map spots: an <xms-patch> of map_spots.xml, applied
+    // now and whenever the file is read again. Empty leaves the stock spots.
+    void SetSpotPatch(pcstr patch, pcstr owner_id);
+
     inline static CUIXml m_uiSpotXml;
+    xr_string m_spotPatch;
+    xr_string m_spotPatchOwner;
 
 private:
     DECLARE_SCRIPT_REGISTER_FUNCTION();

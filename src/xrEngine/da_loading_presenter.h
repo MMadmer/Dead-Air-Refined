@@ -37,6 +37,7 @@ struct DaLoadingLayer
     shared_str shader;
     Fvector4 uv{ 0.f, 0.f, 1.f, 1.f };
     u32 color{ 0xFFFFFFFF };
+    bool silent{}; // Media: a video that keeps its sound to itself
 
     // Fill: the bar's rectangle in screen pixels, its orientation (CUIProgressBar::EOrientMode), and a tint by the
     // progress (from min through middle to max) where the bar has one

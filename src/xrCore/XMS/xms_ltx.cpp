@@ -4,6 +4,7 @@
 #include "stdafx.h"
 
 #include "xms_ltx.h"
+#include "xms_characters.h"
 #include "xms_core.h"
 #include "xrCore/xr_ini.h"
 
@@ -228,6 +229,18 @@ void ApplyConfigStage(CInifile* ini)
         if (m.disabled)
             continue;
 
+        // 0) what the module only describes: its overlays and patches below may still say otherwise
+        {
+            CharacterConfigs characters;
+            if (BuildCharacters(m, *ini, characters))
+            {
+                IReader reader(characters.sections.data(), characters.sections.size());
+                ini->xms_load_overlay(&reader, (m.root + "characters.ltx").c_str(), m.root.c_str());
+                apply_list_op(ini, m, "profiles", "files", characters.profiles.c_str(), true, stats);
+                apply_list_op(ini, m, "profiles", "specific_characters_files", characters.characters.c_str(), true, stats);
+            }
+        }
+
         // 1) whole-file overlays with brand new / merged sections
         {
             xr_vector<xr_string> files;
@@ -251,6 +264,7 @@ void ApplyConfigStage(CInifile* ini)
         }
     }
 
+    FinishCharacters();
     SetLtxMergeEnabled(merge_was);
     if (stats.files || stats.ops)
         Msg("* XMS: config patches applied: %u file(s), %u op(s), %u skipped", stats.files, stats.ops, stats.skipped);

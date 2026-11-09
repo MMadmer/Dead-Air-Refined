@@ -28,5 +28,13 @@ protected:
     ref_sound m_whell;
     ref_sound m_whell_click;
     bool m_bRandom;
-    xr_vector<xr_string> m_play_list;
+    struct Entry
+    {
+        xr_string name;
+        float weight{1.f};
+        float volume{1.f};
+    };
+    xr_vector<Entry> m_play_list;
+    bool m_next_track{}; // a track that ends gives way to another
+    u32 m_next_try{};
 };

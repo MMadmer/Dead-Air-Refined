@@ -23,6 +23,8 @@ public:
     virtual void Draw() = 0;
 
     virtual void SetLevelLogo(const char* name) = 0;
+    // The level being loaded, as soon as it is known.
+    virtual void SetLevelName(const char* /*name*/) {}
     virtual void SetStageTitle(const char* title) = 0;
     virtual void SetStageTip(const char* header, const char* tipNumber, const char* tip) = 0;
 

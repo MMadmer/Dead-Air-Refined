@@ -2,7 +2,7 @@ local HERE = string.match(arg[0], "^(.*)[\\/][^\\/]+$") or "."
 local REPO = HERE .. "\\..\\.."
 local SCRIPTS = REPO .. "\\packaging\\dead-air-x64\\compatibility\\gamedata\\scripts"
 local CONFIG = REPO .. "\\packaging\\dead-air-x64\\compatibility\\gamedata\\configs"
-local EXAMPLES = os.getenv("NQ_EXAMPLES") or "D:\\Games\\XFined-Editor\\docs\\nq\\examples"
+local EXAMPLES = assert(os.getenv("NQ_EXAMPLES"), "run this through run_lua.py, or set NQ_EXAMPLES")
 local mock = dofile(HERE .. "\\mock_engine.lua")
 mock.setup({ scripts_dir = SCRIPTS, config_dir = CONFIG, appdata_dir = HERE,
 	modules = { { id = "mod_a", root = EXAMPLES } } })

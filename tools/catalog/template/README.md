@@ -11,7 +11,7 @@ authors' own releases, VirusTotal results and reviews are refreshed every six ho
 version VirusTotal blocks - or an update its author did not scan - is withdrawn
 automatically. Nobody has to be here.
 
-Scanning is the authors' job, with their own free VirusTotal keys: XFined Editor scans a
+Scanning is the authors' job, with their own free VirusTotal keys: Grizzly Editor scans a
 module when it is submitted and every release of a listed module before it goes out. The
 catalog's own key (`VT_API_KEY`) never uploads anything; it reads the report an author's scan
 left, once, and has every listed package analysed again every 30 days.
@@ -35,14 +35,14 @@ something, never change it.
 
 ## Listing a module
 
-Authors do not edit this repository: XFined Editor's **Mod > Submit to Mod Browser** checks the
+Authors do not edit this repository: Grizzly Editor's **Mod > Submit to Mod Browser** checks the
 module and opens an issue here. The catalog answers in that issue within minutes: accepted
 (the module is listed), refused (with the reasons; fix them and submit again) or waiting
 (VirusTotal still analysing the package, the day's quota of new modules used up). The
 requirements:
 
 1. The module's `[update] github` repository is public and its latest release was made by
-   XFined Editor's Package Release (it carries a signed `[card]`).
+   Grizzly Editor's Package Release (it carries a signed `[card]`).
 2. The release version is 1.0.0 or higher.
 3. The website is the module's own page on AP-PRO or ModDB.
 4. The release holds no programs, libraries, archives or compiled scripts, and its scripts
@@ -54,7 +54,7 @@ requirements:
 
 ## Withdrawing a module
 
-XFined Editor takes a module out of the browser too: **Mod > Submit to Mod Browser** opens a
+Grizzly Editor takes a module out of the browser too: **Mod > Submit to Mod Browser** opens a
 withdrawal issue here, and the catalog accepts it from the account that owns the module's
 repository and from nobody else. The module leaves the browser within minutes and installed copies
 keep working. Its file stays, marked `withdrawn`, so the module id stays bound to its author key:

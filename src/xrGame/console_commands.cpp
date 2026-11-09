@@ -7,6 +7,7 @@
 #include "xrEngine/da_snow_field.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xms_world.h"
+#include "xms_screens.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 #include "xrEngine/Rain.h"
 #include "xrEngine/xr_ioc_cmd.h"
@@ -1331,6 +1332,29 @@ public:
             else
                 Msg("* [%02u] %s %s (ns=%u)", u32(m.layer), m.id.c_str(), m.version.c_str(), u32(m.ns));
         }
+    }
+};
+
+// The modules' screens and music: what they declare and what would be chosen now.
+class CCC_XmsScreens : public IConsole_Command
+{
+public:
+    CCC_XmsScreens(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = true; };
+    void Execute(LPCSTR) override { XmsScreens::Describe(); }
+};
+
+// QA: xms_screens_force <loading|menu|pause> <game|<module id>.<screen id>|off>
+class CCC_XmsScreensForce : public IConsole_Command
+{
+public:
+    CCC_XmsScreensForce(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = false; };
+    void Execute(LPCSTR args) override
+    {
+        string64 surface = "";
+        string256 what = "";
+        sscanf(args, "%63s %255s", surface, what);
+        if (!what[0] || !XmsScreens::Force(surface, what))
+            Msg("! xms_screens_force <loading|menu|pause> <game|<module id>.<screen id>|off>");
     }
 };
 
@@ -4049,6 +4073,8 @@ void CCC_RegisterCommands()
     CMD1(CCC_XmsMods, "xms_mods");
     CMD1(CCC_XmsModes, "xms_modes");
     CMD1(CCC_XmsWorld, "xms_world");
+    CMD1(CCC_XmsScreens, "xms_screens");
+    CMD1(CCC_XmsScreensForce, "xms_screens_force");
     CMD1(CCC_XmsWhy, "xms_why");
     CMD1(CCC_XmsNq, "nq");
 

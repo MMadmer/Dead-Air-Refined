@@ -1158,6 +1158,8 @@ target_sources(xrGame PRIVATE
     xms_spawn_composer.cpp
     xms_pda.cpp
     xms_pda.h
+    xms_screens.cpp
+    xms_screens.h
     xms_world.cpp
     xms_world.h
     setup_manager.h
@@ -2560,6 +2562,8 @@ target_sources(xrGame PRIVATE
     ui/UIInterfaceColorsWnd.h
     ui/CommunityHtmlCanvas.cpp
     ui/CommunityHtmlCanvas.h
+    ui/UIXmsScreenLayers.cpp
+    ui/UIXmsScreenLayers.h
     ui/ContentService.cpp
     ui/ContentService.h
     ui/UIBugReportWnd.cpp

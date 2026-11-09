@@ -431,6 +431,9 @@ void IGame_Persistent::LoadTitle(pcstr ls_title, bool change_tip, shared_str map
     {
         ZoneScopedN("Change tip");
 
+        if (map_name.size())
+            m_pLoadingScreen->SetLevelName(map_name.c_str());
+
         bool noTips = false;
         string512 buff;
         u8 tip_num;

@@ -1,4 +1,4 @@
--- XMS PDA layouts: the .pdaasset reader shared by the game and the editor.
+-- XMS PDA layouts: the .pdaasset reader.
 --
 -- A module can replace what the PDA SHOWS - its screens, buttons, menus - and keep
 -- the device and the live map. The layout is a declarative Lua asset (.pdaasset);
@@ -6,12 +6,9 @@
 -- colour resolved and every position in canvas units, plus coded problems.
 --
 -- Pure Lua on purpose: no engine call, no global of the game. The game loads it as a
--- script namespace (xms_pda_layout), the editor runs the SAME file from the linked
--- game in a sandbox for its preview and its validator, so the two can never read a
--- layout differently. Texts stay UTF-8 here; the game converts them (xms_pda.script).
+-- script namespace (xms_pda_layout). Texts stay UTF-8 here; the game converts them (xms_pda.script).
 --
--- Contract: docs/dead-air/MODDING.md "PDA layouts" (game repo) and docs/pda/PDA_FORMAT.md
--- (editor repo).
+-- Contract: docs/dead-air/MODDING.md "PDA layouts".
 
 FORMAT = 1
 CANVAS_W = 960
@@ -878,7 +875,7 @@ function normalize(asset, opts)
 
 	-- The look of the game's map spots while the module is on: a stock spot node of
 	-- ui\map_spots.xml by name -> an icon, its colour and size, an icon drawn inside it.
-	-- The game never reads this table: the editor's build writes it as an xml patch.
+	-- Not read here: xms_pda.script turns this table into an xml patch.
 	out.map_spots = {}
 	if (asset.map_spots ~= nil and type(asset.map_spots) ~= "table") then
 		add_problem(st, "E323", "map_spots", "map_spots is { <spot node> = { icon, color, size, ... } }")

@@ -6,6 +6,7 @@
 #include "xrCore/_vector3d.h"
 #include "xrCore/xr_token.h"
 #include "xrCommon/xr_vector.h" // DEFINE_VECTOR
+#include "xrCommon/xr_string.h"
 
 #ifdef XRAY_STATIC_BUILD
 #   define XRSOUND_API
@@ -45,6 +46,19 @@ XRSOUND_API extern float psSoundVEffects;
 XRSOUND_API extern float psSoundVFactor;
 XRSOUND_API extern float psSoundVMusic;
 XRSOUND_API extern float psSoundRolloff;
+
+// Music on a thread of its own, for what has to sound while the game's frames and its sound engine stand still: the
+// loading screen's. `next_track`: a track that ends gives way to another of the list, else it starts again.
+struct DaThreadMusicTrack
+{
+    xr_string name; // relative to sounds\, no extension
+    float weight{1.f};
+    float volume{1.f};
+};
+XRSOUND_API void da_thread_music_play(const xr_vector<DaThreadMusicTrack>& tracks, bool next_track);
+XRSOUND_API void da_thread_music_stop(); // fades out
+XRSOUND_API void da_thread_music_shutdown();
+
 XRSOUND_API extern float psSoundOcclusionScale;
 // The room the geometry forms around the listener where no zone is authored (0 off, 2 logs the probes), and the highs
 // a fully occluded sound loses on top of the stock gain (mB at 5 kHz).

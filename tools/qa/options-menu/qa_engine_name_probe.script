@@ -1,6 +1,6 @@
 -- Checks what the engine settings file resolves to and that every Lua accessor reaches it. The
 -- runner plants a `[window] title` in some of `configs\openxray.ltx` (the name the file had while
--- the engine was OpenXRay), `configs\xfined-ray.ltx` (while it was XFined-Ray) and
+-- the engine was OpenXRay), and
 -- `configs\grizzly.ltx`, and reads the answer back from here. Copy into the clone's gamedata\scripts for the run and remove it afterwards.
 
 local started = false
@@ -24,7 +24,6 @@ end
 local function probe()
 	-- luabind objects have no __eq, so the accessors are compared by what they answer.
 	say("grizzly_ini    -> " .. title_of(grizzly_ini()))
-	say("xfined_ray_ini -> " .. title_of(xfined_ray_ini()))
 	say("openxray_ini   -> " .. title_of(openxray_ini()))
 end
 

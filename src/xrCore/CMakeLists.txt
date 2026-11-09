@@ -212,6 +212,8 @@ target_sources_grouped(
     FILES
     XMS/xms_catalog.cpp
     XMS/xms_catalog.h
+    XMS/xms_characters.cpp
+    XMS/xms_characters.h
     XMS/xms_core.cpp
     XMS/xms_core.h
     XMS/xms_ltx.cpp

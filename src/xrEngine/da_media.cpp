@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "da_media.h"
+#include "xrTheora_Surface.h"
 
 #if defined(XR_PLATFORM_WINDOWS)
 #include <wincodec.h>
@@ -108,6 +109,64 @@ void da_media_forget(pcstr id)
 {
     std::lock_guard lock(g_pictures_lock);
     g_pictures.erase(id);
+}
+
+bool da_media_size(pcstr name, u32& width, u32& height)
+{
+    string_path fn;
+    const DaMediaKind kind = da_media_resolve(name, fn);
+    const auto header = [&](pcstr path, u8* to, u32 bytes) {
+        IReader* file = FS.r_open(path);
+        const bool ok = file && file->length() >= bytes;
+        if (ok)
+            file->r(to, bytes);
+        if (file)
+            FS.r_close(file);
+        return ok;
+    };
+    switch (kind)
+    {
+    case DaMediaKind::None:
+    case DaMediaKind::Image:
+    {
+        u8 dds[20];
+        if (kind == DaMediaKind::None && !FS.exist(fn, "$game_textures$", name, ".dds"))
+            return false;
+        if (!header(fn, dds, sizeof(dds)) || memcmp(dds, "DDS ", 4))
+            return false;
+        height = *reinterpret_cast<const u32*>(dds + 12);
+        width = *reinterpret_cast<const u32*>(dds + 16);
+        return true;
+    }
+    case DaMediaKind::Gif:
+    {
+        u8 gif[10];
+        if (!header(fn, gif, sizeof(gif)))
+            return false;
+        width = u32(gif[6]) | (u32(gif[7]) << 8);
+        height = u32(gif[8]) | (u32(gif[9]) << 8);
+        return true;
+    }
+    case DaMediaKind::Video:
+        if (CDaMediaSource* video = CDaMediaSource::Open(kind, fn))
+        {
+            width = video->Width();
+            height = video->Height();
+            xr_delete(video);
+            return true;
+        }
+        return false;
+    case DaMediaKind::Theora:
+    {
+        CTheoraSurface theora;
+        if (!theora.Load(fn))
+            return false;
+        width = theora.Width(true);
+        height = theora.Height(true);
+        return true;
+    }
+    default: return false;
+    }
 }
 
 DaMediaKind da_media_resolve(pcstr name, string_path& fn)

@@ -367,6 +367,26 @@ void CUIMMShniaga::SelectBtn(CUIWindow* btn)
 void CUIMMShniaga::Draw() { CUIWindow::Draw(); }
 void CUIMMShniaga::Update()
 {
+    // What the buttons stand on gives way to a module's screen, whatever a global mod named its textures. The menu's
+    // script attaches this window after making it, so its parent is known only here.
+    if (!m_backdrop_marked && GetParent())
+    {
+        m_backdrop_marked = true;
+        std::function<void(CUIWindow*)> mark = [&](CUIWindow* w) {
+            if (auto* st = smart_cast<CUIStatic*>(w))
+                st->MarkBackdrop();
+            for (CUIWindow* child : w->GetChildWndList())
+                mark(child);
+        };
+        for (CUIWindow* w : GetParent()->GetChildWndList())
+        {
+            if (w == this)
+                break;
+            if (w->GetWndRect().width() >= UI_BASE_WIDTH - 1.f && w->GetWndRect().height() >= UI_BASE_HEIGHT - 1.f)
+                mark(w);
+        }
+    }
+
     if (m_start_time > Device.dwTimeContinual - m_run_time)
     {
         Fvector2 pos = m_shniaga->GetWndPos();

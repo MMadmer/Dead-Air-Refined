@@ -2,14 +2,13 @@
 
 Dead Air: Refined interprets quest graphs at runtime. A module ships a
 declarative description of a quest; the game reads it, validates it and runs it.
-Nothing is compiled, generated or copied into `gamedata` — the editor that
+Nothing is compiled, generated or copied into `gamedata` — the authoring tool that
 authors these files never emits Lua, XML or LTX for them, and a runtime fix in a
 game update fixes every module at once.
 
 This document is the game-side contract: what a module ships, what the format
-means, how the runtime executes it, and what freezes when the editor reaches its
-first public release. The authoring side (editor UI, MCP tools, Russian kind
-titles) is documented in XFined Editor's `docs/nq/NQ_FORMAT.md`.
+means, how the runtime executes it, and what freezes when the authoring tool reaches its
+first public release.
 
 Related specs: `MODDING.md` (module layout), `XMS_ARCHITECTURE.md` (the module
 system NQ rides on), `SAVE_COMPATIBILITY.md` (the save chunk NQ writes into).
@@ -71,10 +70,10 @@ written for one game mode never runs in another.
   when a table constructor spells the `trigger.when` parameter out as a key —
   inside `params = { … }` it is written `["repeat"] = true`.
 - `pos` on a node is **optional**. The runtime ignores it entirely; it exists so
-  the editor can remember canvas coordinates. A hand-written or AI-written quest
+  the authoring tool can remember canvas coordinates. A hand-written or AI-written quest
   never needs it.
 - `comment` on a node is likewise editor-only and ignored by the game.
-- The editor rewrites the file canonically on save and prepends a generated
+- the authoring tool rewrites the file canonically on save and prepends a generated
   comment block with the quest outline. The runtime skips comments like any Lua
   chunk does — the header carries no meaning.
 
@@ -348,7 +347,7 @@ and the engine disagree about the API.
 
 The catalog is `configs\nq\catalog.ltx` plus every `configs\nq\kinds\*.ltx`
 (read in sorted order). LTX was chosen because both sides read it natively — the
-game through `ini_file`, the editor through `CInifile` — and because a module can
+game through `ini_file`, the authoring tool through `CInifile` — and because a module can
 drop a file into the mounted VFS to extend it.
 
 One kind is one section named `nq.<kind>`:
@@ -359,7 +358,7 @@ version = 2                        ; catalog version
 api     = 1                        ; version of the kind implementation contract
 
 [nq.item.give]                     ; section = "nq." .. kind
-group   = items                    ; group in the editor dropdown
+group   = items                    ; group in the authoring tool dropdown
 title   = Kill the boars           ; what the author sees
 desc    = What the main node does
 use     = extra                    ; comma list of: trigger, main, extra, cond
@@ -588,7 +587,7 @@ candidate list to poll, and an offline death goes unnoticed.
 | `map.unspot` | **`target: target_ref`**, `spot: spot_type = secondary_task_location` | Removes it. |
 | `dialog.force` | **`npc: npc_ref`**, `allow_break: bool = true` | Forces the talk window open with an NPC (who must be online and near). |
 | `dialog.break` | — | Closes the current conversation. |
-| `actor.teleport` | **`place: place`** | Moves the player inside the current level. A place on another level is `E031` in the editor and a runtime error in game — there is no scripted cross-level teleport in Dead Air, level changers are the way. |
+| `actor.teleport` | **`place: place`** | Moves the player inside the current level. A place on another level is `E031` in the authoring tool and a runtime error in game — there is no scripted cross-level teleport in Dead Air, level changers are the way. |
 | `sound.play` | **`theme: string`** | Plays a sound theme on the player. |
 | `lua` | **`code: lua`** | Custom Lua (§9). |
 
@@ -643,7 +642,7 @@ They are legal **only** inside `trigger.when`, `wait.when` and `wait.any`
 
 - A kind that has shipped never changes meaning. New kinds and new **optional**
   parameters may be added freely with `since = <version>`.
-- Removing a kind is forbidden; the implementation stays and the editor marks it
+- Removing a kind is forbidden; the implementation stays and the authoring tool marks it
   deprecated.
 - Renaming is forbidden; add `alias = old.kind` instead and the runtime resolves
   the old name.
@@ -694,7 +693,7 @@ as passed: no topic `on_exit`, no `done` pin, and the token stays on the topic.
 Among NPC replies that never happens — the lowest goodwill puts the leaf behind
 any unconditional sibling — but in the player's option list every survivor is
 shown, so the leaf is a real selectable line and whatever hangs off `done` is
-silently skipped. The editor's `W011` follows that split: for player options it
+silently skipped. The authoring tool's `W011` follows that split: for player options it
 fires on exactly the runtime condition (not all of them unconditional), for NPC
 replies only when none of them is.
 
@@ -783,8 +782,8 @@ and `xms.dialogs_for`; all of them demultiplex on the dialog id and are
   `nq.<module>.<quest>.<ref>` for every ref (re-registered after every load), so
   custom Lua and vanilla condlists can address the object by name.
 - **`character`** — a character of the module by the `id` of its `.npcasset`
-  (`"<module>.<id>"` names one another module ships). XFined Editor generates its
-  spawn section and its profile as `<module>_<id>`, so the NPC `spawn.npc` created
+  (`"<module>.<id>"` names one another module ships). Its spawn section and its
+  profile are named `<module>_<id>`, so the NPC `spawn.npc` created
   (the section) and a stalker placed in a level with that profile both answer.
   Resolved online first, otherwise from one walk of the server registry that indexes
   every character at once and is kept for ten seconds (`spawn.npc` drops it, so a
@@ -1078,7 +1077,7 @@ Every runtime line is prefixed so the log can be filtered:
 
 ## 13. Validation codes
 
-The same rule list runs in the editor (as a build gate) and in the game (at
+The same rule list runs in the authoring tool (as a build gate) and in the game (at
 load). `E` blocks — the build refuses, and the game does not load the quest.
 `W` is advisory.
 
@@ -1147,8 +1146,7 @@ sidecar ignored. Removing a module never bricks a save.
 **Quest ids never collide.** Everything is namespaced by module: dialog ids, task
 ids, ref story ids and the quest uid itself.
 
-**What freezes when the editor is released.** Until XFined Editor's first public
-release the whole contract may be rebuilt without migration paths. From that
+**What freezes at the first public release.** Until then the whole contract may be rebuilt without migration paths. From that
 release on, the following are frozen and only ever extended additively:
 
 1. The `.nqasset` format (§2) behind the `nq` version field. The game supports
@@ -1160,12 +1158,12 @@ release on, the following are frozen and only ever extended additively:
 4. The persisted schema (§11.3), migrated through its `v` field.
 
 The game's own obligation is stronger and independent of all of this: a module
-built by any released version of the editor keeps working, and old-style modding
+built by any released version of the authoring tool keeps working, and old-style modding
 keeps working forever.
 
 ## 15. Behaviour graphs
 
-The contract is the editor repository's `docs/NQ_ARCHITECTURE.md` section 19;
+The contract is the authoring tool repository's `docs/NQ_ARCHITECTURE.md` section 19;
 this section is what the runtime does about it.
 
 ### 15.1 A second kind of document on the same interpreter

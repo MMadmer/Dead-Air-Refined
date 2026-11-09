@@ -252,7 +252,7 @@ def submission(module_id, github, key, version="1.0.0", website=WEBSITE):
 
 
 def issue_body(text, extra="The editor's report."):
-    return catalog.SUBMISSION_MARKER + "\nSubmitted from XFined Editor.\n\n```ini\n" + text + "```\n\n" + extra + "\n"
+    return catalog.SUBMISSION_MARKER + "\nSubmitted from Grizzly Editor.\n\n```ini\n" + text + "```\n\n" + extra + "\n"
 
 
 def withdrawal(module_id):
@@ -260,7 +260,7 @@ def withdrawal(module_id):
 
 
 def withdrawal_body(block):
-    return catalog.WITHDRAWAL_MARKER + "\nWithdrawn by its author from XFined Editor.\n\n```ini\n" + block + "```\n\n" \
+    return catalog.WITHDRAWAL_MARKER + "\nWithdrawn by its author from Grizzly Editor.\n\n```ini\n" + block + "```\n\n" \
         "The editor's details.\n"
 
 
@@ -617,7 +617,7 @@ def main():
                   verdict(n_w_theft)[1], "a withdrawal of someone else's module is refused")
         run.check(verdict(n_w_absent)[0] == "refused" and "no-such-mod is not in the catalog" in verdict(n_w_absent)[1],
                   "a withdrawal of a module the catalog does not hold is refused")
-        run.check(all(verdict(n)[0] == "refused" and "the issue names no module: withdraw from XFined Editor (Mod > "
+        run.check(all(verdict(n)[0] == "refused" and "the issue names no module: withdraw from Grizzly Editor (Mod > "
                       "Submit to Mod Browser)" in verdict(n)[1] for n in (n_w_noblock, n_w_noid)),
                   "a withdrawal without its ini block, or with a block that names no module, is refused")
         run.check(verdict(n_w_path)[0] == "refused" and "../x is not a module id" in verdict(n_w_path)[1],

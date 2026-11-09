@@ -409,8 +409,8 @@ local function on_game_load()
 end
 
 -- ============================================================================ placed NPCs' orders
--- A placed NPC carries its standing order in its custom data ([xms_order], written by
--- the level editor); the orders runtime (xms_nq_behaviour) adopts it once.
+-- A placed NPC carries its standing order in its custom data ([xms_order]);
+-- the orders runtime (xms_nq_behaviour) adopts it once.
 local function on_npc_spawn(npc, se_obj)
 	local ok, has = pcall(function()
 		local ini = npc:spawn_ini()

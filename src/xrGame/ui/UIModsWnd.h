@@ -11,6 +11,9 @@
 
 #include <unordered_map>
 
+// A module's name, description or author as the interface shows it.
+xr_string ModsDisplayText(const xr_string& text);
+
 class CUIEditBox;
 class CUIModsPrompt;
 class CUIModsReview;

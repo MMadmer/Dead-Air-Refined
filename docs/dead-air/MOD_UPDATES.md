@@ -1,6 +1,6 @@
 # XMS module metadata, the Mods menu and module updates
 
-This document is the contract between Dead Air: Refined, XFined Editor and every
+This document is the contract between Dead Air: Refined, the authoring tool and every
 published XMS module. Sections marked **frozen** describe what an installed
 module or a published release relies on; they change only by addition.
 
@@ -49,7 +49,7 @@ One to four dot-separated decimal numbers: `1`, `1.2`, `1.2.0`, `1.2.0.4`.
 Missing components count as zero, so `1.2` equals `1.2.0`. Anything after the
 numeric part is ignored for ordering. A version that does not start with a
 number is older than every valid one. A release version is at most 32
-characters of `A-Z a-z 0-9 . _ + -`; XFined Editor writes numbers and dots only.
+characters of `A-Z a-z 0-9 . _ + -`.
 
 ### 1.3 Website (**frozen**)
 
@@ -63,7 +63,7 @@ ignored and the button stays disabled:
 - the rest consists of `A-Z a-z 0-9 - . _ ~ / ? # & = % +` only;
 - the whole URL is at most 512 bytes.
 
-XFined Editor refuses to save any other value. The allow-list is code, not
+The allow-list is code, not
 configuration: extending it is a game release.
 
 ### 1.4 Update source (**frozen**)
@@ -132,7 +132,7 @@ madmer.agroprom_story-1.2.0.zip = 48211044, 9f86d081884c7d659a2feaa0c55ad015a3bf
 | `index` | yes | The file index: `<asset name>, <size in bytes>, <SHA-256 hex>`. |
 | `[packages]` | yes | One line per package: `<asset name> = <size in bytes>, <SHA-256 hex>`. |
 
-Two optional sections follow when XFined Editor packages the release: `[card]`,
+Two optional sections may follow: `[card]`,
 what the Mod Browser shows about the module, and `[signature]`, last, the author
 key's signature over every byte before it - the card, the index hash and the
 package hashes alike ([MOD_CATALOG.md](MOD_CATALOG.md) 3.1 and 4). An updater
@@ -142,7 +142,7 @@ descriptor is never edited afterwards: any changed byte breaks the signature.
 
 An asset name is 1-128 characters of `A-Z a-z 0-9 - . _` and does not start with
 a dot; a package ends with `.zip`, the index with `.files`. At most 64 packages.
-XFined Editor names them `<id>-<version>.zip` - `<id>-<version>.partN.zip` when it
+They are named `<id>-<version>.zip` - `<id>-<version>.partN.zip` when it
 splits a module: a package holds at most 512 MiB of files, so it stays under the
 650 MB VirusTotal takes (every package of a catalog module is scanned,
 [MOD_CATALOG.md](MOD_CATALOG.md) 11) and under GitHub's 2 GiB asset limit; a
@@ -201,25 +201,24 @@ file 2c26b4...e7ae 394 1 66 214 8 mod.ltx
 
 ### 2.5 Publishing (informative)
 
-Nothing here binds the game; it says what a publisher has to get right, and what
-XFined Editor's **Publish Release** does about it.
+Nothing here binds the game; it says what a publisher has to get right.
 
 - Only the descriptor's name is fixed. The tag, the title and the notes of the
   GitHub release are the author's: the game reads none of them - with one exception, where
   nothing depends on it: to find the release of an older installed version when it holds a
   module installed by hand against the mod catalog ([MOD_CATALOG.md](MOD_CATALOG.md) 14.1), it
-  asks for the tags the editor writes, `v<version>` and `v<version>-r<N>`. A release under
+  asks for the tags the authoring tool writes, `v<version>` and `v<version>-r<N>`. A release under
   another tag is simply not found there. Which release is
   newer is decided by the descriptor's `version` against the installed
-  `mod.ltx`, never by a tag or a date. The editor's **Releases** window edits
+  `mod.ltx`, never by a tag or a date. The authoring tool's **Releases** window edits
   the title and the notes of a release that is out and leaves the rest alone -
   including the Latest mark, which GitHub's default for an edit would move.
 - The game sees a release the moment GitHub marks it Latest, so a release must
-  be complete by then. The editor uploads the assets into a *draft*, compares
+  be complete by then. The authoring tool uploads the assets into a *draft*, compares
   what GitHub stored with what it packaged (name, size, SHA-256 digest), and only
   then publishes the draft as the latest release. At the end it fetches the
   descriptor from the URL of section 2 and reports whether it is served.
-- A published release is never overwritten: the editor refuses to publish a tag
+- A published release is never overwritten: the authoring tool refuses to publish a tag
   that already exists. Other files under the same version go out the long way
   round - delete the release, publish the version again - and the game notices
   (3.1): to a client that has version `X`, a release `X` with other content is an
@@ -227,16 +226,16 @@ XFined Editor's **Publish Release** does about it.
   the plain way to ship a change. One thing GitHub does on its own: a release
   deleted and published again under the SAME tag keeps its download address, and
   that address goes on answering with the deleted files for several minutes -
-  the game sees the old descriptor until then. Right after a deletion the editor
+  the game sees the old descriptor until then. Right after a deletion the authoring tool
   therefore publishes the version under a fresh tag (`v1.0.0-r2`), whose address
   is new.
-- Deleting a release takes its git tag with it in the editor, release first: a
+- Deleting a release takes its git tag with it in the authoring tool, release first: a
   published release whose tag goes first falls back to a draft. Once the latest
   release is gone GitHub marks the newest remaining one Latest, and that is what
   the game is served from then on; a client that already has a higher version
   than the one served stays where it is.
 - The repository has to be public: the game downloads anonymously.
-- One repository per module is the simple arrangement. The editor publishes one
+- One repository per module is the simple arrangement. The authoring tool publishes one
   module per release, so it refuses when the current latest release carries the
   descriptor of another module - its own release would hide that module from
   its players.

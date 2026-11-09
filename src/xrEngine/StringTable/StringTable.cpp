@@ -6,8 +6,8 @@
 #include "xrCore/XML/XMLDocument.hpp"
 #include "xrCore/XMS/xms_core.h"
 
-// The engine's own string file, under the name it has now and the ones it had as XFined-Ray and as OpenXRay.
-constexpr pcstr ENGINE_XML[] = { "grizzly.xml", "xfined-ray.xml", "openxray.xml" };
+// The engine's own string file, under the name it has now and the one it had as OpenXRay.
+constexpr pcstr ENGINE_XML[] = { "grizzly.xml", "openxray.xml" };
 static bool is_engine_xml(pcstr name)
 {
     for (pcstr n : ENGINE_XML)

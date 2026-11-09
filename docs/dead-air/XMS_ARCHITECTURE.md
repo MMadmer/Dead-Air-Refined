@@ -1,6 +1,6 @@
 # XMS — eXtensible Module System
 
-Modular modding architecture for Dead Air: Refined (x64) and the XFined editor.
+Modular modding architecture for Dead Air: Refined (x64).
 
 Status: **P0–P4 implemented in the engine** (2026-08-11), P5–P6 are design. All engine references follow the current `src/` tree.
 
@@ -32,7 +32,7 @@ Runtime implementation notes:
 - The kill switch: `-no_xms` on the command line.
 - Module layout: `mod.ltx` + `gamedata\` (the classic 1:1 overlay) + `patch\*.ltxp|*.xmlp` + `spawn\*.xspawn` + `scripts\` (namespaced, via `xms.require`).
 - New config sections arrive through `gamedata\configs\xms\*.ltx` (parsed into pSettings on top of the base with merge semantics).
-- `.xspawn` coordinates are level-local; `game_vertex = auto` takes the level's nearest game vertex (the editor will stamp exact ids on export in the future).
+- `.xspawn` coordinates are level-local; `game_vertex = auto` takes the level's nearest game vertex (the authoring tool will stamp exact ids on export in the future).
 - Module spawns materialize immediately on a new game; on an existing save — from the next spawn-logic cycle (emission), or the module itself calls `alife():create` in an `on_install` hook.
 
 ---
@@ -183,7 +183,7 @@ and the Mods menu metadata `author`, `description`, `website`),
 `[provides_mode]` (`id`/`title`), `[requires]`, `[conflicts]`,
 `[order]` (`after`/`before`), `[budget]` (`spawns`, default 256), `[vfs]`,
 `[redirects]`, `[update]` (`github`). The metadata keys, their text rules and
-the update source are specified in `MOD_UPDATES.md`. Unknown keys are ignored by the engine but survive the editor's
+the update source are specified in `MOD_UPDATES.md`. Unknown keys are ignored by the engine but survive the authoring tool's
 round-trip — format extensions are added as new keys only.
 
 ```ini
@@ -215,7 +215,7 @@ meshes\dynamics\old.ogf = meshes\dynamics\props\new.ogf
 ### Load order
 
 Topological sort by `requires` + `after`/`before`; the tie-break is the user order from
-`mods/order.ltx` (drag-n-drop in the editor/launcher), then by `id`. Fully deterministic.
+`mods/order.ltx` (drag-n-drop in the authoring tool/launcher), then by `id`. Fully deterministic.
 A cycle or a missing dependency → loading does not start, a report is shown.
 
 ### Namespace and the stable `ns`
@@ -442,7 +442,7 @@ area. The contract is MODDING.md "World rules".
 (`XMS::Module::pda_layout`, a path inside the module). `XmsPda::Owner()` picks the last
 applying module that declares one (the others are conflicts). `CUIPdaWnd::Init` asks
 `xms_pda.build` for the layout - `xms_nq_load.parse` reads it in the sandbox,
-`xms_pda_layout.normalize` (pure Lua, shared with the editor) turns it into a flat item
+`xms_pda_layout.normalize` (pure Lua, shared with the authoring tool) turns it into a flat item
 list - and `CUIPdaLayout` builds a window per item under `UIMainPdaFrame`, so the 3D
 PDA's screen UV and the stock sections keep working unchanged. The map slot is a
 second `CUIMapWnd` (`InitFromXml` from a generated description); map windows are kept
@@ -514,9 +514,8 @@ otherwise it goes stale; `prune_inactive_level_caches` learns to respect composi
 **Lighting.** The lightmap is bound to the level's shader table (`r2_loader.cpp:49`), therefore:
 * the cheap path — an overlay on a self-contained OGF shader (the `OGF_TEXTURE` branch,
   `FBasicVisual.cpp:58`): dynamic light only, but it works immediately;
-* the honest path — the patch compiler in XFined Editor bakes its own lightmap and **appends**
-  entries to the shader table at runtime (`getShader` is index-based, append is safe). Which is
-  exactly what the editor is being built for.
+* the honest path — a patch compiler bakes its own lightmap and **appends**
+  entries to the shader table at runtime (`getShader` is index-based, append is safe).
 
 **AI map.** `level.ai` is mmap'ed and welded by GUIDs (`level_graph.cpp:28`). An overlay needs a
 composite node array in memory — the path already exists: `CLevelGraphManager` can own a heap array
@@ -723,12 +722,6 @@ The game-vertex ceiling (65535 for the whole game, a typical level is 1–3k) is
 * `xms_report.json` on every start: the load order, the conflict ledger (files, keys, sections,
   strings, scripts, callbacks), spent budgets, skipped save objects, missing dependencies.
 * Console: `xms_list`, `xms_conflicts`, `xms_why <path|section>` — who won and why.
-* **XFined Editor**: the module list with drag ordering, the conflict matrix, a composition dry-run
-  without launching the game, a legacy-mod "lift" into a module (by diffing against the base:
-  LTX/XML convert to patches automatically, binaries stay opaque, scripts are flagged for manual
-  review), flat `gamedata\` export for vanilla DA with a "vanilla-compatible: yes/no" badge and the
-  list of reasons.
-* All of this is already reachable through XFinedMCP — composition can be debugged with API calls.
 
 ---
 
@@ -744,7 +737,7 @@ Every phase is self-contained, breaks nothing in vanilla and delivers a concrete
 | **P3** | M | the mod-set manifest and module state in `.scov` (runtime chunk ids), unknown-object skip, tests on the 0.98b reference | install and remove mods **on an existing save** |
 | **P4** | L | the additive spawn layer, stable keys, budgets, story_id namespacing | add NPCs/items/quests to any level without rebuilding `all.spawn` |
 | **P5** | L | the composite `game.graph`, level fragments, transition stitching, the composition cache | new locations as ordinary mods, together, without rebuilding the world |
-| **P6** | XL | geometry overlays: the composite CDB, visual injection, the composite `level.ai` (append-only), the patch compiler in the editor, the composition-keyed cform cache | "a house in Cordon" from two mods at once |
+| **P6** | XL | geometry overlays: the composite CDB, visual injection, the composite `level.ai` (append-only), the patch compiler in the authoring tool, the composition-keyed cform cache | "a house in Cordon" from two mods at once |
 | **P7** | XL, opt. | widening `_SPAWN_ID`/`_GRAPH_ID` to u32 | the ceilings go away; the price — the format stops being vanilla |
 
 The first four phases close, by experience, the vast majority of real conflicts between mods.
@@ -764,7 +757,7 @@ P5–P6 are what a dedicated editor exists for in the first place.
   and that is ~57 places in the code.
 * **We do not hot-reload mods at runtime.** Composition happens at start and on save load.
 * **We do not guarantee vanilla export for Grizzly-only features** (the composite graph, overlays, the
-  additive spawn). The editor says so openly, not quietly.
+  additive spawn). The authoring tool says so openly, not quietly.
 * **We do not resolve semantic mod conflicts.** No runtime arbitration, no load blocking, no
   negotiation between mods. A deterministic order, a winner, a report line. Mod A killed an NPC that
   mod B was waiting for — that is for the mod authors and the player to sort out, not the engine.

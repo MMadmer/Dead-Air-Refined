@@ -22,4 +22,8 @@ namespace XMS
 // Applies every module patch registered for this document. Called from
 // XMLDocument::Load after a successful parse. No-op when XMS is inactive.
 XRCORE_API void ApplyXmlPatches(XMLDocument& doc, pcstr xml_filename);
+
+// Applies the <xms-patch> elements of `text` to a document that is already loaded, whatever they
+// name as their target: for a patch the game makes itself from what a module describes.
+XRCORE_API void ApplyXmlPatchText(XMLDocument& doc, pcstr text, pcstr owner_id);
 }

@@ -14,6 +14,7 @@
 #include "xrUICore/Windows/UIWindow.h"
 
 class CApplication;
+class CUIXmsScreenLayers;
 
 class UILoadingScreen final : public ILoadingScreen, public CUIWindow
 {
@@ -28,6 +29,14 @@ class UILoadingScreen final : public ILoadingScreen, public CUIWindow
     CUIStatic* loadingHeader;
     CUIStatic* loadingTipNumber;
     CUIStatic* loadingTip;
+    // A module's screen, under everything else; what the layout itself has as its background gives way to it.
+    CUIXmsScreenLayers* m_screen{};
+    xr_vector<CUIWindow*> m_stock_background;
+    xr_string m_level; // empty until it is known
+    bool m_screen_waits{}; // the choice needs the level
+    bool m_loading{}; // between Show(true) and Show(false)
+    void ChooseScreen();
+
     // when the shown progress was eased last (da_media_time)
     u32 m_eased_at{};
 
@@ -61,6 +70,7 @@ public:
     void Draw() override;
 
     void SetLevelLogo(const char* name) override;
+    void SetLevelName(const char* name) override;
     void SetStageTitle(const char* title) override;
     void SetStageTip(const char* header, const char* tipNumber, const char* tip) override;
 

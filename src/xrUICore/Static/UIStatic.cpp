@@ -50,6 +50,8 @@ bool CUIStatic::InitTexture(pcstr texture, bool fatal /*= true*/)
     return InitTextureEx(texture, "hud" DELIMITER "default", fatal);
 }
 
+bool g_ui_backdrop_replaced = false;
+
 void CUIStatic::CreateShader(const char* tex, const char* sh)
 {
     m_UIStaticItem.CreateShader(tex, sh);
@@ -59,6 +61,10 @@ bool CUIStatic::InitTextureEx(pcstr texture, pcstr shader, bool /*fatal = true*/
 {
     LPCSTR res_shname = GEnv.UIRender->UpdateShaderName(texture, shader);
     bool result = CUITextureMaster::InitTexture(texture, &m_UIStaticItem, res_shname);
+
+    // the background every menu window stands on, and the main menu's picture over it
+    if (!_strnicmp(texture, "ui" DELIMITER "ui_static_mm_back_0", 21) && (texture[21] == '0' || texture[21] == '1') && !texture[22])
+        m_bBackdrop = true;
 
     Fvector2 p = GetWndPos();
     m_UIStaticItem.SetPos(p.x, p.y);
@@ -94,6 +100,9 @@ void CUIStatic::DrawText()
 
 void CUIStatic::DrawTexture()
 {
+    if (m_bBackdrop && g_ui_backdrop_replaced)
+        return;
+
     // a skinned static draws its shape instead of its texture, and neither when the texture is off
     if (!m_bTextureEnable)
         SkipShapeSkin();

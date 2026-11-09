@@ -8,6 +8,7 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <wincodec.h>
+#include <fstream>
 
 namespace
 {
@@ -398,6 +399,29 @@ void CommunityHtmlCanvas::draw_list_marker(litehtml::uint_ptr, const litehtml::l
     }
 }
 
+bool CommunityHtmlCanvas::read_local(const char* src, xr_vector<u8>& bytes) const
+{
+    if (m_folder.empty() || !src || !src[0])
+        return false;
+    xr_string rel(src);
+    std::replace(rel.begin(), rel.end(), '/', '\\');
+    // beside the page and below it, and a scheme or a drive is neither
+    if (rel[0] == '\\' || rel.find("..") != xr_string::npos || rel.find(':') != xr_string::npos)
+        return false;
+    std::ifstream file((m_folder + rel).c_str(), std::ios::binary);
+    if (!file)
+        return false;
+    bytes.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    return !bytes.empty();
+}
+
+void CommunityHtmlCanvas::import_css(litehtml::string& text, const litehtml::string& url, litehtml::string&)
+{
+    xr_vector<u8> bytes;
+    if (read_local(url.c_str(), bytes))
+        text.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+}
+
 void CommunityHtmlCanvas::load_image(const char* src, const char*, bool)
 {
     if (!Valid() || !src || m_pictures.count(src))
@@ -405,7 +429,7 @@ void CommunityHtmlCanvas::load_image(const char* src, const char*, bool)
     Picture& picture = m_pictures[src];
 
     xr_vector<u8> bytes;
-    if (!data_uri(src, bytes))
+    if (!data_uri(src, bytes) && !read_local(src, bytes))
     {
         Msg("! [community] a picture that is not a data: URI is not shown (%.60s)", src);
         return;

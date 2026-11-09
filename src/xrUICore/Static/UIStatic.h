@@ -23,6 +23,9 @@ struct lanim_cont_xf : public lanim_cont
     void set_defaults();
 };
 
+// A module's screen stands under the menus now: their own backgrounds are not drawn.
+XRUICORE_API extern bool g_ui_backdrop_replaced;
+
 class XRUICORE_API CUIStatic : public CUIWindow, public ITextureOwner, public CUILightAnimColorConrollerImpl
 {
     friend class CUIXmlInitBase;
@@ -83,6 +86,8 @@ public:
     void ResetHeadingPivot() { m_UIStaticItem.ResetHeadingPivot(); }
     virtual void SetTextureOffset(float x, float y) { m_TextureOffset.set(x, y); }
     Fvector2 GetTextureOffeset() const { return m_TextureOffset; }
+    // Stands under a menu: gives way to a module's screen while g_ui_backdrop_replaced says so.
+    void MarkBackdrop() { m_bBackdrop = true; }
     void TextureOn() { m_bTextureEnable = true; }
     void TextureOff() { m_bTextureEnable = false; }
     // own
@@ -121,6 +126,7 @@ protected:
     float m_textureRounding{};
     bool m_bStretchTexture{};
     bool m_bTextureEnable{ true };
+    bool m_bBackdrop{};
 
     void DrawRoundedTexture(const Frect& rect);
 

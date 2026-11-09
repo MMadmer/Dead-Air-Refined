@@ -1622,3 +1622,5 @@ void CUIModsWnd::LogState()
     if (m_review->IsShown())
         Msg("* [mods-ui] review dialog for %s", m_review->ModuleId().c_str());
 }
+
+xr_string ModsDisplayText(const xr_string& text) { return mods_display(text); }

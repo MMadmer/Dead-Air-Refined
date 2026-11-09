@@ -133,7 +133,7 @@ void split_pair(pcstr text, xr_string& first, xr_string& second)
     trim(second);
 }
 
-// The light of a hanging lamp as the editor wrote it (EditorModScene's lamp_* keys).
+// The light of a hanging lamp: the op's lamp_* keys.
 void apply_lamp(const OpSection& op, CSE_ALifeObjectHangingLamp& lamp)
 {
     if (pcstr v = op.value("lamp_flags"))
@@ -518,7 +518,7 @@ void CALifeSpawnRegistry::xms_compose()
 
             // A restrictor without its shape is a zone nothing can ever be inside: the
             // marker points at it correctly and walking in does nothing, because the
-            // shape list the editor drew is not part of the section.
+            // object's shape list is not part of the section.
             if (CSE_Shape* shape_object = smart_cast<CSE_Shape*>(abstract))
             {
                 const int shape_count = op.value("shapes") ? atoi(op.value("shapes")) : 0;
@@ -559,7 +559,7 @@ void CALifeSpawnRegistry::xms_compose()
                 if (CSE_ALifeTraderAbstract* trader = smart_cast<CSE_ALifeTraderAbstract*>(abstract))
                     trader->set_character_profile(profile);
 
-            // the editor's Model\Fixed bones chooser: without it a placed prop is a
+            // the op's fixed_bones: without it a placed prop is a
             // free physics body and slides off the spot the author nailed it to
             if (pcstr fixed = op.value("fixed_bones"))
                 if (CSE_ALifeObjectPhysic* physic = smart_cast<CSE_ALifeObjectPhysic*>(abstract))

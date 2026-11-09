@@ -318,4 +318,24 @@ void ApplyXmlPatches(XMLDocument& doc, pcstr xml_filename)
     if (total)
         Msg("* XMS: %u xml patch op(s) applied to [%s]", total, xml_filename);
 }
+
+void ApplyXmlPatchText(XMLDocument& doc, pcstr text, pcstr owner_id)
+{
+    auto parsed = std::make_shared<TiXmlDocument>();
+    parsed->Parse(parsed.get(), text);
+    if (parsed->Error())
+    {
+        Msg("! XMS: bad generated patch of [%s]: %s", owner_id, parsed->ErrorDesc());
+        return;
+    }
+    for (TiXmlElement* patch = parsed->FirstChildElement("xms-patch"); patch; patch = patch->NextSiblingElement("xms-patch"))
+    {
+        PatchRef ref;
+        ref.module_id = owner_id;
+        ref.patch_root = patch;
+        ref.doc = parsed;
+        pcstr target = patch->Attribute("target");
+        apply_patch(doc, normalize_target(target).c_str(), ref);
+    }
+}
 } // namespace XMS

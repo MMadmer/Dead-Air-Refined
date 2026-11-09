@@ -1,6 +1,6 @@
 -- NQ runtime: shared helpers (text encoding, references, places, time, serialization, logging).
--- Part of the node-quest runtime of Dead Air Refined (contract: XFined Editor
--- docs/NQ_ARCHITECTURE.md). Pure helpers: no callbacks, no state of its own except caches.
+-- Part of the node-quest runtime of Dead Air Refined (contract: docs/dead-air/NQ_RUNTIME.md).
+-- Pure helpers: no callbacks, no state of its own except caches.
 
 -- ============================================================================ logging
 -- Every runtime line starts with "* [nq]", "~ [nq]" or "! [nq]" so the log can be filtered.
@@ -347,8 +347,8 @@ end
 
 -- ============================================================================ characters
 -- { character = "id" } names a character of the graph's own module by its asset,
--- { character = "module.id" } one another module ships. XFined Editor generates both the
--- spawn section and the profile of a character as "<module>_<id>": a stalker spawn.npc
+-- { character = "module.id" } one another module ships. Both the
+-- spawn section and the profile of a character are named "<module>_<id>": a stalker spawn.npc
 -- created carries that section, one placed in a level that profile - either identifies it.
 function character_key(ctx, name)
 	if (type(name) ~= "string" or name == "") then return nil end

@@ -1,4 +1,4 @@
--- NQ runtime: asset discovery, sandboxed parse, validation (E/W codes shared with the editor),
+-- NQ runtime: asset discovery, sandboxed parse, validation (E/W codes),
 -- canonicalization, migrations, content hash and the text outline used by `nq state`.
 --
 -- A quest file is a declarative Lua table (`return { ... }`), loaded with an empty environment so
@@ -331,7 +331,7 @@ local function plain_value(value, depth, walk)
 	if (tv ~= "table") then return nil, "value is not plain data (function/userdata)" end
 	if (depth > 48) then return nil, "table nesting too deep (self reference?)" end
 
-	-- Match the editor walker: numeric keys are a sorted list, so sparse literals keep every entry.
+	-- Numeric keys are a sorted list, so sparse literals keep every entry.
 	local numeric, strings = {}, {}
 	for key in pairs(value) do
 		if (type(key) == "number") then numeric[#numeric + 1] = key
@@ -421,7 +421,7 @@ local function valid_npc_ref(v)
 end
 
 -- A target may also be a place: a restrictor by name, or a point the task anchors a
--- space_restrictor on (xms_nq_task target_object_id) - the same forms the editor offers.
+-- space_restrictor on (xms_nq_task target_object_id).
 local function valid_target_ref(v)
 	if (type(v) ~= "table") then return false end
 	if (valid_npc_ref(v)) then return true end
@@ -444,7 +444,7 @@ end
 
 -- One concrete world object (item, container, squad, a character): the alternatives of
 -- squad_ref plus a character - one person, so one object - kept as its own type because the
--- editor pickers and the docs describe it as "this object", not "this squad".
+-- docs describe it as "this object", not "this squad".
 local function valid_object_ref(v)
 	if (type(v) == "table" and type(v.character) == "string" and v.character ~= "") then return true end
 	return valid_squad_ref(v)
@@ -472,7 +472,7 @@ local function valid_place(v)
 end
 
 -- The rows of spawn.npc: who to create. A row names a CHARACTER of the module (the
--- editor's .npcasset, by its id - "other.module.id" reaches into another module) or
+-- module's .npcasset, by its id - "other.module.id" reaches into another module) or
 -- a spawn section, never both; ref saves that NPC, unique / dead / yaw are its own.
 local NPC_ROW_KEYS = { character = true, section = true, ref = true, unique = true, dead = true, yaw = true }
 
@@ -511,7 +511,7 @@ local function valid_spawn_spec(v)
 	if (type(v) ~= "table" or type(v.section) ~= "string") then return false end
 	-- a smart or a place: without either there is nothing to create the squad on
 	if (v.smart ~= nil and type(v.smart) ~= "string") then return false end
-	-- the editor writes "" for a picker nobody touched; that is not a smart
+	-- "" is a picker nobody touched; that is not a smart
 	if ((v.smart == nil or v.smart == "") and v.place == nil) then return false end
 	-- optional: where to put them, and a zone they may not leave
 	if (v.place ~= nil and not valid_place(v.place)) then return false end
@@ -901,8 +901,8 @@ KIND_FORM["objective.kill_count"] = function(st, nid, raw, params)
 end
 
 -- The item actions share the two spellings of "what" with objective.fetch: one section with a
--- count, or a list of rows. Both at once is ambiguous and neither is nothing to do - the editor
--- refuses both shapes and the game must agree, or a quest that passes here would run a kind
+-- count, or a list of rows. Both at once is ambiguous and neither is nothing to do - both are
+-- refused, or a quest that passes here would run a kind
 -- with no rows.
 local function pslot(slot, name)
 	return (slot and (slot .. "/") or "") .. "param:" .. name
@@ -989,7 +989,7 @@ local function canon_cond(st, node, slot, raw)
 end
 
 -- `sep` separates the child index from the owner slot: ":" for a node's own cond list
--- ("cond:0"), "/cond:" inside a case ("param:cases/case:0/cond:0" - the form the editor prints).
+-- ("cond:0"), "/cond:" inside a case ("param:cases/case:0/cond:0").
 canon_cond_list = function(st, node, slot, raw, sep)
 	local out = {}
 	if (type(raw) ~= "table") then
@@ -1362,8 +1362,8 @@ local function check_graph(st, q)
 		if (q.node_by_id[u.name] == nil) then problem(st.problems, "E030", u.node, u.slot, "node '%s' does not exist", u.name) end
 	end
 	-- E030 refs used but never created by any node. An error, not a warning: nothing can ever
-	-- resolve such a ref, so the node holding it fails forever. The editor refuses the build for
-	-- the same reason, and W030 stays what the editor uses it for (created, but maybe too late).
+	-- resolve such a ref, so the node holding it fails forever. W030 stays a warning
+	-- (created, but maybe too late).
 	-- A behaviour graph is the exception, and on purpose: it sees the refs of whoever runs
 	-- it (util.ref_record walks up to the caller), so "the case the quest dropped" is a ref
 	-- this document never creates. Which quest will call it cannot be known here, so such
@@ -1403,7 +1403,7 @@ function build(raw, module, relpath, src, kind)
 	elseif (type(ver) ~= "number" or math.floor(ver) ~= ver or ver < 1) then
 		problem(st.problems, "E001", nil, vkey, "%s version %s is not a version number", vkey, tostring(ver))
 	elseif (ver > NQ_VERSION) then
-		problem(st.problems, "E001", nil, vkey, "%s version %s was written by a newer editor (this runtime supports up to %d)", vkey, tostring(ver), NQ_VERSION)
+		problem(st.problems, "E001", nil, vkey, "%s version %s is newer than this runtime supports (up to %d)", vkey, tostring(ver), NQ_VERSION)
 	end
 	q.nq = ver
 	if not (is_ident(raw.id)) then

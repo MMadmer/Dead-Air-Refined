@@ -1,4 +1,4 @@
-# Submissions and withdrawals (MOD_CATALOG 10.2). Both are issues XFined Editor opens: a
+# Submissions and withdrawals (MOD_CATALOG 10.2). Both are issues Grizzly Editor opens: a
 # submission lists a module or updates its listing, a withdrawal takes a listed module out of the
 # browser and is accepted from the account that owns it only. judge reads them through the API -
 # nothing of them is ever run - and gives the verdict: accepted (merge commits the judged file, or
