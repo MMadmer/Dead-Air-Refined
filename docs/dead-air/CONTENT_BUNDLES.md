@@ -33,7 +33,7 @@ the bytes came from.
 | Path | What it is |
 | --- | --- |
 | `{app}\.dead-air-x64\content-manifest.txt` | The trust root. Ships inside the hash-verified Setup payload; names every bundle this version requires. |
-| `{app}\.dead-air-x64\content-state.txt` | Advisory cache of "this file, this size, this mtime, was this hash". Deleting it costs a rescan, never correctness. |
+| `{app}\.dead-air-x64\content-state.txt` | Advisory cache of "this file, this size, this mtime, was this hash". Deleting it costs a rescan, never correctness. A start on another fs config keeps its own under `$app_data_root$\content\` (below). |
 | `{app}\.dead-air-x64\content-incomplete.txt` | The latch. Present means the installation must not be trusted. |
 | `{app}\.dead-air-x64\content-cache\` | Downloads land here; bundles enter `database\` only from here, by rename. |
 | `{app}\database\xtra_dead_air_x64_content_*.xdb0` | The mounted bundles. |
@@ -58,6 +58,35 @@ the game ends up reading a latch the updater wrote somewhere else. `Database()` 
 write there by absolute path — a content system that resolved it from data could fetch into a
 directory the game never mounts and re-download forever. `ContentService` checks the two agree
 and reports a redirected `$arch_dir$` instead of entering that loop.
+
+### A game on another fs config
+
+An engine started with `-fsltx <file>` whose folder is not the application folder (the folder of
+`xrCore.dll`; `CLocatorAPI::fs_config_elsewhere`) runs that config against the installation and
+writes nothing into the installation. A start without `-fsltx`, or with one naming a file in the
+application folder, is the installation's own and keeps every rule above.
+
+| What | The installation's own start | A start on another fs config |
+| --- | --- | --- |
+| The manifest, the trust root | `{app}\.dead-air-x64\content-manifest.txt` | the same file, read only |
+| The bundles verified and mounted | `{app}\database` | the folder its `$arch_dir$` names (`Layout::archives`) |
+| `content-state.txt`, `content-incomplete.txt` | `{app}\.dead-air-x64` | `$app_data_root$\content\` (`Layout::session`); the first start copies the installation's state file there, so it hashes nothing the installation already vouched for |
+| The installation's latch | written and cleared | read: present, it keeps the gate shut until this run's own hash pass is clean, and stays for the installation to clear |
+| Repair | offered | refused ("start the installation itself to repair it"); the dialog offers none |
+| The update check | runs | skipped ("the game runs on another fs config") |
+| A plain relative root in the config (`appdata\`) | the working folder's | the config's folder |
+| Early crash reports, before the filesystem is up | `<working folder>\session_reports` | `<config folder>\session_reports`; afterwards both use `$app_data_root$\session_reports` |
+
+The executable says it can in its version resource: the string `EngineAbilities` lists
+`fsltx-in-place` (this table) and `long-paths` (below), space-separated
+(`src/xrCore/ProductVersion.h`, `DAR_ENGINE_ABILITIES`). A tool reads it without starting the
+game; a word is added, never changed or removed.
+
+The path limit: the engine is long-path aware (`longPathAware` in its manifest) and
+`CLocatorAPI::Register` keeps a path in a `string_path` (it was a `string256`, which stopped
+the game before its log opened once an fs root was deeper than about 66 characters - the
+shader cache's names under it are 189 long). A full path may now be 519 characters where
+Windows long paths are enabled (`LongPathsEnabled`), and `MAX_PATH` (259) where they are not.
 
 ## The two hashes
 

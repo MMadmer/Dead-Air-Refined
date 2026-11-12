@@ -20,6 +20,7 @@
 #include "xrCore/Threading/Lock.hpp"
 #include "Crypto/trivial_encryptor.h"
 
+#include <filesystem>
 #include <mutex>
 
 constexpr size_t VFS_STANDARD_FILE = std::numeric_limits<size_t>::max();
@@ -325,7 +326,8 @@ const CLocatorAPI::file* CLocatorAPI::Register(
 {
     ZoneScoped;
 
-    string256 temp_file_name;
+    // A full path, as long as the folders around it: a root of any depth the system takes.
+    string_path temp_file_name;
     xr_strcpy(temp_file_name, sizeof temp_file_name, name);
     xr_fs_strlwr(temp_file_name);
 
@@ -1166,6 +1168,19 @@ void CLocatorAPI::setup_fs_path(pcstr fs_name)
     m_paths.emplace(xr_strdup("$fs_root$"), path);
 
     Msg("$fs_root$ = %s", full_current_directory);
+
+    // Only a config named on the command line can be elsewhere: a start without one reads the
+    // working folder's fsgame.ltx and behaves as it always did.
+    if (fs_name && *fs_name)
+    {
+        std::error_code error;
+        const std::filesystem::path root(full_current_directory), application(Core.ApplicationPath);
+        const bool same = std::filesystem::equivalent(root, application, error) ||
+            !xr_stricmp(root.lexically_normal().string().c_str(), application.lexically_normal().string().c_str());
+        m_fs_config_elsewhere = !same;
+        if (m_fs_config_elsewhere)
+            Msg("* The fs config lies outside the application folder: the installation is only read");
+    }
 }
 
 IReader* CLocatorAPI::setup_fs_ltx(pcstr fs_name)
@@ -1283,7 +1298,23 @@ void CLocatorAPI::_initialize(u32 flags, pcstr target_folder, pcstr fs_name)
 
             auto p_it = m_paths.find(root);
 
-            FS_Path* P = xr_new<FS_Path>(p_it != m_paths.end() ? p_it->second->m_Path : root, lp_add, lp_def, lp_capt, fl);
+            // A plain relative root is the working folder's for the installation's own config, as it
+            // always was, and the config's folder for one elsewhere: such a run keeps its app data,
+            // logs and caches beside its config whatever folder it was started from.
+            pcstr base = p_it != m_paths.end() ? p_it->second->m_Path : root;
+            string_path anchored;
+            if (p_it == m_paths.end() && m_fs_config_elsewhere && *root)
+            {
+                const std::filesystem::path relative(root);
+                FS_Path* fsRoot = nullptr;
+                if (!relative.has_root_name() && !relative.has_root_directory() && get_path("$fs_root$", &fsRoot))
+                {
+                    strconcat(sizeof(anchored), anchored, fsRoot->m_Path, root);
+                    base = anchored;
+                }
+            }
+
+            FS_Path* P = xr_new<FS_Path>(base, lp_add, lp_def, lp_capt, fl);
             bNoRecurse = !(fl & FS_Path::flRecurse);
             Recurse(P->m_Path);
             auto I = m_paths.emplace(xr_strdup(id), P);

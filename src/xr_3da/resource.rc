@@ -100,6 +100,7 @@ BEGIN
             VALUE "OriginalFilename", "xrEngine.exe"
             VALUE "ProductName", "Dead Air: Refined"
             VALUE "ProductVersion", DAR_VERSION_STRING
+            VALUE "EngineAbilities", DAR_ENGINE_ABILITIES
         END
     END
     BLOCK "VarFileInfo"

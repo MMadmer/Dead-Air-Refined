@@ -42,6 +42,8 @@ struct ServiceState
     // Set when the cheap pass found nothing wrong but a previous run left the latch behind.
     // That is the one case where a hash pass may run while the state is still Incomplete.
     std::atomic_bool latchedOnly{};
+    // Started on another fs config: the installation is only read, so nothing here repairs it.
+    std::atomic_bool elsewhere{};
 
     std::mutex dataMutex;
     ContentPaths::Layout paths;
@@ -371,6 +373,27 @@ void run_initial_pass(ServiceState& instance)
     instance.missingBytes = 0;
     instance.unrepairable.store(false, std::memory_order_release);
 
+    // On another fs config the run verifies the archives its config mounts and keeps its records
+    // in that config's app data; the installation's manifest stays the trust root and is only read.
+    const bool elsewhere = FS.fs_config_elsewhere();
+    instance.elsewhere.store(elsewhere, std::memory_order_release);
+    if (elsewhere)
+    {
+        string_path records{};
+        FS.update_path(records, "$app_data_root$", "content" DELIMITER);
+        instance.paths.session = std::filesystem::path(records);
+        instance.paths.archives = resolve_archive_directory();
+        // The first run of such a config starts from the installation's cache instead of hashing
+        // every bundle: an entry is trusted only on the same name, size and write time anyway.
+        std::error_code error;
+        if (!std::filesystem::exists(instance.paths.State(), error) &&
+            std::filesystem::is_regular_file(instance.paths.InstalledState(), error))
+        {
+            std::filesystem::create_directories(instance.paths.Records(), error);
+            std::filesystem::copy_file(instance.paths.InstalledState(), instance.paths.State(), error);
+        }
+    }
+
     // An installation that cannot record its own incompleteness will present as healthy after a
     // crash, so a latch that will not write is itself worth reporting.
     const auto latch = [&](ContentState::Reason reason)
@@ -497,7 +520,10 @@ void run_initial_pass(ServiceState& instance)
         return;
     }
 
-    if (ContentState::LatchPresent(instance.paths.Latch()))
+    // The installation's own latch counts for a run elsewhere too: an interrupted commit there
+    // is in the very archives this run mounts. Its hash pass clears only its own latch.
+    if (ContentState::LatchPresent(instance.paths.Latch()) ||
+        (elsewhere && ContentState::LatchPresent(instance.paths.InstalledLatch())))
     {
         // Every file is where it should be and the right size, but a previous run recorded
         // that it was mid-repair. Only a full hash pass may clear that.
@@ -611,6 +637,13 @@ void ContentService::StartRepair()
         Msg("! [content] no usable manifest - the installation has to be reinstalled");
         return;
     }
+    if (instance.elsewhere.load(std::memory_order_acquire))
+    {
+        // A run on another fs config never writes into the installation; the installation
+        // repairs itself when it is started on its own.
+        Msg("! [content] the game runs on another fs config - start the installation itself to repair it");
+        return;
+    }
     if (instance.unrepairable.load(std::memory_order_acquire))
     {
         // A download into a folder the engine does not read would end "repaired" and come back
@@ -678,7 +711,8 @@ ContentService::Snapshot ContentService::GetSnapshot()
     }
     snapshot.checking = instance.latchedOnly.load(std::memory_order_acquire) &&
         instance.verifyStarted.load(std::memory_order_acquire) && snapshot.problems.empty();
-    snapshot.repairable = !instance.unrepairable.load(std::memory_order_acquire);
+    snapshot.repairable = !instance.unrepairable.load(std::memory_order_acquire) &&
+        !instance.elsewhere.load(std::memory_order_acquire);
     snapshot.stage = instance.stage.load(std::memory_order_acquire);
     snapshot.failure = instance.failure.load(std::memory_order_acquire);
     snapshot.repairDone = instance.repairDone.load(std::memory_order_acquire);

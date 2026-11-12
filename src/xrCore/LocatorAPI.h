@@ -287,6 +287,13 @@ public:
     void rescan_pathes();
     void lock_rescan();
     void unlock_rescan();
+
+    // Started with `-fsltx` naming a config outside the application folder: such a run keeps
+    // everything it writes under that config's roots and leaves the installation as it is.
+    bool fs_config_elsewhere() const { return m_fs_config_elsewhere; }
+
+private:
+    bool m_fs_config_elsewhere{};
 };
 
 extern XRCORE_API xr_unique_ptr<CLocatorAPI> xr_FS;

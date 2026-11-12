@@ -176,6 +176,11 @@ check then never starts, the bug report menu entry disappears, and the menu show
 `Автообновление отключено модами:` followed by the declared names. See
 `docs/dead-air/MODDING.md` for the full contract.
 
+An engine started on another fs config (`-fsltx` naming a file outside its folder,
+`CONTENT_BUNDLES.md`, "A game on another fs config") only reads the installation, so
+it does not start the check either ("Update check skipped: the game runs on another
+fs config"); the installation updates when it is started on its own.
+
 The opt-out covers the update check and the bug report, and nothing else.
 Content verification, the content latch and the repair path are outside it —
 `ContentService::StartVerify()` runs beside `UpdateService::StartCheck()`

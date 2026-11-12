@@ -376,12 +376,43 @@ bool has_suffix(std::string_view value, std::string_view suffix)
     return value.size() >= suffix.size() && value.substr(value.size() - suffix.size()) == suffix;
 }
 
+// The fs config `-fsltx` names, quoted or not; empty without one.
+xr_string fsltx_argument(std::string_view commandLine)
+{
+    size_t option = commandLine.find("-fsltx");
+    if (option == std::string_view::npos)
+        return {};
+
+    option += xr_strlen("-fsltx");
+    while (option < commandLine.size() && std::isspace(static_cast<unsigned char>(commandLine[option])))
+        ++option;
+    if (option == commandLine.size())
+        return {};
+
+    const char quote = commandLine[option] == '"' || commandLine[option] == '\'' ? commandLine[option++] : '\0';
+    size_t end = option;
+    while (end < commandLine.size() &&
+        (quote ? commandLine[end] != quote : !std::isspace(static_cast<unsigned char>(commandLine[end]))))
+    {
+        ++end;
+    }
+    return xr_string(commandLine.substr(option, end - option));
+}
+
 void ensure_report_directory()
 {
     if (!*reportDirectory)
     {
+        // Before the filesystem is up a run on a config of its own reports beside that config,
+        // never into the folder it was started from (the installation, for a tool that starts it).
         string_path workingDirectory{};
-        if (!GetCurrentDirectoryA(std::size(workingDirectory), workingDirectory))
+        const xr_string fsltx = fsltx_argument(GetCommandLineA());
+        std::error_code error;
+        const std::filesystem::path config =
+            fsltx.empty() ? std::filesystem::path() : std::filesystem::absolute(fsltx.c_str(), error).parent_path();
+        if (!fsltx.empty() && !error && !config.empty())
+            xr_strcpy(workingDirectory, config.string().c_str());
+        else if (!GetCurrentDirectoryA(std::size(workingDirectory), workingDirectory))
             xr_strcpy(workingDirectory, ".");
         strconcat(reportDirectory, workingDirectory, "\\session_reports");
     }
@@ -1482,25 +1513,8 @@ xr_string resolve_user_config_path()
 
 xr_string resolve_fsgame_path()
 {
-    std::string_view commandLine = Core.Params ? Core.Params : "";
-    size_t option = commandLine.find("-fsltx");
-    if (option == std::string_view::npos)
-        return "fsgame.ltx";
-
-    option += xr_strlen("-fsltx");
-    while (option < commandLine.size() && std::isspace(static_cast<unsigned char>(commandLine[option])))
-        ++option;
-    if (option == commandLine.size())
-        return "fsgame.ltx";
-
-    const char quote = commandLine[option] == '"' || commandLine[option] == '\'' ? commandLine[option++] : '\0';
-    size_t end = option;
-    while (end < commandLine.size() &&
-        (quote ? commandLine[end] != quote : !std::isspace(static_cast<unsigned char>(commandLine[end]))))
-    {
-        ++end;
-    }
-    return xr_string(commandLine.substr(option, end - option));
+    const xr_string named = fsltx_argument(Core.Params ? Core.Params : "");
+    return named.empty() ? xr_string("fsgame.ltx") : named;
 }
 
 u32 physical_core_count()

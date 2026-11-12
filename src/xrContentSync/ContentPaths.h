@@ -20,10 +20,21 @@ struct Layout
 {
     std::filesystem::path root;
 
+    // Set only for an engine started on another fs config (`-fsltx` naming a file outside the
+    // installation): what that run records - the state cache and its latch - lives in the
+    // config's app data, and the bundles are the ones its `$arch_dir$` names. Empty for the
+    // installation itself, the installer and the updater.
+    std::filesystem::path session;
+    std::filesystem::path archives;
+
     std::filesystem::path Meta() const { return root / L".dead-air-x64"; }
     std::filesystem::path Manifest() const { return Meta() / L"content-manifest.txt"; }
-    std::filesystem::path State() const { return Meta() / L"content-state.txt"; }
-    std::filesystem::path Latch() const { return Meta() / L"content-incomplete.txt"; }
+    std::filesystem::path Records() const { return session.empty() ? Meta() : session; }
+    std::filesystem::path State() const { return Records() / L"content-state.txt"; }
+    std::filesystem::path Latch() const { return Records() / L"content-incomplete.txt"; }
+    // The installation's own records, whoever reads them.
+    std::filesystem::path InstalledState() const { return Meta() / L"content-state.txt"; }
+    std::filesystem::path InstalledLatch() const { return Meta() / L"content-incomplete.txt"; }
 
     // Downloads land here and are only ever moved into `database\` after their hash matches,
     // which is what makes a partial file structurally unable to become a mounted bundle. It
@@ -37,8 +48,9 @@ struct Layout
 
     // Where mounted bundles live. Fixed, not read from fsgame.ltx: the installer and the
     // uninstaller write here by absolute path, so a content system that resolved it from data
-    // could fetch into a directory the game never mounts and re-download forever.
-    std::filesystem::path Database() const { return root / L"database"; }
+    // could fetch into a directory the game never mounts and re-download forever. A run on
+    // another fs config reads the archives its config names and never repairs them.
+    std::filesystem::path Database() const { return archives.empty() ? root / L"database" : archives; }
 };
 
 // The named mutex a content fetch holds for its lifetime. The installer's wizard page polls it

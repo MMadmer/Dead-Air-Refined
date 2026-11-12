@@ -1596,6 +1596,19 @@ void UpdateService::StartCheck()
         return;
     }
 
+    // An update rewrites the installation, which a run on another fs config only reads: the
+    // installation is updated when it is started on its own.
+    if (FS.fs_config_elsewhere())
+    {
+        static bool reported = false;
+        if (!reported)
+        {
+            reported = true;
+            Msg("* Update check skipped: the game runs on another fs config");
+        }
+        return;
+    }
+
     ServiceState& instance = service();
     if (instance.started.exchange(true, std::memory_order_acq_rel))
         return;

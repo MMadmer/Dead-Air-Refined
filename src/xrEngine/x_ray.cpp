@@ -400,7 +400,13 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const RendererMo
     if (strstr(commandLine, fsltx))
     {
         const size_t sz = xr_strlen(fsltx);
-        sscanf(strstr(commandLine, fsltx) + sz, "%[^ ] ", fsgame);
+        pcstr value = strstr(commandLine, fsltx) + sz;
+        // A quoted path may hold spaces (a config under a user's profile).
+        // The widths keep a value inside the smallest string_path (Windows: 520 bytes).
+        if (*value == '"')
+            sscanf(value + 1, "%519[^\"]", fsgame);
+        else
+            sscanf(value, "%519[^ ] ", fsgame);
     }
 
     Core.Initialize("Grizzly", commandLine, true, *fsgame ? fsgame : nullptr);

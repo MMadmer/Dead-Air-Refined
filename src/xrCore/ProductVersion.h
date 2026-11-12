@@ -12,6 +12,13 @@
 #define DAR_WIDEN_IMPL(value) L##value
 #define DAR_WIDEN(value) DAR_WIDEN_IMPL(value)
 #define DAR_VERSION_WSTRING DAR_WIDEN(DAR_VERSION_STRING)
+// What this engine can do, space-separated, read from xrEngine.exe's version resource by tools
+// that start it (`EngineAbilities`). A word is added, never changed or removed:
+// - fsltx-in-place: started with `-fsltx` naming a config outside its folder, the engine writes
+//   nothing into the installation and takes the archives from that config's `$arch_dir$`;
+// - long-paths: the executable is long-path aware and the file system takes a path as long as
+//   its buffers (`string_path`, 519 characters) wherever Windows long paths are enabled.
+#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined
