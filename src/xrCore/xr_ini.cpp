@@ -585,7 +585,7 @@ void CInifile::Load(IReader* F, pcstr path, allow_include_func_t allow_include_f
             {
                 string_path fn, inc_path, folder;
                 strconcat(sizeof(fn), fn, path, inc_name);
-                _splitpath(fn, inc_path, folder, 0, 0);
+                xr_split_folder(fn, inc_path, folder);
                 xr_strcat(inc_path, sizeof(inc_path), folder);
 
                 const auto loadFile = [&](const string_path _fn, const string_path name)

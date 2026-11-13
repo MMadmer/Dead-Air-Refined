@@ -77,16 +77,29 @@ application folder, is the installation's own and keeps every rule above.
 | A plain relative root in the config (`appdata\`) | the working folder's | the config's folder |
 | Early crash reports, before the filesystem is up | `<working folder>\session_reports` | `<config folder>\session_reports`; afterwards both use `$app_data_root$\session_reports` |
 
-The executable says it can in its version resource: the string `EngineAbilities` lists
+The engine says it can in the version resource of every program that implements it: the string
+`EngineAbilities` of `xrEngine.exe`, `xrEngine.dll` (the quoted `-fsltx`), `xrCore.dll` (the
+config elsewhere, the paths) and `xrGame.dll` (the content service, the update check) lists
 `fsltx-in-place` (this table) and `long-paths` (below), space-separated
-(`src/xrCore/ProductVersion.h`, `DAR_ENGINE_ABILITIES`). A tool reads it without starting the
-game; a word is added, never changed or removed.
+(`src/xrCore/ProductVersion.h`, `DAR_ENGINE_ABILITIES`; the libraries' resource is
+`src/xrCore/ModuleVersion.rc2`). A tool reads them without starting the game and takes a word as
+present only when all four state it: a library of an older build beside a newer engine - a mixed
+installation - is one that cannot. A word is added, never changed or removed.
 
-The path limit: the engine is long-path aware (`longPathAware` in its manifest) and
-`CLocatorAPI::Register` keeps a path in a `string_path` (it was a `string256`, which stopped
-the game before its log opened once an fs root was deeper than about 66 characters - the
-shader cache's names under it are 189 long). A full path may now be 519 characters where
-Windows long paths are enabled (`LongPathsEnabled`), and `MAX_PATH` (259) where they are not.
+The path limit: the engine is long-path aware (`longPathAware` in its manifest), and a path
+below the config's roots may be as long as the file system's buffers, `string_path`: 519
+characters where Windows long paths are enabled (`LongPathsEnabled`), `MAX_PATH` (259) where they
+are not. On the way a path takes, nothing shorter is left: `CLocatorAPI::Register` keeps it in a
+`string_path` (it was a `string256`, which stopped the game before its log opened once a root was
+deeper than about 66 characters), and the folder of a path - every folder `Register` indexes, the
+folder an ini file's `#include` is read from (`EFS_Utils::ExtractFilePath`), the application
+folder - is split by `xr_split_folder` (`FileSystem.h`), not by `_splitpath`, which gives a folder
+over 256 characters back empty; the protected mode resolves its paths with `_fullpath`, not
+`GetFullPathNameA`, which stops at `MAX_PATH` even in a long-path aware program. Proven to the
+limit (`TEST_MATRIX.md`): a root of 330 characters with a space in its path, the config named
+quoted, every folder indexed in it over 256 characters, its longest path 519. Outside the file
+system the renderers open an archive through DirectStorage by a path of up to `MAX_PATH` and read
+one deeper the ordinary way.
 
 ## The two hashes
 

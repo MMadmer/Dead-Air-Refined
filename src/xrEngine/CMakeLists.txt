@@ -2,6 +2,13 @@ add_library(xrEngine)
 
 if (WIN32 AND BUILD_SHARED_LIBS)
     target_sources(xrEngine PRIVATE xrEngine.def)
+    # The version resource states the engine's abilities (ProductVersion.h); the resource
+    # compiler gets no dependency scanning, so the headers it reads are named.
+    target_sources(xrEngine PRIVATE version.rc)
+    set_property(SOURCE version.rc APPEND PROPERTY OBJECT_DEPENDS
+        "${CMAKE_SOURCE_DIR}/src/xrCore/ProductVersion.h"
+        "${CMAKE_SOURCE_DIR}/src/xrCore/ModuleVersion.rc2"
+    )
 endif()
 
 target_sources_grouped(

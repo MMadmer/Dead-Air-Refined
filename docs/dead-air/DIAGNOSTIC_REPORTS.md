@@ -10,8 +10,9 @@ The engine creates the same network-ready report format for:
 Manual capture is available through the `session_report` console command. Crash
 capture is automatic. Reports are written to `$app_data_root$/session_reports`;
 a crash before the filesystem is up writes into `session_reports` of the working
-folder, or of the fs config's folder when `-fsltx` names one. The directory keeps no more than 10 reports and removes the oldest report only
-after a newer report is ready.
+folder, or of the fs config's folder when `-fsltx` names one outside the application
+folder (a config inside it changes nothing). The directory keeps no more than 10
+reports and removes the oldest report only after a newer report is ready.
 
 The main and in-game menus also expose a native bug-report form. It submits a
 title, the baked product version and a description to the Refined Report Hub over HTTPS and can optionally

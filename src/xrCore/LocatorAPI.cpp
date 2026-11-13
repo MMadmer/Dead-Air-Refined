@@ -372,7 +372,7 @@ const CLocatorAPI::file* CLocatorAPI::Register(
     string_path folder;
     while (temp[0])
     {
-        _splitpath(temp, path, folder, nullptr, nullptr);
+        xr_split_folder(temp, path, folder);
         xr_strcat(path, folder);
         if (!exist(path))
         {

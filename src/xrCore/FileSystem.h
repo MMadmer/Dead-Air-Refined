@@ -43,4 +43,17 @@ public:
 extern XRCORE_API xr_unique_ptr<EFS_Utils> xr_EFS;
 #define EFS (*xr_EFS)
 
+// The drive and the folder of `path`, as _splitpath finds them. _splitpath itself gives both
+// empty once the folder is longer than _MAX_DIR (256) - every path below a deep fs root -, so the
+// call that takes the buffers' sizes is made instead: a folder as long as a string_path holds.
+inline void xr_split_folder(pcstr path, string_path& drive, string_path& folder)
+{
+#if defined(XR_PLATFORM_WINDOWS)
+    if (_splitpath_s(path, drive, sizeof drive, folder, sizeof folder, nullptr, 0, nullptr, 0))
+        drive[0] = folder[0] = 0;
+#else
+    _splitpath(path, drive, folder, nullptr, nullptr);
+#endif
+}
+
 #endif /*_INCDEF_FileSystem_H_*/

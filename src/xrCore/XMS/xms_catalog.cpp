@@ -293,8 +293,10 @@ bool real_path(pcstr path, xr_string& out, xr_string& why)
         why = "network or device path";
         return false;
     }
+    // GetFullPathNameA stops at MAX_PATH even in a long-path aware program; the CRT's takes a
+    // path below a deep fs root.
     char full[1024]{};
-    const DWORD length = GetFullPathNameA(path, sizeof(full), full, nullptr);
+    const size_t length = _fullpath(full, path, sizeof(full)) ? xr_strlen(full) : 0;
     if (!length || length >= sizeof(full))
     {
         why = "path cannot be resolved";

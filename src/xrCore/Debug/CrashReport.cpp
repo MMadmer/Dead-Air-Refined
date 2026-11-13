@@ -399,18 +399,47 @@ xr_string fsltx_argument(std::string_view commandLine)
     return xr_string(commandLine.substr(option, end - option));
 }
 
+// The application folder, the folder of xrCore.dll, as `CLocatorAPI::fs_config_elsewhere` takes it.
+std::filesystem::path application_folder()
+{
+    HMODULE module = nullptr;
+    string_path name{};
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCSTR>(&application_folder), &module))
+        return {};
+    const DWORD length = GetModuleFileNameA(module, name, std::size(name));
+    if (!length || length >= std::size(name))
+        return {};
+    return std::filesystem::path(name).parent_path();
+}
+
+// The folder of the fs config `-fsltx` names when it lies outside the application folder (the
+// rule of `CLocatorAPI::setup_fs_path`); empty without one, or for one inside it.
+std::filesystem::path fs_config_elsewhere()
+{
+    const xr_string fsltx = fsltx_argument(GetCommandLineA());
+    if (fsltx.empty())
+        return {};
+    std::error_code error;
+    const std::filesystem::path config = std::filesystem::absolute(fsltx.c_str(), error).parent_path();
+    if (error || config.empty())
+        return {};
+    const std::filesystem::path application = application_folder();
+    const bool same = application.empty() || std::filesystem::equivalent(config, application, error) ||
+        !xr_stricmp(config.lexically_normal().string().c_str(), application.lexically_normal().string().c_str());
+    return same ? std::filesystem::path() : config;
+}
+
 void ensure_report_directory()
 {
     if (!*reportDirectory)
     {
-        // Before the filesystem is up a run on a config of its own reports beside that config,
-        // never into the folder it was started from (the installation, for a tool that starts it).
+        // Before the filesystem is up a run on a config elsewhere reports beside that config, never
+        // into the folder it was started from (the installation, for a tool that starts it). Any
+        // other start reports into its working folder, as it always did.
         string_path workingDirectory{};
-        const xr_string fsltx = fsltx_argument(GetCommandLineA());
-        std::error_code error;
-        const std::filesystem::path config =
-            fsltx.empty() ? std::filesystem::path() : std::filesystem::absolute(fsltx.c_str(), error).parent_path();
-        if (!fsltx.empty() && !error && !config.empty())
+        const std::filesystem::path config = fs_config_elsewhere();
+        if (!config.empty())
             xr_strcpy(workingDirectory, config.string().c_str());
         else if (!GetCurrentDirectoryA(std::size(workingDirectory), workingDirectory))
             xr_strcpy(workingDirectory, ".");

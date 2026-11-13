@@ -31,7 +31,7 @@ xr_string EFS_Utils::ExtractFileExt(pcstr src)
 xr_string EFS_Utils::ExtractFilePath(pcstr src)
 {
     string_path drive, dir;
-    _splitpath(src, drive, dir, 0, 0);
+    xr_split_folder(src, drive, dir);
     return xr_string(drive) + dir;
 }
 
