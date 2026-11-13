@@ -1927,17 +1927,22 @@ void dump_texture(CBackend& cmd, ID3D11Resource* res, pcstr name)
     xr_sprintf(file, "%s.png", name);
     FS.update_path(png, "$screenshots$", file);
     VerifyPath(dds);
-    wchar_t w[MAX_PATH];
-    MultiByteToWideChar(CP_ACP, 0, dds, -1, w, MAX_PATH);
-    const bool ok_dds = SUCCEEDED(DirectX::SaveToDDSFile(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::DDS_FLAGS_NONE, w));
-    MultiByteToWideChar(CP_ACP, 0, png, -1, w, MAX_PATH);
+    // as long as the paths may be; a path that does not convert is no file name, and nothing is saved
+    wchar_t w_dds[sizeof(string_path)], w_png[sizeof(string_path)];
+    if (!MultiByteToWideChar(CP_ACP, 0, dds, -1, w_dds, int(std::size(w_dds))) ||
+        !MultiByteToWideChar(CP_ACP, 0, png, -1, w_png, int(std::size(w_png))))
+    {
+        Msg("! [trees] dump %s: %s cannot be named for the image writer, nothing is saved", name, dds);
+        return;
+    }
+    const bool ok_dds = SUCCEEDED(DirectX::SaveToDDSFile(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::DDS_FLAGS_NONE, w_dds));
     // (The PNG of the top level as RGBA: WIC writes no two-channel image - the foliage atlas's dump failed.)
     DirectX::ScratchImage rgba;
     const DirectX::Image* top = image.GetImage(0, 0, 0);
     if (image.GetMetadata().format != DXGI_FORMAT_R8G8B8A8_UNORM &&
         SUCCEEDED(DirectX::Convert(*top, DXGI_FORMAT_R8G8B8A8_UNORM, DirectX::TEX_FILTER_DEFAULT, DirectX::TEX_THRESHOLD_DEFAULT, rgba)))
         top = rgba.GetImage(0, 0, 0);
-    const bool ok_png = SUCCEEDED(DirectX::SaveToWICFile(*top, DirectX::WIC_FLAGS_NONE, DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), w));
+    const bool ok_png = SUCCEEDED(DirectX::SaveToWICFile(*top, DirectX::WIC_FLAGS_NONE, DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), w_png));
     Msg("* [trees] dump: %s, %zu levels -> %s%s", name, image.GetMetadata().mipLevels, dds, ok_dds && ok_png ? "" : " (FAILED)");
 }
 

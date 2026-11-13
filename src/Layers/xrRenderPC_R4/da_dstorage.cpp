@@ -824,8 +824,9 @@ IDStorageFile* ArchiveFile(Runtime& rt, size_t vfs)
     if (rt.files[vfs] || rt.fileFailed[vfs])
         return rt.files[vfs];
     const auto& archive = FS.m_archives[vfs];
-    wchar_t path[MAX_PATH];
-    if (!MultiByteToWideChar(CP_ACP, 0, archive.path.c_str(), -1, path, MAX_PATH) ||
+    // the whole path of the archive, as long as the fs takes it
+    wchar_t path[sizeof(string_path)];
+    if (!MultiByteToWideChar(CP_ACP, 0, archive.path.c_str(), -1, path, int(std::size(path))) ||
         FAILED(rt.factory->OpenFile(path, IID_PPV_ARGS(&rt.files[vfs]))))
     {
         rt.files[vfs] = nullptr;

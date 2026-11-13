@@ -116,6 +116,19 @@ void CRenderTarget::phase_cloud_map()
         env.cloud_sun_visibility = 1.f;
 }
 
+namespace
+{
+// A path of the fs as the wide name the image writer takes: as long as the path may be. A path
+// that does not convert is no file name, and nothing is saved under it.
+bool dump_name_of(pcstr path, wchar_t (&wide)[sizeof(string_path)])
+{
+    if (MultiByteToWideChar(CP_ACP, 0, path, -1, wide, int(std::size(wide))) > 0)
+        return true;
+    Msg("! cloud map dump: %s cannot be named for the image writer, nothing is saved there", path);
+    return false;
+}
+} // namespace
+
 // Diagnostic (r__cloud_map_dump): the map as a PNG next to the screenshots, so a "no clouds
 // overhead" report can be checked against what the field actually holds around the camera.
 void CRenderTarget::dump_cloud_map()
@@ -130,8 +143,11 @@ void CRenderTarget::dump_cloud_map()
     }
     string_path path;
     FS.update_path(path, "$screenshots$", "cloud_map.png");
-    wchar_t wpath[MAX_PATH];
-    mbstowcs(wpath, path, MAX_PATH);
+    // the image writer makes no folder: a fresh app data has no screenshots folder yet
+    VerifyPath(path);
+    wchar_t wpath[sizeof(string_path)];
+    if (!dump_name_of(path, wpath))
+        return;
     const HRESULT hr = DirectX::SaveToWICFile(*image.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE,
         DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
     Msg("* cloud map dump -> %s (%s) centre=(%.0f, %.0f) extent=%.0f", path, SUCCEEDED(hr) ? "ok" : "FAILED",
@@ -145,7 +161,8 @@ void CRenderTarget::dump_cloud_map()
             SUCCEEDED(DirectX::Convert(*march.GetImage(0, 0, 0), DXGI_FORMAT_B8G8R8X8_UNORM, DirectX::TEX_FILTER_DEFAULT, 0.f, converted)))
         {
             static u32 dump_index = 0; string64 dump_name; xr_sprintf(dump_name, "cloud_march_%u.png", dump_index++); FS.update_path(path, "$screenshots$", dump_name);
-            mbstowcs(wpath, path, MAX_PATH);
+            if (!dump_name_of(path, wpath))
+                return;
             const HRESULT hr2 = DirectX::SaveToWICFile(*converted.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE,
                 DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
             Msg("* cloud march dump -> %s (%s)", path, SUCCEEDED(hr2) ? "ok" : "FAILED");
@@ -160,8 +177,8 @@ void CRenderTarget::dump_cloud_map()
             {
                 xr_sprintf(dump_name, "cloud_march_t_%u.png", dump_index - 1);
                 FS.update_path(path, "$screenshots$", dump_name);
-                mbstowcs(wpath, path, MAX_PATH);
-                DirectX::SaveToWICFile(*tconv.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE, DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
+                if (dump_name_of(path, wpath))
+                    DirectX::SaveToWICFile(*tconv.GetImage(0, 0, 0), DirectX::WIC_FLAGS_NONE, DirectX::GetWICCodec(DirectX::WIC_CODEC_PNG), wpath);
             }
         }
     }

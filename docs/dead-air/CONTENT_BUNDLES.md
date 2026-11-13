@@ -97,9 +97,11 @@ folder - is split by `xr_split_folder` (`FileSystem.h`), not by `_splitpath`, wh
 over 256 characters back empty; the protected mode resolves its paths with `_fullpath`, not
 `GetFullPathNameA`, which stops at `MAX_PATH` even in a long-path aware program. Proven to the
 limit (`TEST_MATRIX.md`): a root of 330 characters with a space in its path, the config named
-quoted, every folder indexed in it over 256 characters, its longest path 519. Outside the file
-system the renderers open an archive through DirectStorage by a path of up to `MAX_PATH` and read
-one deeper the ordinary way.
+quoted, every folder indexed in it over 256 characters, its longest path 519. Where a path of the
+file system becomes a wide name, the buffer is a `string_path` too: the renderers open an archive
+through DirectStorage by its whole path (an archive DirectStorage refuses is read the ordinary
+way), and the console's cloud map and tree dumps name their files by their whole paths - a path
+that does not convert is a failed dump with its log line, never a file saved under another name.
 
 ## The two hashes
 
