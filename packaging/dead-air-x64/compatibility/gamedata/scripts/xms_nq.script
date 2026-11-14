@@ -714,6 +714,7 @@ end
 -- ---------------------------------------------------------------------------- triggers
 local function trigger_armed(q, qs, node)
 	if (qs.status ~= "active") then return false end
+	if (node.disabled) then return false end
 	if (node.once and qs.done[node.id]) then return false end
 	local rep = node.params and node.params["repeat"] == true
 	if (rep) then return true end
@@ -737,6 +738,7 @@ end
 local function fire_trigger(uid, node, pin)
 	local q, qs = Q[uid], quest_state(uid)
 	if not (q and qs and qs.status == "active") then return end
+	if (node.disabled) then return end
 	qs.fired[node.id] = (qs.fired[node.id] or 0) + 1
 	if (node.once) then qs.done[node.id] = node.kind end
 	dirty = true
@@ -757,6 +759,7 @@ end
 local function trigger_pin(uid, node, pin, soft)
 	local q, qs = Q[uid], quest_state(uid)
 	if not (q and qs and qs.status == "active") then return end
+	if (node.disabled) then return end
 	if not (soft) then
 		if (trigger_armed(q, qs, node)) then fire_trigger(uid, node, pin) end
 		return
@@ -775,7 +778,10 @@ local function arm_triggers(uid)
 	local q, qs = Q[uid], quest_state(uid)
 	if not (q and qs) then return end
 	for _, node in ipairs(q.nodes) do
-		if (node.is_trigger and node.spec) then
+		if (node.is_trigger and node.spec and node.disabled) then
+			-- a disabled trigger never fires: nothing of it is armed or polled
+			unwire(uid, node.id)
+		elseif (node.is_trigger and node.spec) then
 			if (trigger_armed(q, qs, node)) then
 				local impl = kind_impl(node.kind)
 				if not (impl) then
@@ -907,6 +913,14 @@ local function enter_impl(uid, node_id, from)
 	local node = q.node_by_id[node_id]
 	if not (node and node.spec) then return end
 	if (node.is_trigger) then return end
+	-- a disabled node runs no action and no wait: it leaves at once by its way on, or ends the branch
+	if (node.disabled) then
+		log_debug("%s: %s is disabled, passed through %s", uid, node_id, tostring(node.pass))
+		if (node.pass and node.out[node.pass]) then
+			for _, tid in ipairs(node.out[node.pass]) do enqueue_enter(uid, tid, node_id .. "/" .. node.pass) end
+		end
+		return
+	end
 	if (node.kind == "flow.join") then
 		local joins = qs.joins[node_id]
 		if not (joins) then joins = {} qs.joins[node_id] = joins end

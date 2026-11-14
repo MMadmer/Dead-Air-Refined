@@ -5,7 +5,7 @@
 ; One section per kind: [nq.<kind>]. Keys:
 ;   group   - the group the kind is listed under
 ;   title   - what the author sees (rus)
-;   desc    - one-line description (rus), also returned by MCP quest_catalog for AI
+;   desc    - one-line description (rus), also what an authoring tool shows its author
 ;   use     - comma list of: trigger, main, extra, cond
 ;   params  - ordered comma list of parameter names; each name has its own key:
 ;   <name>  = <type>[, required][, default=<v>][, min=<v>][, max=<v>][, enum=a|b|c]
@@ -17,6 +17,9 @@
 ;   since   - catalog version the kind appeared in
 ;   rows    - ordered comma list of keys ONE ROW of a list parameter carries; each
 ;             name has its own key spelled row.<name> with the same grammar as a param
+;   summary - ordered comma list of the parameters that tell a node or an action apart at a
+;             glance (what an editor prints on it); the runtime does not read it
+;   pin.<name> - what an output pin means (an editor's hover text); the runtime does not read it
 ; Extensions: modules add gamedata\configs\nq\kinds\<mod>.ltx with more [nq.*] sections and
 ; register implementations from scripts\register.script.
 
@@ -34,6 +37,7 @@ params =
 pins   = next
 wait   = false
 once   = true
+pin.next = When the quest activates
 impl   = core
 since  = 1
 
@@ -49,6 +53,9 @@ check_every = float, default=0.25, min=0
 pins   = next, off
 wait   = false
 once   = false
+summary = repeat, cooldown
+pin.next = When the conditions start to hold
+pin.off = When they stop holding again - once per firing
 impl   = core
 since  = 1
 
@@ -66,6 +73,9 @@ initiator = enum, default=actor, enum=actor|npc
 pins   = next, done
 wait   = true
 once   = true
+summary = text
+pin.next = The phrases of the topic
+pin.done = A last phrase of the topic was said
 impl   = core
 since  = 1
 
@@ -80,6 +90,8 @@ text   = text, required
 pins   = next
 wait   = false
 once   = false
+summary = text
+pin.next = The replies to this phrase
 impl   = core
 since  = 1
 
@@ -94,6 +106,8 @@ text   = text, required
 pins   = next
 wait   = false
 once   = false
+summary = text
+pin.next = What the NPC answers
 impl   = core
 since  = 1
 
@@ -113,6 +127,8 @@ spot_done      = bool, default=true
 pins   = done
 wait   = true
 once   = false
+summary = target
+pin.done = When the target is dead
 impl   = core
 since  = 1
 
@@ -131,6 +147,8 @@ section   = string
 pins   = done
 wait   = true
 once   = false
+summary = count, section, community, squad
+pin.done = When enough were killed
 impl   = core
 since  = 2
 
@@ -152,6 +170,8 @@ spot_done      = bool, default=true
 pins   = done
 wait   = true
 once   = false
+summary = section, count, items
+pin.done = When the player has the items
 impl   = core
 since  = 1
 
@@ -169,6 +189,8 @@ spot_done      = bool, default=true
 pins   = done
 wait   = true
 once   = false
+summary = place
+pin.done = When the player is there
 impl   = core
 since  = 1
 
@@ -183,6 +205,8 @@ duration = duration, required
 pins   = done
 wait   = true
 once   = false
+summary = duration
+pin.done = When the time is up
 impl   = core
 since  = 1
 
@@ -196,6 +220,9 @@ timeout = duration
 pins   = done, timeout
 wait   = true
 once   = false
+summary = timeout
+pin.done = When the conditions hold
+pin.timeout = When the timeout runs out first
 impl   = core
 since  = 1
 
@@ -209,6 +236,7 @@ cases  = cases_cond, required
 pins   = cases
 wait   = true
 once   = false
+summary = cases
 impl   = core
 since  = 1
 
@@ -223,6 +251,8 @@ cases  = cases_cond, required
 pins   = cases, else
 wait   = false
 once   = false
+summary = cases
+pin.else = When no case holds
 impl   = core
 since  = 1
 
@@ -236,6 +266,7 @@ cases  = cases_weight, required
 pins   = cases
 wait   = false
 once   = false
+summary = cases
 impl   = core
 since  = 1
 
@@ -248,6 +279,7 @@ params =
 pins   = next
 wait   = true
 once   = false
+pin.next = Once every incoming wire has arrived
 impl   = core
 since  = 1
 
@@ -260,6 +292,7 @@ params =
 pins   = next
 wait   = false
 once   = false
+pin.next = Right after its actions
 impl   = core
 since  = 1
 
@@ -274,6 +307,7 @@ restart = bool, default=false
 pins   =
 wait   = false
 once   = false
+summary = status
 impl   = core
 since  = 1
 
@@ -291,6 +325,7 @@ items   = item_list
 rows    = section, count
 row.section = item_section, required
 row.count   = int, default=1, min=1
+summary = section, count, items
 impl   = core
 since  = 1
 
@@ -307,6 +342,7 @@ items   = item_list
 rows    = section, count
 row.section = item_section, required
 row.count   = count_or_all, default=1
+summary = section, count, items
 impl   = core
 since  = 1
 
@@ -333,6 +369,7 @@ row.ammo      = int, min=0
 row.ammo_kind = item_section
 row.upgrades  = string
 row.ref       = ref_name
+summary = section, count, items
 impl   = core
 since  = 1
 
@@ -344,6 +381,7 @@ desc   = Gives the player money.
 use    = extra
 params = amount
 amount = int, required, min=1
+summary = amount
 impl   = core
 since  = 1
 
@@ -355,6 +393,7 @@ desc   = Takes money from the player.
 use    = extra
 params = amount
 amount = int, required, min=1
+summary = amount
 impl   = core
 since  = 1
 
@@ -366,6 +405,7 @@ desc   = Gives the player an info portion (bridge to vanilla logic).
 use    = extra
 params = info
 info   = info, required
+summary = info
 impl   = core
 since  = 1
 
@@ -376,6 +416,7 @@ desc   = Removes an info portion from the player.
 use    = extra
 params = info
 info   = info, required
+summary = info
 impl   = core
 since  = 1
 
@@ -387,6 +428,7 @@ use    = extra
 params = name, value
 name   = var_name, required
 value  = value, required
+summary = name, value
 impl   = core
 since  = 1
 
@@ -398,6 +440,7 @@ use    = extra
 params = name, delta
 name   = var_name, required
 delta  = float, required
+summary = name, delta
 impl   = core
 since  = 1
 
@@ -409,6 +452,7 @@ use    = extra
 params = name, value
 name   = global_name, required
 value  = value, required
+summary = name, value
 impl   = core
 since  = 19
 
@@ -420,6 +464,7 @@ use    = extra
 params = name, delta
 name   = global_name, required
 delta  = float, required
+summary = name, delta
 impl   = core
 since  = 19
 
@@ -430,6 +475,7 @@ desc   = Emits a signal for event.signal triggers and waits, including other que
 use    = extra
 params = name
 name   = signal_name, required
+summary = name
 impl   = core
 since  = 1
 
@@ -441,6 +487,7 @@ desc   = Activates another quest declared with activation = manual.
 use    = extra
 params = quest
 quest  = quest_id, required
+summary = quest
 impl   = core
 since  = 1
 
@@ -453,6 +500,7 @@ desc   = Creates a PDA task from the quest tasks declaration.
 use    = extra
 params = task
 task   = task_id, required
+summary = task
 impl   = core
 since  = 1
 
@@ -464,6 +512,7 @@ desc   = Marks a PDA task completed.
 use    = extra
 params = task
 task   = task_id, required
+summary = task
 impl   = core
 since  = 1
 
@@ -475,6 +524,7 @@ desc   = Marks a PDA task failed.
 use    = extra
 params = task
 task   = task_id, required
+summary = task
 impl   = core
 since  = 1
 
@@ -486,6 +536,7 @@ desc   = Removes a task from the PDA without a status.
 use    = extra
 params = task
 task   = task_id, required
+summary = task
 impl   = core
 since  = 1
 
@@ -498,6 +549,7 @@ use    = extra
 params = task, target
 task   = task_id, required
 target = target_ref
+summary = task, target
 impl   = core
 since  = 1
 
@@ -511,6 +563,7 @@ params    = task, new_title, new_descr
 task      = task_id, required
 new_title = text
 new_descr = text
+summary = task, new_title
 impl   = core
 since  = 1
 
@@ -524,6 +577,7 @@ use       = extra
 params    = task, objective
 task      = task_id, required
 objective = objective_id, required
+summary = task, objective
 impl      = core
 since     = 4
 
@@ -536,6 +590,7 @@ use       = extra
 params    = task, objective
 task      = task_id, required
 objective = objective_id, required
+summary = task, objective
 impl      = core
 since     = 4
 
@@ -549,6 +604,7 @@ params    = task, objective, target
 task      = task_id, required
 objective = objective_id, required
 target    = target_ref
+summary = objective, target
 impl      = core
 since     = 4
 
@@ -563,6 +619,7 @@ task      = task_id, required
 objective = objective_id, required
 new_title = text
 new_descr = text
+summary = objective, new_title
 impl      = core
 since     = 4
 
@@ -576,6 +633,7 @@ params    = task, objective, visible
 task      = task_id, required
 objective = objective_id, required
 visible   = bool
+summary = objective, visible
 impl      = core
 since     = 6
 
@@ -592,6 +650,7 @@ restrictor = restrictor
 spread  = float, default=1, min=0.05, max=1
 ref     = ref_name
 hold    = bool, default=true
+summary = section, place
 impl   = core
 since  = 1
 
@@ -606,6 +665,7 @@ place   = place, required
 yaw     = float, default=0, min=-360, max=360
 dead    = bool, default=false
 ref     = ref_name
+summary = section, place
 impl   = core
 since  = 1
 
@@ -625,6 +685,7 @@ row.ref       = ref_name
 row.unique    = bool
 row.dead      = bool, default=false
 row.yaw       = float, default=0, min=-360, max=360
+summary = npcs
 impl   = core
 since  = 17
 
@@ -637,6 +698,7 @@ params       = target, smart, follow_actor
 target       = target_ref, required
 smart        = smart
 follow_actor = bool, default=false
+summary = target, smart
 impl   = core
 since  = 1
 
@@ -647,6 +709,7 @@ desc   = Removes the squad from the world.
 use    = extra
 params = target
 target = target_ref, required
+summary = target
 impl   = core
 since  = 1
 
@@ -657,6 +720,7 @@ desc   = Removes an object created by this quest (spawn.object) or one by story 
 use    = extra
 params = target
 target = object_ref, required
+summary = target
 impl   = core
 since  = 3
 
@@ -667,6 +731,7 @@ desc   = Removes the NPC from the world.
 use    = extra
 params = npc
 npc    = npc_ref, required
+summary = npc
 impl   = core
 since  = 1
 
@@ -677,6 +742,7 @@ desc   = The trader's stock comes new the next time the player opens the trade (
 use    = extra
 params = who
 who    = npc_ref, required
+summary = who
 impl   = core
 since  = 21
 
@@ -687,6 +753,7 @@ desc   = Kills the NPC.
 use    = extra
 params = npc
 npc    = npc_ref, required
+summary = npc
 impl   = core
 since  = 1
 
@@ -698,6 +765,7 @@ use    = extra
 params = npc, name
 npc    = npc_ref, required
 name   = text, required
+summary = npc, name
 impl   = core
 since  = 14
 
@@ -710,6 +778,7 @@ use    = extra
 params = who, value
 who    = npc_ref, required
 value  = relation, required
+summary = who, value
 impl   = core
 since  = 1
 
@@ -721,6 +790,7 @@ use    = extra
 params = who, delta
 who    = npc_ref, required
 delta  = int, required
+summary = who, delta
 impl   = core
 since  = 1
 
@@ -735,6 +805,7 @@ text     = text, required
 sender   = npc_ref
 icon     = string
 duration = float, default=5
+summary = text
 impl   = core
 since  = 1
 
@@ -748,6 +819,7 @@ params = target, text, spot
 target = target_ref, required
 text   = text
 spot   = spot_type, default=secondary_task_location
+summary = target, text
 impl   = core
 since  = 1
 
@@ -760,6 +832,7 @@ use    = extra
 params = target, spot
 target = target_ref, required
 spot   = spot_type, default=secondary_task_location
+summary = target
 impl   = core
 since  = 1
 
@@ -772,6 +845,7 @@ use    = extra
 params      = npc, allow_break
 npc         = npc_ref, required
 allow_break = bool, default=true
+summary = npc
 impl   = core
 since  = 1
 
@@ -793,6 +867,7 @@ desc   = Moves the player to a point on the current level.
 use    = extra
 params = place
 place  = place, required
+summary = place
 impl   = core
 since  = 1
 
@@ -803,6 +878,7 @@ desc   = Plays a sound theme on the player.
 use    = extra
 params = theme
 theme  = string, required
+summary = theme
 impl   = core
 since  = 1
 
@@ -813,6 +889,7 @@ desc   = Custom Lua. As an action it runs, as a condition it must return true or
 use    = extra, cond
 params = code
 code   = lua, required
+summary = code
 impl   = core
 since  = 1
 
@@ -825,6 +902,7 @@ use    = cond
 params = info
 info   = info, required
 event  = false
+summary = info
 impl   = core
 since  = 1
 
@@ -837,6 +915,7 @@ params  = section, count
 section = item_section, required
 count   = int, default=1, min=1
 event  = false
+summary = section, count
 impl   = core
 since  = 1
 
@@ -848,6 +927,7 @@ use    = cond
 params = amount
 amount = int, required
 event  = false
+summary = amount
 impl   = core
 since  = 1
 
@@ -861,6 +941,7 @@ name   = var_name, required
 op     = enum, default=eq, enum=eq|ne|lt|le|gt|ge
 value  = value, required
 event  = false
+summary = name, op, value
 impl   = core
 since  = 1
 
@@ -874,6 +955,7 @@ name   = global_name, required
 op     = enum, default=eq, enum=eq|ne|lt|le|gt|ge
 value  = value, required
 event  = false
+summary = name, op, value
 impl   = core
 since  = 19
 
@@ -885,6 +967,7 @@ use    = cond
 params = node
 node   = node_id, required
 event  = false
+summary = node
 impl   = core
 since  = 1
 
@@ -898,6 +981,7 @@ params = quest, is
 quest  = quest_id, required
 is     = enum, required, enum=inactive|active|completed|failed
 event  = false
+summary = quest, is
 impl   = core
 since  = 1
 
@@ -911,6 +995,7 @@ params = task, is
 task   = task_id, required
 is     = enum, required, enum=none|active|completed|failed
 event  = false
+summary = task, is
 impl   = core
 since  = 1
 
@@ -925,6 +1010,7 @@ task      = task_id, required
 objective = objective_id, required
 is        = enum, required, enum=none|active|completed|failed
 event     = false
+summary = objective, is
 impl      = core
 since     = 4
 
@@ -936,6 +1022,7 @@ use    = cond
 params = level
 level  = level, required
 event  = false
+summary = level
 impl   = core
 since  = 1
 
@@ -947,6 +1034,7 @@ use    = cond
 params = place
 place  = place, required
 event  = false
+summary = place
 impl   = core
 since  = 1
 
@@ -958,6 +1046,7 @@ use    = cond
 params = npc
 npc    = npc_ref, required
 event  = false
+summary = npc
 impl   = core
 since  = 1
 
@@ -969,6 +1058,7 @@ use    = cond
 params = npc
 npc    = npc_ref, required
 event  = false
+summary = npc
 impl   = core
 since  = 1
 
@@ -980,6 +1070,7 @@ use    = cond
 params = target
 target = target_ref, required
 event  = false
+summary = target
 impl   = core
 since  = 1
 
@@ -991,6 +1082,7 @@ use    = cond
 params    = community
 community = community, required
 event  = false
+summary = community
 impl   = core
 since  = 1
 
@@ -1003,6 +1095,7 @@ params = who, is
 who    = npc_ref, required
 is     = relation, required
 event  = false
+summary = who, is
 impl   = core
 since  = 1
 
@@ -1015,6 +1108,7 @@ params = from, to
 from   = int, required, min=0, max=23
 to     = int, required, min=0, max=23
 event  = false
+summary = from, to
 impl   = core
 since  = 1
 
@@ -1028,6 +1122,7 @@ from     = enum, default=quest, enum=quest|node
 node     = node_id
 duration = duration, required
 event  = false
+summary = duration
 impl   = core
 since  = 1
 
@@ -1039,6 +1134,7 @@ use    = cond
 params  = percent
 percent = int, required, min=0, max=100
 event  = false
+summary = percent
 impl   = core
 since  = 1
 
@@ -1050,6 +1146,7 @@ use    = cond
 params = of
 of     = cond_list, required
 event  = false
+summary = of
 impl   = core
 since  = 1
 
@@ -1062,6 +1159,7 @@ use    = cond
 params  = section
 section = item_section
 event  = true
+summary = section
 impl   = core
 since  = 1
 
@@ -1073,6 +1171,7 @@ use    = cond
 params  = section
 section = item_section
 event  = true
+summary = section
 impl   = core
 since  = 1
 
@@ -1084,6 +1183,7 @@ use    = cond
 params  = section
 section = item_section
 event  = true
+summary = section
 impl   = core
 since  = 1
 
@@ -1096,6 +1196,7 @@ params   = who, by_actor
 who      = npc_ref
 by_actor = bool, default=false
 event  = true
+summary = who
 impl   = core
 since  = 1
 
@@ -1107,6 +1208,7 @@ use    = cond
 params = target
 target = squad_ref, required
 event  = true
+summary = target
 impl   = core
 since  = 1
 
@@ -1118,6 +1220,7 @@ use    = cond
 params = info
 info   = info, required
 event  = true
+summary = info
 impl   = core
 since  = 1
 
@@ -1129,6 +1232,7 @@ use    = cond
 params = level
 level  = level, required
 event  = true
+summary = level
 impl   = core
 since  = 1
 
@@ -1140,6 +1244,7 @@ use    = cond
 params = npc
 npc    = npc_ref
 event  = true
+summary = npc
 impl   = core
 since  = 1
 
@@ -1151,6 +1256,7 @@ use    = cond
 params = npc
 npc    = npc_ref
 event  = true
+summary = npc
 impl   = core
 since  = 1
 
@@ -1162,6 +1268,7 @@ use    = cond
 params = name
 name   = signal_name, required
 event  = true
+summary = name
 impl   = core
 since  = 1
 
@@ -1173,6 +1280,7 @@ use    = cond
 params = npc
 npc    = npc_ref
 event  = true
+summary = npc
 impl   = core
 since  = 1
 
@@ -1197,6 +1305,8 @@ radius = float, default=3, min=0.5, max=50
 pins   = done
 wait   = true
 once   = false
+summary = who, place
+pin.done = When the NPC is there
 impl   = core
 since  = 15
 
@@ -1213,6 +1323,7 @@ look   = way_path
 radius = float, default=20, min=1, max=100
 shoot  = enum, enum=always|none|terminal, default=always
 no_retreat = bool, default=false
+summary = who, place
 impl   = core
 since  = 15
 
@@ -1228,6 +1339,7 @@ route  = way_path
 area   = destination
 radius = float, default=15, min=3, max=150
 move   = enum, enum=walk|run, default=walk
+summary = who, route
 impl   = core
 since  = 18
 
@@ -1242,6 +1354,7 @@ who    = role, required
 state  = string, default=wait
 look   = target_ref
 sound  = string
+summary = who, state
 impl   = core
 since  = 15
 
@@ -1255,6 +1368,7 @@ params = who, target, distance
 who    = role, required
 target = role_or_actor, required
 distance = float, default=3, min=1, max=30
+summary = who, target
 impl   = core
 since  = 15
 
@@ -1267,6 +1381,7 @@ use    = extra
 params = who, target
 who    = role, required
 target = attack_target, required
+summary = who, target
 impl   = core
 since  = 15
 
@@ -1282,6 +1397,7 @@ to_actor = relation
 goodwill = int, min=-5000, max=5000
 combat_ignore = bool
 invulnerable  = bool
+summary = who, to_actor
 impl   = core
 since  = 15
 
@@ -1293,6 +1409,7 @@ desc   = Gives the role back to the logic that owned it - its smart terrain, or 
 use    = extra
 params = who
 who    = role, required
+summary = who
 impl   = core
 since  = 15
 
@@ -1306,6 +1423,7 @@ params = who, place, radius
 who    = role, required
 place  = destination, required
 radius = float, default=3, min=0.5, max=50
+summary = who, place
 impl   = core
 since  = 15
 
@@ -1317,6 +1435,7 @@ desc   = True while any living member of the role has an enemy.
 use    = cond
 params = who
 who    = role, required
+summary = who
 impl   = core
 since  = 15
 
@@ -1329,6 +1448,7 @@ use    = cond
 params = who, all
 who    = role, required
 all    = bool, default=false
+summary = who
 impl   = core
 since  = 15
 
@@ -1342,6 +1462,7 @@ params = changer, level, open
 changer = level_changer
 level  = level
 open   = bool, default=true
+summary = changer, open
 impl   = core
 since  = 18
 
@@ -1353,6 +1474,7 @@ use    = extra
 params = level, include
 level  = level, required
 include = bool, default=true
+summary = level
 impl   = core
 since  = 18
 
@@ -1364,6 +1486,7 @@ use    = extra
 params = rule, value
 rule   = enum, required, enum=original_npcs|random_stalkers|mutants|npc_quests|story_quests
 value  = enum, required, enum=keep|remove|default
+summary = rule, value
 impl   = core
 since  = 18
 
@@ -1375,6 +1498,7 @@ use    = cond
 params = changer
 changer = level_changer, required
 event  = false
+summary = changer
 impl   = core
 since  = 18
 
@@ -1390,6 +1514,7 @@ who    = npc_ref, required
 place  = destination
 look   = way_path
 radius = float, default=20, min=1, max=100
+summary = who, place
 impl   = core
 since  = 18
 
@@ -1404,6 +1529,7 @@ who    = npc_ref, required
 cover  = string, required
 camp   = bool, default=false
 anims  = string
+summary = who, cover
 impl   = core
 since  = 20
 
@@ -1419,6 +1545,7 @@ route  = way_path
 area   = destination
 radius = float, default=15, min=3, max=150
 move   = enum, enum=walk|run, default=walk
+summary = who, route
 impl   = core
 since  = 18
 
@@ -1432,6 +1559,7 @@ params = who, target, distance
 who    = npc_ref, required
 target = role_or_actor, required
 distance = float, default=3, min=1, max=30
+summary = who, target
 impl   = core
 since  = 18
 
@@ -1444,6 +1572,7 @@ use    = extra
 params = who, target
 who    = npc_ref, required
 target = attack_target, required
+summary = who, target
 impl   = core
 since  = 18
 
@@ -1455,6 +1584,7 @@ desc   = Takes the NPC's standing order away - it goes back to its own logic, it
 use    = extra
 params = who
 who    = npc_ref, required
+summary = who
 impl   = core
 since  = 18
 
@@ -1472,6 +1602,10 @@ ref    = ref_name
 pins   = started, finished, aborted
 wait   = true
 once   = false
+summary = asset
+pin.started = At once, while the graph runs
+pin.finished = When the graph reached its end by itself
+pin.aborted = When it was stopped, its cast died or it failed
 impl   = core
 since  = 16
 
@@ -1483,6 +1617,7 @@ desc   = Ends a running behaviour graph and hands its NPCs back to the logic tha
 use    = extra
 params = target
 target = ref_name, required
+summary = target
 impl   = core
 since  = 15
 
@@ -1494,6 +1629,7 @@ desc   = True while the instance saved under this ref is still going.
 use    = cond
 params = target
 target = ref_name, required
+summary = target
 impl   = core
 since  = 15
 
@@ -1505,5 +1641,6 @@ desc   = True once the instance saved under this ref has finished or been stoppe
 use    = cond
 params = target
 target = ref_name, required
+summary = target
 impl   = core
 since  = 15

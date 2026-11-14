@@ -3858,6 +3858,105 @@ do
 end
 end)()
 
+-- ============================================================================ (z29) disabled nodes
+-- A disabled node stays in the graph and is passed through: it runs no action and no wait and
+-- leaves by its way on (the kind's first output in catalog order that is not a failure); a
+-- disabled trigger never fires and keeps no quest alive; one with no way on ends its branch. The
+-- loader ignores what only an editor keeps: the top-level canvas, a node's pos and collapsed.
+;(function()
+section("(z29) disabled nodes: passed through, a disabled trigger never fires, canvas and collapsed ignored")
+do
+	setup()
+	for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+		mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+	end
+	mock.overrides["mod_a/dis_action.nqasset"] = [[return { nq = 1, id = "dis_action", vars = { a = 0, b = 0 },
+		canvas = { flow = "right", wires = { style = "circuit", thickness = 3 },
+			frames = { { title = "Intro", tone = 3, x = 0, y = 0, w = 400, h = 200 } },
+			routes = { ["a.next>b"] = { { 10, -20 }, { 30, 40 } } }, bookmarks = { { name = "Start", node = "s" } } },
+		nodes = {
+		{ id = "s", kind = "trigger.start", out = { next = "a" }, pos = { 0, 0 } },
+		{ id = "a", kind = "flow.step", disabled = true, collapsed = true, pos = { 240, 0 },
+			on_enter = { { kind = "var.add", params = { name = "a", delta = 1 } } }, on_exit = { { kind = "var.add", params = { name = "a", delta = 1 } } }, out = { next = "b" } },
+		{ id = "b", kind = "flow.step", collapsed = false, on_enter = { { kind = "var.add", params = { name = "b", delta = 1 } } } },
+	} }]]
+	mock.overrides["mod_a/dis_wait.nqasset"] = [[return { nq = 1, id = "dis_wait", vars = { b = 0 }, nodes = {
+		{ id = "s", kind = "trigger.start", out = { next = "w" } },
+		{ id = "w", kind = "wait.timer", disabled = true, params = { duration = { game_minutes = 600 } }, out = { done = "b" } },
+		{ id = "b", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "b", delta = 1 } } }, out = { next = "w2" } },
+		{ id = "w2", kind = "wait.when", disabled = true, cond = { { kind = "has_item", params = { section = "bread" } } }, out = { timeout = "f", done = "e" } },
+		{ id = "f", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "b", delta = 100 } } } },
+		{ id = "e", kind = "flow.end" },
+	} }]]
+	mock.overrides["mod_a/dis_trigger.nqasset"] = [[return { nq = 1, id = "dis_trigger", vars = { n = 0, m = 0 }, nodes = {
+		{ id = "t", kind = "trigger.start", disabled = true, out = { next = "x" } },
+		{ id = "x", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "n", delta = 1 } } } },
+		{ id = "t2", kind = "trigger.when", disabled = true, cond = { { kind = "event.signal", params = { name = "go" } } }, out = { next = "y" } },
+		{ id = "y", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "n", delta = 1 } } } },
+		{ id = "t3", kind = "trigger.start", out = { next = "z" } },
+		{ id = "z", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "m", delta = 1 } } } },
+	} }]]
+	mock.overrides["mod_a/dis_branch.nqasset"] = [[return { nq = 1, id = "dis_branch", vars = { k = 0 }, nodes = {
+		{ id = "s", kind = "trigger.start", out = { next = { "l", "r" } } },
+		{ id = "l", kind = "flow.step", out = { next = "cut" } },
+		{ id = "cut", kind = "flow.end", disabled = true, params = { status = "failed" } },
+		{ id = "r", kind = "flow.step", out = { next = "br" } },
+		{ id = "br", kind = "flow.branch", disabled = true, params = { cases = { { name = "first", cond = { { kind = "chance", params = { percent = 0 } } } } } },
+			out = { first = "k1", ["else"] = "k2" } },
+		{ id = "k1", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "k", delta = 1 } } }, out = { next = "w" } },
+		{ id = "k2", kind = "flow.step", on_enter = { { kind = "var.add", params = { name = "k", delta = 10 } } } },
+		{ id = "w", kind = "wait.when", cond = { { kind = "has_item", params = { section = "bread" } } }, out = { done = "e" } },
+		{ id = "e", kind = "flow.end" },
+	} }]]
+	mock.first_update()
+	core = xms_nq
+	mock.ticks(3)
+	local function V(id, v) local q = core.quest_state("mod_a." .. id) return q and q.vars[v] end
+	local function errors_of(uid)
+		local n = 0
+		for _, p in ipairs(core.quest_def(uid).problems or {}) do
+			if (string.sub(p.code, 1, 1) == "E") then n = n + 1 end
+		end
+		return n
+	end
+	-- the loader: what only an editor keeps changes nothing
+	local da = core.quest_def("mod_a.dis_action")
+	check(da ~= nil and da.valid ~= false and errors_of("mod_a.dis_action") == 0, "canvas, pos and collapsed load without a problem")
+	check(da and da.node_by_id.a.disabled == true and da.node_by_id.a.pass == "next", "disabled read, its way on is next")
+	check(da and da.node_by_id.b.disabled == nil, "a node without disabled is not disabled")
+	-- an action node
+	check(V("dis_action", "a") == 0, "a disabled node runs neither its on_enter nor its on_exit")
+	check(V("dis_action", "b") == 1, "the node after it ran")
+	check(core.quest_status("mod_a.dis_action") == "completed", "the quest went on to its end")
+	check(core.quest_state("mod_a.dis_action").done.a == nil, "a node passed through is not done")
+	-- a wait
+	local qw = core.quest_state("mod_a.dis_wait")
+	check(qw.tokens.w == nil and qw.tokens.w2 == nil, "a disabled wait holds no token")
+	check(V("dis_wait", "b") == 1, "a disabled wait leaves at once by done, never by timeout")
+	check(core.quest_status("mod_a.dis_wait") == "completed", "and the quest reached its end")
+	-- a trigger
+	check(V("dis_trigger", "n") == 0, "a disabled trigger.start never fires")
+	core.emit({ name = "signal", signal = "go", module = "mod_a" })
+	mock.ticks(2)
+	check(V("dis_trigger", "n") == 0, "a disabled trigger.when never fires on its event")
+	check(V("dis_trigger", "m") == 1, "the enabled trigger beside them fires")
+	check(core.quest_status("mod_a.dis_trigger") == "completed", "a disabled trigger keeps no quest alive")
+	-- inside a branch
+	check(V("dis_branch", "k") == 1, "a disabled branch takes its first way, its conditions unread")
+	local qb = core.quest_state("mod_a.dis_branch")
+	check(core.quest_status("mod_a.dis_branch") == "active", "a disabled flow.end with no way on ends its branch, not the quest")
+	check(qb.tokens.w ~= nil, "the other branch goes on and waits")
+	mock.add_item("bread", true)
+	mock.ticks(2)
+	check(core.quest_status("mod_a.dis_branch") == "completed", "and the quest ends where that branch ends")
+	-- a save in the middle keeps nothing of a disabled node
+	check(next(core.quest_state("mod_a.dis_wait").tokens) == nil, "no token of a disabled node is ever saved")
+	-- the type of the key is checked
+	local bad = codes_of([[return { nq = 1, id = "x", nodes = { { id = "s", kind = "trigger.start", disabled = "yes", out = { next = "e" } }, { id = "e", kind = "flow.end" } } }]])
+	check(bad.E006 == 1, "disabled must be true or false (E006)")
+end
+end)()
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

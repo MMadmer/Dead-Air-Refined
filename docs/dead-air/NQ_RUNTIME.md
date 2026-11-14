@@ -90,6 +90,8 @@ return {
                                type = "additional"|"storyline",
                                target = <target_ref|place>, icon = <string> }, … },
   nodes      = { <node>, <node>, … },
+  canvas     = { … },                 -- an authoring tool's own (flow, wires, frames, routes,
+                                      -- bookmarks): never read
 }
 
 <node> = {
@@ -101,7 +103,9 @@ return {
   on_enter = { <action>, … },         -- optional, run in order before the main action
   on_exit  = { <action>, … },         -- optional, run in order after it
   out      = { <pin> = "<node id>" | { "<id>", "<id>" }, … },
+  disabled = true,                    -- optional: the node is passed through (3.7)
   pos      = { 0, 160 },              -- editor only
+  collapsed = true,                   -- editor only
   comment  = "…",                     -- editor only
 }
 
@@ -341,6 +345,27 @@ and the engine disagree about the API.
 
 ---
 
+### 3.7 Disabled nodes
+
+`disabled = true` keeps a node in the graph and takes it out of play. It is read
+by the loader (`xms_nq_load`: anything but a boolean is `E006`) and acted on by
+the core (`xms_nq`):
+
+- Entering a disabled node runs no action - neither `on_enter` nor `on_exit` -
+  and no wait or main action, and holds no token. It leaves at once by its
+  **way on**: the kind's first output pin in catalog order that is not a failure
+  (`timeout`, `fail`, `failed`, `aborted`, `abort`, `error`); a kind's cases
+  stand where its `pins` line names them, so a disabled `flow.branch` takes its
+  first case with its conditions unread. A disabled `wait.when` leaves by `done`.
+- A node with no way on (a `flow.end`, a node whose way on is not wired) ends its
+  branch there: the quest goes on wherever else it has tokens, and completes as
+  usual when nothing is left.
+- A disabled trigger never fires: it is not armed, not polled, and does not keep
+  its quest active.
+- A node passed through is not done (`node_done` stays false, `once` is not
+  spent). Saves are unaffected: a node id is still a node id, and enabling the
+  node again later needs no migration.
+
 ## 4. The catalog and how a module extends it
 
 ### 4.1 Format
@@ -372,7 +397,12 @@ event   = false                    ; cond: true for edge-triggered event.* condi
 impl    = core                     ; core | <module id> — who registers the implementation
 since   = 1                        ; catalog version the kind appeared in
 alias   = old.kind                 ; optional, comma list of retired names still accepted
+summary = section, count           ; optional: the parameters that tell it apart at a glance
+pin.<name> = …                     ; optional, one per pin of a main or trigger kind: its meaning
 ```
+
+`summary` and `pin.<name>` are for an authoring tool (what it prints on a node,
+a pin's hover text); the runtime does not read them.
 
 The file is **cp1251**, like every other game config. `title` and `desc` are the
 only human-language fields; everything else is ASCII.

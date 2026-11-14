@@ -98,7 +98,12 @@ local function read_kind_section(ini, sec, cat, source)
 		k.param_by_name[pname] = p
 	end
 	for _, pin in ipairs(split_csv(raw.pins)) do
-		if (pin == "cases") then k.pins_cases = true else k.pins[#k.pins + 1] = pin end
+		if (pin == "cases") then
+			k.pins_cases = true
+			k.cases_at = #k.pins + 1	-- where the cases stand among the pins, in catalog order
+		else
+			k.pins[#k.pins + 1] = pin
+		end
 	end
 	if (cat.kinds[kind]) then
 		util.warn("catalog: kind '%s' redefined by %s (was %s)", kind, tostring(source), tostring(cat.kinds[kind].source))
@@ -1117,6 +1122,11 @@ local function build_nodes(st, raw_nodes, q)
 				else
 					node.once = spec.once
 				end
+				-- a disabled node stays in the graph and is passed through (NQ_RUNTIME.md "Disabled nodes")
+				if (rn.disabled ~= nil) then
+					if (type(rn.disabled) ~= "boolean") then problem(st.problems, "E006", nid, "disabled", "disabled must be true or false") end
+					node.disabled = rn.disabled == true
+				end
 				node.params = canon_params(st, nid, "param", spec, rn.params)
 				local form = KIND_FORM[kname]
 				if (form) then form(st, nid, type(rn.params) == "table" and rn.params or {}, node.params) end
@@ -1220,7 +1230,34 @@ end
 
 local DIALOG_PHRASE = { ["dialog.npc_phrase"] = "npc", ["dialog.actor_phrase"] = "actor" }
 
+-- The pins a node leaves by when something went wrong: a disabled node never takes one.
+local FAILURE_PIN = { timeout = true, fail = true, failed = true, aborted = true, abort = true, error = true }
+
+-- The way a disabled node passes through: the kind's first output in catalog order that is not a
+-- failure (a kind's cases stand where its `pins` line names them); nil when it has none and the
+-- branch ends there.
+local function pass_pin(node)
+	local spec = node.spec
+	local cases = (spec.pins_cases and type(node.params.cases) == "table") and node.params.cases or {}
+	local function first_case()
+		for _, cs in ipairs(cases) do if (cs.name and not FAILURE_PIN[cs.name]) then return cs.name end end
+		return nil
+	end
+	for i, p in ipairs(spec.pins) do
+		if (i == spec.cases_at) then
+			local c = first_case()
+			if (c) then return c end
+		end
+		if not (FAILURE_PIN[p]) then return p end
+	end
+	if (spec.cases_at and spec.cases_at > #spec.pins) then return first_case() end
+	return nil
+end
+
 local function check_graph(st, q)
+	for _, node in ipairs(q.nodes) do
+		if (node.spec and node.disabled) then node.pass = pass_pin(node) end
+	end
 	-- E007 edges, incoming counters
 	for _, node in ipairs(q.nodes) do
 		if (node.spec) then
