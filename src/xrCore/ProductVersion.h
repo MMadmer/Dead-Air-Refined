@@ -21,8 +21,10 @@
 //   config's `$arch_dir$`;
 // - long-paths: the executable is long-path aware and the file system takes a path below the
 //   config's roots as long as its buffers (`string_path`, 519 characters) wherever Windows long
-//   paths are enabled.
-#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths"
+//   paths are enabled;
+// - level-pieces: a module's <module>\levels\<level>\pieces\<name>\ is loaded beside the level, hung on its
+//   sectors and streamed by distance (docs/dead-air/XMS_ARCHITECTURE.md 8.3).
+#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths level-pieces"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined

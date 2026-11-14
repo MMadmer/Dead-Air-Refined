@@ -201,6 +201,7 @@ extern ECORE_API int ps_r__dbg_trees; // r__dbg_trees (QA): draws of the trees l
 extern ECORE_API int ps_r__trees_cut; // r__trees_cut (QA): 0 = the trees' view without the GPU cut (da_veg.cpp cut)
 extern ECORE_API int ps_r__trees_occlusion; // r__trees_occlusion (QA): 0 = the cut culls nothing by the depth
 extern ECORE_API int ps_r__clusters; // r__clusters: the level's static geometry by clusters (da_clusters.cpp); 0 the stock draws
+extern ECORE_API int ps_r__pieces_stream; // r__pieces_stream: level pieces by distance (r2_loader.cpp); 0 all with the level
 extern ECORE_API int ps_r__clusters_min_tris; // r__clusters_min_tris: visuals under this many triangles draw as a whole (from the next load)
 extern ECORE_API float ps_r__clusters_px; // r__clusters_px: the main view's error on the screen a cluster may carry (pixels)
 extern ECORE_API float ps_r__clusters_shadow_px; // r__clusters_shadow_px: the shadow maps' (texels)

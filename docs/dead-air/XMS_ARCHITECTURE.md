@@ -24,6 +24,7 @@ Status: **P0–P4 implemented in the engine** (2026-08-11), P5–P6 are design. 
 | P6 collision | implemented | the module's `overlay.xcform` is merged into the static CDB in `CObjectSpace::Load` BEFORE the tree is built: overlay triangles go to the end; materials by name through the GMLib resolver; the cache is keyed by `crc ^ hash(overlays)`; the embedded OPCODE tree is ignored when overlays are present |
 | P6 cutting | implemented | XCF1 **v2** carries a cut-box list after the triangles: a base triangle fully inside a box is dropped BEFORE `Create()`. Indices after it shift — that is safe, because a triangle index never survives level load (verified across all ~60 consumers of `rq_result.element`); the only serialization is the OPCODE tree in `objspace.bin` and the tail of `level.cform`, both already invalidated via `crc ^ hash` and `cacheStream = nullptr`. Vertices are NOT removed (that would require remapping `TRI::verts` for every consumer). Known consequences, documented: `level.ai` nodes are coordinate-based and do not disappear with the geometry; `detect_sector` casts a ray into collision, so a cut floor breaks sector detection |
 | P6 AI map | implemented (experimental) | `overlay.aimap` appends NodeCompressed13 nodes to a heap copy of the array; the columnar index honestly falls back to a full scan with a warning when sorting is violated; the cross-table clamps on OOB nodes. Limitation: packed positions must land on the level's base grid |
+| P6 level pieces | implemented | `<module>\levels\<level>\pieces\<name>\` (section 8.3): a compiled, lightmapped part of the level's picture with its own shader table, buffers and lightmap pages, hung on the level's sectors and streamed by distance; `CRender::LoadPieces` / `PiecesFrame` / `UnloadPieces` (`r2_loader.cpp`), the same in R4, R5 and R6. The ability `level-pieces` (`ProductVersion.h`). QA: `tools/qa/pieces/Run-PiecesQa.ps1` |
 | P6 visuals | implemented | `<module>\levels\<level>\overlay_visuals.ltx` lists world `.ogf` files (editor export); `CRender::LoadOverlayVisuals` (`r2_loader.cpp`) loads them physically (bypassing the VFS — otherwise last-writer-wins would kill every module's contribution but the last), detects the sector by the visual's center and push_backs into the root's `children`; the root's box grows **only** when the overlay actually exceeds it (otherwise the sector's base geometry loses fcvInside); `UnloadOverlayVisuals` detaches and frees on `level_Unload`. Section keys: `file` (required), `mode` (an extra mode gate), `sector` (a forced id). Skeletons/dynamics are rejected. For small things the alternative is a regular spawn (P4) |
 
 Runtime implementation notes:
@@ -511,11 +512,12 @@ As a bonus this gives **physics for free**: the ODE tri-list does not own triang
 The cform cache (`xr_area.cpp:238`) is keyed by CRC — the key becomes `crc(base) ^ hash(overlays)`,
 otherwise it goes stale; `prune_inactive_level_caches` learns to respect composite keys.
 
-**Lighting.** The lightmap is bound to the level's shader table (`r2_loader.cpp:49`), therefore:
-* the cheap path — an overlay on a self-contained OGF shader (the `OGF_TEXTURE` branch,
-  `FBasicVisual.cpp:58`): dynamic light only, but it works immediately;
-* the honest path — a patch compiler bakes its own lightmap and **appends**
-  entries to the shader table at runtime (`getShader` is index-based, append is safe).
+**Lighting.** The lightmap is bound to the level's shader table, therefore:
+* the cheap path — an overlay on a self-contained OGF shader (the `OGF_TEXTURE` branch of
+  `dxRender_Visual::Load`): dynamic light only, but it works immediately;
+* the lit path — a **level piece** (8.3): the module's compiler bakes the piece with lightmap
+  pages of its own, and the piece brings its own shader table naming them. The level's table is
+  never appended to: a piece's visuals answer from the piece's tables alone.
 
 **AI map.** `level.ai` is mmap'ed and welded by GUIDs (`level_graph.cpp:28`). An overlay needs a
 composite node array in memory — the path already exists: `CLevelGraphManager` can own a heap array
@@ -526,6 +528,82 @@ rebuilding the columnar index (`level_graph.cpp:48`, degrades softly when sortin
 passes through), grass in slots outside the compiled grid (`DetailManager_CACHE.cpp:256` returns an
 empty slot without crashing); wallmarks on overlays work (they go through the static CDB — and ours
 is composite).
+
+### 8.3 Level pieces
+
+A piece is a compiled part of a level's static picture that the game loads beside the level: its
+own visuals, vertex and index buffers, shader table and lightmap pages. It is made by a level's own
+author (the level cut into streaming cells) or by a module for a level it does not own (a lit
+building in Cordon). **Only the picture is a piece**: collision, the AI map, the game graph and the
+spawn stay whole in the level's own files or in a module's `overlay.xcform`, `overlay.aimap` and
+`.xspawn`, composed once at the load - nothing a save refers to streams. A piece brings no sectors or
+portals: the engine's sector graph is per render context and static after the load, and `level.ltx`
+keys on sector ids, so each root of a piece becomes a child of a sector root of the level, as an
+overlay does.
+
+The files, in `<module>\levels\<level>\pieces\<name>\`, read physically per module like
+`overlay_visuals.ltx`, under the module's gate (`ModuleApplies`) and the piece's own `mode`:
+
+```text
+piece.ltx      [piece] version = 1
+                       box = minx, miny, minz, maxx, maxy, maxz   streaming: its centre and radius
+                       sector = auto | <sector id>                one sector for every root, or by each root
+                       stream = true | false                      false: loaded with the level and kept
+                       mode = <id>                                optional extra mode gate
+piece          chunks as the level file has them: 1 header (hdrLEVEL, the compiler's version 14),
+               2 shader table, 3 visuals; and 32 roots: u32 count, then per root u32 visual index,
+               u16 sector (0xFFFF: the sector at the visual's centre), u16 reserved
+piece.geom     chunks 9 vertex buffers, 10 index buffers, 11 sliding windows, as level.geom
+piece.geomx    the fast (position only) buffers, as level.geomX; optional
+<name>.dds     a texture the shader table names that lies in the folder is the piece's own
+```
+
+**Its own tables.** While a piece's visuals load, `getShader`, `getVisual`, `getVB_Format`, `getVB`,
+`getIB` and `getSWI` answer from the piece's tables (`CRender::s_piece_loading`, a `thread_local`
+set on the thread that loads them, for that time only): a dynamic model loading on another thread
+meanwhile resolves against the level, and a piece's visual can never reach a level table, nor the
+reverse. Before anything of a piece is made, every id its visuals name - the shader, the vertex and
+index buffers and the ranges in them, the fast geometry, the sliding window, the children (an
+earlier visual of the piece) - is checked against what the piece has; a piece that fails is refused
+with a `! [pieces]` line and the level goes on without it. Its visuals never enter `Visuals`, its
+shaders never the level's table.
+
+**Its own textures.** A texture of the shader table whose file lies in the piece's folder is
+registered under a name that keeps its first characters - the deferred blender tells a lightmap by
+the third texture's name starting `lmap` - and adds `@piece<n>` (a counter: no other piece, and no
+later load of the same piece, meets it). The texture loader resolves that name to the folder's file
+before the season's folders, `$level$` and `$game_textures$` (`texture_resolve_name`, `texture_load`),
+on whichever thread loads it. The textures go with the piece's shaders; they are never left to the
+level's unload snapshot.
+
+**Attach and detach** happen at the frame's safe point, the top of `CRender::Calculate`, before any
+view walks the sector roots: the root joins its sector root's children, and the root's box grows only
+when the piece sticks out of it (as `AttachOverlayVisual`). The systems that keep the visual tree are
+told the way `da_veg_apply_switch` tells them: the GPU-driven trees' registry and the ray tracing
+scene let go before the change and gather the tree again after; the lamps' cached static shadow
+slices are dropped (they hold what they drew, and a piece's trees by pointer); when the camera can see
+the piece, the temporal history starts over. The clusters keep only the level's own
+visuals and draw what the views list, so they need nothing. The vegetation's census (the procedural
+shrubs and trees, the reeds, the trees' bake) is taken before any piece attaches: a piece's bushes and
+trees draw as models.
+
+**Streaming.** A manager looks at the distances every 8 frames: a piece is wanted while the camera is
+nearer than the weather's far plane plus its radius plus 50 m, and leaves at 1.25 times that, after
+5 seconds attached at least. The files are read, checked and the device buffers made on a task; the
+shaders, textures and visuals are made at the safe point, one piece a frame. `stream = false` and the
+console's `r__pieces_stream 0` load the pieces with the level (inside `level_Load`, after the
+vegetation's census, before the GPU registry and the clusters) and keep them; the streamed ones the
+camera can reach when the level starts are loaded in its first frame, all at once, so the level never
+starts with a hole. `level_Unload` waits for a task in flight and frees every piece before the level's
+own tables. A level without pieces pays one pointer test a frame.
+
+The log: `* [pieces] <level>: N piece(s) found, M streamed`; `* [pieces] <module>/<piece>: attached,
+V visual(s), R root(s), B buffer(s), T texture(s), task X ms, safe point Y ms`; `* [pieces]
+<module>/<piece>: released`; `! [pieces] <module>/<piece>: <why>` for a piece refused.
+
+What a piece does not have: sectors and portals of its own (its interior draws correctly without
+them and only loses portal culling inside itself), lights, glows, HOM occluders, sound geometry,
+details. The engine states the ability as `level-pieces` in its version resources.
 
 ---
 
@@ -581,6 +659,7 @@ hot code.
 | `FS.r_open` / `check_for_file` | nothing: the winner is fixed in `m_files` at mount time | 0 |
 | `pSettings->r_*` | nothing: the same `Sect` (sorted vector + hash index) | 0 |
 | dsgraph traversal, culling, portals | nothing: an overlay is an ordinary child of the sector root | same as base geometry |
+| a level piece (8.3) | an ordinary child of a sector root; streaming looks at the distances every 8 frames | one pointer test a frame on a level without pieces |
 | ray/box against statics | nothing: still **one** `CDB::MODEL`, `element` is the same raw index | 0 |
 | static physics | nothing: the ODE tri-list already walks `ObjectSpace()` during collision | 0 |
 | ALife update, registries | nothing: the same spawn graph, the same indices | 0 |

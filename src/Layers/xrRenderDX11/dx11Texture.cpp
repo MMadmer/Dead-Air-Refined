@@ -277,6 +277,10 @@ bool texture_resolve_name(pcstr fRName, string_path& fn, bool quiet)
     xr_strcpy(fname, fRName);
     fix_texture_name(fname);
 
+    // A level piece's own texture is a file of the piece's folder, under a name nothing else has (r2_loader.cpp).
+    if (RImplementation.PieceTexturePath(fname, fn))
+        return true;
+
     // The season's own copy goes first, from the folder latched for the texture's category, bump maps
     // included (r__season, da_season.h).
     if (texture_season_overlay(fname, texture_season(), fn))
@@ -334,7 +338,9 @@ ID3DBaseTexture* CRender::texture_load(LPCSTR fRName, u32& ret_msize)
     // Load and get header. Reading covers the archive open and an LZO inflate; a raw entry is paged in
     // while the resource is created.
     const u64 readStart = da_texload_ticks();
-    IReader* S = FS.r_open(fn);
+    IReader* S = RImplementation.PieceTextureRead(fn);
+    if (!S)
+        S = FS.r_open(fn);
     probe.sample.read_ms = da_texload_ms_since(readStart);
     R_ASSERT3_CURE(S, "Can't open texture", fn, { return nullptr; });
 

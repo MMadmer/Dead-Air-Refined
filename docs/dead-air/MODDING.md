@@ -50,6 +50,8 @@ Spawn ids: every module holds a range of ids for the objects its spawn layers ad
     overlay.aimap    ;   AI nodes appended to level.ai
     visuals/*.ogf    ;   world-space geometry
     overlay_visuals.ltx ; registry for the .ogf above
+    pieces/<name>/   ;   a level piece: compiled, lightmapped picture,
+                     ;   streamed by distance (below)
 ```
 
 The `gamedata/` mirror is a CONVENTION, not a requirement. A module may keep
@@ -116,6 +118,48 @@ The `.ogf` must be baked in **world space** (the authoring tool's OGF export doe
 and static — skeletons and dynamics are rejected with a log line. Every module
 contributes its own registry; these files live outside `gamedata/` on purpose,
 so overlays add up instead of overwriting each other.
+
+**Level pieces** are the lit way to add to a level's picture: a compiled part of
+it, with its own shader table and lightmap pages, that the game loads beside the
+level and hangs on the level's sectors (`XMS_ARCHITECTURE.md` 8.3). A module
+ships one folder a piece:
+
+```
+levels/<level>/pieces/<name>/
+  piece.ltx     ; [piece] version = 1
+                ;         box     = minx, miny, minz, maxx, maxy, maxz
+                ;         sector  = auto | <sector id>  ; every root to that sector
+                ;         stream  = true | false        ; false: loaded with the level
+                ;         mode    = <id>                ; optional extra mode gate
+  piece         ; chunks 1 header, 2 shader table, 3 visuals as the level file has
+                ; them, and 32 roots: u32 count, then u32 visual, u16 sector
+                ; (0xFFFF: the sector at the visual's centre), u16 reserved
+  piece.geom    ; chunks 9 vertex buffers, 10 index buffers, 11 sliding windows
+  piece.geomx   ; the fast (position only) buffers, optional
+  lmap#1_1.dds  ; a texture the shader table names that lies here is the
+  lmap#1_2.dds  ; piece's own: loaded from this folder and from nowhere else
+```
+
+Every id a piece's visual names - its shader, its buffers and ranges, its sliding
+window, its children - is an index into the piece's own tables, checked before the
+piece is made: a piece that names anything it does not have is refused with a
+`! [pieces]` line and the level loads without it. Only static visuals load
+(normal, progressive, hierarchy, LOD, trees). A piece brings no sectors, portals,
+lights, collision or AI map: its collision and AI nodes still go through
+`overlay.xcform` and `overlay.aimap`, and a cut box in `overlay_visuals.ltx`
+hides the base visuals it replaces. The procedural vegetation does not stand in
+for a piece's bushes and trees (they draw as models), and a piece casts no
+occluders.
+
+A streamed piece loads when the camera comes nearer than the weather's far plane
+plus the piece's radius plus 50 m, and leaves at a quarter more than that after
+five seconds at least; the files are read and the buffers made on a worker, the
+piece is attached at the frame's start, one piece a frame. What the camera sees
+when the level starts is there in its first frame. `r__pieces_stream 0` (a
+session switch) loads every piece with the level and keeps it. The log says
+`* [pieces] <level>: N piece(s) found`, `* [pieces] <module>/<name>: attached, ...`
+with the counts and the milliseconds, and `... released`. A game that loads pieces
+states `level-pieces` in its version resources' `EngineAbilities`.
 
 
 Runtime facts:

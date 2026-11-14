@@ -8,6 +8,10 @@
 #include "xrCore/stream_reader.h"
 #include "xrCore/XMS/xms_core.h"
 
+#include <algorithm>
+#include <atomic>
+#include <thread>
+
 #include "Layers/xrRender/FHierrarhyVisual.h"
 #include "Layers/xrRender/FTreeVisual.h"
 #include "xrEngine/Environment.h"
@@ -176,6 +180,14 @@ void CRender::level_Load(IReader* fs)
     // The stock path's vegetation whose billboard cells the bake draws again (the census of da_veg_level_load).
     da_trees_bake_level_load();
     g_pGamePersistent->LoadPump();
+#endif
+
+    // XMS: the level's pieces, after the vegetation's census (a piece may leave again, the census keeps what it
+    // counted) and before everything below that walks the finished tree.
+    if (!GEnv.isDedicatedServer)
+        LoadPieces();
+
+#if RENDER == R_R4
     // Every tree of the level is known now, module overlays included: the GPU registry.
     da_gpu_trees_level_load();
     // The level's static visuals by clusters: their hierarchy from the disk cache or built on worker threads while the
@@ -324,6 +336,9 @@ void CRender::level_Unload()
     // graph is still intact.
     Unload3DFluid();
 #endif
+
+    // The pieces hang on the same roots, attached after the overlays: they go first.
+    UnloadPieces();
 
     // Same deal for the module overlays
     UnloadOverlayVisuals();
@@ -1004,6 +1019,1001 @@ void CRender::UnloadOverlayVisuals()
         }
     }
     m_overlay_visuals.clear();
+}
+
+// ---- level pieces -----------------------------------------------------------
+// A piece is a compiled part of the level's static picture that a module keeps in
+// <module>\levels\<level>\pieces\<name>\ (docs/dead-air/XMS_ARCHITECTURE.md 8.3):
+//   piece.ltx    [piece] version = 1, box = minx, miny, minz, maxx, maxy, maxz,
+//                sector = auto | <id>, stream = true | false, mode = <id> (optional)
+//   piece        chunks 1 header, 2 shader table, 3 visuals as the level file has them, 32 roots
+//   piece.geom   chunks 9 vertex buffers, 10 index buffers, 11 sliding windows, as level.geom
+//   piece.geomx  the fast buffers, as level.geomX (optional)
+//   <name>.dds   a texture of the shader table that lies in the folder is the piece's own
+// Only the picture is a piece: the collision, the AI map and the spawn are composed with the level.
+thread_local CRender::PieceTables* CRender::s_piece_loading = nullptr;
+
+namespace
+{
+constexpr u32 piece_format_version = 1;
+constexpr u32 piece_roots_chunk = 32;
+constexpr u16 piece_sector_auto = 0xFFFF;
+// A piece loads nearer than the far plane plus its radius plus the margin and leaves a quarter beyond that,
+// attached for piece_keep_ms at least; the distances are looked at every piece_check_frames.
+constexpr float piece_margin = 50.f;
+constexpr float piece_leave_factor = 1.25f;
+constexpr u32 piece_keep_ms = 5000;
+constexpr u32 piece_check_frames = 8;
+// Every attach renames the piece's own textures anew: no other piece, nor a later load of this one, meets them.
+std::atomic<u32> piece_serial{};
+
+// A piece's own texture for the texture loader: the whole file in memory, freed with the reader.
+class PieceFileReader final : public IReader
+{
+public:
+    PieceFileReader(void* bytes, size_t size) : IReader(bytes, size, 0) {}
+    ~PieceFileReader() override { xr_free(data); }
+};
+
+template <typename... Args>
+void piece_fail(xr_string& error, pcstr format, Args... args)
+{
+    string512 text;
+    xr_sprintf(text, format, args...);
+    error = text;
+}
+
+bool piece_file_exists(pcstr path)
+{
+    FILE* f = fopen(path, "rb");
+    if (!f)
+        return false;
+    fclose(f);
+    return true;
+}
+
+// The last component of "$level$": the name the module layout files the level under.
+void piece_level_name(string_path& out)
+{
+    string_path root;
+    FS.update_path(root, "$level$", "");
+    if (const size_t len = xr_strlen(root); len && (root[len - 1] == _DELIMITER || root[len - 1] == '/'))
+        root[len - 1] = 0;
+    pcstr name = root;
+    for (pcstr p = root; *p; ++p)
+        if (*p == _DELIMITER || *p == '/')
+            name = p + 1;
+    xr_strcpy(out, name);
+}
+
+bool piece_visual_type(u8 type)
+{
+    switch (type)
+    {
+    case MT_NORMAL:
+    case MT_PROGRESSIVE:
+    case MT_HIERRARHY:
+    case MT_LOD:
+    case MT_TREE_ST:
+    case MT_TREE_PM: return true;
+    default: return false;
+    }
+}
+} // namespace
+
+struct CRender::LevelPieces
+{
+    struct Root
+    {
+        u32 visual;
+        u16 sector;
+    };
+
+    // What a task reads and makes off the main thread; the safe point takes it over.
+    struct Load
+    {
+        xr_vector<u8> file; // `piece`: its visuals are read from it at the safe point
+        xr_vector<xr_string> shaders; // "shader/textures", the piece's own textures renamed
+        xr_vector<std::pair<xr_string, xr_string>> textures; // a renamed texture, its file
+        xr_vector<Root> roots;
+        PieceTables tables; // the buffers, their declarations, the sliding windows
+        u32 visuals{};
+        float task_ms{};
+        xr_string error;
+    };
+
+    struct Piece
+    {
+        xr_string name; // "<module>/<piece>"
+        xr_string folder; // physical, with the trailing delimiter
+        Fvector center{};
+        float radius{};
+        int sector{-1}; // the manifest's sector for every root; -1: each root's own
+        bool stream{true};
+        bool failed{};
+        bool attached{};
+        u32 attached_at{};
+        u32 buffers{};
+        std::atomic<bool> reading{};
+        Load* load{};
+        PieceTables tables;
+        xr_vector<overlay_visual> links; // a root and the sector root it hangs on
+        xr_vector<xr_string> textures; // the renamed ones
+    };
+
+    xr_vector<Piece*> pieces;
+    Piece* reading{}; // the one piece a task reads, at most
+    u32 next_check{};
+    bool first_frame{true};
+};
+
+namespace
+{
+using PieceLoad = CRender::LevelPieces::Load;
+using PieceState = CRender::LevelPieces::Piece;
+
+void piece_free_tables(CRender::PieceTables& tables)
+{
+    for (FSlideWindowItem& swi : tables.swis)
+        xr_free(swi.sw);
+    tables.swis.clear();
+    // The buffers' destructors free what the device holds; the visuals that took references went first.
+    tables.nVB.clear();
+    tables.xVB.clear();
+    tables.nIB.clear();
+    tables.xIB.clear();
+    tables.nDC.clear();
+    tables.xDC.clear();
+}
+
+void piece_free_load(PieceLoad*& load)
+{
+    if (!load)
+        return;
+    piece_free_tables(load->tables);
+    xr_delete(load);
+}
+
+// One file of the geometry (piece.geom or piece.geomx): the buffers' layout first, the device buffers once every
+// visual has been checked against it.
+struct PieceGeom
+{
+    struct Buffer
+    {
+        const u8* data;
+        size_t size;
+        u32 count;
+    };
+    xr_vector<u8> bytes;
+    xr_vector<CRender::VertexDeclarator> decls;
+    xr_vector<Buffer> vbs, ibs;
+};
+
+bool piece_parse_geom(PieceGeom& geom, bool fast, CRender::PieceTables& tables, xr_string& error)
+{
+    IReader file(geom.bytes.data(), geom.bytes.size());
+    IReader* vb = file.open_chunk(fsL_VB);
+    IReader* ib = file.open_chunk(fsL_IB);
+    const auto close = [&] {
+        if (vb)
+            vb->close();
+        if (ib)
+            ib->close();
+    };
+    if (!vb || !ib || vb->elapsed() < 4 || ib->elapsed() < 4)
+    {
+        error = fast ? "piece.geomx has no vertex or index buffers" : "piece.geom has no vertex or index buffers";
+        close();
+        return false;
+    }
+    constexpr size_t decl_bytes = (MAXD3DDECLLENGTH + 1) * sizeof(VertexElement);
+    const u32 vb_count = vb->r_u32();
+    for (u32 i = 0; i < vb_count; ++i)
+    {
+        VertexElement dcl[MAXD3DDECLLENGTH + 1]{};
+        const size_t avail = std::min<size_t>(decl_bytes, size_t(vb->elapsed()));
+        CopyMemory(dcl, vb->pointer(), avail);
+        const u32 length = GetDeclLength(dcl);
+        if (length == 0 || (length + 1) * sizeof(VertexElement) > avail)
+        {
+            error.assign("a vertex buffer's declaration is broken");
+            close();
+            return false;
+        }
+        vb->advance(int((length + 1) * sizeof(VertexElement)));
+        if (vb->elapsed() < 4)
+        {
+            error.assign("a vertex buffer is cut short");
+            close();
+            return false;
+        }
+        const u32 count = vb->r_u32();
+        const size_t size = size_t(count) * GetDeclVertexSize(dcl, 0);
+        if (!size || size > size_t(vb->elapsed()))
+        {
+            error.assign("a vertex buffer is empty or cut short");
+            close();
+            return false;
+        }
+        geom.decls.emplace_back();
+        geom.decls.back().assign(dcl, length + 1);
+        geom.vbs.push_back({static_cast<const u8*>(vb->pointer()), size, count});
+        vb->advance(int(size));
+    }
+    const u32 ib_count = ib->r_u32();
+    for (u32 i = 0; i < ib_count; ++i)
+    {
+        if (ib->elapsed() < 4)
+        {
+            error.assign("an index buffer is cut short");
+            close();
+            return false;
+        }
+        const u32 count = ib->r_u32();
+        const size_t size = size_t(count) * 2;
+        if (!size || size > size_t(ib->elapsed()))
+        {
+            error.assign("an index buffer is empty or cut short");
+            close();
+            return false;
+        }
+        geom.ibs.push_back({static_cast<const u8*>(ib->pointer()), size, count});
+        ib->advance(int(size));
+    }
+    close();
+
+    // The sliding windows (progressive trees) live in piece.geom alone.
+    if (!fast && file.find_chunk(fsL_SWIS))
+    {
+        IReader* sw = file.open_chunk(fsL_SWIS);
+        bool ok = sw && sw->elapsed() >= 4;
+        const u32 count = ok ? sw->r_u32() : 0;
+        tables.swis.resize(count);
+        for (u32 i = 0; ok && i < count; ++i)
+        {
+            FSlideWindowItem& swi = tables.swis[i];
+            ok = sw->elapsed() >= 20;
+            if (!ok)
+                break;
+            for (u32& r : swi.reserved)
+                r = sw->r_u32();
+            swi.count = sw->r_u32();
+            ok = size_t(swi.count) * sizeof(FSlideWindow) <= size_t(sw->elapsed());
+            if (!ok)
+                break;
+            swi.sw = xr_alloc<FSlideWindow>(swi.count ? swi.count : 1);
+            sw->r(swi.sw, sizeof(FSlideWindow) * swi.count);
+        }
+        if (sw)
+            sw->close();
+        if (!ok)
+        {
+            error.assign("the sliding windows are cut short");
+            return false;
+        }
+    }
+    return true;
+}
+
+void piece_create_buffers(const PieceGeom& geom, bool fast, CRender::PieceTables& tables)
+{
+    auto& decls = fast ? tables.xDC : tables.nDC;
+    auto& vbs = fast ? tables.xVB : tables.nVB;
+    auto& ibs = fast ? tables.xIB : tables.nIB;
+    decls = geom.decls;
+    // Sized once: the buffers never move after the device holds them.
+    vbs.resize(geom.vbs.size());
+    ibs.resize(geom.ibs.size());
+    for (size_t i = 0; i < geom.vbs.size(); ++i)
+        vbs[i].CreateFromData(geom.vbs[i].data, geom.vbs[i].size);
+    for (size_t i = 0; i < geom.ibs.size(); ++i)
+        ibs[i].CreateFromData(geom.ibs[i].data, geom.ibs[i].size);
+}
+
+bool piece_check_range(const PieceGeom& geom, IReader& chunk, xr_string& error, u32 index, bool fast)
+{
+    if (chunk.elapsed() < 24)
+    {
+        piece_fail(error, "visual %u: its geometry record is cut short", index);
+        return false;
+    }
+    const u32 vb = chunk.r_u32(), vbase = chunk.r_u32(), vcount = chunk.r_u32();
+    const u32 ib = chunk.r_u32(), ibase = chunk.r_u32(), icount = chunk.r_u32();
+    if (vb >= geom.vbs.size() || u64(vbase) + vcount > geom.vbs[vb].count || ib >= geom.ibs.size() ||
+        u64(ibase) + icount > geom.ibs[ib].count)
+    {
+        piece_fail(error, "visual %u: its %sgeometry lies outside the piece's buffers", index, fast ? "fast " : "");
+        return false;
+    }
+    return true;
+}
+
+// Every id a visual names, against the piece's own tables: a visual of a piece can never reach the level's.
+bool piece_check_visual(IReader& chunk, u32 index, u32 shaders, const PieceGeom& geom, const PieceGeom* fast,
+    u32 swis, xr_string& error)
+{
+    ogf_header H;
+    if (chunk.find_chunk(OGF_HEADER) != sizeof(H))
+    {
+        piece_fail(error, "visual %u has no header", index);
+        return false;
+    }
+    chunk.r(&H, sizeof(H));
+    if (H.format_version != xrOGF_FormatVersion || !piece_visual_type(H.type))
+    {
+        piece_fail(error, "visual %u is of type %u (format %u): not a static visual", index, H.type,
+            H.format_version);
+        return false;
+    }
+    if (H.shader_id >= shaders)
+    {
+        piece_fail(error, "visual %u names shader %u, the piece has %u", index, H.shader_id, shaders);
+        return false;
+    }
+    // Containers a level visual never carries; their readers would reach past the piece.
+    if (chunk.find_chunk(OGF_VCONTAINER) || chunk.find_chunk(OGF_ICONTAINER) || chunk.find_chunk(OGF_CHILDREN))
+    {
+        piece_fail(error, "visual %u carries a container a static visual does not", index);
+        return false;
+    }
+    const bool geometry = chunk.find_chunk(OGF_GCONTAINER);
+    if (geometry && !piece_check_range(geom, chunk, error, index, false))
+        return false;
+    if ((H.type == MT_NORMAL || H.type == MT_PROGRESSIVE || H.type == MT_TREE_ST || H.type == MT_TREE_PM) &&
+        !geometry && !chunk.find_chunk(OGF_VERTICES))
+    {
+        piece_fail(error, "visual %u has no geometry", index);
+        return false;
+    }
+    if ((H.type == MT_TREE_ST || H.type == MT_TREE_PM) && (!geometry || !chunk.find_chunk(OGF_TREEDEF2)))
+    {
+        piece_fail(error, "visual %u: a tree without its geometry or its definition", index);
+        return false;
+    }
+    if (H.type == MT_PROGRESSIVE && !chunk.find_chunk(OGF_SWIDATA))
+    {
+        piece_fail(error, "visual %u: a progressive visual without its windows", index);
+        return false;
+    }
+    if (H.type == MT_LOD && !chunk.find_chunk(OGF_LODDEF2))
+    {
+        piece_fail(error, "visual %u: a LOD without its definition", index);
+        return false;
+    }
+    if (chunk.find_chunk(OGF_FASTPATH))
+    {
+        IReader* path = chunk.open_chunk(OGF_FASTPATH);
+        IReader* def = path ? path->open_chunk(OGF_GCONTAINER) : nullptr;
+        const bool ok = def && fast && piece_check_range(*fast, *def, error, index, true);
+        if (def)
+            def->close();
+        if (path)
+            path->close();
+        if (!ok)
+        {
+            if (error.empty())
+                piece_fail(error, "visual %u has fast geometry and the piece no piece.geomx", index);
+            return false;
+        }
+    }
+    if (H.type == MT_TREE_PM)
+    {
+        if (chunk.find_chunk(OGF_SWICONTAINER) < 4 || chunk.r_u32() >= swis)
+        {
+            piece_fail(error, "visual %u names a sliding window the piece does not have", index);
+            return false;
+        }
+    }
+    if (const size_t size = chunk.find_chunk(OGF_CHILDREN_L))
+    {
+        const u32 count = size >= 4 ? chunk.r_u32() : u32(-1);
+        if (count == u32(-1) || size_t(count) * 4 + 4 > size)
+        {
+            piece_fail(error, "visual %u: its children are cut short", index);
+            return false;
+        }
+        for (u32 i = 0; i < count; ++i)
+        {
+            // A child loads before its parent, as in the level: it is an earlier visual of the piece.
+            if (chunk.r_u32() >= index)
+            {
+                piece_fail(error, "visual %u names a child that is not an earlier visual of the piece", index);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// The task's part: the files, every check, the device buffers. Runs on a worker, or on the main thread when the
+// piece loads with the level.
+void piece_read(const PieceState& piece, PieceLoad& out)
+{
+    CTimer timer;
+    timer.Start();
+    const auto path = [&](pcstr file) {
+        string_path p;
+        strconcat(p, piece.folder.c_str(), file);
+        return xr_string(p);
+    };
+
+    if (!xms_read_physical(path("piece").c_str(), out.file))
+    {
+        out.error.assign("piece is not readable");
+        return;
+    }
+    PieceGeom geom, fast;
+    if (!xms_read_physical(path("piece.geom").c_str(), geom.bytes))
+    {
+        out.error.assign("piece.geom is not readable");
+        return;
+    }
+    const bool has_fast = xms_read_physical(path("piece.geomx").c_str(), fast.bytes);
+    if (!piece_parse_geom(geom, false, out.tables, out.error) ||
+        (has_fast && !piece_parse_geom(fast, true, out.tables, out.error)))
+        return;
+
+    IReader file(out.file.data(), out.file.size());
+    hdrLEVEL H;
+    if (file.find_chunk(fsL_HEADER) != sizeof(H))
+    {
+        out.error.assign("piece has no header");
+        return;
+    }
+    file.r(&H, sizeof(H));
+    if (H.XRLC_version != XRCL_PRODUCTION_VERSION)
+    {
+        piece_fail(out.error, "piece is of the compiler's version %u, the game reads %u", H.XRLC_version,
+            XRCL_PRODUCTION_VERSION);
+        return;
+    }
+
+    // The shader table: a texture whose file lies in the piece's folder is the piece's own, renamed so that it keeps
+    // its first characters (the deferred blender tells a lightmap by its name) and nothing else answers to it.
+    IReader* shaders = file.open_chunk(fsL_SHADERS);
+    if (!shaders || shaders->elapsed() < 4)
+    {
+        if (shaders)
+            shaders->close();
+        out.error.assign("piece has no shader table");
+        return;
+    }
+    const u32 serial = piece_serial.fetch_add(1, std::memory_order_relaxed);
+    const u32 shader_count = shaders->r_u32();
+    for (u32 i = 0; i < shader_count; ++i)
+    {
+        const void* end = shaders->elapsed() > 0 ? memchr(shaders->pointer(), 0, shaders->elapsed()) : nullptr;
+        if (!end)
+        {
+            out.error.assign("the shader table is cut short");
+            shaders->close();
+            return;
+        }
+        xr_string entry;
+        shaders->r_stringZ(entry);
+        const size_t slash = entry.find('/');
+        if (entry.empty() || slash == xr_string::npos)
+        {
+            if (!entry.empty())
+            {
+                piece_fail(out.error, "shader %u [%s] names no texture", i, entry.c_str());
+                shaders->close();
+                return;
+            }
+            out.shaders.emplace_back();
+            continue;
+        }
+        xr_string renamed = entry.substr(0, slash + 1);
+        size_t from = slash + 1;
+        for (bool first = true;; first = false)
+        {
+            const size_t comma = entry.find(',', from);
+            const xr_string texture = entry.substr(from, comma == xr_string::npos ? xr_string::npos : comma - from);
+            if (!first)
+                renamed += ',';
+            string_path file_name;
+            strconcat(file_name, piece.folder.c_str(), texture.c_str(), ".dds");
+            for (char* p = file_name; *p; ++p)
+                if (*p == '/')
+                    *p = _DELIMITER;
+            if (!texture.empty() && piece_file_exists(file_name))
+            {
+                string64 suffix;
+                xr_sprintf(suffix, "@piece%u", serial);
+                xr_string own = texture + suffix;
+                xr_strlwr(own);
+                out.textures.emplace_back(own, file_name);
+                renamed += own;
+            }
+            else
+                renamed += texture;
+            if (comma == xr_string::npos)
+                break;
+            from = comma + 1;
+        }
+        out.shaders.push_back(std::move(renamed));
+    }
+    shaders->close();
+
+    // The visuals, every one checked before anything of them is made.
+    IReader* visuals = file.open_chunk(fsL_VISUALS);
+    if (!visuals)
+    {
+        out.error.assign("piece has no visuals");
+        return;
+    }
+    for (u32 index = 0;; ++index)
+    {
+        IReader* chunk = visuals->open_chunk(index);
+        if (!chunk)
+            break;
+        const bool ok = piece_check_visual(*chunk, index, shader_count, geom, has_fast ? &fast : nullptr,
+            u32(out.tables.swis.size()), out.error);
+        chunk->close();
+        if (!ok)
+        {
+            visuals->close();
+            return;
+        }
+        out.visuals = index + 1;
+    }
+    visuals->close();
+
+    const size_t roots_size = file.find_chunk(piece_roots_chunk);
+    const u32 root_count = roots_size >= 4 ? file.r_u32() : 0;
+    if (!root_count || roots_size != 4 + size_t(root_count) * 8)
+    {
+        out.error.assign("piece has no roots, or they are cut short");
+        return;
+    }
+    for (u32 i = 0; i < root_count; ++i)
+    {
+        const u32 visual = file.r_u32();
+        const u16 sector = file.r_u16();
+        file.r_u16();
+        if (visual >= out.visuals)
+        {
+            piece_fail(out.error, "root %u names visual %u, the piece has %u", i, visual, out.visuals);
+            return;
+        }
+        out.roots.push_back({visual, sector});
+    }
+
+    piece_create_buffers(geom, false, out.tables);
+    if (has_fast)
+        piece_create_buffers(fast, true, out.tables);
+    out.task_ms = timer.GetElapsed_sec() * 1000.f;
+}
+} // namespace
+
+bool CRender::PieceTexturePath(pcstr name, string_path& path) const
+{
+    if (!m_piece_textures_count.load(std::memory_order_acquire))
+        return false;
+    std::lock_guard lock(m_piece_textures_lock);
+    for (const auto& [own, file] : m_piece_textures)
+    {
+        if (!xr_stricmp(own.c_str(), name))
+        {
+            xr_strcpy(path, file.c_str());
+            return true;
+        }
+    }
+    return false;
+}
+
+IReader* CRender::PieceTextureRead(pcstr path) const
+{
+    if (!m_piece_textures_count.load(std::memory_order_acquire))
+        return nullptr;
+    {
+        std::lock_guard lock(m_piece_textures_lock);
+        const bool own = std::any_of(m_piece_textures.begin(), m_piece_textures.end(),
+            [&](const auto& texture) { return !xr_stricmp(texture.second.c_str(), path); });
+        if (!own)
+            return nullptr;
+    }
+    xr_vector<u8> bytes;
+    if (!xms_read_physical(path, bytes))
+        return nullptr;
+    u8* data = xr_alloc<u8>(bytes.size());
+    CopyMemory(data, bytes.data(), bytes.size());
+    return xr_new<PieceFileReader>(data, bytes.size());
+}
+
+void CRender::LoadPieces()
+{
+    ZoneScoped;
+
+    if (!XMS::Active())
+        return;
+    string_path level_name;
+    piece_level_name(level_name);
+    if (!level_name[0])
+        return;
+
+    LevelPieces* found = nullptr;
+    for (const XMS::Module& m : XMS::Modules())
+    {
+        if (m.disabled || !XMS::ModuleApplies(m))
+            continue;
+        string_path dir;
+        xr_sprintf(dir, "%slevels" DELIMITER "%s" DELIMITER "pieces" DELIMITER, m.root.c_str(), level_name);
+        xr_vector<xr_string> manifests;
+        XMS::ListFilesRelative(dir, "piece.ltx", true, manifests);
+        for (const xr_string& rel : manifests)
+        {
+            // <name>\piece.ltx: one folder a piece
+            const size_t slash = rel.find(_DELIMITER);
+            if (slash == xr_string::npos || rel.find(_DELIMITER, slash + 1) != xr_string::npos)
+                continue;
+            const xr_string piece_name = rel.substr(0, slash);
+            string_path manifest;
+            strconcat(manifest, dir, rel.c_str());
+            xr_vector<XMS::IniRecord> records;
+            if (!XMS::ReadIniRecords(manifest, records))
+                continue;
+
+            auto* piece = xr_new<LevelPieces::Piece>();
+            piece->name = m.id + "/" + piece_name;
+            strconcat(manifest, dir, piece_name.c_str(), DELIMITER);
+            piece->folder = manifest;
+            int version = 0;
+            bool box_ok = false, gated = false;
+            xr_string problem;
+            Fbox box;
+            for (const XMS::IniRecord& r : records)
+            {
+                if (r.section != "piece")
+                    continue;
+                if (r.key == "version")
+                    version = atoi(r.value.c_str());
+                else if (r.key == "box")
+                    box_ok = 6 == sscanf(r.value.c_str(), "%f , %f , %f , %f , %f , %f", &box.vMin.x, &box.vMin.y,
+                        &box.vMin.z, &box.vMax.x, &box.vMax.y, &box.vMax.z) && box.is_valid();
+                else if (r.key == "sector")
+                    piece->sector = r.value == "auto" ? -1 : atoi(r.value.c_str());
+                else if (r.key == "stream")
+                    piece->stream = r.value != "false";
+                else if (r.key == "mode")
+                    gated = !r.value.empty() && !XMS::ModeActive(r.value.c_str());
+            }
+            if (version != int(piece_format_version))
+                piece_fail(problem, "piece.ltx is of version %d, the game reads %u", version, piece_format_version);
+            else if (!box_ok)
+                problem.assign("piece.ltx has no valid box");
+            else if (piece->sector < -1)
+                problem.assign("piece.ltx names a negative sector");
+            if (gated || !problem.empty())
+            {
+                if (!problem.empty())
+                    Msg("! [pieces] %s: %s", piece->name.c_str(), problem.c_str());
+                xr_delete(piece);
+                continue;
+            }
+            box.getsphere(piece->center, piece->radius);
+            if (!found)
+                found = xr_new<LevelPieces>();
+            found->pieces.push_back(piece);
+        }
+    }
+    if (!found)
+        return;
+    m_pieces = found;
+
+    u32 streamed = 0;
+    for (const LevelPieces::Piece* piece : m_pieces->pieces)
+        streamed += piece->stream ? 1 : 0;
+    Msg("* [pieces] %s: %u piece(s) found, %u streamed", level_name, u32(m_pieces->pieces.size()),
+        ps_r__pieces_stream ? streamed : 0);
+
+    // What is not streamed loads with the level; the rest at the first frame, where the camera stands.
+    for (u32 i = 0; i < m_pieces->pieces.size(); ++i)
+    {
+        LevelPieces::Piece& piece = *m_pieces->pieces[i];
+        if (piece.stream && ps_r__pieces_stream)
+            continue;
+        piece.load = xr_new<LevelPieces::Load>();
+        piece_read(piece, *piece.load);
+        AttachPiece(*m_pieces, i);
+    }
+}
+
+// The safe point's part: the shaders, the textures, the visuals and the links into the sector roots. The caller
+// told the systems that keep the tree (NotifyPieces) when the level is already running.
+bool CRender::AttachPiece(LevelPieces& pieces, u32 index)
+{
+    LevelPieces::Piece& piece = *pieces.pieces[index];
+    LevelPieces::Load* load = piece.load;
+    piece.load = nullptr;
+    if (!load->error.empty())
+    {
+        Msg("! [pieces] %s: %s", piece.name.c_str(), load->error.c_str());
+        piece.failed = true;
+        piece_free_load(load);
+        return false;
+    }
+
+    CTimer timer;
+    timer.Start();
+    piece.tables = std::move(load->tables);
+    load->tables = {};
+    PieceTables& tables = piece.tables;
+
+    // The renamed textures answer before their shaders ask for them.
+    if (!load->textures.empty())
+    {
+        std::lock_guard lock(m_piece_textures_lock);
+        for (auto& texture : load->textures)
+        {
+            piece.textures.push_back(texture.first);
+            m_piece_textures.push_back(std::move(texture));
+        }
+        m_piece_textures_count.store(u32(m_piece_textures.size()), std::memory_order_release);
+    }
+
+    tables.shaders.resize(load->shaders.size());
+    for (size_t i = 0; i < load->shaders.size(); ++i)
+    {
+        const xr_string& entry = load->shaders[i];
+        const size_t slash = entry.find('/');
+        if (slash == xr_string::npos)
+            continue;
+        tables.shaders[i] = Resources->Create(entry.substr(0, slash).c_str(), entry.substr(slash + 1).c_str());
+    }
+
+    // While the visuals load, every id they name is the piece's (checked by the task).
+    {
+        IReader file(load->file.data(), load->file.size());
+        IReader* visuals = file.open_chunk(fsL_VISUALS);
+        s_piece_loading = &tables;
+        for (u32 i = 0; i < load->visuals; ++i)
+        {
+            IReader* chunk = visuals->open_chunk(i);
+            ogf_header H;
+            chunk->r_chunk_safe(OGF_HEADER, &H, sizeof(H));
+            dxRender_Visual* visual = Models->Instance_Create(H.type);
+            visual->Load(piece.name.c_str(), chunk, 0);
+            tables.visuals.push_back(visual);
+            chunk->close();
+        }
+        s_piece_loading = nullptr;
+        visuals->close();
+    }
+
+    // The roots hang on the level's sectors, as an overlay does (AttachOverlayVisual).
+    auto& dsgraph = get_imm_context();
+    for (const LevelPieces::Root& root : load->roots)
+    {
+        dxRender_Visual* visual = tables.visuals[root.visual];
+        auto sector_id = IRender_Sector::INVALID_SECTOR_ID;
+        if (piece.sector >= 0)
+            sector_id = IRender_Sector::sector_id_t(piece.sector);
+        else if (root.sector != piece_sector_auto)
+            sector_id = IRender_Sector::sector_id_t(root.sector);
+        else
+            sector_id = dsgraph.detect_sector(visual->vis.sphere.P);
+        if (sector_id == IRender_Sector::INVALID_SECTOR_ID || size_t(sector_id) >= dsgraph.Sectors.size())
+        {
+            Msg("! [pieces] %s: visual %u has no sector of the level (%d, the level has %zu)", piece.name.c_str(),
+                root.visual, int(sector_id), dsgraph.Sectors.size());
+            continue;
+        }
+        dxRender_Visual* parent = static_cast<CSector*>(dsgraph.get_sector(sector_id))->root();
+        if (!parent || parent->getType() != MT_HIERRARHY)
+        {
+            Msg("! [pieces] %s: sector %d has no hierarchy root", piece.name.c_str(), int(sector_id));
+            continue;
+        }
+        static_cast<FHierrarhyVisual*>(parent)->children.push_back(visual);
+        // The root's bounds gate the sector's subtree: grown only when the piece sticks out of them, a larger box
+        // costs every base visual of the sector its fully-inside test.
+        if (!parent->vis.box.contains(visual->vis.box))
+        {
+            parent->vis.box.merge(visual->vis.box);
+            parent->vis.box.getsphere(parent->vis.sphere.P, parent->vis.sphere.R);
+        }
+        piece.links.push_back({parent, visual});
+    }
+
+    piece.buffers = u32(tables.nVB.size() + tables.nIB.size() + tables.xVB.size() + tables.xIB.size());
+    piece.attached = true;
+    piece.attached_at = Device.dwTimeGlobal;
+    Msg("* [pieces] %s: attached, %u visual(s), %u root(s), %u buffer(s), %u texture(s), task %.1f ms, safe point "
+        "%.1f ms",
+        piece.name.c_str(), u32(tables.visuals.size()), u32(piece.links.size()), piece.buffers,
+        u32(piece.textures.size()), load->task_ms, timer.GetElapsed_sec() * 1000.f);
+    xr_delete(load);
+    return true;
+}
+
+void CRender::ReleasePiece(LevelPieces& pieces, u32 index)
+{
+    LevelPieces::Piece& piece = *pieces.pieces[index];
+    for (const overlay_visual& link : piece.links)
+        std::erase(static_cast<FHierrarhyVisual*>(link.parent)->children, link.visual);
+    piece.links.clear();
+
+    // The parents first: a hierarchy's children are links (bDontDelete), freed as visuals of their own.
+    PieceTables& tables = piece.tables;
+    for (auto it = tables.visuals.rbegin(); it != tables.visuals.rend(); ++it)
+    {
+        (*it)->Release();
+        xr_delete(*it);
+    }
+    tables.visuals.clear();
+    tables.shaders.clear();
+    piece_free_tables(tables);
+
+    if (!piece.textures.empty())
+    {
+        std::lock_guard lock(m_piece_textures_lock);
+        for (const xr_string& own : piece.textures)
+            std::erase_if(m_piece_textures, [&](const auto& texture) { return texture.first == own; });
+        m_piece_textures_count.store(u32(m_piece_textures.size()), std::memory_order_release);
+    }
+    piece.textures.clear();
+    piece.attached = false;
+    Msg("* [pieces] %s: released", piece.name.c_str());
+}
+
+void CRender::NotifyPieces(bool before, bool visible)
+{
+#if RENDER == R_R4
+    // As the vegetation's switches do (da_veg_apply_switch): the GPU-driven trees and the ray tracing scene let go of
+    // the tree before it changes and gather it again after. The trees' registry is made again for a piece without
+    // trees too: while it is applied it keeps each sector root's children as they were when it was built.
+    if (before)
+    {
+        da_gpu_trees_level_unload();
+        da_rt_level_unload();
+        return;
+    }
+    da_gpu_trees_level_load();
+    da_rt_level_load();
+    // The lamps' cached static slices hold the casters they drew, and their lists of a piece's trees by pointer:
+    // every one is drawn again.
+    da_smap_cache_reset();
+#endif
+    // A change the camera can see: the temporal history starts over.
+    if (!before && visible)
+        da_history_request_reset("level pieces");
+}
+
+void CRender::PiecesFrame()
+{
+    ZoneScoped;
+
+    LevelPieces& P = *m_pieces;
+    const u32 now = Device.dwTimeGlobal;
+    const Fvector& camera = Device.vCameraPosition;
+    float far_plane = g_pGamePersistent ? g_pGamePersistent->Environment().CurrentEnv.far_plane : 0.f;
+    if (far_plane < 1.f)
+        far_plane = 1000.f;
+    const auto wanted = [&](const LevelPieces::Piece& piece) {
+        if (!ps_r__pieces_stream || !piece.stream)
+            return true;
+        const float reach = far_plane + piece.radius + piece_margin;
+        const float distance = camera.distance_to(piece.center);
+        if (!piece.attached)
+            return distance < reach;
+        return distance <= reach * piece_leave_factor || now - piece.attached_at < piece_keep_ms;
+    };
+    const auto visible = [&](const LevelPieces::Piece& piece) {
+        return camera.distance_to(piece.center) - piece.radius < far_plane;
+    };
+
+    xr_vector<u32> leaving, arriving;
+    // A finished task: one piece a frame is made.
+    if (P.reading && !P.reading->reading.load(std::memory_order_acquire))
+    {
+        const auto it = std::find(P.pieces.begin(), P.pieces.end(), P.reading);
+        const u32 index = u32(it - P.pieces.begin());
+        P.reading = nullptr;
+        if (wanted(*P.pieces[index]))
+            arriving.push_back(index);
+        else
+            piece_free_load(P.pieces[index]->load);
+    }
+
+    const bool first = P.first_frame;
+    if (first || Device.dwFrame >= P.next_check)
+    {
+        P.next_check = Device.dwFrame + piece_check_frames;
+        P.first_frame = false;
+        for (u32 i = 0; i < P.pieces.size(); ++i)
+        {
+            LevelPieces::Piece& piece = *P.pieces[i];
+            if (piece.attached && !wanted(piece))
+                leaving.push_back(i);
+        }
+        // The first frame of the level takes every piece it can see at once: the level starts whole.
+        if (first)
+        {
+            if (P.reading)
+            {
+                while (P.reading->reading.load(std::memory_order_acquire))
+                    std::this_thread::yield();
+                arriving.push_back(u32(std::find(P.pieces.begin(), P.pieces.end(), P.reading) - P.pieces.begin()));
+                P.reading = nullptr;
+            }
+            for (u32 i = 0; i < P.pieces.size(); ++i)
+            {
+                LevelPieces::Piece& piece = *P.pieces[i];
+                if (piece.attached || piece.failed || piece.load || !wanted(piece))
+                    continue;
+                piece.load = xr_new<LevelPieces::Load>();
+                piece_read(piece, *piece.load);
+                arriving.push_back(i);
+            }
+        }
+    }
+
+    if (!leaving.empty() || !arriving.empty())
+    {
+        bool seen = false;
+        for (const u32 i : leaving)
+            seen = seen || visible(*P.pieces[i]);
+        for (const u32 i : arriving)
+            seen = seen || visible(*P.pieces[i]);
+        NotifyPieces(true, seen);
+        for (const u32 i : leaving)
+            ReleasePiece(P, i);
+        for (const u32 i : arriving)
+            AttachPiece(P, i);
+        NotifyPieces(false, seen);
+    }
+
+    // The next task: the nearest piece wanted and not there.
+    if (!P.reading)
+    {
+        LevelPieces::Piece* next = nullptr;
+        float best = flt_max;
+        for (LevelPieces::Piece* piece : P.pieces)
+        {
+            if (piece->attached || piece->failed || piece->load || !wanted(*piece))
+                continue;
+            const float distance = camera.distance_to(piece->center);
+            if (distance < best)
+            {
+                best = distance;
+                next = piece;
+            }
+        }
+        if (next)
+        {
+            next->load = xr_new<LevelPieces::Load>();
+            next->reading.store(true, std::memory_order_release);
+            P.reading = next;
+            TaskScheduler->AddTask([next] {
+                piece_read(*next, *next->load);
+                next->reading.store(false, std::memory_order_release);
+            });
+        }
+    }
+}
+
+void CRender::UnloadPieces()
+{
+    if (!m_pieces)
+        return;
+    LevelPieces& P = *m_pieces;
+    // A task still reading owns its piece's load until it ends.
+    if (P.reading)
+    {
+        while (P.reading->reading.load(std::memory_order_acquire))
+            std::this_thread::yield();
+        P.reading = nullptr;
+    }
+    for (u32 i = 0; i < P.pieces.size(); ++i)
+    {
+        LevelPieces::Piece* piece = P.pieces[i];
+        if (piece->attached)
+            ReleasePiece(P, i);
+        piece_free_load(piece->load);
+        xr_delete(piece);
+    }
+    xr_delete(m_pieces);
 }
 
 #if defined(USE_DX11)

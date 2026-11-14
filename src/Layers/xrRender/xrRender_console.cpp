@@ -546,6 +546,8 @@ int ps_r__dbg_trees = 0;
 int ps_r__trees_cut = 1;
 // The trees' cut culls by the depth drawn so far (da_veg.cpp cut_dispatch: the opaque world, then the near trees); 0 for QA.
 int ps_r__trees_occlusion = 1;
+// Level pieces (r2_loader.cpp): streamed by distance; 0 loads every piece with the level and keeps it.
+int ps_r__pieces_stream = 1;
 // The level's static geometry by clusters (CLUSTERS.md, da_clusters.cpp): the hierarchy built after the load, the views'
 // cut on the GPU by the error on the screen (1 pixel in the view, 2 texels in the shadow maps). The main view's two
 // passes against the depth pyramid are off: on the stock levels the pyramid costs more than it hides (CLUSTERS.md,
@@ -2455,6 +2457,7 @@ void xrRender_initconsole()
     CMD4(CCC_RuntimeInteger, "r__trees_cut", &ps_r__trees_cut, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__trees_occlusion", &ps_r__trees_occlusion, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__clusters", &ps_r__clusters, 0, 1);
+    CMD4(CCC_RuntimeInteger, "r__pieces_stream", &ps_r__pieces_stream, 0, 1);
     CMD4(CCC_RuntimeInteger, "r__clusters_min_tris", &ps_r__clusters_min_tris, 0, 4096);
     CMD4(CCC_RuntimeFloat, "r__clusters_px", &ps_r__clusters_px, 0.25f, 16.f);
     CMD4(CCC_RuntimeFloat, "r__clusters_shadow_px", &ps_r__clusters_shadow_px, 0.25f, 32.f);

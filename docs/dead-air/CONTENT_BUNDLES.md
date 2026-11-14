@@ -80,7 +80,8 @@ application folder, is the installation's own and keeps every rule above.
 The engine says it can in the version resource of every program that implements it: the string
 `EngineAbilities` of `xrEngine.exe`, `xrEngine.dll` (the quoted `-fsltx`), `xrCore.dll` (the
 config elsewhere, the paths) and `xrGame.dll` (the content service, the update check) lists
-`fsltx-in-place` (this table) and `long-paths` (below), space-separated
+`fsltx-in-place` (this table), `long-paths` (below) and `level-pieces` (`XMS_ARCHITECTURE.md`
+8.3), space-separated
 (`src/xrCore/ProductVersion.h`, `DAR_ENGINE_ABILITIES`; the libraries' resource is
 `src/xrCore/ModuleVersion.rc2`). A tool reads them without starting the game and takes a word as
 present only when all four state it: a library of an older build beside a newer engine - a mixed

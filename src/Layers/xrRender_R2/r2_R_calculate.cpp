@@ -96,6 +96,9 @@ void CRender::Calculate()
     // ... and r__reeds, the stock reeds.
     da_reeds_apply_switch();
 #endif
+    // The level's pieces come and go here too, before any view walks the sector roots (r2_loader.cpp).
+    if (HasPieces())
+        PiecesFrame();
 
     // Transfer to global space to avoid deep pointer access
     //

@@ -1,0 +1,109 @@
+-- Level pieces QA probe (tools/qa/pieces/Run-PiecesQa.ps1). QA tooling: the runner copies it into the QA root's
+-- gamedata and it never ships. It never moves the actor: the camera leaves through the demo camera and the
+-- console (demo_record, demo_set_cam_position), the frames are taken by the runner when it reads a SHOT line.
+--
+-- configs\pieces_qa.ltx, written by the runner before every launch:
+--   [qa]
+--   shots  = true          ; PIECESQA-SHOT: a, b and c two seconds apart
+--   away   = x,y,z         ; optional: the demo camera there, and back where the actor looks from
+--   save   = <name>        ; optional: a save at the end
+--
+-- Log lines: PIECESQA: ready / camera / SHOT / away / back / saved / DONE
+
+local PHASE_INI = "pieces_qa.ltx"
+local settle_ms = 8000
+
+local started = false
+local steps, idx, step_at = {}, 1, 0
+local cfg = { shots = true, away = nil, save = nil }
+local home = nil
+
+local function say(fmt, ...)
+	local ok, s = pcall(string.format, fmt, ...)
+	printf("PIECESQA: %s", ok and s or tostring(fmt))
+end
+
+local function console(cmd)
+	local ok, e = pcall(function() get_console():execute(cmd) end)
+	if not (ok) then say("console '%s' failed: %s", cmd, tostring(e)) end
+end
+
+local function read_config()
+	pcall(function()
+		local ini = ini_file(PHASE_INI)
+		if not (ini and ini:section_exist("qa")) then return end
+		if (ini:line_exist("qa", "shots")) then cfg.shots = ini:r_bool("qa", "shots") end
+		if (ini:line_exist("qa", "away")) then cfg.away = ini:r_string("qa", "away") end
+		if (ini:line_exist("qa", "save")) then cfg.save = ini:r_string("qa", "save") end
+	end)
+end
+
+-- A step is a function run once and a time to wait after it.
+local function add(name, wait_ms, fn) steps[#steps + 1] = { name = name, wait = wait_ms, fn = fn } end
+
+local function build()
+	add("settle", settle_ms, function()
+		local p, d = device().cam_pos, device().cam_dir
+		home = string.format("%.3f,%.3f,%.3f", p.x, p.y, p.z)
+		say("camera %s dir %.4f,%.4f,%.4f level %s", home, d.x, d.y, d.z, level.name())
+	end)
+	if (cfg.shots) then
+		add("shot_a", 2000, function() say("SHOT: a") end)
+		add("shot_b", 2000, function() say("SHOT: b") end)
+		add("shot_c", 2000, function() say("SHOT: c") end)
+	end
+	if (cfg.away and cfg.away ~= "") then
+		add("away", 14000, function()
+			console("demo_record pieces_qa")
+			console("demo_set_cam_position " .. cfg.away)
+			say("away %s", cfg.away)
+		end)
+		add("back", 8000, function()
+			console("demo_set_cam_position " .. home)
+			say("back %s", home)
+		end)
+	end
+	if (cfg.save and cfg.save ~= "") then
+		add("save", 6000, function()
+			console("save " .. cfg.save)
+			say("saved %s", cfg.save)
+		end)
+	end
+	add("done", 0, function()
+		say("DONE")
+		console("flush")
+		console("quit")
+	end)
+end
+
+local function on_update()
+	pcall(function() device():pause(false) end)
+	local s = steps[idx]
+	if not (s) then return true end
+	local now = time_global_async()
+	if (step_at == 0) then
+		step_at = now
+		s.fn()
+	end
+	if (now - step_at >= s.wait) then
+		idx = idx + 1
+		step_at = 0
+	end
+	return false
+end
+
+local function start()
+	if (started) then return end
+	started = true
+	console("g_pause_in_background 0")
+	console("main_menu off")
+	pcall(function() device():pause(false) end)
+	read_config()
+	build()
+	say("ready level=%s", level.name())
+	level.add_call(on_update, function() end)
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", start)
+end

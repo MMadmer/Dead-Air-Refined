@@ -1348,19 +1348,26 @@ IRenderVisual* CRender::model_CreateParticles(LPCSTR name)
 }
 void CRender::models_Prefetch() { Models->Prefetch(); }
 void CRender::models_Clear(bool b_complete) { Models->ClearPool(b_complete); }
+// A level piece's visuals name the piece's own tables (r2_loader.cpp checks every id before they load).
 ref_shader CRender::getShader(int id)
 {
+    if (PieceTables* piece = s_piece_loading)
+        return piece->shaders[id];
     VERIFY(id < int(Shaders.size()));
     return Shaders[id];
 }
 IRenderVisual* CRender::getVisual(int id)
 {
+    if (PieceTables* piece = s_piece_loading)
+        return piece->visuals[id];
     VERIFY(id < int(Visuals.size()));
     return Visuals[id];
 }
 
 VertexElement* CRender::getVB_Format(int id, bool alternative)
 {
+    if (PieceTables* piece = s_piece_loading)
+        return (alternative ? piece->xDC : piece->nDC)[id].begin();
     if (alternative)
     {
         VERIFY(id < int(xDC.size()));
@@ -1372,6 +1379,8 @@ VertexElement* CRender::getVB_Format(int id, bool alternative)
 
 VertexStagingBuffer* CRender::getVB(int id, bool alternative)
 {
+    if (PieceTables* piece = s_piece_loading)
+        return &(alternative ? piece->xVB : piece->nVB)[id];
     if (alternative)
     {
         VERIFY(id<int(xVB.size()));
@@ -1383,6 +1392,8 @@ VertexStagingBuffer* CRender::getVB(int id, bool alternative)
 
 IndexStagingBuffer* CRender::getIB(int id, bool alternative)
 {
+    if (PieceTables* piece = s_piece_loading)
+        return &(alternative ? piece->xIB : piece->nIB)[id];
     if (alternative)
     {
         VERIFY(id < int(xIB.size()));
@@ -1394,6 +1405,8 @@ IndexStagingBuffer* CRender::getIB(int id, bool alternative)
 
 FSlideWindowItem* CRender::getSWI(int id)
 {
+    if (PieceTables* piece = s_piece_loading)
+        return &piece->swis[id];
     VERIFY(id < int(SWIs.size()));
     return &SWIs[id];
 }

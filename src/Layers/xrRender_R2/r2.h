@@ -406,6 +406,43 @@ private:
     };
     xr_vector<overlay_visual> m_overlay_visuals;
 
+public:
+    // Level pieces (r2_loader.cpp, docs/dead-air/XMS_ARCHITECTURE.md 8.3): compiled parts of the level's picture that
+    // a module keeps beside the level, hung on its sectors and streamed by distance. Their own tables: while a piece's
+    // visuals load, the id getters answer from these alone.
+    struct PieceTables
+    {
+        xr_vector<ref_shader> shaders;
+        xr_vector<VertexDeclarator> nDC, xDC;
+        xr_vector<VertexStagingBuffer> nVB, xVB;
+        xr_vector<IndexStagingBuffer> nIB, xIB;
+        xr_vector<FSlideWindowItem> swis;
+        xr_vector<dxRender_Visual*> visuals;
+    };
+    struct LevelPieces;
+    // The streaming's safe point, the top of Calculate (a level without pieces never gets here).
+    void PiecesFrame();
+    bool HasPieces() const { return !!m_pieces; }
+    // A piece's own texture: the physical file a renamed texture of its shader table stands for, and its bytes.
+    bool PieceTexturePath(pcstr name, string_path& path) const;
+    IReader* PieceTextureRead(pcstr path) const;
+
+private:
+    void LoadPieces();
+    void UnloadPieces();
+    bool AttachPiece(LevelPieces& pieces, u32 index);
+    void ReleasePiece(LevelPieces& pieces, u32 index);
+    // The systems that keep the visual tree let go of it (before) or take it again (after a change).
+    void NotifyPieces(bool before, bool visible);
+
+    // Set on the thread that loads a piece's visuals, for the time it does; null everywhere else.
+    static thread_local PieceTables* s_piece_loading;
+    LevelPieces* m_pieces{};
+    // The renamed textures of the attached pieces -> their files; read by the texture loaders on any thread.
+    mutable std::mutex m_piece_textures_lock;
+    xr_vector<std::pair<xr_string, xr_string>> m_piece_textures;
+    std::atomic<u32> m_piece_textures_count{};
+
 #if defined(USE_DX11)
     void Unload3DFluid();
 
