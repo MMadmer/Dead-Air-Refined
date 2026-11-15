@@ -7,12 +7,17 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrCore/stream_reader.h"
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_level_edits.h"
+#include "xrCore/_fbox2.h"
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <limits>
 #include <thread>
 
 #include "Layers/xrRender/FHierrarhyVisual.h"
+#include "Layers/xrRender/FProgressive.h"
 #include "Layers/xrRender/FLOD.h"
 #include "Layers/xrRender/FTreeVisual.h"
 #include "xrEngine/Environment.h"
@@ -163,6 +168,9 @@ void CRender::level_Load(IReader* fs)
     // 3D Fluid
     Load3DFluid();
 #endif
+
+    // XMS: the exact cuts take the level's own visuals before anything of a module hangs beside them
+    ApplyLevelCuts();
 
     // XMS: module-added geometry goes in right after the sectors exist
     LoadOverlayVisuals();
@@ -381,6 +389,8 @@ void CRender::level_Unload()
         xr_delete(visual);
     }
     Visuals.clear();
+    // The buffers the cut visuals held, now that none holds them
+    UnloadLevelCuts();
 
     //*** SWI
     for (auto& swi : SWIs)
@@ -2122,6 +2132,450 @@ void CRender::UnloadPieces()
         xr_delete(piece);
     }
     xr_delete(m_pieces);
+}
+
+// ---- exact cuts ---------------------------------------------------------------
+// overlay.cut (docs/dead-air/XMS_ARCHITECTURE.md 8.4): the regions clip the level's own normal and progressive visuals
+// with the clip the collision uses. A visual a region cut draws from buffers of its own with what stays - a progressive
+// one its full detail, neither its fast geometry - and one left with nothing is unlinked like a hidden one. It runs
+// before the overlays and the pieces attach: they are never cut. Trees, LODs and everything else are left alone.
+namespace
+{
+template <typename T>
+T cut_load(const u8* at)
+{
+    T v;
+    memcpy(&v, at, sizeof(T));
+    return v;
+}
+
+template <typename T>
+void cut_store(u8* at, T v)
+{
+    memcpy(at, &v, sizeof(T));
+}
+
+float cut_half_to_float(u16 h)
+{
+    const float sign = (h & 0x8000) ? -1.f : 1.f;
+    const u32 exponent = (h >> 10) & 0x1F, mantissa = h & 0x3FF;
+    if (exponent == 0)
+        return sign * float(mantissa) * 5.9604645e-8f;
+    if (exponent == 0x1F)
+        return mantissa ? std::numeric_limits<float>::quiet_NaN() : sign * std::numeric_limits<float>::infinity();
+    return sign * std::ldexp(1.f + float(mantissa) / 1024.f, int(exponent) - 15);
+}
+
+u16 cut_float_to_half(float f)
+{
+    const u16 sign = std::signbit(f) ? 0x8000 : 0;
+    const float a = std::fabs(f);
+    if (a != a)
+        return 0x7E00;
+    if (!(a < 65520.f))
+        return sign | 0x7C00;
+    if (a < 6.1035156e-5f)
+        return sign | u16(iFloor(a / 5.9604645e-8f + .5f));
+    int e;
+    const float m = std::frexp(a, &e); // a = m * 2^e, m in [0.5, 1)
+    u32 mantissa = u32(iFloor((2.f * m - 1.f) * 1024.f + .5f));
+    u32 exponent = u32(e - 1 + 15);
+    if (mantissa == 1024)
+    {
+        mantissa = 0;
+        ++exponent;
+    }
+    return sign | u16(exponent << 10) | u16(mantissa);
+}
+
+// A vertex format as the cut reads it: the position, and the packed base texture coordinate of the level's formats
+// (a short TEXCOORD0 whose fractions are the alpha of the tangent and the binormal, unpack_tc_base in the shaders).
+struct CutFormat
+{
+    const VertexElement* decl{};
+    u32 elements{}, stride{};
+    int position{-1}, tc{-1}, tangent{-1}, binormal{-1};
+};
+
+CutFormat cut_format(const VertexElement* decl)
+{
+    CutFormat f;
+    f.decl = decl;
+    f.elements = GetDeclLength(decl);
+    f.stride = GetDeclVertexSize(decl, 0);
+    for (u32 e = 0; e < f.elements; ++e)
+    {
+        const VertexElement& el = decl[e];
+        if (el.Stream != 0)
+            continue;
+        if (el.Usage == D3DDECLUSAGE_POSITION && el.Type == D3DDECLTYPE_FLOAT3 && el.UsageIndex == 0)
+            f.position = el.Offset;
+        else if (el.Usage == D3DDECLUSAGE_TEXCOORD && el.UsageIndex == 0 &&
+            (el.Type == D3DDECLTYPE_SHORT2 || el.Type == D3DDECLTYPE_SHORT4))
+            f.tc = el.Offset;
+        else if (el.Usage == D3DDECLUSAGE_TANGENT && el.Type == D3DDECLTYPE_D3DCOLOR && el.UsageIndex == 0)
+            f.tangent = el.Offset;
+        else if (el.Usage == D3DDECLUSAGE_BINORMAL && el.Type == D3DDECLTYPE_D3DCOLOR && el.UsageIndex == 0)
+            f.binormal = el.Offset;
+    }
+    return f;
+}
+
+// The vertex at `w` of the triangle `src`, every element interpolated by its type; directions are renormalised. What
+// has no linear meaning (the 10-bit packings) takes the nearest vertex's value.
+void cut_blend(const CutFormat& f, const u8* const src[3], const float w[3], u8* dst)
+{
+    const int nearest = w[0] >= w[1] && w[0] >= w[2] ? 0 : w[1] >= w[2] ? 1 : 2;
+    memcpy(dst, src[nearest], f.stride);
+    const auto mix = [&](auto read) { return w[0] * read(src[0]) + w[1] * read(src[1]) + w[2] * read(src[2]); };
+    for (u32 e = 0; e < f.elements; ++e)
+    {
+        const VertexElement& el = f.decl[e];
+        if (el.Stream != 0)
+            continue;
+        const u32 o = el.Offset;
+        const bool direction = el.Usage == D3DDECLUSAGE_NORMAL || el.Usage == D3DDECLUSAGE_TANGENT ||
+            el.Usage == D3DDECLUSAGE_BINORMAL;
+        switch (el.Type)
+        {
+        case D3DDECLTYPE_FLOAT1:
+        case D3DDECLTYPE_FLOAT2:
+        case D3DDECLTYPE_FLOAT3:
+        case D3DDECLTYPE_FLOAT4:
+        {
+            const u32 n = u32(el.Type - D3DDECLTYPE_FLOAT1) + 1;
+            float v[4];
+            for (u32 k = 0; k < n; ++k)
+                v[k] = mix([&](const u8* s) { return cut_load<float>(s + o + 4 * k); });
+            if (direction && n >= 3)
+            {
+                Fvector d{v[0], v[1], v[2]};
+                d.normalize_safe();
+                v[0] = d.x, v[1] = d.y, v[2] = d.z;
+            }
+            for (u32 k = 0; k < n; ++k)
+                cut_store(dst + o + 4 * k, v[k]);
+            break;
+        }
+        case D3DDECLTYPE_FLOAT16_2:
+        case D3DDECLTYPE_FLOAT16_4:
+        {
+            const u32 n = el.Type == D3DDECLTYPE_FLOAT16_2 ? 2 : 4;
+            for (u32 k = 0; k < n; ++k)
+                cut_store(dst + o + 2 * k,
+                    cut_float_to_half(mix([&](const u8* s) { return cut_half_to_float(cut_load<u16>(s + o + 2 * k)); })));
+            break;
+        }
+        case D3DDECLTYPE_D3DCOLOR:
+        case D3DDECLTYPE_UBYTE4:
+        case D3DDECLTYPE_UBYTE4N:
+        {
+            float v[4];
+            for (u32 k = 0; k < 4; ++k)
+                v[k] = mix([&](const u8* s) { return float(s[o + k]); });
+            if (direction)
+            {
+                // Packed as (n + 1) / 2 * 255 per byte (u8_vec4); the fourth byte is data of its own.
+                Fvector d{v[0] / 127.5f - 1.f, v[1] / 127.5f - 1.f, v[2] / 127.5f - 1.f};
+                d.normalize_safe();
+                v[0] = (d.x + 1.f) * 127.5f, v[1] = (d.y + 1.f) * 127.5f, v[2] = (d.z + 1.f) * 127.5f;
+            }
+            for (u32 k = 0; k < 4; ++k)
+                dst[o + k] = u8(std::clamp(iFloor(v[k] + (direction && k < 3 ? 0.f : .5f)), 0, 255));
+            break;
+        }
+        case D3DDECLTYPE_SHORT2:
+        case D3DDECLTYPE_SHORT4:
+        case D3DDECLTYPE_SHORT2N:
+        case D3DDECLTYPE_SHORT4N:
+        {
+            const u32 n = el.Type == D3DDECLTYPE_SHORT2 || el.Type == D3DDECLTYPE_SHORT2N ? 2 : 4;
+            for (u32 k = 0; k < n; ++k)
+                cut_store(dst + o + 2 * k, s16(std::clamp(
+                    iFloor(mix([&](const u8* s) { return float(cut_load<s16>(s + o + 2 * k)); }) + .5f), -32768, 32767)));
+            break;
+        }
+        case D3DDECLTYPE_USHORT2N:
+        case D3DDECLTYPE_USHORT4N:
+        {
+            const u32 n = el.Type == D3DDECLTYPE_USHORT2N ? 2 : 4;
+            for (u32 k = 0; k < n; ++k)
+                cut_store(dst + o + 2 * k, u16(std::clamp(
+                    iFloor(mix([&](const u8* s) { return float(cut_load<u16>(s + o + 2 * k)); }) + .5f), 0, 65535)));
+            break;
+        }
+        default: break;
+        }
+    }
+
+    // The packed base coordinate is one number in two elements: interpolated whole, then packed again (s24_tc_base).
+    if (f.tc >= 0 && f.tangent >= 0 && f.binormal >= 0)
+    {
+        for (u32 axis = 0; axis < 2; ++axis)
+        {
+            const u32 fraction = u32(axis ? f.binormal : f.tangent) + 3;
+            const float v = mix([&](const u8* s) {
+                return float(cut_load<s16>(s + f.tc + 2 * axis)) + float(s[fraction]) / 255.f;
+            });
+            const int primary = std::clamp(iFloor(v), -32768, 32767);
+            cut_store(dst + f.tc + 2 * axis, s16(primary));
+            dst[fraction] = u8(std::clamp(iFloor(255.5f * (v - float(primary))), 0, 255));
+        }
+    }
+}
+
+// The rectangle's box in the world, a centimetre wider: what lies beyond it cannot be cut.
+Fbox2 cut_area(const XMS::CutRegion& region)
+{
+    const float cs = _abs(_cos(region.yaw)), sn = _abs(_sin(region.yaw));
+    const float ex = cs * region.half.x + sn * region.half.z + .01f;
+    const float ez = sn * region.half.x + cs * region.half.z + .01f;
+    Fbox2 area;
+    area.min.set(region.centre.x - ex, region.centre.z - ez);
+    area.max.set(region.centre.x + ex, region.centre.z + ez);
+    return area;
+}
+} // namespace
+
+void CRender::ApplyLevelCuts()
+{
+    string_path level_name;
+    piece_level_name(level_name);
+    XMS::LevelCuts cuts;
+    if (XMS::Active() && level_name[0])
+        XMS::ReadLevelCuts(level_name, cuts);
+    const u32 collision = XMS::TakeCollisionCuts(level_name);
+    if (cuts.regions.empty())
+        return;
+    const u32 visuals = GEnv.isDedicatedServer ? 0 : CutLevelVisuals(cuts, level_name);
+    Msg("* [cuts] %s: %u region(s), %u collision triangle(s) cut, %u visual(s) cut", level_name,
+        u32(cuts.regions.size()), collision, visuals);
+}
+
+u32 CRender::CutLevelVisuals(const XMS::LevelCuts& cuts, pcstr level_name)
+{
+    ZoneScoped;
+
+    xr_vector<Fbox2> areas;
+    for (const XMS::CutRegion& region : cuts.regions)
+        areas.push_back(cut_area(region));
+
+    struct Candidate
+    {
+        Fvisual* visual;
+        u32 vb, ib;
+        u32 ibase, icount; // its full detail
+    };
+    xr_vector<Candidate> candidates;
+    for (dxRender_Visual* v : Visuals)
+    {
+        if (!v || (v->Type != MT_NORMAL && v->Type != MT_PROGRESSIVE))
+            continue;
+        const Fbox& box = v->vis.box;
+        const bool touched = std::any_of(areas.begin(), areas.end(), [&](const Fbox2& a) {
+            return box.vMax.x >= a.min.x && box.vMin.x <= a.max.x && box.vMax.z >= a.min.y && box.vMin.z <= a.max.y;
+        });
+        Fvisual* f = static_cast<Fvisual*>(v);
+        if (!touched || !f->p_rm_Vertices || !f->p_rm_Indices || nVB.empty() || nIB.empty())
+            continue;
+        // Only geometry in the level's own buffers is the level's.
+        if (f->p_rm_Vertices < nVB.data() || f->p_rm_Vertices >= nVB.data() + nVB.size() ||
+            f->p_rm_Indices < nIB.data() || f->p_rm_Indices >= nIB.data() + nIB.size())
+            continue;
+        Candidate c{f, u32(f->p_rm_Vertices - nVB.data()), u32(f->p_rm_Indices - nIB.data()), f->iBase,
+            f->dwPrimitives * 3};
+        if (v->Type == MT_PROGRESSIVE)
+        {
+            const FSlideWindowItem& w = static_cast<const FProgressive*>(v)->windows();
+            if (!w.count || !w.sw)
+                continue;
+            c.ibase += w.sw[0].offset;
+            c.icount = u32(w.sw[0].num_tris) * 3;
+        }
+        candidates.push_back(c);
+    }
+    if (candidates.empty())
+        return 0;
+
+    // The level's buffers again, those the candidates use: the device keeps no copy on this side.
+    xr_vector<xr_vector<u8>> vb_bytes(nVB.size()), ib_bytes(nIB.size());
+    {
+        xr_vector<u8> want_vb(nVB.size()), want_ib(nIB.size());
+        for (const Candidate& c : candidates)
+            want_vb[c.vb] = want_ib[c.ib] = 1;
+        CStreamReader* geom = FS.rs_open("$level$", "level.geom");
+        if (!geom)
+        {
+            Msg("! [cuts] %s: level.geom cannot be read again, no visual is cut", level_name);
+            return 0;
+        }
+        if (CStreamReader* fs = geom->open_chunk(fsL_VB))
+        {
+            const u32 count = std::min<u32>(fs->r_u32(), u32(nVB.size()));
+            constexpr size_t decl_bytes = (MAXD3DDECLLENGTH + 1) * sizeof(VertexElement);
+            for (u32 b = 0; b < count; ++b)
+            {
+                VertexElement dcl[MAXD3DDECLLENGTH + 1];
+                fs->r(dcl, decl_bytes);
+                fs->advance(-int(decl_bytes));
+                fs->advance(int((GetDeclLength(dcl) + 1) * sizeof(VertexElement)));
+                const size_t bytes = size_t(fs->r_u32()) * GetDeclVertexSize(dcl, 0);
+                if (want_vb[b])
+                {
+                    const u8* data = static_cast<const u8*>(fs->pointer_contiguous(bytes));
+                    vb_bytes[b].assign(data, data + bytes);
+                }
+                fs->advance(int(bytes));
+            }
+            fs->close();
+        }
+        if (CStreamReader* fs = geom->open_chunk(fsL_IB))
+        {
+            const u32 count = std::min<u32>(fs->r_u32(), u32(nIB.size()));
+            for (u32 b = 0; b < count; ++b)
+            {
+                const size_t bytes = size_t(fs->r_u32()) * 2;
+                if (want_ib[b])
+                {
+                    const u8* data = static_cast<const u8*>(fs->pointer_contiguous(bytes));
+                    ib_bytes[b].assign(data, data + bytes);
+                }
+                fs->advance(int(bytes));
+            }
+            fs->close();
+        }
+        FS.r_close(geom);
+    }
+
+    xr_vector<XMS::Cut::Region> views;
+    for (const XMS::CutRegion& region : cuts.regions)
+        views.push_back(region.view());
+
+    u32 cut = 0, left_whole = 0;
+    for (const Candidate& c : candidates)
+    {
+        Fvisual& v = *c.visual;
+        const CutFormat format = cut_format(nDC[c.vb].begin());
+        const u32 stride = format.stride;
+        constexpr u32 max_stride = 256;
+        const xr_vector<u8>& source_vb = vb_bytes[c.vb];
+        const xr_vector<u8>& source_ib = ib_bytes[c.ib];
+        if (format.position < 0 || !stride || stride > max_stride ||
+            (size_t(v.vBase) + v.vCount) * stride > source_vb.size() || (size_t(c.ibase) + c.icount) * 2 > source_ib.size())
+            continue;
+
+        xr_vector<u8> vertices(source_vb.begin() + size_t(v.vBase) * stride,
+            source_vb.begin() + (size_t(v.vBase) + v.vCount) * stride);
+        xr_vector<u16> indices(c.icount);
+        memcpy(indices.data(), source_ib.data() + size_t(c.ibase) * 2, size_t(c.icount) * 2);
+        if (std::any_of(indices.begin(), indices.end(), [&](u16 i) { return i >= v.vCount; }))
+            continue;
+
+        bool changed = false, overflow = false;
+        xr_vector<u16> next;
+        for (size_t r = 0; r < views.size() && !overflow; ++r)
+        {
+            if (v.vis.box.vMax.x < areas[r].min.x || v.vis.box.vMin.x > areas[r].max.x ||
+                v.vis.box.vMax.z < areas[r].min.y || v.vis.box.vMin.z > areas[r].max.y)
+                continue;
+            next.clear();
+            next.reserve(indices.size());
+            for (size_t t = 0; t + 2 < indices.size() && !overflow; t += 3)
+            {
+                const u16 ids[3] = {indices[t], indices[t + 1], indices[t + 2]};
+                u8 corners[3][max_stride];
+                for (int k = 0; k < 3; ++k)
+                    memcpy(corners[k], vertices.data() + size_t(ids[k]) * stride, stride);
+                XMS::Cut::Result result;
+                if (!XMS::Cut::ClipTriangle(views[r], reinterpret_cast<const float*>(corners[0] + format.position),
+                        reinterpret_cast<const float*>(corners[1] + format.position),
+                        reinterpret_cast<const float*>(corners[2] + format.position), result))
+                {
+                    next.insert(next.end(), ids, ids + 3);
+                    continue;
+                }
+                changed = true;
+                const u8* const src[3] = {corners[0], corners[1], corners[2]};
+                u16 points[XMS::Cut::max_points];
+                for (int p = 0; p < result.points && !overflow; ++p)
+                {
+                    const float* w = result.weights[p];
+                    const int same = w[0] == 1.f ? 0 : w[1] == 1.f ? 1 : w[2] == 1.f ? 2 : -1;
+                    if (same >= 0)
+                    {
+                        points[p] = ids[same];
+                        continue;
+                    }
+                    // u16 indices and u16 window counts: 65535 vertices at most.
+                    const size_t index = vertices.size() / stride;
+                    if (index >= 65535)
+                    {
+                        overflow = true;
+                        break;
+                    }
+                    vertices.resize(vertices.size() + stride);
+                    cut_blend(format, src, w, vertices.data() + index * stride);
+                    points[p] = u16(index);
+                }
+                for (int k = 0; k < result.triangles && !overflow; ++k)
+                    for (int corner = 0; corner < 3; ++corner)
+                        next.push_back(points[result.indices[k][corner]]);
+            }
+            indices.swap(next);
+        }
+        const u32 tris = u32(indices.size() / 3);
+        if (overflow || (v.Type == MT_PROGRESSIVE && tris > 65535))
+        {
+            ++left_whole;
+            continue;
+        }
+        if (!changed)
+            continue;
+        ++cut;
+
+        if (!tris)
+        {
+            for (dxRender_Visual* parent : Visuals)
+                if (parent && (parent->Type == MT_HIERRARHY || parent->Type == MT_LOD))
+                    std::erase(static_cast<FHierrarhyVisual*>(parent)->children, static_cast<dxRender_Visual*>(&v));
+            continue;
+        }
+
+        const u32 verts = u32(vertices.size() / stride);
+        cut_geometry* geometry = xr_new<cut_geometry>();
+        geometry->vb.CreateFromData(vertices.data(), vertices.size());
+        geometry->ib.CreateFromData(indices.data(), indices.size() * 2);
+        m_cut_geometry.push_back(geometry);
+
+        v.rm_geom.destroy();
+        v.p_rm_Vertices->Release();
+        v.p_rm_Indices->Release();
+        v.p_rm_Vertices = &geometry->vb;
+        v.p_rm_Vertices->AddRef();
+        v.p_rm_Indices = &geometry->ib;
+        v.p_rm_Indices->AddRef();
+        v.vBase = 0;
+        v.vCount = verts;
+        v.iBase = 0;
+        v.iCount = tris * 3;
+        v.dwPrimitives = tris;
+        v.rm_geom.create(nDC[c.vb].begin(), geometry->vb, geometry->ib);
+        if (v.Type == MT_PROGRESSIVE)
+            static_cast<FProgressive&>(v).KeepOneWindow(u16(tris), u16(verts));
+        else
+            xr_delete(v.m_fast);
+    }
+    if (left_whole)
+        Msg("! [cuts] %s: %u visual(s) would need more than 65535 vertices or triangles and stay whole", level_name,
+            left_whole);
+    return cut;
+}
+
+void CRender::UnloadLevelCuts()
+{
+    for (cut_geometry* geometry : m_cut_geometry)
+        xr_delete(geometry);
+    m_cut_geometry.clear();
 }
 
 #if defined(USE_DX11)

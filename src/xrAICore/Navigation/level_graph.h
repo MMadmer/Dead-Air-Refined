@@ -33,6 +33,11 @@ enum ELineIntersections
 
 class CCoverPoint;
 
+namespace XMS
+{
+struct AiEdit;
+}
+
 class XRAICORE_API CLevelGraph
 {
 private:
@@ -54,6 +59,8 @@ private:
     CHeader m_xms_header_copy{}; // owned header when ai-map overlays bump the count
     CLevelGraphManager* m_nodes; // contains nodes array
     void xms_collect_aimap_overlays(pcstr level_ai_path, xr_vector<u8>& out);
+    static bool xms_level_name(pcstr level_ai_path, string_path& out);
+    void xms_apply_ai_edits(pcstr level_name, const xr_vector<XMS::AiEdit>& edits);
     // One mask per task worker, filled on first use. Path builds of different objects run at once,
     // and each masks its own borders around its own search: a shared mask let them clear each
     // other's bits and see each other's borders.

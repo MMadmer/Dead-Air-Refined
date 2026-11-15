@@ -23,6 +23,7 @@ Status: **P0–P4 implemented in the engine** (2026-08-11), P5–P6 are design. 
 | P5 composite game.graph | implemented (runtime) | `src/xrGame/xms_graph_composer.cpp`: the blob is rebuilt in memory on spawn load; module levels (`gamedata/levels/<name>/level.ai`) get an auto fragment (vertex sampling on a ~32 m grid, k=4 edges, a dense cross-table), a persistent u8 id (128+), `graph_links.ltx` stitching by coordinates; byte offsets of base vertices are recomputed, base indices and the GUID stay unchanged — saves survive |
 | P6 collision | implemented | the module's `overlay.xcform` is merged into the static CDB in `CObjectSpace::Load` BEFORE the tree is built: overlay triangles go to the end; materials by name through the GMLib resolver; the cache is keyed by `crc ^ hash(overlays)`; the embedded OPCODE tree is ignored when overlays are present |
 | P6 cutting | implemented | XCF1 **v2** carries a cut-box list after the triangles: a base triangle fully inside a box is dropped BEFORE `Create()`. Indices after it shift — that is safe, because a triangle index never survives level load (verified across all ~60 consumers of `rq_result.element`); the only serialization is the OPCODE tree in `objspace.bin` and the tail of `level.cform`, both already invalidated via `crc ^ hash` and `cacheStream = nullptr`. Vertices are NOT removed (that would require remapping `TRI::verts` for every consumer). Known consequences, documented: `level.ai` nodes are coordinate-based and do not disappear with the geometry; `detect_sector` casts a ray into collision, so a cut floor breaks sector detection |
+| P6 exact cuts and AI edits | implemented | section 8.4. `levels\<level>\overlay.cut` (`XCU1`): regions that clip the base level's static collision in `CObjectSpace::Load` before the tree is built (new vertices appended after the overlays', the cache keyed by `crc ^ hash(overlays) ^ hash(cuts)`) and the level's own normal and progressive visuals in `CRender::ApplyLevelCuts` (`r2_loader.cpp`, R4, R5 and R6: buffers of their own, read again from `level.geom`); `levels\<level>\overlay.aiedit` (`XAE1`): nodes moved and closed in place in `CLevelGraph::xms_apply_ai_edits`. One reader and one clip in `src/xrCore/XMS/xms_level_edits.*` and `xms_cut_clip.*`. The abilities `level-cuts` and `ai-edits`. QA of the clip: `tools/qa/cuts/Run-CutClipQa.ps1` |
 | P6 AI map | implemented (experimental) | `overlay.aimap` appends NodeCompressed13 nodes to a heap copy of the array; the columnar index honestly falls back to a full scan with a warning when sorting is violated; the cross-table clamps on OOB nodes. Limitation: packed positions must land on the level's base grid |
 | P6 level pieces | implemented | `<module>\levels\<level>\pieces\<name>\` (section 8.3): a compiled, lightmapped part of the level's picture with its own shader table, buffers and lightmap pages, hung on the level's sectors and streamed by distance; `CRender::LoadPieces` / `PiecesFrame` / `UnloadPieces` (`r2_loader.cpp`), the same in R4, R5 and R6. The ability `level-pieces` (`ProductVersion.h`). QA: `tools/qa/pieces/Run-PiecesQa.ps1` |
 | P6 visuals | implemented | `<module>\levels\<level>\overlay_visuals.ltx` lists world `.ogf` files (editor export); `CRender::LoadOverlayVisuals` (`r2_loader.cpp`) loads them physically (bypassing the VFS — otherwise last-writer-wins would kill every module's contribution but the last), detects the sector by the visual's center and push_backs into the root's `children`; the root's box grows **only** when the overlay actually exceeds it (otherwise the sector's base geometry loses fcvInside); `UnloadOverlayVisuals` detaches and frees on `level_Unload`. Section keys: `file` (required), `mode` (an extra mode gate), `sector` (a forced id). Skeletons/dynamics are rejected. For small things the alternative is a regular spawn (P4) |
@@ -524,6 +525,11 @@ composite node array in memory — the path already exists: `CLevelGraphManager`
 during version conversion (`level_graph_manager.h:15`). Plus appending cross-table cells and
 rebuilding the columnar index (`level_graph.cpp:48`, degrades softly when sorting is violated).
 
+**Taking away.** The `[cut_N]` boxes of `overlay_visuals.ltx` and the XCF1 v2 box list drop whole
+visuals and whole triangles; the exact way to take a part of the level away - the ground under a new
+terrain - is `overlay.cut`, and the way to change the AI map's nodes under it is `overlay.aiedit`
+(8.4).
+
 **What degrades, documented:** HOM (new geometry can be occluded but does not occlude), SOM (sound
 passes through), grass in slots outside the compiled grid (`DetailManager_CACHE.cpp:256` returns an
 empty slot without crashing); wallmarks on overlays work (they go through the static CDB — and ours
@@ -614,6 +620,107 @@ V visual(s), R root(s), B buffer(s), T texture(s), task X ms, safe point Y ms`; 
 What a piece does not have: sectors and portals of its own (its interior draws correctly without
 them and only loses portal culling inside itself), lights, glows, HOM occluders, sound geometry,
 details. The engine states the ability as `level-pieces` in its version resources.
+
+### 8.4 Exact cuts and AI edits
+
+A module that replaces a part of a level it does not own - new ground under a yard, a pit - takes
+away exactly what it replaces, in two files of `<module>\levels\<level>\`. Both are read physically
+from every applying module (`ModuleApplies`), in module order, like `overlay.xcform`; an older game
+never looks for either name and loads the level as it is. One reader serves the collision, the
+picture and the AI map (`src/xrCore/XMS/xms_level_edits.*`); a file it refuses - a magic or a
+version it does not know (a newer one: "made for a newer game"), a count over its cap (4096
+regions, a grid side of 4096, 2^20 edits, 64 MB a file), a value that is not a number, a region
+without size, a grid under two by two, a normal that does not point up, bytes missing - is skipped
+whole with one `! [cuts] <file>: <why>, refused` or `! [ai edits] <file>: <why>, refused` line. The
+sizes are checked before anything is read.
+
+```text
+overlay.cut     "XCU1"  u32 version (1)  u32 region count
+                region: u8 kind (0 everything, 1 ground)  u8[3] zero
+                        f32 centre x, y, z   f32 half x, y, z   f32 yaw (radians about +Y)
+                        kind 1: f32 tolerance (m)  u32 columns, rows
+                                f32[columns * rows] the old ground's heights, row by row from local -z,
+                                each row from local -x: sample (i, j) at
+                                x' = -half.x + i * 2 half.x / (columns - 1), z' likewise with rows
+overlay.aiedit  "XAE1"  u32 version (1)  u32 count
+                edit:   f32 x, z   f32 old y   f32 new y   f32 normal x, y, z   u32 flags (1: closed)
+```
+
+**The clip** (`xms_cut_clip.cpp`, `XMS::Cut::ClipTriangle`) is normative; the authoring tool's
+preview implements the same steps, in single precision, and `tools/qa/cuts/Run-CutClipQa.ps1`
+holds four cases both sides share:
+
+1. A vertex's local coordinates: with `d = p - centre`, `x' = d.x cos(yaw) - d.z sin(yaw)`,
+   `z' = d.x sin(yaw) + d.z cos(yaw)` (the point turned by `-yaw` about +Y); its height stays the
+   world `y`.
+2. A triangle whose local XZ bounding box does not overlap `[-half.x, half.x] x [-half.z, half.z]`
+   is kept whole.
+3. The triangle, as a convex polygon P, is split by the lines `x' = -half.x`, `x' = +half.x`,
+   `z' = -half.z`, `z' = +half.z`, in that order: walking P's edges, a vertex goes to the part on the
+   rectangle's side when its distance to the line on that side is at least -1e-5 m (a point on the
+   line counts as inside), else to the far part; an edge whose ends go to different parts adds the
+   point at `t = da / (da - db)` (clamped to 0..1) to both. The far part is appended to the list
+   `kept`; P becomes the near part. After the four lines P is what lies inside the rectangle.
+4. If P has less than 1e-8 m² of area (in 3D), the triangle is kept whole and unchanged.
+5. The test of P: kind 0 - every vertex of P has `centre.y - half.y <= y <= centre.y + half.y`;
+   kind 1 - every vertex has `|y - H(x', z')| <= tolerance`, H bilinear over the grid (the sample
+   coordinates clamped to the grid). If the test fails, the triangle is kept whole and unchanged.
+6. Otherwise the triangle is replaced by the fan (from each polygon's first vertex) of every
+   polygon of `kept` that has 1e-8 m² of area or more; with nothing kept it is gone. The winding is
+   the triangle's. A new vertex is a linear combination of the triangle's three vertices - on an
+   edge the interpolation of that edge's two, at a corner of the rectangle inside the triangle the
+   combination of all three - and every attribute of it is the same combination.
+
+The regions apply in order, each to what the earlier ones left, and a file's regions after the
+earlier module's.
+
+**The collision.** In `CObjectSpace::Load`, after the XCF1 v2 boxes and before the overlay
+triangles are appended, every base triangle goes through the clip; the parts that stay keep the
+material, the sector and the flags of their triangle, and their new vertices go to the end of the
+vertex array, after the overlays' (whose triangles index it by offset). The overlay triangles are
+never cut. As with the boxes, triangle indices after the first cut one shift, which is safe (P6
+cutting); the cache key becomes `crc(base) ^ hash(overlays) ^ hash(cuts)`, the embedded tree is not
+used, and a level without cuts keeps the key it had.
+
+**The picture.** In `level_Load`, after the sectors and before the overlays and the pieces attach,
+`CRender::ApplyLevelCuts` takes every visual of the level itself whose box a region touches: the
+normal and the progressive ones that draw from the level's own buffers. Their vertices and indices
+are read again from `level.geom` (the device keeps no copy), the triangles of the most detailed form
+are clipped, and the visual gets a vertex and an index buffer of its own with what stays: a
+progressive one keeps that form alone (one sliding window), neither keeps its fast geometry (the
+shadows draw the full one). Every vertex element is interpolated by its declared type - floats,
+half floats, bytes, shorts, unsigned shorts; normals, tangents and binormals renormalised; the
+packed base texture coordinate of the level's formats (a short `TEXCOORD0` whose fractions are the
+alpha of the tangent and the binormal) interpolated as the one number it is and packed again; the
+10-bit packings take the nearest vertex's value. A visual left with no triangle is unlinked from its
+parents as a hidden one is. A visual that would need more than 65535 vertices (or a progressive one
+more than 65535 triangles) stays whole, counted in one `! [cuts]` line. Trees, LOD billboards,
+hierarchies, a piece's and an overlay's visuals are never cut: a tree or a bush on the cut ground
+stays, as its own object. The cluster hierarchy leaves a cut visual to the stock draw (it is no
+longer in the level's buffers); the ray tracing scene reads its new buffers. The buffers are freed
+after the visuals at `level_Unload`. R4, R5 and R6 share the loader.
+
+**The AI map.** After the nodes are in memory - the level's and the appended `overlay.aimap` ones,
+in a heap copy (the file's array may be mapped read-only; a converted older version is one already)
+- every edit finds the node whose cell holds `(x, z)` (the node's packed xz) and whose height is
+nearest `old y`, within 2 m (ties: the lowest id); it takes the new height (packed as the nodes are,
+clamped into the level's box) and the plane of `normal` (`pvCompress`). With `closed` it is unlinked
+from its four neighbours both ways (the link becomes the invalid one). An edit that finds no node is
+skipped. No node is added, removed or reordered: the vertex ids saves keep, the cross table and the
+game graph are untouched, and the xz order the nearest-vertex index needs holds.
+
+**The details (grass)** need no code of their own: what grows where and how dense is the level's
+`level.details`, but each item's height is found when its slot is decompressed, by a ray down the
+slot's height range into the static collision (`CDetailManager::cache_Decompress`, the highest
+triangle that is not passable). On cut ground the ray meets what the module put there
+(`overlay.xcform`) - the grass follows the new ground - or, where the new ground leaves the slot's
+height range or nothing is under the item, the item is not placed. Sectors are still detected by
+rays into the collision (P6 cutting), HOM and SOM are the level's.
+
+The log: `* [cuts] <level>: <n> region(s), <c> collision triangle(s) cut, <v> visual(s) cut` (the
+renderer writes it, with what the collision counted), `* [ai edits] <level>: <n> node(s) moved, <c>
+closed, <s> skipped` (a closed node counts as moved too). The engine states the abilities as
+`level-cuts` and `ai-edits` in its version resources.
 
 ---
 

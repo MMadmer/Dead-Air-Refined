@@ -23,8 +23,11 @@
 //   config's roots as long as its buffers (`string_path`, 519 characters) wherever Windows long
 //   paths are enabled;
 // - level-pieces: a module's <module>\levels\<level>\pieces\<name>\ is loaded beside the level, hung on its
-//   sectors and streamed by distance (docs/dead-air/XMS_ARCHITECTURE.md 8.3).
-#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths level-pieces"
+//   sectors and streamed by distance (docs/dead-air/XMS_ARCHITECTURE.md 8.3);
+// - level-cuts: a module's levels\<level>\overlay.cut clips the level's static collision and its own visuals
+//   exactly (XMS_ARCHITECTURE.md 8.4);
+// - ai-edits: a module's levels\<level>\overlay.aiedit moves and closes the level's AI nodes in place (8.4).
+#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths level-pieces level-cuts ai-edits"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined

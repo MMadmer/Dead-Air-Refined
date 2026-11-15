@@ -5,6 +5,7 @@
 #include "Common/LevelStructure.hpp"
 #include "xrEngine/xr_collide_form.h"
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_level_edits.h"
 
 #include <filesystem>
 
@@ -209,15 +210,10 @@ struct XcformMerge
     u32 hash{0};
 };
 
-bool xms_load_xcform_overlays(pcstr level_folder, u32 base_verts, XcformMerge& out)
+bool xms_load_xcform_overlays(pcstr level_name, u32 base_verts, XcformMerge& out)
 {
     if (!XMS::Active())
         return false;
-    // "$level$" m_Add carries a trailing delimiter - strip it for the key
-    string_path level_name;
-    xr_strcpy(level_name, level_folder ? level_folder : "");
-    if (const size_t len = xr_strlen(level_name); len && level_name[len - 1] == _DELIMITER)
-        level_name[len - 1] = 0;
 
     u32 vertex_cursor = base_verts;
     for (const XMS::Module& m : XMS::Modules())
@@ -333,6 +329,71 @@ bool xms_load_xcform_overlays(pcstr level_folder, u32 base_verts, XcformMerge& o
     }
     return !out.tris.empty() || !out.cuts.empty();
 }
+
+// overlay.cut: every region, in order, clips the base triangles `tris` (and what an earlier
+// region left of them). A triangle that is cut is replaced in place by the parts that stay; their
+// new vertices go to the end of the vertex array, after the overlays', whose triangles index it
+// by offset. Returns how many triangles were cut.
+u32 xms_apply_level_cuts(const XMS::LevelCuts& cuts, xr_vector<Fvector>& verts, xr_vector<CDB::TRI>& tris)
+{
+    u32 cut = 0;
+    xr_vector<CDB::TRI> base, next;
+    base.swap(tris);
+    for (const XMS::CutRegion& region : cuts.regions)
+    {
+        const XMS::Cut::Region view = region.view();
+        // The rectangle's box in the world, a centimetre wider: a triangle beyond it cannot be cut.
+        const float cs = _abs(_cos(region.yaw)), sn = _abs(_sin(region.yaw));
+        const float ex = cs * region.half.x + sn * region.half.z + 0.01f;
+        const float ez = sn * region.half.x + cs * region.half.z + 0.01f;
+        next.clear();
+        next.reserve(base.size());
+        for (const CDB::TRI& tri : base)
+        {
+            const Fvector corners[3] = {verts[tri.verts[0]], verts[tri.verts[1]], verts[tri.verts[2]]};
+            const float min_x = std::min({corners[0].x, corners[1].x, corners[2].x});
+            const float max_x = std::max({corners[0].x, corners[1].x, corners[2].x});
+            const float min_z = std::min({corners[0].z, corners[1].z, corners[2].z});
+            const float max_z = std::max({corners[0].z, corners[1].z, corners[2].z});
+            XMS::Cut::Result result;
+            if (max_x < region.centre.x - ex || min_x > region.centre.x + ex || max_z < region.centre.z - ez ||
+                min_z > region.centre.z + ez ||
+                !XMS::Cut::ClipTriangle(view, &corners[0].x, &corners[1].x, &corners[2].x, result))
+            {
+                next.push_back(tri);
+                continue;
+            }
+            ++cut;
+            u32 ids[XMS::Cut::max_points];
+            for (int p = 0; p < result.points; ++p)
+            {
+                const float* w = result.weights[p];
+                const int vertex = w[0] == 1.f ? 0 : w[1] == 1.f ? 1 : w[2] == 1.f ? 2 : -1;
+                if (vertex >= 0)
+                {
+                    ids[p] = tri.verts[vertex];
+                    continue;
+                }
+                Fvector v;
+                v.set(corners[0].x * w[0] + corners[1].x * w[1] + corners[2].x * w[2],
+                    corners[0].y * w[0] + corners[1].y * w[1] + corners[2].y * w[2],
+                    corners[0].z * w[0] + corners[1].z * w[1] + corners[2].z * w[2]);
+                ids[p] = u32(verts.size());
+                verts.push_back(v);
+            }
+            for (int t = 0; t < result.triangles; ++t)
+            {
+                CDB::TRI part = tri;
+                for (int k = 0; k < 3; ++k)
+                    part.verts[k] = ids[result.indices[t][k]];
+                next.push_back(part);
+            }
+        }
+        base.swap(next);
+    }
+    tris.swap(base);
+    return cut;
+}
 } // namespace
 
 void CObjectSpace::Load(IReader* F,
@@ -368,9 +429,21 @@ void CObjectSpace::Load(IReader* F,
     // XMS: merge module collision overlays; the embedded tree only matches the
     // base geometry, so it is skipped when overlays are present
     XcformMerge merge;
+    XMS::LevelCuts level_cuts;
     xr_vector<Fvector> merged_verts;
     xr_vector<CDB::TRI> merged_tris;
-    if (FS.path_exist("$level$") && xms_load_xcform_overlays(FS.get_path("$level$")->m_Add, H.vertcount, merge))
+    // "$level$" m_Add carries a trailing delimiter - strip it for the level's name
+    string_path level_name{};
+    if (FS.path_exist("$level$"))
+    {
+        xr_strcpy(level_name, FS.get_path("$level$")->m_Add);
+        if (const size_t len = xr_strlen(level_name); len && level_name[len - 1] == _DELIMITER)
+            level_name[len - 1] = 0;
+    }
+    const bool overlays = level_name[0] && xms_load_xcform_overlays(level_name, H.vertcount, merge);
+    if (level_name[0])
+        XMS::ReadLevelCuts(level_name, level_cuts);
+    if (overlays || !level_cuts.regions.empty())
     {
         merged_verts.reserve(size_t(H.vertcount) + merge.verts.size());
         merged_verts.assign(verts, verts + H.vertcount);
@@ -407,6 +480,8 @@ void CObjectSpace::Load(IReader* F,
             }
             Msg("* XMS: collision cuts removed %u base triangle(s) of %u", dropped, H.facecount);
         }
+        if (!level_cuts.regions.empty())
+            XMS::NoteCollisionCuts(level_name, xms_apply_level_cuts(level_cuts, merged_verts, merged_tris));
         merged_tris.insert(merged_tris.end(), merge.tris.begin(), merge.tris.end());
         for (const Fvector& v : merge.verts)
             H.aabb.modify(v);
@@ -416,7 +491,7 @@ void CObjectSpace::Load(IReader* F,
         tris = merged_tris.data();
         cacheStream = nullptr;
         if (use_cache)
-            Static.set_model_crc32(base_crc ^ merge.hash);
+            Static.set_model_crc32(base_crc ^ merge.hash ^ level_cuts.hash);
     }
     else if (use_cache)
         Static.set_model_crc32(base_crc);

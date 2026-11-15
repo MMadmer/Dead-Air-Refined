@@ -10,6 +10,7 @@
 #include "level_graph.h"
 #include "xrEngine/profiler.h"
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_level_edits.h"
 
 #include <thread>
 
@@ -39,10 +40,16 @@ void CLevelGraph::Initialize(const char* filePath)
 
     // XMS: module ai-map overlays append nodes after the base array. The
     // header and node array move to an owned heap copy with a bumped count.
+    // AI edits change nodes in place, so they need the heap copy too: the
+    // file's own array may be mapped read-only.
     xr_vector<u8> overlay_nodes;
     if (header().version() == XRAI_CURRENT_VERSION)
         xms_collect_aimap_overlays(filePath, overlay_nodes);
-    if (!overlay_nodes.empty())
+    string_path level_name{};
+    xr_vector<XMS::AiEdit> ai_edits;
+    if (XMS::Active() && xms_level_name(filePath, level_name))
+        XMS::ReadAiEdits(level_name, ai_edits);
+    if (!overlay_nodes.empty() || (!ai_edits.empty() && header().version() == XRAI_CURRENT_VERSION))
     {
         const u32 base_count = header().vertex_count();
         const u32 extra_count = u32(overlay_nodes.size() / sizeof(CLevelVertex));
@@ -56,7 +63,8 @@ void CLevelGraph::Initialize(const char* filePath)
         memcpy(nodes + base_count, overlay_nodes.data(), overlay_nodes.size());
         memset(nodes + total, 0, sizeof(CLevelVertex));
         m_nodes = xr_new<CLevelGraphManager>(nodes, total);
-        Msg("* XMS: ai-map overlay: +%u node(s) on top of %u", extra_count, base_count);
+        if (extra_count)
+            Msg("* XMS: ai-map overlay: +%u node(s) on top of %u", extra_count, base_count);
     }
     else
         m_nodes = xr_new<CLevelGraphManager>(m_reader, header().vertex_count(), header().version());
@@ -71,6 +79,99 @@ void CLevelGraph::Initialize(const char* filePath)
     build_vertex_column_index();
     if (!overlay_nodes.empty() && m_vertex_column_offsets.empty())
         Msg("! XMS: ai-map overlay broke the sort invariant, nearest-vertex search falls back to full scan");
+    // Positions keep their xz, so the column index built above still holds.
+    if (!ai_edits.empty())
+        xms_apply_ai_edits(level_name, ai_edits);
+}
+
+// ".../levels/<name>/level.ai" -> the level's folder name
+bool CLevelGraph::xms_level_name(pcstr level_ai_path, string_path& out)
+{
+    string_path buffer;
+    xr_strcpy(buffer, level_ai_path);
+    pstr file_part = strrchr(buffer, _DELIMITER);
+    if (!file_part)
+        return false;
+    *file_part = 0;
+    pcstr level_name = strrchr(buffer, _DELIMITER);
+    xr_strcpy(out, level_name ? level_name + 1 : buffer);
+    return out[0] != 0;
+}
+
+// overlay.aiedit: the node whose cell holds (x, z) and whose height is nearest `old y`, within 2 m,
+// takes the new height and plane; a closed one loses its links both ways. No node is added,
+// removed or moved in the array: the vertex ids saves keep stay what they were.
+void CLevelGraph::xms_apply_ai_edits(pcstr level_name, const xr_vector<XMS::AiEdit>& edits)
+{
+    constexpr float max_height_gap = 2.f;
+    constexpr u32 no_link = NodeCompressed::LINK_MASK;
+    CLevelVertex* const nodes = m_nodes->begin();
+    const u32 count = header().vertex_count();
+    u32 moved = 0, closed = 0, skipped = 0;
+    for (const XMS::AiEdit& edit : edits)
+    {
+        const Fvector at{edit.x, edit.old_y, edit.z};
+        if (!valid_vertex_position(at))
+        {
+            ++skipped;
+            continue;
+        }
+        const u32 xz = vertex_position(at).xz();
+        u32 first = 0, last = count;
+        if (!m_vertex_column_offsets.empty())
+        {
+            const u32 column = xz / m_row_length;
+            first = last = 0;
+            if (column + 1 < m_vertex_column_offsets.size())
+            {
+                first = m_vertex_column_offsets[column];
+                last = m_vertex_column_offsets[column + 1];
+            }
+        }
+        u32 best = u32(-1);
+        float best_gap = max_height_gap;
+        for (u32 id = first; id < last; ++id)
+        {
+            if (nodes[id].position().xz() != xz)
+                continue;
+            const float gap = _abs(vertex_position(nodes[id].position()).y - edit.old_y);
+            if (gap < best_gap || (gap == best_gap && best == u32(-1)))
+            {
+                best_gap = gap;
+                best = id;
+            }
+        }
+        if (best == u32(-1))
+        {
+            ++skipped;
+            continue;
+        }
+
+        // The packed node itself: CLevelVertex hides its setters behind the getters of the same names.
+        NodeCompressed& node = nodes[best];
+        int packed_y = iFloor(65535.f * (edit.new_y - header().box().vMin.y) / header().factor_y() + EPS_S);
+        clamp(packed_y, 0, 65535);
+        node.p.y(u16(packed_y));
+        node.plane = pvCompress(edit.normal);
+        ++moved;
+
+        if (!(edit.flags & 1))
+            continue;
+        for (u8 k = 0; k < 4; ++k)
+        {
+            const u32 neighbour = node.link(k);
+            if (valid_vertex_id(neighbour))
+            {
+                NodeCompressed& other = nodes[neighbour];
+                for (u8 back = 0; back < 4; ++back)
+                    if (other.link(back) == best)
+                        other.link(back, no_link);
+            }
+            node.link(k, no_link);
+        }
+        ++closed;
+    }
+    Msg("* [ai edits] %s: %u node(s) moved, %u closed, %u skipped", level_name, moved, closed, skipped);
 }
 
 // gathers XAM1 overlay files of every applicable module for this level
@@ -78,15 +179,9 @@ void CLevelGraph::xms_collect_aimap_overlays(pcstr level_ai_path, xr_vector<u8>&
 {
     if (!XMS::Active())
         return;
-    // ".../levels/<name>/level.ai" -> level folder name
-    string_path buffer;
-    xr_strcpy(buffer, level_ai_path);
-    pstr file_part = strrchr(buffer, _DELIMITER);
-    if (!file_part)
+    string_path level_name;
+    if (!xms_level_name(level_ai_path, level_name))
         return;
-    *file_part = 0;
-    pstr level_name = strrchr(buffer, _DELIMITER);
-    level_name = level_name ? level_name + 1 : buffer;
 
     for (const auto& m : XMS::Modules())
     {

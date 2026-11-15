@@ -223,6 +223,10 @@ target_sources_grouped(
     XMS/xms_characters.h
     XMS/xms_core.cpp
     XMS/xms_core.h
+    XMS/xms_cut_clip.cpp
+    XMS/xms_cut_clip.h
+    XMS/xms_level_edits.cpp
+    XMS/xms_level_edits.h
     XMS/xms_ltx.cpp
     XMS/xms_ltx.h
     XMS/xms_xml.cpp

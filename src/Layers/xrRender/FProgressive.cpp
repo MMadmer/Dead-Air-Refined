@@ -111,6 +111,21 @@ void FProgressive::Render(CBackend& cmd_list, float LOD, bool use_fast_geo)
 #endif
 }
 
+void FProgressive::KeepOneWindow(u16 tris, u16 verts)
+{
+    xr_free(nSWI.sw);
+    nSWI.count = 1;
+    nSWI.sw = xr_alloc<FSlideWindow>(1);
+    nSWI.sw[0] = {0, tris, verts};
+    if (xSWI)
+    {
+        xr_free(xSWI->sw);
+        xr_delete(xSWI);
+    }
+    xr_delete(m_fast);
+    last_lod = 0;
+}
+
 #define PCOPY(a) a = pFrom->a
 void FProgressive::Copy(dxRender_Visual* pSrc)
 {

@@ -28,6 +28,9 @@ public:
     const FSlideWindowItem& windows() const { return nSWI; }
     // The fast geometry's (positions alone), null without one.
     const FSlideWindowItem* windows_fast() const { return xSWI; }
+    // From now on one window of every triangle and no fast geometry: a visual a level cut rebuilt
+    // (r2_loader.cpp) keeps its full detail alone.
+    void KeepOneWindow(u16 tris, u16 verts);
 
 private:
     FProgressive(const FProgressive& other);

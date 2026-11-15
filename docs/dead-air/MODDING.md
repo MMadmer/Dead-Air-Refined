@@ -114,6 +114,40 @@ geometry (patch them with `overlay.aimap` if NPCs must not walk there), and
 render sectors are detected by raycast against collision, so cutting away the
 floor of a sector breaks sector detection for whatever stands on it.
 
+**Exact cuts** take away precisely the part of a level a module replaces - the
+ground under a new yard, not whole visuals and whole triangles. A module ships
+`levels/<level>/overlay.cut` (`XCU1`, `XMS_ARCHITECTURE.md` 8.4): regions, each
+a rectangle on the ground (a centre, half extents, a heading) that removes either
+everything inside its box (kind 0) or only what lies within a tolerance of the
+old ground's heights it carries (kind 1 - a wall standing on the ground stays,
+the ground under it goes). Every triangle of the level's static collision and of
+the level's own visuals is clipped by the rectangle: the part inside goes when it
+passes the test, the parts outside stay as new triangles with every vertex
+attribute interpolated, so nothing beyond the rectangle changes. The module
+brings the replacement itself - its collision in `overlay.xcform`, its picture as
+a piece or an overlay visual; those are never cut, nor is anything of another
+module. Changed ground usually needs the AI map changed under it too:
+`levels/<level>/overlay.aiedit` (`XAE1`) moves a node to a new height and plane
+or closes it (unlinks it from its neighbours), found by its cell and its old
+height within 2 m. Nodes are never added or removed, so saves keep their vertex
+ids; a node the edit does not find is skipped and counted.
+
+What to expect: the regions of every module apply in module order; the log says
+`* [cuts] <level>: <n> region(s), <c> collision triangle(s) cut, <v> visual(s)
+cut` and `* [ai edits] <level>: <n> node(s) moved, <c> closed, <s> skipped`, and
+a file the game refuses (bad header, newer version, too large, a value that is
+not a number) gets one `! [cuts]` / `! [ai edits]` line and is ignored whole.
+Only normal and progressive visuals of the level are cut; trees, bushes and LOD
+billboards standing on the cut ground stay, as do other modules' additions. A cut
+visual loses its position-only shadow geometry (its shadows draw the full one)
+and a progressive one its lower levels of detail. Grass (the level's details)
+keeps its kinds and density but finds its height on whatever collision is there:
+on the module's new ground it follows it, and where the new ground leaves the
+detail slot's height range or there is nothing under it, no grass grows. Render
+sectors are still detected by rays into the collision. A game that does this
+states `level-cuts` and `ai-edits` in its version resources' `EngineAbilities`;
+an older game ignores both files and loads the level uncut.
+
 The `.ogf` must be baked in **world space** (the authoring tool's OGF export does that)
 and static — skeletons and dynamics are rejected with a log line. Every module
 contributes its own registry; these files live outside `gamedata/` on purpose,

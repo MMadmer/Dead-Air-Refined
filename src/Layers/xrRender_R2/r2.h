@@ -29,6 +29,7 @@
 namespace XMS
 {
 struct Module;
+struct LevelCuts;
 }
 
 namespace xray::render::RENDER_NAMESPACE
@@ -405,6 +406,18 @@ private:
         dxRender_Visual* visual;
     };
     xr_vector<overlay_visual> m_overlay_visuals;
+
+    // XMS exact cuts (overlay.cut): a level visual a region cut draws from buffers of its own,
+    // kept here and freed after the visuals that hold them.
+    void ApplyLevelCuts();
+    u32 CutLevelVisuals(const XMS::LevelCuts& cuts, pcstr level_name);
+    void UnloadLevelCuts();
+    struct cut_geometry
+    {
+        VertexStagingBuffer vb;
+        IndexStagingBuffer ib;
+    };
+    xr_vector<cut_geometry*> m_cut_geometry;
 
 public:
     // Level pieces (r2_loader.cpp, docs/dead-air/XMS_ARCHITECTURE.md 8.3): compiled parts of the level's picture that
