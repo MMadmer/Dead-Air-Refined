@@ -272,7 +272,13 @@ bool CSoundRender_Source::LoadWave(pcstr pName)
     if (ovm->comments)
     {
         IReader F(ovm->user_comments[0], ovm->comment_lengths[0]);
-        const u32 vers = F.r_u32();
+        // A comment of the game starts with its version and holds every field of that version. A
+        // shorter one is an encoder's own tag: read as fields it would run over its end.
+        const int length = ovm->comment_lengths[0];
+        u32 vers = length >= 4 ? F.r_u32() : 0;
+        if ((vers == 0x0001 && length < 16) || (vers == 0x0002 && length < 20) ||
+            (vers == OGG_COMMENT_VERSION && length < 24))
+            vers = 0;
         if (vers == 0x0001)
         {
             m_info.minDist = F.r_float();

@@ -839,6 +839,10 @@ return {
 | `lists` | list of rows | `{ file, section, key, value }` sets `key = value` in `[section]` of that config (`file` a path under `configs`, left out the system config; `key` left out the item's section; `value` left out a bare key); `{ file, section, key, add = member }` / `drop` change a list. |
 | `editor` | table | Passed by, like every key the game does not read. |
 
+- **The two forms of a placement key**: a HUD section's `hands_position`, `hands_orientation`,
+  `aim_hud_offset_pos`, `aim_hud_offset_rot`, `gl_hud_offset_pos` and `gl_hud_offset_rot` are read plain on a
+  4:3 screen and with `_16x9` on a wide one. A section that has one form alone - tuned on one kind of
+  screen - is read by that form on both; the game stops only when neither is there.
 - **The order**: per module, in the load order, its characters, then its items - the new ones
   first (one whose base is another new item of the module waits for it), then the changes in the
   order of their paths - then its `gamedata\configs\xms\*.ltx`, then its `.ltxp`. What a module's

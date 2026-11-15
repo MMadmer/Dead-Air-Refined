@@ -1,0 +1,214 @@
+-- The probe of tools\qa\module\Run-ModuleInGameQa.ps1: a module of its own beside the module under test. It reads
+-- the item assets of every other module. In a new game it plays every motion (`anm_*`) of every first-person
+-- section those items have - an item's HUD section and its use scene's - the way the game itself warms a scene
+-- up, each call guarded: a motion or a model the game lacks is one "MODQA fail" line instead of a stopped game,
+-- and the whole of a large module takes seconds. Then a few of the items are really taken in the hands.
+-- Every answer is a log line "MODQA <name> = <value>".
+
+local ME = "module_qa"
+local function say(name, value) xms.log("MODQA " .. name .. " = " .. tostring(value)) end
+
+local sys = system_ini()
+local scenes = ini_file("items\\items\\animations_settings.ltx")
+
+-- ---- what the modules' item assets make or change ------------------------------------------------------------
+local function asset_section(module, rel, src)
+	local fn = loadstring(src)
+	if not (fn) then return nil end
+	setfenv(fn, {})
+	local ok, t = pcall(fn)
+	if not (ok and type(t) == "table") then return nil end
+	if (t.abstract) then return nil end
+	if (type(t.edit) == "string") then return t.edit end
+	if (type(t.section) == "string") then return t.section end
+	local id = t.id or string.match(rel, "([^/\\]+)%.itemasset$")
+	return id and (module .. "_" .. id) or nil
+end
+
+local sections, seen, unread = {}, {}, 0
+for _, m in ipairs(xms.modules() or {}) do
+	local id = type(m) == "table" and m.id or m
+	if (id and id ~= ME) then
+		local ok, files = pcall(xms.list_files, id, "", "*.itemasset", true)
+		for _, rel in ipairs(ok and files or {}) do
+			local okr, src = pcall(xms.read_file, id, rel)
+			local sec = okr and src and asset_section(id, rel, src)
+			if (sec) then
+				sec = string.lower(sec)
+				if not (seen[sec]) then
+					seen[sec] = true
+					sections[#sections + 1] = sec
+				end
+			else
+				unread = unread + 1
+			end
+		end
+	end
+end
+table.sort(sections)
+
+-- the motion keys of a first-person section, inherited ones included
+local function motions_of(hud)
+	local out = {}
+	for i = 0, sys:line_count(hud) - 1 do
+		local _, key, value = sys:r_line(hud, i, "", "")
+		if (key and string.find(key, "^anm_")) then out[#out + 1] = { key = key, value = value or "" } end
+	end
+	return out
+end
+
+local missing, plays, draws, huds = {}, {}, {}, {}
+local function add_hud(sec, hud, what)
+	if not (hud and hud ~= "" and sys:section_exist(hud)) or huds[hud] then return end
+	huds[hud] = true
+	for _, m in ipairs(motions_of(hud)) do
+		plays[#plays + 1] = { item = sec, hud = hud, key = m.key, value = m.value, what = what }
+	end
+end
+for _, sec in ipairs(sections) do
+	if not (sys:section_exist(sec)) then
+		missing[#missing + 1] = sec
+	elseif (sys:line_exist(sec, "class")) then
+		local hud = sys:line_exist(sec, "hud") and sys:r_string_ex(sec, "hud") or nil
+		if (hud and hud ~= "" and sys:section_exist(hud)) then
+			add_hud(sec, hud, "hud")
+			-- what the hands really take: a weapon of some kind (an artefact has a HUD section and is never held so)
+			if (string.find(sys:r_string_ex(sec, "class") or "", "^WP_")) then draws[#draws + 1] = sec end
+		end
+		-- its use scene: the section the scene's `anm` names holds the scene's own HUD section
+		if (scenes and scenes:section_exist(sec) and scenes:line_exist(sec, "anm")) then
+			local anm = scenes:r_string(sec, "anm")
+			local scene_hud = (sys:section_exist(anm) and sys:line_exist(anm, "hud")) and sys:r_string_ex(anm, "hud") or (anm .. "_hud")
+			add_hud(sec, scene_hud, "scene")
+		end
+	end
+end
+say("item assets", #sections)
+say("unread", unread)
+say("missing", #missing)
+for i = 1, math.min(#missing, 40) do say("missing " .. i, missing[i]) end
+say("motions", #plays)
+say("to hold", #draws)
+say("menu done", true)
+
+-- ---- a new game -------------------------------------------------------------------------------------------------
+local opt = ini_file("module_qa.ltx")
+local function num(key, default)
+	return (opt and opt:section_exist("module_qa") and opt:line_exist("module_qa", key)) and opt:r_float("module_qa", key) or default
+end
+-- how many items are really taken in the hands (spread over all of them; 0: none), and for how long
+local HOLD, HOLD_MS = num("hold", 6), num("hold_ms", 2000)
+-- sections to hold before the sample, named by the runner
+local first = {}
+if (opt and opt:section_exist("module_qa") and opt:line_exist("module_qa", "hold_first")) then
+	for name in string.gmatch(opt:r_string("module_qa", "hold_first"), "[^,%s]+") do first[#first + 1] = name end
+end
+local PER_FRAME = num("per_frame", 60)
+
+local at, failures = 0, 0
+local function fail(what)
+	failures = failures + 1
+	say("fail", what)
+end
+
+-- every motion once: a scene started and stopped at once, as the game warms its scenes up
+local function play_some()
+	for _ = 1, PER_FRAME do
+		at = at + 1
+		local p = plays[at]
+		if not (p) then return true end
+		local before = game.hud_scene_id()
+		local ok, why = pcall(game.play_hud_motion, 2, p.hud, p.key, false, 1)
+		local id = game.hud_scene_id()
+		if (id ~= before) then game.stop_hud_scene(id) end
+		if not (ok) then
+			fail(p.item .. ": [" .. p.hud .. "] " .. p.key .. " = " .. p.value .. " (" .. p.what .. "): " .. tostring(why))
+		end
+	end
+	return false
+end
+
+-- a few of them for real: spawned, taken in the hands, held, released
+local hold_at, hold_state, since, held_id, held, held_since = 0, "next", 0, nil, 0, nil
+local function hold_some()
+	local now, a = time_global(), db.actor
+	if (hold_state == "next") then
+		if (held >= HOLD + #first or (#draws == 0 and held >= #first)) then return true end
+		held = held + 1
+		if (held <= #first) then
+			-- a named one stands in the list's first place while it is held
+			draws[0] = first[held]
+			hold_at = 0
+		else
+			hold_at = math.min(#draws, 1 + math.floor((held - #first - 1) * #draws / math.max(HOLD, 1)))
+		end
+		say("at", "hold " .. draws[hold_at])
+		local se = sys:section_exist(draws[hold_at]) and alife():create(draws[hold_at], a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id())
+		if not (se) then
+			fail(draws[hold_at] .. ": not created")
+		else
+			held_id, hold_state, since = se.id, "wait", now
+		end
+	elseif (hold_state == "wait") then
+		local obj = held_id and level.object_by_id(held_id)
+		if (obj) then
+			local ok, why = pcall(function() a:make_item_active(obj) end)
+			if not (ok) then fail(draws[hold_at] .. ": cannot be taken in the hands (" .. tostring(why) .. ")") end
+			hold_state, since = "hold", now
+		elseif (now - since > 8000) then
+			fail(draws[hold_at] .. ": did not come online")
+			hold_state = "next"
+		end
+	elseif (hold_state == "hold") then
+		local active = a:active_item()
+		local mine = active and active:section() == draws[hold_at]
+		if (mine and not held_since) then held_since = now end
+		if ((held_since and now - held_since > HOLD_MS) or (not held_since and now - since > 6000)) then
+			if not (held_since) then fail(draws[hold_at] .. ": not in the hands after " .. (now - since) .. " ms") end
+			held_since = nil
+			a:activate_slot(0)
+			local se = held_id and alife():object(held_id)
+			if (se) then alife():release(se, true) end
+			held_id, hold_state, since = nil, "rest", now
+		end
+	elseif (hold_state == "rest") then
+		if (now - since > 500) then hold_state = "next" end
+	end
+	return false
+end
+
+-- A new game starts on fake_start and jumps to the level the new-game screen picked. A window on a hidden desktop
+-- has no focus: the level would pause itself, and a paused level runs no actor callback - a level call does.
+local begun, t_level, phase = false, nil, "settle"
+RegisterScriptCallback("actor_on_first_update", function()
+	get_console():execute("rs_always_active on")
+	get_console():execute("g_pause_in_background 0")
+	get_console():execute("main_menu off")
+	pcall(function() device():pause(false) end)
+	if (begun or level.name() == "fake_start") then return end
+	begun = true
+	level.add_call(function()
+		pcall(function() device():pause(false) end)
+		t_level = t_level or time_global()
+		if (phase == "settle") then
+			-- the level settles first: the loading screen, the key it waits for
+			if (time_global() - t_level < 3000) then return false end
+			say("level", level.name())
+			get_console():execute("g_god on")
+			phase = "play"
+		elseif (phase == "play") then
+			if (play_some()) then
+				say("motions played", #plays)
+				phase = "hold"
+			end
+		elseif (phase == "hold") then
+			if (hold_some()) then
+				say("held", held)
+				say("failures", failures)
+				say("game done", true)
+				return true
+			end
+		end
+		return false
+	end, function() end)
+end)

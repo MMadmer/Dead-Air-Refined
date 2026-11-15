@@ -287,17 +287,25 @@ void attachable_hud_item::render(u32 context_id, IRenderable* root)
 bool attachable_hud_item::render_item_ui_query() const { return m_parent_hud_item->render_item_3d_ui_query(); }
 void attachable_hud_item::render_item_ui() const { m_parent_hud_item->render_item_3d_ui(); }
 
+// A placement key has two forms, one per shape of the screen. A section tuned on one kind of screen
+// often has that form alone: the form asked for is read, else the other one. With neither the read
+// stops the game with its usual words.
+static Fvector read_by_shape(const shared_str& sect_name, pcstr key, bool is_16x9)
+{
+    string128 asked, other;
+    strconcat(asked, key, is_16x9 ? "_16x9" : "");
+    strconcat(other, key, is_16x9 ? "" : "_16x9");
+    if (!pSettings->line_exist(sect_name, asked) && pSettings->line_exist(sect_name, other))
+        return pSettings->r_fvector3(sect_name, other);
+    return pSettings->r_fvector3(sect_name, asked);
+}
+
 Fmatrix hud_item_measures::load(const shared_str& sect_name, IKinematics* K)
 {
     const bool is_16x9 = UICore::is_widescreen();
-    string64 _prefix;
-    xr_sprintf(_prefix, "%s", is_16x9 ? "_16x9" : "");
-    string128 val_name;
 
-    strconcat(val_name, "hands_position", _prefix);
-    m_hands_attach[0] = pSettings->r_fvector3(sect_name, val_name);
-    strconcat(val_name, "hands_orientation", _prefix);
-    m_hands_attach[1] = pSettings->r_fvector3(sect_name, val_name);
+    m_hands_attach[0] = read_by_shape(sect_name, "hands_position", is_16x9);
+    m_hands_attach[1] = read_by_shape(sect_name, "hands_orientation", is_16x9);
 
     m_item_attach[0] = pSettings->r_fvector3(sect_name, "item_position");
     m_item_attach[1] = pSettings->r_fvector3(sect_name, "item_orientation");
@@ -339,15 +347,11 @@ Fmatrix hud_item_measures::load(const shared_str& sect_name, IKinematics* K)
     m_hands_offset[0][0] = {};
     m_hands_offset[1][0] = {};
 
-    strconcat(val_name, "aim_hud_offset_pos", _prefix);
-    m_hands_offset[0][1] = pSettings->r_fvector3(sect_name, val_name);
-    strconcat(val_name, "aim_hud_offset_rot", _prefix);
-    m_hands_offset[1][1] = pSettings->r_fvector3(sect_name, val_name);
+    m_hands_offset[0][1] = read_by_shape(sect_name, "aim_hud_offset_pos", is_16x9);
+    m_hands_offset[1][1] = read_by_shape(sect_name, "aim_hud_offset_rot", is_16x9);
 
-    strconcat(val_name, "gl_hud_offset_pos", _prefix);
-    m_hands_offset[0][2] = pSettings->r_fvector3(sect_name, val_name);
-    strconcat(val_name, "gl_hud_offset_rot", _prefix);
-    m_hands_offset[1][2] = pSettings->r_fvector3(sect_name, val_name);
+    m_hands_offset[0][2] = read_by_shape(sect_name, "gl_hud_offset_pos", is_16x9);
+    m_hands_offset[1][2] = read_by_shape(sect_name, "gl_hud_offset_rot", is_16x9);
 
     R_ASSERT2(pSettings->line_exist(sect_name, "fire_point") == pSettings->line_exist(sect_name, "fire_bone"),
         sect_name.c_str());
