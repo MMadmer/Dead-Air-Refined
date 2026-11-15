@@ -217,6 +217,8 @@ target_sources_grouped(
     TARGET xrCore
     NAME "XMS"
     FILES
+    XMS/xms_assets.cpp
+    XMS/xms_assets.h
     XMS/xms_catalog.cpp
     XMS/xms_catalog.h
     XMS/xms_characters.cpp
@@ -229,6 +231,8 @@ target_sources_grouped(
     XMS/xms_level_edits.h
     XMS/xms_ltx.cpp
     XMS/xms_ltx.h
+    XMS/xms_luadata.cpp
+    XMS/xms_luadata.h
     XMS/xms_xml.cpp
     XMS/xms_xml.h
 )

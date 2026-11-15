@@ -396,7 +396,7 @@ module could change.
 
 - Paths: MOD_UPDATES 2.2, and no component starting with a dot.
 - A file has no extension or one of: `ltx ltxp xml xmlp script txt md json csv ini cfg seq
-  gif mp4 webm wmv html htm css png jpg jpeg nqasset behasset npcasset pdaasset xspawn xcform dds thm ogg ogm ogf omf skl skls anm ppe xr ps vs
+  gif mp4 webm wmv html htm css png jpg jpeg nqasset behasset npcasset pdaasset texasset sndasset meshasset xspawn xcform cut aiedit aimap dds thm ogg ogm ogf omf skl skls anm ppe xr ps vs
   gs hs ds cs h hlsl s spawn graph ai gct cform details env_mod fog_vol game geom geomx hom
   ps_static snd_env snd_static som sectors wallmarks lanims`.
 - Whatever its name, a file must not start like a program or a container: a PE image

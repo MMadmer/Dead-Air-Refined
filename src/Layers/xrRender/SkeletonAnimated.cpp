@@ -8,6 +8,7 @@
 #include "SkeletonX.h"
 #include "xrCore/Animation/AnimationBlendSettings.hpp"
 #include "xrCore/FMesh.hpp"
+#include "xrCore/XMS/xms_assets.h"
 #include "xrCore/xr_token.h"
 #ifdef DEBUG
 #include "xrCore/dump_string.h"
@@ -805,6 +806,48 @@ CBlend* CKinematicsAnimated::IBlend_Create()
     FATAL("Too many blended motions requisted");
     return nullptr;
 }
+// A module's description of the model sets its named animations' speed and flags. Motions are shared by
+// the file they come from, so only the model's own are changed: the ones inside it and its own
+// <model>.omf; a motion of another file would change for every model that uses that file.
+void CKinematicsAnimated::describe_motions(pcstr model_name)
+{
+    const XMS::Assets::Model* described = XMS::Assets::FindModel(model_name);
+    if (!described || described->animations.empty())
+        return;
+    const xr_string own_inside = xr_string(model_name) + ".ogf", own_file = xr_string(model_name) + ".omf";
+    for (const XMS::Assets::Animation& row : described->animations)
+    {
+        const shared_str name = row.name.c_str();
+        pcstr shared_from = nullptr;
+        bool done = false;
+        for (const SMotionsSlot& slot : m_Motions)
+        {
+            u16 index = u16(-1);
+            for (const accel_map* map : {slot.motions.cycle(), slot.motions.fx()})
+                if (const auto it = map->find(name); it != map->end())
+                    index = it->second;
+            if (index == u16(-1))
+                continue;
+            pcstr id = slot.motions.id().c_str();
+            if (xr_stricmp(id, own_inside.c_str()) && xr_stricmp(id, own_file.c_str()))
+            {
+                shared_from = id;
+                continue;
+            }
+            CMotionDef* def = slot.motions.motion_def(index);
+            if (row.has_speed)
+                def->speed = def->Quantize(row.speed);
+            def->flags = u16((def->flags | row.set) & ~row.clear);
+            done = true;
+        }
+        if (!done && shared_from)
+            Msg("! %s: animation '%s' comes from %s, which other models share - it keeps its speed and flags",
+                described->file.c_str(), row.name.c_str(), shared_from);
+        else if (!done)
+            Msg("! %s: the model has no animation '%s'", described->file.c_str(), row.name.c_str());
+    }
+}
+
 void CKinematicsAnimated::Load(const char* N, IReader* data, u32 dwFlags)
 {
     inherited::Load(N, data, dwFlags);
@@ -989,6 +1032,8 @@ void CKinematicsAnimated::Load(const char* N, IReader* data, u32 dwFlags)
             MS.bone_motions[i] = MS.motions.bone_motions(BD->name);
         }
     }
+
+    describe_motions(N);
 
     // Init blend pool
     IBlend_Startup();

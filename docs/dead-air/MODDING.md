@@ -654,6 +654,11 @@ return {
   `community`, `rank` and `reputation` are always there, because the engine asserts on them.
 - What the module's overlays and patches say about those sections still counts: they are applied
   after the characters.
+- `npc` is the format's version; a file without it is version 1. A character made for a newer game
+  (`npc` above the one this game reads) is left out with one line,
+  `! <module>\<file>: made for a newer game (version N, this game reads up to M)`; an older version is
+  read through the reader's steps (the version rule of
+  [a module's models, textures and sounds](#a-modules-models-textures-and-sounds)).
 - A character the game cannot use - no name, no visual, a broken base aside - is left out and the log
   says why, instead of stopping the game. `$app_data_root$\xms_generated\` holds what the game made
   for its own loaders: a cache, rewritten when it changes, never part of a module.
@@ -690,6 +695,98 @@ xms_trade         = misc\trade\my_mod\barkeep.ltx
   clears that clock, so the next trade restocks at once - a quest ties a shop's refresh to a
   night that begins or a caravan that came, and the restock hours stay a fallback.
 
+### A module's models, textures and sounds
+
+A module ships its textures, sounds and models in the game's own containers - `.dds`, `.ogg`,
+`.ogf` / `.omf` - and beside each, optionally, a text description of it: plain Lua data the game
+reads and acts on, the way it reads a character. The description says what a `.thm`, an
+`.ogg`'s comment or the `.ogf` itself would, under names instead of numbers.
+
+| Kind | The file | Header | Beside |
+|---|---|---|---|
+| Texture | `gamedata\textures\**\<name>.texasset` | `tex = 1` | `<name>.dds` |
+| Sound | `gamedata\sounds\**\<name>.sndasset` | `snd = 1` | `<name>.ogg` |
+| Model | `gamedata\meshes\**\<name>.meshasset` | `mesh = 1` | `<name>.ogf` |
+
+```lua
+return {
+  tex = 1,
+  name = [[bunker\wall_brick]],     -- the game's name; the path under textures without the extension when left out
+  bump = { parallax = true },       -- the pair <name>_bump / <name>_bump#; texture = names another one
+  detail = { texture = [[detail\detail_brick]], scale = 4, on = "diffuse" },
+  material = "blinn", weight = 0.3,
+}
+```
+
+- **It is data.** Strings, numbers, booleans and tables only; nothing in it runs. A description
+  that does not read - code in it, an unclosed string - or that has no header is left out with one
+  line naming the file and the line of the problem. Keys the game does not read (`source`, `format`,
+  `mips`, `scale`, `rotate`, `parts`, `compile`, ...) belong to the authoring side and are passed
+  by in silence.
+- **The game's name** of the thing is `name` when the description has one, else its path under
+  `textures`, `sounds` or `meshes` without the extension; case and slashes do not matter. Every
+  enabled module's descriptions are read once, as the modules are mounted, whatever its mode; a later
+  module wins over an earlier one for the same name. The log says, when there is any:
+  `* [assets] <t> texture(s), <s> sound(s), <m> model(s) described by <k> module(s)`.
+- **A key left out keeps what the game's file says**: a `.thm`, the `.ogg`'s comment, the `.ogf`. A
+  texture, a sound or a model without a description - and every old mod's `.thm`, plain `.ogg` and
+  plain `.ogf` - behaves exactly as before.
+- **The version rule** holds for every reader of a module's assets - these three, the characters
+  (`npc`) and the PDA layouts (`pda`); the quests and behaviour graphs have theirs
+  (`ASSET_MIGRATE` in `xms_nq_load.script`). A header above the version the game reads is left out
+  with one line, `! <module>\<file>: made for a newer game (version N, this game reads up to M)`; an
+  older one is read through the reader's chain of small steps, one per version. Every kind is at
+  version 1, so the chains are empty.
+
+**A texture** (`tex`) wins over a `.thm` of the same name in the texture descriptions; a level
+piece's own texture (`<name>@piece<n>`) is described as its texture is.
+
+| Key | Takes | Means |
+|---|---|---|
+| `use` | `surface`, `normal`, `terrain`, `ui`, `cube` | `ui` and `cube` are described nowhere, like such a `.thm` |
+| `bump` | `false`, `true`, a table | the bump pair `<name>_bump` / `<name>_bump#`; `false` none |
+| `bump.texture` | a texture name | another pair than `<name>_bump` |
+| `bump.parallax` | boolean, `false` | the steep parallax of the pair's height |
+| `detail` | `false`, a table | the detail texture laid over it; `false` none |
+| `detail.texture` | a texture name | required for a detail |
+| `detail.scale` | number, `1` | how many times it repeats over the texture |
+| `detail.on` | `diffuse` (default), `bump`, `both` | what it is laid on |
+| `material` | `oren_nayar`, `blinn`, `phong`, `metal`, or the `.thm`'s number | the lighting model |
+| `weight` | 0..1, `0` | how far the lighting goes towards the next model (`oren_nayar` -> `blinn` -> `phong` -> `metal` -> `oren_nayar`) |
+
+**A sound** (`snd`) wins over what its `.ogg` states:
+
+| Key | Takes | Means |
+|---|---|---|
+| `min_distance`, `max_distance` | metres | where it starts to fade and where it is gone |
+| `volume` | number, `1` | its base volume |
+| `ai_distance` | metres | how far the AI hears it |
+| `type` | a word or a list of words, ORed | the game's sound type: `weapon_shooting`, `item_picking_up`, `monster_step`, `world_ambient`, `anomaly_idle`, ... - the names of `ai_sounds.h` without `SOUND_TYPE_`, in lower case; the parts (`weapon`, `shooting`, ...) as well; `no_sound` is none |
+
+**A model** (`mesh`) is applied when the model is loaded the first time; every instance of it
+shares the result.
+
+| Key | Takes | Means |
+|---|---|---|
+| `surfaces` | a list, by the model's order | the n-th child of the model (the model itself when it has none) |
+| `surfaces[n].texture`, `.shader` | names | left out, the child keeps its own; a child beyond the list keeps both |
+| `bones` | a list of `{ name = ... }` | the named bones' physics |
+| `bones[].shape` | `none`, `box`, `sphere`, `cylinder` | the kind of the bone's shape; its size is the model's, so a kind the bone has no size for is refused with a line |
+| `bones[].mass` | kilograms | |
+| `bones[].material` | a dynamic game material | another one is refused with a line |
+| `userdata` | a string | replaces the model's user data (the ltx text of `OGF_S_USERDATA`) |
+| `animations` | a list of `{ name = ... }` | the named motions |
+| `animations[].speed` | number | the motion's speed |
+| `animations[].loop` | boolean | `false` stops it at its end |
+| `animations[].no_mix`, `sync_part`, `foot_steps`, `root_mover`, `idle`, `weapon_bone` | boolean | the motion's flags |
+
+Motions are shared by the file they come from, so a description changes the model's own only: the
+ones inside its `.ogf` and those of its own `<name>.omf`. A motion of another `.omf`, which other
+models load too, keeps its speed and flags, and the log says so.
+
+A game that reads descriptions states `asset-descriptions` in its version resources'
+`EngineAbilities`; an older game never looks for the files and loads the containers as they are.
+
 ### PDA layouts - a module's own PDA interface
 
 A module can give the PDA its own screens: pages, buttons, lists, menus, and a slot for
@@ -714,6 +811,10 @@ layout = pda\app.pdaasset     ; a .pdaasset inside the module
   other is a conflict in `xms_report.json` and the log.
 - A layout with an error (`E3xx`) is not shown: the log names the problems and the stock
   PDA stays. Warnings (`W3xx`) are logged.
+- `pda` is the format's version. A layout made for a newer game is not shown, with one line
+  `! <module>\<file>: made for a newer game (version N, this game reads up to M)`; an older
+  version is read through the reader's steps (`MIGRATE` in `xms_pda_layout.script`, the
+  version rule of [a module's models, textures and sounds](#a-modules-models-textures-and-sounds)).
 - The screen is the rect of `noice_static` of the loaded `pda.xml` / `pda_16.xml`; the
   canvas (960x680 unless the layout says otherwise) is laid over it per axis. The stock
   tabs, caption, clock and the screen's decorations of `pda.xml` step aside; the device

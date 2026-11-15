@@ -4,6 +4,7 @@
 #include "stdafx.h"
 
 #include "xms_core.h"
+#include "xms_assets.h"
 #include "xms_catalog.h"
 #include "xrCore/LocatorAPI.h"
 
@@ -1519,6 +1520,7 @@ void InitializeAndMount()
     s.active = enabled != 0;
     Msg("* XMS: %u module(s) enabled, %zu overlay file(s), %zu conflict(s)", enabled, s.overlays.size(),
         s.conflicts.size());
+    Assets::Build();
     WriteReport();
 }
 

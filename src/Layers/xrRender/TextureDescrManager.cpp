@@ -4,6 +4,7 @@
 #include "ETextureParams.h"
 
 #include "xrCore/Threading/ParallelForEach.hpp"
+#include "xrCore/XMS/xms_assets.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -222,6 +223,58 @@ void CTextureDescrMngr::LoadTHM(LPCSTR initial, bool listTHM)
     }
 }
 
+void CTextureDescrMngr::ApplyDescriptions()
+{
+    for (const auto& [name, tex] : XMS::Assets::Textures())
+    {
+        if (!tex.described)
+            continue;
+        const shared_str key = name.c_str();
+        texture_desc& desc = m_texture_details[key];
+        const auto spec = [&desc]() -> texture_spec&
+        {
+            if (!desc.m_spec)
+            {
+                desc.m_spec = xr_new<texture_spec>();
+                desc.m_spec->m_material = 1.0f; // what GetMaterial answers for a texture nobody describes
+                desc.m_spec->m_use_steep_parallax = false;
+            }
+            return *desc.m_spec;
+        };
+
+        if (tex.bump == 0 && desc.m_spec)
+        {
+            desc.m_spec->m_bump_name = shared_str();
+            desc.m_spec->m_use_steep_parallax = false;
+        }
+        else if (tex.bump == 1)
+        {
+            spec().m_bump_name = tex.bump_name.empty() ? (name + "_bump").c_str() : tex.bump_name.c_str();
+            spec().m_use_steep_parallax = tex.parallax;
+        }
+        if (tex.has_material)
+            spec().m_material = tex.material;
+
+        if (tex.detail == 0)
+            xr_delete(desc.m_assoc);
+        else if (tex.detail == 1)
+        {
+            xr_delete(desc.m_assoc);
+            desc.m_assoc = xr_new<texture_assoc>();
+            desc.m_assoc->detail_name = tex.detail_name.c_str();
+            if (tex.detail_diffuse)
+                desc.m_assoc->usage.set(texture_assoc::flDiffuseDetail);
+            if (tex.detail_bump)
+                desc.m_assoc->usage.set(texture_assoc::flBumpDetail);
+            cl_dt_scaler*& dts = m_detail_scalers[key];
+            if (dts)
+                dts->scale = tex.detail_scale;
+            else
+                dts = xr_new<cl_dt_scaler>(tex.detail_scale);
+        }
+    }
+}
+
 void CTextureDescrMngr::Load()
 {
     ZoneScoped;
@@ -237,6 +290,8 @@ void CTextureDescrMngr::Load()
 
     LoadTHM("$game_textures$", listTHM);
     LoadTHM("$level$", listTHM);
+
+    ApplyDescriptions();
 
 #ifndef MASTER_GOLD
     Msg("%s, texture descriptions loaded for %d ms", __FUNCTION__, timer.GetElapsed_ms());

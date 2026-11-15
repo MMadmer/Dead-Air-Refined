@@ -148,7 +148,22 @@ local function case(name, mutate, want, lang)
 	if not (check(ok, name)) then dump(r) end
 	return r
 end
-case("E301 header", function(a) a.pda = 2 end, { E301 = 1 })
+do
+	local newer = case("E301 header of a newer game", function(a) a.pda = 2 end, { E301 = 1 })
+	check(newer.problems[1].message == "made for a newer game (version 2, this game reads up to 1)",
+		"a newer layout is refused by name")
+end
+case("E301 no header", function(a) a.pda = nil end, { E301 = 1 })
+case("E301 header not a version", function(a) a.pda = 0.5 end, { E301 = 1 })
+do
+	-- an older version goes through the steps: the test plays a game that reads version 2
+	L.FORMAT = 2
+	L.MIGRATE[1] = function(a) a.id = "lifted" return a end
+	local older = case("an older layout goes through the steps", function(a) a.pda = 1 end, { E301 = 0 })
+	L.MIGRATE[1] = nil
+	L.FORMAT = 1
+	check(older.id == "lifted", "the step of version 1 ran")
+end
 case("E302 id", function(a) a.id = "Bad Id" end, { E302 = 1 })
 case("E303 no pages", function(a) a.pages = {} end, { E303 = 1 })
 case("E304 duplicate page", function(a) a.pages[2].id = "orders" end, { E304 = 1 })

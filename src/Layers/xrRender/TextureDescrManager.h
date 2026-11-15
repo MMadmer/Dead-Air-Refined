@@ -43,6 +43,8 @@ class CTextureDescrMngr
 
     void LoadTHM(pcstr initial, bool listTHM);
     void LoadLTX(pcstr initial, bool listTHM);
+    // What the modules describe, over what the .thm and textures.ltx files left
+    void ApplyDescriptions();
 
 public:
     ~CTextureDescrMngr();

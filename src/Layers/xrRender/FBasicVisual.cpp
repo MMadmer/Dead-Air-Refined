@@ -6,7 +6,9 @@
 #pragma hdrstop
 
 #include "FBasicVisual.h"
+#include "FHierrarhyVisual.h"
 #include "xrCore/FMesh.hpp"
+#include "xrCore/XMS/xms_assets.h"
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -62,6 +64,14 @@ void dxRender_Visual::Load(const char* N, IReader* data, u32)
         string256 fnT, fnS;
         data->r_stringZ(fnT, sizeof(fnT));
         data->r_stringZ(fnS, sizeof(fnS));
+        // a module's description of the model names this surface's texture and shader
+        if (const auto* surface = XMS::Assets::FindSurface(N, !dynamic_cast<FHierrarhyVisual*>(this)))
+        {
+            if (!surface->texture.empty())
+                xr_strcpy(fnT, surface->texture.c_str());
+            if (!surface->shader.empty())
+                xr_strcpy(fnS, surface->shader.c_str());
+        }
         shader.create(fnS, fnT);
     }
 

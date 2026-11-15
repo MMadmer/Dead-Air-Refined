@@ -6,6 +6,8 @@
 #include "FSkinned.h"
 #include "SkeletonX.h"
 #include "xrCore/FMesh.hpp"
+#include "xrCore/XMS/xms_assets.h"
+#include "xrMaterialSystem/GameMtlLib.h"
 #include "xrCDB/Intersect.hpp"
 
 #ifndef _EDITOR
@@ -204,6 +206,56 @@ CSkeletonX* CKinematics::LL_GetChild(u32 idx)
     return SkeletonChild(children[idx]);
 }
 
+namespace
+{
+// A module's description of the model sets its named bones' physics. A shape is switched only to
+// one the bone has dimensions for: the description names the kind, the model holds its size.
+void describe_bones(pcstr model_name, vecBones& bones)
+{
+    const XMS::Assets::Model* described = XMS::Assets::FindModel(model_name);
+    if (!described)
+        return;
+    for (const XMS::Assets::Bone& row : described->bones)
+    {
+        const auto it = std::ranges::find_if(
+            bones, [&row](const CBoneData* b) { return !xr_stricmp(b->name.c_str(), row.name.c_str()); });
+        if (it == bones.end())
+        {
+            Msg("! %s: the model has no bone '%s'", described->file.c_str(), row.name.c_str());
+            continue;
+        }
+        CBoneData& bone = **it;
+        if (!row.shape.empty())
+        {
+            constexpr std::pair<pcstr, u16> shapes[] = {{"none", SBoneShape::stNone}, {"box", SBoneShape::stBox},
+                {"sphere", SBoneShape::stSphere}, {"cylinder", SBoneShape::stCylinder}};
+            const auto shape = std::ranges::find_if(shapes, [&row](const auto& s) { return row.shape == s.first; });
+            const u16 was = bone.shape.type;
+            if (shape != std::end(shapes))
+                bone.shape.type = shape->second;
+            if (shape == std::end(shapes) || !bone.shape.Valid())
+            {
+                bone.shape.type = was;
+                Msg("! %s: bone '%s' has no %s shape in the model - it keeps its own", described->file.c_str(),
+                    row.name.c_str(), row.shape.c_str());
+            }
+        }
+        if (row.has_mass)
+            bone.mass = row.mass;
+        // the model pool stops the game on a bone whose material is not a dynamic one
+        if (!row.material.empty())
+        {
+            const SGameMtl* material = GMLib.GetMaterialByIdx(GMLib.GetMaterialIdx(row.material.c_str()));
+            if (material && material->Flags.is(SGameMtl::flDynamic))
+                bone.game_mtl_name = row.material.c_str();
+            else
+                Msg("! %s: bone '%s': '%s' is no dynamic game material - it keeps its own", described->file.c_str(),
+                    row.name.c_str(), row.material.c_str());
+        }
+    }
+}
+} // namespace
+
 void CKinematics::Load(const char* N, IReader* data, u32 dwFlags)
 {
     // Msg              ("skeleton: %s",N);
@@ -251,6 +303,13 @@ void CKinematics::Load(const char* N, IReader* data, u32 dwFlags)
     pUserData = UD ? xr_new<CInifile>(UD, FS.get_path("$game_config$")->m_Path) : 0;
     if (UD)
         UD->close();
+    // a module's description of the model replaces its user data
+    if (const XMS::Assets::Model* described = XMS::Assets::FindModel(N); described && described->has_userdata)
+    {
+        xr_delete(pUserData);
+        IReader text(const_cast<char*>(described->userdata.data()), described->userdata.size());
+        pUserData = xr_new<CInifile>(&text, FS.get_path("$game_config$")->m_Path);
+    }
 #endif
 
     // Globals
@@ -353,6 +412,7 @@ void CKinematics::Load(const char* N, IReader* data, u32 dwFlags)
         (*bones)[LL_GetBoneRoot()]->CalculateM2B(Fidentity);
         IKD->close();
     }
+    describe_bones(N, *bones);
 
     // after load process
     {

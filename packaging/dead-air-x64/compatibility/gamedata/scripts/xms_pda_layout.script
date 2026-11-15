@@ -663,6 +663,29 @@ local function key_action(st, path, v)
 	return nil
 end
 
+-- ---------------------------------------------------------------------------- versions
+-- MIGRATE[v] lifts a layout of version v to v + 1; none yet, FORMAT is the only version. A
+-- layout of an older version goes through the steps, one of a newer game is refused by name.
+MIGRATE = {}
+
+-- asset, or nil and why this game cannot read it
+function upgrade(asset)
+	local v = asset.pda
+	if (type(v) ~= "number" or v < 1 or v ~= math.floor(v)) then
+		return nil, string.format("the header must be pda = %d", FORMAT)
+	end
+	if (v > FORMAT) then
+		return nil, string.format("made for a newer game (version %d, this game reads up to %d)", v, FORMAT)
+	end
+	while (v < FORMAT) do
+		local step = MIGRATE[v]
+		if (step) then asset = step(asset) or asset end
+		v = v + 1
+		asset.pda = v
+	end
+	return asset
+end
+
 -- ---------------------------------------------------------------------------- normalize
 -- asset: the table a .pdaasset returns. opts: { lang = "rus" | "eng" | ... }.
 -- Returns a layout: { ok, problems, errors, warnings, id, title, canvas, start, keys,
@@ -682,8 +705,9 @@ function normalize(asset, opts)
 		out.errors = st.errors
 		return out
 	end
-	if (asset.pda ~= FORMAT) then
-		add_problem(st, "E301", "pda", "the header must be pda = %d", FORMAT)
+	do
+		local upgraded, why = upgrade(asset)
+		if (upgraded) then asset = upgraded else add_problem(st, "E301", "pda", "%s", why) end
 	end
 	do
 		local names = {}

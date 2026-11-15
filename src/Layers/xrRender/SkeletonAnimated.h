@@ -113,6 +113,7 @@ private:
         float blendFalloff, float Speed, BOOL noloop, PlayCallback Callback, LPVOID CallbackParam);
     void IFXBlendSetup(
         CBlend& B, MotionID motion_ID, float blendAccrue, float blendFalloff, float Power, float Speed, u16 bone);
+    void describe_motions(pcstr model_name);
     //.	bool						LoadMotions				(LPCSTR N, IReader *data);
 public:
 #if (defined DEBUG || defined _EDITOR)

@@ -26,8 +26,10 @@
 //   sectors and streamed by distance (docs/dead-air/XMS_ARCHITECTURE.md 8.3);
 // - level-cuts: a module's levels\<level>\overlay.cut clips the level's static collision and its own visuals
 //   exactly (XMS_ARCHITECTURE.md 8.4);
-// - ai-edits: a module's levels\<level>\overlay.aiedit moves and closes the level's AI nodes in place (8.4).
-#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths level-pieces level-cuts ai-edits"
+// - ai-edits: a module's levels\<level>\overlay.aiedit moves and closes the level's AI nodes in place (8.4);
+// - asset-descriptions: a module's .texasset, .sndasset and .meshasset files describe its textures, sounds
+//   and models over what their .thm, .ogg and .ogf say (MODDING.md, "A module's models, textures and sounds").
+#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined

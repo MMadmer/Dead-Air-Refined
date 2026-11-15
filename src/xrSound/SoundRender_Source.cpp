@@ -3,6 +3,9 @@
 #include "SoundRender_Core.h"
 #include "SoundRender_Source.h"
 
+#include "xrCore/XMS/xms_assets.h"
+#include "xrServerEntities/ai_sounds.h"
+
 #include <vorbis/vorbisfile.h>
 
 CSoundRender_Source::~CSoundRender_Source() { unload(); }
@@ -39,6 +42,58 @@ bool ov_can_continue_read(long res)
     case OV_ENOSEEK: Msg("The given stream is not seekable"); return false;
     }
     return false;
+}
+
+// A module's description of a sound wins over what its .ogg states.
+void apply_description(pcstr name, SoundSourceInfo& info)
+{
+    const XMS::Assets::Sound* s = XMS::Assets::FindSound(name);
+    if (!s)
+        return;
+    if (s->has_min)
+        info.minDist = s->min_distance;
+    if (s->has_max)
+        info.maxDist = s->max_distance;
+    if (s->has_volume)
+        info.baseVolume = s->volume;
+    if (s->has_ai)
+        info.maxAIDist = s->ai_distance;
+    if (!s->has_type)
+        return;
+
+    // the game's sound types by their names in ai_sounds.h, without SOUND_TYPE_ and in lower case
+    static constexpr std::pair<pcstr, u32> types[] = {
+        {"no_sound", SOUND_TYPE_NO_SOUND}, {"weapon", SOUND_TYPE_WEAPON}, {"item", SOUND_TYPE_ITEM},
+        {"monster", SOUND_TYPE_MONSTER}, {"anomaly", SOUND_TYPE_ANOMALY}, {"world", SOUND_TYPE_WORLD},
+        {"picking_up", SOUND_TYPE_PICKING_UP}, {"dropping", SOUND_TYPE_DROPPING}, {"hiding", SOUND_TYPE_HIDING},
+        {"taking", SOUND_TYPE_TAKING}, {"using", SOUND_TYPE_USING}, {"shooting", SOUND_TYPE_SHOOTING},
+        {"empty_clicking", SOUND_TYPE_EMPTY_CLICKING}, {"bullet_hit", SOUND_TYPE_BULLET_HIT},
+        {"recharging", SOUND_TYPE_RECHARGING}, {"dying", SOUND_TYPE_DYING}, {"injuring", SOUND_TYPE_INJURING},
+        {"step", SOUND_TYPE_STEP}, {"talking", SOUND_TYPE_TALKING}, {"attacking", SOUND_TYPE_ATTACKING},
+        {"eating", SOUND_TYPE_EATING}, {"idle", SOUND_TYPE_IDLE}, {"object_breaking", SOUND_TYPE_OBJECT_BREAKING},
+        {"object_colliding", SOUND_TYPE_OBJECT_COLLIDING}, {"object_exploding", SOUND_TYPE_OBJECT_EXPLODING},
+        {"ambient", SOUND_TYPE_AMBIENT}, {"item_picking_up", SOUND_TYPE_ITEM_PICKING_UP},
+        {"item_dropping", SOUND_TYPE_ITEM_DROPPING}, {"item_hiding", SOUND_TYPE_ITEM_HIDING},
+        {"item_taking", SOUND_TYPE_ITEM_TAKING}, {"item_using", SOUND_TYPE_ITEM_USING},
+        {"weapon_shooting", SOUND_TYPE_WEAPON_SHOOTING}, {"weapon_empty_clicking", SOUND_TYPE_WEAPON_EMPTY_CLICKING},
+        {"weapon_bullet_hit", SOUND_TYPE_WEAPON_BULLET_HIT}, {"weapon_recharging", SOUND_TYPE_WEAPON_RECHARGING},
+        {"monster_dying", SOUND_TYPE_MONSTER_DYING}, {"monster_injuring", SOUND_TYPE_MONSTER_INJURING},
+        {"monster_step", SOUND_TYPE_MONSTER_STEP}, {"monster_talking", SOUND_TYPE_MONSTER_TALKING},
+        {"monster_attacking", SOUND_TYPE_MONSTER_ATTACKING}, {"monster_eating", SOUND_TYPE_MONSTER_EATING},
+        {"anomaly_idle", SOUND_TYPE_ANOMALY_IDLE}, {"world_object_breaking", SOUND_TYPE_WORLD_OBJECT_BREAKING},
+        {"world_object_colliding", SOUND_TYPE_WORLD_OBJECT_COLLIDING},
+        {"world_object_exploding", SOUND_TYPE_WORLD_OBJECT_EXPLODING}, {"world_ambient", SOUND_TYPE_WORLD_AMBIENT},
+    };
+    u32 type = 0;
+    for (const xr_string& word : s->type)
+    {
+        const auto it = std::ranges::find_if(types, [&word](const auto& t) { return word == t.first; });
+        if (it != std::end(types))
+            type |= it->second;
+        else
+            Msg("! %s: '%s' is no sound type - left out", s->file.c_str(), word.c_str());
+    }
+    info.gameType = type;
 }
 }
 
@@ -255,6 +310,8 @@ bool CSoundRender_Source::LoadWave(pcstr pName)
         Log("! Missing ogg-comment, file: ", pName);
 #endif
     }
+
+    apply_description(fname.c_str(), m_info);
 
     R_ASSERT3_CURE(m_info.maxAIDist >= 0.1f && m_info.maxDist >= 0.1f, "Invalid max distance.", pName,
     {
