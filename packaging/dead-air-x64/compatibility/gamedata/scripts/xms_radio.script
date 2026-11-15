@@ -1,0 +1,886 @@
+-- The radios of the world: the game's own music, the radio music of modules, the player's station,
+-- a playlist bound to one radio, and the streamer mode.
+--
+-- A radio of the world is an object whose logic runs the stock ph_sound scheme on a radio theme of
+-- plugins\xr_sound.ltx: common_radio, or a section that inherits it unchanged (every level radio:
+-- esc_sidorovich_radio, bar_visitors_radio, ...). The scheme asks xr_sound.get_sound_object for its
+-- next track. The workbench radio of the craft scripts plays the 3d theme play_radio_dar2 of
+-- script_sound.ltx (sound_theme.object_sound, music\radio\music_<n>), one track per press. Both pickers
+-- are wrapped here; nothing of either script is replaced, because Dead Air and Revolution II carry
+-- their own copies of the stock scripts.
+--
+-- What a radio plays, first match wins:
+--   1. what a script set on it at run time (set below; kept in the save),
+--   2. [xms_radio] playlist = <module>.<playlist> | game | off in its custom data,
+--   3. the player's station, Options > Sound (mm_options radio_station of axr_options.ltx):
+--      all (the default: the game's radio music and every module's radio tracks), game (the game's
+--      music alone) or a playlist <module>.<playlist>.
+-- A playlist that is not there now (its module is switched off) gives way to the next rule; the
+-- binding is kept for the module's return.
+--
+-- With no module radio music, every radio on the station "all" and the streamer mode off, the stock
+-- pickers run untouched: the game plays exactly what it played before.
+--
+-- The streamer mode (the engine's snd_streamer_mode): a copyrighted track is never chosen. One with
+-- a replacement plays the replacement in its place; one without is passed over; a radio with nothing
+-- left is silent and goes on asking. The same holds for every other list a script picks music from:
+-- the other themes of xr_sound.ltx, the 3d themes of script_sound.ltx, the combat music.
+--
+-- Engine calls, each feature-tested: xms.radio(), xms.streamer_mode(), xms.sound_copyrighted(name),
+-- xms.sound_replacement(name), xms.save_data / xms.load_data.
+-- Contract: docs/dead-air/RADIO.md.
+
+local THEMES_FILE = "plugins\\xr_sound.ltx"
+local COMMON_THEME = "common_radio"
+local RADIO_3D_PATH = "music\\radio\\"
+local CONFIG_SECTION, CONFIG_KEY = "mm_options", "radio_station"
+local DATA_SECTION, DATA_KEY = "xms_radio", "playlist"
+local BLOB_ID = "xms.radio"
+local BLOB_VERSION = "1"
+
+local function say(text)
+	printf("%s", text)
+end
+
+local said = {}
+local function say_once(key, text)
+	if (said[key]) then return end
+	said[key] = true
+	say(text)
+end
+
+local function trim(s)
+	return (string.gsub(s or "", "^%s*(.-)%s*$", "%1"))
+end
+
+-- a script namespace, loaded on first use the way the game loads one
+local function ns(name)
+	return rawget(_G, name) or _G[name]
+end
+
+local function engine_call(name, ...)
+	local f = xms and xms[name]
+	if (type(f) ~= "function") then return nil, false end
+	local ok, v = pcall(f, ...)
+	if not (ok) then
+		say_once("call|" .. name, "! xms_radio: xms." .. name .. " failed: " .. tostring(v))
+		return nil, false
+	end
+	return v, true
+end
+
+-- ============================================================================ what the modules bring
+-- { only = <module or nil>, tracks = { row, ... }, playlists = { row, ... }, by_key = { [key] = row },
+--   by_sound = { [sound] = track row } } - read once per Lua state: the modules do not change in one.
+local radio_data = nil
+
+local function number_or(v, default, min)
+	v = tonumber(v)
+	if (v == nil or v ~= v or (min and v < min)) then return default end
+	return v
+end
+
+function data()
+	if (radio_data) then return radio_data end
+	local d = { tracks = {}, playlists = {}, by_key = {}, by_sound = {} }
+	local r = engine_call("radio")
+	if (type(r) == "table") then
+		if (type(r.only) == "string" and r.only ~= "") then d.only = r.only end
+		for _, t in ipairs(type(r.tracks) == "table" and r.tracks or {}) do
+			if (type(t) == "table" and type(t.sound) == "string" and t.sound ~= "") then
+				local row = {
+					module = tostring(t.module or ""), id = tostring(t.id or ""), sound = t.sound,
+					copyrighted = t.copyrighted == true,
+					streamer = (type(t.streamer) == "string" and t.streamer ~= "") and t.streamer or nil,
+					volume = number_or(t.volume, 1, 0),
+					weight = number_or(t.weight, 1, 0),
+				}
+				d.tracks[#d.tracks + 1] = row
+				d.by_sound[string.lower(row.sound)] = row
+			end
+		end
+		for _, p in ipairs(type(r.playlists) == "table" and r.playlists or {}) do
+			if (type(p) == "table" and p.module and p.id) then
+				local row = {
+					module = tostring(p.module), id = tostring(p.id),
+					title = tostring(p.title or p.id),
+					order = (p.order == "list") and "list" or "shuffle",
+					tracks = {},
+				}
+				row.key = row.module .. "." .. row.id
+				for _, s in ipairs(type(p.tracks) == "table" and p.tracks or {}) do
+					if (type(s) == "string" and s ~= "") then row.tracks[#row.tracks + 1] = s end
+				end
+				d.playlists[#d.playlists + 1] = row
+				d.by_key[row.key] = row
+			end
+		end
+	end
+	radio_data = d
+	return d
+end
+
+-- drops what was read (the tests' new Lua state)
+function reset()
+	radio_data, themes_read, radio_themes, said = nil, {}, {}, {}
+	bindings, pending, loaded, data_bindings, gens, plays = {}, {}, false, {}, {}, {}
+end
+
+function playlist(key)
+	return key and data().by_key[key] or nil
+end
+
+-- what exists now, for a listing: { key, module, id, title, order, tracks = <count> } each
+function playlists()
+	local out = {}
+	for _, p in ipairs(data().playlists) do
+		out[#out + 1] = { key = p.key, module = p.module, id = p.id, title = p.title, order = p.order,
+			tracks = #p.tracks }
+	end
+	return out
+end
+
+-- ============================================================================ the streamer mode
+function streamer_mode()
+	return engine_call("streamer_mode") == true
+end
+
+local function track_of(name)
+	return name and data().by_sound[string.lower(name)] or nil
+end
+
+local function copyrighted(name, info)
+	info = info or track_of(name)
+	if (info and info.copyrighted) then return true end
+	return engine_call("sound_copyrighted", name) == true
+end
+
+-- the sound to play instead of a copyrighted one, never a copyrighted one itself
+local function replacement(name, info)
+	info = info or track_of(name)
+	local rep = engine_call("sound_replacement", name)
+	if not (type(rep) == "string" and rep ~= "") then
+		rep = info and info.streamer or nil
+	end
+	if (rep and copyrighted(rep)) then return nil end
+	return rep
+end
+
+-- What plays for an entry now: the entry, its replacement, or nil when it may not play.
+function playable(name, info)
+	if not (streamer_mode()) then return name end
+	if not (copyrighted(name, info)) then return name end
+	return replacement(name, info)
+end
+
+local function any_copyrighted(list)
+	for _, name in ipairs(list) do
+		if (type(name) == "string" and copyrighted(name)) then return true end
+	end
+	return false
+end
+
+-- ============================================================================ the player's station
+local function config()
+	local m = ns("axr_main")
+	return m and m.config
+end
+
+-- "all", "game" or a playlist key, as the player left it
+function station_setting()
+	local cfg = config()
+	local v = cfg and cfg:r_value(CONFIG_SECTION, CONFIG_KEY, 0, "all")
+	v = trim(type(v) == "string" and v or "all")
+	return v ~= "" and v or "all"
+end
+
+-- what the station plays now: a playlist that is gone is "all"
+function station()
+	local v = station_setting()
+	if (v == "all" or v == "game" or playlist(v)) then return v end
+	return "all"
+end
+
+function set_station(key)
+	local cfg = config()
+	if not (cfg) then return false end
+	key = trim(key or "all")
+	if (key == "") then key = "all" end
+	cfg:w_value(CONFIG_SECTION, CONFIG_KEY, key)
+	cfg:save()
+	return true
+end
+
+-- ============================================================================ one radio's own playlist
+-- id -> "off" | "game" | "<module>.<playlist>": set by a script, kept in the save
+bindings = {}
+-- set before the save was read: applied over it once it is
+pending = {}
+loaded = false
+-- id -> what its custom data says, false for nothing
+data_bindings = {}
+-- id -> a counter a switch "at once" raises: the scheme cuts the track it plays
+gens = {}
+
+local function valid_choice(v)
+	if (v == "off" or v == "game") then return true end
+	return type(v) == "string" and string.find(v, "^[^%.%s]+%.[^%s]+$") ~= nil
+end
+
+local function encode()
+	local ids = {}
+	for id in pairs(bindings) do ids[#ids + 1] = id end
+	table.sort(ids)
+	local out = { "v=" .. BLOB_VERSION }
+	for _, id in ipairs(ids) do
+		out[#out + 1] = string.format("%d=%s", id, bindings[id])
+	end
+	return table.concat(out, "\n")
+end
+
+local function decode(blob)
+	local out, version = {}, nil
+	for line in string.gmatch(blob or "", "[^\n]+") do
+		local k, v = string.match(line, "^([^=]+)=(.*)$")
+		if (k == "v") then
+			version = v
+		elseif (k and tonumber(k) and valid_choice(v)) then
+			out[tonumber(k)] = v
+		end
+	end
+	if (version ~= BLOB_VERSION) then
+		if (blob and blob ~= "") then
+			say_once("blob", "! xms_radio: the save's radio bindings are of version " .. tostring(version) ..
+				", this game reads " .. BLOB_VERSION .. ": they are left out")
+		end
+		return {}
+	end
+	return out
+end
+
+local function stage()
+	if not (xms and type(xms.save_data) == "function") then return false end
+	local blob = (next(bindings) ~= nil) and encode() or nil
+	local ok, r = pcall(xms.save_data, BLOB_ID, blob)
+	if not (ok and r) then
+		say_once("stage", "! xms_radio: the save does not take " .. BLOB_ID ..
+			": what scripts set on radios lasts until the game is closed")
+		return false
+	end
+	return true
+end
+
+-- The save's bindings are read once the actor exists: on the load path the Lua state is built
+-- before the save's data is in.
+local function ensure_loaded()
+	if (loaded) then return end
+	if not (db and db.actor) then return end
+	loaded = true
+	local blob = engine_call("load_data", BLOB_ID)
+	local from_save = decode(type(blob) == "string" and blob or nil)
+	local had = next(from_save) ~= nil
+	for id, v in pairs(pending) do
+		from_save[id] = v ~= false and v or nil
+	end
+	bindings, pending = from_save, {}
+	-- the next save carries them again
+	if (had or next(bindings) ~= nil) then stage() end
+end
+
+local function read_data_binding(obj)
+	if not (obj) then return nil end
+	local f = obj.spawn_ini
+	if (type(f) ~= "function") then return nil end
+	local ok, ini = pcall(f, obj)
+	if not (ok and ini and ini:section_exist(DATA_SECTION) and ini:line_exist(DATA_SECTION, DATA_KEY)) then
+		return nil
+	end
+	local ok2, v = pcall(ini.r_string, ini, DATA_SECTION, DATA_KEY)
+	v = ok2 and trim(v) or ""
+	if (v == "") then return nil end
+	if not (valid_choice(v)) then
+		say_once("data|" .. v, "! xms_radio: [" .. DATA_SECTION .. "] " .. DATA_KEY .. " = " .. v ..
+			" is no playlist (<module>.<playlist>, game or off): the radio plays the player's station")
+		return nil
+	end
+	return v
+end
+
+local function object_of(id)
+	local st = db and db.storage and db.storage[id]
+	if (st and st.object) then return st.object end
+	local lvl = ns("level")
+	if (lvl and type(lvl.object_by_id) == "function") then
+		local ok, o = pcall(lvl.object_by_id, id)
+		if (ok and o) then return o end
+	end
+	local sim = type(alife) == "function" and alife() or nil
+	if (sim) then
+		local ok, se = pcall(sim.object, sim, id)
+		if (ok and se) then return se end
+	end
+	return nil
+end
+
+local function data_binding(id, obj)
+	local v = data_bindings[id]
+	if (v == nil) then
+		obj = obj or object_of(id)
+		if not (obj) then return nil end
+		v = read_data_binding(obj) or false
+		data_bindings[id] = v
+	end
+	return v or nil
+end
+
+-- A radio is addressed by its game object or server object, its ALife id, or a story id or object
+-- name, which is turned into the id here: the id is what the save keeps, stable for the objects of
+-- a level and a module alike.
+function id_of(target)
+	local t = type(target)
+	if (t == "number") then return target end
+	if (t == "string") then
+		local n = tonumber(target)
+		if (n) then return n end
+		if (type(get_story_object_id) == "function") then
+			local ok, id = pcall(get_story_object_id, target)
+			if (ok and type(id) == "number") then return id end
+		end
+		local sim = type(alife) == "function" and alife() or nil
+		if (sim) then
+			local ok, se = pcall(sim.object, sim, target)
+			if (ok and se) then
+				local id = se.id
+				if (type(id) == "function") then id = id(se) end
+				if (type(id) == "number") then return id end
+			end
+		end
+		return nil
+	end
+	if (t == "userdata" or t == "table") then
+		local f = target.id
+		if (type(f) == "function") then
+			local ok, id = pcall(f, target)
+			return ok and id or nil
+		end
+		return type(f) == "number" and f or nil
+	end
+	return nil
+end
+
+-- What a radio is told to play: the script's word, else its custom data's, and where it came from.
+local function binding_of(id, obj)
+	ensure_loaded()
+	local v = pending[id]
+	if (v) then return v, "script" end
+	-- false: cleared before the save was read
+	if (v == nil) then
+		v = bindings[id]
+		if (v) then return v, "script" end
+	end
+	v = data_binding(id, obj)
+	if (v) then return v, "data" end
+	return nil, nil
+end
+
+-- What a radio plays now: "off", "game", "all" or a playlist key.
+function choice_of(id, obj)
+	if (id) then
+		local b = binding_of(id, obj)
+		if (b == "off" or b == "game" or playlist(b)) then return b end
+	end
+	return station()
+end
+
+-- set(radio, value[, next_track]): value "<module>.<playlist>", "game", "off" or nil (the radio
+-- goes back to its custom data, then to the player's station). The track playing is cut at once
+-- unless next_track is true. A playlist whose module is not there now is kept: the radio plays the
+-- station until the module is back.
+function set(target, value, next_track)
+	local id = id_of(target)
+	if not (id) then return false, "no such radio" end
+	if (value ~= nil) then
+		value = trim(tostring(value))
+		if not (valid_choice(value)) then return false, "not a playlist: " .. value end
+	end
+	ensure_loaded()
+	if (loaded) then
+		bindings[id] = value
+		stage()
+	else
+		pending[id] = (value == nil) and false or value
+	end
+	if not (next_track) then gens[id] = (gens[id] or 0) + 1 end
+	return true
+end
+
+-- get(radio): the binding (nil: none), where it comes from ("script" or "data"), and what the radio
+-- plays now ("off", "game", "all" or a playlist key).
+function get(target)
+	local id = id_of(target)
+	if not (id) then return nil, nil, nil end
+	local b, from = binding_of(id)
+	return b, from, choice_of(id)
+end
+
+function gen_of(id)
+	return id and gens[id] or 0
+end
+
+-- ============================================================================ picking a track
+-- id or theme -> { last = <name>, plan = <choice>, order = { ... }, pos = n }
+plays = {}
+
+local function state_of(key, choice)
+	local s = plays[key]
+	if not (s) then
+		s = {}
+		plays[key] = s
+	end
+	if (s.plan ~= choice) then
+		s.plan, s.order, s.pos = choice, nil, 0
+	end
+	return s
+end
+
+-- weighted, never the same track twice in a row while there is another
+local function pick_weighted(list, last)
+	local cand = {}
+	for _, e in ipairs(list) do
+		if (e.weight > 0) then
+			local name = playable(e.name, e.info)
+			if (name) then cand[#cand + 1] = { e = e, name = name } end
+		end
+	end
+	if (#cand > 1 and last) then
+		local rest = {}
+		for _, c in ipairs(cand) do
+			if (c.name ~= last) then rest[#rest + 1] = c end
+		end
+		if (#rest > 0) then cand = rest end
+	end
+	if (#cand == 0) then return nil end
+	local total = 0
+	for _, c in ipairs(cand) do total = total + c.e.weight end
+	local r = math.random() * total
+	for _, c in ipairs(cand) do
+		r = r - c.e.weight
+		if (r < 0) then return c.name, c.e.info end
+	end
+	local c = cand[#cand]
+	return c.name, c.e.info
+end
+
+local function shuffled(n, avoid_first)
+	local order = {}
+	for i = 1, n do order[i] = i end
+	for i = n, 2, -1 do
+		local j = math.random(1, i)
+		order[i], order[j] = order[j], order[i]
+	end
+	if (avoid_first and n > 1 and order[1] == avoid_first) then
+		order[1], order[n] = order[n], order[1]
+	end
+	return order
+end
+
+-- the playlist's next track that may play, in its order; nil when none may
+local function pick_playlist(p, s)
+	local n = #p.tracks
+	if (n == 0) then return nil end
+	for _ = 1, n do
+		if (p.order == "list") then
+			s.pos = (s.pos % n) + 1
+			local name = p.tracks[s.pos]
+			local play = playable(name)
+			if (play) then return play, track_of(name) end
+		else
+			if not (s.order and s.pos < #s.order) then
+				s.order = shuffled(n, s.order and s.order[#s.order])
+				s.pos = 0
+			end
+			s.pos = s.pos + 1
+			local name = p.tracks[s.order[s.pos]]
+			local play = playable(name)
+			if (play) then return play, track_of(name) end
+		end
+	end
+	return nil
+end
+
+-- The common music: the radio's own (the game's) tracks and every module's, or one module's alone.
+local function common_pool(choice, own)
+	local d, list = data(), {}
+	if (choice == "game" or not d.only) then
+		for _, name in ipairs(own or {}) do
+			if (type(name) == "string") then list[#list + 1] = { name = name, weight = 1 } end
+		end
+	end
+	if (choice == "all") then
+		for _, t in ipairs(d.tracks) do
+			if (not d.only or t.module == d.only) then
+				list[#list + 1] = { name = t.sound, info = t, weight = t.weight }
+			end
+		end
+	end
+	return list
+end
+
+-- The next track of a radio: its sound name and the track's row (nil for the game's), or nil for
+-- silence. key: the radio's id, or the theme for a caller that names no radio; own: the game's
+-- tracks of its theme.
+function next_track(key, own, obj)
+	local id = type(key) == "number" and key or nil
+	local choice = choice_of(id, obj)
+	local s = state_of(key, choice)
+	local name, info
+	if (choice == "off") then
+		name = nil
+	elseif (choice == "all" or choice == "game") then
+		name, info = pick_weighted(common_pool(choice, own), s.last)
+	else
+		name, info = pick_playlist(playlist(choice), s)
+	end
+	if (name) then s.last = name end
+	return name, info
+end
+
+-- True when the stock picker gives exactly what this radio should play.
+function stock_wanted(id, obj)
+	local d = data()
+	if (#d.tracks > 0 or d.only) then return false end
+	if (streamer_mode()) then return false end
+	local choice = choice_of(id, obj)
+	return choice == "all" or choice == "game"
+end
+
+-- ============================================================================ a radio that is silent
+-- What the scheme holds while nothing may play: it is "not playing", so the scheme asks again after
+-- its pause, and plays as soon as there is something.
+local silent_mt = { __index = {
+	play_at_pos = function() end,
+	play = function() end,
+	play_no_feedback = function() end,
+	playing = function() return false end,
+	stop = function() end,
+	stop_deffered = function() end,
+	set_position = function() end,
+	length = function() return 0 end,
+} }
+
+function silent_sound()
+	return setmetatable({ volume = 1, xms_silent = true }, silent_mt)
+end
+
+-- ============================================================================ xr_sound themes
+themes_read = {}
+radio_themes = {}
+
+local function theme_list(theme)
+	local list = themes_read[theme]
+	if (list == nil) then
+		list = {}
+		local ok, ini = pcall(ini_file, THEMES_FILE)
+		local au = ns("alun_utils")
+		if (ok and ini and au and au.collect_section) then
+			for _, v in ipairs(au.collect_section(ini, theme) or {}) do
+				if (type(v) == "string") then list[#list + 1] = v end
+			end
+		end
+		themes_read[theme] = list
+	end
+	return list
+end
+
+local function same_list(a, b)
+	if (#a ~= #b) then return false end
+	for i = 1, #a do
+		if (string.lower(a[i]) ~= string.lower(b[i])) then return false end
+	end
+	return true
+end
+
+-- the radio's music: common_radio and every theme that has exactly its tracks
+function is_radio_theme(theme)
+	local v = radio_themes[theme]
+	if (v == nil) then
+		local list = theme_list(theme)
+		v = #list > 0 and (theme == COMMON_THEME or same_list(list, theme_list(COMMON_THEME)))
+		radio_themes[theme] = v
+	end
+	return v
+end
+
+-- the ph_sound radio asking now (set around its update)
+local asking = nil
+
+local function make_sound(name, info)
+	if not (name) then return silent_sound() end
+	local snd = sound_object(name)
+	if (asking) then asking.volume = info and info.volume or nil end
+	return snd
+end
+
+-- a theme that is no radio, in the streamer mode: the stock rule (random, never twice in a row)
+-- among what may play
+local function pick_free(key, list)
+	local s = state_of(key, "free")
+	local cand = {}
+	for _, name in ipairs(list) do
+		local play = playable(name)
+		if (play) then cand[#cand + 1] = play end
+	end
+	if (#cand > 1 and s.last) then
+		local rest = {}
+		for _, n in ipairs(cand) do
+			if (n ~= s.last) then rest[#rest + 1] = n end
+		end
+		if (#rest > 0) then cand = rest end
+	end
+	if (#cand == 0) then return nil end
+	local name = cand[math.random(1, #cand)]
+	s.last = name
+	return name
+end
+
+local function install_xr_sound()
+	local m = ns("xr_sound")
+	if not (m and type(m.get_sound_object) == "function") then return false end
+	if (m.xms_radio_base) then return true end
+	local base = m.get_sound_object
+	m.xms_radio_base = base
+	m.get_sound_object = function(theme, t_type, ...)
+		local who = asking
+		if (who) then who.picked = true end
+		if (type(theme) == "string") then
+			if (is_radio_theme(theme)) then
+				local id = who and who.id
+				if not (stock_wanted(id, who and who.obj)) then
+					return make_sound(next_track(id or ("theme:" .. theme), theme_list(theme), who and who.obj))
+				end
+			elseif (streamer_mode() and any_copyrighted(theme_list(theme))) then
+				local key = (who and who.id) and ("free:" .. who.id .. ":" .. theme) or ("free:" .. theme)
+				return make_sound(pick_free(key, theme_list(theme)))
+			end
+		end
+		return base(theme, t_type, ...)
+	end
+	return true
+end
+
+-- ============================================================================ the ph_sound scheme
+-- The scheme's update runs with the radio known, so the picker knows whose next track it is; a
+-- switch "at once" cuts the track it plays; a module track's volume scales the scheme's own.
+local function install_ph_sound()
+	local m = ns("ph_sound")
+	local cls = m and m.snd_source
+	if not (cls and type(cls.update) == "function") then return false end
+	if (m.xms_radio_base) then return true end
+	local base = cls.update
+	m.xms_radio_base = base
+	cls.update = function(self, ...)
+		local obj = self.object
+		local id = obj and obj:id()
+		if (id and self.xms_gen ~= nil and self.xms_gen ~= gen_of(id)) then
+			self.xms_gen = gen_of(id)
+			if (self.played_sound ~= nil) then
+				self.played_sound:stop()
+				self.st.sound_set = true
+				self.st.pause_time = 0
+			end
+		end
+		local outer = asking
+		local me = { id = id, obj = obj }
+		asking = me
+		base(self, ...)
+		asking = outer
+		if (me.picked) then
+			self.xms_gen = gen_of(id)
+			self.xms_volume = me.volume
+			self.xms_written = nil
+		end
+		local snd = self.played_sound
+		if (snd ~= nil and self.xms_volume and self.xms_volume ~= 1) then
+			local v = snd.volume
+			if (v ~= self.xms_written) then
+				local scaled = v * self.xms_volume
+				snd.volume = scaled
+				self.xms_written = scaled
+			end
+		end
+	end
+	return true
+end
+
+-- ============================================================================ the 3d themes
+-- object_sound picks an entry of self.sound and plays it. For the radio's 3d theme (and, in the
+-- streamer mode, any random theme with a copyrighted entry) the entry is chosen here and handed to
+-- the stock play as a list of one, so everything else it does - the PDA copy, the subtitles, the
+-- news - stays its own.
+local function is_radio_3d(theme)
+	return type(theme.path) == "string" and
+		string.sub(string.lower(theme.path), 1, #RADIO_3D_PATH) == RADIO_3D_PATH
+end
+
+local function install_sound_theme()
+	local m = ns("sound_theme")
+	local cls = m and m.object_sound
+	if not (cls and type(cls.play) == "function") then return false end
+	if (m.xms_radio_base) then return true end
+	local base = cls.play
+	m.xms_radio_base = base
+	cls.play = function(self, obj_id, ...)
+		local radio = is_radio_3d(self)
+		local own = self.sound
+		local ours = false
+		if (radio) then
+			local obj = db.storage[obj_id] and db.storage[obj_id].object
+			ours = not stock_wanted(obj_id, obj)
+		elseif (self.shuffle == "rnd" and type(own) == "table" and streamer_mode()) then
+			ours = any_copyrighted(own)
+		end
+		if not (ours) then return base(self, obj_id, ...) end
+
+		-- the stock play's own refusals first, so a refused play takes no track of the order
+		local obj = db.storage[obj_id] and db.storage[obj_id].object
+		if (obj == nil) then return false end
+		if (self.can_play_sound[obj_id] == false) then return false end
+		if (self.cooldown and self.cooldown[obj_id] and time_global() < self.cooldown[obj_id]) then
+			return false
+		end
+
+		local name
+		if (radio) then
+			name = next_track(obj_id, own, obj)
+		else
+			name = pick_free("free:" .. tostring(obj_id) .. ":" .. tostring(self.section), own)
+		end
+		if not (name) then return false end
+		local shuffle = self.shuffle
+		self.sound, self.shuffle = { name }, "rnd"
+		local ok, r = pcall(base, self, obj_id, ...)
+		self.sound, self.shuffle = own, shuffle
+		if not (ok) then error(r, 0) end
+		return r
+	end
+	return true
+end
+
+-- ============================================================================ the combat music
+-- xrs_dyn_music picks a theme and a track of its table; in the streamer mode it picks from a copy
+-- that holds only what may play (a copyrighted part with a replacement plays the replacement).
+local function install_dyn_music()
+	local m = ns("xrs_dyn_music")
+	if not (m and type(m.start_theme) == "function") then return false end
+	if (m.xms_radio_base) then return true end
+	local base = m.start_theme
+	m.xms_radio_base = base
+	local own, filtered = nil, nil
+	m.start_theme = function(...)
+		if (m.themes ~= filtered) then own = m.themes end
+		if not (streamer_mode()) then
+			m.themes = own
+			return base(...)
+		end
+		local list = {}
+		for _, theme in ipairs(own or {}) do
+			local parts = {}
+			for _, name in ipairs(type(theme) == "table" and theme or {}) do
+				local play = playable(name)
+				if (play) then parts[#parts + 1] = play end
+			end
+			if (#parts > 0) then list[#list + 1] = parts end
+		end
+		if (#list == 0) then return end
+		filtered = list
+		m.themes = filtered
+		return base(...)
+	end
+	return true
+end
+
+-- ============================================================================ Options > Sound
+-- The station row: a list the sound page puts in its layout as the script row radio_station (the
+-- dialog's member xms_radio_station). Shown only when a module brings radio music.
+local STATION_MEMBER = "xms_radio_station"
+
+-- the entries of the list: { key, text } each
+function stations()
+	local out = {
+		{ key = "all", text = game.translate_string("st_da_x64_radio_all") },
+		{ key = "game", text = game.translate_string("st_da_x64_radio_game") },
+	}
+	for _, p in ipairs(data().playlists) do
+		out[#out + 1] = { key = p.key, text = game.translate_string(p.title) }
+	end
+	return out
+end
+
+local function select_current(menu)
+	local combo, keys = menu[STATION_MEMBER], menu.xms_radio_station_keys
+	if not (combo and keys) then return end
+	local current = station()
+	for i, key in ipairs(keys) do
+		if (key == current) then
+			combo:SetCurrentID(i - 1)
+			return
+		end
+	end
+	combo:SetCurrentID(0)
+end
+
+function on_options_set_values(menu)
+	select_current(menu)
+end
+
+function on_options_accept(menu)
+	local combo, keys = menu[STATION_MEMBER], menu.xms_radio_station_keys
+	if not (combo and keys) then return end
+	local key = keys[combo:CurrentID() + 1]
+	if (key and key ~= station_setting()) then set_station(key) end
+end
+
+-- page: the sound page, built; node: its xml node; handler: the options dialog
+function options_init(page, xml, handler, node)
+	local d = data()
+	if (#d.tracks == 0 and #d.playlists == 0) then return false end
+	local combo = xml:InitComboBox(node .. ":list_radio_station", page)
+	local keys = {}
+	for i, entry in ipairs(stations()) do
+		combo:AddItem(entry.text, i - 1)
+		keys[i] = entry.key
+	end
+	handler[STATION_MEMBER] = combo
+	handler.xms_radio_station_keys = keys
+	select_current(handler)
+	RegisterScriptCallback("opt_menu_on_set_values", on_options_set_values)
+	RegisterScriptCallback("opt_menu_on_accept", on_options_accept)
+	return true
+end
+
+-- ============================================================================ install
+local function on_first_update()
+	ensure_loaded()
+end
+
+function install()
+	local done = {}
+	for _, step in ipairs({
+		{ "xr_sound", install_xr_sound }, { "ph_sound", install_ph_sound },
+		{ "sound_theme", install_sound_theme }, { "xrs_dyn_music", install_dyn_music },
+	}) do
+		local ok, r = pcall(step[2])
+		if not (ok) then
+			say("! xms_radio: " .. step[1] .. " not wrapped: " .. tostring(r))
+		end
+		done[step[1]] = ok and r or false
+	end
+	return done
+end
+
+function on_game_start()
+	-- -no_xms: no modules, no streamer mode, nothing to do
+	if not (xms) then return end
+	install()
+	RegisterScriptCallback("actor_on_first_update", on_first_update)
+end

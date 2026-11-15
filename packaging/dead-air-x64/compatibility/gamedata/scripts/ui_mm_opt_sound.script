@@ -12,6 +12,8 @@ end
 -- The subtitle controls closecaption.script puts on this page are rows too: the dialog hands them
 -- over once its opt_menu_on_init callback has run (AdoptScriptRows). The stock nodes of this page
 -- (tab_sound in ui_mm_opt*.xml) stay for addons that ship the stock page script.
+-- The radio station is a script row too: xms_radio.script builds its list here, when a module brings
+-- radio music, and it joins the list with the subtitle rows.
 local SOUND_LAYOUT = "dead_air_x64_sound_options.ltx"
 
 function opt_sound:InitControls(x, y, xml, handler)
@@ -20,6 +22,12 @@ function opt_sound:InitControls(x, y, xml, handler)
 	self:SetAutoDelete(true)
 
 	dead_air_x64_option_list.build(self, xml, handler, ini_file(SOUND_LAYOUT), "sound_page", "st_da_x64_sound_hint_")
+
+	local radio = rawget(_G, "xms_radio") or xms_radio
+	if (radio and radio.options_init) then
+		local ok, err = pcall(radio.options_init, self, xml, handler, "sound_page")
+		if not (ok) then printf("! ui_mm_opt_sound: the radio station row is not built: %s", tostring(err)) end
+	end
 end
 
 function opt_sound:AdoptScriptRows(handler)

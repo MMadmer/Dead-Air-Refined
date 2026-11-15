@@ -8,6 +8,9 @@
 ; dialog opens: script rows, <row> = script, <dialog member>, <dialog member of its old caption>,
 ; placed in their row by the node place_<row>. They join the list after the rest, so their
 ; subsection is the last one.
+;
+; The music rows: the streamer mode is the engine's variable (left out on a game without it); the
+; radio station is xms_radio.script's list, put on the page only when a module brings radio music.
 
 [rows]
 master_volume = track, snd_volume_eff, %.2f
@@ -15,11 +18,13 @@ music_volume  = track, snd_volume_music, %.2f
 snd_device    = list, snd_device
 eax           = check, snd_efx
 dynamic_music = check, g_dynamic_music
+streamer_mode = check, snd_streamer_mode
+radio_station = script, xms_radio_station
 cc_captioning = script, tab_captioning, cap_captioning
 cc_icc        = script, check_closedcaptions, cap_closedcaptions
 
 [groups]
-order = volume, playback, subtitles
+order = volume, playback, music, subtitles
 
 [group_volume]
 rows = master_volume, music_volume
@@ -27,10 +32,15 @@ rows = master_volume, music_volume
 [group_playback]
 rows = snd_device, eax, dynamic_music
 
+[group_music]
+rows = streamer_mode, radio_station
+
 [group_subtitles]
 rows = cc_captioning, cc_icc
 
 [captions]
+streamer_mode = ui_mm_da_streamer_mode
+radio_station = ui_mm_da_radio_station
 master_volume = ui_mm_da_volume_sounds
 music_volume  = ui_mm_da_volume_music
 eax           = ui_mm_da_eax

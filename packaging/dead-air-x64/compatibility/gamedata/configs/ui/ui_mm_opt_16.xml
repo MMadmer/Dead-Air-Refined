@@ -547,10 +547,24 @@
 			<options_item entry="g_dynamic_music" group="mm_opt_sound" depend="snd"/>
 		</check_dynamic_music>
 
+		<check_streamer_mode x="255" y="1" width="30" height="21">
+			<options_item entry="snd_streamer_mode" group="mm_opt_sound"/>
+		</check_streamer_mode>
+
+		<!-- The radio station: xms_radio.script fills it, so it binds to no console command. -->
+		<list_radio_station x="125" y="1" width="160" height="21" list_length="5" always_show_scroll="1">
+			<list_font r="170" g="170" b="170" font="letterica16"/>
+			<text_color>
+				<e r="170" g="170" b="170"/>
+				<d r="70" g="70" b="70"/>
+			</text_color>
+		</list_radio_station>
+
 		<!-- Where the adopted controls sit in their rows, and how tall the rows are: the radio
 		     buttons of tab_sound:tab_captioning are 26 apart. -->
 		<place_cc_captioning x="125" y="1" width="160" height="76"/>
 		<place_cc_icc x="255" y="1" width="30" height="24"/>
+		<place_radio_station x="125" y="1" width="160" height="24"/>
 	</sound_page>
 
 	<controls_page>

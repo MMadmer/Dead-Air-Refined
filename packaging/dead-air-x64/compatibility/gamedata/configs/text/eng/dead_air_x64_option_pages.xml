@@ -62,6 +62,28 @@
 	<string id="st_da_x64_sound_hint_cc_icc">
 		<text>Captions for sounds, such as a creaking door. They work while speech subtitles are on.</text>
 	</string>
+	<!-- Options -> Sound, the music rows: the streamer mode and the radio station (xms_radio.script), its header and its entries. -->
+	<string id="ui_mm_grp_music">
+		<text>Music</text>
+	</string>
+	<string id="ui_mm_da_streamer_mode">
+		<text>Streamer mode</text>
+	</string>
+	<string id="ui_mm_da_radio_station">
+		<text>Radio station</text>
+	</string>
+	<string id="st_da_x64_sound_hint_streamer_mode">
+		<text>Copyrighted music does not play: radios skip such tracks or play a replacement. For streams and videos.</text>
+	</string>
+	<string id="st_da_x64_sound_hint_radio_station">
+		<text>What the radios of the world play: all music, the game's own, or one playlist of a module.</text>
+	</string>
+	<string id="st_da_x64_radio_all">
+		<text>Everything</text>
+	</string>
+	<string id="st_da_x64_radio_game">
+		<text>The game's music</text>
+	</string>
 	<!-- Options -> Controls: the hint of every row (st_da_x64_controls_hint_<row>). -->
 	<string id="st_da_x64_controls_hint_mouse_sense">
 		<text>How fast the mouse turns the camera.</text>

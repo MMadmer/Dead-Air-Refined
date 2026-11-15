@@ -1,0 +1,27 @@
+; The game's own copyrighted sounds: what does not play while the streamer mode (snd_streamer_mode)
+; is on. The list is the game author's to keep; a module says the same of its own sounds in their
+; descriptions and tracks (docs/dead-air/RADIO.md).
+;
+; [copyrighted], one line per sound:
+;   <name>                 a sound name: its path under sounds, without the extension
+;   <mask>                 the same with *, any run of characters (music\radio\*)
+;   <name or mask> = <replacement>
+;                          a sound that is not copyrighted, played in its place while the mode is on;
+;                          a bare line has none, and the sound is simply not played
+; Case and the direction of the slashes do not matter. A module's #file patch of this file adds to it.
+;
+; What is here, and why:
+;   music\radio\*          the radio's music (play_radio_dar2), commercial recordings by the game
+;                          author's word
+;   radio\01\*             the level radios' music (common_radio): the same 45 recordings as
+;                          music\radio\music_<n>, byte for byte
+;   radio\<artist_title>   named after their performers and titles: Eduard Artemyev's "Meditation",
+;                          FireLake's "Dirge for the Planet", "Razom nas bahato", Vulgargrad's "Alkogolik"
+
+[copyrighted]
+music\radio\*
+radio\01\*
+radio\edward_artemiev_meditation
+radio\firelake_dirge_the_planet
+radio\razom_nas_bahato
+radio\vulgargrad_alkoholik
