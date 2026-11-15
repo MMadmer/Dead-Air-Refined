@@ -1,0 +1,2039 @@
+; What no extraction knows about the item keys: the families, the groups, the titles, the help,
+; the units and which keys are common. Input of make_item_catalog.py, beside item_keys.tsv.
+;
+; [<scope>.<name>] notes one key of item_keys.tsv (a series like use<N>_functor is use_n_functor):
+;   title, group, unit, common = true, help - and, where the extraction got it wrong, type, values,
+;   families, default or required. A key without notes gets a title made from its name and the first
+;   group whose `match` fits it. Plain ASCII, no `;` and no double quote inside a value.
+
+[catalog]
+version = 1
+
+[scopes]
+order = item, hud, upgrade, immunities, absorbation, bones, sound_layers, model, global
+
+[scope.item]
+title = Item
+help = The item's own section: what spawns, what the inventory shows, what the hands hold.
+
+[scope.hud]
+title = HUD Section
+help = The section the item's hud key names: the first-person model, where the hands hold it and its motions.
+
+[scope.upgrade]
+title = Upgrade
+help = An upgrade's settings section (the section key of an upgrade): what installing it changes in the item.
+
+[scope.immunities]
+title = Immunities
+help = The section an item's immunities_sect names: how much of each kind of hit the item itself takes.
+
+[scope.absorbation]
+title = Hit Absorption
+help = The section an artefact's hit_absorbation_sect names: how much of each kind of hit it takes off its wearer.
+
+[scope.bones]
+title = Bone Protection
+help = The section an outfit's or helmet's bones_koeff_protection names: protection per bone of the wearer.
+
+[scope.sound_layers]
+title = Sound Layers
+help = A section a sound key names instead of a file: every snd_N_layer of it plays at once.
+
+[scope.model]
+title = Model Data
+help = The torch_definition section in the user data of a torch's model: its lamp.
+
+[scope.global]
+title = Game-Wide
+help = A section of the system config every item of a kind reads: the defaults an item may override.
+
+[families]
+order = item, eatable, medicine, weapon, shotgun, launcher, knife, grenade, ammo, scope, silencer, grenade_launcher, outfit, helmet, backpack, artefact, detector, torch, pda, device, other
+
+[family.item]
+title = Plain Item
+like = jar, rope, document
+help = Parts, junk, documents and props: an inventory item with no use of its own.
+
+[family.eatable]
+title = Food and Medicine
+like = bread, vodka, medkit
+help = Everything eaten, drunk or used on the body. Dead Air's medkits, bandages and drugs are of this family.
+
+[family.medicine]
+title = Medkit Class
+help = The engine's medkit and antirad classes. Dead Air uses the antirad class for rucksack items such as containers and sleeping bags, its real medicine is of the food family.
+
+[family.weapon]
+title = Firearm
+like = wpn_ak74, wpn_pm, wpn_svd
+
+[family.shotgun]
+title = Shotgun
+like = wpn_bm16, wpn_mp133
+
+[family.launcher]
+title = Rocket and Grenade Launcher
+like = wpn_rpg7, wpn_rg-6
+
+[family.knife]
+title = Knife
+like = wpn_knife
+
+[family.grenade]
+title = Grenade
+like = grenade_f1, grenade_rgd5
+
+[family.ammo]
+title = Ammunition
+like = ammo_5.45x39_fmj, ammo_12x70_buck, ammo_vog-25
+
+[family.scope]
+title = Scope
+like = wpn_addon_scope
+
+[family.silencer]
+title = Silencer
+like = wpn_addon_silencer, wpn_sil_9mm
+
+[family.grenade_launcher]
+title = Underbarrel Grenade Launcher
+like = wpn_addon_grenade_launcher
+
+[family.outfit]
+title = Outfit
+like = stalker_outfit, novice_outfit, exo_outfit
+
+[family.helmet]
+title = Helmet
+like = helm_respirator, helm_cloth_mask
+
+[family.backpack]
+title = Backpack Class
+help = The engine's backpack class. Dead Air's backpacks are artefact-class items in their own slot.
+
+[family.artefact]
+title = Artefact
+like = af_medusa
+help = Artefacts, and Dead Air's belt gear built on the artefact class: backpacks, plates, pouches.
+
+[family.detector]
+title = Detector
+like = detector_simple, detector_advanced
+help = Detectors, and Dead Air's hand lights built on the detector class (the flashlight, glowsticks, lighters).
+
+[family.torch]
+title = Head Torch
+like = device_torch
+
+[family.pda]
+title = PDA
+like = device_pda
+
+[family.device]
+title = Binoculars and Flare
+like = wpn_binoc, device_flare
+
+[family.other]
+title = Other
+like = bolt
+help = The bolt, rockets and the projectiles of grenade launchers, and the multiplayer bag.
+
+[groups]
+order = general, icon, inventory, economy, use, protection, weapon, recoil, aim, addons, ammo, condition, explosive, throw, artefact, detector, light, sound, effects, hud, motion, upgrades, tools, ai, other
+
+[group.general]
+title = General
+match = class, inv_name, inv_name_short, description, visual, kind, story_id, quest_item, ghost, script_binding, custom_data, cform, npc, weapon_class, shadow_visual, npc_visual, actor_visual, character_portrait, parent_section
+
+[group.icon]
+title = Icon
+match = inv_grid_x, inv_grid_y, inv_grid_width, inv_grid_height, icons_texture, *icon_layer*, upgr_icon_*, kill_msg_*, icon_name, select_mode, full_icon_name
+
+[group.inventory]
+title = Inventory
+match = inv_weight, slot, belt, can_take, dont_stack, default_to_ruck, system_item, ignore_slots_blocked, highlight_equipped, sprint_allowed, control_inertion_factor, animation_slot, single_handed, hand_dependence, empty_weight
+
+[group.economy]
+title = Economy
+match = cost, can_trade, box_cost
+
+[group.use]
+title = Use
+match = eat_*, boost_*, max_uses, remove_after_use, use_sound, use<N>_*, default_use_text, apply_time_sec, wounds_heal_perc, next_use_item, placeable_section, antirad, health_value, food_value, play_function
+
+[group.protection]
+title = Protection and Effects
+match = *_protection, *_restore_speed, additional_inventory_weight*, power_loss, hit_fraction*, artefact_count, helmet_avaliable, backpack_avaliable, nightvision_sect, immunities_sect*, bones_koeff_protection*, jump_speed, walk_accel, overweight_walk_accel, use_filters, nearest_enemies_show_dist, *_immunity, <bone>, skin_path
+
+[group.weapon]
+title = Firing
+match = rpm*, hit_power*, hit_impulse*, hit_type, hit_type_2, fire_distance, bullet_speed*, fire_modes, preffered_fire_mode, ammo_class, ammo_mag_size, ammo_elapsed, ammo_limit, fire_dispersion_base*, use_aim_bullet, time_to_aim, air_resistance_factor, base_dispersioned_*, bullet_hit_*, magazined, bolt_action, always_load, tri_state_reload, tracers*, first_bullet_*, use_first_bullet, launch_speed, grenade_class, rocket_class, max_zoom_factor, material, splash*, spash*, auto_spawn_ammo, use_ammo_belt, cycle_down, weapon_remove_time
+
+[group.recoil]
+title = Recoil and Spread
+match = cam_*, zoom_cam_*, PDM_*, crosshair_inertion
+
+[group.aim]
+title = Aiming
+match = zoom_enabled, zoom_rotate_time, zoom_hide_crosshair, ironsight_zoom_factor, scope_zoom_factor, scope_texture, scope_dynamic_zoom, scope_nightvision, scope_alive_detector, holder_*, ezi_*, *_dof, nearwall_*, vision_present, vis_frame_*, camera_move_epsilon, disp_min, speed_min, zoom_aim_*, delta_time
+
+[group.addons]
+title = Addons
+match = scope_status, silencer_status, grenade_launcher_status, scopes, scopes_sect, silencer_name, silencer_x, silencer_y, grenade_launcher_name, grenade_launcher_x, grenade_launcher_y, scope_name, scope_x, scope_y, scope_hide_bones, scope_show_bones, scopes_hide_bone, inv_grid_addon_*, grenade_vel
+
+[group.ammo]
+title = Ammunition
+match = box_*, k_*, tracer, tracer_color_ID, buck_shot, impair, explosive, allow_ricochet, magnetic_beam_shot, 4to1_tracer, can_be_unlimited, keep_empty_box, misfire_chance, fake_grenade_name, air_resistance_k
+
+[group.condition]
+title = Condition and Faults
+match = condition*, misfire_*, fault_*, use_condition, allow_repair, repair_type, degrade_rate
+
+[group.explosive]
+title = Explosion
+match = blast*, frag*, up_throw_factor, explode_*, fragment_speed, time_to_explode, set_timer_particles, detonation_threshold_hit, dynamic_explosion_particles, hide_in_explosion, effect_sect_name, hit_type_blast, hit_type_frag
+
+[group.throw]
+title = Throwing and Flight
+match = force_*, destroy_time, throw_*, grenade_remove_time, engine_*, third_person_throw_point_offset, infinite, work_time_sec
+
+[group.artefact]
+title = Artefact
+match = af_rank, af_actor_properties, can_be_controlled, lights_enabled, idle_light_shadow, det_*, artefact_activation_seq, jump_height, impulse_*, energy_*, strike_impulse, time_to_update, hit_absorbation_sect, particle, radius
+
+[group.detector]
+title = Detector
+match = af_radius, af_vis_radius, af_class_*, zone_class_*, af_freq_*, zone_freq_*, af_sound_*, zone_sound_*, ui_p, ui_r, ef_detector_type, decay_rate, flash_light_range, onoff_light_range
+
+[group.light]
+title = Lights
+match = light_*, *light_color, *light_range, *light_time, *light_var_*, trail_light_*, torch_*, omni_*, night_vision, disabled_maps, color*, range*, volumetric_*, spot_*, glow_*, guide_bone
+
+[group.sound]
+title = Sounds
+match = snd_*, *_snd, snd, *sound*, <snd_key><N>
+
+[group.effects]
+title = Visual Effects
+match = *particles*, shell_point, wm_size
+
+[group.hud]
+title = First-Person View
+match = hands_*, item_position, item_orientation, aim_hud_offset_*, gl_hud_offset_*, grenade_*zoom*, fire_bone*, fire_point*, shell_bone, position, orientation, zoom_offset, _16x9*, zoom_rotate_*, inertion_*, pitch_offset_*, hud_ui_*, attach_place_idx, item_visual, hud, player_hud_section, strap_*, attach_*, hud_fov_*
+
+[group.motion]
+title = Motions
+match = anm_*, anim_*
+
+[group.upgrades]
+title = Upgrades
+match = upgrades, upgrade_scheme, installed_upgrades, *_add
+
+[group.tools]
+title = Repair and Cooking Tools
+match = repair_*, cooking_*
+
+[group.ai]
+title = NPCs
+match = ef_*, hit_probability_*
+
+[group.other]
+title = Other
+
+; ============================================================================ the item's own section
+; ---- general
+[item.class]
+title = Class
+common = true
+help = The engine class the item is made of: what it can do and which other keys it reads. A new item takes it from its base.
+
+[item.inv_name]
+title = Name
+common = true
+help = The string id of the name the inventory, the trader and the tooltip show.
+
+[item.inv_name_short]
+title = Short Name
+common = true
+help = The string id of the short name the slots and the item list show.
+
+[item.description]
+title = Description
+common = true
+help = The string id of the text under the name in the tooltip.
+
+[item.visual]
+title = Model
+common = true
+help = The model of the item lying in the world and held by NPCs, a path under meshes without the extension.
+
+[item.quest_item]
+title = Quest Item
+help = A quest item: traders do not take it, and stashes never hold it.
+
+[item.ghost]
+title = Ghost
+help = Anomalies do not react to the object.
+
+[item.story_id]
+title = Story Id
+help = The story id the object takes when it spawns, so quests and scripts can find it.
+
+[item.script_binding]
+title = Script Binding
+help = A Lua function that binds a script object to the item when it comes online, as script.function.
+
+[item.custom_data]
+title = Custom Data
+help = Text the spawned object carries as its custom data (a logic section, for instance).
+
+[item.parent_section]
+title = Parent Section
+help = The weapon this section is a variant of: a scope variant names the gun without the scope.
+
+[item.npc_visual]
+title = NPC Model
+help = The model an NPC who wears the outfit takes.
+
+[item.actor_visual]
+title = Player Model
+help = The model the player takes while wearing the outfit.
+
+[item.shadow_visual]
+title = Shadow Model
+help = A model drawn for the item's shadow instead of its own.
+
+[item.kind]
+title = Kind
+help = A free word scripts group items by (the debug spawner, for one).
+
+; ---- icon
+[item.inv_grid_x]
+title = Icon Column
+common = true
+help = The first column of the item's icon on its icon sheet, in cells of 50 pixels.
+
+[item.inv_grid_y]
+title = Icon Row
+common = true
+help = The first row of the item's icon on its icon sheet, in cells of 50 pixels.
+
+[item.inv_grid_width]
+title = Icon Width
+common = true
+help = The icon's width in cells, which is also how many cells the item takes in the rucksack.
+
+[item.inv_grid_height]
+title = Icon Height
+common = true
+help = The icon's height in cells, which is also how many cells the item takes in the rucksack.
+
+[item.icons_texture]
+title = Icon Sheet
+common = true
+help = A texture of the item's own to cut the icon from, on the same 50 pixel grid, the game's equipment sheet when left out.
+
+[item.n_icon_layer]
+title = Icon Layer
+help = A section whose icon is drawn over the item's own (a scope on a rifle): 1icon_layer, 2icon_layer and so on, from 0 when 0icon_layer is there, without gaps.
+
+[item.n_icon_layer_x]
+title = Icon Layer X
+help = Where the layer of the same number sits on the item's icon, in pixels of the icon from its left edge.
+
+[item.n_icon_layer_y]
+title = Icon Layer Y
+help = Where the layer of the same number sits on the item's icon, in pixels of the icon from its top edge.
+
+[item.n_icon_layer_scale]
+title = Icon Layer Scale
+unit = x
+help = The size of the layer of the same number against its own icon.
+
+[item.upgr_icon_x]
+title = Upgrade Picture X
+help = The left edge of the item's picture in the upgrade window, in pixels of the upgrade sheet.
+
+[item.upgr_icon_y]
+title = Upgrade Picture Y
+help = The top edge of the item's picture in the upgrade window, in pixels of the upgrade sheet.
+
+[item.upgr_icon_width]
+title = Upgrade Picture Width
+help = The width of the item's picture in the upgrade window, in pixels.
+
+[item.upgr_icon_height]
+title = Upgrade Picture Height
+help = The height of the item's picture in the upgrade window, in pixels.
+
+[item.full_icon_name]
+title = Outfit Picture
+help = The texture id of the outfit's full figure in the outfit slot.
+
+[item.select_mode]
+title = Icon Select Mode
+
+
+; ---- inventory
+[item.inv_weight]
+title = Weight
+unit = kg
+common = true
+help = The weight the item adds to what the player carries.
+
+[item.slot]
+title = Slot
+help = The slot the item goes into: 0 knife, 1 pistol, 2 rifle, 3 grenade, 4 sidearm, 5 bolt, 6 outfit, 7 PDA, 8 detector, 9 torch, 10 artefact, 11 helmet, 13 binoculars, 14 backpack, none for the rucksack only.
+
+[item.belt]
+title = Belt Item
+help = The item can be worn on the belt.
+
+[item.can_take]
+title = Can Be Picked Up
+help = The item can be taken from the world.
+
+[item.dont_stack]
+title = Do Not Stack
+help = Every piece of it takes a cell of its own in the rucksack.
+
+[item.default_to_ruck]
+title = Into the Rucksack
+help = A slot item picked up goes into the rucksack instead of its slot.
+
+[item.system_item]
+title = System Item
+help = The inventory never shows the item.
+
+[item.ignore_slots_blocked]
+title = Ignores Blocked Slots
+help = The item can be drawn while the slots are blocked (in a dialog, for instance).
+
+[item.highlight_equipped]
+title = Highlight When Equipped
+help = The inventory marks the item while it is in its slot.
+
+[item.sprint_allowed]
+title = Sprint Allowed
+help = The player can sprint with the item in hand.
+
+[item.control_inertion_factor]
+title = Handling Inertia
+unit = x
+help = How much slower the view turns with the item in hand, 1 is no slower.
+
+[item.animation_slot]
+title = Hands Animation Slot
+help = Which set of body motions the item is held with, a number of the motion tables of the hands and the third-person body.
+
+[item.single_handed]
+title = Single-Handed
+help = The weapon is held in one hand, which changes how NPCs and the player's body carry it.
+
+[item.hand_dependence]
+title = Hand Dependence
+help = How NPCs hold the weapon: 0 none, 1 one hand, 2 both hands.
+
+; ---- economy
+[item.cost]
+title = Cost
+unit = RU
+common = true
+help = The base price, which traders scale by their own factors.
+
+[item.can_trade]
+title = Tradable
+help = Traders may buy and sell the item, NPCs also pick up only tradable items.
+
+[item.box_cost]
+title = Box Cost
+unit = RU
+help = The price of a full box when it is not the cost of the box size in rounds.
+
+; ---- use
+[item.max_uses]
+title = Portions
+common = true
+help = How many times the item can be used before it is gone, 255 is without end.
+
+[item.remove_after_use]
+title = Removed After Use
+help = The item is gone once its last portion is used.
+
+[item.empty_weight]
+title = Empty Weight
+unit = kg
+help = The weight that stays once every portion is used up.
+
+[item.use_sound]
+title = Use Sound
+common = true
+help = The sound played when the item is used.
+
+[item.eat_health]
+title = Health
+common = true
+help = Health the item restores at once when used, from -1 to 1.
+
+[item.eat_power]
+title = Stamina
+common = true
+help = Stamina the item restores at once when used.
+
+[item.eat_satiety]
+title = Satiety
+common = true
+help = How much the item takes away hunger.
+
+[item.eat_radiation]
+title = Radiation
+common = true
+help = Radiation the item adds, a negative value takes it away.
+
+[item.eat_max_power]
+title = Maximum Stamina
+help = A change of the player's maximum stamina.
+
+[item.eat_alcohol]
+title = Alcohol
+help = The alcohol the item adds: the drunk view and its effects.
+
+[item.eat_psy]
+title = Psy Health
+help = Psy health the item restores (Dead Air).
+
+[item.eat_sleepiness]
+title = Sleepiness
+help = Sleepiness the item adds, a negative value takes it away (Dead Air).
+
+[item.wounds_heal_perc]
+title = Wounds Healed
+common = true
+help = The share of the bleeding wounds the item closes, from 0 to 1.
+
+[item.apply_time_sec]
+title = Effect Time
+unit = s
+help = The time the effects are spread over, -1 is at once.
+
+[item.boost_time]
+title = Boost Time
+unit = s
+common = true
+help = How long the boost_ values of the item last.
+
+[item.boost_health_restore]
+title = Boost Health Regeneration
+common = true
+help = Health regained per second while the boost lasts.
+
+[item.boost_power_restore]
+title = Boost Stamina Regeneration
+help = Stamina regained per second while the boost lasts.
+
+[item.boost_radiation_restore]
+title = Boost Radiation Removal
+common = true
+help = Radiation taken away per second while the boost lasts.
+
+[item.boost_bleeding_restore]
+title = Boost Bleeding Stop
+common = true
+help = Bleeding stopped per second while the boost lasts.
+
+[item.boost_max_weight]
+title = Boost Carry Weight
+unit = kg
+common = true
+help = Weight the player can carry beyond the limit while the boost lasts.
+
+[item.boost_burn_immunity]
+title = Boost Burn Immunity
+help = Burn protection added while the boost lasts.
+
+[item.boost_shock_immunity]
+title = Boost Shock Immunity
+help = Electric shock protection added while the boost lasts.
+
+[item.boost_radiation_immunity]
+title = Boost Radiation Immunity
+help = Protection against radiation hits added while the boost lasts.
+
+[item.boost_telepat_immunity]
+title = Boost Psy Immunity
+help = Psy protection added while the boost lasts.
+
+[item.boost_chemburn_immunity]
+title = Boost Chemical Immunity
+help = Chemical burn protection added while the boost lasts.
+
+[item.boost_explosion_immunity]
+title = Boost Explosion Immunity
+help = Explosion protection added while the boost lasts.
+
+[item.boost_strike_immunity]
+title = Boost Strike Immunity
+help = Strike protection added while the boost lasts.
+
+[item.boost_fire_wound_immunity]
+title = Boost Bullet Immunity
+help = Bullet protection added while the boost lasts.
+
+[item.boost_wound_immunity]
+title = Boost Wound Immunity
+help = Rupture protection added while the boost lasts.
+
+[item.boost_radiation_protection]
+title = Boost Radiation Protection
+help = Protection against the radiation of the zone added while the boost lasts.
+
+[item.boost_telepat_protection]
+title = Boost Psy Protection
+help = Protection against psy fields added while the boost lasts.
+
+[item.boost_chemburn_protection]
+title = Boost Chemical Protection
+help = Protection against chemical fields added while the boost lasts.
+
+[item.use_n_functor]
+title = Context Action
+help = A Lua function, as script.function, the inventory's context menu calls for a use of the item: use1_functor up to use4_functor, it returns the caption or nothing to hide the row.
+
+[item.use_n_action_functor]
+title = Context Action Effect
+help = The Lua function, as script.function, the context menu row of the same number runs when it is picked.
+
+[item.default_use_text]
+title = Use Caption
+help = The string id of the caption of the item's own use in the context menu.
+
+[item.next_use_item]
+title = Next Item After Use
+help = The section the item becomes once used, for items whose portions are sections of their own (vodka, vodka_2 and so on).
+
+[item.placeable_section]
+title = Placed Section
+help = The section a placeable item becomes when it is put down in the world (Dead Air).
+
+; ---- protection and effects on the wearer
+[item.burn_protection]
+title = Burn Protection
+common = true
+help = How much of a burn hit the outfit takes, from 0 to 1.
+
+[item.strike_protection]
+title = Strike Protection
+common = true
+help = How much of a blunt hit the outfit takes, from 0 to 1.
+
+[item.shock_protection]
+title = Shock Protection
+common = true
+help = How much of an electric hit the outfit takes, from 0 to 1.
+
+[item.wound_protection]
+title = Rupture Protection
+common = true
+help = How much of a tearing hit, claws and teeth, the outfit takes, from 0 to 1.
+
+[item.radiation_protection]
+title = Radiation Protection
+common = true
+help = How much of the zone's radiation the outfit keeps off, from 0 to 1.
+
+[item.telepatic_protection]
+title = Psy Protection
+common = true
+help = How much of a psy hit the outfit takes, from 0 to 1.
+
+[item.chemical_burn_protection]
+title = Chemical Protection
+common = true
+help = How much of a chemical burn the outfit takes, from 0 to 1.
+
+[item.explosion_protection]
+title = Explosion Protection
+common = true
+help = How much of a blast the outfit takes, from 0 to 1.
+
+[item.fire_wound_protection]
+title = Bullet Protection
+common = true
+help = How much of a bullet the outfit takes. Together with hit_fraction_actor, its presence picks Clear Sky's bullet formula over Call of Pripyat's.
+
+[item.physic_strike_protection]
+title = Physical Strike Protection
+help = How much of a physical blow (a fall, an object) the outfit takes, strike_protection when left out.
+
+[item.hit_fraction_actor]
+title = Bullet Hit Fraction
+help = The least share of a bullet's hit that still goes through armour it does not pierce, for the player.
+
+[item.bones_koeff_protection]
+title = Bone Protection
+help = The section with the protection per bone of the wearer (see the scope Bone Protection).
+
+[item.additional_inventory_weight]
+title = Extra Carry Weight
+unit = kg
+common = true
+help = Weight the wearer can carry beyond the limit before being overloaded.
+
+[item.additional_inventory_weight2]
+title = Extra Maximum Weight
+unit = kg
+help = Weight added to the most the wearer can carry at all.
+
+[item.power_loss]
+title = Stamina Use
+unit = x
+help = How fast the wearer tires, 1 is as without it.
+
+[item.health_restore_speed]
+title = Health Regeneration
+common = true
+help = Health the item restores per second while it is worn.
+
+[item.radiation_restore_speed]
+title = Radiation Change
+common = true
+help = Radiation the item adds per second while it is worn, a negative value takes it away.
+
+[item.satiety_restore_speed]
+title = Satiety Change
+help = Satiety the item adds per second while it is worn.
+
+[item.bleeding_restore_speed]
+title = Bleeding Stop
+common = true
+help = Bleeding the item stops per second while it is worn.
+
+[item.power_restore_speed]
+title = Stamina Regeneration
+common = true
+help = Stamina the item restores per second while it is worn.
+
+[item.artefact_count]
+title = Artefact Slots
+common = true
+help = How many artefacts the outfit lets the player wear on the belt.
+
+[item.helmet_avaliable]
+title = Helmet Allowed
+help = A helmet can be worn with the outfit, false for outfits with a helmet of their own.
+
+[item.backpack_avaliable]
+title = Backpack Allowed
+help = A backpack can be worn with the outfit.
+
+[item.nightvision_sect]
+title = Night Vision
+help = The section of the night vision the outfit or helmet brings (its effector).
+
+[item.player_hud_section]
+title = Hands Model
+help = A hands section of its own for the outfit: the first-person arms the player has while wearing it.
+
+[item.jump_speed]
+title = Jump Height
+unit = x
+help = How high the wearer jumps against without the backpack.
+
+[item.walk_accel]
+title = Walk Speed
+unit = x
+help = How fast the wearer walks against without the backpack.
+
+[item.overweight_walk_accel]
+title = Overloaded Walk Speed
+unit = x
+help = How fast the wearer walks while overloaded, against without the backpack.
+
+[item.use_filters]
+title = Uses Filters
+help = The helmet's gas mask needs filters (Dead Air).
+
+[item.nearest_enemies_show_dist]
+title = Enemy Marks Distance
+unit = m
+help = Enemies nearer than this are marked on the HUD while the helmet is worn, 0 is none.
+
+[item.immunities_sect]
+title = Immunities
+help = The section with the item's own immunities: how much of each hit the item takes (see the scope Immunities).
+
+; ---- firing
+[item.rpm]
+title = Rate of Fire
+unit = rpm
+common = true
+help = Rounds per minute.
+
+[item.rpm_mode_2]
+title = Burst Rate of Fire
+unit = rpm
+help = Rounds per minute in the second fire mode, rpm when left out.
+
+[item.rpm_actor]
+title = Player Rate of Fire
+unit = rpm
+help = Rounds per minute when the player fires, rpm when left out.
+
+[item.hit_power]
+title = Damage
+common = true
+help = The hit of one bullet: four values, for the novice, stalker, veteran and master difficulty.
+
+[item.hit_power_critical]
+title = Critical Damage
+help = The hit of a critical shot, four values like Damage, Damage when left out.
+
+[item.hit_impulse]
+title = Hit Impulse
+common = true
+help = How hard a bullet pushes what it hits.
+
+[item.hit_type]
+title = Hit Type
+type = token
+values = burn, shock, strike, wound, radiation, telepatic, fire_wound, chemical_burn, explosion, wound_2, physic_strike, light_burn
+help = The kind of hit the weapon deals: fire_wound for bullets, wound for blades.
+
+[item.fire_distance]
+title = Range
+unit = m
+common = true
+help = How far a bullet flies before it is gone.
+
+[item.bullet_speed]
+title = Muzzle Velocity
+unit = m/s
+common = true
+help = The speed of the bullet as it leaves the barrel.
+
+[item.fire_modes]
+title = Fire Modes
+common = true
+help = The fire modes the weapon switches between: 1 single, a number a burst of that many, -1 automatic.
+
+[item.preffered_fire_mode]
+title = Preferred Fire Mode
+help = The fire mode the weapon starts in, as an index into fire_modes, the last when left out.
+
+[item.ammo_class]
+title = Ammunition
+common = true
+help = The ammo sections the weapon takes, the first is the one it is loaded with.
+
+[item.ammo_mag_size]
+title = Magazine Size
+common = true
+help = Rounds in a full magazine.
+
+[item.ammo_elapsed]
+title = Loaded Rounds
+help = Rounds loaded when the weapon spawns.
+
+[item.fire_dispersion_base]
+title = Spread
+unit = deg
+common = true
+help = The angle the bullets spread in from a new weapon.
+
+[item.use_aim_bullet]
+title = First Shot Accurate
+help = The first shot after a pause of time_to_aim goes where the sight points.
+
+[item.time_to_aim]
+title = Aim Time
+unit = s
+help = The pause after which the next shot is accurate, with use_aim_bullet.
+
+[item.air_resistance_factor]
+title = Air Resistance
+unit = x
+help = How much the air slows the weapon's bullets, against the ammo's own.
+
+[item.magazined]
+title = Magazine-Fed
+help = A detachable magazine: taking it out leaves the round in the chamber.
+
+[item.bolt_action]
+title = Bolt Action
+help = The weapon is worked by hand after every shot.
+
+[item.tri_state_reload]
+title = Three-Stage Reload
+help = The shotgun reloads round by round: open, add a cartridge, close.
+
+[item.tracers]
+title = Tracers
+help = The weapon's bullets may draw tracers.
+
+[item.launch_speed]
+title = Launch Speed
+unit = m/s
+help = The speed the rocket or grenade leaves the launcher at.
+
+[item.grenade_class]
+title = Grenades
+help = The grenade sections the underbarrel launcher takes.
+
+[item.rocket_class]
+title = Rockets
+help = The rocket sections the launcher fires.
+
+[item.max_zoom_factor]
+title = Maximum Zoom
+unit = deg
+help = The narrowest field of view of the launcher's sight.
+
+[item.material]
+title = Hit Material
+help = The game material whose sounds and marks the knife's hits make, objects\knife when left out.
+
+[item.hit_power_2]
+title = Second Attack Damage
+help = The hit of the knife's second attack, four values like Damage.
+
+[item.hit_impulse_2]
+title = Second Attack Impulse
+help = How hard the knife's second attack pushes what it hits.
+
+[item.hit_type_2]
+title = Second Attack Hit Type
+type = token
+values = burn, shock, strike, wound, radiation, telepatic, fire_wound, chemical_burn, explosion, wound_2, physic_strike, light_burn
+help = The kind of hit of the knife's second attack.
+
+; ---- recoil and spread
+[item.cam_dispersion]
+title = Recoil
+unit = deg
+common = true
+help = How far the view climbs with a shot.
+
+[item.cam_dispersion_inc]
+title = Recoil Growth
+unit = deg
+common = true
+help = How much more the view climbs with every further shot of a burst.
+
+[item.cam_max_angle]
+title = Maximum Recoil
+unit = deg
+help = The most the view climbs in a burst.
+
+[item.cam_max_angle_horz]
+title = Maximum Side Recoil
+unit = deg
+help = The most the view swings sideways in a burst.
+
+[item.cam_step_angle_horz]
+title = Side Recoil
+unit = deg
+help = How far the view swings sideways with a shot.
+
+[item.cam_relax_speed]
+title = Recoil Recovery
+unit = deg
+help = How fast the view comes back down after the shooting stops, per second.
+
+[item.cam_return]
+title = View Returns
+help = 1: the view comes back to where it was after the recoil, 0: it stays where the recoil left it.
+
+[item.zoom_cam_dispersion]
+title = Aimed Recoil
+unit = deg
+help = Recoil while aiming, cam_dispersion when left out.
+
+[item.zoom_cam_dispersion_inc]
+title = Aimed Recoil Growth
+unit = deg
+help = Recoil growth while aiming, cam_dispersion_inc when left out.
+
+[item.PDM_disp_base]
+title = Stance Spread
+unit = x
+help = The spread of the player's shots against the weapon's own.
+
+[item.PDM_disp_vel_factor]
+title = Moving Spread
+unit = x
+help = How much moving widens the player's spread.
+
+[item.PDM_disp_crouch]
+title = Crouched Spread
+unit = x
+help = The player's spread while crouching.
+
+[item.PDM_disp_crouch_no_acc]
+title = Still Crouched Spread
+unit = x
+help = The player's spread while crouching without moving.
+
+[item.crosshair_inertion]
+title = Crosshair Inertia
+help = How fast the crosshair follows the spread.
+
+; ---- aiming
+[item.zoom_enabled]
+title = Can Aim
+common = true
+help = The weapon can be aimed down the sights.
+
+[item.ironsight_zoom_factor]
+title = Iron Sight Field of View
+unit = deg
+common = true
+help = The field of view while aiming over the iron sights: smaller is closer.
+
+[item.scope_zoom_factor]
+title = Scope Field of View
+unit = deg
+families = scope, weapon, shotgun, launcher
+common = true
+help = The field of view through the scope: smaller is closer. In a scope's section, or in a weapon with a built-in scope.
+
+[item.scope_texture]
+title = Scope Reticle
+help = The reticle drawn while aiming through the scope: a texture, or a node of scopes.xml.
+
+[item.scope_dynamic_zoom]
+title = Variable Zoom
+help = The scope's magnification can be changed while aiming.
+
+[item.scope_nightvision]
+title = Scope Night Vision
+help = The night vision section the scope switches on while aiming through it.
+
+[item.scope_alive_detector]
+title = Scope Life Detector
+help = The section of the detector of living things the scope shows while aiming through it.
+
+[item.holder_range_modifier]
+title = Scope Range
+unit = x
+help = How much farther its holder sees with the weapon in hand. Set on a scope, it counts while the scope is attached.
+
+[item.holder_fov_modifier]
+title = Scope Sight Cone
+unit = x
+help = How much narrower its holder looks with the weapon in hand. Set on a scope, it counts while the scope is attached.
+
+[item.zoom_rotate_time]
+title = Aim Time
+unit = s
+help = How long the weapon takes to come up to the eye.
+
+[item.vision_present]
+title = Target Marks
+help = The binoculars mark living things in view.
+
+; ---- addons
+[item.scope_status]
+title = Scope
+type = int
+common = true
+help = 0 no scope, 1 a built-in one, 2 a scope can be attached.
+
+[item.silencer_status]
+title = Silencer
+type = int
+common = true
+help = 0 no silencer, 1 a built-in one, 2 a silencer can be attached.
+
+[item.grenade_launcher_status]
+title = Grenade Launcher
+type = int
+common = true
+help = 0 no launcher, 1 a built-in one, 2 a launcher can be attached.
+
+[item.scopes]
+title = Scope Variants
+help = The scopes the weapon takes in Dead Air's way: each is a section of its own, the weapon's name and the scope's joined (wpn_ak74_kobra).
+
+[item.scopes_sect]
+title = Attachable Scopes
+help = The sections of the scopes the weapon takes when there is more than one, the weapon's own scope_name when left out.
+
+[item.scope_name]
+title = Scope Item
+help = The scope item that can be attached, in the weapon's section, or in each section its scopes_sect names.
+
+[item.scope_x]
+title = Scope Icon X
+help = Where the attached scope is drawn on the weapon's icon, in pixels.
+
+[item.scope_y]
+title = Scope Icon Y
+help = Where the attached scope is drawn on the weapon's icon, in pixels.
+
+[item.silencer_name]
+title = Silencer Item
+help = The silencer item that can be attached.
+
+[item.silencer_x]
+title = Silencer Icon X
+help = Where the attached silencer is drawn on the weapon's icon, in pixels.
+
+[item.silencer_y]
+title = Silencer Icon Y
+help = Where the attached silencer is drawn on the weapon's icon, in pixels.
+
+[item.grenade_launcher_name]
+title = Launcher Item
+help = The grenade launcher item that can be attached.
+
+[item.grenade_launcher_x]
+title = Launcher Icon X
+help = Where the attached launcher is drawn on the weapon's icon, in pixels.
+
+[item.grenade_launcher_y]
+title = Launcher Icon Y
+help = Where the attached launcher is drawn on the weapon's icon, in pixels.
+
+[item.scopes_hide_bone]
+title = Bone Hidden With a Scope
+help = A bone of the first-person model hidden while any scope is attached (a rear sight).
+
+[item.scope_hide_bones]
+title = Bones This Scope Hides
+help = Bones of the first-person model hidden while this scope is the one mounted.
+
+[item.scope_show_bones]
+title = Bones This Scope Shows
+help = Bones of the first-person model visible only while this scope is the one mounted.
+
+[item.grenade_vel]
+title = Grenade Speed
+unit = m/s
+help = The speed the underbarrel launcher fires its grenade at.
+
+; ---- ammunition
+[item.box_size]
+title = Box Size
+common = true
+help = Rounds in a box: what one item of the section holds.
+
+[item.k_hit]
+title = Damage Factor
+unit = x
+common = true
+help = The bullet's hit against the weapon's.
+
+[item.k_impulse]
+title = Impulse Factor
+unit = x
+help = The bullet's push against the weapon's.
+
+[item.k_dist]
+title = Range Factor
+unit = x
+help = The bullet's range against the weapon's.
+
+[item.k_disp]
+title = Spread Factor
+unit = x
+help = The bullet's spread against the weapon's.
+
+[item.k_ap]
+title = Armour Piercing
+common = true
+help = The bullet's armour piercing, set against the armour of the bone it hits.
+
+[item.k_air_resistance]
+title = Air Resistance Factor
+unit = x
+help = How much the air slows the bullet, against the game's default.
+
+[item.buck_shot]
+title = Pellets
+help = Bullets one round fires: more than 1 for buckshot.
+
+[item.impair]
+title = Weapon Wear
+unit = x
+help = How much the round wears the weapon against an ordinary one.
+
+[item.tracer]
+title = Tracer
+help = The bullet draws a tracer.
+
+[item.tracer_color_ID]
+title = Tracer Colour
+help = The tracer's colour, an index of the tracer colours of the bullet manager.
+
+[item.explosive]
+title = Explosive Round
+help = The bullet explodes where it hits.
+
+[item.misfire_chance]
+title = Misfire Chance
+help = The chance of a misfire with this round, from 0 to 1 (Dead Air).
+
+[item.box_weight]
+title = Box Weight
+unit = kg
+help = The weight of a box when it is not the round's weight times the box size (Dead Air).
+
+[item.keep_empty_box]
+title = Keep Empty Box
+help = The box stays as an empty one when the last round is taken (Dead Air).
+
+[item.fake_grenade_name]
+title = Flying Grenade
+help = The section of the projectile a grenade round becomes in flight, which a round an underbarrel launcher or a grenade launcher fires needs.
+
+; ---- condition and faults
+[item.use_condition]
+title = Has Condition
+help = The item wears and shows its condition.
+
+[item.condition_shot_dec]
+title = Wear Per Shot
+common = true
+help = Condition lost with every shot.
+
+[item.condition_queue_shot_dec]
+title = Wear Per Burst Shot
+help = Condition lost with every shot of a burst, Wear Per Shot when left out.
+
+[item.fire_dispersion_condition_factor]
+title = Spread From Wear
+help = How much wider the spread gets as the condition falls.
+
+[item.misfire_probability]
+title = Misfire Probability
+help = The old misfire chance at a broken weapon, used when the misfire_start and misfire_end keys are not all there.
+
+[item.misfire_start_condition]
+title = Misfire Start Condition
+help = The condition below which the weapon begins to misfire.
+
+[item.misfire_end_condition]
+title = Misfire End Condition
+help = The condition at which misfires reach misfire_end_prob.
+
+[item.misfire_start_prob]
+title = Misfire Start Chance
+help = The misfire chance at misfire_start_condition.
+
+[item.misfire_end_prob]
+title = Misfire End Chance
+help = The misfire chance at misfire_end_condition and below.
+
+[item.misfire_condition_ceiling]
+title = Misfire Ceiling
+help = The condition above which the weapon never misfires, whatever its curve says, the [inventory] value when left out.
+
+[item.condition_avail]
+title = Possible Faults
+help = The faults the weapon can get, as a bit mask of Dead Air's fault list.
+
+[item.condition_coeff]
+title = Reliability
+unit = x
+help = Higher is more reliable: it stretches the rounds between faults.
+
+[item.fault_fouling_rounds]
+title = Fouling Interval
+help = The base of the rounds to the first dirty fault, the [inventory] value when left out.
+
+[item.fault_fouling_repeat]
+title = Fouling Repeat
+help = Later dirty faults come at this fraction of the interval, the [inventory] value when left out.
+
+[item.fault_deform_rounds]
+title = Deformation Rounds
+help = The base of the rounds to a deformed part below the misfire ceiling, the [inventory] value when left out.
+
+[item.fault_break_rounds]
+title = Breakage Rounds
+help = The base of the rounds a deformed part lasts before it breaks, the [inventory] value when left out.
+
+[item.allow_repair]
+title = Repairable
+help = The item can be repaired with a kit.
+
+[item.repair_type]
+title = Repair Kind
+help = Which repair kits mend the item: pistol, rifle, shotgun, knife, outfit, helmet or helmet_light (Dead Air).
+
+[item.condition_drain]
+title = Condition Drain
+help = Condition the item loses per second while it works: a torch or a hand light that is on.
+
+; ---- explosion
+[item.blast]
+title = Blast Damage
+common = true
+help = The hit of the blast at its centre.
+
+[item.blast_r]
+title = Blast Radius
+unit = m
+common = true
+help = How far the blast reaches.
+
+[item.blast_impulse]
+title = Blast Impulse
+help = How hard the blast pushes.
+
+[item.frags]
+title = Fragments
+common = true
+help = How many fragments the explosion throws.
+
+[item.frags_r]
+title = Fragment Range
+unit = m
+common = true
+help = How far the fragments fly.
+
+[item.frag_hit]
+title = Fragment Damage
+common = true
+help = The hit of one fragment.
+
+[item.frag_hit_impulse]
+title = Fragment Impulse
+help = How hard a fragment pushes what it hits.
+
+[item.hit_type_blast]
+title = Blast Hit Type
+type = token
+values = burn, shock, strike, wound, radiation, telepatic, fire_wound, chemical_burn, explosion, wound_2, physic_strike, light_burn
+help = The kind of hit of the blast, usually explosion.
+
+[item.hit_type_frag]
+title = Fragment Hit Type
+type = token
+values = burn, shock, strike, wound, radiation, telepatic, fire_wound, chemical_burn, explosion, wound_2, physic_strike, light_burn
+help = The kind of hit of the fragments, usually fire_wound.
+
+[item.explode_particles]
+title = Explosion Effect
+help = The particle effect of the explosion.
+
+[item.explode_duration]
+title = Explosion Time
+unit = s
+help = How long the explosion lasts.
+
+[item.fragment_speed]
+title = Fragment Speed
+unit = m/s
+help = The speed the fragments fly at.
+
+[item.up_throw_factor]
+title = Upward Throw
+help = How much of the blast's push goes upward.
+
+[item.snd_explode]
+title = Explosion Sound
+help = The sound of the explosion.
+
+[item.time_to_explode]
+title = Burn Time
+unit = s
+help = How long the explosive item burns before it explodes.
+
+[item.condition_to_explode]
+title = Explosion Condition
+help = The condition at which hits make the explosive item go off.
+
+[item.detonation_threshold_hit]
+title = Detonation Threshold
+help = The smallest hit that sets the grenade off.
+
+; ---- throwing and flight
+[item.force_min]
+title = Weakest Throw
+help = The force of the shortest throw.
+
+[item.force_max]
+title = Strongest Throw
+help = The force of a throw held to the end.
+
+[item.force_const]
+title = Fixed Throw
+help = The force of a quick throw.
+
+[item.force_grow_speed]
+title = Throw Charge Speed
+help = How fast holding the throw builds up its force.
+
+[item.destroy_time]
+title = Fuse
+unit = ms
+common = true
+help = The time from the throw to the explosion.
+
+[item.work_time_sec]
+title = Burn Time
+unit = s
+help = How long the flare burns.
+
+; ---- artefact
+[item.af_rank]
+title = Rank
+
+
+[item.can_be_controlled]
+title = Can Be Held Still
+
+
+[item.lights_enabled]
+title = Glows
+help = The artefact lights up its surroundings.
+
+[item.hit_absorbation_sect]
+title = Hit Absorption
+help = The section with what the artefact takes off each kind of hit to its wearer (see the scope Hit Absorption).
+
+[item.particles]
+title = Idle Effect
+help = The particle effect the artefact or detector shows while it lies or works.
+
+[item.jump_height]
+title = Jump Height
+unit = m
+help = How high the gravity artefact jumps.
+
+; ---- detector
+[item.af_radius]
+title = Detection Radius
+unit = m
+common = true
+help = How far the detector hears artefacts.
+
+[item.af_vis_radius]
+title = Visibility Radius
+unit = m
+help = How near an artefact must be for the detector to make it visible.
+
+[item.af_class_n]
+title = Detected Kind
+help = A class of artefacts the detector reacts to: af_class_1, af_class_2 and so on, each with the matching af_freq and af_sound.
+
+[item.af_freq_n]
+title = Beep Rate
+help = The fastest and the slowest beep rate for the kind of the same number.
+
+[item.af_sound_n]
+title = Beep Sound
+help = The beep for the kind of the same number.
+
+[item.zone_class_n]
+title = Detected Anomaly
+help = A class of anomalies the scientific detector reacts to, with the matching zone_freq and zone_sound.
+
+[item.ef_detector_type]
+title = Detector Kind
+help = The kind of detector, for the game's evaluation of what NPCs carry.
+
+; ---- lights
+[item.light_disabled]
+title = No Muzzle Flash Light
+help = The weapon's shots light nothing up.
+
+[item.light_color]
+title = Light Colour
+help = The colour of the light: a shot's flash, an explosion's, or a detector's lamp, as r, g, b.
+
+[item.light_range]
+title = Light Range
+unit = m
+help = How far the light reaches.
+
+[item.light_time]
+title = Light Time
+unit = s
+help = How long the light of a shot or an explosion lasts.
+
+[item.light_var_color]
+title = Light Colour Spread
+help = How much the flash's colour varies from shot to shot.
+
+[item.light_var_range]
+title = Light Range Spread
+unit = m
+help = How much the flash's range varies from shot to shot.
+
+[item.light_trace_bone]
+title = Light Bone
+help = The bone of the torch's model the beam follows.
+
+[item.night_vision]
+title = Night Vision
+help = The torch has a night vision mode.
+
+[item.disabled_maps]
+title = Levels Without the Torch
+help = Levels where the torch cannot be switched on.
+
+; ---- sounds
+[item.snd_shoot]
+title = Shot Sound
+common = true
+help = The sound of a shot, snd_shoot1, snd_shoot2 and so on are variants played at random.
+
+[item.snd_reload]
+title = Reload Sound
+common = true
+help = The sound of a reload.
+
+[item.snd_reload_empty]
+title = Empty Reload Sound
+help = The sound of a reload of an empty weapon, Reload Sound when left out.
+
+[item.snd_draw]
+title = Draw Sound
+common = true
+help = The sound of taking the item into the hands.
+
+[item.snd_holster]
+title = Holster Sound
+common = true
+help = The sound of putting the item away.
+
+[item.snd_empty]
+title = Empty Click
+common = true
+help = The sound of a shot with nothing in the chamber.
+
+[item.snd_silncer_shot]
+title = Silenced Shot Sound
+help = The sound of a shot with the silencer attached.
+
+[item.snd_fire_mode]
+title = Fire Mode Sound
+help = The sound of switching the fire mode.
+
+[item.snd_switch]
+title = Switch Sound
+help = The sound of switching to the underbarrel launcher and back.
+
+[item.snd_shoot_grenade]
+title = Grenade Shot Sound
+help = The sound of firing the underbarrel launcher.
+
+[item.snd_reload_grenade]
+title = Grenade Reload Sound
+help = The sound of loading the underbarrel launcher.
+
+[item.snd_key_n]
+title = Sound Variants
+help = Any sound key with a number after it is a variant of it: snd_shoot, snd_shoot1, snd_shoot2 play at random.
+
+[item.snd_bore]
+title = Idle Sound
+help = The sound of the idle motion the player's hands play when bored.
+
+; ---- visual effects
+[item.flame_particles]
+title = Muzzle Flash
+common = true
+help = The particle effect at the muzzle with every shot.
+
+[item.smoke_particles]
+title = Muzzle Smoke
+help = The smoke at the muzzle after a shot.
+
+[item.shell_particles]
+title = Ejected Shell
+help = The particle effect of the shell thrown out of the weapon.
+
+[item.shot_particles]
+title = Shot Effect
+help = The particle effect along the shot.
+
+[item.silencer_flame_particles]
+title = Silenced Muzzle Flash
+help = The muzzle flash with the silencer attached.
+
+[item.silencer_smoke_particles]
+title = Silenced Muzzle Smoke
+help = The muzzle smoke with the silencer attached.
+
+[item.grenade_flame_particles]
+title = Grenade Launch Flash
+help = The flash of firing the underbarrel launcher.
+
+[item.wm_size]
+title = Hit Mark Size
+help = The size of the mark a hit leaves on a wall.
+
+; ---- first-person view
+[item.hud]
+title = HUD Section
+common = true
+help = The section of the item's first-person model, its hands position and its motions (see the scope HUD Section).
+
+[item.fire_point]
+title = Muzzle Point
+help = Where the bullets leave the world model, in its own coordinates.
+
+[item.position]
+title = Held Position
+help = Where NPCs and the third-person body hold the weapon, in metres.
+
+[item.orientation]
+title = Held Rotation
+help = How NPCs and the third-person body hold the weapon, in degrees.
+
+[item.strap_bone0]
+title = Strap Bone
+help = The bone of an NPC's body the slung weapon hangs from.
+
+[item.attach_bone_name]
+title = Attach Bone
+help = The bone of an NPC's body the item is attached to.
+
+[item.attach_position_offset]
+title = Attach Position
+help = Where on the attach bone the item sits, in metres.
+
+[item.attach_angle_offset]
+title = Attach Rotation
+help = How the item is turned on the attach bone, in radians.
+
+; ---- upgrades
+[item.upgrades]
+title = Upgrade Groups
+help = The upgrade groups of the item, the roots of its upgrade tree.
+
+[item.upgrade_scheme]
+title = Upgrade Scheme
+help = The layout of the upgrade window, a template of inventory_upgrade.xml.
+
+[item.installed_upgrades]
+title = Installed Upgrades
+help = Upgrades the item spawns with.
+
+; ---- repair and cooking tools (Dead Air)
+[item.repair_only]
+title = Repairs Only
+help = The item sections the repair tool mends, when it mends no kind but these.
+
+[item.repair_min_condition]
+title = Repairs From
+help = The lowest condition the tool can mend from.
+
+[item.repair_max_condition]
+title = Repairs Up To
+help = The condition the tool mends up to.
+
+[item.repair_add_condition]
+title = Condition Added
+help = The condition one use of the tool adds.
+
+[item.repair_use_parts]
+title = Uses Parts
+help = The tool needs parts as well.
+
+[item.repair_parts_include]
+title = Parts Taken
+help = The sections the tool takes as parts.
+
+[item.cooking_type]
+title = Cooking Kind
+help = What the cooking tool works on.
+
+; ---- NPCs
+[item.ef_main_weapon_type]
+title = Weapon Kind for NPCs
+help = The kind of weapon, for the NPCs' choice of which of their weapons to use.
+
+[item.ef_weapon_type]
+title = Weapon Kind
+help = The weapon kind for the game's evaluation of how dangerous an armed NPC is.
+
+[item.ef_equipment_type]
+title = Equipment Kind
+help = The kind of outfit for the game's evaluation of how protected an NPC is.
+
+[item.hit_probability_gd_novice]
+title = Hit Chance on Novice
+help = The share of an NPC's shots with the weapon that hit the player on the novice difficulty.
+
+[item.hit_probability_gd_stalker]
+title = Hit Chance on Stalker
+help = The share of an NPC's shots with the weapon that hit the player on the stalker difficulty.
+
+[item.hit_probability_gd_veteran]
+title = Hit Chance on Veteran
+help = The share of an NPC's shots with the weapon that hit the player on the veteran difficulty.
+
+[item.hit_probability_gd_master]
+title = Hit Chance on Master
+help = The share of an NPC's shots with the weapon that hit the player on the master difficulty.
+
+[item.bone_head]
+type = string
+
+[item.bone_torso]
+type = string
+
+[item.bone_spin]
+type = string
+
+[item.bone_fire]
+type = string
+
+; ---- other
+[item.xms_trade]
+title = Module Trade Config
+help = The trade config of a module's character, which the game writes itself, not an item key.
+
+; ============================================================================ the HUD section
+[hud.item_visual]
+title = First-Person Model
+common = true
+help = The model of the item in the hands, a path under meshes without the extension.
+
+[hud.visual]
+title = Hands and Item Model
+help = A single model of the hands and the item together, instead of item_visual on the player's hands.
+
+[hud.hands_position]
+title = Hands Position
+common = true
+help = Where the hands hold the item, x right, y up, z forward.
+
+[hud.hands_orientation]
+title = Hands Rotation
+common = true
+help = How the hands hold the item, in degrees.
+
+[hud.hands_position_16x9]
+title = Hands Position Wide
+help = Hands Position on a wide screen, Hands Position when left out.
+
+[hud.hands_orientation_16x9]
+title = Hands Rotation Wide
+help = Hands Rotation on a wide screen.
+
+[hud.item_position]
+title = Item Position
+help = Where the item sits in the hand bone.
+
+[hud.item_orientation]
+title = Item Rotation
+help = How the item is turned in the hand bone, in degrees.
+
+[hud.aim_hud_offset_pos]
+title = Aim Position
+common = true
+help = How the hands move when aiming down the sights.
+
+[hud.aim_hud_offset_rot]
+title = Aim Rotation
+common = true
+help = How the hands turn when aiming down the sights.
+
+[hud.gl_hud_offset_pos]
+title = Launcher Aim Position
+help = How the hands move when aiming the underbarrel launcher.
+
+[hud.gl_hud_offset_rot]
+title = Launcher Aim Rotation
+help = How the hands turn when aiming the underbarrel launcher.
+
+[hud.fire_bone]
+title = Muzzle Bone
+help = The bone of the first-person model the muzzle is at.
+
+[hud.fire_point]
+title = Muzzle Point
+help = Where the muzzle is, from the muzzle bone.
+
+[hud.shell_bone]
+title = Ejection Bone
+help = The bone the shells come out of.
+
+[hud.shell_point]
+title = Ejection Point
+help = Where the shells come out, from the ejection bone.
+
+[hud.attach_place_idx]
+title = Hand
+help = 0 the item is in the right hand, 1 in the left (detectors).
+
+[hud.hud_fov_factor]
+title = HUD Field of View
+unit = x
+help = How large the hands and the item are drawn, may stand in the item's section instead.
+
+[hud.hud_fov_zoom_factor]
+title = Aimed HUD Field of View
+unit = x
+help = HUD Field of View while aiming.
+
+[hud.anm_idle]
+title = Idle Motion
+common = true
+help = The motion of the hands at rest: a motion of the hands model, then optionally the item's own motion and a speed.
+
+[hud.anm_show]
+title = Draw Motion
+common = true
+help = The motion of taking the item into the hands.
+
+[hud.anm_hide]
+title = Holster Motion
+common = true
+help = The motion of putting the item away.
+
+[hud.anm_reload]
+title = Reload Motion
+common = true
+help = The motion of a reload.
+
+[hud.anm_reload_empty]
+title = Empty Reload Motion
+help = The motion of a reload of an empty weapon.
+
+[hud.anm_shots]
+title = Shot Motion
+common = true
+help = The motion of a shot.
+
+[hud.anm_idle_aim]
+title = Aimed Idle Motion
+help = The motion while aiming.
+
+[hud.anm_idle_sprint]
+title = Sprint Motion
+help = The motion while sprinting.
+
+[hud.anm_idle_moving]
+title = Walk Motion
+help = The motion while walking.
+
+[hud.anm_bore]
+title = Bored Motion
+help = The motion played now and then while the hands are idle.
+
+[hud.anm_name]
+title = Motion
+help = Every anm_ key of the HUD section is a motion the item may play: a motion of the hands model, then optionally the item's own motion and a speed.
+
+; ============================================================================ an upgrade
+[upgrade.cost]
+title = Cost Change
+unit = RU
+help = What installing the upgrade adds to the item's cost.
+
+[upgrade.inv_weight]
+title = Weight Change
+unit = kg
+help = What installing the upgrade adds to the item's weight.
+
+[upgrade.hit_power]
+title = Damage Change
+help = What the upgrade adds to the weapon's damage, four values like the weapon's.
+
+[upgrade.rpm]
+title = Rate of Fire Change
+unit = rpm
+help = What the upgrade adds to the rate of fire.
+
+[upgrade.ammo_mag_size]
+title = Magazine Change
+help = What the upgrade adds to the magazine size.
+
+[upgrade.fire_dispersion_base]
+title = Spread Change
+unit = deg
+help = What the upgrade adds to the spread, negative is tighter.
+
+[upgrade.cam_dispersion]
+title = Recoil Change
+unit = deg
+help = What the upgrade adds to the recoil, negative is less.
+
+[upgrade.condition_shot_dec]
+title = Wear Change
+help = What the upgrade adds to the wear per shot, negative is less.
+
+[upgrade.bullet_speed]
+title = Velocity Change
+unit = m/s
+help = What the upgrade adds to the muzzle velocity.
+
+[upgrade.fire_modes]
+title = Fire Modes
+help = The fire modes the weapon has once the upgrade is in.
+
+[upgrade.scope_status]
+title = Scope Status
+help = The scope status the upgrade gives the weapon.
+
+[upgrade.additional_inventory_weight]
+title = Carry Weight Change
+unit = kg
+help = What the upgrade adds to the outfit's extra carry weight.
+
+[upgrade.fire_wound_protection]
+title = Bullet Protection Change
+help = What the upgrade adds to the outfit's bullet protection.
+
+[upgrade.artefact_count]
+title = Artefact Slots Change
+help = What the upgrade adds to the outfit's artefact slots.
+
+[upgrade.bones_koeff_protection_add]
+title = Bone Protection Added
+help = A section of bone protection added to the outfit's own.
+
+[upgrade.immunities_sect_add]
+title = Immunities Added
+help = A section of immunities added to the item's own.
+
+; ============================================================================ the sections an item names
+[immunities.burn_immunity]
+title = Burn
+help = How much of a burn hit the item itself takes, from 0 to 1.
+
+[immunities.strike_immunity]
+title = Strike
+help = How much of a blunt hit the item itself takes.
+
+[immunities.shock_immunity]
+title = Shock
+help = How much of an electric hit the item itself takes.
+
+[immunities.wound_immunity]
+title = Rupture
+help = How much of a tearing hit the item itself takes.
+
+[immunities.radiation_immunity]
+title = Radiation
+help = How much of a radiation hit the item itself takes.
+
+[immunities.telepatic_immunity]
+title = Psy
+help = How much of a psy hit the item itself takes.
+
+[immunities.chemical_burn_immunity]
+title = Chemical
+help = How much of a chemical burn the item itself takes.
+
+[immunities.explosion_immunity]
+title = Explosion
+help = How much of a blast the item itself takes.
+
+[immunities.fire_wound_immunity]
+title = Bullet
+help = How much of a bullet the item itself takes.
+
+[absorbation.burn_immunity]
+title = Burn
+help = The share of a burn hit the artefact takes off its wearer.
+
+[absorbation.strike_immunity]
+title = Strike
+help = The share of a blunt hit the artefact takes off its wearer.
+
+[absorbation.shock_immunity]
+title = Shock
+help = The share of an electric hit the artefact takes off its wearer.
+
+[absorbation.wound_immunity]
+title = Rupture
+help = The share of a tearing hit the artefact takes off its wearer.
+
+[absorbation.radiation_immunity]
+title = Radiation
+help = The share of a radiation hit the artefact takes off its wearer.
+
+[absorbation.telepatic_immunity]
+title = Psy
+help = The share of a psy hit the artefact takes off its wearer.
+
+[absorbation.chemical_burn_immunity]
+title = Chemical
+help = The share of a chemical burn the artefact takes off its wearer.
+
+[absorbation.explosion_immunity]
+title = Explosion
+help = The share of a blast the artefact takes off its wearer.
+
+[absorbation.fire_wound_immunity]
+title = Bullet
+help = The share of a bullet the artefact takes off its wearer.
+
+[bones.bone]
+title = Bone
+help = A bone of the wearer, three numbers: the factor of a hit there, the armour of the bone, and 1 when a bullet passes through it.
+
+[bones.hit_fraction]
+title = Hit Fraction
+help = The least share of a bullet's hit that goes through armour it does not pierce.
+
+[bones.hit_fraction_npc]
+title = NPC Hit Fraction
+help = The least share of a bullet's hit that goes through armour it does not pierce, by the newer formula, hit_fraction when left out.
+
+[sound_layers.snd_n_layer]
+title = Sound Layer
+help = A sound that plays with the others of the section: snd_1_layer, snd_2_layer and so on.
+
+[model.color]
+title = Beam Colour
+help = The colour of the torch's beam, as r, g, b.
+
+[model.range]
+title = Beam Range
+unit = m
+help = How far the torch's beam reaches.
+
+[model.spot_angle]
+title = Beam Angle
+unit = deg
+help = The width of the torch's beam.
+
+[model.spot_texture]
+title = Beam Texture
+help = The texture the beam projects.
+
+[global.misfire_condition_ceiling]
+title = Misfire Ceiling
+help = The condition above which no weapon misfires, unless its own section says otherwise.
+
+[global.fault_fouling_rounds]
+title = Fouling Interval
+help = The game-wide base of the rounds to the first dirty fault.
+
+[global.fault_fouling_repeat]
+title = Fouling Repeat
+help = The game-wide fraction of the interval for later dirty faults.
+
+[global.fault_deform_rounds]
+title = Deformation Rounds
+help = The game-wide base of the rounds to a deformed part.
+
+[global.fault_break_rounds]
+title = Breakage Rounds
+help = The game-wide base of the rounds a deformed part lasts.
+
+; read by a revolver class of the engine that no `class =` value makes
+[hud.anm_reload_3]
+families = weapon
+required = false
+help = Read by the engine's revolver class, which no item class value makes.
+
+[hud.anm_reload_4]
+families = weapon
+required = false
+help = Read by the engine's revolver class, which no item class value makes.
+
+[hud.anm_reload_5]
+families = weapon
+required = false
+help = Read by the engine's revolver class, which no item class value makes.

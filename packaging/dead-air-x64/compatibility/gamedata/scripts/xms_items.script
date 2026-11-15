@@ -1,0 +1,731 @@
+-- A module's items in the game's own windows: craft recipes, start kits of the new-game screen and
+-- the costs of a module's upgrades, all from data in the system config.
+--
+-- None of the three windows is replaced. The stock scripts differ between Dead Air and Revolution II
+-- (their recipe tables, their kits, their perks), so one copy shipped here would take one game's
+-- content away from the other; their classes and functions are wrapped instead, and every wrapper
+-- hands everything the data does not name to the stock code untouched. With no [xms_craft] recipe,
+-- no [xms_start_kits] kit and no module enabled nothing is wrapped at all.
+--
+--   * craft:   [xms_craft] <key> = at, result, count, part, part, part, part
+--   * kits:    [xms_start_kits] <kit section> =, one section per kit (title, cost, items, ...)
+--   * upgrades: an upgrade section item_upgrades.ltx does not have is read from the system config
+--
+-- Contract: docs/dead-air/ITEM_DATA.md.
+
+local EQUIPMENT_ICONS = "ui\\ui_icon_equipment"
+
+local function say(text)
+	printf("%s", text)
+end
+
+local function trim(s)
+	return (string.gsub(s or "", "^%s*(.-)%s*$", "%1"))
+end
+
+local function split(s, sep)
+	local out = {}
+	for part in string.gmatch((s or "") .. sep, "([^" .. sep .. "]*)" .. sep) do
+		out[#out + 1] = trim(part)
+	end
+	return out
+end
+
+local function lines_of(ini, section)
+	local out = {}
+	if not (ini and ini:section_exist(section)) then return out end
+	for i = 0, ini:line_count(section) - 1 do
+		local ok, key, value = ini:r_line(section, i, "", "")
+		if (ok and key and key ~= "") then out[#out + 1] = { key = key, value = value or "" } end
+	end
+	return out
+end
+
+-- a global function named `<script>.<function>` (a module's registrar may publish one)
+local function global_function(name)
+	local script, path = string.match(name or "", "^([%a_][%w_]*)%.(.+)$")
+	local target = script and _G[script]
+	for part in string.gmatch(path or "", "[^%.]+") do
+		target = type(target) == "table" and target[part] or nil
+	end
+	return type(target) == "function" and target or nil
+end
+
+-- ============================================================================ craft
+-- [xms_craft] <key> = at, result, count, part, part, part, part
+-- `at` is the section the craft window is opened with (a tool or a workbench), `-` or nothing a
+-- missing part. The engine hands the lines back sorted by key, so that is the order they are listed
+-- in, after the window's own recipes.
+local CRAFT_SECTION = "xms_craft"
+local recipes_by_tool = nil
+
+function parse_recipe(key, value, ini)
+	local f = split(value, ",")
+	-- section names are lower case in the game, as obj:section() hands the window's tool over
+	local at, result, count = string.lower(f[1] or ""), string.lower(f[2] or ""), f[3] or ""
+	if (at == "" or result == "") then return nil, "it names no tool or no result" end
+	if (#f > 7) then return nil, "more than four parts" end
+	count = (count == "") and 1 or tonumber(count)
+	if not (count and count >= 1 and count == math.floor(count)) then
+		return nil, "the count is no whole number of 1 or more"
+	end
+	if not (ini:section_exist(result)) then return nil, "the result " .. result .. " is no section" end
+	local parts = {}
+	for i = 1, 4 do
+		local p = f[3 + i]
+		if (p == nil or p == "" or p == "-") then
+			p = "-"
+		elseif not (ini:section_exist(p)) then
+			return nil, "the part " .. p .. " is no section"
+		else
+			p = string.lower(p)
+		end
+		parts[i] = p
+	end
+	return { key = key, at = at, result = result, count = count, parts = parts }
+end
+
+-- every recipe of the system config by tool, read once per Lua state
+function craft_recipes_all()
+	if (recipes_by_tool) then return recipes_by_tool end
+	recipes_by_tool = {}
+	local ini = system_ini()
+	for _, line in ipairs(lines_of(ini, CRAFT_SECTION)) do
+		local rec, why = parse_recipe(line.key, line.value, ini)
+		if (rec) then
+			local list = recipes_by_tool[rec.at]
+			if not (list) then
+				list = {}
+				recipes_by_tool[rec.at] = list
+			end
+			list[#list + 1] = rec
+		else
+			say("! xms_items: craft recipe " .. line.key .. " is left out - " .. why)
+		end
+	end
+	return recipes_by_tool
+end
+
+function craft_recipes(at)
+	return craft_recipes_all()[at] or {}
+end
+
+-- the recipe of the selected row when it is one of the data's, nil for a stock row
+local function selected_recipe(wnd)
+	if not (wnd.xms_first and wnd.xms_recipes and wnd.list_box_craft) then return nil end
+	local index = wnd.list_box_craft:GetSelectedIndex()
+	if (index == nil or index < wnd.xms_first) then return nil end
+	return wnd.xms_recipes[index - wnd.xms_first + 1]
+end
+
+-- the stock window draws every part from the equipment atlas and never sets the texture again
+local function reset_part_textures(wnd)
+	if not (wnd.xms_textured) then return end
+	for i in pairs(wnd.xms_textured) do
+		local icon = wnd["icon_part" .. i]
+		if (icon) then icon:InitTexture(EQUIPMENT_ICONS) end
+	end
+	wnd.xms_textured = nil
+end
+
+-- the parts of a data recipe, shown and counted the way the stock window does it for its own
+local PART_ROW_Y = { 90, 175, 260, 345 }
+
+function show_recipe(wnd, rec)
+	local ini = system_ini()
+	local read = alun_utils.read_from_ini
+	local tmp_x, tmp_y, size_k = 120, 25, 0.7
+	local found = { false, false, false, false }
+	wnd.xms_parts = {}
+	for i = 1, 4 do
+		local sec = rec.parts[i]
+		local caption, icon = wnd["caption_part" .. i], wnd["icon_part" .. i]
+		db.actor:iterate_inventory(function(temp, item)
+			if (not found[i]) and (item:section() == sec) and (not wnd.xms_parts[item:id()]) then
+				found[i] = true
+				wnd.xms_parts[item:id()] = true
+				caption:SetTextColor(GetARGB(200, 0, 255, 0))
+			end
+		end, nil)
+		if (sec == "-") then found[i] = true end
+
+		caption:SetText(game.translate_string(read(ini, sec, "inv_name", "string", "")))
+		-- a module's item may draw from an icon sheet of its own
+		local sheet = read(ini, sec, "icons_texture", "string", nil)
+		if (sheet and sheet ~= "") then
+			icon:InitTexture(sheet)
+			wnd.xms_textured = wnd.xms_textured or {}
+			wnd.xms_textured[i] = true
+		end
+		local x1 = read(ini, sec, "inv_grid_x", "float", 0) * 50
+		local y1 = read(ini, sec, "inv_grid_y", "float", 0) * 50
+		local width = read(ini, sec, "inv_grid_width", "float", 0) * 50
+		local height = read(ini, sec, "inv_grid_height", "float", 0) * 50
+		icon:SetTextureRect(Frect():set(x1, y1, x1 + width, y1 + height))
+		icon:SetWndPos(vector2():set(tmp_x - width / 3, PART_ROW_Y[i] + tmp_y - height / 2))
+		icon:SetWndSize(vector2():set(width * size_k, height * size_k))
+	end
+	wnd.can_craft = found[1] and found[2] and found[3] and found[4]
+end
+
+-- the result made and the parts taken, as the stock window does it
+function craft_recipe(wnd, rec)
+	local a = db.actor
+	local result, num = rec.result, rec.count
+	if (string.find(result, "ammo_")) then
+		create_ammo(result, a:position(), a:level_vertex_id(), a:game_vertex_id(), 0, num)
+	else
+		for _ = 1, num do
+			alife():create(result, a:position(), a:level_vertex_id(), a:game_vertex_id(), a:id())
+		end
+	end
+	for id in pairs(wnd.xms_parts or {}) do
+		alife():release(alife_object(id), true)
+	end
+	if (actor_effects) then
+		actor_effects.use_item("toolkit_u_dummy")
+	end
+	wnd:HideDialog()
+end
+
+function install_craft()
+	local m = rawget(_G, "ui_itm_craft") or ui_itm_craft
+	local cls = m and m.craft_ui
+	if not (cls) then return false end
+	local fill, parts, ok = cls.FillCraftList, cls.OnPartsListItemClicked, cls.OnButton_ok
+	if not (type(fill) == "function" and type(parts) == "function" and type(ok) == "function"
+		and type(cls.AddItemToList) == "function") then
+		say("! xms_items: the craft window is not the one this game knows - recipes from data are off")
+		return false
+	end
+	-- once per Lua state, and only when the data has a recipe at all
+	if (m.xms_items_wrapped) then return true end
+	if (next(craft_recipes_all()) == nil) then return true end
+	m.xms_items_wrapped = true
+
+	cls.FillCraftList = function(self, ...)
+		fill(self, ...)
+		local list = self.list_box_craft
+		local recipes = craft_recipes(self.section)
+		self.xms_first = list:GetSize()
+		self.xms_recipes = recipes
+		for _, rec in ipairs(recipes) do
+			self:AddItemToList(rec.result, list, rec.count)
+		end
+	end
+	cls.OnPartsListItemClicked = function(self, ...)
+		reset_part_textures(self)
+		parts(self, ...)
+		local rec = selected_recipe(self)
+		if (rec) then show_recipe(self, rec) end
+	end
+	cls.OnButton_ok = function(self, ...)
+		local rec = selected_recipe(self)
+		if not (rec) then return ok(self, ...) end
+		if not (self.can_craft) then return end
+		craft_recipe(self, rec)
+	end
+	return true
+end
+
+-- ============================================================================ start kits
+-- [xms_start_kits] lists the kit sections (a key each); a kit section says
+--   title = <string id>, cost = <points of the screen's 100>, items = <rows>,
+--   descr = <string id> (optional), after = <script>.<function> (optional)
+-- A row is `section[:count][@min-max]`, `a|b|c` one of them at random; count is boxes for ammo.
+local KITS_SECTION = "xms_start_kits"
+local KIT_INDEX = 1000		-- the screen's own kits are 1..N; a module kit's row is KIT_INDEX + n
+local CONFIG_KEY = "new_game_xms_kits"
+local kits = nil
+
+local function parse_row(token, ini, kit_name)
+	local text, range = string.match(token, "^(.-)@(.*)$")
+	text = text or token
+	local cmin, cmax
+	if (range) then
+		local a, b = string.match(range, "^%s*([%d%.]+)%s*%-%s*([%d%.]+)%s*$")
+		a, b = tonumber(a), tonumber(b)
+		if not (a) then
+			a = tonumber(trim(range))
+			b = a
+		end
+		if (a and b and a >= 0 and b <= 1 and a <= b) then
+			cmin, cmax = a, b
+		else
+			say("! xms_items: start kit " .. kit_name .. ": condition " .. range .. " is no range within 0-1 - left out")
+		end
+	end
+	local names, count = string.match(text, "^(.-):(.*)$")
+	names = names or text
+	if (count) then
+		count = tonumber(trim(count))
+		if not (count and count >= 1 and count == math.floor(count)) then
+			say("! xms_items: start kit " .. kit_name .. ": " .. token .. " has no whole count of 1 or more - left out")
+			return nil
+		end
+	else
+		count = 1
+	end
+	local alts = {}
+	for _, name in ipairs(split(names, "|")) do
+		if (name ~= "") then
+			if (ini:section_exist(name)) then
+				alts[#alts + 1] = name
+			else
+				say("! xms_items: start kit " .. kit_name .. ": " .. name .. " is not a section of the game - left out")
+			end
+		end
+	end
+	if (#alts == 0) then return nil end
+	return { sections = alts, count = count, cmin = cmin, cmax = cmax }
+end
+
+function parse_kit(name, ini)
+	if not (ini:section_exist(name)) then return nil, "it is no section" end
+	local function value(key)
+		if not (ini:line_exist(name, key)) then return "" end
+		return trim(ini:r_string_ex(name, key) or "")
+	end
+	local title = value("title")
+	if (title == "") then return nil, "it has no title" end
+	local cost = tonumber(value("cost"))
+	if not (cost and cost >= 0 and cost <= 100 and cost == math.floor(cost)) then
+		return nil, "its cost is no whole number from 0 to 100"
+	end
+	local kit = { section = name, title = title, cost = cost, rows = {} }
+	local descr, after = value("descr"), value("after")
+	if (descr ~= "") then kit.descr = descr end
+	if (after ~= "") then kit.after = after end
+	for _, token in ipairs(split(value("items"), ",")) do
+		if (token ~= "") then
+			local row = parse_row(token, ini, name)
+			if (row) then kit.rows[#kit.rows + 1] = row end
+		end
+	end
+	if (#kit.rows == 0 and not kit.after) then return nil, "it gives nothing" end
+	return kit
+end
+
+-- every kit of the system config, read once per Lua state
+function start_kits()
+	if (kits) then return kits end
+	kits = {}
+	local ini = system_ini()
+	for _, line in ipairs(lines_of(ini, KITS_SECTION)) do
+		local kit, why = parse_kit(line.key, ini)
+		if (kit) then
+			kit.index = KIT_INDEX + #kits + 1
+			kits[#kits + 1] = kit
+		else
+			say("! xms_items: start kit " .. line.key .. " is left out - " .. why)
+		end
+	end
+	return kits
+end
+
+local function kit_by_index(index)
+	for _, kit in ipairs(start_kits()) do
+		if (kit.index == index) then return kit end
+	end
+	return nil
+end
+
+local function kit_by_section(name)
+	for _, kit in ipairs(start_kits()) do
+		if (kit.section == name) then return kit end
+	end
+	return nil
+end
+
+-- what the description pane shows for a kit: its points, its own text, then what it gives
+function kit_text(kit)
+	local gs = game.translate_string
+	local ini = system_ini()
+	local out = gs("st_loadout_points") .. " " .. kit.cost .. "\n \n"
+	if (kit.descr) then out = out .. gs(kit.descr) .. "\n \n" end
+	for _, row in ipairs(kit.rows) do
+		local names = {}
+		for i, sec in ipairs(row.sections) do
+			names[i] = gs(ini:line_exist(sec, "inv_name") and ini:r_string_ex(sec, "inv_name") or sec)
+		end
+		out = out .. "- " .. table.concat(names, " / ") .. (row.count > 1 and (" x" .. row.count) or "") .. "\n"
+	end
+	return out
+end
+
+local function show_kit_text(wnd, kit)
+	local desc, scroll = wnd.loadout_desc_text, wnd.loadout_scroll_v
+	if not (desc and scroll) then return end
+	desc:SetText(kit_text(kit))
+	desc:AdjustHeightToText()
+	desc:SetWndSize(vector2():set(desc:GetWidth(), desc:GetHeight()))
+	scroll:Clear()
+	scroll:AddWindow(desc, true)
+	desc:SetAutoDelete(false)
+end
+
+function install_kits()
+	local screen = rawget(_G, "ui_mm_faction_select") or ui_mm_faction_select
+	local cls = screen and screen.faction_ui
+	if not (cls and screen.set_list_text) then return false end
+	if (screen.xms_items_kits) then return true end
+	if (#start_kits() == 0) then return true end
+	local init, start = cls.InitControls, cls.OnStartGame
+	local click1, click2 = cls.OnLoadout1Clicked, cls.OnLoadout2Clicked
+	if not (type(init) == "function" and type(start) == "function" and type(click1) == "function"
+		and type(click2) == "function") then
+		say("! xms_items: the new-game screen is not the one this game knows - start kits from data are off")
+		return false
+	end
+	screen.xms_items_kits = true
+
+	-- every row the screen makes for one of these kits - the first one and the copy it makes on
+	-- each move between the two lists - is captioned with the kit's own title
+	local make_row = screen.set_list_text
+	screen.set_list_text = function(idx, points, ...)
+		local row = make_row(idx, points, ...)
+		local kit = kit_by_index(idx)
+		if (kit and row) then
+			row.xms_kit = kit
+			if (row.text) then row.text:SetText(game.translate_string(kit.title)) end
+		end
+		return row
+	end
+
+	cls.InitControls = function(self, ...)
+		init(self, ...)
+		local list = self.list_loadout_2
+		if not (list) then return end
+		for _, kit in ipairs(start_kits()) do
+			list:AddExistingItem(screen.set_list_text(kit.index, kit.cost))
+		end
+	end
+	cls.OnLoadout1Clicked = function(self, ...)
+		click1(self, ...)
+		local row = self.list_loadout_1 and self.list_loadout_1:GetSelectedItem()
+		if (row and row.xms_kit) then show_kit_text(self, row.xms_kit) end
+	end
+	cls.OnLoadout2Clicked = function(self, ...)
+		click2(self, ...)
+		local row = self.list_loadout_2 and self.list_loadout_2:GetSelectedItem()
+		if (row and row.xms_kit) then show_kit_text(self, row.xms_kit) end
+	end
+	-- The screen packs its picks into one number, a bit per row index, which only holds the
+	-- screen's own rows: a module kit's row counts as index 0 there (a bit the game never reads)
+	-- and its section goes into a key of its own.
+	cls.OnStartGame = function(self, ...)
+		local picked, rows = {}, {}
+		local list = self.list_loadout_1
+		local cfg = axr_main and axr_main.config
+		if (list and cfg) then
+			for i = 0, list:GetSize() - 1 do
+				local row = list:GetItemByIndex(i)
+				if (row and row.xms_kit) then
+					picked[#picked + 1] = row.xms_kit.section
+					rows[#rows + 1] = { row = row, idx = row.idx }
+					row.idx = 0
+				end
+			end
+			cfg:w_value("character_creation", CONFIG_KEY, #picked > 0 and table.concat(picked, ",") or nil)
+		end
+		local res = { pcall(start, self, ...) }
+		for _, r in ipairs(rows) do r.row.idx = r.idx end
+		if not (res[1]) then error(res[2], 0) end
+		return unpack(res, 2)
+	end
+	return true
+end
+
+function give_kit(kit)
+	local a, sim = db.actor, alife()
+	if not (a and sim) then return 0 end
+	local given = 0
+	for _, row in ipairs(kit.rows) do
+		local sec = row.sections[#row.sections > 1 and math.random(#row.sections) or 1]
+		for _ = 1, row.count do
+			local se = sim:create(sec, a:position(), a:level_vertex_id(), a:game_vertex_id(), 0)
+			if (se) then
+				given = given + 1
+				if (row.cmin) then
+					local c = row.cmin + math.random() * (row.cmax - row.cmin)
+					pcall(function() se.condition = c end)
+				end
+			end
+		end
+	end
+	if (kit.after) then
+		local fn = global_function(kit.after)
+		if (fn) then
+			local ok, err = pcall(fn, kit.section)
+			if not (ok) then say("! xms_items: start kit " .. kit.section .. ": " .. kit.after .. ": " .. tostring(err)) end
+		else
+			say("! xms_items: start kit " .. kit.section .. ": there is no function " .. kit.after)
+		end
+	end
+	return given
+end
+
+-- the kits picked on the screen, given when the new game loads, as the screen gives its own
+local kits_new_game = false
+
+local function on_game_load_kits()
+	local cfg = axr_main and axr_main.config
+	if not (cfg) then return end
+	local picked = cfg:r_value("character_creation", CONFIG_KEY, 3)
+	if (picked == nil) then return end
+	cfg:w_value("character_creation", CONFIG_KEY)
+	cfg:save()
+	if not (kits_new_game) then return end
+	for _, name in ipairs(split(tostring(picked), ",")) do
+		local kit = name ~= "" and kit_by_section(name)
+		if (kit) then
+			say("* xms_items: start kit " .. name .. ": " .. give_kit(kit) .. " item(s) given")
+		elseif (name ~= "") then
+			say("! xms_items: start kit " .. name .. " is not in the system config any more - nothing given")
+		end
+	end
+end
+
+-- ============================================================================ upgrade costs
+-- The stock upgrade functions read an upgrade's cost and a property's name from item_upgrades.ltx,
+-- opened by name; a section a module adds to the system config is not in that file, and reading
+-- it there stops the game. For such a section the same functions run here over the system config;
+-- every upgrade the file has goes to the stock code as before.
+local upgrades_file = nil
+local mechanics_file = nil
+local price_percent = 2		-- the stock's cur_price_percent, followed through mech_discount
+local free_noted = {}
+
+local function file_ini()
+	if not (upgrades_file) then upgrades_file = ini_file("item_upgrades.ltx") end
+	return upgrades_file
+end
+
+local function mechanics_ini()
+	if not (mechanics_file) then mechanics_file = ini_file("misc\\stalkers_upgrade_info.ltx") end
+	return mechanics_file
+end
+
+function in_upgrades_file(section)
+	return section ~= nil and file_ini():section_exist(section)
+end
+
+-- the ini that holds a section: the file when it has it, else the system config
+local function ini_for(section)
+	if (in_upgrades_file(section)) then return file_ini() end
+	return system_ini()
+end
+
+function upgrade_cost(section)
+	local ini = system_ini()
+	if (ini:section_exist(section) and ini:line_exist(section, "cost")) then
+		return ini:r_u32(section, "cost")
+	end
+	if not (free_noted[section]) then
+		free_noted[section] = true
+		say("! xms_items: upgrade " .. tostring(section) .. " has no cost - it is free")
+	end
+	return 0
+end
+
+local function mechanic()
+	local iu = inventory_upgrades
+	local id = iu and iu.victim_id
+	return id and (db.storage[id] and db.storage[id].object or level.object_by_id(id))
+end
+
+function install_upgrades()
+	local iu = rawget(_G, "inventory_upgrades") or inventory_upgrades
+	if not (iu) then return false end
+	local names = { "precondition_functor_a", "effect_functor_a", "get_upgrade_cost", "prereq_functor_a",
+		"property_functor_a", "property_functor_b", "property_functor_c", "mech_discount" }
+	local base = {}
+	for _, n in ipairs(names) do
+		if (type(iu[n]) ~= "function") then
+			say("! xms_items: inventory_upgrades." .. n .. " is missing - module upgrades keep the stock reads")
+			return false
+		end
+		base[n] = iu[n]
+	end
+	if (iu.xms_items_wrapped) then return true end
+	iu.xms_items_wrapped = true
+
+	iu.mech_discount = function(perc, ...)
+		price_percent = perc
+		return base.mech_discount(perc, ...)
+	end
+
+	iu.precondition_functor_a = function(param1, section, ...)
+		if (in_upgrades_file(section)) then return base.precondition_functor_a(param1, section, ...) end
+		local victim = mechanic()
+		if not (victim) then return 2 end
+		local mechanic_name = victim:section()
+		local ret = 0
+		local pini = mechanics_ini()
+		if (pini:line_exist(mechanic_name .. "_upgr", section)) then
+			local param = pini:r_string_ex(mechanic_name .. "_upgr", section)
+			if (param) then
+				if (param == "false") then
+					ret = 1
+				elseif (param ~= "true") then
+					local possibility_table = xr_logic.parse_condlist(victim, mechanic_name .. "_upgr", section, param)
+					local possibility = xr_logic.pick_section_from_condlist(db.actor, victim, possibility_table)
+					if not (possibility) or (possibility == "false") then ret = 2 end
+				end
+			end
+		end
+		if not (db.actor) then return ret end
+		local price = math.floor(upgrade_cost(section) * price_percent)
+		if (db.actor:money() < price) then ret = 2 end
+		return ret
+	end
+
+	iu.effect_functor_a = function(param2, section, loading, ...)
+		if (in_upgrades_file(section)) then return base.effect_functor_a(param2, section, loading, ...) end
+		if (loading == 0) then
+			db.actor:give_money(math.floor(upgrade_cost(section) * -1 * price_percent))
+		end
+	end
+
+	iu.get_upgrade_cost = function(section, ...)
+		if (in_upgrades_file(section)) then return base.get_upgrade_cost(section, ...) end
+		if (db.actor) then
+			return game.translate_string("st_upgr_cost") .. ": " .. math.floor(upgrade_cost(section) * price_percent)
+		end
+		return " "
+	end
+
+	iu.prereq_functor_a = function(param3, section, ...)
+		if (in_upgrades_file(section)) then return base.prereq_functor_a(param3, section, ...) end
+		local victim = mechanic()
+		if not (victim) then return "" end
+		local mechanic_name = victim:section()
+		local str = ""
+		local pini = mechanics_ini()
+		if (pini:line_exist(mechanic_name .. "_upgr", section)) then
+			local param = pini:r_string_ex(mechanic_name .. "_upgr", section)
+			if (param) then
+				if (param == "false") then
+					return str
+				else
+					iu.cur_hint = nil
+					local possibility_table = xr_logic.parse_condlist(victim, mechanic_name .. "_upgr", section, param)
+					local possibility = xr_logic.pick_section_from_condlist(db.actor, victim, possibility_table)
+					if not (possibility) or (possibility == "false") then
+						str = str .. iu.get_possibility_string(mechanic_name, possibility_table)
+					end
+				end
+			end
+		end
+		if (db.actor) then
+			local price = math.floor(upgrade_cost(section) * price_percent)
+			if (db.actor:money() < price) then
+				return str .. "\\n - " .. game.translate_string("st_upgr_enough_money")
+			end
+		end
+		return str
+	end
+
+	-- a property and the upgrade sections it sums: the stock code when the file has them all
+	local function all_in_file(param1, name)
+		if not (in_upgrades_file(name)) then return false end
+		for _, s in ipairs(utils.parse_names(param1)) do
+			if not (in_upgrades_file(s)) then return false end
+		end
+		return true
+	end
+
+	iu.property_functor_a = function(param1, name, ...)
+		if (all_in_file(param1, name)) then return base.property_functor_a(param1, name, ...) end
+		local nini = ini_for(name)
+		local t_name = game.translate_string(nini:line_exist(name, "name") and nini:r_string(name, "name") or name)
+		local section_table = utils.parse_names(param1)
+		if (#section_table == 0) then return "" end
+		local value, sum = 0, 0
+		for i = 1, #section_table do
+			local sini = ini_for(section_table[i])
+			if not (sini:line_exist(section_table[i], "value")) or not (sini:r_string(section_table[i], "value")) then
+				return t_name
+			end
+			value = sini:r_string(section_table[i], "value")
+			if (name ~= "prop_night_vision") then
+				sum = sum + tonumber(value)
+			else
+				sum = tonumber(value)
+			end
+		end
+		if (sum < 0) then
+			value = string.format("%g", sum)
+		else
+			value = "+" .. string.format("%g", sum)
+		end
+		if (name == "prop_ammo_size" or name == "prop_artefact") then
+			return t_name .. " " .. value
+		elseif (name == "prop_restore_bleeding" or name == "prop_restore_health" or name == "prop_power") then
+			if (name == "prop_power") then value = "+" .. tonumber(value) * 2 end
+			return t_name .. " " .. value
+		elseif (name == "prop_tonnage" or name == "prop_weightoutfit" or name == "prop_weight") then
+			return string.format("%s %5.2f %s", t_name, value, game.translate_string("st_kg"))
+		elseif (name == "prop_night_vision") then
+			if (tonumber(value) == 1) then return t_name end
+			local pname = nini:line_exist(name, "name") and nini:r_string(name, "name") or name
+			return game.translate_string(pname .. "_" .. tonumber(value))
+		elseif (name == "prop_no_buck" or name == "prop_autofire") then
+			return t_name
+		end
+		return t_name .. " " .. value .. "%"
+	end
+
+	local function issue_property(param1, name)
+		local nini = ini_for(name)
+		local t_name = game.translate_string(nini:line_exist(name, "name") and nini:r_string_ex(name, "name") or name)
+		local section = utils.parse_names(param1)[1]
+		if not (section) then return t_name end
+		local sini = ini_for(section)
+		if not (sini:line_exist(section, "value")) or not (sini:r_string_ex(section, "value")) then return t_name end
+		return t_name .. " " .. string.sub(sini:r_string_ex(section, "value"), 2, -2)
+	end
+	iu.property_functor_b = function(param1, name, ...)
+		if (all_in_file(param1, name)) then return base.property_functor_b(param1, name, ...) end
+		return issue_property(param1, name)
+	end
+	iu.property_functor_c = function(param1, name, ...)
+		if (all_in_file(param1, name)) then return base.property_functor_c(param1, name, ...) end
+		return issue_property(param1, name)
+	end
+	return true
+end
+
+-- Only a module brings an upgrade the file lacks (one a loose mod adds there and not to the file
+-- stops the stock game already), so a game without modules keeps the stock functions untouched -
+-- and does not read the file twice.
+local function any_module()
+	if not (xms and xms.modules) then return false end
+	for _, m in ipairs(xms.modules() or {}) do
+		if (m.enabled) then return true end
+	end
+	return false
+end
+
+-- ============================================================================ install
+-- The new-game screen exists in the menu's own Lua state, before any game: wrapped as this file loads
+-- (it is one of the [common] scripts). The craft window and the upgrades belong to a game.
+do
+	local ok, err = pcall(install_kits)
+	if not (ok) then say("! xms_items: start kits not installed: " .. tostring(err)) end
+end
+
+function on_game_start()
+	local ok, err = pcall(install_craft)
+	if not (ok) then say("! xms_items: craft recipes not installed: " .. tostring(err)) end
+	ok, err = pcall(function()
+		if (any_module()) then install_upgrades() end
+	end)
+	if not (ok) then say("! xms_items: upgrade costs not installed: " .. tostring(err)) end
+
+	-- a new game: the screen's faction still waits for ui_mm_faction_select to read it
+	local cfg = axr_main and axr_main.config
+	local faction = cfg and cfg:r_value("character_creation", "new_game_faction", 3)
+	kits_new_game = faction ~= nil and faction ~= ""
+	RegisterScriptCallback("on_game_load", on_game_load_kits)
+end

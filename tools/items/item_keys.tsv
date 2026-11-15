@@ -1,0 +1,901 @@
+# Every config key the engine and the game's scripts read of an item, extracted from the code.
+# Input of make_item_catalog.py. families: * = every family; section: the section a global key lives in.
+scope	key	type	required	default	families	pattern	presence	section	source
+item	1icon_layer	section	0		*	0	0		_work/da_unpack/xtra/scripts/ui_debug_main.script:1099
+item	4to1_tracer	bool	0		ammo	0	0		xrGame/WeaponAmmo.cpp:89
+item	<N>icon_layer	section	0		*	1	0		xrGame/ui/UICellCustomItems.cpp:46
+item	<N>icon_layer_scale	float	0	1	*	1	0		xrGame/ui/UICellCustomItems.cpp:62
+item	<N>icon_layer_x	float	0		*	1	0		xrGame/ui/UICellCustomItems.cpp:57
+item	<N>icon_layer_y	float	0		*	1	0		xrGame/ui/UICellCustomItems.cpp:58
+item	<snd_key><N>	sound	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	1	0		xrGame/HudSound.cpp:31
+item	PDM_disp_accel_factor	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:535
+item	PDM_disp_base	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:533
+item	PDM_disp_crouch	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:536
+item	PDM_disp_crouch_no_acc	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:537
+item	PDM_disp_vel_factor	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:534
+item	actor_visual	visual	0		outfit	0	0		xrGame/CustomOutfit.cpp:99
+item	additional_inventory_weight	float	EQU_EXO,EQU_MLTR,EQU_SCIE,EQU_STLK,EQ_BAKPK,E_STLK		artefact,backpack,outfit	0	0		xrGame/ActorBackpack.cpp:15
+item	additional_inventory_weight2	float	1		backpack,outfit	0	0		xrGame/ActorBackpack.cpp:16
+item	af_actor_properties	string	0		artefact	0	1		xrGame/ui/ui_af_params.cpp:115
+item	af_class_<N>	section	0		detector	1	0		xrGame/CustomDetector.cpp:358
+item	af_freq_<N>	vec2	0		detector	1	0		xrGame/CustomDetector.cpp:358
+item	af_radius	float	1		detector	0	0		xrGame/CustomDetector.cpp:355
+item	af_rank	int	0	0	artefact	0	0		xrGame/Artefact.cpp:225
+item	af_sound_<N>_	sound	0		detector	1	0		xrGame/CustomDetector.cpp:358
+item	af_vis_radius	float	1		detector	0	0		xrGame/CustomDetector.cpp:356
+item	air_resistance_factor	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:78
+item	allow_repair	bool	0		*	0	0		xrGame/ui/UIActorMenu_script.cpp:53
+item	allow_ricochet	bool	0		ammo	0	0		xrGame/WeaponAmmo.cpp:78
+item	always_load	bool	0	false	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:125
+item	ammo_class	list	WP_AK74,WP_ASHTG,WP_BINOC,WP_BM16,WP_GROZA,WP_HPSA,WP_KNIFE,WP_LR300,WP_PDA3D,WP_PM,WP_RG6,WP_RPG7,WP_SHOTG,WP_SVD,WP_SVU,WP_USP45,WP_VAL,WP_VINT,WP_WALTH,W_AK74,W_BINOC,W_BM16,W_FN2000,W_FORT,W_GROZA,W_HPSA,W_KNIFE,W_LR300,W_PM,W_RG6,W_RPG7,W_SHOTGN,W_SVD,W_SVU,W_USP45,W_VAL,W_VINT,W_WALTHR,W_WMAGAZ,W_WMAGGL		*	0	0		xrGame/alife_object.cpp:113
+item	ammo_elapsed	int	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:422
+item	ammo_limit	int	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrServerEntities/xrServer_Objects_ALife_Items.cpp:651
+item	ammo_mag_size	int	WP_AK74,WP_ASHTG,WP_BINOC,WP_BM16,WP_GROZA,WP_HPSA,WP_KNIFE,WP_LR300,WP_PDA3D,WP_PM,WP_RG6,WP_RPG7,WP_SHOTG,WP_SVD,WP_SVU,WP_USP45,WP_VAL,WP_VINT,WP_WALTH,W_AK74,W_BINOC,W_BM16,W_FN2000,W_FORT,W_GROZA,W_HPSA,W_KNIFE,W_LR300,W_PM,W_RG6,W_RPG7,W_SHOTGN,W_SVD,W_SVU,W_USP45,W_VAL,W_VINT,W_WALTHR,W_WMAGAZ,W_WMAGGL		*	0	0		xrGame/inventory_item_upgrade.cpp:251
+item	animation_slot	int	1		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:127
+item	antirad	string	0		*	0	0		_work/da_unpack/xtra/scripts/bind_artefact.script:51
+item	apply_time_sec	float	0	-1	eatable,medicine	0	0		xrGame/EntityCondition.cpp:627
+item	artefact_activation_seq	section	0		artefact	0	0		xrGame/artefact_activation.cpp:42
+item	artefact_count	int	0	0	outfit	0	0		xrGame/CustomOutfit.cpp:118
+item	attach_angle_offset	vec3	0		*	0	0		xrGame/attachable_item.cpp:44
+item	attach_bone_name	string	0		*	0	0		xrGame/attachable_item.cpp:51
+item	attach_position_offset	vec3	0		*	0	0		xrGame/attachable_item.cpp:48
+item	auto_spawn_ammo	bool	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:680
+item	backpack_avaliable	bool	0	true	outfit	0	0		xrGame/CustomOutfit.cpp:124
+item	base_dispersioned_bullets_count	int	0	0	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:127
+item	base_dispersioned_bullets_speed	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:129
+item	belt	bool	0	false	*	0	0		xrGame/inventory_item.cpp:126
+item	blast	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:99
+item	blast_impulse	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:101
+item	blast_r	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:100
+item	bleeding_restore_speed	float	AF_BAST,AF_BDROP,AF_BGRAV,AF_CTA,AF_DUMMY,AF_EBALL,AF_FBALL,AF_GALAN,AF_GRAVI,AF_MBALL,AF_NEEDL,AF_RHAIR,AF_THORN,AF_ZUDA,ARTEFACT,SCRPTART		artefact,helmet,outfit	0	0		xrGame/ActorHelmet.cpp:100
+item	bolt_action	bool	0	false	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:124
+item	bone_fire	float	0		*	0	0		_work/da_unpack/xtra/scripts/rx_utils.script:525
+item	bone_head	float	0		*	0	0		_work/da_unpack/xtra/scripts/rx_utils.script:515
+item	bone_spin	float	0		*	0	0		_work/da_unpack/xtra/scripts/rx_utils.script:520
+item	bone_torso	float	0		*	0	0		_work/da_unpack/xtra/scripts/rx_utils.script:520
+item	bones_koeff_protection	section	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:104
+item	boost_bleeding_restore	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:639
+item	boost_burn_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:641
+item	boost_chemburn_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:645
+item	boost_chemburn_protection	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:653
+item	boost_explosion_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:646
+item	boost_fire_wound_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:648
+item	boost_health_restore	float	0	0	eatable,medicine	0	0		xrGame/EntityCondition.cpp:636
+item	boost_max_weight	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:640
+item	boost_power_restore	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:637
+item	boost_radiation_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:643
+item	boost_radiation_protection	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:650
+item	boost_radiation_restore	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:638
+item	boost_shock_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:642
+item	boost_strike_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:647
+item	boost_telepat_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:644
+item	boost_telepat_protection	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:651
+item	boost_time	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:632
+item	boost_wound_immunity	float	0		eatable,medicine	0	0		xrGame/EntityCondition.cpp:649
+item	box_cost	int	0	0	ammo	0	0		xrGame/WeaponAmmo.cpp:37
+item	box_current	int	0		ammo	0	0		xrServerEntities/xrServer_Objects_ALife_Items.cpp:809
+item	box_size	int	1		ammo	0	0		xrGame/Weapon.cpp:1718
+item	box_weight	float	0	0	ammo	0	0		xrGame/WeaponAmmo.cpp:36
+item	break_particles	particles	0		eatable	0	0		xrGame/BottleItem.cpp:20
+item	break_sound	sound	0		eatable	0	0		xrGame/BottleItem.cpp:23
+item	buck_shot	int	1		ammo	0	0		xrGame/WeaponAmmo.cpp:71
+item	bullet_hit_impulse_k	float	0	1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1440
+item	bullet_hit_power_k	float	0	1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1439
+item	bullet_speed	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:164
+item	bullet_speed_k	float	0	1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1441
+item	burn_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:64
+item	cam	string	0		*	0	0		gamedata/scripts/da_wear_anims.script:155
+item	cam_dispersion	string	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:736
+item	cam_dispersion_frac	float	0	0.7	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:474
+item	cam_dispersion_inc	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:739
+item	cam_dispersion_inc_k	float	0	1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1444
+item	cam_dispersion_k	float	0	1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1443
+item	cam_max_angle	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:455
+item	cam_max_angle_horz	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:463
+item	cam_relax_speed	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:436
+item	cam_relax_speed_ai	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:445
+item	cam_return	int	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:429
+item	cam_return_stop	int	0	0	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:432
+item	cam_step_angle_horz	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:471
+item	can_be_controlled	bool	0	false	artefact	0	0		xrGame/Artefact.cpp:513
+item	can_be_unlimited	bool	0		ammo	0	0		xrGame/WeaponAmmo.cpp:92
+item	can_take	bool	0	true	*	0	0		xrGame/inventory_item.cpp:128
+item	can_trade	bool	0	true	*	0	0		xrGame/inventory_item.cpp:127
+item	catch_snd	sound	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponBinocularsVision.cpp:297
+item	cform	string	0		*	0	1		xrGame/GameObject.cpp:631
+item	character_portrait	string	0		*	0	0		_work/da_unpack/xtra/scripts/bind_stalker_ext.script:106
+item	chemical_burn_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:70
+item	class	string	1		*	0	0		xrGame/alife_simulator_script.cpp:165
+item	condition	float	0		*	0	0		xrServerEntities/xrServer_Objects_ALife_Items.cpp:38
+item	condition_avail	int	0	0	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:121
+item	condition_coeff	float	0	1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:120
+item	condition_drain	float	0	0	*	0	0		xrGame/inventory_item.cpp:140
+item	condition_queue_shot_dec	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:614
+item	condition_shot_dec	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:613
+item	condition_to_explode	float	1		item	0	0		xrGame/ExplosiveItem.cpp:20
+item	control_inertion_factor	float	0	1	*	0	0		xrGame/inventory_item.cpp:150
+item	cooking_only	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:34
+item	cooking_parts_exclude	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:38
+item	cooking_parts_include	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:37
+item	cooking_refuse	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:35
+item	cooking_type	string	0	weapon	*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:32
+item	cooking_use_actor_effects	bool	0	false	*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:40
+item	cooking_use_fuel	bool	0	false	*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:31
+item	cooking_use_parts	bool	0	false	*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:30
+item	cost	float	1		*	0	0		xrGame/inventory_item.cpp:113
+item	crosshair_inertion	float	0	5.91	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:539
+item	custom_data	string	0		*	0	0		xrServerEntities/xrServer_Object_Base.cpp:116
+item	cycle_down	bool	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:67
+item	decay_rate	float	0	0	detector	0	0		xrGame/CustomDetector.cpp:357
+item	default_to_ruck	bool	0	true	*	0	0		xrGame/inventory_item.cpp:148
+item	default_use_text	string_id	0		*	0	0		xrGame/ui/UIActorMenuInventory.cpp:1204
+item	degrade_rate	float	0		*	0	0		_work/da_unpack/xtra/scripts/artefact_degradation.script:74
+item	description	string_id	0		*	0	0		xrGame/inventory_item.cpp:121
+item	destroy_time	int	1		grenade,other	0	0		xrGame/Missile.cpp:64
+item	det_hide_particles	particles	0		artefact	0	0		xrGame/Artefact.cpp:939
+item	det_hide_snd	sound	0		artefact	0	0		xrGame/Artefact.cpp:949
+item	det_show_particles	particles	0		artefact	0	0		xrGame/Artefact.cpp:939
+item	det_show_snd	sound	0		artefact	0	0		xrGame/Artefact.cpp:949
+item	detonation_threshold_hit	float	0		grenade	0	0		xrGame/Grenade.cpp:38
+item	disabled_maps	list	1		torch	0	0		xrGame/Torch.cpp:169
+item	dont_stack	bool	0	false	*	0	0		xrGame/inventory_item.cpp:133
+item	dynamic_explosion_particles	bool	0		grenade,item,other	0	0		xrGame/Explosive.cpp:149
+item	eat_alcohol	float	0	0	eatable,medicine	0	0		xrGame/EntityCondition.cpp:626
+item	eat_health	float	1		eatable,medicine	0	0		xrGame/EntityCondition.cpp:619
+item	eat_max_power	float	0	0	eatable,medicine	0	0		xrGame/EntityCondition.cpp:625
+item	eat_power	float	1		eatable,medicine	0	0		xrGame/EntityCondition.cpp:620
+item	eat_psy	float	0	0	*	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:735
+item	eat_radiation	float	1		eatable,medicine	0	0		xrGame/EntityCondition.cpp:622
+item	eat_satiety	float	1		eatable,medicine	0	0		xrGame/EntityCondition.cpp:621
+item	eat_sleepiness	float	0	0	*	0	0		_work/da_unpack/xtra/scripts/sleep_dep.script:128
+item	ef_detector_type	int	1		detector	0	0		xrServerEntities/xrServer_Objects_ALife_Items.cpp:859
+item	ef_equipment_type	int	1		outfit	0	0		xrGame/CustomOutfit.cpp:104
+item	ef_main_weapon_type	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:2455
+item	ef_weapon_type	int	0		device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/Missile.cpp:69
+item	empty_weight	float	0	0	eatable,medicine	0	0		xrGame/eatable_item.cpp:43
+item	energy_decrease_speed	float	1		artefact	0	0		xrGame/BastArtifact.cpp:115
+item	energy_max	float	1		artefact	0	0		xrGame/BastArtifact.cpp:114
+item	engine_impulse	float	0		other	0	0		xrGame/CustomRocket.cpp:318
+item	engine_impulse_up	float	0		other	0	0		xrGame/CustomRocket.cpp:319
+item	engine_particles	particles	0		other	0	0		xrGame/CustomRocket.cpp:330
+item	engine_present	bool	1		other	0	0		xrGame/CustomRocket.cpp:314
+item	engine_work_time	int	0		other	0	0		xrGame/CustomRocket.cpp:317
+item	explode_duration	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:128
+item	explode_hide_duration	float	0		grenade,item,other	0	0		xrGame/Explosive.cpp:142
+item	explode_particles	particles	1		grenade,item,other	0	0		xrGame/Explosive.cpp:116
+item	explosion_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:71
+item	explosive	bool	0	false	ammo	0	0		xrGame/WeaponAmmo.cpp:95
+item	ezi_camera_move_epsilon	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/EffectorZoomInertion.cpp:67
+item	ezi_delta_time	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/EffectorZoomInertion.cpp:67
+item	ezi_disp_min	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/EffectorZoomInertion.cpp:67
+item	ezi_speed_min	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/EffectorZoomInertion.cpp:67
+item	ezi_zoom_aim_disp_k	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/EffectorZoomInertion.cpp:67
+item	ezi_zoom_aim_speed_k	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/EffectorZoomInertion.cpp:67
+item	faction	string	0		*	0	1		gamedata/scripts/xms_world.script:60
+item	fake_grenade_name	section	0		ammo	0	0		xrGame/WeaponMagazinedWGrenade.cpp:101
+item	fault_break_rounds	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:611
+item	fault_deform_rounds	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:610
+item	fault_fouling_repeat	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:609
+item	fault_fouling_rounds	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:608
+item	fire_dispersion_base	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:114
+item	fire_dispersion_base_k	float	0	1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1442
+item	fire_dispersion_condition_factor	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:541
+item	fire_distance	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:162
+item	fire_modes	list	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:131
+item	fire_point	vec3	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/aimers_weapon.cpp:96
+item	fire_point2	vec3	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:617
+item	fire_wound_protection	float	0	0	helmet,outfit	0	0		xrGame/ActorHelmet.cpp:72
+item	first_bullet_dispertion	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/first_bullet_controller.cpp:18
+item	first_bullet_timeout	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/first_bullet_controller.cpp:19
+item	first_bullet_velocity_limit	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/first_bullet_controller.cpp:20
+item	flame_particles	particles	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:76
+item	flame_particles_2	particles	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:405
+item	float	string	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_cooking.script:85
+item	fly_particles	particles	0		other	0	0		xrGame/CustomRocket.cpp:332
+item	food_value	int	0		*	0	0		xrServerEntities/xrServer_Objects_ALife_Items.cpp:46
+item	force_const	float	1		grenade,other	0	0		xrGame/Missile.cpp:60
+item	force_explode_time	float	1		other	0	0		xrGame/CustomRocket.cpp:105
+item	force_grow_speed	float	1		grenade,other	0	0		xrGame/Missile.cpp:62
+item	force_max	float	1		grenade,other	0	0		xrGame/Missile.cpp:61
+item	force_min	float	1		grenade,other	0	0		xrGame/Missile.cpp:59
+item	found_snd	sound	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponBinocularsVision.cpp:296
+item	frag_hit	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:105
+item	frag_hit_impulse	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:106
+item	fragment_speed	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:123
+item	frags	int	1		grenade,item,other	0	0		xrGame/Explosive.cpp:103
+item	frags_r	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:104
+item	full_icon_name	string	1		outfit	0	0		xrGame/CustomOutfit.cpp:117
+item	ghost	bool	0	false	*	0	0		xrGame/GameObject.cpp:234
+item	grenade_class	section	1		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:47
+item	grenade_flame_particles	particles	1		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:38
+item	grenade_launcher_name	section	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:669
+item	grenade_launcher_status	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:627
+item	grenade_launcher_x	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:670
+item	grenade_launcher_y	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:671
+item	grenade_remove_time	int	0		grenade	0	0		xrGame/Grenade.cpp:34
+item	grenade_vel	float	WP_GLAUN,W_GLAUNC		grenade_launcher,weapon	0	0		xrGame/GrenadeLauncher.cpp:15
+item	hand_dependence	int	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:620
+item	health_restore_speed	float	AF_BAST,AF_BDROP,AF_BGRAV,AF_CTA,AF_DUMMY,AF_EBALL,AF_FBALL,AF_GALAN,AF_GRAVI,AF_MBALL,AF_NEEDL,AF_RHAIR,AF_THORN,AF_ZUDA,ARTEFACT,SCRPTART		artefact,helmet,outfit	0	0		xrGame/ActorHelmet.cpp:96
+item	health_value	int	0		*	0	0		xrServerEntities/xrServer_Objects_ALife_Items.cpp:41
+item	helmet_avaliable	bool	0	true	outfit	0	0		xrGame/CustomOutfit.cpp:123
+item	hide_in_explosion	bool	0		grenade,item,other	0	0		xrGame/Explosive.cpp:138
+item	highlight_equipped	bool	0	false	*	0	0		xrGame/inventory_item.cpp:138
+item	hit_absorbation_sect	section	1		artefact	0	0		xrGame/Artefact.cpp:218
+item	hit_fraction_actor	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:77
+item	hit_impulse	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:160
+item	hit_impulse_2	float	1		knife	0	0		xrGame/WeaponKnife.cpp:454
+item	hit_power	list	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:117
+item	hit_power_2	list	1		knife	0	0		xrGame/WeaponKnife.cpp:441
+item	hit_power_critical	list	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:118
+item	hit_power_critical_2	list	0		knife	0	0		xrGame/WeaponKnife.cpp:442
+item	hit_probability_gd_master	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:705
+item	hit_probability_gd_novice	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:705
+item	hit_probability_gd_stalker	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:705
+item	hit_probability_gd_veteran	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:705
+item	hit_type	string	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponKnife.cpp:438
+item	hit_type_2	string	1		knife	0	0		xrGame/WeaponKnife.cpp:455
+item	hit_type_blast	string	1		grenade,item,other	0	0		xrGame/Explosive.cpp:108
+item	hit_type_frag	string	1		grenade,item,other	0	0		xrGame/Explosive.cpp:109
+item	holder_fov_modifier	float	0		*	0	0		xrGame/inventory_item.cpp:1227
+item	holder_range_modifier	float	0		*	0	0		xrGame/inventory_item.cpp:1226
+item	hud	section	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:124
+item	hud_fov_addition_modifier	float	0	0	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:543
+item	hud_particles_enabled	bool	1		detector	0	0		xrGame/CustomDetector.cpp:390
+item	icon_name	string	0		*	0	0		xrGame/inventory_item.cpp:152
+item	icons_texture	texture	0		*	0	0		xrGame/ui/UIInventoryUtilities.cpp:201
+item	idle_light_shadow	bool	0	false	artefact	0	0		xrGame/Artefact.cpp:695
+item	ignore_slots_blocked	bool	0	false	*	0	0		xrGame/inventory_item.cpp:132
+item	immunities_sect	section	1		*	0	0		xrGame/inventory_item.cpp:100
+item	impair	float	1		ammo	0	0		xrGame/WeaponAmmo.cpp:72
+item	impulse_max	float	1		artefact	0	0		xrGame/MercuryBall.cpp:27
+item	impulse_min	float	1		artefact	0	0		xrGame/MercuryBall.cpp:26
+item	impulse_threshold	float	1		artefact	0	0		xrGame/BastArtifact.cpp:110
+item	infinite	bool	0		other	0	0		xrGame/Bolt.cpp:24
+item	installed_upgrades	section	0		*	0	0		xrGame/inventory_upgrade_manager.cpp:409
+item	inv_grid_addon_height	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ui/UICellCustomItems.cpp:522
+item	inv_grid_addon_width	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ui/UICellCustomItems.cpp:520
+item	inv_grid_addon_x	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ui/UICellCustomItems.cpp:525
+item	inv_grid_addon_y	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ui/UICellCustomItems.cpp:527
+item	inv_grid_height	float	1		*	0	0		xrGame/inventory_item.cpp:1464
+item	inv_grid_width	float	1		*	0	0		xrGame/inventory_item.cpp:1463
+item	inv_grid_x	float	1		*	0	0		xrGame/inventory_item.cpp:1461
+item	inv_grid_y	float	1		*	0	0		xrGame/inventory_item.cpp:1462
+item	inv_name	string_id	1		*	0	0		xrGame/inventory_item.cpp:107
+item	inv_name_short	string_id	1		*	0	0		xrGame/inventory_item.cpp:108
+item	inv_weight	float	1		*	0	0		xrGame/inventory_item.cpp:110
+item	ironsight_zoom_factor	float	0	50	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1361
+item	jump_height	float	0		artefact	0	0		xrGame/GraviArtifact.cpp:49
+item	jump_speed	float	0	1	backpack	0	0		xrGame/ActorBackpack.cpp:21
+item	k_air_resistance	float	0		ammo	0	0		xrGame/WeaponAmmo.cpp:65
+item	k_ap	float	1		ammo	0	0		xrGame/WeaponAmmo.cpp:56
+item	k_disp	float	1		ammo	0	0		xrGame/WeaponAmmo.cpp:51
+item	k_dist	float	1		ammo	0	0		xrGame/WeaponAmmo.cpp:50
+item	k_hit	float	1		ammo	0	0		xrGame/Weapon.cpp:1841
+item	k_impulse	float	1		ammo	0	0		xrGame/WeaponAmmo.cpp:53
+item	k_pierce	float	0		ammo	0	0		xrGame/WeaponAmmo.cpp:59
+item	keep_empty_box	bool	0		ammo	0	0		xrGame/WeaponAmmo.cpp:40
+item	kill_msg_height	float	0	0	*	0	0		xrGame/inventory_item.cpp:1452
+item	kill_msg_width	float	0	0	*	0	0		xrGame/inventory_item.cpp:1451
+item	kill_msg_x	float	0	0	*	0	0		xrGame/inventory_item.cpp:1449
+item	kill_msg_y	float	0	0	*	0	0		xrGame/inventory_item.cpp:1450
+item	kind	string	0		*	0	0		xrServerEntities/object_factory_spawner.cpp:33
+item	launch_speed	float	1		launcher,weapon	0	0		xrGame/RocketLauncher.cpp:20
+item	light_angle	float	1		detector	0	0		xrGame/CustomDetector.cpp:377
+item	light_bone	string	1		detector	0	0		xrGame/CustomDetector.cpp:382
+item	light_brightness	float	1		detector	0	0		xrGame/CustomDetector.cpp:376
+item	light_color	vec3	DET_ADVA,DET_ELIT,DET_SCIE,DET_SIMP,D_ADVANC,D_ELITE,D_SCIENT,D_SIMDET,G_F1,G_F1_S,G_FAKE,G_RGD5,G_RGD5_S,G_RPG7,II_EXPLO,S_EXPLO		detector,device,grenade,item,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/CustomDetector.cpp:383
+item	light_color_animmator	string	1		detector	0	0		xrGame/CustomDetector.cpp:387
+item	light_disable_from_idle	bool	0		detector	0	0		xrGame/CustomDetector.cpp:368
+item	light_disabled	bool	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:47
+item	light_enable_from_idle	bool	0		detector	0	0		xrGame/CustomDetector.cpp:367
+item	light_enabled	bool	1		detector	0	0		xrGame/CustomDetector.cpp:365
+item	light_hud_only	bool	0	false	detector	0	0		xrGame/CustomDetector.cpp:369
+item	light_range	float	DET_ADVA,DET_ELIT,DET_SCIE,DET_SIMP,D_ADVANC,D_ELITE,D_SCIENT,D_SIMDET,G_F1,G_F1_S,G_FAKE,G_RGD5,G_RGD5_S,G_RPG7,II_EXPLO,S_EXPLO		detector,device,grenade,item,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/CustomDetector.cpp:375
+item	light_shadow	bool	1		detector	0	0		xrGame/CustomDetector.cpp:378
+item	light_spot	bool	1		detector	0	0		xrGame/CustomDetector.cpp:380
+item	light_texture	texture	1		detector	0	0		xrGame/CustomDetector.cpp:381
+item	light_time	float	G_F1,G_F1_S,G_FAKE,G_RGD5,G_RGD5_S,G_RPG7,II_EXPLO,S_EXPLO		device,grenade,item,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/Explosive.cpp:120
+item	light_trace_bone	string	1		torch	0	0		xrGame/Torch.cpp:119
+item	light_var_color	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:74
+item	light_var_range	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:74
+item	light_volumetric	bool	1		detector	0	0		xrGame/CustomDetector.cpp:379
+item	lights_enabled	bool	1		artefact,other	0	0		xrGame/Artefact.cpp:204
+item	magazined	bool	0	false	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:123
+item	magnetic_beam_shot	bool	0		ammo	0	0		xrGame/WeaponAmmo.cpp:83
+item	material	string	0		knife	0	0		xrGame/WeaponKnife.cpp:155
+item	max_uses	int	0	1	eatable,medicine	0	0		xrGame/eatable_item.cpp:39
+item	max_zoom_factor	float	1		launcher	0	0		xrGame/WeaponRPG7.cpp:17
+item	misfire_chance	float	0	0	ammo	0	0		xrGame/Weapon.cpp:104
+item	misfire_condition_ceiling	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:596
+item	misfire_condition_k	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:580
+item	misfire_end_condition	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:566
+item	misfire_end_prob	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:568
+item	misfire_probability	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:579
+item	misfire_start_condition	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:565
+item	misfire_start_prob	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:567
+item	name	string	0		*	0	1		_work/da_unpack/xtra/scripts/inventory_upgrades.script:314
+item	nearest_enemies_show_dist	float	0	0	helmet	0	0		xrGame/ActorHelmet.cpp:105
+item	nearwall_dist_max	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:560
+item	nearwall_dist_min	float	0	0.5	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:559
+item	nearwall_speed_mod	float	0	10	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:562
+item	nearwall_target_hud_fov	float	0	0.27	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:561
+item	next_use_item	string	0		*	0	1		xrGame/ui/UIActorMenuTools.cpp:336
+item	night_vision	bool	1		torch	0	0		xrGame/Torch.cpp:139
+item	nightvision_sect	section	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:91
+item	npc	string	0		*	0	0		xrServerEntities/object_factory_spawner.cpp:60
+item	npc_visual	visual	0		outfit	0	0		xrGame/Actor.cpp:1086
+item	omni_offset	vec3	0		torch	0	0		xrGame/Torch.cpp:123
+item	orientation	vec3	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/aimers_weapon.cpp:71
+item	overweight_walk_accel	float	0	1	backpack	0	0		xrGame/ActorBackpack.cpp:23
+item	parent_section	section	0		*	0	0		xrServerEntities/object_factory_spawner.cpp:51
+item	particle	string	1		artefact	0	0		xrGame/BastArtifact.cpp:117
+item	particles	particles	DET_ADVA,DET_ELIT,DET_SCIE,DET_SIMP,D_ADVANC,D_ELITE,D_SCIENT,D_SIMDET		artefact,detector	0	0		xrGame/Artefact.cpp:201
+item	particles_bone	particles	DET_ADVA,DET_ELIT,DET_SCIE,DET_SIMP,D_ADVANC,D_ELITE,D_SCIENT,D_SIMDET		artefact,detector	0	0		xrGame/Artefact.cpp:943
+item	particles_enabled	bool	1		detector	0	0		xrGame/CustomDetector.cpp:389
+item	physic_strike_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:73
+item	placeable_section	section	0		*	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:532
+item	play_function	string	0		pda	0	0		xrGame/PDA.cpp:47
+item	player_hud_section	section	0		outfit	0	0		xrGame/CustomOutfit.cpp:295
+item	position	vec3	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/aimers_weapon.cpp:70
+item	power	string	0		*	0	1		_work/da_unpack/xtra/scripts/axr_battery.script:57
+item	power_loss	float	0	1	backpack,helmet,outfit	0	0		xrGame/ActorBackpack.cpp:18
+item	power_restore_speed	float	AF_BAST,AF_BDROP,AF_BGRAV,AF_CTA,AF_DUMMY,AF_EBALL,AF_FBALL,AF_GALAN,AF_GRAVI,AF_MBALL,AF_NEEDL,AF_RHAIR,AF_THORN,AF_ZUDA,ARTEFACT,SCRPTART		artefact,backpack,helmet,outfit	0	0		xrGame/ActorBackpack.cpp:17
+item	preffered_fire_mode	int	0	-1	device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:146
+item	property	string	0		*	0	0		gamedata/scripts/actor_effects.script:304
+item	quest_item	bool	0	false	*	0	0		xrGame/inventory_item.cpp:130
+item	radiation_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:68
+item	radiation_restore_speed	float	AF_BAST,AF_BDROP,AF_BGRAV,AF_CTA,AF_DUMMY,AF_EBALL,AF_FBALL,AF_GALAN,AF_GRAVI,AF_MBALL,AF_NEEDL,AF_RHAIR,AF_THORN,AF_ZUDA,ARTEFACT,SCRPTART		artefact,helmet,outfit	0	0		xrGame/ActorHelmet.cpp:97
+item	radius	float	1		artefact,pda	0	0		xrGame/BastArtifact.cpp:111
+item	reload_dof	vec4	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:695
+item	reload_empty_dof	vec4	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:696
+item	remove_after_use	bool	0	true	eatable,medicine	0	0		xrGame/eatable_item.cpp:40
+item	repair_add_condition	float	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:52
+item	repair_condition_type	float	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:56
+item	repair_max_condition	float	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:51
+item	repair_min_condition	float	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:50
+item	repair_only	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:58
+item	repair_part_bonus	float	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:53
+item	repair_parts_exclude	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:62
+item	repair_parts_include	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:61
+item	repair_refuse	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:59
+item	repair_type	string	0	-1	*	0	0		gamedata/scripts/actor_effects.script:179
+item	repair_use_actor_effects	bool	0	false	*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:64
+item	repair_use_parts	bool	0		*	0	0		_work/da_unpack/xtra/scripts/ui_itm_repair.script:54
+item	rocket_class	section	1		launcher	0	0		xrGame/WeaponRPG7.cpp:19
+item	rpm	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:55
+item	rpm_actor	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:59
+item	rpm_mode_2	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:58
+item	satiety_restore_speed	float	AF_BAST,AF_BDROP,AF_BGRAV,AF_CTA,AF_DUMMY,AF_EBALL,AF_FBALL,AF_GALAN,AF_GRAVI,AF_MBALL,AF_NEEDL,AF_RHAIR,AF_THORN,AF_ZUDA,ARTEFACT,SCRPTART		artefact,helmet,outfit	0	0		xrGame/ActorHelmet.cpp:98
+item	scope_alive_detector	string	0	0	scope	0	0		xrGame/WeaponMagazined.cpp:1378
+item	scope_dynamic_zoom	bool	0	false	device,knife,launcher,pda,scope,shotgun,weapon	0	0		xrGame/Weapon.cpp:708
+item	scope_hide_bones	string	0		launcher,shotgun,weapon	0	1		xrGame/Weapon.cpp:2042
+item	scope_name	section	0		launcher,shotgun,weapon	0	0		xrGame/Weapon.cpp:1991
+item	scope_nightvision	string	0	0	scope	0	0		xrGame/WeaponMagazined.cpp:1374
+item	scope_show_bones	string	0		launcher,shotgun,weapon	0	1		xrGame/Weapon.cpp:2043
+item	scope_status	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:625
+item	scope_texture	texture	0		*	0	0		xrGame/Weapon.cpp:730
+item	scope_x	int	0		launcher,shotgun,weapon	0	0		xrGame/Weapon.h:355
+item	scope_y	int	0		launcher,shotgun,weapon	0	0		xrGame/Weapon.h:356
+item	scope_zoom_factor	float	0		device,knife,launcher,pda,scope,shotgun,weapon	0	0		xrGame/Weapon.cpp:651
+item	scopes	list	0		*	0	0		_work/da_unpack/xtra/scripts/dxr_scopes.script:155
+item	scopes_hide_bone	string	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:2031
+item	scopes_sect	section	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:634
+item	script_binding	functor	0		*	0	0		xrGame/script_binder.cpp:62
+item	section	string	0		*	0	0		gamedata/scripts/actor_effects.script:306
+item	select_mode	int	0	0	*	0	0		xrGame/ui/UICellCustomItems.cpp:24
+item	set_timer_particles	particles	1		item	0	0		xrGame/ExplosiveItem.cpp:21
+item	shadow_visual	visual	0		outfit	0	0		xrGame/actor_shadow.cpp:51
+item	shell_particles	particles	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:75
+item	shell_point	vec3	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:75
+item	shock_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:66
+item	shot_particles	particles	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:76
+item	silencer_flame_particles	particles	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:102
+item	silencer_light_color	vec3	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1414
+item	silencer_light_range	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1414
+item	silencer_light_time	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1414
+item	silencer_light_var_color	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1414
+item	silencer_light_var_range	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1414
+item	silencer_name	section	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:662
+item	silencer_smoke_particles	particles	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:104
+item	silencer_status	float	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:626
+item	silencer_x	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:663
+item	silencer_y	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:664
+item	single_handed	bool	0	true	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:622
+item	slot	int	WP_AK74,WP_ASHTG,WP_BINOC,WP_BM16,WP_GROZA,WP_HPSA,WP_KNIFE,WP_LR300,WP_PDA3D,WP_PM,WP_RG6,WP_RPG7,WP_SHOTG,WP_SVD,WP_SVU,WP_USP45,WP_VAL,WP_VINT,WP_WALTH,W_AK74,W_BINOC,W_BM16,W_FN2000,W_FORT,W_GROZA,W_HPSA,W_KNIFE,W_LR300,W_PM,W_RG6,W_RPG7,W_SHOTGN,W_SVD,W_SVU,W_USP45,W_VAL,W_VINT,W_WALTHR,W_WMAGAZ,W_WMAGGL		*	0	0		xrGame/inventory_item.cpp:116
+item	smoke_particles	particles	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:76
+item	snd	string	0		*	0	0		gamedata/scripts/da_backpack_anim.script:291
+item	snd_add_cartridge	sound	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:59
+item	snd_bore	sound	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:131
+item	snd_checkout	sound	0		grenade	0	0		xrGame/Grenade.cpp:28
+item	snd_close	sound	0		weapon	0	0		xrGame/WeaponPistol.cpp:18
+item	snd_close_weapon	sound	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:61
+item	snd_draw	sound	0		detector,device,grenade,knife,launcher,pda,shotgun,weapon	0	0		xrGame/CustomDetector.cpp:360
+item	snd_empty	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:87
+item	snd_explode	sound	0		grenade,item,other	0	0		xrGame/Explosive.cpp:126
+item	snd_fire_mode	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:93
+item	snd_fly_sound	sound	0		other	0	0		xrGame/CustomRocket.cpp:335
+item	snd_holster	sound	0		detector,device,grenade,knife,launcher,pda,shotgun,weapon	0	0		xrGame/CustomDetector.cpp:361
+item	snd_night_vision_broken	sound	0		torch	0	0		xrGame/Torch.cpp:805
+item	snd_night_vision_idle	sound	0		torch	0	0		xrGame/Torch.cpp:804
+item	snd_night_vision_off	sound	0		torch	0	0		xrGame/Torch.cpp:803
+item	snd_night_vision_on	sound	0		torch	0	0		xrGame/Torch.cpp:802
+item	snd_open_weapon	sound	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:57
+item	snd_pump	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:91
+item	snd_reload	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:88
+item	snd_reload_1	sound	0		shotgun	0	0		xrGame/weaponBM16.cpp:8
+item	snd_reload_empty	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:95
+item	snd_reload_grenade	sound	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:35
+item	snd_reload_misfire	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:97
+item	snd_shoot	sound	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponKnife.cpp:69
+item	snd_shoot_grenade	sound	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:34
+item	snd_silncer_shot	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:108
+item	snd_silncer_shot_actor	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:110
+item	snd_switch	sound	0		detector,weapon	0	0		xrGame/CustomDetector.cpp:362
+item	snd_turn_off	sound	0		torch	0	0		xrGame/Torch.cpp:143
+item	snd_turn_on	sound	0		torch	0	0		xrGame/Torch.cpp:141
+item	snd_zoomin	sound	0		device,pda	0	0		xrGame/WeaponBinoculars.cpp:24
+item	snd_zoomout	sound	0		device,pda	0	0		xrGame/WeaponBinoculars.cpp:25
+item	spash1_dist	float	0		knife	0	0		xrGame/WeaponKnife.cpp:80
+item	spash1_radius	float	0		knife	0	0		xrGame/WeaponKnife.cpp:80
+item	spash2_dist	float	0		knife	0	0		xrGame/WeaponKnife.cpp:80
+item	spash2_radius	float	0		knife	0	0		xrGame/WeaponKnife.cpp:80
+item	species	string	0		*	0	0		gamedata/scripts/ui_mutant_loot.script:133
+item	splash1_direction	vec3	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash1_dist	float	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash1_hits_count	int	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash1_pervictim_hcount	int	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash1_radius	float	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash2_direction	vec3	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash2_dist	float	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash2_hits_count	int	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash2_radius	float	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	splash_hit_divide_factor	float	0		knife	0	0		xrGame/WeaponKnife.cpp:76
+item	sprint_allowed	bool	0	true	*	0	0		xrGame/inventory_item.cpp:149
+item	story_id	section	0		*	0	0		_work/da_unpack/configs/scripts/story_objects.script:106
+item	strap_bone0	string	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:2408
+item	strap_bone1	string	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:2413
+item	strap_orientation	vec3	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:2442
+item	strap_position	vec3	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:2442
+item	strike_impulse	float	1		artefact	0	0		xrGame/BastArtifact.cpp:112
+item	strike_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:65
+item	system_item	bool	0	false	*	0	0		xrGame/inventory_item.cpp:131
+item	telepatic_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:69
+item	third_person_throw_point_offset	vec3	0		grenade,other	0	0		xrGame/ai/stalker/ai_stalker_fire.cpp:1126
+item	throw_dir	vec3	1		grenade,other	0	0		xrGame/Missile.cpp:67
+item	throw_point	vec3	1		grenade,other	0	0		xrGame/Missile.cpp:66
+item	time_to_aim	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:168
+item	time_to_explode	float	1		item	0	0		xrGame/ExplosiveItem.cpp:20
+item	time_to_update	int	1		artefact	0	0		xrGame/MercuryBall.cpp:25
+item	torch_inertion_speed_max	float	0		torch	0	0		xrGame/Torch.cpp:126
+item	torch_inertion_speed_min	float	0		torch	0	0		xrGame/Torch.cpp:125
+item	torch_offset	vec3	0		torch	0	0		xrGame/Torch.cpp:120
+item	tracer	bool	1		ammo	0	0		xrGame/WeaponAmmo.cpp:70
+item	tracer_color_ID	int	0	0	ammo	0	0		xrGame/WeaponAmmo.cpp:63
+item	tracers	bool	0	true	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:698
+item	tracers_color_ID	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:699
+item	trail_light_color	list	0		artefact,other	0	0		xrGame/Artefact.cpp:207
+item	trail_light_range	float	0		artefact,other	0	0		xrGame/Artefact.cpp:209
+item	tri_state_reload	bool	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:51
+item	ui_p	vec3	0		detector	0	0		xrGame/EliteDetector.cpp:124
+item	ui_r	vec3	0		detector	0	0		xrGame/EliteDetector.cpp:125
+item	up_throw_factor	float	1		grenade,item,other	0	0		xrGame/Explosive.cpp:111
+item	upgr_icon_height	int	0	0	*	0	0		xrGame/inventory_item.cpp:1476
+item	upgr_icon_width	int	0	0	*	0	0		xrGame/inventory_item.cpp:1475
+item	upgr_icon_x	int	0	0	*	0	0		xrGame/inventory_item.cpp:1473
+item	upgr_icon_y	int	0	0	*	0	0		xrGame/inventory_item.cpp:1474
+item	upgrade_scheme	section	0		*	0	0		xrGame/inventory_upgrade_manager.cpp:150
+item	upgrades	list	0		*	0	0		xrGame/inventory_upgrade_manager.cpp:146
+item	use<N>_action_functor	functor	0		*	1	0		xrGame/ui/UIActorMenuInventory.cpp:1362
+item	use<N>_functor	functor	0		*	1	0		xrGame/ui/UIActorMenuInventory.cpp:1243
+item	use_aim_bullet	bool	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/ShootingObject.cpp:165
+item	use_condition	bool	0		*	0	0		xrGame/ActorBackpack.cpp:25
+item	use_filters	bool	0	false	helmet	0	0		xrGame/ActorHelmet.cpp:60
+item	use_first_bullet	bool	0	false	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/first_bullet_controller.cpp:15
+item	use_sound	sound	0		eatable,medicine	0	0		xrGame/ActorCondition.cpp:1114
+item	value	string	0		*	0	1		_work/da_unpack/xtra/scripts/inventory_upgrades.script:325
+item	vis_frame_color	color	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponBinocularsVision.cpp:295
+item	vis_frame_speed	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponBinocularsVision.cpp:294
+item	vision_present	bool	1		device,pda	0	0		xrGame/WeaponBinoculars.cpp:26
+item	visual	visual	0		*	0	0		xrGame/GameObject.cpp:239
+item	walk_accel	float	0	1	backpack	0	0		xrGame/ActorBackpack.cpp:22
+item	weapon_class	string	0		*	0	0		xrServerEntities/object_factory_spawner.cpp:34
+item	weapon_remove_time	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:675
+item	wm_size	float	1		ammo,grenade,item,knife,other	0	0		xrGame/Explosive.cpp:113
+item	work_time_sec	float	1		device	0	0		xrGame/flare.cpp:9
+item	working_particles	particles	1		device	0	0		xrGame/flare.cpp:110
+item	wound_protection	float	1		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:67
+item	wounds_heal_perc	float	1		eatable,medicine	0	0		xrGame/EntityCondition.cpp:623
+item	xms_trade	string	0		*	0	1		gamedata/scripts/xms_characters.script:21
+item	zone_class_<N>	section	0		detector	1	0		xrGame/EliteDetector.cpp:226
+item	zone_freq_<N>	vec2	0		detector	1	0		xrGame/EliteDetector.cpp:226
+item	zone_sound_<N>_	sound	0		detector	1	0		xrGame/EliteDetector.cpp:226
+item	zoom_cam_dispersion	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:747
+item	zoom_cam_dispersion_frac	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:528
+item	zoom_cam_dispersion_inc	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:751
+item	zoom_cam_max_angle	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:506
+item	zoom_cam_max_angle_horz	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:515
+item	zoom_cam_relax_speed	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:488
+item	zoom_cam_relax_speed_ai	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:497
+item	zoom_cam_step_angle_horz	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:524
+item	zoom_dof	vec3	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:692
+item	zoom_enabled	bool	1		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:629
+item	zoom_rotate_time	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:630
+hud	_16x9zoom_offset	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:399
+hud	_16x9zoom_rotate_x	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:400
+hud	_16x9zoom_rotate_y	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:401
+hud	_16x9zoom_rotate_z	float	0	0	artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:402
+hud	aim_hud_offset_pos	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:343
+hud	aim_hud_offset_pos_16x9	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:343
+hud	aim_hud_offset_rot	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:345
+hud	aim_hud_offset_rot_16x9	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:345
+hud	anim_activate	motion	0		artefact	0	0		xrGame/Artefact.cpp:848
+hud	anim_add_cartridge	motion	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:206
+hud	anim_close	motion	0		shotgun,weapon	0	0		xrGame/WeaponAutomaticShotgun.cpp:189
+hud	anim_close_weapon	motion	0		launcher,shotgun	0	0		xrGame/WeaponShotgun.cpp:193
+hud	anim_draw	motion	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/weaponBM16.cpp:32
+hud	anim_draw_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:27
+hud	anim_draw_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:618
+hud	anim_draw_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:616
+hud	anim_drop	motion	0		device	0	0		xrGame/flare.cpp:72
+hud	anim_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:35
+hud	anim_hide	motion	0		artefact,detector,device,grenade,knife,other	0	0		xrGame/Artefact.cpp:845
+hud	anim_holster	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/weaponBM16.cpp:42
+hud	anim_holster_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:632
+hud	anim_holster_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:630
+hud	anim_idle	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/Artefact.cpp:857
+hud	anim_idle_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:53
+hud	anim_idle_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:54
+hud	anim_idle_aim	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1494
+hud	anim_idle_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:713
+hud	anim_idle_g_aim	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:678
+hud	anim_idle_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:743
+hud	anim_idle_gl_aim	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:680
+hud	anim_idle_sprint	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:748
+hud	anim_open	motion	0		shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:201
+hud	anim_open_weapon	motion	0		launcher,shotgun	0	0		xrGame/WeaponShotgun.cpp:205
+hud	anim_reload	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/weaponBM16.cpp:68
+hud	anim_reload_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:66
+hud	anim_reload_empty	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1477
+hud	anim_reload_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:135
+hud	anim_reload_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:652
+hud	anim_reload_misfire	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1475
+hud	anim_shoot	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/weaponBM16.cpp:24
+hud	anim_shoot1_end	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:335
+hud	anim_shoot1_start	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:365
+hud	anim_shoot2_end	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:337
+hud	anim_shoot2_start	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:367
+hud	anim_shoot_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:23
+hud	anim_shoot_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:777
+hud	anim_shoot_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:783
+hud	anim_shot_last	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:107
+hud	anim_show	motion	0		artefact,detector,device,grenade,other	0	0		xrGame/Artefact.cpp:839
+hud	anim_switch_grenade_off	motion	1		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:796
+hud	anim_throw_act	motion	0		grenade,other	0	0		xrGame/Missile.cpp:287
+hud	anim_throw_begin	motion	0		grenade,other	0	0		xrGame/Missile.cpp:277
+hud	anim_throw_end	motion	0		grenade,other	0	0		xrGame/Missile.cpp:294
+hud	anim_throw_idle	motion	0		grenade,other	0	0		xrGame/Missile.cpp:280
+hud	anim_zoomed_idle_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:103
+hud	anim_zoomedidle_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:106
+hud	anm_<name>	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	1	0		xrGame/player_hud.cpp:117
+hud	anm_activate	motion	0		artefact	0	0		xrGame/Artefact.cpp:848
+hud	anm_add_cartridge	motion	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:206
+hud	anm_attack	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:365
+hud	anm_attack2	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:367
+hud	anm_attack2_end	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:337
+hud	anm_attack_end	motion	0		knife	0	0		xrGame/WeaponKnife.cpp:335
+hud	anm_bore	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:244
+hud	anm_bore_0	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:52
+hud	anm_bore_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:53
+hud	anm_bore_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:54
+hud	anm_bore_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:35
+hud	anm_bore_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:806
+hud	anm_bore_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:808
+hud	anm_close	motion	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:189
+hud	anm_drop	motion	0		device	0	0		xrGame/flare.cpp:72
+hud	anm_headlamp	motion	0		pda	0	0		xrGame/PdaAnimatorItem.cpp:383
+hud	anm_headlamp_aim	motion	0		pda	0	0		xrGame/PdaAnimatorItem.cpp:383
+hud	anm_hide	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/Artefact.cpp:845
+hud	anm_hide_0	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:42
+hud	anm_hide_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:43
+hud	anm_hide_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:44
+hud	anm_hide_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:92
+hud	anm_hide_fast	motion	0		detector	0	0		xrGame/CustomDetector.cpp:199
+hud	anm_hide_from_aim	motion	0		pda	0	0		xrGame/PdaAnimatorItem.cpp:319
+hud	anm_hide_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:632
+hud	anm_hide_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:630
+hud	anm_idle	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/Artefact.cpp:857
+hud	anm_idle<move>	motion	0		pda	1	0		xrGame/PdaAnimatorItem.cpp:268
+hud	anm_idle_0	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:115
+hud	anm_idle_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:118
+hud	anm_idle_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:121
+hud	anm_idle_aim	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/PdaAnimatorItem.cpp:263
+hud	anm_idle_aim<joy>	motion	0		pda	1	0		xrGame/PdaAnimatorItem.cpp:251
+hud	anm_idle_aim<joy><move>	motion	0		pda	1	0		xrGame/PdaAnimatorItem.cpp:245
+hud	anm_idle_aim<move>	motion	0		pda	1	0		xrGame/PdaAnimatorItem.cpp:258
+hud	anm_idle_aim_0	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:100
+hud	anm_idle_aim_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:103
+hud	anm_idle_aim_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:106
+hud	anm_idle_aim_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:82
+hud	anm_idle_aim_end	motion	0		pda	0	0		xrGame/PdaAnimatorItem.cpp:292
+hud	anm_idle_aim_start	motion	0		pda	0	0		xrGame/PdaAnimatorItem.cpp:283
+hud	anm_idle_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:71
+hud	anm_idle_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:713
+hud	anm_idle_g_aim	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:678
+hud	anm_idle_moving	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:485
+hud	anm_idle_moving_0	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:75
+hud	anm_idle_moving_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:76
+hud	anm_idle_moving_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:77
+hud	anm_idle_moving_crouch	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:490
+hud	anm_idle_moving_crouch_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:723
+hud	anm_idle_moving_crouch_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:753
+hud	anm_idle_moving_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:56
+hud	anm_idle_moving_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:732
+hud	anm_idle_moving_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:762
+hud	anm_idle_sprint	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:542
+hud	anm_idle_sprint_0	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:85
+hud	anm_idle_sprint_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:86
+hud	anm_idle_sprint_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:87
+hud	anm_idle_sprint_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:44
+hud	anm_idle_sprint_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:718
+hud	anm_idle_sprint_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:748
+hud	anm_idle_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:743
+hud	anm_idle_w_gl_aim	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:680
+hud	anm_open	motion	0		launcher,shotgun	0	0		xrGame/WeaponAutomaticShotgun.cpp:201
+hud	anm_reload	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1480
+hud	anm_reload_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:66
+hud	anm_reload_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:68
+hud	anm_reload_3	motion	1			0	0		xrGame/WeaponRevolver.cpp:94
+hud	anm_reload_4	motion	1			0	0		xrGame/WeaponRevolver.cpp:96
+hud	anm_reload_5	motion	1			0	0		xrGame/WeaponRevolver.cpp:98
+hud	anm_reload_empty	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1477
+hud	anm_reload_empty_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:649
+hud	anm_reload_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:135
+hud	anm_reload_misfire	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1475
+hud	anm_reload_misfire_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:647
+hud	anm_reload_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:652
+hud	anm_shot_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:23
+hud	anm_shot_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:24
+hud	anm_shot_l	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:107
+hud	anm_shots	motion	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1510
+hud	anm_shots_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:777
+hud	anm_shots_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:783
+hud	anm_show	motion	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/Artefact.cpp:839
+hud	anm_show_0	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:32
+hud	anm_show_1	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:33
+hud	anm_show_2	motion	0		shotgun	0	0		xrGame/weaponBM16.cpp:34
+hud	anm_show_empty	motion	0		weapon	0	0		xrGame/WeaponPistol.cpp:27
+hud	anm_show_fast	motion	0		detector	0	0		xrGame/CustomDetector.cpp:188
+hud	anm_show_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:618
+hud	anm_show_w_gl	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:616
+hud	anm_switch	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:793
+hud	anm_switch_g	motion	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:793
+hud	anm_throw	motion	0		grenade,other	0	0		xrGame/Missile.cpp:287
+hud	anm_throw_begin	motion	0		grenade,other	0	0		xrGame/Missile.cpp:277
+hud	anm_throw_end	motion	0		grenade,other	0	0		xrGame/Missile.cpp:294
+hud	anm_throw_idle	motion	0		grenade,other	0	0		xrGame/Missile.cpp:280
+hud	anm_zoom	motion	0		detector	0	0		xrGame/CustomDetector.cpp:216
+hud	attach_place_idx	int	0	0	artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:479
+hud	fire_bone	string	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:309
+hud	fire_bone2	string	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:319
+hud	fire_point	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:314
+hud	fire_point2	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:324
+hud	flash_light_range	float	0		detector	0	0		xrGame/SimpleDetector.cpp:119
+hud	gl_hud_offset_pos	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:348
+hud	gl_hud_offset_pos_16x9	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:348
+hud	gl_hud_offset_rot	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:350
+hud	gl_hud_offset_rot_16x9	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:350
+hud	grenade_normal_zoom_offset	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:409
+hud	grenade_normal_zoom_rotate_x	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:409
+hud	grenade_normal_zoom_rotate_y	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:409
+hud	grenade_normal_zoom_rotate_z	float	0	0	artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:409
+hud	grenade_zoom_offset	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:407
+hud	grenade_zoom_rotate_x	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:407
+hud	grenade_zoom_rotate_y	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:407
+hud	grenade_zoom_rotate_z	float	0	0	artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:407
+hud	hands_orientation	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:300
+hud	hands_orientation_16x9	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:300
+hud	hands_position	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:298
+hud	hands_position_16x9	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:298
+hud	hud_fov_absolute	float	0	0	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:557
+hud	hud_fov_factor	float	0	1	device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:549
+hud	hud_fov_zoom_factor	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:553
+hud	hud_ui_attach_bone	string	1		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:53
+hud	hud_ui_pos	vec3	1		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:54
+hud	hud_ui_rot	vec3	1		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:55
+hud	hud_ui_size	list	0		*	0	0		_work/da_unpack/xtra/scripts/ui_debug_main.script:2147
+hud	hud_ui_xml_tag_name	string	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/HudItem.cpp:134
+hud	inertion_origin_aim_offset	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:439
+hud	inertion_origin_offset	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:438
+hud	inertion_tendto_aim_speed	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:441
+hud	inertion_tendto_speed	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:440
+hud	item_orientation	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:303
+hud	item_position	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:302
+hud	item_visual	visual	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:463
+hud	onoff_light_range	float	0		detector	0	0		xrGame/SimpleDetector.cpp:129
+hud	orientation	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:368
+hud	pitch_offset_forward	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:435
+hud	pitch_offset_right	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:433
+hud	pitch_offset_up	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:434
+hud	pitch_offset_up_low_limit	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:436
+hud	position	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:367
+hud	shell_bone	string	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:329
+hud	shell_particles	particles	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:386
+hud	shell_point	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:334
+hud	visual	visual	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:468
+hud	zoom_hide_crosshair	bool	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/Weapon.cpp:687
+hud	zoom_offset	vec3	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:399
+hud	zoom_rotate_x	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:400
+hud	zoom_rotate_y	float	0		artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:401
+hud	zoom_rotate_z	float	0	0	artefact,detector,device,grenade,knife,launcher,other,pda,shotgun,weapon	0	0		xrGame/player_hud.cpp:402
+upgrade	PDM_disp_accel_factor	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:113
+upgrade	PDM_disp_base	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:110
+upgrade	PDM_disp_crouch	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:114
+upgrade	PDM_disp_crouch_no_acc	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:116
+upgrade	PDM_disp_vel_factor	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:111
+upgrade	additional_inventory_weight	float	0		backpack,outfit	0	0		xrGame/ActorBackpack.cpp:44
+upgrade	additional_inventory_weight2	float	0		backpack,outfit	0	0		xrGame/ActorBackpack.cpp:45
+upgrade	ammo_class	list	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:921
+upgrade	ammo_mag_size	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:917
+upgrade	artefact_count	int	0		outfit	0	0		xrGame/CustomOutfit.cpp:414
+upgrade	base_dispersioned_bullets_count	int	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1790
+upgrade	base_dispersioned_bullets_speed	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1792
+upgrade	bleeding_restore_speed	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:442
+upgrade	bones_koeff_protection	section	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:450
+upgrade	bones_koeff_protection_add	string	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:456
+upgrade	bullet_speed	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:192
+upgrade	burn_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:411
+upgrade	cam_dispersion	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:79
+upgrade	cam_dispersion_frac	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:82
+upgrade	cam_dispersion_inc	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:80
+upgrade	cam_max_angle	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:84
+upgrade	cam_max_angle_horz	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:85
+upgrade	cam_relax_speed	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:77
+upgrade	cam_relax_speed_ai	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:78
+upgrade	cam_return	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:68
+upgrade	cam_return_stop	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:72
+upgrade	cam_step_angle_horz	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:86
+upgrade	chemical_burn_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:423
+upgrade	condition_queue_shot_dec	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:125
+upgrade	condition_shot_dec	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:124
+upgrade	control_inertion_factor	float	0	1	*	0	0		xrGame/inventory_item_upgrade.cpp:206
+upgrade	cost	int	0		*	0	0		xrGame/inventory_item_upgrade.cpp:182
+upgrade	default_to_ruck	bool	0		*	0	0		xrGame/inventory_item_upgrade.cpp:189
+upgrade	explosion_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:425
+upgrade	fire_dispersion_base	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:75
+upgrade	fire_dispersion_condition_factor	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:63
+upgrade	fire_distance	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:65
+upgrade	fire_modes	list	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1775
+upgrade	fire_wound_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:427
+upgrade	grenade_class	section	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:947
+upgrade	grenade_launcher_name	section	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:317
+upgrade	grenade_launcher_status	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:311
+upgrade	grenade_launcher_x	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:318
+upgrade	grenade_launcher_y	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:319
+upgrade	health_restore_speed	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:438
+upgrade	hit_fraction_actor	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:463
+upgrade	hit_impulse	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:191
+upgrade	hit_power	list	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:143
+upgrade	hit_power_critical	list	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:167
+upgrade	holder_fov_modifier	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:257
+upgrade	holder_range_modifier	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:255
+upgrade	immunities_sect	section	0		*	0	0		xrGame/inventory_item_upgrade.cpp:229
+upgrade	immunities_sect_add	string	0		*	0	0		xrGame/inventory_item_upgrade.cpp:233
+upgrade	inv_weight	float	0		*	0	0		xrGame/inventory_item_upgrade.cpp:183
+upgrade	ironsight_zoom_factor	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1858
+upgrade	launch_speed	float	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:964
+upgrade	misfire_condition_k	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:119
+upgrade	misfire_end_condition	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:121
+upgrade	misfire_end_prob	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:123
+upgrade	misfire_probability	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:118
+upgrade	misfire_start_condition	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:120
+upgrade	misfire_start_prob	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:122
+upgrade	nearest_enemies_show_dist	float	0		helmet	0	0		xrGame/ActorHelmet.cpp:447
+upgrade	nightvision_sect	section	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:431
+upgrade	physic_strike_protection	float	0		outfit	0	0		xrGame/CustomOutfit.cpp:373
+upgrade	power_loss	float	0		backpack,helmet,outfit	0	0		xrGame/ActorBackpack.cpp:41
+upgrade	power_restore_speed	float	0		backpack,helmet,outfit	0	0		xrGame/ActorBackpack.cpp:40
+upgrade	radiation_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:419
+upgrade	radiation_restore_speed	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:439
+upgrade	rpm	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:209
+upgrade	rpm_actor	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:231
+upgrade	rpm_mode_2	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:222
+upgrade	satiety_restore_speed	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:440
+upgrade	scope_alive_detector	string	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:289
+upgrade	scope_dynamic_zoom	bool	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:286
+upgrade	scope_nightvision	string	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:287
+upgrade	scope_status	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:249
+upgrade	scope_zoom_factor	float	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1865
+upgrade	scopes_sect	section	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:262
+upgrade	shock_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:413
+upgrade	silencer_flame_particles	particles	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1844
+upgrade	silencer_name	section	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:301
+upgrade	silencer_smoke_particles	particles	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1846
+upgrade	silencer_status	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:295
+upgrade	silencer_x	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:302
+upgrade	silencer_y	int	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:303
+upgrade	snd_draw	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1796
+upgrade	snd_empty	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1817
+upgrade	snd_fire_mode	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:92
+upgrade	snd_holster	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1803
+upgrade	snd_pump	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:90
+upgrade	snd_reload	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1824
+upgrade	snd_reload_empty	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1831
+upgrade	snd_reload_grenade	sound	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:973
+upgrade	snd_reload_misfire	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:96
+upgrade	snd_shoot	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1810
+upgrade	snd_shoot_grenade	sound	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:966
+upgrade	snd_silncer_shot	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:1849
+upgrade	snd_silncer_shot_actor	sound	0		device,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponMagazined.cpp:109
+upgrade	snd_switch	sound	0		weapon	0	0		xrGame/WeaponMagazinedWGrenade.cpp:980
+upgrade	sprint_allowed	bool	0		*	0	0		xrGame/inventory_item_upgrade.cpp:197
+upgrade	strike_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:415
+upgrade	telepatic_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:421
+upgrade	time_to_aim	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:204
+upgrade	use_aim_bullet	bool	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:201
+upgrade	wound_protection	float	0		helmet,outfit	0	0		xrGame/ActorHelmet.cpp:417
+upgrade	zoom_cam_dispersion	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:95
+upgrade	zoom_cam_dispersion_frac	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:98
+upgrade	zoom_cam_dispersion_inc	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:96
+upgrade	zoom_cam_max_angle	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:101
+upgrade	zoom_cam_max_angle_horz	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:102
+upgrade	zoom_cam_relax_speed	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:93
+upgrade	zoom_cam_relax_speed_ai	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:94
+upgrade	zoom_cam_step_angle_horz	float	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:103
+upgrade	zoom_enabled	bool	0		device,knife,launcher,pda,shotgun,weapon	0	0		xrGame/WeaponUpgrade.cpp:128
+immunities	burn_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	chemical_burn_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	explosion_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	fire_wound_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	physic_strike_wound_immunity	float	0		*	0	0		xrGame/hit_immunity.cpp:37
+immunities	radiation_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	shock_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	strike_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	telepatic_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+immunities	wound_immunity	float	1		*	0	0		xrGame/hit_immunity.cpp:40
+absorbation	burn_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1437
+absorbation	chemical_burn_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1455
+absorbation	explosion_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1458
+absorbation	fire_wound_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1461
+absorbation	radiation_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1449
+absorbation	shock_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1443
+absorbation	strike_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1440
+absorbation	telepatic_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1452
+absorbation	wound_immunity	float	0		artefact	0	0		_work/da_unpack/xtra/scripts/itms_manager.script:1446
+bones	<bone>	list	0		helmet,outfit	1	0		xrGame/BoneProtections.cpp:60
+bones	hit_fraction	float	0		helmet,outfit	0	0		xrGame/BoneProtections.cpp:43
+bones	hit_fraction_npc	float	0		helmet,outfit	0	0		xrGame/BoneProtections.cpp:43
+sound_layers	snd_1_layer	sound	0		*	0	0		xrGame/HudSound.cpp:255
+sound_layers	snd_<N>_layer	sound	0		*	1	0		xrGame/HudSound.cpp:255
+model	color	color	1		torch	0	0		xrGame/Torch.cpp:505
+model	color_animator	string	1		torch	0	0		xrGame/Torch.cpp:501
+model	color_r2	color	1		torch	0	0		xrGame/Torch.cpp:505
+model	glow_radius	float	1		torch	0	0		xrGame/Torch.cpp:546
+model	glow_texture	texture	1		torch	0	0		xrGame/Torch.cpp:544
+model	guide_bone	string	1		torch	0	0		xrGame/Torch.cpp:502
+model	omni_color	color	1		torch	0	0		xrGame/Torch.cpp:534
+model	omni_color_r2	color	1		torch	0	0		xrGame/Torch.cpp:534
+model	omni_range	float	1		torch	0	0		xrGame/Torch.cpp:535
+model	omni_range_r2	float	1		torch	0	0		xrGame/Torch.cpp:535
+model	range	float	1		torch	0	0		xrGame/Torch.cpp:507
+model	range_r2	float	1		torch	0	0		xrGame/Torch.cpp:507
+model	spot_angle	float	1		torch	0	0		xrGame/Torch.cpp:539
+model	spot_texture	texture	1		torch	0	0		xrGame/Torch.cpp:540
+model	volumetric_distance	float	0	1	torch	0	0		xrGame/Torch.cpp:528
+model	volumetric_enabled	bool	0	false	torch	0	0		xrGame/Torch.cpp:516
+model	volumetric_intensity	float	0	1	torch	0	0		xrGame/Torch.cpp:524
+model	volumetric_quality	float	0	1	torch	0	0		xrGame/Torch.cpp:520
+global	air_resistance_k	float	1		*	0	0	bullet_manager	xrGame/WeaponAmmo.cpp:68
+global	camera_move_epsilon	float	1		*	0	0	zoom_inertion_effector	xrGame/EffectorZoomInertion.cpp:27
+global	delta_time	int	1		*	0	0	zoom_inertion_effector	xrGame/EffectorZoomInertion.cpp:42
+global	disp_min	float	1		*	0	0	zoom_inertion_effector	xrGame/EffectorZoomInertion.cpp:30
+global	effect_sect_name	string	1		*	0	0	explode_effector	xrGame/Explosive.cpp:130
+global	fault_break_rounds	float	0		*	0	0	inventory	xrGame/Weapon.cpp:611
+global	fault_deform_rounds	float	0		*	0	0	inventory	xrGame/Weapon.cpp:610
+global	fault_fouling_repeat	float	0		*	0	0	inventory	xrGame/Weapon.cpp:609
+global	fault_fouling_rounds	float	0		*	0	0	inventory	xrGame/Weapon.cpp:608
+global	misfire_condition_ceiling	float	0	0.75	*	0	0	inventory	xrGame/Weapon.cpp:594
+global	skin_path	string	0		*	0	0	mp_skins_path	xrGame/CustomOutfit.cpp:281
+global	speed_min	float	1		*	0	0	zoom_inertion_effector	xrGame/EffectorZoomInertion.cpp:33
+global	use_ammo_belt	bool	1		*	0	0	inventory	xrGame/Weapon.cpp:1827
+global	zoom_aim_disp_k	float	1		*	0	0	zoom_inertion_effector	xrGame/EffectorZoomInertion.cpp:36
+global	zoom_aim_speed_k	float	1		*	0	0	zoom_inertion_effector	xrGame/EffectorZoomInertion.cpp:39
