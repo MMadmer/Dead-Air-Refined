@@ -21,7 +21,7 @@ constexpr u32 max_regions = 4096;
 constexpr u32 max_grid_side = 4096;
 constexpr long max_aiedit_bytes = 64l << 20;
 constexpr u32 max_ai_edits = 1u << 20;
-constexpr size_t ai_edit_bytes = 36;
+constexpr size_t ai_edit_bytes = 32; // x, z, old y, new y, the normal, the flags
 
 struct Collision
 {
