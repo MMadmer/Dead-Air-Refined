@@ -299,6 +299,8 @@ bool parse_endpoint(pcstr text, xr_string& level, Fvector& position)
 
 IReader* XmsGame::ComposeGameGraph(IReader* base_chunk)
 {
+    // until a module level joins, every vertex is the base game's
+    NoteComposedGraph(u32(-1), {});
     if (!XMS::Active() || !base_chunk)
         return base_chunk;
 
@@ -642,9 +644,14 @@ IReader* XmsGame::ComposeGameGraph(IReader* base_chunk)
     IReader* composed = xr_new<XmsBlobReader>(buffer, writer.size());
     base_chunk->close();
 
+    xr_vector<std::pair<u8, xr_string>> module_levels;
     for (const NewLevel& level : new_levels)
+    {
         Msg("* XMS: level [%s] joined the game graph: id=%u, %zu vertices (module %s)", level.name.c_str(),
             u32(level.id), level.samples.size(), level.module_id.c_str());
+        module_levels.emplace_back(level.id, level.module_id);
+    }
+    NoteComposedGraph(base_vertex_count, module_levels);
     Msg("* XMS: game graph composed: %u vertices (%u base), %u edges, %zu level(s), %u link(s)", vertex_count,
         base_vertex_count, edge_total, base_header.levels().size() + new_levels.size(), linked);
     XMS::WriteReport();

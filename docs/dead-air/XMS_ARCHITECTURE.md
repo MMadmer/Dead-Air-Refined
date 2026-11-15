@@ -15,7 +15,7 @@ Status: **P0–P4 implemented in the engine** (2026-08-11), P5–P6 are design. 
 | P1 layered string table | implemented | `StringTable.cpp` (sort by layer + `CompositionHash` in the cache signature) |
 | P2 multicast callbacks | implemented | `script_callback_ex.h` (subscribers with a 0–1 fast path), `game_object:add_callback/remove_callback` in `script_game_object_*` |
 | P2 xms Lua core | implemented | `src/xrGame/xms_game.cpp`: `xms_native_*` natives + the embedded bootstrap (`xms.require`, `xms.hook` pre/post/around, `xms.registry`, `xms.save_data/load_data`, `xms.story_id`); loose override via `gamedata\scripts\xms.script` |
-| P3 saves | implemented | the `XMS1` manifest + per-mod chunks `0x584D0000|ns` in `.scov` (`xms_game.cpp`, hooks in `save_extension_gameplay.cpp` and `alife_storage_manager.cpp`), unknown-section skip in `alife_object_registry.cpp::get_object`, dangling-children pruning in `alife_storage_manager.cpp::load` |
+| P3 saves | implemented | the `XMS1` manifest + per-mod chunks `0x584D0000|ns` in `.scov` (`xms_game.cpp`, hooks in `save_extension_gameplay.cpp` and `alife_storage_manager.cpp`), unknown-section skip in `alife_object_registry.cpp::get_object`, dangling-children pruning in `alife_storage_manager.cpp::load`. A module's objects and what the game's objects carry of its data in `.scov` (`0x584F|ns`, `0x5845|ns`, `XMK1`), placeholders and the lineage in `.scop`, absent modules kept (`XmsSaves`, §9 item 7). QA: `tools/qa/saves/Run-ModuleSavesQa.ps1` |
 | P4 spawn composer | implemented | `src/xrGame/xms_spawn_composer.cpp` (`CALifeSpawnRegistry::xms_compose`, invoked before `build_story_spawns`), persistent ns/ranges in `xms_registry.ltx` |
 | Console/report | implemented | `xms_list`, `xms_conflicts`, `xms_why <fragment>` (who supplied a file/section/key: the overlay map + the ledger) in `console_commands.cpp`; `$app_data_root$\xms_report.json` |
 | Module console commands | implemented | `[commands]` `name = <script>.<function>` + `[command.<name>]` help/args/cheat, parsed into `Module::commands` (`xms_core.cpp`); `XmsGame::RegisterModuleCommands` (`xms_game.cpp`, called last in `xrGameModule::initialize`) adds a `CCC_ModuleCommand` per command - a name the game or an earlier module has is refused with a log line - which calls the function under `lua_pcall` with a traceback handler as `(args, module, command)`, prints a returned string (UTF-8 converted to cp1251), refuses a `cheat` outside `DEV_DEBUG`, runs it under the Script origin of protected mode and stops self-nesting at 8; `xms.command_args` splits the text. QA: `Run-NqQa.ps1 -Scenario Commands`. Contract: MODDING.md, "Console commands" |
@@ -783,18 +783,23 @@ closed, <s> skipped` (a closed node counts as moved too). The engine states the 
    section name already exposed to Lua. A module may declare `on_install` / `on_uninstall` hooks.
 6. **`REGISTRY_CHUNK` stays untouched.** Positional concatenation without framing
    (`alife_registry_container.cpp:52`) — any edit breaks everything; module state lives in `.scov`.
-7. **Removing a mod from an existing save.** The manifest names every module the save was written
-   with, its `ns` and its spawn-id range. A module that is gone or gated off at load is reported
-   (`! XMS: save was made with module [...] which is no longer installed`) and then
-   `XmsGame::ReleaseOrphanedModuleSpawns` releases what it had composed: every registered object
-   whose spawn id lies in the module's range or in its applied-spawn ledger, children with their
-   parents, server-side and offline, right after `on_register` and before the level goes online.
-   The module's ledger goes with the objects, so a module that comes back places its spawns
-   again. Objects the module's scripts created by hand carry no spawn id and stay: they are made
-   of stock sections and visuals. Skipping unknown sections (item 3) covers the other half - a
-   record whose section left with the module. Without this pass a box the module had placed
-   stayed in the save with a visual that left with the module, and the load died on
-   `Can't find model file`.
+7. **What a module brings stays out of `.scop`, and a module that is away is kept.** A module's
+   ALife objects (its sections, sections of the game whose `class` it changed, its spawn layer,
+   its levels, what it declared, what is inside them, squads with their members) are written by
+   the object scheduler into the `.scov` family `0x584F0000|ns`, an inert placeholder holding
+   each id in `.scop`; what the game's objects carry of its data (an ammo index past the base
+   list, its upgrades) goes to `0x5845|ns`; `XMK1` names the absent modules a save keeps
+   (`XmsSaves` in `xms_game.cpp`, hooks in `alife_object_registry.cpp::continue_save` and
+   `alife_storage_manager.cpp::load`). The placeholders carry the save's transaction id, the
+   lineage: a `.scop` the base game saved finds the `.scov` of its lineage among the saves. A
+   module that is gone or switched off at load is reported
+   (`! XMS: save was made with module [...] which is no longer installed`) and kept: its objects
+   stay in its chunks, out of the world, its placeholders and its ledger stay, every save made
+   without it keeps them byte for byte, and they come back with it unless their section is gone,
+   its class changed or their owner is gone. An older save with such a module's spawn-layer
+   objects inside `.scop` has them taken into the module's kept chunk at the load. Skipping
+   unknown sections (item 3) still covers an older save's records whose section left with the
+   module. The contract is `SAVE_COMPATIBILITY.md`, "What a module brings".
 
 ---
 
@@ -879,10 +884,14 @@ same set and mode — and vice versa. It rests on one invariant: **XMS renumbers
    extension channel. Original 0.98b simply does not see it; on a signature mismatch the sidecar is
    treated as stale and ignored with a log entry instead of failing the load. The mod-set manifest
    and module state are new `.scov` chunk ids registered from `ns`.
-5. **An honest limitation.** Objects a mod added will load in the original DA only if it has the same
-   config sections — that is, if the mod is installed there too. That is what "the same mod set"
-   means. If the section is absent, with P3 the object is silently skipped with a report entry
-   instead of `R_ASSERT2 "Can't create entity."`.
+5. **What a module brings is not in `.scop`.** A module's objects live in `.scov` and inert
+   placeholders hold their ids in `.scop` (§9 item 7), so a save made with modules loads in the
+   original DA without them: the original game sees space restrictors that do nothing, keeps them
+   and never reuses their ids, and Refined finds the module content again through the lineage the
+   placeholders carry. The limits are in `SAVE_COMPATIBILITY.md`, "What a module brings": the player
+   standing on a module's level, a module changing the game's own objects in place, a module's own
+   mode. An older save that kept a module's objects in `.scop` loads in the original only where the
+   original has the same sections; Refined writes it the new way at its next save.
 
 ### 11.1 How this is verified
 

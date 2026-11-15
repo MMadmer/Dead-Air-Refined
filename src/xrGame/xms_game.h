@@ -29,6 +29,19 @@ inline constexpr u32 kModuleChunkBase = 0x584D0000;
 // Separate from the data chunk so a mod's own xms.save_data never collides
 // with the engine's bookkeeping.
 inline constexpr u32 kLedgerChunkBase = 0x584C0000;
+// the ALife objects of a module, kept out of .scop: "XO" prefix + module ns
+// (SAVE_COMPATIBILITY.md, "What a module brings")
+inline constexpr u32 kObjectChunkBase = 0x584F0000;
+// what the game's own objects carry of a module's data - a loaded ammo type, an
+// installed upgrade: "XE" prefix + module ns
+inline constexpr u32 kStateChunkBase = 0x58450000;
+// the module chunk families, by their high word
+inline constexpr bool IsModuleFamily(u32 type)
+{
+    const u32 family = type & 0xFFFF0000;
+    return family == kModuleChunkBase || family == kLedgerChunkBase || family == kObjectChunkBase ||
+        family == kStateChunkBase;
+}
 
 // ---- per-module persistent blobs (Lua xms.save_data / xms.load_data) -------
 void SetPendingBlob(u16 ns, const void* data, size_t size);
@@ -74,13 +87,6 @@ IReader* ComposeGameGraph(IReader* base_chunk);
 // Returns how many objects were created.
 u32 LateSpawnCompose(class CALifeSimulatorBase& sim);
 
-// Releases the objects a module composed into a save that is now loaded without that
-// module (gone or gated off): everything with a spawn id in the module's range or in its
-// applied-spawn ledger, children with their parents, and the ledger with them. Runs after
-// the registry is registered and before the level goes online, so a visual that left with
-// the module is never asked for. Returns how many objects were released.
-u32 ReleaseOrphanedModuleSpawns(class CALifeSimulatorBase& sim);
-
 // Re-runs the spawn composer and then the late pass. For the Lua-side mode
 // restore on LEGACY saves: the manifestless save's modes become known only
 // once the game world is up, which is long after spawns().load composed with
@@ -94,4 +100,75 @@ u32 RecomposeAndLateSpawn(class CALifeSimulatorBase& sim);
 // earlier in the load order - is refused with a log line instead of shadowing.
 void RegisterModuleCommands();
 void UnregisterModuleCommands();
+
+// ---- the composed game graph ----------------------------------------------------
+// Set by ComposeGameGraph on every spawn load: how many vertices the base graph has and
+// which module added each level appended after them.
+void NoteComposedGraph(u32 base_vertex_count, const xr_vector<std::pair<u8, xr_string>>& module_levels);
+}
+
+class CALifeSimulatorBase;
+class CALifeObjectRegistry;
+class CSE_ALifeDynamicObject;
+class NET_Packet;
+struct CGameTaskRegistry;
+
+// What a module brings never enters the original game's save format: a module's ALife objects
+// are written to the module's chunk of the .scov, an inert placeholder holds each id in .scop, and
+// the placeholders carry the lineage that finds the .scov again after the save went through a game
+// that does not know it. Contract: docs/dead-air/SAVE_COMPATIBILITY.md, "What a module brings".
+namespace XmsSaves
+{
+// ---- the save -------------------------------------------------------------------
+// Starts the object capture of a save that will carry this transaction id. Nothing is done for a
+// game without modules and without content kept for an absent one: the registry then writes
+// exactly what it always did.
+void BeginCapture(u64 save_id);
+// Called by the registry for every object it is about to write. A module's object goes to the
+// module's chunk and a placeholder with its id to `out`: true. The game's own: false, and the
+// registry writes it.
+bool CaptureObject(const CALifeObjectRegistry& registry, CSE_ALifeDynamicObject& object, IWriter& out,
+    u32& record_count, NET_Packet& packet);
+// When nothing else carries the lineage, its anchor.
+void FinishCapture(const CALifeObjectRegistry& registry, IWriter& out, u32& record_count, NET_Packet& packet);
+// The .scov side: the object chunks, the kept set. False stops the save (a chunk over its limit).
+bool CollectMutations(xr_vector<SaveExtensionGameplay::ChunkMutation>& mutations);
+
+// ---- the load -------------------------------------------------------------------
+// After the save's own .scov was read: when it is missing or stale, or holds nothing of a module,
+// and the .scop carries a lineage, the module chunks of the .scov of that lineage are added to
+// `chunks` - from the stale sidecar of the same name, or from another save of the folder.
+void ResolveLineage(std::span<const u8> scop_source, pcstr sidecar_path, std::span<const u8> own_sidecar,
+    bool own_valid, u64 own_save_id, SaveExtensionContainer::ChunkList& chunks);
+// The manifests of the loaded .scov (XMS1, XMK1): which absent modules this game keeps.
+void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks);
+// After the .scop objects are read and before they are registered: every placeholder is replaced
+// by the object it stands for, stays for an absent module (it holds the id), or is removed.
+void OnObjectsLoaded(CALifeObjectRegistry& registry);
+// After the registries are read: the quest tasks of the present modules go back into the actor's
+// task registry (they were kept out of .scop's).
+void OnRegistriesLoaded(CGameTaskRegistry& tasks);
+// The squads have registered their members: an NPC's squad is its own field again.
+void OnLoadFinished();
+// The actor's task registry as .scop gets it: without the present modules' quest tasks, which go
+// to the modules' state chunks.
+void SaveTaskRegistry(CGameTaskRegistry& tasks, IWriter& out);
+// A new game keeps nothing.
+void Reset();
+// An object released for good forgets what it was declared.
+void ForgetObject(u16 id);
+
+// ---- scripts and the console ----------------------------------------------------
+// The module an ALife object belongs to; null for the game's own. An id an absent module keeps
+// answers that module.
+pcstr ObjectOwner(u16 id);
+bool OwnObject(u16 id, pcstr module_id);
+// The module that made a section of a config: the system config without `file`, else a config read
+// by name (a path under configs). Null for the game's own sections and for one a module only changed.
+pcstr SectionOwner(pcstr section, pcstr file);
+// xms_forget: drops what the game keeps of an absent module.
+bool Forget(pcstr module_id, xr_string& answer);
+void DescribeKept(xr_vector<xr_string>& lines);
+void KeptModules(xr_vector<shared_str>& out);
+const xr_vector<shared_str>& Forgotten();
 }

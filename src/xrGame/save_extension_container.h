@@ -81,6 +81,11 @@ enum class UpdateResult
     const FileSignature& actualScop, const FileSignature& actualScoc, Container& result);
 [[nodiscard]] LoadResult load(
     pcstr path, const FileSignature& actualScop, const FileSignature& actualScoc, Container& result);
+// A structurally valid container whatever .scop it is bound to: the binding is filled in for the
+// caller to judge. Only the module chunk families are ever taken from a sidecar read this way.
+[[nodiscard]] LoadResult load_detached(std::span<const u8> contents, Container& result);
+// The transaction id of a sidecar, from its first 16 bytes alone; false when it is no sidecar.
+[[nodiscard]] bool read_save_id(pcstr path, u64& saveId);
 [[nodiscard]] bool build(const Binding& binding, const ChunkList& chunks, xr_vector<u8>& result);
 
 [[nodiscard]] const Chunk* find_chunk(const ChunkList& chunks, u32 type);

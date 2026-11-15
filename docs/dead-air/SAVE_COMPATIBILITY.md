@@ -115,11 +115,163 @@ ID can be reused; ordinary online/offline transitions keep the record alive.
 | `0x584DFF03` | 1 | Run-time vars of a module PDA layout (`XmsPda`, MODDING.md "PDA layouts"): `u8 version`, `u32 count`, `count` pairs of zero-terminated name and value (cp1251). Absent when no script set a var. |
 | `AIK1` | 1 | NPC beliefs (`NPC_AI.md` "Knowledge"), 32-byte records: `u16 npcId`, `u16 targetId`, `u32 npcSectionCRC`, `f32 x, y, z`, `f32 err`, `u32 ageMs`, `u8 source`, `u8 confidence` (0..255), `u16 flags` (bit 0 enemy, bit 1 own sighting). Absent when no online stalker holds a belief. |
 | `AIT1` | 1 | NPC radio traits (`NPC_AI.md` "Communication"): `u16 npcId`, `u32 npcSectionCRC`, `u8 flags` (bit 0 rolled, bit 1 carries a radio), sorted by id. |
+| `XMK1` | 1 | The absent modules this save keeps content of (below, "What a module brings"): `u32 count`, then per module `stringZ id`, `stringZ version`, `u16 ns`, `u32 spawnBase`, `u32 spawnSize`. Absent when no module is kept. |
+| `0x584F0000\|ns` | 1 | A module's ALife objects: `u32 count`, `stringZ module id`, `stringZ module version`, then `count` records `u16 objectId`, `u16 parentId` (`0xFFFF` none), `u8 flags` (bit 0: owned by declaration), `stringZ section`, `u64 classId` (the section's `class` the record was written by), `stringZ parentSection` (empty without a parent), `u32 size`, then `size` bytes: `u16 spawnSize`, the spawn packet, `u16 updateSize`, the update packet - exactly what the object registry writes into `.scop` for an object. Parents come before their children. Absent when the module has no object. |
+| `0x58450000\|ns` | 1 | What the game's own objects carry of a module's data: `u32 count`, `stringZ module id`, `stringZ module version`, then records `u16 objectId`, `u32 sectionCRC`, `u8 kind` and the kind's fields: 1 loaded ammo type and 2 grenade type (`u8 value`, `u8 written`), 3 a shotgun's cartridges (`u32 writtenCRC`, `u8 n`, `n` × (`u8 place`, `u8 value`)), 4 an installed upgrade (`u32 writtenCRC`, `u8 place`, `stringZ upgrade`), 5 the actor's model (`stringZ worn`, `stringZ written`), 6 a quest task of the module in the actor's task registry (`u16 registryKey`, `u16 place`, `u32 size`, then the task as the registry writes it: id and `CGameTask`). `written` is the value `.scop` was given, `writtenCRC` the CRC-32 of the list as `.scop` holds it - the game's own entries, the module entries left out or set to the first type. A kind this build does not know ends the reading of the chunk. Absent when nothing names the module's data. |
+| `0x584DFF04` | 1 | The radios' state (`xms_radio.script`, `xms.save_data("xms.radio", ...)`): an opaque blob on the per-module data channel under the core pseudo-namespace `0xFF04`, kept like the quest runtime's. |
 
 The XMS module set manifest (`XMS1`) and the per-module data (`0x584D0000|ns`)
 and spawn-ledger (`0x584C0000|ns`) chunk families are described in
 `XMS_ARCHITECTURE.md`; a core blob such as `0x584DFF01` follows the module blob
 rules (opaque payload, version 1, erased when the owner stores an empty blob).
+The four families `0x584D`, `0x584C`, `0x584F` and `0x5845` are ranges by the
+high word: no fixed chunk id is registered inside them (`save_extension_chunk_ids.h`
+proves it at compile time).
+
+## What a module brings
+
+A module's content never enters the base game's save format. `.scop` always
+describes a world the base game can load; everything of a module lives in `.scov`
+and is laid over that world when Refined loads the save. A save can therefore go
+to the base Dead Air and back, or through a time with the module switched off or
+removed, and the module's content is no problem for the game that lacks it and
+not lost for the game that has it. Without modules nothing of this exists: a game
+with no module enabled, and a save that holds nothing of a module, are written
+byte for byte as before - no placeholder, no anchor, no new chunk.
+
+**Which objects are a module's.** An ALife object belongs to a module, in this
+order of rules: its section was made by a module (the system config notes the
+layer that creates each section; a section of the game a module only changed or
+merged into stays the game's) - or the module changed the `class` of a section of
+the game, so the object is written by a class only the module explains; a module's
+spawn layer added it (its spawn id lies in the module's range); it stands in the
+world on a level a module added; a module declared it its own at run time
+(`xms.own_object`). Whatever is inside such an object, at any depth, is that
+module's too, whatever its own section (a stock medkit in a module character's
+pockets), and a squad and its members are one: the squad's own rule, else its
+first member's that has one, decides for all of them - the base game's
+`register_member` takes any id of its roster for a monster. The actor is never a
+module's. A section a module brings by replacing a whole stock config file through
+its `gamedata` mirror is read as the game's (the reader sees the stock path); a
+module brings sections through `configs\xms\*.ltx`, `.ltxp`, items and characters.
+
+**Where they are written.** Each such object is written into its module's chunk
+`0x584F0000|ns`, the record the registry would have written into `.scop`, and the
+object scheduler writes in its place, under the same id, a placeholder: a
+`space_restrictor` of the base game with no shape, the "none" restrictor kind, no
+spawn id, no client data, `flSwitchOnline`, `flVisibleForMap` and `flInteractive`
+cleared and `flCanSave` set, standing at the object's game vertex when that is a
+vertex of the base graph (else at the actor's), on that vertex's own level vertex,
+named `xms_ph_<lineage>_<id>` and with `[xms_placeholder] module = <id>` as its
+custom data. The capture keeps its 3 ms budget and its eight-object batches; a
+placeholder costs one more packet per module object. A placeholder is no content:
+it gives the id a holder, nothing else.
+
+What the base game's reader does with a placeholder was checked in the readers this
+tree keeps of it: `CALifeObjectRegistry::get_object` creates it from a section the
+game has; `CSE_ALifeSpaceRestrictor::STATE_Read` reads zero shapes; the object is
+registered on a vertex of its own graph; `try_switch_online` keeps it offline
+because `flSwitchOnline` is clear (a space restrictor never switches offline by
+itself, so this flag is what keeps it out of the level); `se_zones.se_restrictor`
+(all three script layers the game ships) looks for a story id in its custom data
+and for a teleport by its name, and finds neither; no stock script walks space
+restrictors by section. The base game keeps it, saves it back and never gives its
+id to anything else.
+
+**The lineage.** The placeholders carry the transaction id of the save whose
+`.scov` holds the module content (`SOV1` offset 8). When that save holds module
+state but no placeholder - a quest blob, a ledger, what the game's objects carry of
+a module's data - one more placeholder carries it, the anchor (`anchor = true`, under
+an id no record of the save has). The base game carries both forward untouched under
+any save name. **The one exception to the stale rule:** when Refined loads a `.scop`
+whose own `.scov` is missing, stale, or holds no module chunk at all, and a record of
+the `.scop` is a placeholder, it takes the module chunks - `XMS1`, `XMK1` and the
+families `0x584D`, `0x584C`, `0x584F`, `0x5845` - from the `.scov` whose transaction id
+is that lineage: the stale sidecar of the same name first, then the other `.scov` files
+of the save folder, newest first, by their first 16 bytes alone (hundreds of saves cost
+hundreds of 16-byte reads, and only on this path). The gameplay chunks bound to the
+game's own objects (`WEX1`, `AFO1`, ...) stay under the stale rule. The search says
+where it found the content, or, when it finds none, that the module content of the
+save could not be found and where it looked; the placeholders are then removed and
+the game goes on.
+
+**The load.** After the `.scop` objects are read and before they are registered, every
+placeholder of a present module is replaced by the object its record holds; a record
+comes back only when its placeholder is in the world (the id is intact by construction),
+its section is there with a `class`, that class is the one the record was written by
+(never another class's reader), and its owner is there with the section recorded for it;
+otherwise it is dropped with one line saying why (`its section is gone from the module`,
+`its section's class is not the one it was written for`, `its owner is gone`,
+`its owner is no longer what it was`, `its placeholder is not in the save any more`).
+A dropped object drops what was inside it. A placeholder of a present module without a
+record, and the anchor, are removed. What the game's objects carry of a module's data
+comes back where the `.scop` field still holds what Refined wrote there (same id, same
+section CRC, the `written` value or CRC unchanged); otherwise the record is dropped with
+its line - so a weapon the base game reloaded keeps the ammo it was given there.
+
+**What the game's own objects carry of a module's data** follows `WEX1`: the `.scop`
+record keeps what the base game understands, the module's `0x5845|ns` the rest. A loaded
+ammo type or a grenade type that indexes past the list the base game gives the weapon's
+section (a module made `ammo_class` longer) is written as the first type, and so are such
+cartridges in a shotgun's tube; an upgrade whose section a module made is left out of the
+item's list. The list lengths before the modules are taken from the system config before
+the module stage, and the module that made the list longer is the one whose stage did. The
+actor wearing a module's mesh (a module outfit) is written with the model its own section
+names. The quest runtime's tasks of a present module (`nq.<module>.<quest>.<task>` in the
+actor's task registry, `REGISTRY_CHUNK`) are left out of the registry `.scop` gets and come
+back once the registries are read; the active task id stays as it is (the base game finds no
+such task and shows none active).
+
+**A module that is absent** - switched off (`xms_disable`, `modules\disabled.ltx`) or
+removed from the disk, the same case - is kept. The save loads without an error; its
+objects are not in the world (one line per module with the count), every other module's
+are; its placeholders stay in the world as the base game's would and hold its ids. Its
+chunks - objects, state records, spawn ledger, per-module data - stay in `.scov` byte for
+byte through every save made without it, `XMK1` names it, and its placeholders are written
+with each new save's lineage. When it is there again each record comes back under the
+rules above, and the kept ledger keeps the composer from placing its spawn objects twice.
+`xms_forget <module id>` drops what the game in progress keeps of an absent module (its
+placeholders are released, its chunks leave the save's state, and `xms_saves.forget(<id>)`
+and every `xms.on_forget` handler run for the scripts' part); `xms_list` lists what is kept for which absent module. An older
+save that still holds an absent module's spawn-layer objects in `.scop` has them taken
+into the module's kept chunk at the load, a placeholder under each id, instead of
+releasing them.
+
+**Scripts.** `xms.object_owner(id)` names the module an ALife object belongs to by the
+rules above, nil for the game's own - during a save's capture, during a load (a placeholder
+answers its module from the moment it is read, an absent module's for as long as it stands;
+a module's objects are back in the registry before any object registers, and until the squads
+register their members a member's squad is what the squads' rosters say);
+`xms.section_owner(section [, file])` names the module that made a section of the system
+config or, with `file` (a path under `configs`), of a config read by name through a `#file`
+patch - nil for the game's own and for a section a module only changed;
+`xms.own_object(id, module)` declares an object a module's, and the declaration is saved
+with the object; `xms.module_present(id)` is true while the module is enabled and loaded;
+`xms.kept_modules()` lists the absent modules this game keeps content of; `xms.on_forget(fn)`
+and `xms.forgotten()` tell what `xms_forget` dropped. What the stock scripts serialize
+about a module's objects and the quest runtime's handling of an absent module's quests are
+`SAVE_SCRIPTS.md`.
+
+**Limits, said once in the log when hit.** A player who saved standing on a level a module
+added has a save that loads only where that module is (`the player stands on a level a
+module added`, at each such save). A module that modifies or removes the game's own objects in
+place (a spawn layer's `modify` and `remove`, said per module when the spawn layers are composed;
+a script changing a stock NPC's profile) changes records of `.scop`: those changes are the
+module's state the base game sees. A module's own mode or world rules make a game of their own,
+which the base game never starts (said at the game's first save). A squad of the game a module's NPC joined
+leaves `.scop` with it, its own members too (a squad and its members are one; the base game
+reads a roster it cannot narrow). The engine does not take out of `.scop` a stock record that
+names a module's object in the engine's own fields beyond those - a restriction by a module
+restrictor, a car of a module the actor sits in - nor the scope index and grenade mode in a
+weapon's client data; what the stock scripts write is `SAVE_SCRIPTS.md`'s. One module's
+objects in one save fit one chunk: 65,535 records and 16 MiB; over that the save stops and
+the previous group stays.
+
+What stands in for the base game in the proof (`tools\qa\saves\Run-ModuleSavesQa.ps1`,
+`TEST_MATRIX.md`): the base 0.98b is not on this machine, so its reading of a `.scop` is
+`scop_records.py` (the records as the base reader takes them) and Refined with `-no_xms`,
+and its saving of a world is that world saved by Refined with `-no_xms` and the `.scop`
+copied under another name without its `.scov`.
 
 The AFO1 values are weight, health, radiation, satiety, power, bleeding,
 additional carry weight, and the nine original hit-immunity classes. WEX1

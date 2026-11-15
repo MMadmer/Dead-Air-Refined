@@ -8,6 +8,7 @@
 #include "xrCore/XMS/xms_core.h"
 #include "xms_world.h"
 #include "xms_screens.h"
+#include "xms_game.h"
 #include "xrMaterialSystem/GameMtlLib.h"
 #include "xrEngine/Rain.h"
 #include "xrEngine/xr_ioc_cmd.h"
@@ -1321,10 +1322,7 @@ public:
     {
         const auto& modules = XMS::Modules();
         if (modules.empty())
-        {
             Msg("* XMS: no modules installed");
-            return;
-        }
         for (const XMS::Module& m : modules)
         {
             if (m.disabled)
@@ -1332,6 +1330,41 @@ public:
             else
                 Msg("* [%02u] %s %s (ns=%u)", u32(m.layer), m.id.c_str(), m.version.c_str(), u32(m.ns));
         }
+        // the game in progress keeps what absent modules brought into it
+        xr_vector<xr_string> kept;
+        XmsSaves::DescribeKept(kept);
+        for (const xr_string& line : kept)
+            Msg("%s", line.c_str());
+    }
+};
+
+// Drops what the game in progress keeps of an absent module: its objects, its ids, its saved data.
+class CCC_XmsForget : public IConsole_Command
+{
+public:
+    CCC_XmsForget(LPCSTR N) : IConsole_Command(N)
+    {
+        bEmptyArgsHandled = true;
+        bLowerCaseArgs = false;
+    };
+    virtual void Execute(LPCSTR args)
+    {
+        if (!args || !args[0])
+        {
+            xr_vector<xr_string> kept;
+            XmsSaves::DescribeKept(kept);
+            for (const xr_string& line : kept)
+                Msg("%s", line.c_str());
+            Msg("* usage: %s <module id> - drops what this game keeps of an absent module", cName);
+            return;
+        }
+        xr_string answer;
+        XmsSaves::Forget(args, answer);
+        Msg("%s", answer.c_str());
+    }
+    virtual void Info(TInfo& I)
+    {
+        xr_strcpy(I, "drop what the game in progress keeps of an absent module (its objects and saved data)");
     }
 };
 
@@ -4060,6 +4093,7 @@ void CCC_RegisterCommands()
 
     // XMS module system
     CMD1(CCC_XmsList, "xms_list");
+    CMD1(CCC_XmsForget, "xms_forget");
     CMD2(CCC_XmsEnable, "xms_enable", true);
     CMD2(CCC_XmsEnable, "xms_disable", false);
     CMD1(CCC_XmsConflicts, "xms_conflicts");

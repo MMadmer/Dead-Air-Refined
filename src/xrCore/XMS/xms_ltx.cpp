@@ -23,6 +23,125 @@ struct PatchStats
     u32 skipped{0};
 };
 
+// What the system config said before the module stage, for what a save must tell apart: the
+// class of every section, and how long the lists are that a saved object indexes.
+struct BaseValues
+{
+    xr_unordered_map<shared_str, shared_str, std::hash<shared_str>> classes;
+    xr_unordered_map<shared_str, u32, std::hash<shared_str>> ammo;
+    xr_unordered_map<shared_str, u32, std::hash<shared_str>> grenades;
+};
+
+BaseValues& base_values()
+{
+    static BaseValues values;
+    return values;
+}
+
+void note_base_values(const CInifile& ini)
+{
+    BaseValues& values = base_values();
+    values = {};
+    static const shared_str class_key("class"), ammo_key("ammo_class"), grenade_key("grenade_class");
+    for (const CInifile::Sect* section : ini.sections())
+    {
+        if (!section)
+            continue;
+        const auto value_of = [section](const shared_str& key) -> const shared_str*
+        {
+            const auto found = section->LineIndex.find(key.c_str());
+            return found == section->LineIndex.end() ? nullptr : &section->Data[found->second].second;
+        };
+        if (const shared_str* value = value_of(class_key))
+            values.classes.emplace(section->Name, *value);
+        if (const shared_str* value = value_of(ammo_key))
+            values.ammo.emplace(section->Name, _GetItemCount(value->c_str() ? value->c_str() : ""));
+        if (const shared_str* value = value_of(grenade_key))
+            values.grenades.emplace(section->Name, _GetItemCount(value->c_str() ? value->c_str() : ""));
+    }
+}
+
+// A section of the game whose class a module changed is written by that class's writer, which
+// only the module explains: its objects are the module's, like those of a section it made. Looked
+// at after each module's stage, so the change is the module's that made it, whatever the way.
+struct ClassWatch
+{
+    xr_unordered_map<shared_str, shared_str, std::hash<shared_str>> now;
+    xr_unordered_map<shared_str, u16, std::hash<shared_str>> by;
+};
+
+// how long a list of the game's section has grown after each module's stage: the module whose
+// stage made it longer than an index explains an object that holds that index
+struct ListGrowth
+{
+    u32 length{};
+    u16 layer{};
+};
+using Growths = xr_unordered_map<shared_str, xr_vector<ListGrowth>, std::hash<shared_str>>;
+Growths& ammo_growth()
+{
+    static Growths growth;
+    return growth;
+}
+Growths& grenade_growth()
+{
+    static Growths growth;
+    return growth;
+}
+
+void watch_lists(const CInifile& ini, const xr_unordered_map<shared_str, u32, std::hash<shared_str>>& base, pcstr key,
+    Growths& growth, u16 layer)
+{
+    for (const auto& [name, length] : base)
+    {
+        if (!ini.section_exist(name))
+            continue;
+        const CInifile::Sect& section = ini.r_section(name);
+        const auto found = section.LineIndex.find(key);
+        if (found == section.LineIndex.end())
+            continue;
+        const shared_str& value = section.Data[found->second].second;
+        const u32 now = _GetItemCount(value.c_str() ? value.c_str() : "");
+        const auto steps = growth.find(name);
+        const u32 before = steps == growth.end() || steps->second.empty() ? length : steps->second.back().length;
+        if (now > before)
+            growth[name].push_back({now, layer});
+    }
+}
+
+void watch_classes(const CInifile& ini, ClassWatch& watch, u16 layer)
+{
+    for (auto& [name, value] : watch.now)
+    {
+        if (!ini.section_exist(name))
+            continue;
+        const CInifile::Sect& section = ini.r_section(name);
+        const auto found = section.LineIndex.find("class");
+        const shared_str current = found == section.LineIndex.end() ? shared_str() : section.Data[found->second].second;
+        if (current == value)
+            continue;
+        value = current;
+        watch.by[name] = layer;
+    }
+    watch_lists(ini, base_values().ammo, "ammo_class", ammo_growth(), layer);
+    watch_lists(ini, base_values().grenades, "grenade_class", grenade_growth(), layer);
+}
+
+void note_changed_classes(const CInifile& ini, const ClassWatch& watch)
+{
+    for (const auto& [name, layer] : watch.by)
+    {
+        const shared_str& base_class = base_values().classes[name];
+        const shared_str& now = watch.now.at(name);
+        const Module* m = ModuleOfLayer(layer);
+        if (!m || !now || now == base_class)
+            continue;
+        NoteSectionCreated(ini, name, layer);
+        Msg("* XMS: [%s] changes the class of [%s] (%s -> %s): its objects are the module's in a save", m->id.c_str(),
+            name.c_str(), base_class.c_str(), now.c_str());
+    }
+}
+
 char* trim(char* text)
 {
     while (*text == ' ' || *text == '\t')
@@ -354,6 +473,9 @@ void ApplyConfigStage(CInifile* ini)
     std::sort(patches.system_files.begin(), patches.system_files.end());
     patches.system_files.erase(std::unique(patches.system_files.begin(), patches.system_files.end()),
         patches.system_files.end());
+    note_base_values(*ini);
+    ClassWatch classes;
+    classes.now = base_values().classes;
 
     for (const Module& m : Modules())
     {
@@ -413,7 +535,9 @@ void ApplyConfigStage(CInifile* ini)
             }
             PopLtxFile();
         }
+        watch_classes(*ini, classes, m.layer);
     }
+    note_changed_classes(*ini, classes);
 
     FinishCharacters();
     patches.stage_done = true;
@@ -425,5 +549,57 @@ void ApplyConfigStage(CInifile* ini)
         Msg("* XMS: %u patch op(s) of %u other config file(s) kept for when they are read", u32(patches.ops.size()),
             u32(patches.by_file.size()));
     WriteReport();
+}
+
+namespace
+{
+// sections a module's patch made in a config read by name: "<config path>|<section>" -> layer
+xr_unordered_map<xr_string, u16>& file_sections()
+{
+    static xr_unordered_map<xr_string, u16> sections;
+    return sections;
+}
+
+xr_string file_section_key(pcstr file, pcstr section)
+{
+    xr_string key(ConfigPath(file ? file : "").c_str());
+    key += '|';
+    key += section ? section : "";
+    xr_strlwr(key);
+    return key;
+}
+} // namespace
+
+void NoteFileSectionCreated(pcstr file, pcstr section, u16 layer)
+{
+    const xr_string key = file_section_key(file, section);
+    if (layer)
+        file_sections()[key] = layer;
+    else
+        file_sections().erase(key);
+}
+
+const Module* ModuleOfFileSection(pcstr file, pcstr section)
+{
+    const auto& sections = file_sections();
+    if (sections.empty())
+        return nullptr;
+    const auto found = sections.find(file_section_key(file, section));
+    return found == sections.end() ? nullptr : ModuleOfLayer(found->second);
+}
+
+const Module* ListEntryModule(const shared_str& section, bool grenades, u32 index)
+{
+    const auto& base = grenades ? base_values().grenades : base_values().ammo;
+    const auto length = base.find(section);
+    if (length == base.end() || index < length->second)
+        return nullptr;
+    const Growths& growth = grenades ? grenade_growth() : ammo_growth();
+    const auto steps = growth.find(section);
+    if (steps != growth.end())
+        for (const ListGrowth& step : steps->second)
+            if (index < step.length)
+                return ModuleOfLayer(step.layer);
+    return nullptr;
 }
 } // namespace XMS

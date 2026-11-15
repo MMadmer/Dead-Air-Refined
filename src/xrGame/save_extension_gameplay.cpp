@@ -590,6 +590,13 @@ bool continue_capture(CaptureState& state, float budgetMilliseconds)
                 std::move(seasonPayload), season != 0.f);
             // XMS module manifest + per-module blobs ride the same capture
             XmsGame::CollectSaveMutations(state.mutations);
+            // the modules' objects and what the game's objects carry of their data
+            if (!XmsSaves::CollectMutations(state.mutations))
+            {
+                state.failed = true;
+                state.completed = true;
+                return true;
+            }
             state.phase = 10;
             continue;
         }
@@ -765,5 +772,6 @@ void forget_object(const CSE_Abstract& serverObject)
     DaAi::Know::forget_saved(serverObject.ID);
     // [ai:know] end forget_object
     DaAi::Traits::forget(serverObject.ID);
+    XmsSaves::ForgetObject(serverObject.ID);
 }
 }

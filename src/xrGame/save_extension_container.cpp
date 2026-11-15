@@ -337,8 +337,7 @@ SignatureResult read_file_signature(pcstr path, FileSignature& result)
 #endif
 }
 
-LoadResult load(std::span<const u8> contents,
-    const FileSignature& actualScop, const FileSignature& actualScoc, Container& result)
+LoadResult load_detached(std::span<const u8> contents, Container& result)
 {
     result = {};
     const size_t size = contents.size();
@@ -356,7 +355,34 @@ LoadResult load(std::span<const u8> contents,
         parsed = parse_fixed_chunk(contents, result);
     else if (version == directoryVersion)
         parsed = parse_directory(contents, result);
+    if (parsed != LoadResult::Valid)
+    {
+        result.chunks.clear();
+        result.skippedChunks = 0;
+    }
+    return parsed;
+}
 
+bool read_save_id(pcstr path, u64& saveId)
+{
+    saveId = 0;
+    FILE* file = fopen(path, "rb");
+    if (!file)
+        return false;
+    std::array<u8, 16> head{};
+    const size_t got = fread(head.data(), 1, head.size(), file);
+    fclose(file);
+    size_t offset = 0;
+    u32 storedMagic = 0, version = 0;
+    const std::span<const u8> contents(head.data(), got);
+    return read_value(contents, offset, storedMagic) && storedMagic == magic && read_value(contents, offset, version) &&
+        version >= legacyVersion && version <= directoryVersion && read_value(contents, offset, saveId);
+}
+
+LoadResult load(std::span<const u8> contents,
+    const FileSignature& actualScop, const FileSignature& actualScoc, Container& result)
+{
+    LoadResult parsed = load_detached(contents, result);
     if (parsed == LoadResult::Valid && !binding_matches(result.binding, actualScop, actualScoc))
         parsed = LoadResult::SignatureMismatch;
 

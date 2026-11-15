@@ -250,9 +250,30 @@ Runtime facts:
   `xms.patrol_point(name, x, y, z)` registers a one-point runtime patrol path
   (`xms_rt_*`) at the navmesh cell nearest to a position, so the stock schemes
   walk to a place nobody drew a path for; it is level data, never saved.
-- Saves: the module set is recorded in the save's `.scov` sidecar; removing a
-  module does not brick the save — its objects are skipped on load and
-  reported. `.scop` stays byte-compatible with original Dead Air 0.98b.
+  What a module brings to a save (`xms.saves_api`): `xms.object_owner(id)`,
+  `xms.own_object(id, module)`, `xms.module_present(id)`,
+  `xms.section_owner(section [, file])`, `xms.kept_modules()`,
+  `xms.on_forget(fn)` / `xms.forgotten()` - `SAVE_COMPATIBILITY.md`, "What a
+  module brings".
+- Saves: what a module brings never enters the base game's save format. Its
+  ALife objects - of a section it made or whose `class` it changed, of its spawn
+  layer, on a level it added, declared with `xms.own_object(id, module)`, and
+  whatever is inside them, a squad with its members - are written into the save's
+  `.scov`, and `.scop` holds an inert placeholder under each id (a space
+  restrictor with no shape, never online). What the game's own objects carry of
+  a module's data - a loaded ammo type past the list the base game gives the
+  weapon, an upgrade the module made - is kept the same way; `.scop` gets what
+  the base game understands. So a save goes to the base Dead Air and back: the
+  placeholders carry the lineage that finds the `.scov` again, under any save
+  name. Contract: `SAVE_COMPATIBILITY.md`, "What a module brings".
+- A module switched off or removed is kept, not erased: the save loads without
+  it, its objects out of the world and its placeholders holding their ids, and
+  every save made without it keeps its chunks byte for byte. When it is back its
+  objects are where they were - except one whose section it no longer has, whose
+  section's class changed since, or whose owner is gone, each dropped with a line
+  saying why. `xms_forget <module>` drops what a game keeps of an absent module;
+  `xms_list` names what is kept. Changing the `class` of a section of the game
+  makes every object of that section the module's in a save.
 - Spawn ids for module objects come from persistent per-module ranges
   (`appdata/xms_registry.ltx`); base `all.spawn` ids never change.
 - Kill switch: `-no_xms` command line. JSGME layers and `xtra_*.xdb0` keep

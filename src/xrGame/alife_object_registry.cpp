@@ -307,6 +307,15 @@ bool CALifeObjectRegistry::continue_save(
             }
 
             ++state.nextObjectIndex;
+            // XMS: a module's object goes to the .scov, an inert placeholder holds its id here
+            if (XmsSaves::CaptureObject(*this, *object, memory_stream, state.objectCount, savePacket))
+            {
+                ++batchObjectCount;
+                schedulerTime = SaveClock::now();
+                if (budget_exhausted_at(schedulerTime))
+                    break;
+                continue;
+            }
             if (fastMemoryStream)
             {
                 SaveObjectProfile profile;
@@ -333,6 +342,7 @@ bool CALifeObjectRegistry::continue_save(
             return false;
     }
 
+    XmsSaves::FinishCapture(*this, memory_stream, state.objectCount, savePacket);
     const u32 last_position = memory_stream.tell();
     memory_stream.seek(state.countPosition);
     memory_stream.w_u32(state.objectCount);

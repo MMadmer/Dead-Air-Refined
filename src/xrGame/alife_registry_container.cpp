@@ -11,6 +11,7 @@
 #include "Common/object_interfaces.h"
 #include "alife_space.h"
 #include "Common/object_type_traits.h"
+#include "xms_game.h"
 
 template <typename TContainer, typename TList>
 struct RegistryHelper;
@@ -41,7 +42,11 @@ struct RegistryHelper<TContainer, Loki::Typelist<Head, Tail>>
         {
             if (index++ == target)
             {
-                self->Head::save(writer);
+                // XMS: the quest tasks of a module are the module's data, kept out of .scop
+                if constexpr (std::is_same_v<Head, CGameTaskRegistry>)
+                    XmsSaves::SaveTaskRegistry(*self, writer);
+                else
+                    self->Head::save(writer);
                 return true;
             }
         }

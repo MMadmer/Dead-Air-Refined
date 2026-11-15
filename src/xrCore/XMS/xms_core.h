@@ -12,6 +12,8 @@
 #include "xrCommon/xr_vector.h"
 #include "xrCore/xrstring.h"
 
+class CInifile;
+
 namespace XMS
 {
 struct ProvidedMode
@@ -419,6 +421,20 @@ XRCORE_API u16 CurrentLtxLayer();
 XRCORE_API pcstr CurrentLtxFile();
 // The enabled module at that layer; null for the base game.
 XRCORE_API const Module* ModuleOfLayer(u16 layer);
+// Who made a section of the system config: the config reader notes every section it creates
+// there with the layer of the file or module doing it. A module that only changed or merged
+// into a section the game has does not make it its own. Null for the game's sections.
+XRCORE_API void NoteSectionCreated(const CInifile& ini, const shared_str& section, u16 layer);
+XRCORE_API const Module* ModuleOfSection(const shared_str& section);
+// The same for a config read by name (a path under configs, e.g. "misc\\task_manager.ltx"): the
+// module whose `#file` patch made the section there. Known once an ini of that file was read.
+XRCORE_API void NoteFileSectionCreated(pcstr file, pcstr section, u16 layer);
+XRCORE_API const Module* ModuleOfFileSection(pcstr file, pcstr section);
+// A section of the game whose class a module changed counts as made by that module.
+// The module that made the ammo_class (grenades: grenade_class) list of a section of the game
+// longer than `index`; null when the index is within the list the game itself gives it, or the
+// section is no section of the game. Kept from the config stage (xms_ltx.cpp).
+XRCORE_API const Module* ListEntryModule(const shared_str& section, bool grenades, u32 index);
 XRCORE_API bool LtxMergeEnabled();
 XRCORE_API void SetLtxMergeEnabled(bool enabled);
 }

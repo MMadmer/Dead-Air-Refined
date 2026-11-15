@@ -79,6 +79,9 @@ struct State
     xr_vector<xr_string> active_modes;
     xr_string active_modes_csv;
     MaterialResolver material_resolver{nullptr};
+    // sections of the system config a module made, with its layer; a section a module only
+    // changed is not here
+    xr_unordered_map<shared_str, u16, std::hash<shared_str>> section_origin;
 };
 
 State& st()
@@ -2355,6 +2358,32 @@ u16 CurrentLtxLayer()
 {
     const auto& stack = st().ltx_layer_stack;
     return stack.empty() ? 0 : stack.back();
+}
+
+void NoteSectionCreated(const CInifile& ini, const shared_str& section, u16 layer)
+{
+    if (!section)
+        return;
+    if (&ini != pSettings)
+    {
+        // a config read by name: what a `#file` patch made there, by the file it was opened as
+        if (!ini.xms_files().empty())
+            NoteFileSectionCreated(ini.xms_files().front().c_str(), section.c_str(), layer);
+        return;
+    }
+    if (layer)
+        st().section_origin[section] = layer;
+    else
+        st().section_origin.erase(section);
+}
+
+const Module* ModuleOfSection(const shared_str& section)
+{
+    const auto& origins = st().section_origin;
+    if (!section || origins.empty())
+        return nullptr;
+    const auto found = origins.find(section);
+    return found == origins.end() ? nullptr : ModuleOfLayer(found->second);
 }
 
 bool LtxMergeEnabled() { return st().ltx_merge; }

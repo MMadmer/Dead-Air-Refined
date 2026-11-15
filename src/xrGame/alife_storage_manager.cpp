@@ -1660,6 +1660,7 @@ void CALifeStorageManager::process_save_captures(float budgetMilliseconds)
             const u64 objectCyclesStarted = current_thread_cycles();
             const ThreadCpuTime objectCpuStarted = current_thread_cpu_time();
             objectTimer.Start();
+            XmsSaves::BeginCapture(capture.job.saveId);
             objects().begin_save(*capture.stream, capture.objectState);
             const float objectMilliseconds = objectTimer.GetElapsed_sec() * 1000.f;
             const ThreadCpuTime objectCpuEnded = current_thread_cpu_time();
@@ -2152,6 +2153,8 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
     spawns().load(source, file_name);
     graph().on_load();
     objects().load(source);
+    // XMS: every placeholder gives way to the object it stands for, or keeps its id for an absent module
+    XmsSaves::OnObjectsLoaded(objects());
 
     // XMS: when the loader skipped objects of removed modules, their children
     // reference missing parent ids - drop those subtrees before registration
@@ -2193,6 +2196,7 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
     }
 
     registry().load(source);
+    XmsSaves::OnRegistriesLoaded(registry());
 
     // XMS: a module updated since this save was written has its new spawn
     // vertices composed (spawns().load above runs the composer on this path
@@ -2205,10 +2209,6 @@ void CALifeStorageManager::load(void* buffer, const u32& buffer_size, LPCSTR fil
 
     for (auto& object : objects().objects())
         object.second->on_register();
-
-    // XMS: what a module that is no longer installed had spawned into this save goes now,
-    // registered and offline, before any client asks for a visual that left with the module.
-    XmsGame::ReleaseOrphanedModuleSpawns(*this);
 
     if (!g_pGameLevel)
         return;
@@ -2421,6 +2421,10 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
     {
         Msg("! Ignored stale save extensions in '%s'", sidecarName);
     }
+    // XMS: what a module brought stays with the lineage the .scop carries, whatever game saved it last
+    XmsSaves::ResolveLineage(std::span<const u8>(preparedSource.data, source_count), sidecarName,
+        preparedSource.extensions.present ? companionContents(preparedSource.extensions) : std::span<const u8>(),
+        extensionResult == SaveExtensionContainer::LoadResult::Valid, extensions.binding.saveId, loadedExtensionChunks);
 
     unload();
     reload(m_section);
@@ -2438,6 +2442,7 @@ bool CALifeStorageManager::load(LPCSTR save_name_no_check)
         preparedSource.customBackup.present, companionContents(preparedSource.customBackup));
 
     groups().on_after_game_load();
+    XmsSaves::OnLoadFinished();
 
     VERIFY(graph().actor());
 

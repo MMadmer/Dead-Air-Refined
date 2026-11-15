@@ -600,6 +600,8 @@ void CInifile::insert_section(Sect* section)
     DATA.insert(position, section);
     m_sectionIndex.emplace(section->Name.c_str(), section);
     xms_note_child(*section);
+    if (section->xms_layer)
+        XMS::NoteSectionCreated(*this, section->Name, section->xms_layer);
 }
 
 void CInifile::xms_note_file(pcstr path)
@@ -1344,6 +1346,8 @@ bool CInifile::xms_set_line(pcstr S, pcstr L, pcstr V, shared_str* old_value, u1
         const auto position = std::lower_bound(DATA.begin(), DATA.end(), section->Name.c_str(), sect_pred);
         DATA.insert(position, section);
         m_sectionIndex.emplace(section->Name.c_str(), section);
+        if (layer)
+            XMS::NoteSectionCreated(*this, section->Name, layer);
     }
     const shared_str key(L);
     bool existed = false;
@@ -1400,6 +1404,7 @@ bool CInifile::xms_remove_section(pcstr S)
     if (!section)
         return false;
     m_sectionIndex.erase(section->Name.c_str());
+    XMS::NoteSectionCreated(*this, section->Name, 0);
     const auto it = std::find(DATA.begin(), DATA.end(), section);
     if (it != DATA.end())
         DATA.erase(it);
@@ -1437,6 +1442,8 @@ bool CInifile::xms_create_section(pcstr S, pcstr parents_csv, u16 layer)
     DATA.insert(position, section);
     m_sectionIndex.emplace(section->Name.c_str(), section);
     xms_note_child(*section);
+    if (section->xms_layer)
+        XMS::NoteSectionCreated(*this, section->Name, section->xms_layer);
     return true;
 }
 

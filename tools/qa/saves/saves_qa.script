@@ -1,0 +1,182 @@
+-- tools/qa/saves/Run-ModuleSavesQa.ps1 puts `local plan = { ... }` in front of this and drops it into the QA
+-- root's gamedata\scripts: it runs with modules and without them (-no_xms), and says what it finds as
+-- "SAVESQA <name> = <value>" lines of the log.
+
+local function say(name, value) printf("SAVESQA %s = %s", name, tostring(value)) end
+
+local function owner(id)
+	if xms and xms.object_owner then return xms.object_owner(id) end
+	return nil
+end
+
+-- a game vertex on another level than the actor's: what is made there stays offline
+local function far_vertex()
+	local gg = game_graph()
+	local here = gg:vertex(db.actor:game_vertex_id()):level_id()
+	for gv = 0, 65534 do
+		if not gg:valid_vertex_id(gv) then break end
+		local v = gg:vertex(gv)
+		if v:level_id() ~= here and alife():level_name(v:level_id()) ~= "fake_start" then return gv, v end
+	end
+end
+
+local function make()
+	local a = db.actor
+	local sim = alife()
+	local gv, v = far_vertex()
+	local pos, lv = v:level_point(), v:level_vertex_id()
+	local made = {}
+	local function mk(name, section, parent, near)
+		local se
+		if near then
+			se = sim:create(section, a:position(), a:level_vertex_id(), a:game_vertex_id(), parent)
+		elseif parent then
+			se = sim:create(section, pos, lv, gv, parent)
+		else
+			se = sim:create(section, pos, lv, gv)
+		end
+		made[name] = se
+		say("made " .. name, se and (se.id .. " " .. se:section_name() .. " " .. se.parent_id) or "nil")
+		return se
+	end
+	mk("pistol_actor", "saves_qa_a_pistol", 0, true)
+	local box = mk("box", "inventory_box")
+	mk("pistol_box", "saves_qa_a_pistol", box.id)
+	local npc = mk("npc", "stalker_silent")
+	mk("pistol_npc", "saves_qa_a_pistol", npc.id)
+	local guide = mk("guide", "saves_qa_a_guide")
+	local med = mk("declared", "medkit")
+	say("own", xms.own_object(med.id, "saves_qa_a"))
+	local w = mk("weapon", "wpn_pm")
+	w.ammo_type = 2
+	w:add_upgrade("saves_qa_a_up")
+	mk("gone", "saves_qa_a_gone", 0, true)
+	mk("morph", "saves_qa_a_morph", 0, true)
+	mk("knife_b", "saves_qa_b_knife", 0, true)
+	mk("gauss_b", "wpn_gauss", 0, true)
+	-- a squad of the module with a stock member nobody declared, and a squad of the game with a
+	-- module's NPC in it: each squad is one with its members
+	local ok_squads = pcall(function()
+		local msquad = sim:create("saves_qa_a_guide_squad", pos, lv, gv)
+		made.msquad = msquad
+		say("made msquad", msquad.id .. " " .. msquad:section_name() .. " " .. msquad.parent_id)
+		local member = msquad:add_squad_member("stalker_silent", pos, lv, gv)
+		local se = sim:object(member)
+		made.msquad_member = se
+		say("made msquad_member", se.id .. " " .. se:section_name() .. " " .. se.parent_id)
+		local gsquad = sim:create("stalker_sim_squad_novice", pos, lv, gv)
+		made.gsquad = gsquad
+		say("made gsquad", gsquad.id .. " " .. gsquad:section_name() .. " " .. gsquad.parent_id)
+		local guest = sim:object(gsquad:add_squad_member("saves_qa_a_guide", pos, lv, gv))
+		made.gsquad_member = guest
+		say("made gsquad_member", guest.id .. " " .. guest:section_name() .. " " .. guest.parent_id)
+	end)
+	say("squads", ok_squads)
+	-- a quest task of the module in the actor's registry, the radio's blob
+	local ok_task = pcall(function()
+		local t = CGameTask()
+		t:set_id("nq.saves_qa_a.qa.t")
+		t:set_title("QA task")
+		t:set_description("QA task")
+		a:give_task(t, 0, false)
+	end)
+	say("task given", ok_task and a:get_task("nq.saves_qa_a.qa.t", true) ~= nil)
+	say("radio saved", xms.save_data("xms.radio", "saves_qa radio"))
+	for id = 1, 65534 do
+		local se = sim:object(id)
+		if se then
+			if se.parent_id == guide.id then
+				say("guide child", se.id .. " " .. se:section_name())
+			elseif se:section_name() == "inventory_box" and owner(se.id) == "saves_qa_a" then
+				made.crate = se
+				say("made crate", se.id .. " " .. se:section_name() .. " " .. se.parent_id)
+			end
+		end
+	end
+	for name, se in pairs(made) do
+		say("owner " .. name, owner(se.id))
+	end
+end
+
+local function check()
+	local sim = alife()
+	for _, e in ipairs(plan.expect or {}) do
+		local se = sim:object(e.id)
+		local got
+		if not se then
+			got = "absent"
+		elseif se:section_name() == "space_restrictor" and string.find(se:name(), "^xms_ph_") then
+			got = "placeholder"
+		elseif se:section_name() == e.section and se.parent_id == e.parent then
+			got = "present"
+		else
+			got = "other " .. se:section_name() .. " " .. se.parent_id
+		end
+		say("check " .. e.name, got)
+	end
+	local w = plan.weapon and sim:object(plan.weapon)
+	if w then
+		say("weapon ammo", w.ammo_type)
+		say("weapon upgrade", w:has_upgrade("saves_qa_a_up"))
+	end
+	if plan.declared then say("declared owner", owner(plan.declared)) end
+	if xms and xms.kept_modules then say("kept", table.concat(xms.kept_modules(), ",")) end
+	for _, o in ipairs(plan.owners or {}) do say("owner of " .. o, owner(o)) end
+	say("task", db.actor:get_task("nq.saves_qa_a.qa.t", true) ~= nil)
+	if xms and xms.section_owner then
+		say("section pistol", xms.section_owner("saves_qa_a_pistol"))
+		say("section pm", xms.section_owner("wpn_pm"))
+		say("section gauss", xms.section_owner("wpn_gauss"))
+		say("section task", xms.section_owner("saves_qa_a_task", "misc\\task_manager.ltx"))
+		say("section stock task", xms.section_owner("saves_qa_none", "misc\\task_manager.ltx"))
+	end
+	if xms and xms.load_data then say("radio", xms.load_data("xms.radio") ~= nil) end
+end
+
+local started, acted, saved
+local function update()
+	-- a new game starts on fake_start and jumps to the start the new-game screen picked
+	if level.name() == "fake_start" then return end
+	local now = time_global()
+	if not started then started = now end
+	if plan.phase == "new" and not acted and now - started > 10000 then
+		acted = now
+		if not db.actor:object("saves_qa_a_pistol") then make() end
+	elseif plan.phase == "check" and not acted and now - started > (plan.wait or 3) * 1000 then
+		acted = now
+		check()
+		if plan.forget then
+			get_console():execute("xms_forget " .. plan.forget)
+			if xms and xms.forgotten then say("forgotten", table.concat(xms.forgotten(), ",")) end
+		end
+		if not plan.save then say("done", true) end
+	elseif plan.phase == "plain" and not acted and now - started > 10000 then
+		acted = now
+	end
+	if acted and plan.save and not saved and now - acted > 3000 then
+		saved = true
+		get_console():execute("save " .. plan.save)
+	end
+end
+
+-- A window on a hidden desktop has no focus: the level that loads next would pause itself before
+-- any script runs unless the device stays active, and a paused level runs no actor callback - a
+-- level call does.
+local function first_update()
+	get_console():execute("rs_always_active on")
+	get_console():execute("g_pause_in_background 0")
+	get_console():execute("main_menu off")
+	pcall(function() device():pause(false) end)
+	level.add_call(function()
+		pcall(function() device():pause(false) end)
+		update()
+		return false
+	end, function() end)
+end
+
+function on_game_start()
+	RegisterScriptCallback("actor_on_first_update", first_update)
+	if xms and xms.on_forget then
+		xms.on_forget(function(id) say("forget heard", id) end)
+	end
+end

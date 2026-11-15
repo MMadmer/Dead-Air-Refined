@@ -328,6 +328,7 @@ void CALifeSpawnRegistry::xms_compose()
             }
         }
 
+        u32 changed_in_place = 0, removed_in_place = 0;
         for (const OpSection& op : ops)
         {
             // per-op mode gate on top of the module-level one
@@ -379,6 +380,7 @@ void CALifeSpawnRegistry::xms_compose()
                     }
                     m_spawns.remove_vertex(found->second);
                     ++removed;
+                    ++removed_in_place;
                     continue;
                 }
 
@@ -411,6 +413,7 @@ void CALifeSpawnRegistry::xms_compose()
                 if (pcstr disabled = op.value("disabled"))
                     object.m_spawn_flags.set(CSE_Abstract::flSpawnEnabled, 0 != xr_strcmp(disabled, "true"));
                 ++modified;
+                ++changed_in_place;
                 continue;
             }
 
@@ -605,6 +608,11 @@ void CALifeSpawnRegistry::xms_compose()
             m_spawns.add_vertex(xr_new<CServerEntityWrapper>(abstract), ALife::_SPAWN_ID(spawn_id));
             ++added;
         }
+        // the game's own objects stay in .scop: what the module did to them is what the base game reads
+        if (changed_in_place || removed_in_place)
+            Msg("! XMS: [%s] changes %u and removes %u of the game's own objects in place - the saves keep those "
+                "objects as the module left them, also for a game without it",
+                m.id.c_str(), changed_in_place, removed_in_place);
     }
 
     if (added || modified || removed || failed || culled)
