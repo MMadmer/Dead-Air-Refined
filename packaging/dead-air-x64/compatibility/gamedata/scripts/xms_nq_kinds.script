@@ -1227,6 +1227,39 @@ K["sound.play"] = {
 	end,
 }
 
+-- A radio of the world is told what to play: the radio script (xms_radio.script) keeps it, saves
+-- it and plays it. A level's own radio has a name and no story id, and the radio script knows
+-- both, so a story the registry does not hold goes there as it is written.
+local function radio_set(ctx, what, ref, value, next_track)
+	local ok, radio = pcall(function() return xms_radio end)
+	if not (ok and type(radio) == "table" and type(radio.set) == "function") then
+		error(what .. ": this game has no radio script")
+	end
+	local target = util.ref_object_id(ctx, ref) or (type(ref) == "table" and ref.story) or nil
+	if not (target) then
+		util.warn("%s/%s: %s: the radio is not there", ctx.uid, ctx.node_id, what)
+		return
+	end
+	local done, why = radio.set(target, value, next_track == true)
+	if not (done) then util.warn("%s/%s: %s: %s", ctx.uid, ctx.node_id, what, tostring(why)) end
+end
+
+K["radio.play"] = {
+	run = function(ctx, p)
+		local value = p.playlist
+		-- a playlist named by its id alone is one of the graph's own module
+		if (value ~= "game" and value ~= "off" and not string.find(value, ".", 1, true)) then
+			local mod = (ctx.def and ctx.def.module) or string.match(tostring(ctx.uid), "^(.-)%.")
+			if (mod) then value = mod .. "." .. value end
+		end
+		radio_set(ctx, "radio.play", p.radio, value, p.next_track)
+	end,
+}
+
+K["radio.reset"] = {
+	run = function(ctx, p) radio_set(ctx, "radio.reset", p.radio, nil, p.next_track) end,
+}
+
 -- Custom Lua is executed by the core (compiled once at load); the entries exist so the kind is
 -- known to be implemented.
 K["lua"] = {

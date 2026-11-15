@@ -141,6 +141,23 @@ scripts set is kept in the save, in the module-independent core channel of the `
 (`xms.save_data("xms.radio", ...)`): `v=1`, then one `<id>=<binding>` line per radio. A game that
 binds nothing writes nothing there.
 
+### Switching a radio from a quest
+
+The quest runtime has the same two moves as actions (catalog v22): `radio.play` - which radio, which
+playlist, at once or at the next track - and `radio.reset`, which gives the radio back to its own
+data and the player's station.
+
+```lua
+{ kind = "radio.play", params = { radio = { story = "my_mod_camp_radio" }, playlist = "road_songs" } },
+{ kind = "radio.play", params = { radio = { ref = "bar_radio" }, playlist = "game", next_track = true } },
+{ kind = "radio.play", params = { radio = { story = "esc_radio_01" }, playlist = "off" } },
+{ kind = "radio.reset", params = { radio = { story = "my_mod_camp_radio" } } },
+```
+
+`playlist` is `<module>.<playlist>`, the id alone for a playlist of the quest's own module, `game`
+or `off`. `radio` is an object the quest made (`ref`), a story id, or - written as `story` too - the
+object name of a radio the level itself has. What a quest sets is kept exactly like a script's.
+
 ## For the game's keeper
 
 ### The game's copyrighted list

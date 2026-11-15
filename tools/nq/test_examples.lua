@@ -4588,6 +4588,48 @@ mock.rebuild()
 if (failed > 0) then fail_dump() end
 end)()
 
+section("(z31) radio.play / radio.reset: a radio is told its playlist through the radio script")
+do
+	setup()
+	local calls = {}
+	local stub = { set = function(target, value, next_track)
+		calls[#calls + 1] = { target = target, value = value, next_track = next_track }
+		if (value == "mod_a.broken") then return false, "not a playlist: mod_a.broken" end
+		return true
+	end }
+	rawset(_G, "xms_radio", stub)
+	mock.overrides["mod_a/radio.nqasset"] = [[return { nq = 1, id = "radio", nodes = {
+		{ id = "start", kind = "trigger.start", out = { next = "s" } },
+		{ id = "s", kind = "flow.step", on_enter = {
+			{ kind = "radio.play", params = { radio = { story = "esc_bar_radio" }, playlist = "night" } },
+			{ kind = "radio.play", params = { radio = { story = "esc_bar_radio" }, playlist = "other_mod.day", next_track = true } },
+			{ kind = "radio.play", params = { radio = { story = "esc_bar_radio" }, playlist = "off" } },
+			{ kind = "radio.play", params = { radio = { story = "esc_bar_radio" }, playlist = "game" } },
+			{ kind = "radio.play", params = { radio = { story = "esc_bar_radio" }, playlist = "broken" } },
+			{ kind = "radio.reset", params = { radio = { story = "esc_bar_radio" } } },
+			{ kind = "info.give", params = { info = "radio_done" } },
+		}, out = { next = "e" } },
+		{ id = "e", kind = "flow.end" },
+	} }]]
+	mock.first_update()
+	check(#calls == 6, "every radio action reached the radio script (" .. tostring(#calls) .. ")")
+	check(calls[1] and calls[1].target == "esc_bar_radio" and calls[1].value == "mod_a.night" and calls[1].next_track == false,
+		"a playlist named by its id is the graph's own module's, the name of a level's radio goes as written, the track is cut")
+	check(calls[2] and calls[2].value == "other_mod.day" and calls[2].next_track == true, "another module's playlist, at the next track")
+	check(calls[3] and calls[3].value == "off" and calls[4] and calls[4].value == "game", "off and game go as they are")
+	check(calls[6] and calls[6].value == nil, "radio.reset takes the binding away")
+	check(has_alife_info("radio_done"), "a playlist the radio script refuses stops nothing")
+	local q = xms_nq_load.load_asset("mod_x", "inline.nqasset", [[return { nq = 1, id = "x", nodes = {
+		{ id = "s", kind = "trigger.start", on_enter = { { kind = "radio.play", params = { radio = { story = "r" }, playlist = "a b" } } }, out = { next = "e" } },
+		{ id = "e", kind = "flow.end" },
+	} }]])
+	check(not q.valid, "a playlist that is no name is refused when the graph loads")
+	rawset(_G, "xms_radio", nil)
+	calls = {}
+	mock.overrides["mod_a/radio.nqasset"] = nil
+end
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

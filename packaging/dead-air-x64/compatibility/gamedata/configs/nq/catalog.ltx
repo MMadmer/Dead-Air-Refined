@@ -24,7 +24,7 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 21
+version = 22
 api     = 1
 
 ; ============================================================ triggers
@@ -881,6 +881,31 @@ theme  = string, required
 summary = theme
 impl   = core
 since  = 1
+
+[nq.radio.play]
+group  = sound
+title  = Play on radio
+desc   = Makes one radio of the world play a playlist of a module - or the game's music alone, or nothing - whatever station the player chose. The radio keeps it through saves, until another action changes it or Radio as before takes it away.
+use    = extra
+params = radio, playlist, next_track
+radio  = object_ref, required
+playlist = radio_playlist, required
+next_track = bool, default=false
+summary = radio, playlist
+impl   = core
+since  = 22
+
+[nq.radio.reset]
+group  = sound
+title  = Radio as before
+desc   = Takes away what a quest told a radio to play: it plays what its own data says, else the player's station.
+use    = extra
+params = radio, next_track
+radio  = object_ref, required
+next_track = bool, default=false
+summary = radio
+impl   = core
+since  = 22
 
 [nq.lua]
 group  = custom

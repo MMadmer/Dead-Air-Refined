@@ -668,6 +668,12 @@ local function canon_param(st, node, slot, p, v, kind)
 	elseif (t == "squad_ref") then
 		if not (valid_squad_ref(v)) then return nil, false, "must be {story=} | {ref=}" end
 		return util.copy(v), true
+	elseif (t == "radio_playlist") then
+		-- "<module>.<playlist>", a playlist of the graph's own module by its id alone, "game" or "off"
+		if (type(v) ~= "string" or not (string.match(v, "^[%w_]+$") or string.match(v, "^[%w_]+%.[%w_]+$"))) then
+			return nil, false, "must be a playlist (\"<module>.<id>\", or the id of one of this module), \"game\" or \"off\""
+		end
+		return v, true
 	elseif (t == "object_ref") then
 		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=} | {character=}" end
 		return util.copy(v), true
