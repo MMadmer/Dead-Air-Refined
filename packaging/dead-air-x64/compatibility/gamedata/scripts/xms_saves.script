@@ -1,0 +1,979 @@
+-- What a module keeps in a save, and what the game's own scripts would otherwise write about a
+-- module's things into the original game's save format.
+--
+--   xms.storage(id)     the module's own table: read from its chunk of the save when a game is
+--                       loaded, written back by itself at every save. xms.save_data /
+--                       xms.load_data keep working beside it, in the same chunk.
+--   kept records        what a stock smart terrain, squad or creature writes into .scop, and the
+--                       task and companion tables write into .scoc, about a module's object or task
+--                       is taken out of what they write and kept in that module's chunk; it goes
+--                       back in when the save is loaded with the module there.
+--   forget(id)          the scripts' part of xms_forget: what the quest runtime keeps of a module.
+--
+-- Contract: docs/dead-air/SAVE_SCRIPTS.md. Without an xms table (no module) nothing is installed;
+-- without xms.object_owner no stock function is wrapped.
+
+local MAGIC = string.char(0) .. "XMS" .. string.char(1)	-- a chunk of more than the module's own string
+local PART_VERSION = "1"
+local MAX_DEPTH = 32
+local CTIME_KEY = "c"
+
+local function say(text)
+	printf("%s", text)
+end
+
+local said = {}
+local function say_once(key, text)
+	if (said[key]) then return end
+	said[key] = true
+	say(text)
+end
+
+-- ============================================================================ values
+-- The storage and the records are plain data: booleans, finite numbers, strings, game times and
+-- tables of them with string, number or boolean keys. Written with sorted keys, so equal data is
+-- equal bytes; read without running anything.
+local ctime_mt = nil
+local function is_ctime(v)
+	if (ctime_mt == nil) then
+		local ok, t = pcall(function() return game.CTime() end)
+		ctime_mt = (ok and t and getmetatable(t)) or false
+	end
+	return ctime_mt and getmetatable(v) == ctime_mt
+end
+
+local function finite(v)
+	return v == v and v ~= math.huge and v ~= -math.huge
+end
+
+local function key_rank(k)
+	local t = type(k)
+	return t == "number" and 1 or t == "string" and 2 or 3
+end
+
+local function key_less(a, b)
+	local ra, rb = key_rank(a), key_rank(b)
+	if (ra ~= rb) then return ra < rb end
+	if (ra == 3) then return (a == false) and (b == true) end
+	return a < b
+end
+
+local function path_of(path, k)
+	if (type(k) == "string" and string.find(k, "^[%a_][%w_]*$")) then
+		return (path == "") and k or (path .. "." .. k)
+	end
+	return path .. "[" .. tostring(k) .. "]"
+end
+
+-- refuse(path, why) is told about every value left out; the rest is written
+local function put(v, out, path, depth, seen, refuse)
+	local t = type(v)
+	if (t == "boolean") then
+		out[#out + 1] = v and "T" or "F"
+	elseif (t == "number") then
+		if not (finite(v)) then refuse(path, "not a finite number") return false end
+		if (v == math.floor(v) and v >= -9007199254740992 and v <= 9007199254740992) then
+			out[#out + 1] = "i" .. string.format("%d", v) .. ";"
+		else
+			out[#out + 1] = "n" .. string.format("%.17g", v) .. ";"
+		end
+	elseif (t == "string") then
+		out[#out + 1] = "s" .. #v .. ":" .. v
+	elseif (is_ctime(v)) then
+		local ok, Y, M, D, h, m, s, ms = pcall(function() return v:get(0, 0, 0, 0, 0, 0, 0) end)
+		if not (ok and type(ms) == "number") then refuse(path, "a game time that cannot be read") return false end
+		out[#out + 1] = CTIME_KEY .. table.concat({ Y, M, D, h, m, s, ms }, ",") .. ";"
+	elseif (t == "table") then
+		if (seen[v]) then refuse(path, "a table that contains itself") return false end
+		if (depth >= MAX_DEPTH) then refuse(path, "nested deeper than " .. MAX_DEPTH .. " tables") return false end
+		seen[v] = true
+		local keys = {}
+		for k in pairs(v) do
+			local tk = type(k)
+			if ((tk == "number" and finite(k)) or tk == "string" or tk == "boolean") then
+				keys[#keys + 1] = k
+			else
+				refuse(path_of(path, tostring(k)), "under a key of type " .. tk)
+			end
+		end
+		table.sort(keys, key_less)
+		out[#out + 1] = "{"
+		for _, k in ipairs(keys) do
+			local kv, vv = {}, {}
+			put(k, kv, path, depth + 1, seen, refuse)
+			if (put(v[k], vv, path_of(path, k), depth + 1, seen, refuse) ~= false) then
+				out[#out + 1] = table.concat(kv)
+				out[#out + 1] = table.concat(vv)
+			end
+		end
+		out[#out + 1] = "}"
+		seen[v] = nil
+	else
+		refuse(path, "a " .. t)
+		return false
+	end
+	return true
+end
+
+function encode_value(v, refuse)
+	local out = {}
+	put(v, out, "", 0, {}, refuse or function() end)
+	return table.concat(out)
+end
+
+local function take(s, i, depth)
+	if (depth > MAX_DEPTH + 1) then error("nested too deep") end
+	local c = string.sub(s, i, i)
+	if (c == "T") then return true, i + 1 end
+	if (c == "F") then return false, i + 1 end
+	if (c == "i" or c == "n") then
+		local j = string.find(s, ";", i + 1, true)
+		local v = j and tonumber(string.sub(s, i + 1, j - 1))
+		if not (v) then error("bad number at " .. i) end
+		return v, j + 1
+	end
+	if (c == "s") then
+		local j = string.find(s, ":", i + 1, true)
+		local n = j and tonumber(string.sub(s, i + 1, j - 1))
+		if not (n and j + n <= #s) then error("bad string at " .. i) end
+		return string.sub(s, j + 1, j + n), j + n + 1
+	end
+	if (c == CTIME_KEY) then
+		local j = string.find(s, ";", i + 1, true)
+		if not (j) then error("bad game time at " .. i) end
+		local f = {}
+		for x in string.gmatch(string.sub(s, i + 1, j - 1), "[^,]+") do f[#f + 1] = tonumber(x) end
+		if (#f ~= 7) then error("bad game time at " .. i) end
+		local t = game.CTime()
+		t:set(f[1], f[2], f[3], f[4], f[5], f[6], f[7])
+		return t, j + 1
+	end
+	if (c == "{") then
+		local t = {}
+		i = i + 1
+		while (string.sub(s, i, i) ~= "}") do
+			if (i > #s) then error("unterminated table") end
+			local k, v
+			k, i = take(s, i, depth + 1)
+			v, i = take(s, i, depth + 1)
+			t[k] = v
+		end
+		return t, i + 1
+	end
+	error("bad value at " .. i)
+end
+
+function decode_value(s)
+	if (type(s) ~= "string" or s == "") then return nil end
+	local ok, v, i = pcall(take, s, 1, 0)
+	if (ok and i == #s + 1) then return v end
+	return nil
+end
+
+local function same(a, b)
+	if (a == b) then return true end
+	if (type(a) ~= "table" or type(b) ~= "table") then return false end
+	if (is_ctime(a) or is_ctime(b)) then return encode_value(a) == encode_value(b) end
+	for k, v in pairs(a) do if not (same(v, b[k])) then return false end end
+	for k in pairs(b) do if (a[k] == nil) then return false end end
+	return true
+end
+
+-- ============================================================================ the module's chunk
+-- One chunk per module in the .scov, as the engine keeps it. While only the module's own string is
+-- in it, the chunk is that string and nothing else, byte for byte as before. Once there is more, it
+-- is MAGIC followed by parts - a tag, a length, a colon, the bytes: "r" the module's own string,
+-- "s" its storage, "k" the records kept for it. A part with another tag is kept as it is.
+local native_save, native_load = nil, nil
+local cache = {}			-- module id -> container, valid once synced
+local synced = false
+local held = {}				-- kind -> key -> { module = true }: what the present modules keep records of
+
+local function core_id(id)
+	return type(id) == "string" and string.sub(id, 1, 4) == "xms."
+end
+
+local present_cache = nil
+local function present(id)
+	if (type(id) ~= "string" or id == "" or core_id(id)) then return false end
+	if (present_cache and present_cache[id] ~= nil) then return present_cache[id] end
+	local fn = xms and (xms.module_present or xms.is_loaded)
+	local ok, r = false, false
+	if (type(fn) == "function") then ok, r = pcall(fn, id) end
+	r = (ok and r == true) or false
+	present_cache = present_cache or {}
+	present_cache[id] = r
+	return r
+end
+
+local present_ids = nil
+local function present_list()
+	if (present_ids) then return present_ids end
+	present_ids = {}
+	local ok, mods = pcall(function() return xms.modules() end)
+	if (ok and type(mods) == "table") then
+		for _, m in ipairs(mods) do
+			if (m.enabled ~= false and present(m.id)) then present_ids[#present_ids + 1] = m.id end
+		end
+	end
+	table.sort(present_ids)
+	return present_ids
+end
+
+local function unpack_parts(s)
+	if (string.sub(s, 1, #MAGIC) ~= MAGIC) then return nil end
+	local parts, i = {}, #MAGIC + 1
+	while (i <= #s) do
+		local tag = string.sub(s, i, i)
+		local j = string.find(s, ":", i + 1, true)
+		local n = j and tonumber(string.sub(s, i + 1, j - 1))
+		if not (n and n >= 0 and j + n <= #s) then return nil end
+		parts[#parts + 1] = { tag, string.sub(s, j + 1, j + n) }
+		i = j + n + 1
+	end
+	return parts
+end
+
+local function read_container(id)
+	local c = { extra = {} }
+	local ok, blob = pcall(native_load, id)
+	if not (ok and type(blob) == "string" and blob ~= "") then return c end
+	c.had, c.seen = true, blob
+	local parts = unpack_parts(blob)
+	if not (parts) then
+		c.r = blob
+		return c
+	end
+	for _, p in ipairs(parts) do
+		if (p[1] == "r") then c.r = p[2]
+		elseif (p[1] == "s") then c.s = p[2]
+		elseif (p[1] == "k") then c.k = p[2]
+		else c.extra[#c.extra + 1] = p end
+	end
+	return c
+end
+
+local function container(id)
+	local c = cache[id]
+	if not (c) then
+		c = read_container(id)
+		cache[id] = c
+	end
+	return c
+end
+
+local function build(c)
+	if not (c.s or c.k or #c.extra > 0) then
+		if (c.r == nil) then return nil end
+		if (string.sub(c.r, 1, #MAGIC) ~= MAGIC) then return c.r end
+	end
+	local out = { MAGIC }
+	local function part(tag, bytes)
+		if (bytes ~= nil) then out[#out + 1] = tag .. #bytes .. ":" .. bytes end
+	end
+	part("r", c.r)
+	part("s", c.s)
+	part("k", c.k)
+	for _, p in ipairs(c.extra) do part(p[1], p[2]) end
+	return table.concat(out)
+end
+
+-- Hands the module's chunk to the engine. Only a module that is here can be written; the chunk of
+-- one that is away is the engine's to keep, byte for byte.
+-- A module script that kept the engine's own save_data from before this file wrapped it wrote its
+-- string around us: that string is the module's part, the rest stays.
+local function adopt(c, id)
+	local ok, now = pcall(native_load, id)
+	if (ok and now ~= c.seen and type(now) == "string" and now ~= "" and not unpack_parts(now)) then
+		c.r, c.seen = now, now
+	end
+end
+
+local function stage(id, adopted)
+	if not (present(id)) then return false end
+	local c = container(id)
+	if not (adopted) then adopt(c, id) end
+	local payload = build(c)
+	if (payload == c.staged and c.staged_once) then return true end
+	if (payload == nil and not c.had and not c.staged_once) then return true end
+	local ok, r = pcall(native_save, id, payload)
+	if (ok and r) then
+		c.staged, c.staged_once, c.seen = payload, true, payload
+		c.had = payload ~= nil
+		return true
+	end
+	say_once("stage|" .. id, "! xms_saves: the data of module " .. id .. " could not be handed to the save")
+	return false
+end
+
+local function part_value(c, field, id)
+	local bytes = c[field]
+	if (bytes == nil) then return nil end
+	if (string.sub(bytes, 1, 1) == PART_VERSION) then
+		local v = decode_value(string.sub(bytes, 2))
+		if (type(v) == "table") then return v end
+	end
+	-- written by a newer game or damaged: kept as it is, never overwritten in this session
+	c[field .. "_kept"] = true
+	say_once("bad|" .. field .. "|" .. id, "! xms_saves: the saved " .. (field == "s" and "storage" or "records") ..
+		" of module " .. id .. " cannot be read by this game; it is kept as it is and not changed")
+	return nil
+end
+
+-- ============================================================================ sync with the save
+-- A Lua state is made before the save it plays is read, and the engine still holds the previous
+-- save's data until then: what was read before that moment is read again from the save. A storage
+-- table handed out earlier keeps its identity and gets the save's contents.
+local function sync()
+	if (synced) then return end
+	synced = true
+	local old = cache
+	cache, held, present_cache, present_ids = {}, {}, nil, nil
+	for id, c in pairs(old) do
+		local t = c.storage
+		if (t) then
+			local fresh = container(id)
+			for k in pairs(t) do t[k] = nil end
+			local data = part_value(fresh, "s", id)
+			if (data) then for k, v in pairs(data) do t[k] = v end end
+			fresh.storage = t
+		end
+	end
+	for _, id in ipairs(present_list()) do
+		local c = container(id)
+		local r = part_value(c, "k", id)
+		c.records = r or {}
+		for kind, list in pairs(c.records) do
+			held[kind] = held[kind] or {}
+			for key in pairs(list) do
+				held[kind][key] = held[kind][key] or {}
+				held[kind][key][id] = true
+			end
+		end
+	end
+end
+
+function synced_now() return synced end
+
+-- ============================================================================ xms.storage
+local function refuse_for(id)
+	return function(path, why)
+		say_once("refuse|" .. id .. "|" .. path, "! xms.storage(" .. id .. "): " .. (path ~= "" and path or "the table") ..
+			" is " .. why .. " and is not saved")
+	end
+end
+
+function storage(id)
+	if not (present(id)) then
+		if (type(id) == "string") then
+			say_once("absent|" .. id, "~ xms.storage(" .. id .. "): no such module is enabled; its saved data stays where it is")
+		end
+		return nil
+	end
+	local c = container(id)
+	if not (c.storage) then
+		c.storage = (not c.s_kept and part_value(c, "s", id)) or {}
+	end
+	return c.storage
+end
+
+-- Every module's storage into its chunk; nothing is handed over when nothing changed.
+function flush_storage()
+	if not (synced) then return end
+	for id, c in pairs(cache) do
+		if (c.storage and not c.s_kept and present(id)) then
+			local s = nil
+			if (next(c.storage) ~= nil) then s = PART_VERSION .. encode_value(c.storage, refuse_for(id)) end
+			if (s ~= c.s) then
+				c.s = s
+				stage(id)
+			end
+		end
+	end
+end
+
+local function install_api()
+	if not (xms and type(xms.save_data) == "function" and type(xms.load_data) == "function") then return false end
+	if (rawget(xms, "storage_api")) then
+		native_save, native_load = xms.saves_native_save, xms.saves_native_load
+		return true
+	end
+	native_save, native_load = xms.save_data, xms.load_data
+	xms.saves_native_save, xms.saves_native_load = native_save, native_load
+	xms.storage_api = 1
+	xms.storage = storage
+	-- the module's own string, in the same chunk as its storage and its records
+	xms.save_data = function(id, data)
+		if (core_id(id) or not present(id)) then return native_save(id, data) end
+		if (data ~= nil and type(data) ~= "string") then return false end
+		if (data == "") then data = nil end
+		local c = synced and container(id) or read_container(id)
+		if not (synced) then cache[id] = c end
+		adopt(c, id)
+		c.r = data
+		return stage(id, true)
+	end
+	xms.load_data = function(id)
+		if (core_id(id) or not present(id)) then return native_load(id) end
+		local c = synced and container(id) or read_container(id)
+		adopt(c, id)
+		return c.r
+	end
+	return true
+end
+
+-- ============================================================================ kept records
+local function records(id)
+	local c = container(id)
+	if (c.records == nil) then c.records = part_value(c, "k", id) or {} end
+	return c.records
+end
+
+function record(id, kind, key)
+	if not (present(id)) then return nil end
+	local list = records(id)[kind]
+	return list and list[key] or nil
+end
+
+function put_record(id, kind, key, value)
+	if not (present(id)) then return end
+	local c = container(id)
+	if (c.k_kept) then return end
+	local r = records(id)
+	local list = r[kind]
+	if (same(list and list[key], value)) then return end
+	if (value == nil) then
+		list[key] = nil
+		if (next(list) == nil) then r[kind] = nil end
+		if (held[kind] and held[kind][key]) then held[kind][key][id] = nil end
+	else
+		if not (list) then list = {} r[kind] = list end
+		list[key] = value
+		held[kind] = held[kind] or {}
+		held[kind][key] = held[kind][key] or {}
+		held[kind][key][id] = true
+	end
+	c.k = (next(r) ~= nil) and (PART_VERSION .. encode_value(r)) or nil
+	stage(id)
+end
+
+-- `per` holds the new record of each module that has one; a module that held a record of this key
+-- and has none now loses it.
+local function update_records(kind, key, per)
+	local mods = {}
+	for id in pairs(per) do mods[id] = true end
+	for id in pairs((held[kind] and held[kind][key]) or {}) do mods[id] = true end
+	for id in pairs(mods) do put_record(id, kind, key, per[id]) end
+end
+
+local function held_by_any(kind, key)
+	local h = held[kind] and held[kind][key]
+	return h ~= nil and next(h) ~= nil
+end
+
+-- ============================================================================ who owns what
+local function owner(id)
+	if (type(id) ~= "number" or id >= 65535) then return nil end
+	local ok, m = pcall(xms.object_owner, id)
+	if (ok and type(m) == "string" and m ~= "") then return m end
+	return nil
+end
+
+local function wraps_possible()
+	return xms ~= nil and type(xms.object_owner) == "function"
+end
+
+-- A task section of task_manager.ltx a module made (not one it only changed).
+local TASK_FILE = "misc\\task_manager.ltx"
+local function task_owner(task_id)
+	if not (xms and type(xms.section_owner) == "function") then return nil end
+	local ok, m = pcall(xms.section_owner, task_id, TASK_FILE)
+	if (ok and type(m) == "string" and m ~= "") then return m end
+	return nil
+end
+
+-- A logic file the quest runtime made (a behaviour step or a standing order): `*<tag>`.
+local tags = nil
+local function generated(tag)
+	if (type(tag) ~= "string" or tag == "") then return false end
+	if (tags == nil) then
+		tags = {}
+		local beh = rawget(_G, "xms_nq_behaviour") or (xms_nq_behaviour)
+		if (beh and type(beh.generated_tags) == "function") then
+			local ok, t = pcall(beh.generated_tags)
+			if (ok and type(t) == "table") then tags = t end
+		end
+	end
+	return tags[tag] ~= nil
+end
+
+local function generated_file(f)
+	return type(f) == "string" and string.sub(f, 1, 1) == "*" and generated(string.sub(f, 2))
+end
+
+local function generated_section(sect)
+	local tag = type(sect) == "string" and string.match(sect, "@(.+)$")
+	return tag ~= nil and generated(tag)
+end
+
+-- What a record gave back may name an object the module no longer has (the engine drops a record
+-- whose section went away). By registration every object of the save is in the registry: a field
+-- that names nothing then, or not a smart terrain where one is meant, is set to none again.
+local function exists(id, smart)
+	if (type(id) ~= "number" or id >= 65535) then return false end
+	local ok, se = pcall(function() return alife():object(id) end)
+	if not (ok and se) then return false end
+	if (smart) then
+		local okm, fn = pcall(function() return se.register_npc end)
+		return okm and type(fn) == "function"
+	end
+	return true
+end
+
+local function wrap_register(cls, check)
+	local base = cls.on_register
+	if (type(base) ~= "function") then return end
+	cls.on_register = function(self, ...)
+		local given = self.xms_saves_given
+		if (given) then
+			self.xms_saves_given = nil
+			local ok, e = pcall(check, self, given)
+			if not (ok) then say("! xms_saves: " .. tostring(e)) end
+		end
+		return base(self, ...)
+	end
+end
+
+-- ============================================================================ smart terrains
+-- A smart terrain of the game writes the ids of the NPCs it expects (arriving_npc) and holds
+-- (npc_info, with their jobs). Those of a module are written into the module's records instead.
+local function wrap_smart()
+	local m = rawget(_G, "smart_terrain") or smart_terrain
+	local cls = m and m.se_smart_terrain
+	if not (cls and type(cls.STATE_Write) == "function" and type(cls.STATE_Read) == "function") then return false end
+	if (rawget(m, "xms_saves_wrapped")) then return true end
+	m.xms_saves_wrapped = true
+	local write, read = cls.STATE_Write, cls.STATE_Read
+
+	cls.STATE_Write = function(self, packet, ...)
+		if (owner(self.id)) then return write(self, packet, ...) end
+		local out = nil
+		for id, v in pairs(self.arriving_npc or {}) do
+			local mod = owner(id)
+			if (mod) then out = out or {} out[#out + 1] = { "arriving_npc", id, v, mod } end
+		end
+		for id, v in pairs(self.npc_info or {}) do
+			local mod = owner(id)
+			if (mod) then out = out or {} out[#out + 1] = { "npc_info", id, v, mod } end
+		end
+		if not (out or held_by_any("smart", self.id)) then return write(self, packet, ...) end
+		local per = {}
+		for _, e in ipairs(out or {}) do
+			local r = per[e[4]]
+			if not (r) then r = { name = self:name(), a = {}, i = {} } per[e[4]] = r end
+			if (e[1] == "arriving_npc") then
+				r.a[#r.a + 1] = e[2]
+			else
+				local info = e[3]
+				r.i[e[2]] = { j = info.job and info.job.section or "nil", b = info.begin_job == true, n = tostring(info.need_job) }
+			end
+			self[e[1]][e[2]] = nil
+		end
+		local ok, err = pcall(write, self, packet, ...)
+		for _, e in ipairs(out or {}) do self[e[1]][e[2]] = e[3] end
+		for _, r in pairs(per) do table.sort(r.a) end
+		update_records("smart", self.id, per)
+		if not (ok) then error(err, 0) end
+	end
+
+	cls.STATE_Read = function(self, packet, size, ...)
+		read(self, packet, size, ...)
+		sync()
+		if not (type(self.load_info) == "table" and type(self.arriving_npc) == "table") then return end
+		if not (held_by_any("smart", self.id)) or owner(self.id) then return end
+		local name = self:name()
+		for id in pairs(held.smart[self.id]) do
+			local r = record(id, "smart", self.id)
+			if (r and r.name == name) then
+				for _, nid in ipairs(r.a or {}) do
+					if (self.arriving_npc[nid] == nil and self.load_info[nid] == nil) then self.arriving_npc[nid] = false end
+				end
+				for nid, e in pairs(r.i or {}) do
+					if (self.load_info[nid] == nil) then
+						self.load_info[nid] = { job_section = e.j, begin_job = e.b, need_job = e.n }
+					end
+				end
+			end
+		end
+	end
+	return true
+end
+
+-- ============================================================================ squads
+-- A squad of the game writes where it goes and where it belongs as ids: its target, its smart
+-- terrain, the smart that respawned it. One that names a module's object is written as "none"
+-- and is given it back on load - unless it found itself another one in the meantime.
+local SQUAD_FIELDS = { "current_target_id", "assigned_target_id", "smart_id", "respawn_point_id" }
+
+local function wrap_squad()
+	local m = rawget(_G, "sim_squad_scripted") or sim_squad_scripted
+	local cls = m and m.sim_squad_scripted
+	if not (cls and type(cls.STATE_Write) == "function" and type(cls.STATE_Read) == "function") then return false end
+	if (rawget(m, "xms_saves_wrapped")) then return true end
+	m.xms_saves_wrapped = true
+	local write, read = cls.STATE_Write, cls.STATE_Read
+
+	cls.STATE_Write = function(self, packet, ...)
+		if (owner(self.id)) then return write(self, packet, ...) end
+		local saved, per = nil, {}
+		for _, f in ipairs(SQUAD_FIELDS) do
+			local v = self[f]
+			local mod = type(v) == "number" and owner(v) or nil
+			if (mod) then
+				saved = saved or {}
+				saved[f] = v
+				local r = per[mod]
+				if not (r) then r = { name = self:name() } per[mod] = r end
+				r[f] = v
+				if (f == "respawn_point_id") then
+					saved.respawn_point_prop_section = self.respawn_point_prop_section
+					r.respawn_point_prop_section = self.respawn_point_prop_section
+				end
+			end
+		end
+		if not (saved or held_by_any("squad", self.id)) then return write(self, packet, ...) end
+		for f in pairs(saved or {}) do self[f] = nil end
+		local ok, err = pcall(write, self, packet, ...)
+		for f, v in pairs(saved or {}) do self[f] = v end
+		update_records("squad", self.id, per)
+		if not (ok) then error(err, 0) end
+	end
+
+	cls.STATE_Read = function(self, packet, size, ...)
+		read(self, packet, size, ...)
+		sync()
+		if not (held_by_any("squad", self.id)) or owner(self.id) then return end
+		local name = self:name()
+		local given = nil
+		for id in pairs(held.squad[self.id]) do
+			local r = record(id, "squad", self.id)
+			if (r and r.name == name) then
+				given = given or {}
+				for _, f in ipairs({ "current_target_id", "assigned_target_id" }) do
+					if (r[f] and self[f] == nil) then self[f] = r[f] given[f] = true end
+				end
+				if (r.respawn_point_id and self.respawn_point_id == nil) then
+					self.respawn_point_id = r.respawn_point_id
+					self.respawn_point_prop_section = r.respawn_point_prop_section
+					given.respawn_point_id = true
+				end
+				if (r.smart_id and self.smart_id == nil) then
+					-- what the stock reader does with a smart id it read (init_squad_on_load)
+					self.smart_id = r.smart_id
+					given.smart_id = true
+					local sb = rawget(_G, "sim_board") or sim_board
+					local board = sb and sb.get_sim_board and sb.get_sim_board()
+					if (board and board.assign_squad_to_smart) then board:assign_squad_to_smart(self, r.smart_id) end
+				end
+			end
+		end
+		if (given and next(given)) then self.xms_saves_given = given end
+	end
+
+	wrap_register(cls, function(self, given)
+		for f in pairs(given) do
+			if not (exists(self[f], f == "smart_id" or f == "respawn_point_id")) then
+				say_once("gone|" .. self.id .. "|" .. f, "~ xms_saves: " .. self:name() .. ": " .. f .. " names nothing any more; set to none")
+				self[f] = nil
+				if (f == "respawn_point_id") then self.respawn_point_prop_section = nil end
+			end
+		end
+	end)
+	return true
+end
+
+-- ============================================================================ NPCs and monsters
+-- The engine part of a stalker's or a monster's record keeps the smart terrain it belongs to; the
+-- script part keeps the section it was in when it went offline. A module's smart, or a section of
+-- a logic file the quest runtime made, is not written there.
+local function wrap_creature(script, class)
+	local m = rawget(_G, script) or _G[script]
+	local cls = m and m[class]
+	if not (cls and type(cls.STATE_Write) == "function" and type(cls.STATE_Read) == "function") then return false end
+	local flag = "xms_saves_wrapped_" .. class
+	if (rawget(m, flag)) then return true end
+	m[flag] = true
+	local write, read = cls.STATE_Write, cls.STATE_Read
+
+	cls.STATE_Write = function(self, packet, ...)
+		if (owner(self.id)) then return write(self, packet, ...) end
+		local sid = self.m_smart_terrain_id
+		local mod = (type(sid) == "number" and sid ~= 65535) and owner(sid) or nil
+		local off = db and db.offline_objects and db.offline_objects[self.id]
+		local sect = off and off.active_section
+		local gen = generated_section(sect)
+		if not (mod or gen or held_by_any("npc", self.id)) then return write(self, packet, ...) end
+		if (mod) then self.m_smart_terrain_id = 65535 end
+		if (gen) then off.active_section = nil end
+		local ok, err = pcall(write, self, packet, ...)
+		if (mod) then self.m_smart_terrain_id = sid end
+		if (gen) then off.active_section = sect end
+		local per = {}
+		if (mod) then per[mod] = { name = self:name(), smart = sid } end
+		update_records("npc", self.id, per)
+		if not (ok) then error(err, 0) end
+	end
+
+	cls.STATE_Read = function(self, packet, size, ...)
+		read(self, packet, size, ...)
+		sync()
+		if not (held_by_any("npc", self.id)) or owner(self.id) then return end
+		if (self.m_smart_terrain_id ~= 65535) then return end
+		local name = self:name()
+		for id in pairs(held.npc[self.id]) do
+			local r = record(id, "npc", self.id)
+			if (r and r.name == name and r.smart) then
+				self.m_smart_terrain_id = r.smart
+				self.xms_saves_given = true
+				return
+			end
+		end
+	end
+
+	-- the engine follows the id to a smart terrain it must find (CALifeMonsterBrain::smart_terrain)
+	wrap_register(cls, function(self)
+		if not (exists(self.m_smart_terrain_id, true)) then
+			say_once("gone|" .. self.id, "~ xms_saves: " .. self:name() .. ": its smart terrain is no more; it has none")
+			self.m_smart_terrain_id = 65535
+		end
+	end)
+	return true
+end
+
+-- ============================================================================ an NPC's logic
+-- A game NPC a behaviour step or a standing order drives runs a logic file the quest runtime made
+-- (`*<tag>`). Saved as it is, the original game finds no such file when the NPC spawns and stops;
+-- so the NPC is saved with its own logic, and the runtime gives it its step again after a load.
+local function wrap_logic()
+	local m = rawget(_G, "xr_logic") or xr_logic
+	if not (m and type(m.save_obj) == "function") then return false end
+	if (rawget(m, "xms_saves_wrapped")) then return true end
+	m.xms_saves_wrapped = true
+	local base = m.save_obj
+	m.save_obj = function(obj, packet, ...)
+		local id = obj and obj:id()
+		local st = id and db.storage[id]
+		-- also called when an NPC goes offline, between saves: the runtime's files of now
+		if (st and type(st.ini_filename) == "string" and string.sub(st.ini_filename, 1, 1) == "*") then tags = nil end
+		if not (st and generated_file(st.ini_filename)) or owner(id) then return base(obj, packet, ...) end
+		local keep = { st.ini_filename, st.section_logic, st.active_section, st.gulag_name }
+		st.ini_filename, st.section_logic, st.active_section, st.gulag_name = "<customdata>", "logic", nil, ""
+		local ok, err = pcall(base, obj, packet, ...)
+		st.ini_filename, st.section_logic, st.active_section, st.gulag_name = keep[1], keep[2], keep[3], keep[4]
+		if not (ok) then error(err, 0) end
+	end
+	return true
+end
+
+-- ============================================================================ the .scoc table
+-- After every save_state handler wrote its part of the table, and before it is encoded.
+local function strip_logic(m_data)
+	for id, state in pairs(type(m_data.game_object) == "table" and m_data.game_object or {}) do
+		local x = type(state) == "table" and state.xr_logic
+		if (type(x) == "table" and generated_file(x.ini_filename) and not owner(id)) then
+			-- read back as "no saved logic": the NPC's own active section is chosen anew
+			x.ini_filename, x.section_logic, x.active_section, x.gulag_name = "<customdata>", "logic", nil, ""
+		end
+	end
+end
+
+local function strip_tasks(m_data)
+	local info, objs = m_data.task_info, m_data.task_objects
+	local per = {}
+	if (type(info) == "table") then
+		for task_id in pairs(info) do
+			local mod = task_owner(task_id)
+			if (mod) then
+				per[mod] = per[mod] or {}
+				per[mod][task_id] = (type(objs) == "table" and objs[task_id]) or false
+			end
+		end
+		for _, list in pairs(per) do
+			for task_id in pairs(list) do
+				info[task_id] = nil
+				if (type(objs) == "table") then objs[task_id] = nil end
+			end
+		end
+	end
+	update_records("task", "manager", per)
+end
+
+local function strip_companions(m_data)
+	local squads, npcs = m_data.companion_squads, m_data.non_task_companions
+	local per, any = {}, false
+	local function note(kind, id)
+		local mod = owner(id)
+		if not (mod) then return false end
+		per[mod] = per[mod] or { squads = {}, npcs = {} }
+		table.insert(per[mod][kind], id)
+		any = true
+		return true
+	end
+	if (type(squads) == "table") then
+		for id in pairs(squads) do note("squads", id) end
+	end
+	local copy = nil
+	if (type(npcs) == "table") then
+		for id, v in pairs(npcs) do
+			if not (note("npcs", id)) then
+				copy = copy or {}
+				copy[id] = v
+			end
+		end
+	end
+	if (any) then
+		for _, r in pairs(per) do
+			for _, id in ipairs(r.squads) do squads[id] = nil end
+			table.sort(r.squads)
+			table.sort(r.npcs)
+		end
+		-- the companions script hands its own live table over: a copy goes into the save instead
+		if (type(npcs) == "table") then m_data.non_task_companions = copy or {} end
+	end
+	update_records("companions", "actor", per)
+end
+
+function strip_scoc(m_data)
+	if (type(m_data) ~= "table") then return end
+	strip_logic(m_data)
+	if not (synced) then return end
+	strip_tasks(m_data)
+	strip_companions(m_data)
+end
+
+-- Before any load_state handler reads the table: what is kept for a module that is here goes back.
+function merge_scoc(m_data)
+	sync()
+	if (type(m_data) ~= "table") then return end
+	for id in pairs((held.task and held.task.manager) or {}) do
+		local tasks = record(id, "task", "manager")
+		for task_id, o in pairs(tasks or {}) do
+			m_data.task_info = m_data.task_info or {}
+			if (m_data.task_info[task_id] == nil) then
+				m_data.task_info[task_id] = true
+				if (type(o) == "table") then
+					m_data.task_objects = m_data.task_objects or {}
+					m_data.task_objects[task_id] = o
+				end
+			end
+		end
+	end
+	for id in pairs((held.companions and held.companions.actor) or {}) do
+		local r = record(id, "companions", "actor")
+		if (r) then
+			if (#(r.squads or {}) > 0) then
+				m_data.companion_squads = m_data.companion_squads or {}
+				for _, sid in ipairs(r.squads) do
+					if (m_data.companion_squads[sid] == nil) then m_data.companion_squads[sid] = false end
+				end
+			end
+			if (#(r.npcs or {}) > 0) then
+				m_data.non_task_companions = m_data.non_task_companions or {}
+				for _, nid in ipairs(r.npcs) do m_data.non_task_companions[nid] = true end
+			end
+		end
+	end
+end
+
+local function wrap_storage_manager()
+	local m = rawget(_G, "alife_storage_manager") or alife_storage_manager
+	if not (m) then return false end
+	if (rawget(m, "xms_saves_wrapped")) then return true end
+	local prepare, load = m.CALifeStorageManager_capture_prepare_begin, m.CALifeStorageManager_load
+	if (type(prepare) ~= "function" or type(load) ~= "function") then return false end
+	m.xms_saves_wrapped = true
+
+	-- the save_state handlers run inside: what they put into a storage table is in this save
+	m.CALifeStorageManager_capture_prepare_begin = function(...)
+		tags = nil
+		local r = prepare(...)
+		local ok, e = pcall(flush_storage)
+		if not (ok) then say("! xms_saves: storage: " .. tostring(e)) end
+		if (wraps_possible()) then
+			ok, e = pcall(function() strip_scoc(m.get_state and m.get_state()) end)
+			if not (ok) then say("! xms_saves: the .scoc records: " .. tostring(e)) end
+		end
+		return r
+	end
+
+	m.CALifeStorageManager_load = function(...)
+		local send = rawget(_G, "SendScriptCallback")
+		local merged = false
+		if (type(send) == "function") then
+			rawset(_G, "SendScriptCallback", function(name, ...)
+				if (name == "load_state" and not merged) then
+					merged = true
+					local ok, e = pcall(merge_scoc, ...)
+					if not (ok) then say("! xms_saves: the .scoc records: " .. tostring(e)) end
+				end
+				return send(name, ...)
+			end)
+		end
+		local ok, err = pcall(load, ...)
+		if (type(send) == "function") then rawset(_G, "SendScriptCallback", send) end
+		if not (merged) then sync() end
+		if not (ok) then error(err, 0) end
+	end
+	return true
+end
+
+-- ============================================================================ forget
+-- The scripts' part of `xms_forget <module>`: the engine drops the module's chunks and objects, the
+-- quest runtime drops the quests, behaviour graphs, globals and orders it keeps for the module.
+function forget(id)
+	if (type(id) ~= "string" or id == "") then return 0 end
+	cache[id] = nil
+	for _, keys in pairs(held) do
+		for _, mods in pairs(keys) do mods[id] = nil end
+	end
+	local nq = rawget(_G, "xms_nq") or xms_nq
+	if (nq and type(nq.forget_module) == "function") then
+		local ok, n = pcall(nq.forget_module, id)
+		if (ok) then return n or 0 end
+		say("! xms_saves: forget " .. id .. ": " .. tostring(n))
+	end
+	return 0
+end
+
+-- ============================================================================ install
+function install_stock()
+	if not (wraps_possible()) then return false end
+	local done = {}
+	if (wrap_smart()) then done[#done + 1] = "smart terrains" end
+	if (wrap_squad()) then done[#done + 1] = "squads" end
+	if (wrap_creature("se_stalker", "se_stalker")) then done[#done + 1] = "stalkers" end
+	if (wrap_creature("se_monster", "se_monster")) then done[#done + 1] = "monsters" end
+	if (wrap_logic()) then done[#done + 1] = "logic" end
+	return done
+end
+
+local function on_game_load()
+	sync()
+end
+
+-- this file is one of the [common] scripts: the api is there before any module script runs
+do
+	if (xms) then
+		local ok, e = pcall(install_api)
+		if not (ok) then say("! xms_saves: xms.storage not installed: " .. tostring(e)) end
+	end
+end
+
+function on_game_start()
+	if not (xms and native_save) then return end
+	local ok, e = pcall(wrap_storage_manager)
+	if not (ok) then say("! xms_saves: the .scoc is not watched: " .. tostring(e)) end
+	ok, e = pcall(install_stock)
+	if not (ok) then say("! xms_saves: stock records are not kept: " .. tostring(e)) end
+	RegisterScriptCallback("on_game_load", on_game_load)
+end

@@ -990,6 +990,7 @@ state = {
   quests = {
     ["madmer.cordon_tales.wolf_debt"] = {
       uid    = "madmer.cordon_tales.wolf_debt",
+      mod    = "madmer.cordon_tales",  -- the module (older records: the uid before its last dot)
       status = "active",    -- inactive | active | completed | failed
       hash   = 305419896,   -- FNV-1a of the asset text of the last run
       t0     = <game seconds at activation>,
@@ -1026,12 +1027,25 @@ state, does not auto-activate quests, and re-stages the original blob on save.
   nodes are dropped; new `vars` take their defaults; `refs`, `done` and `tasks`
   survive; triggers are re-armed against the new graph. Everything else keeps
   running.
-- **The module was removed or stopped applying**: the record simply stays in the
-  blob, unread and tiny. `nq list` shows it as "asset not loaded, record kept". If
-  the module comes back, the quest carries on where it was. When the *last*
-  module goes, XMS itself goes inactive and stages nothing, so the chunk is
-  carried into the new save untouched rather than rewritten — the record survives
-  either way, but the runtime cannot report it during such a session.
+- **The module is away** - switched off, removed, or not for this game's mode: its
+  records are *kept*. Quests, behaviour instances (and an instance a kept quest
+  started), its global variables and the standing orders its quests gave stay in the
+  blob as they were, written back unchanged at every save; nothing of them runs,
+  is reconciled or answers a query (`quest_status` reads `inactive`, its globals read
+  as unset). What would point into a kept quest from the live game is withdrawn: its
+  PDA tasks are closed silently, an NPC of the game a kept step or order drove gets its
+  own logic back, no ref story id is registered. `nq list` names the module and the
+  count. When the module is back, the records are restored by the ordinary path (a
+  changed asset is reconciled as above, a ref whose object has another section now is
+  dropped) and the quest carries on where it was. When the *last* module goes, XMS
+  itself goes inactive and stages nothing, so the chunk is carried into the new save
+  untouched. `docs/dead-air/SAVE_SCRIPTS.md` has the whole of it.
+- **The module is here but no longer has the quest** (the author removed it): the
+  record is dropped with one line, its PDA tasks are closed and its anchors released.
+  A record whose asset did not load (invalid, unreadable) is kept and listed as
+  "asset not loaded, record kept".
+- **`nq forget <module>`** (the quest runtime's part of the engine's `xms_forget`,
+  which calls `xms_saves.forget`) drops everything kept for a module that is away.
 - **A vanilla save, or original Dead Air**: no `.scov`, no chunk, nothing to do.
 - **A save that predates NQ**: no blob, so every `auto` quest of every installed
   module activates on the first update, exactly as if the module had just been
@@ -1058,6 +1072,7 @@ mounted none of it runs.
 | `xms.dialog_unregister` | `(dialog_id)` | Removes it. |
 | `xms.dialog_invalidate` | `(dialog_id) → bool` | Drops the cached phrase graph so the next conversation rebuilds it. **Returns false while a talk window is open** (the open dialog holds pointers into that graph); the runtime retries on `actor_on_leave_dialog`. |
 | `xms.save_data` / `xms.load_data` | `("xms.nq", blob)` | The core pseudo-namespace, resolved before any module id. |
+| `xms.own_object` | `(id, module_id)` | Called for every NPC, squad (and each of its members), world object, anchor and laid-out item a quest or behaviour graph creates - not for what `item.give` hands the player - so it is saved with the module's data (SAVE_SCRIPTS.md). Feature-tested; absent, nothing is declared. |
 | `xms.patrol_point` | `(name, x, y, z) → bool` | **Grizzly.** Registers the one-point runtime patrol path `name` at the navmesh cell nearest to the position, or moves it there when it exists already. `name` must start with `xms_rt_`; a path the level shipped is never touched. `false` without a level graph, or when no walkable cell lies within 15 m. See section 15.4. |
 
 ### 12.2 The `dialogs_for` hook
@@ -1087,6 +1102,7 @@ Without the runtime loaded it answers `! NQ runtime is not loaded`.
 | `nq debug 0\|1` | Mirrors every transition into PDA news as well as the log. |
 | `nq validate` | Re-scans and prints every problem of every asset with its code. Works before the runtime is initialised. |
 | `nq dump` | Writes a full JSON report to `$app_data_root$\nq_report.json`. |
+| `nq forget <module>` | Drops what is kept for a module that is away (§11.4); refused for a module that is here. |
 | `nq help` | The subcommand list (also the answer to a bare `nq`). |
 
 `<uid>` accepts a bare quest id when it is unambiguous across modules; otherwise

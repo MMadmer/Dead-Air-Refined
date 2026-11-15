@@ -1020,6 +1020,30 @@ function give_items(section, count)
 	return made
 end
 
+-- What a quest or a behaviour graph puts into the world - an NPC, a squad with its members, a
+-- prop, an anchor, the loot it lays out - is its module's: saved with the module's data and kept
+-- while the module is away (the engine's xms.own_object). What it hands to the player is not.
+function own_object(ctx, id)
+	if not (id and xms and type(xms.own_object) == "function") then return false end
+	local mod = ctx and ctx.def and ctx.def.module
+	if (type(mod) ~= "string" or mod == "") then
+		local qs = ctx and ctx.qs
+		mod = (type(qs) == "table" and qs.mod) or (xms_nq and xms_nq.module_of and xms_nq.module_of(ctx and ctx.uid, qs))
+	end
+	if (type(mod) ~= "string" or mod == "") then return false end
+	local ok, r = pcall(xms.own_object, id, mod)
+	return ok and r ~= false
+end
+
+-- A squad and every member it was made with.
+function own_squad(ctx, squad)
+	if not (squad) then return end
+	own_object(ctx, squad.id)
+	pcall(function()
+		for k in squad:squad_members() do own_object(ctx, k.id) end
+	end)
+end
+
 -- ============================================================================ serialization
 -- Plain-data tables (bool/number/string keys and values, nested tables). Used as the fallback
 -- when marshal is missing and for the JSON report of `nq dump`.

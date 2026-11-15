@@ -99,6 +99,7 @@ local function target_object_id(ctx, name, target)
 		local se
 		pcall(function() se = alife():create("space_restrictor", pos, lvid, gvid) end)
 		if not (se) then return nil end
+		util.own_object(ctx, se.id)
 		core.ref_set(ctx.qs, rname, { id = se.id, kind = "anchor", section = "space_restrictor" })
 		return se.id
 	end
@@ -737,6 +738,23 @@ function on_init()
 				end
 			end
 		end
+	end
+end
+
+-- The module no longer has the quest and its record goes: the same silent close as a reset, from
+-- what the record knows, because the declaration is gone with the asset.
+function on_quest_dropped(uid, qs)
+	local a = actor()
+	for name in pairs((qs and qs.tasks) or {}) do
+		if (a) then
+			local tid = task_id(uid, name)
+			local t = get_task(a, tid, true)
+			if (t) then
+				pcall(t.remove_map_locations, t, false)
+				pcall(a.set_task_state, a, task.fail, tid)
+			end
+		end
+		release_anchor(qs, name)
 	end
 end
 

@@ -470,6 +470,7 @@ local function fetch_host(ctx, sp, cache)
 			if not (pos and lvid and gvid) then error("fetch spawn: cannot resolve the corpse place") end
 			local se = alife():create(sp.new_corpse.section, pos, lvid, gvid)
 			if not (se) then error("fetch spawn: cannot create " .. tostring(sp.new_corpse.section)) end
+			util.own_object(ctx, se.id)
 			cache.body = se.id
 			if (cache.on_body) then cache.on_body(se.id) end
 		end
@@ -686,6 +687,8 @@ function spawn_items(ctx, where, rows)
 		end
 		if (se) then
 			local id = se.id
+			-- laid out in the world for the quest; one put into the player's own pockets is his
+			if (e.host == nil or e.host ~= actor_id()) then util.own_object(ctx, id) end
 			ids[#ids + 1] = id
 			by_row[e.ri] = by_row[e.ri] or {}
 			table.insert(by_row[e.ri], id)
@@ -734,6 +737,7 @@ local function fetch_make_loot(ctx)
 			se = alife():create(e.section, e.ground.pos, e.ground.lvid, e.ground.gvid)
 		end
 		if (se) then
+			util.own_object(ctx, se.id)
 			w.ids[se.id] = e.ri
 			if (e.host) then
 				w.host_of[se.id] = e.host
@@ -768,6 +772,7 @@ local function fetch_heal(ctx)
 			if (a) then nse = alife():create(section, a:position(), a:level_vertex_id(), a:game_vertex_id()) end
 		end
 		if (nse) then
+			util.own_object(ctx, nse.id)
 			w.ids[nse.id] = e.ri
 			if (hse) then w.host_of[nse.id] = host end
 			util.warn("%s/%s: quest item %s was destroyed, a replacement was made", ctx.uid, ctx.node_id, tostring(section))
@@ -988,6 +993,7 @@ local function reach_spot_target(ctx)
 		return nil
 	end
 	if not (se) then return nil end
+	util.own_object(ctx, se.id)
 	core.ref_set(ctx.qs, reach_anchor_name(ctx), { id = se.id, kind = "anchor", section = "space_restrictor" })
 	return se.id
 end

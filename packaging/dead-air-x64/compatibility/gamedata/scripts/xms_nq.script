@@ -82,6 +82,13 @@ local draining = false
 local touched = {}			-- uid -> true: check implicit completion after the drain
 local err_at = {}			-- key -> real ms of the last begin/poll error (retry throttle, not persisted)
 local now_g, now_r = 0, 0
+-- A module that is not here (switched off, removed, or not for this game's mode) keeps what it
+-- left in the state: its records are KEPT - not run, not reconciled, not listed as quests, written
+-- back as they were - until the module is here again or the player forgets it.
+local PRESENT = {}			-- module id -> true: enabled and applying, from the last scan
+local KEPT = {}				-- uid -> module id of a record kept for a module that is not here
+local forget_later = {}		-- module ids xms_forget named before the runtime was up
+local apply_forgets			-- forward: below forget_module
 
 local function key_of(uid, node) return uid .. "|" .. node end
 
@@ -122,7 +129,22 @@ function quests() return Q, Q_ORDER, INVALID end
 function behaviours() return SCEN, SCEN_ORDER end
 function behaviour_def(uid) return SCEN[uid] end
 function quest_def(uid) return Q[uid] end
-function quest_state(uid) return state and state.quests[uid] or nil end
+-- A kept record is nobody's to read or change: queries see no record at all.
+function quest_state(uid)
+	if (KEPT[uid]) then return nil end
+	return state and state.quests[uid] or nil
+end
+function is_kept(uid) return KEPT[uid] ~= nil end
+function kept() return KEPT end
+function module_present(mod) return PRESENT[mod] == true end
+
+-- The module of a record: stored since the record format has it, else everything before the
+-- last dot of the uid (a quest or behaviour id has none; a module id may have several).
+function module_of(uid, qs)
+	if (type(qs) == "table" and type(qs.mod) == "string" and qs.mod ~= "") then return qs.mod end
+	local base = string.gsub(tostring(uid), "#%d+$", "")
+	return string.match(base, "^(.+)%.[^.]+$")
+end
 function tokens_of(uid) local qs = quest_state(uid) return qs and qs.tokens or nil end
 function node_done(uid, node) local qs = quest_state(uid) return (qs and qs.done[node] ~= nil) and true or false end
 
@@ -169,7 +191,7 @@ local function new_quest_state(q)
 	return {
 		status = "active", hash = q.hash, tokens = {}, vars = util.copy(q.vars), refs = {}, done = {},
 		fired = {}, joins = {}, tasks = {}, objectives = {}, ovis = {}, retg = {}, errors = {}, timers = {},
-		trig = {}, jobs = {}, t0 = now_g, r = 0,
+		trig = {}, jobs = {}, t0 = now_g, r = 0, mod = q.module,
 	}
 end
 
@@ -191,7 +213,8 @@ end
 
 local function run_online_jobs()
 	for uid, qs in pairs(state.quests) do
-		if (qs.jobs and next(qs.jobs)) then
+		-- a kept quest's objects are not in the world: its jobs wait with it
+		if (not KEPT[uid] and qs.jobs and next(qs.jobs)) then
 			for id, job in pairs(qs.jobs) do
 				local se = util.se_by_id(id)
 				if not (se) then
@@ -381,7 +404,26 @@ function ref_clear(qs, name)
 	dirty = true
 end
 
+-- A ref names an object by id, and an id an object gave up can be given to another one. A record
+-- back after its module was away may name such a stranger: a ref whose object has another section
+-- now is dropped rather than followed.
+local function check_refs(uid, qs)
+	for name, rec in pairs(util.copy(qs.refs)) do
+		if (type(rec) == "table" and rec.id and type(rec.section) == "string" and rec.section ~= "") then
+			local se = util.se_by_id(rec.id)
+			local ok, sec = false, nil
+			if (se and se.section_name) then ok, sec = pcall(se.section_name, se) end
+			if (ok and type(sec) == "string" and sec ~= rec.section) then
+				qs.refs[name] = nil
+				dirty = true
+				util.warn("%s: ref %s names another object now (%s, not %s); it is dropped", uid, name, sec, rec.section)
+			end
+		end
+	end
+end
+
 local function restore_refs(uid, qs)
+	check_refs(uid, qs)
 	for name, rec in pairs(qs.refs) do
 		if (type(rec) == "table" and rec.id) then util.register_story_id(rec.id, util.ref_story_id(uid, name)) end
 	end
@@ -413,10 +455,20 @@ end
 -- One set per module, declared in its manifest ([vars]) and shared by every graph of it;
 -- "<module>.<name>" reaches another module's. Kept in the state beside the quests, so a
 -- value outlives any one quest and rides the save.
+local global_absent_said = {}
+
 local function global_slot(ctx_or_module, name)
 	local own = type(ctx_or_module) == "table" and (ctx_or_module.def and ctx_or_module.def.module) or ctx_or_module
 	local mod, n = loader.global_key(own, name)
 	if not (state and mod and n) then return nil, nil, nil end
+	-- the variables of a module that is not here are kept for it, out of everyone's reach
+	if not (PRESENT[mod]) then
+		if not (global_absent_said[mod]) then
+			global_absent_said[mod] = true
+			util.warn("global variables of %s: the module is not here, they read as unset and are not written", tostring(mod))
+		end
+		return nil, nil, nil
+	end
 	state.globals = state.globals or {}
 	state.globals[mod] = state.globals[mod] or {}
 	return state.globals[mod], mod, n
@@ -1228,6 +1280,47 @@ function reset(uid)
 	return true
 end
 
+-- Drops everything kept for a module that is not here (xms_forget, `nq forget`): its quests,
+-- behaviour instances, global variables and the orders its quests gave. Refused for a module
+-- that is here - that is what `nq reset` is for. Returns the number of records dropped.
+function forget_module(mod)
+	if (type(mod) ~= "string" or mod == "") then return 0 end
+	if not (state) then
+		forget_later[mod] = true
+		return 0
+	end
+	if (PRESENT[mod]) then
+		util.warn("forget %s: the module is here; reset its quests instead", mod)
+		return nil, "present"
+	end
+	local n = 0
+	for uid, qs in pairs(util.copy(state.quests)) do
+		if (module_of(uid, qs) == mod or KEPT[uid] == mod) then
+			state.quests[uid] = nil
+			KEPT[uid] = nil
+			rt[uid] = nil
+			n = n + 1
+		end
+	end
+	local g = 0
+	if (state.globals and state.globals[mod]) then
+		g = util.count_keys(state.globals[mod])
+		state.globals[mod] = nil
+	end
+	ext_call("on_module_forget", mod)
+	dirty = true
+	util.info("%s forgotten: %d record(s) and %d global variable(s) kept for it are dropped", mod, n, g)
+	save_now()
+	return n
+end
+
+apply_forgets = function()
+	for mod in pairs(forget_later) do
+		forget_later[mod] = nil
+		if not (PRESENT[mod]) then forget_module(mod) end
+	end
+end
+
 -- Debug: cancel everything and put a token on `node`.
 function jump(uid, node_id)
 	local q, qs = Q[uid], quest_state(uid)
@@ -1354,11 +1447,66 @@ local function restore_quests()
 	for _, uid in ipairs(Q_ORDER) do restore_one(uid) end
 end
 
+local function is_instance_uid(uid) return string.find(tostring(uid), "#", 1, true) ~= nil end
+
+-- Sorts the records no asset of this scan answers: kept for a module that is not here, dropped for
+-- a module that is here and no longer has the quest. An instance is kept with the graph it runs
+-- or the quest that started it; one of a module that is here is the behaviour runtime's to restore.
+local function sort_records(all)
+	KEPT = {}
+	local function keep_of(uid, qs)
+		local mod = module_of(uid, qs)
+		if not (mod and PRESENT[mod]) then return mod or "?" end
+		return nil
+	end
+	for uid, qs in pairs(state.quests) do
+		if not (Q[uid]) then
+			local mod = keep_of(uid, qs)
+			if (mod) then
+				KEPT[uid] = mod
+			elseif not (is_instance_uid(uid)) and not (all.invalid_by_uid and all.invalid_by_uid[uid])
+				and (all.complete == nil or all.complete[module_of(uid, qs)] ~= false) then
+				ext_call("on_quest_dropped", uid, qs)
+				state.quests[uid] = nil
+				rt[uid] = nil
+				dirty = true
+				util.warn("%s: the module no longer has this quest; its saved state is dropped", uid)
+			end
+		end
+	end
+	-- an instance whose starter is kept waits with it, up the chain
+	local changed = true
+	local hops = 0
+	while (changed and hops < 16) do
+		changed, hops = false, hops + 1
+		for uid, qs in pairs(state.quests) do
+			local owner = type(qs.owner) == "table" and qs.owner.uid or nil
+			if (not KEPT[uid] and is_instance_uid(uid) and owner and KEPT[owner]) then
+				KEPT[uid] = KEPT[owner]
+				changed = true
+			end
+		end
+	end
+	local per = {}
+	for _, mod in pairs(KEPT) do per[mod] = (per[mod] or 0) + 1 end
+	for mod, n in pairs(per) do
+		util.info("%d record(s) kept for %s: the module is not here", n, tostring(mod))
+	end
+end
+
 local function apply_scan(all, first_time)
 	SCAN = all
+	PRESENT = all.present or {}
+	if not (all.present) then
+		-- a scan of an older loader: every module with assets counts as here
+		for _, q in pairs(all.quests or {}) do PRESENT[q.module] = true end
+		for _, q in pairs(all.behaviours or {}) do PRESENT[q.module] = true end
+	end
 	settle_globals(all)
 	Q, Q_ORDER, INVALID = all.quests, all.order, all.invalid
 	SCEN, SCEN_ORDER = all.behaviours or {}, all.behaviour_order or {}
+	sort_records(all)
+	apply_forgets()
 	for _, uid in ipairs(Q_ORDER) do
 		local q = Q[uid]
 		if (#q.problems > 0) then loader.log_problems(q.module .. "/" .. q.file, q.problems, false) end

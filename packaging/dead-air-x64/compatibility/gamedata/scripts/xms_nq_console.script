@@ -10,6 +10,7 @@
 --   nq debug 0|1               mirror transitions to PDA news
 --   nq validate                re-validate every asset and print problems
 --   nq dump                    write $app_data_root$\nq_report.json
+--   nq forget <module>         drop what is kept for a module that is not here (xms_forget's part)
 --   nq help
 
 local util = xms_nq_util
@@ -57,17 +58,31 @@ local function cmd_list()
 	for _, q in ipairs(invalid) do
 		say("%s/%s INVALID (%d error(s))", tostring(q.module), tostring(q.file), q.errors or 0)
 	end
-	-- unknown records (module removed)
+	-- records no asset answers: kept for a module that is not here (one line per module), or a
+	-- record of a module that is here whose asset did not load
 	local st = core.get_state()
 	if (st) then
+		local kept = {}
 		for uid, qs in pairs(st.quests) do
-			if not (Q[uid]) then say("%s [%s] (asset not loaded, record kept)", uid, tostring(qs.status)) end
+			if (core.is_kept and core.is_kept(uid)) then
+				local mod = core.kept()[uid]
+				kept[mod] = (kept[mod] or 0) + 1
+			elseif not (Q[uid]) then
+				say("%s [%s] (asset not loaded, record kept)", uid, tostring(qs.status))
+			end
+		end
+		for _, mod in ipairs(util.sorted_keys(kept)) do
+			say("kept for %s: %d record(s) - the module is not here (nq forget %s drops them)", tostring(mod), kept[mod], tostring(mod))
 		end
 	end
 end
 
 local function cmd_state(arg)
 	local uid, why = find_uid(arg)
+	if (not uid and arg and core.is_kept and core.is_kept(arg)) then
+		say("%s is kept for %s: the module is not here, nothing of it runs", arg, tostring(core.kept()[arg]))
+		return
+	end
 	if not (uid) then say(why or "unknown quest %s", tostring(arg)) return end
 	local q, qs = core.quest_def(uid), core.quest_state(uid)
 	say("%s [%s] hash=%08x file=%s", uid, qs and qs.status or "inactive", q.hash or 0, tostring(q.file))
@@ -196,7 +211,10 @@ local function report_table()
 	end
 	if (st) then
 		for uid, qs in pairs(st.quests) do
-			if not (Q[uid]) then rep.records[#rep.records + 1] = { uid = uid, status = qs.status } end
+			if not (Q[uid]) then
+				local kept_for = core.is_kept and core.is_kept(uid) and core.kept()[uid] or nil
+				rep.records[#rep.records + 1] = { uid = uid, status = qs.status, kept_for = kept_for }
+			end
 		end
 	end
 	return rep
@@ -221,19 +239,31 @@ local function cmd_globals(mod)
 	local n = 0
 	for _, m in ipairs(mods) do
 		if (not mod or mod == m) then
-			for _, name in ipairs(util.sorted_keys(all[m])) do
-				local v = all[m][name]
-				say("%s.%s = %s", m, name, type(v) == "string" and ("\"" .. util.cp1251(v) .. "\"") or tostring(v))
-				n = n + 1
+			if (core.module_present and not core.module_present(m)) then
+				say("%s: %d variable(s) kept - the module is not here", m, util.count_keys(all[m]))
+			else
+				for _, name in ipairs(util.sorted_keys(all[m])) do
+					local v = all[m][name]
+					say("%s.%s = %s", m, name, type(v) == "string" and ("\"" .. util.cp1251(v) .. "\"") or tostring(v))
+					n = n + 1
+				end
 			end
 		end
 	end
 	if (n == 0) then say(mod and ("no global variables in " .. mod) or "no global variables") end
 end
 
+-- The quest runtime's part of xms_forget: what it keeps for a module that is not here.
+local function cmd_forget(mod)
+	if not (mod) then say("nq forget <module id>") return end
+	local n, why = core.forget_module(mod)
+	if (why == "present") then say("%s is here: reset its quests instead", mod) return end
+	say("%s: %d kept record(s) dropped", mod, n or 0)
+end
+
 local function cmd_help()
 	say("nq list | state <uid> | activate <uid> | reset <uid> | jump <uid> <node> | fire <uid> <node> [pin]")
-	say("nq globals [module] | reload | debug 0|1 | validate | dump | help")
+	say("nq globals [module] | forget <module> | reload | debug 0|1 | validate | dump | help")
 end
 
 function exec(args)
@@ -248,6 +278,7 @@ function exec(args)
 		elseif (cmd == "jump") then if (need_ready()) then cmd_jump(words[2], words[3]) end
 		elseif (cmd == "fire") then if (need_ready()) then cmd_fire(words[2], words[3], words[4]) end
 		elseif (cmd == "globals") then if (need_ready()) then cmd_globals(words[2]) end
+		elseif (cmd == "forget") then if (need_ready()) then cmd_forget(words[2]) end
 		elseif (cmd == "reload") then
 			if (core.reload()) then say("reloaded") else say("reload failed (runtime disabled?)") end
 		elseif (cmd == "debug") then

@@ -58,12 +58,32 @@ local function is_instance(uid)
 	return type(uid) == "string" and string.find(uid, UID_MARK, 1, true) ~= nil
 end
 
+-- An instance kept for a module that is not here: nothing of it runs or holds anybody.
+local function kept(uid)
+	return core.is_kept ~= nil and core.is_kept(uid)
+end
+
+local function live_instance(uid)
+	return is_instance(uid) and not kept(uid)
+end
+
 local function any_instance()
 	local st = core.get_state()
 	for uid in pairs((st and st.quests) or {}) do
-		if (is_instance(uid)) then return true end
+		if (live_instance(uid)) then return true end
 	end
 	return false
+end
+
+-- The module an object belongs to, and whether that module is here (the engine's answer).
+local function object_module_away(id)
+	if not (xms and type(xms.object_owner) == "function") then return false end
+	local ok, m = pcall(xms.object_owner, id)
+	if not (ok and type(m) == "string" and m ~= "") then return false end
+	local fn = xms.module_present or xms.is_loaded
+	if (type(fn) ~= "function") then return false end
+	local ok2, here = pcall(fn, m)
+	return ok2 and here == false
 end
 
 -- The engine calls only xms_nq back, so this module asks for the tick itself -
@@ -349,6 +369,8 @@ local order_of, has_orders	-- standing orders, below
 -- that held it is gone); a member of a smart terrain gets its job again; anyone
 -- else simply stops being driven, which returns them to the game's own
 -- behaviour. Never left in a scheme nothing updates.
+local let_go -- forward
+
 local function release(id)
 	local go = go_by_id(id)
 	if not (go) then return end
@@ -358,6 +380,13 @@ local function release(id)
 		core.mark_dirty()
 		return
 	end
+	let_go(id)
+end
+
+-- The NPC back to its smart terrain's job or its own logic, touching nothing of the runtime's state.
+let_go = function(id)
+	local go = go_by_id(id)
+	if not (go) then return end
 	local se = se_by_id(id)
 	local smart_id = se and se.m_smart_terrain_id
 	if (smart_id and smart_id ~= 65535 and alife()) then
@@ -1099,9 +1128,23 @@ local function held_by_graph(id)
 	local st = core.get_state()
 	local key = tostring(id)
 	for uid, qs in pairs((st and st.quests) or {}) do
-		if (is_instance(uid) and qs.held and qs.held[key]) then return uid end
+		if (live_instance(uid) and qs.held and qs.held[key]) then return uid end
 	end
 	return nil
+end
+
+-- An order kept for a module that is not here: given by one of its quests, or to one of its NPCs.
+-- It is not applied and not forgotten; it waits.
+local function order_kept(key, o)
+	local by = type(o) == "table" and o.by or nil
+	if (type(by) == "string" and by ~= "spawn" and by ~= "order") then
+		if (kept(by)) then return true end
+		local st = core.get_state()
+		local mod = core.module_of and core.module_of(by, st and st.quests and st.quests[by])
+		if (mod and core.module_present and not core.module_present(mod)) then return true end
+	end
+	local id = tonumber(key)
+	return id ~= nil and object_module_away(id)
 end
 
 -- the context a destination of an order resolves in: the quest that gave it, whose
@@ -1388,9 +1431,17 @@ function adopt_npc(id)
 	adopt_drain()
 end
 
+-- orders kept for a module that is not here ask for no tick
 has_orders = function()
 	local st = core.get_state()
-	return st ~= nil and ((st.orders and next(st.orders) ~= nil) or (st.hostile and next(st.hostile) ~= nil))
+	if not (st) then return false end
+	for key, o in pairs(st.orders or {}) do
+		if not (order_kept(key, o)) then return true end
+	end
+	for key, h in pairs(st.hostile or {}) do
+		if not (order_kept(key, h)) then return true end
+	end
+	return false
 end
 
 -- ---- the pass: parked orders applied, taken NPCs taken back, wanderers moved ----
@@ -1404,7 +1455,9 @@ local function orders_tick()
 	for key, o in pairs(util.copy(all)) do
 		local id = tonumber(key)
 		o = all[key]
-		if not (id and alive_id(id)) then
+		if (order_kept(key, o)) then
+			-- waits for its module, untouched
+		elseif not (id and alive_id(id)) then
 			order_forget(key)
 		elseif not (held_by_graph(id)) then
 			local stg = db and db.storage and db.storage[id]
@@ -1423,7 +1476,9 @@ local function orders_tick()
 	local st = core.get_state()
 	for key, h in pairs(util.copy((st and st.hostile) or {})) do
 		local id = tonumber(key)
-		if not (id and alive_id(id)) then
+		if (order_kept(key, h)) then
+			-- waits for its module, untouched
+		elseif not (id and alive_id(id)) then
 			st.hostile[key] = nil
 		elseif (hostile_now(id, h.target, { uid = h.by, qs = core.quest_state(h.by) or { refs = {} } })) then
 			st.hostile[key] = nil
@@ -1490,9 +1545,18 @@ end
 function on_init()
 	local state = core.get_state()
 	if not (state and state.quests) then return end
-	local restored, dropped = 0, 0
+	local restored, dropped, waiting = 0, 0, 0
 	for uid, qs in pairs(util.copy(state.quests)) do
-		if (is_instance(uid)) then
+		if (is_instance(uid) and kept(uid)) then
+			-- kept for its module: not restored, not stopped; the NPCs of the game it drives go
+			-- back to their own logic until the module is here again
+			waiting = waiting + 1
+			for key, tag in pairs(qs.applied or {}) do
+				local id = tonumber(key)
+				local stg = id and db and db.storage and db.storage[id]
+				if (stg and stg.object and stg.ini_filename == "*" .. tag) then let_go(id) end
+			end
+		elseif (is_instance(uid)) then
 			local scen = qs.behaviour and core.behaviour_def(qs.behaviour) or nil
 			if (scen) then
 				core.instance_restore(uid, scen)
@@ -1506,8 +1570,8 @@ function on_init()
 			end
 		end
 	end
-	if (restored > 0 or dropped > 0) then
-		util.info("behaviours: %d restored, %d dropped", restored, dropped)
+	if (restored > 0 or dropped > 0 or waiting > 0) then
+		util.info("behaviours: %d restored, %d dropped, %d kept for a module that is not here", restored, dropped, waiting)
 	end
 	-- the pool knows what is taken from the state alone, whatever on_game_load saw
 	rt_used = {}
@@ -1518,10 +1582,17 @@ function on_init()
 			end
 		end
 	end
-	for _, o in pairs(state.orders or {}) do
+	for key, o in pairs(state.orders or {}) do
 		if (o.path) then rt_used[o.path] = true end
-		-- the tick finds out whether the NPC runs it already (the load put its file back)
-		o.applied = false
+		if (order_kept(key, o)) then
+			-- an NPC of the game running a kept order runs its own logic until the order is back
+			local id = tonumber(key)
+			local stg = id and db and db.storage and db.storage[id]
+			if (stg and stg.object and o.tag and stg.ini_filename == "*" .. o.tag) then let_go(id) end
+		else
+			-- the tick finds out whether the NPC runs it already (the load put its file back)
+			o.applied = false
+		end
 	end
 	-- NPCs that spawned before the runtime was up and carry [xms_order]
 	adopt_drain()
@@ -1637,7 +1708,7 @@ function tick()
 	local ok, e = pcall(orders_tick)
 	if not (ok) then util.err("orders: %s", tostring(e)) end
 	for uid, qs in pairs(util.copy(state.quests)) do
-		if (is_instance(uid)) then
+		if (live_instance(uid)) then
 			drain_pending(uid)
 			heal_applied(uid)
 			drive_wanderers(uid)
@@ -1664,10 +1735,10 @@ function forget_object(id)
 	if not (st and st.quests or id == nil) then return end
 	local key = tostring(id)
 	-- an NPC that leaves the world takes its standing order with it
-	order_forget(key)
-	if (st.hostile) then st.hostile[key] = nil end
+	if not (order_kept(key, order_of(id))) then order_forget(key) end
+	if (st.hostile and not order_kept(key, st.hostile[key])) then st.hostile[key] = nil end
 	for uid, qs in pairs(st.quests) do
-		if (is_instance(uid)) then
+		if (live_instance(uid)) then
 			if (qs.held) then qs.held[key] = nil end
 			if (qs.pending) then qs.pending[key] = nil end
 			if (qs.applied) then qs.applied[key] = nil end
@@ -1677,6 +1748,44 @@ function forget_object(id)
 				end
 			end
 		end
+	end
+	core.mark_dirty()
+end
+
+-- Every logic file this runtime made, by tag -> the module it is for: the steps of the behaviour
+-- instances and the standing orders, from the state or, before init, from the save. A game NPC
+-- saved naming one of these would find no such file in a game without the module.
+function generated_tags()
+	local st = core.get_state() or (core.peek_state and core.peek_state()) or nil
+	local out = {}
+	if not (st) then return out end
+	for uid, qs in pairs(type(st.quests) == "table" and st.quests or {}) do
+		if (is_instance(uid) and type(qs.steps) == "table") then
+			local mod = core.module_of and core.module_of(uid, qs) or true
+			for tag in pairs(qs.steps) do out[tag] = mod end
+		end
+	end
+	for _, o in pairs(type(st.orders) == "table" and st.orders or {}) do
+		if (type(o) == "table" and o.tag) then
+			local mod = (type(o.by) == "string" and core.module_of) and core.module_of(o.by, st.quests and st.quests[o.by]) or nil
+			out[o.tag] = mod or true
+		end
+	end
+	return out
+end
+
+-- xms_forget: the orders and the hostility the module's quests gave go with them.
+function on_module_forget(mod)
+	local st = core.get_state()
+	if not (st) then return end
+	local function by_mod(by)
+		return type(by) == "string" and core.module_of and core.module_of(by, st.quests and st.quests[by]) == mod
+	end
+	for key, o in pairs(util.copy(st.orders or {})) do
+		if (by_mod(o.by)) then order_forget(key) end
+	end
+	for key, h in pairs(util.copy(st.hostile or {})) do
+		if (by_mod(h.by)) then st.hostile[key] = nil end
 	end
 	core.mark_dirty()
 end

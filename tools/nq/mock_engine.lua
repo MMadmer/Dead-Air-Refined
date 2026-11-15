@@ -1316,15 +1316,20 @@ local function build_xms()
 			mock.patrol_point_calls = (mock.patrol_point_calls or 0) + 1
 			return true
 		end,
-		-- like resolve_blob_ns: the core blob or an enabled module's own id, nothing else
+		-- like resolve_blob_ns: the core blob or an enabled module's own id, nothing else. The chunk
+		-- of a module that is not enabled is kept by the engine as it was; nil or "" erases one.
 		save_data = function(id, s)
-			if (id ~= "xms.nq" and not module_by_id(id)) then return false end
+			local m = module_by_id(id)
+			if (id ~= "xms.nq" and not (m and m.enabled ~= false)) then return false end
+			if (s ~= nil and type(s) ~= "string") then return false end
 			mock.save_calls = mock.save_calls + 1
+			if (s == "") then s = nil end
 			mock.blobs[id] = s
 			return true
 		end,
 		load_data = function(id)
-			if (id ~= "xms.nq" and not module_by_id(id)) then return nil end
+			local m = module_by_id(id)
+			if (id ~= "xms.nq" and not (m and m.enabled ~= false)) then return nil end
 			return mock.blobs[id]
 		end,
 		list_files = function(id, subdir, mask, recursive)
@@ -1377,10 +1382,32 @@ local function build_xms()
 		},
 	}
 	if (mock.list_files_missing) then xms.list_files = nil xms.read_file = nil xms.nq_api = nil end
+	-- what the engine says about a module's things (SAVE_SCRIPTS.md): an object a module brought or
+	-- declared its own - also the placeholder holding the id of one of a module that is not here -,
+	-- a section a module made, whether a module is enabled and loaded now
+	if not (mock.no_saves_api) then
+		xms.object_owner = function(id) return mock.owners[id] or mock.owned[id] end
+		xms.own_object = function(id, mod)
+			if not (id and type(mod) == "string") then return false end
+			mock.owned[id] = mod
+			return true
+		end
+		xms.module_present = function(id) local m = module_by_id(id) return m ~= nil and m.enabled ~= false end
+		xms.kept_modules = function()
+			local out = {}
+			for _, m in ipairs(mock.opts.modules or {}) do if (m.enabled == false) then out[#out + 1] = m.id end end
+			return out
+		end
+		xms.section_owner = function(section, file) return mock.section_owners[section] end
+	end
 end
 
+mock.owners = {}			-- object id -> module id: what the engine knows as a module's
+mock.owned = {}				-- object id -> module id: what a script declared (xms.own_object)
+mock.section_owners = {}	-- section -> module id
+
 -- ---------------------------------------------------------------------------- script namespaces
-local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_behaviour = true, xms_world = true, xms_characters = true }
+local SCRIPT_NAMES = { xms_nq = true, xms_nq_util = true, xms_nq_load = true, xms_nq_kinds = true, xms_nq_console = true, xms_nq_dialog = true, xms_nq_task = true, xms_nq_world = true, xms_nq_behaviour = true, xms_world = true, xms_characters = true, xms_saves = true }
 local loading = {}
 
 local function load_script(name)
@@ -1670,6 +1697,9 @@ function mock.fresh()
 	mock.no_navmesh = false
 	mock.apply_count = 0
 	mock.patrol_point_calls = 0
+	mock.owners = {}
+	mock.owned = {}
+	mock.section_owners = {}
 	for name, smart in pairs(mock.smarts) do mock.se[smart.id] = smart end
 	mock.rebuild()
 end

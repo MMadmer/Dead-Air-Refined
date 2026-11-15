@@ -3957,6 +3957,637 @@ do
 end
 end)()
 
+-- ============================================================================ (z30) saves: a module away
+-- What a module brings never enters the original game's save format, and nothing of it is lost
+-- while the module is away (SAVE_SCRIPTS.md): the quest runtime keeps an absent module's records
+-- untouched and runs none of them; xms.storage is the module's own table in its chunk of the save;
+-- what the game's own scripts would write about a module's object into .scop / .scoc is kept in
+-- that chunk instead and put back when the module is there again.
+;(function()
+local function deep_equal(a, b)
+	if (a == b) then return true end
+	if (type(a) ~= "table" or type(b) ~= "table") then return false end
+	for k, v in pairs(a) do if not (deep_equal(v, b[k])) then return false end end
+	for k in pairs(b) do if (a[k] == nil) then return false end end
+	return true
+end
+local copy = function(t) return xms_nq_util.copy(t) end
+
+local function instance_uid()
+	local st = xms_nq.get_state()
+	for uid in pairs((st and st.quests) or {}) do
+		if (string.find(uid, "#", 1, true)) then return uid end
+	end
+	return nil
+end
+
+local function module_entry(id)
+	for _, m in ipairs(mock.opts.modules) do if (m.id == id) then return m end end
+end
+
+-- a load: a new Lua state reads the save as the last one wrote it
+local function reload()
+	mock.rebuild()
+	mock.first_update()
+	return xms_nq
+end
+
+section("(z30) a quest saved mid-way is kept while its module is away")
+setup()
+mock.first_update()
+local core = xms_nq
+do
+	local qs = core.quest_state(UID_A)
+	check(qs and qs.status == "active" and qs.tokens.fetch ~= nil, "linear_fetch waits on its fetch node")
+	check(qs and qs.mod == "mod_a", "the record names its module")
+	check(core.set_global("mod_a", "kept_flag", 7) == true, "a global of the module is set")
+	local before = copy(core.get_state().quests[UID_A])
+	core.save_now()
+
+	module_entry("mod_a").enabled = false
+	core = reload()
+	check(core.is_ready(), "the runtime starts without the module")
+	check(core.quests()[UID_A] == nil, "no quest of it is loaded")
+	check(core.is_kept(UID_A) and core.quest_state(UID_A) == nil, "its record is kept, out of everyone's reach")
+	check(core.quest_status(UID_A) == "inactive", "a query sees no quest at all")
+	check(deep_equal(core.get_state().quests[UID_A], before), "the saved state is untouched")
+	mock.add_item("bread", true)
+	mock.add_item("bread", true)
+	mock.ticks(4)
+	check(deep_equal(core.get_state().quests[UID_A], before), "not run, not ticked: what it waits for changes nothing")
+	check(core.get_global("mod_a", "kept_flag") == nil, "the module's global reads as unset")
+	check(core.set_global("mod_a", "kept_flag", 8) == false, "and cannot be written")
+	check(core.get_state().globals.mod_a.kept_flag == 7, "it is kept as it was")
+	check(db.actor:get_task(T_BREAD, true) == nil, "its PDA task does not stay in progress in a game without it")
+	mock.clear_log()
+	xms_nq_console.exec("list")
+	check(mock.log_has("kept for mod_a: %d+ record"), "nq list says what is kept and for whom")
+	check(not mock.log_has("linear_fetch %[active%]"), "and lists none of it as a quest")
+	mock.clear_log()
+	xms_nq_console.exec("state " .. UID_A)
+	check(mock.log_has("kept for mod_a"), "nq state says the quest is kept")
+	check(xms_nq_console ~= nil and core.quest_state(UID_B) == nil, "every quest of the module is kept alike")
+
+	-- a second save and load without the module
+	core.save_now()
+	core = reload()
+	check(core.is_kept(UID_A) and deep_equal(core.get_state().quests[UID_A], before), "a save made without the module keeps it too")
+
+	module_entry("mod_a").enabled = true
+	core = reload()
+	local back = core.quest_state(UID_A)
+	check(back and back.status == "active" and back.tokens.fetch ~= nil, "the module is back: the quest stands on the node it was at")
+	check(core.get_global("mod_a", "kept_flag") == 7, "its global variable is back")
+	check(db.actor:get_task(T_BREAD, true) ~= nil, "its PDA task is in progress again")
+	mock.add_item("bread", true)
+	mock.add_item("bread", true)
+	mock.ticks(3)
+	check(core.quest_status(UID_A) == "completed", "and it carries on from there to its end")
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) a quest the module no longer has is dropped with one line; nq forget drops what is kept")
+do
+	mock.deleted["mod_a/parallel_triggers.nqasset"] = true
+	mock.clear_log()
+	core = reload()
+	check(core.get_state().quests[UID_B] == nil and not core.is_kept(UID_B), "the record of a removed quest of a present module is dropped")
+	check(mock.log_count("the module no longer has this quest") == 1, "with one line")
+	check(core.quest_state(UID_C) ~= nil, "the other quests of the module go on")
+	mock.deleted["mod_a/parallel_triggers.nqasset"] = nil
+
+	module_entry("mod_a").enabled = false
+	core = reload()
+	check(core.is_kept(UID_A) and core.is_kept(UID_C), "kept while away")
+	mock.clear_log()
+	xms_nq_console.exec("forget mod_b")
+	check(mock.log_has("mod_b is here"), "nq forget refuses a module that is here")
+	xms_nq_console.exec("forget mod_a")
+	check(core.get_state().quests[UID_A] == nil and core.get_state().quests[UID_C] == nil, "nq forget drops every kept record of the module")
+	check(core.get_state().globals.mod_a == nil, "and its global variables")
+	check(xms_saves.forget("mod_a") == 0, "xms_saves.forget, the engine's way in, reaches the same place")
+	for i = #db.actor._inv, 1, -1 do
+		local it = db.actor._inv[i]
+		if (it:section() == "bread") then mock.remove_item(it) end
+	end
+	module_entry("mod_a").enabled = true
+	core = reload()
+	local fresh = core.quest_state(UID_A)
+	check(fresh and fresh.status == "active" and fresh.tokens.fetch ~= nil, "brought back after a forget, a quest starts anew")
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) a behaviour graph of a module that is away is kept; the game's NPC it drove goes free")
+setup()
+mock.add_path("qa_walk", { vector():set(0, 0, 0), vector():set(10, 0, 10) })
+mock.add_path("qa_look", { vector():set(11, 0, 11) })
+mock.add_path("qa_post", { vector():set(20, 0, 20) })
+mock.first_update()
+do
+	xms_nq_console.exec("activate mod_b.beh_caller")
+	mock.ticks(2)
+	local inst = instance_uid()
+	check(inst ~= nil and mock.applied[wolf:id()] and mock.applied[wolf:id()].scheme == "walker", "wolf walks the behaviour's step")
+	local rec = copy(xms_nq.get_state().quests[inst])
+	local caller_refs = copy(xms_nq.quest_state("mod_b.beh_caller").refs)
+	check(next(caller_refs) ~= nil, "the caller holds refs")
+	xms_nq.save_now()
+	module_entry("mod_b").enabled = false
+	core = reload()
+	check(core.is_kept(inst) and core.quest_state(inst) == nil, "the instance is kept")
+	check(core.is_kept("mod_b.beh_caller"), "and so is the quest that started it")
+	check(deep_equal(core.get_state().quests[inst], rec), "its state is untouched")
+	check(mock.applied[wolf:id()].scheme == "nil", "wolf, an NPC of the game, is let go of the step")
+	mock.ticks(6)
+	check(mock.applied[wolf:id()].scheme == "nil", "and nothing hands it back while the module is away")
+	check(deep_equal(core.get_state().quests[inst], rec), "the instance stays as it was")
+	module_entry("mod_b").enabled = true
+	-- what the save held for wolf: its own logic (the step's file is never written into it)
+	db.storage[wolf:id()].ini_filename = "<customdata>"
+	core = reload()
+	mock.ticks(2)
+	check(not core.is_kept(inst) and core.quest_state(inst) ~= nil, "the module is back: the instance is restored")
+	check(mock.applied[wolf:id()].scheme == "walker", "and wolf is given its step again")
+	check(deep_equal(core.quest_state("mod_b.beh_caller").refs, caller_refs), "the caller's refs are intact")
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) what a quest puts into the world is declared its module's; what it gives the player is not")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.overrides["mod_a/own.nqasset"] = [[return { nq = 1, id = "own", nodes = {
+	{ id = "s", kind = "trigger.start", out = { next = "e" } },
+	{ id = "e", kind = "flow.end", on_enter = {
+		{ kind = "spawn.squad", params = { section = "simulation_boar", smart = "esc_smart_terrain_2_12", ref = "sq" } },
+		{ kind = "spawn.object", params = { section = "medkit", place = { level = "l01_escape", pos = { 5, 0, 5 } }, ref = "box" } },
+		{ kind = "item.give", params = { section = "medkit" } },
+	} },
+} }]]
+mock.first_update()
+do
+	local qs = xms_nq.quest_state("mod_a.own")
+	local sq, box = qs and qs.refs.sq, qs and qs.refs.box
+	check(sq and mock.owned[sq.id] == "mod_a", "the squad a quest spawned is its module's")
+	local members, owned = 0, 0
+	local se = sq and mock.se[sq.id]
+	pcall(function()
+		for k in se:squad_members() do
+			members = members + 1
+			if (mock.owned[k.id] == "mod_a") then owned = owned + 1 end
+		end
+	end)
+	check(members > 0 and owned == members, "and every member it was made with (" .. owned .. "/" .. members .. ")")
+	check(box and mock.owned[box.id] == "mod_a", "a world object a quest spawned is its module's")
+	local medkit
+	for _, item in ipairs(db.actor._inv) do if (item:section() == "medkit") then medkit = item end end
+	check(medkit and mock.owned[medkit:id()] == nil, "an item handed to the player stays his own")
+end
+if (failed > 0) then fail_dump() end
+end)()
+
+;(function()
+-- ---------------------------------------------------------------------------- stock stand-ins
+-- The stock writers and readers, reduced to what they write (the field order and the pairs
+-- walk of the real ones), so the wrappers run over them exactly as over the game's.
+local function new_packet()
+	local p = { out = {}, i = 0 }
+	local function w(kind) return function(self, v) self.out[#self.out + 1] = { kind, v } end end
+	local function r() return function(self) self.i = self.i + 1 local e = self.out[self.i] return e and e[2] end end
+	p.w_u8, p.w_u16, p.w_bool, p.w_stringZ = w("u8"), w("u16"), w("bool"), w("s")
+	p.r_u8, p.r_u16, p.r_bool, p.r_stringZ = r(), r(), r(), r()
+	return p
+end
+local function same_packet(a, b)
+	if (#a.out ~= #b.out) then return false end
+	for i = 1, #a.out do
+		if (a.out[i][1] ~= b.out[i][1] or a.out[i][2] ~= b.out[i][2]) then return false end
+	end
+	return true
+end
+local function packet_has(p, v)
+	for _, e in ipairs(p.out) do if (e[2] == v) then return true end end
+	return false
+end
+local function obj(id, name, fields)
+	local o = { id = id }
+	o.name = function() return name end
+	for k, v in pairs(fields or {}) do o[k] = v end
+	return o
+end
+local function tbl_size(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+local copy = function(t) return xms_nq_util.copy(t) end
+local function num(s) return (s ~= "nil") and tonumber(s) or nil end
+
+local stock -- what make_stock made for this Lua state
+local saved = {} -- what a write produced, read back in a later Lua state
+local orig_sim_board = rawget(_G, "sim_board")
+local function make_stock()
+	local s = { assigned = {}, m_data = { se_object = {}, game_object = {}, actor_contacts = {} } }
+	local smart = {}
+	function smart.STATE_Write(self, p)
+		p:w_u8(tbl_size(self.arriving_npc))
+		for k in pairs(self.arriving_npc) do p:w_u16(k) end
+		p:w_u8(tbl_size(self.npc_info))
+		for id, info in pairs(self.npc_info) do
+			p:w_u16(id)
+			p:w_stringZ(info.job and info.job.section or "nil")
+			p:w_bool(info.begin_job)
+			p:w_stringZ(tostring(info.need_job))
+		end
+		p:w_bool(false)
+		p:w_stringZ(tostring(self.faction))
+	end
+	function smart.STATE_Read(self, p)
+		self.need_init_npc = true
+		self.arriving_npc = {}
+		for _ = 1, p:r_u8() do local id = p:r_u16() if (id < 65535) then self.arriving_npc[id] = false end end
+		self.load_info = {}
+		for _ = 1, p:r_u8() do
+			local id = p:r_u16()
+			self.load_info[id] = { job_section = p:r_stringZ(), begin_job = p:r_bool(), need_job = p:r_stringZ() }
+		end
+		p:r_bool()
+		self.faction = p:r_stringZ()
+	end
+	local squad = {}
+	local SF = { "current_target_id", "assigned_target_id", "respawn_point_id", "respawn_point_prop_section", "smart_id" }
+	function squad.STATE_Write(self, p)
+		for _, f in ipairs(SF) do p:w_stringZ(tostring(self[f])) end
+	end
+	function squad.STATE_Read(self, p)
+		self.current_target_id = num(p:r_stringZ())
+		self.assigned_target_id = num(p:r_stringZ())
+		self.respawn_point_id = num(p:r_stringZ())
+		local sec = p:r_stringZ()
+		self.respawn_point_prop_section = (sec ~= "nil") and sec or nil
+		self.smart_id = num(p:r_stringZ())
+		-- init_squad_on_load
+		sim_board.get_sim_board():assign_squad_to_smart(self, self.smart_id)
+	end
+	local npc = {}
+	function npc.STATE_Write(self, p)
+		p:w_u16(self.m_smart_terrain_id)
+		local off = db.offline_objects[self.id]
+		p:w_stringZ(tostring(off and off.active_section))
+	end
+	function npc.STATE_Read(self, p)
+		self.m_smart_terrain_id = p:r_u16()
+		local sect = p:r_stringZ()
+		db.offline_objects[self.id] = db.offline_objects[self.id] or {}
+		db.offline_objects[self.id].active_section = (sect ~= "nil") and sect or nil
+	end
+	function squad.on_register(self) s.registered = (s.registered or 0) + 1 end
+	function npc.on_register(self) s.registered = (s.registered or 0) + 1 end
+	s.originals = { smart_w = smart.STATE_Write, squad_w = squad.STATE_Write, npc_w = npc.STATE_Write }
+	rawset(_G, "smart_terrain", { se_smart_terrain = smart })
+	rawset(_G, "sim_squad_scripted", { sim_squad_scripted = squad })
+	rawset(_G, "se_stalker", { se_stalker = npc })
+	rawset(_G, "se_monster", nil)
+	rawset(_G, "sim_board", { get_sim_board = function()
+		return { assign_squad_to_smart = function(_, sq, sid) s.assigned[#s.assigned + 1] = { sq.id, sid } end }
+	end })
+	local asm = {}
+	asm.get_state = function() return s.m_data end
+	asm.CALifeStorageManager_capture_prepare_begin = function()
+		SendScriptCallback("save_state", s.m_data)
+		return true
+	end
+	asm.CALifeStorageManager_load = function(fname, id, present, data)
+		s.m_data = data or { se_object = {}, game_object = {}, actor_contacts = {} }
+		SendScriptCallback("load_state", s.m_data)
+	end
+	rawset(_G, "alife_storage_manager", asm)
+	s.asm = asm
+	xr_logic.save_obj = function(o, p)
+		local st = db.storage[o:id()]
+		p:w_stringZ(st.ini_filename or "")
+		p:w_stringZ(st.section_logic or "")
+		p:w_stringZ(st.active_section or "")
+		p:w_stringZ(st.gulag_name or "")
+	end
+	s.originals.save_obj = xr_logic.save_obj
+	xr_logic.xms_saves_wrapped = nil
+	db.offline_objects = db.offline_objects or {}
+	return s
+end
+
+-- a new Lua state: the stock scripts, then this file as one of the [common] scripts, then
+-- on_game_start; the save is read by the storage manager before any object
+local function lua_state(m_data)
+	mock.rebuild()
+	stock = make_stock()
+	local _ = xms_saves
+	xms_saves.on_game_start()
+	stock.asm.CALifeStorageManager_load("save", "0", true, m_data)
+	return stock
+end
+local function save_game() stock.asm.CALifeStorageManager_capture_prepare_begin("save") end
+
+local MODS = {
+	{ id = "mod_m", root = FIXTURES .. "\\no_assets" },
+	{ id = "mod_r", root = FIXTURES .. "\\no_assets" },
+}
+local function module_entry(id) for _, m in ipairs(MODS) do if (m.id == id) then return m end end end
+mock.setup({ scripts_dir = SCRIPTS, config_dir = CONFIG, appdata_dir = HERE, modules = MODS, verbose = verbose })
+mock.fresh()
+
+section("(z30) xms.storage: the module's own table, written back by itself at every save")
+lua_state()
+do
+	check(xms.storage_api == 1 and type(xms.storage) == "function", "the api is there for every Lua state")
+	local t = xms.storage("mod_m")
+	check(type(t) == "table" and next(t) == nil, "a new game: an empty table")
+	check(xms.storage("mod_m") == t, "the same table on every call")
+	t.counter = 3
+	t.name = "Волк"
+	t.flags = { a = true, b = false, list = { 1, 2.5, "x" } }
+	t.when = game.CTime()
+	t.fn = function() end
+	t[true] = "a boolean key"
+	mock.clear_log()
+	save_game()
+	check(mock.log_count("xms.storage%(mod_m%): fn is a function and is not saved") == 1, "a value that cannot be saved is refused with one line naming it")
+	save_game()
+	check(mock.log_count("fn is a function") == 1, "and only once")
+	local blob = mock.blobs["mod_m"]
+	check(type(blob) == "string" and string.sub(blob, 1, 1) == string.char(0), "the chunk now holds more than the module's own string")
+	xms.save_data("mod_r", "raw bytes " .. string.char(0, 1, 2))
+	check(mock.blobs["mod_r"] == "raw bytes " .. string.char(0, 1, 2), "a module that only saves its own string gets exactly that string in its chunk")
+	xms.save_data("mod_m", "my own")
+	check(xms.load_data("mod_m") == "my own", "beside its storage, a module's own string reads back as it was written")
+end
+lua_state()
+do
+	local t = xms.storage("mod_m")
+	check(t.counter == 3 and t.name == "Волк", "a load: the values are back")
+	check(t.flags and t.flags.a == true and t.flags.b == false and t.flags.list[2] == 2.5 and t.flags.list[3] == "x", "nested tables too")
+	check(t.when ~= nil and getmetatable(t.when) == getmetatable(game.CTime()), "a game time is a game time again")
+	check(t.fn == nil and t[true] == "a boolean key", "what was refused is not there, the rest is")
+	check(xms.load_data("mod_m") == "my own", "the module's own string survived the storage")
+	xms.save_data("mod_m", "changed")
+	save_game()
+	check(xms.storage("mod_m").counter == 3, "and the module's own string does not erase the storage")
+end
+lua_state()
+do
+	check(xms.storage("mod_m").counter == 3 and xms.load_data("mod_m") == "changed", "both users of the chunk keep their part")
+	-- a module away: nothing of the script side can write its chunk
+	local kept = mock.blobs["mod_m"]
+	module_entry("mod_m").enabled = false
+	lua_state()
+	check(xms.storage("mod_m") == nil, "a module that is away has no storage to hand out")
+	check(xms.save_data("mod_m", "x") == false and xms.load_data("mod_m") == nil, "and its chunk can be neither written nor read")
+	save_game()
+	check(mock.blobs["mod_m"] == kept, "a save made without it leaves its chunk byte for byte")
+	module_entry("mod_m").enabled = true
+	lua_state()
+	check(xms.storage("mod_m").counter == 3, "the module is back: so is its storage")
+	-- read before the save is: the same table, refreshed with what the save holds
+	mock.rebuild()
+	stock = make_stock()
+	local _ = xms_saves
+	local early = xms.storage("mod_m")
+	early.counter = 99
+	xms_saves.on_game_start()
+	stock.asm.CALifeStorageManager_load("save", "0", true, nil)
+	check(xms.storage("mod_m") == early and early.counter == 3, "a table handed out before the save was read gets the save's contents")
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) a smart terrain of the game: a module's NPCs are kept out of what it writes")
+mock.owners = { [501] = "mod_m", [502] = "mod_m", [910] = "mod_m", [960] = "mod_m" }
+lua_state()
+do
+	local function a_smart()
+		return obj(900, "esc_smart_terrain_5_7", {
+			arriving_npc = { [601] = true, [501] = true },
+			npc_info = {
+				[602] = { job = { section = "logic@walker_1" }, begin_job = true, need_job = "nil" },
+				[502] = { job = { section = "logic@guard_2" }, begin_job = false, need_job = "logic@camp" },
+			},
+			faction = "stalker",
+		})
+	end
+	-- byte for byte when nothing of a module is involved
+	local plain = obj(901, "esc_smart_terrain_1_1", { arriving_npc = { [601] = true }, npc_info = { [602] = { begin_job = true, need_job = "nil" } }, faction = "stalker" })
+	local p1, p2 = new_packet(), new_packet()
+	stock.originals.smart_w(plain, p1)
+	smart_terrain.se_smart_terrain.STATE_Write(plain, p2)
+	check(smart_terrain.se_smart_terrain.STATE_Write ~= stock.originals.smart_w, "the smart terrain writer is wrapped")
+	check(same_packet(p1, p2), "a smart terrain with nothing of a module writes exactly what it always did")
+	local s = a_smart()
+	local p = new_packet()
+	smart_terrain.se_smart_terrain.STATE_Write(s, p)
+	check(not packet_has(p, 501) and not packet_has(p, 502), "no id of a module's NPC reaches the stock record")
+	check(packet_has(p, 601) and packet_has(p, 602) and packet_has(p, "logic@walker_1"), "the game's own NPCs are written with their jobs")
+	check(s.arriving_npc[501] == true and s.npc_info[502] and s.npc_info[502].job.section == "logic@guard_2", "and the smart terrain still holds them all after the write")
+	local r = xms_saves.record("mod_m", "smart", 900)
+	check(r and r.name == "esc_smart_terrain_5_7" and r.a[1] == 501 and r.i[502] and r.i[502].j == "logic@guard_2" and r.i[502].n == "logic@camp", "what was taken out is kept for the module")
+	saved.smart = p
+end
+lua_state()
+do
+	local s = obj(900, "esc_smart_terrain_5_7", {})
+	saved.smart.i = 0
+	smart_terrain.se_smart_terrain.STATE_Read(s, saved.smart)
+	check(s.arriving_npc[601] == false and s.arriving_npc[501] == false, "a load with the module: the NPC it expected is expected again")
+	check(s.load_info[602] and s.load_info[502] and s.load_info[502].job_section == "logic@guard_2" and s.load_info[502].begin_job == false
+		and s.load_info[502].need_job == "logic@camp", "and the one it held is back on its job")
+	-- a stranger under the same id is not given the record
+	local other = obj(900, "some_other_smart", {})
+	saved.smart.i = 0
+	smart_terrain.se_smart_terrain.STATE_Read(other, saved.smart)
+	check(other.arriving_npc[501] == nil and other.load_info[502] == nil, "an object of another name under the id gets nothing")
+
+	module_entry("mod_m").enabled = false
+	local kept = mock.blobs["mod_m"]
+	lua_state()
+	local away = obj(900, "esc_smart_terrain_5_7", {})
+	saved.smart.i = 0
+	smart_terrain.se_smart_terrain.STATE_Read(away, saved.smart)
+	check(away.arriving_npc[501] == nil and away.load_info[502] == nil, "a load without the module: none of its NPCs is in the smart terrain")
+	check(away.arriving_npc[601] == false and away.load_info[602] ~= nil, "the game's own are")
+	-- the session without it plays on and saves
+	away.npc_info = { [602] = { job = { section = "logic@walker_1" }, begin_job = true, need_job = "nil" } }
+	local p = new_packet()
+	smart_terrain.se_smart_terrain.STATE_Write(away, p)
+	save_game()
+	check(mock.blobs["mod_m"] == kept, "a save without the module: what is kept for it stays byte for byte")
+	saved.smart_away = p
+
+	module_entry("mod_m").enabled = true
+	lua_state()
+	local back = obj(900, "esc_smart_terrain_5_7", {})
+	saved.smart_away.i = 0
+	smart_terrain.se_smart_terrain.STATE_Read(back, saved.smart_away)
+	check(back.arriving_npc[501] == false and back.load_info[502] and back.load_info[502].job_section == "logic@guard_2",
+		"the module is back: its NPCs return to the smart terrain where they were")
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) a squad of the game: a target, a smart or a respawn point of a module is written as none")
+lua_state()
+do
+	local plain = obj(950, "stalker_sim_squad_1", { current_target_id = 900, assigned_target_id = 900, smart_id = 900 })
+	local p1, p2 = new_packet(), new_packet()
+	stock.originals.squad_w(plain, p1)
+	sim_squad_scripted.sim_squad_scripted.STATE_Write(plain, p2)
+	check(same_packet(p1, p2), "a squad with nothing of a module writes exactly what it always did")
+	local sq = obj(951, "stalker_sim_squad_2", { current_target_id = 910, assigned_target_id = 910, smart_id = 910,
+		respawn_point_id = 900, respawn_point_prop_section = "stalker_sim_squad_novice" })
+	local p = new_packet()
+	sim_squad_scripted.sim_squad_scripted.STATE_Write(sq, p)
+	check(not packet_has(p, "910") and packet_has(p, "900"), "the module's smart is written as none, the game's respawn point as itself")
+	check(sq.smart_id == 910 and sq.assigned_target_id == 910, "and the squad still has its target after the write")
+	saved.squad = p
+end
+lua_state()
+do
+	local sq = obj(951, "stalker_sim_squad_2", {})
+	saved.squad.i = 0
+	sim_squad_scripted.sim_squad_scripted.STATE_Read(sq, saved.squad)
+	check(sq.current_target_id == 910 and sq.assigned_target_id == 910 and sq.smart_id == 910, "a load with the module: target and smart are back")
+	local last = stock.assigned[#stock.assigned]
+	check(last and last[1] == 951 and last[2] == 910, "and the squad is assigned to its smart as the stock reader does")
+	-- the squad found another target while the module was away: that one stays
+	local moved = new_packet()
+	for _, v in ipairs({ "900", "900", "nil", "nil", "900" }) do moved:w_stringZ(v) end
+	local sq2 = obj(951, "stalker_sim_squad_2", {})
+	sim_squad_scripted.sim_squad_scripted.STATE_Read(sq2, moved)
+	check(sq2.smart_id == 900 and sq2.assigned_target_id == 900, "a squad that went elsewhere meanwhile is not sent back")
+	-- by registration the module's smart is in the registry - or it was dropped with its section
+	mock.se[910] = { id = 910, register_npc = function() end }
+	sim_squad_scripted.sim_squad_scripted.on_register(sq)
+	check(sq.smart_id == 910 and sq.assigned_target_id == 910 and stock.registered == 1, "a target that is there stays, and the stock registration runs")
+	local sq3 = obj(951, "stalker_sim_squad_2", {})
+	saved.squad.i = 0
+	sim_squad_scripted.sim_squad_scripted.STATE_Read(sq3, saved.squad)
+	mock.se[910] = nil
+	mock.clear_log()
+	sim_squad_scripted.sim_squad_scripted.on_register(sq3)
+	check(sq3.smart_id == nil and sq3.assigned_target_id == nil and sq3.current_target_id == nil, "a target the module no longer has is set to none")
+	check(mock.log_has("smart_id names nothing any more"), "with a line")
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) an NPC of the game in a module's smart terrain, and a logic file the quest runtime made")
+mock.blobs["xms.nq"] = xms_nq_util.encode({ v = 1, quests = {}, orders = { ["600"] = { tag = "xms_ord_600", by = "mod_m.guard_quest" } } })
+lua_state()
+do
+	db.offline_objects[700] = { active_section = "walker@xms_ord_600" }
+	local npc = obj(700, "esc_stalker_700", { m_smart_terrain_id = 910 })
+	local p = new_packet()
+	se_stalker.se_stalker.STATE_Write(npc, p)
+	check(p.out[1][2] == 65535, "the module's smart terrain is not written into a stalker of the game")
+	check(p.out[2][2] == "nil", "nor the section of a logic file the runtime made")
+	check(npc.m_smart_terrain_id == 910 and db.offline_objects[700].active_section == "walker@xms_ord_600", "and the NPC keeps both")
+	saved.npc = p
+	-- xr_logic.save_obj, the packet path
+	db.storage[600] = { ini_filename = "*xms_ord_600", section_logic = "logic@xms_ord_600", active_section = "walker@xms_ord_600", gulag_name = "" }
+	local o600 = { id = function() return 600 end }
+	local lp = new_packet()
+	xr_logic.save_obj(o600, lp)
+	check(lp.out[1][2] == "<customdata>" and lp.out[2][2] == "logic" and lp.out[3][2] == "", "a game NPC on a standing order is saved with its own logic")
+	check(db.storage[600].ini_filename == "*xms_ord_600", "and keeps running the order")
+	-- the .scoc path
+	stock.m_data.game_object[600] = { name = "esc_stalker_600", xr_logic = { ini_filename = "*xms_ord_600", section_logic = "logic@xms_ord_600", active_section = "walker@xms_ord_600", gulag_name = "" } }
+	stock.m_data.game_object[501] = { name = "mod_m_npc", xr_logic = { ini_filename = "*xms_ord_600", active_section = "walker@xms_ord_600" } }
+	stock.m_data.game_object[602] = { name = "esc_stalker_602", xr_logic = { ini_filename = "*esc_smart_terrain_5_7", active_section = "logic@walker_1" } }
+	save_game()
+	local x = stock.m_data.game_object[600].xr_logic
+	check(x.ini_filename == "<customdata>" and x.active_section == nil, "in .scoc too: the NPC's own logic, its section chosen anew on load")
+	check(stock.m_data.game_object[501].xr_logic.ini_filename == "*xms_ord_600", "a module's NPC keeps it: its record is the module's")
+	check(stock.m_data.game_object[602].xr_logic.ini_filename == "*esc_smart_terrain_5_7", "a smart terrain's job file is left alone")
+end
+lua_state()
+do
+	local npc = obj(700, "esc_stalker_700", {})
+	saved.npc.i = 0
+	se_stalker.se_stalker.STATE_Read(npc, saved.npc)
+	check(npc.m_smart_terrain_id == 910, "a load with the module: the NPC belongs to its smart terrain again")
+	mock.se[910] = { id = 910, register_npc = function() end }
+	se_stalker.se_stalker.on_register(npc)
+	check(npc.m_smart_terrain_id == 910, "it stays when the smart terrain is there at registration")
+	local gone = obj(700, "esc_stalker_700", {})
+	saved.npc.i = 0
+	se_stalker.se_stalker.STATE_Read(gone, saved.npc)
+	mock.se[910] = nil
+	se_stalker.se_stalker.on_register(gone)
+	check(gone.m_smart_terrain_id == 65535, "and is cleared when the module no longer has it: the engine would follow it to nothing")
+	local other = new_packet()
+	other:w_u16(900) other:w_stringZ("nil")
+	local npc2 = obj(700, "esc_stalker_700", {})
+	se_stalker.se_stalker.STATE_Read(npc2, other)
+	check(npc2.m_smart_terrain_id == 900, "one that found another smart while the module was away keeps it")
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) .scoc: tasks of task_manager.ltx a module made, and a module's companions")
+mock.section_owners = { mod_m_task = "mod_m" }
+lua_state()
+do
+	local live_npcs = { [501] = true, [601] = true }
+	local fill = function(m)
+		m.task_info = { stock_task = true, mod_m_task = true }
+		m.task_objects = { stock_task = { status = "selected" }, mod_m_task = { status = "selected", stage = 2, inited_time = game.CTime() } }
+		m.companion_squads = { [950] = false, [960] = false }
+		m.non_task_companions = live_npcs
+	end
+	RegisterScriptCallback("save_state", fill)
+	save_game()
+	local m = stock.m_data
+	check(m.task_info.stock_task == true and m.task_info.mod_m_task == nil and m.task_objects.mod_m_task == nil, "a module's task leaves the stock table")
+	check(m.companion_squads[950] == false and m.companion_squads[960] == nil, "a module's companion squad leaves it too")
+	check(m.non_task_companions[601] == true and m.non_task_companions[501] == nil, "and a module's companion")
+	check(live_npcs[501] == true, "the companions script's own table is untouched")
+	local tr = xms_saves.record("mod_m", "task", "manager")
+	check(tr and tr.mod_m_task and tr.mod_m_task.stage == 2, "the task is kept for the module")
+	saved.m_data = { task_info = m.task_info, task_objects = m.task_objects, companion_squads = m.companion_squads, non_task_companions = m.non_task_companions, se_object = {}, game_object = {}, actor_contacts = {} }
+end
+do
+	local seen = nil
+	mock.rebuild()
+	stock = make_stock()
+	local _ = xms_saves
+	xms_saves.on_game_start()
+	RegisterScriptCallback("load_state", function(m) seen = { task = m.task_info and m.task_info.mod_m_task, stage = m.task_objects and m.task_objects.mod_m_task and m.task_objects.mod_m_task.stage,
+		squad = m.companion_squads and m.companion_squads[960], npc = m.non_task_companions and m.non_task_companions[501] } end)
+	stock.asm.CALifeStorageManager_load("save", "0", true, copy(saved.m_data))
+	check(seen and seen.task == true and seen.stage == 2, "a load with the module: the task is in the table before any reader sees it")
+	check(seen and seen.squad == false and seen.npc == true, "and so are its companions")
+	module_entry("mod_m").enabled = false
+	seen = nil
+	mock.rebuild()
+	stock = make_stock()
+	local _ = xms_saves
+	xms_saves.on_game_start()
+	RegisterScriptCallback("load_state", function(m) seen = { task = m.task_info and m.task_info.mod_m_task, squad = m.companion_squads and m.companion_squads[960] } end)
+	stock.asm.CALifeStorageManager_load("save", "0", true, copy(saved.m_data))
+	check(seen and seen.task == nil and seen.squad == nil, "a load without the module: neither is there")
+	module_entry("mod_m").enabled = true
+end
+if (failed > 0) then fail_dump() end
+
+section("(z30) without the engine's ownership calls nothing is wrapped")
+mock.no_saves_api = true
+lua_state()
+do
+	check(smart_terrain.se_smart_terrain.STATE_Write == stock.originals.smart_w and sim_squad_scripted.sim_squad_scripted.STATE_Write == stock.originals.squad_w
+		and se_stalker.se_stalker.STATE_Write == stock.originals.npc_w and xr_logic.save_obj == stock.originals.save_obj, "the stock functions are the stock functions")
+	check(type(xms.storage) == "function", "xms.storage is there all the same")
+end
+mock.no_saves_api = nil
+mock.owners = {}
+mock.section_owners = {}
+xr_logic.save_obj = nil
+rawset(_G, "smart_terrain", nil) rawset(_G, "sim_squad_scripted", nil) rawset(_G, "se_stalker", nil)
+rawset(_G, "sim_board", orig_sim_board) rawset(_G, "alife_storage_manager", nil)
+mock.rebuild()
+if (failed > 0) then fail_dump() end
+end)()
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

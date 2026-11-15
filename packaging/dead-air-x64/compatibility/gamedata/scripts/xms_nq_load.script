@@ -1823,7 +1823,7 @@ local SCAN_KINDS = { { mask = "*.nqasset", kind = "quest" },
 
 function scan()
 	local all = { quests = {}, order = {}, invalid = {}, invalid_by_uid = {}, files = 0, modules = 0,
-				  behaviours = {}, behaviour_order = {} }
+				  behaviours = {}, behaviour_order = {}, present = {} }
 	if not (xms and xms.list_files and xms.read_file) then return all end
 	local ok, mods = pcall(xms.modules)
 	if not (ok and type(mods) == "table") then return all end
@@ -1835,6 +1835,10 @@ function scan()
 			if (ok2 and r == false) then applies = false end
 		end
 		if (applies) then
+			-- a module that is here; `complete` once every asset of it was listed and read, which is
+			-- what lets a record whose asset is not among them be told apart from one we failed to see
+			all.present[m.id] = true
+			local complete = true
 			-- the module's global variables, before any graph that names them is checked
 			local okm, manifest = pcall(xms.read_file, m.id, "mod.ltx")
 			local defaults, names = parse_globals(okm and manifest or nil)
@@ -1843,6 +1847,7 @@ function scan()
 			local counted, seen_ids = false, {}
 			for _, sk in ipairs(SCAN_KINDS) do
 				local ok3, files = pcall(xms.list_files, m.id, "", sk.mask, true)
+				if not (ok3 and type(files) == "table") then complete = false end
 				if (ok3 and type(files) == "table" and #files > 0) then
 					if not (counted) then all.modules = all.modules + 1 counted = true end
 					table.sort(files)
@@ -1872,11 +1877,14 @@ function scan()
 								if not (all.invalid_by_uid[q.uid]) then all.invalid_by_uid[q.uid] = q end
 							end
 						else
+							complete = false
 							util.err("%s/%s: cannot read file", tostring(m.id), tostring(rel))
 						end
 					end
 				end
 			end
+			all.complete = all.complete or {}
+			all.complete[m.id] = complete
 		end
 	end
 	check_quest_refs(all)
