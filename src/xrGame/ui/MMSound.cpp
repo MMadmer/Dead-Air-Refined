@@ -62,20 +62,28 @@ void CMMSound::whell_Click()
 void CMMSound::whell_UpdateMoving(float frequency) { m_whell.set_frequency(frequency); }
 void CMMSound::music_Play()
 {
-    if (m_play_list.empty())
+    // The streamer mode: a copyrighted track without a replacement is passed over - one with a replacement plays
+    // it, the sound engine sees to that. Nothing left is silence.
+    xr_vector<const Entry*> pool;
+    pool.reserve(m_play_list.size());
+    for (const Entry& entry : m_play_list)
+        if (!psSoundStreamerMode || snd_playable(entry.name.c_str()))
+            pool.push_back(&entry);
+    m_silent = pool.empty();
+    if (m_silent)
         return;
 
     float total = 0.f;
-    for (const Entry& entry : m_play_list)
-        total += entry.weight;
+    for (const Entry* entry : pool)
+        total += entry->weight;
     float roll = Random.randF(total);
-    const Entry* picked = &m_play_list.back();
-    for (const Entry& entry : m_play_list)
+    const Entry* picked = pool.back();
+    for (const Entry* entry : pool)
     {
-        roll -= entry.weight;
+        roll -= entry->weight;
         if (roll <= 0.f)
         {
-            picked = &entry;
+            picked = entry;
             break;
         }
     }
@@ -105,13 +113,14 @@ void CMMSound::music_Play()
         m_music[1].destroy();
     }
     m_music[0].set_volume(picked->volume);
+    m_silent = !m_music[0]._feedback();
 }
 
 void CMMSound::music_Update()
 {
     // a menu pauses the game, so a list that moves on has to look regardless - a second apart, a sound that
     // will not start must not be tried every frame
-    if (m_next_track)
+    if (m_next_track || m_silent)
     {
         if (Device.dwTimeContinual < m_next_try)
             return;

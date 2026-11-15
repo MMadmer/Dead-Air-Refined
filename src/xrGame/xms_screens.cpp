@@ -206,6 +206,39 @@ XmsScreens::Choice XmsScreens::Choose(ScreenSurface surface, pcstr level)
 
 XmsScreens::Choice& XmsScreens::CurrentMenu() { return s_menu; }
 
+XmsScreens::Radio XmsScreens::RadioMusic()
+{
+    Radio radio;
+    radio.only = claimant([](const Module& m) { return m.screens.only_radio; });
+    for (const Module& m : Modules())
+    {
+        if (m.disabled)
+            continue;
+        for (const TrackDecl& t : m.screens.tracks)
+            if (t.radio && !t.radio_name.empty())
+            {
+                // whether it is copyrighted is its sound's to say, by the name the radio plays it under
+                RadioTrack& row = radio.tracks.emplace_back();
+                row.module = &m;
+                row.track = &t;
+                row.sound = t.radio_name;
+                row.copyrighted = snd_copyrighted(t.radio_name.c_str());
+                row.streamer = snd_replacement(t.radio_name.c_str());
+            }
+        for (const PlaylistDecl& p : m.screens.playlists)
+        {
+            RadioPlaylist& row = radio.playlists.emplace_back();
+            row.module = &m;
+            row.playlist = &p;
+            for (const xr_string& id : p.tracks)
+                for (const TrackDecl& t : m.screens.tracks)
+                    if (t.id == id && !t.radio_name.empty())
+                        row.sounds.push_back(t.radio_name);
+        }
+    }
+    return radio;
+}
+
 bool XmsScreens::Force(pcstr surface, pcstr what)
 {
     ScreenSurface s;
@@ -238,10 +271,33 @@ void XmsScreens::Describe()
                 d.show & (1u << ScreenLoading) ? " loading" : "", d.show & (1u << ScreenMenu) ? " menu" : "",
                 d.show & (1u << ScreenPause) ? " pause" : "", d.weight);
         for (const TrackDecl& t : s.tracks)
-            Msg("*   track %s: %s, weight %.2f, volume %.2f", t.id.c_str(), t.name.c_str(), t.weight, t.volume);
+        {
+            Msg("*   track %s: %s, weight %.2f, volume %.2f%s%s", t.id.c_str(), t.name.c_str(), t.weight, t.volume,
+                t.radio ? ", on the radio" : "", snd_copyrighted(t.name.c_str()) ? ", copyrighted" : "");
+            if (!t.radio_name.empty() && t.radio_name != t.name)
+                Msg("*     the radio plays it as %s", t.radio_name.c_str());
+        }
+        for (const PlaylistDecl& p : s.playlists)
+        {
+            xr_string ids;
+            for (const xr_string& id : p.tracks)
+                ids += (ids.empty() ? "" : ", ") + id;
+            Msg("*   playlist %s \"%s\": %s, %u track(s): %s", p.id.c_str(), p.title.c_str(), p.shuffle ? "shuffle" : "list",
+                u32(p.tracks.size()), ids.c_str());
+        }
+        if (s.only_radio)
+            Msg("*   radio: music only");
     }
     if (!any)
         Msg("* XMS: no module brings screens or music");
+    const Radio radio = RadioMusic();
+    Msg("* radio now: %u track(s), %u playlist(s)%s%s", u32(radio.tracks.size()), u32(radio.playlists.size()),
+        radio.only ? ", music only of " : "", radio.only ? radio.only->id.c_str() : "");
+    if (psSoundStreamerMode)
+        for (const RadioTrack& t : radio.tracks)
+            if (t.copyrighted)
+                Msg("*   streamer mode: %s %s", t.sound.c_str(),
+                    t.streamer.empty() ? "does not play" : ("plays " + t.streamer + " instead").c_str());
     for (u32 i = 0; i < ScreenSurfaceCount; ++i)
     {
         const Choice c = Choose(ScreenSurface(i), nullptr);

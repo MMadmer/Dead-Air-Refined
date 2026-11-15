@@ -7,6 +7,7 @@
 #include "SoundRender_Core.h"
 #include "SoundRender_Scene.h"
 #include "SoundRender_Emitter.h"
+#include "SoundRender_Source.h"
 
 // A tree crown, a bush, an occluder or an invisible wall is passable in the game's own material terms (a bullet does
 // not stop there): no wall for a sound either.
@@ -174,9 +175,15 @@ void CSoundRender_Scene::set_geometry_env(IReader* I)
     xr_free(_data);
 }
 
+// Every way a sound starts comes through these three. With the streamer mode on, the sound engine decides before a
+// source starts: a copyrighted sound does not start - the caller holds a sound that is not playing, as one that
+// ended at once - or the replacement it names starts in its place, as the caller asked for it (SoundRender_Rights.cpp).
 void CSoundRender_Scene::play(ref_sound& S, IGameObject* O, u32 flags, float delay)
 {
     if (!SoundRender->bPresent || !S._handle())
+        return;
+    bool flat = flags & sm_2D || S._handle()->channels_num() == 2;
+    if (psSoundStreamerMode && !SoundRender->streamer_admits(S, flat))
         return;
     S->g_object = O;
     if (S._feedback())
@@ -184,7 +191,7 @@ void CSoundRender_Scene::play(ref_sound& S, IGameObject* O, u32 flags, float del
     else
         i_play(S, flags, delay);
 
-    if (flags & sm_2D || S._handle()->channels_num() == 2)
+    if (flat)
         S._feedback()->switch_to_2D();
 
     S._feedback()->set_ignore_time_factor(flags & sm_IgnoreTimeFactor);
@@ -196,17 +203,40 @@ void CSoundRender_Scene::play_no_feedback(
     if (!SoundRender->bPresent || !S._handle())
         return;
     const ref_sound orig = S;
-    S._set(xr_new<CSound>(orig->handle));
+    CSound_source* handle = orig->handle;
+    bool flat = flags & sm_2D || handle->channels_num() == 2;
+    CSoundRender_Source* instead = nullptr;
+    if (psSoundStreamerMode)
+    {
+        bool refused = false;
+        instead = SoundRender->streamer_instead((CSoundRender_Source*)handle, refused);
+        if (refused)
+            return;
+        if (instead)
+        {
+            handle = instead;
+            flat = flat || instead->channels_num() == 2;
+        }
+    }
+    S._set(xr_new<CSound>(handle));
     S->g_type = orig->g_type;
     S->g_object = O;
-    S->dwBytesTotal = orig->dwBytesTotal;
-    S->fTimeTotal = orig->fTimeTotal;
-    S->fn_attached[0] = orig->fn_attached[0];
-    S->fn_attached[1] = orig->fn_attached[1];
+    if (instead)
+    {
+        S->dwBytesTotal = instead->bytes_total();
+        S->fTimeTotal = instead->length_sec();
+    }
+    else
+    {
+        S->dwBytesTotal = orig->dwBytesTotal;
+        S->fTimeTotal = orig->fTimeTotal;
+        S->fn_attached[0] = orig->fn_attached[0];
+        S->fn_attached[1] = orig->fn_attached[1];
+    }
 
     i_play(S, flags, delay);
 
-    if (flags & sm_2D || S._handle()->channels_num() == 2)
+    if (flat)
         S._feedback()->switch_to_2D();
 
     if (pos)
@@ -224,6 +254,9 @@ void CSoundRender_Scene::play_at_pos(ref_sound& S, IGameObject* O, const Fvector
 {
     if (!SoundRender->bPresent || !S._handle())
         return;
+    bool flat = flags & sm_2D || S._handle()->channels_num() == 2;
+    if (psSoundStreamerMode && !SoundRender->streamer_admits(S, flat))
+        return;
     S->g_object = O;
     if (S._feedback())
         ((CSoundRender_Emitter*)S._feedback())->rewind();
@@ -232,7 +265,7 @@ void CSoundRender_Scene::play_at_pos(ref_sound& S, IGameObject* O, const Fvector
 
     S._feedback()->set_position(pos);
 
-    if (flags & sm_2D || S._handle()->channels_num() == 2)
+    if (flat)
         S._feedback()->switch_to_2D();
 
     S._feedback()->set_ignore_time_factor(flags & sm_IgnoreTimeFactor);

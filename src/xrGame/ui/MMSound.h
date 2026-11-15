@@ -36,5 +36,6 @@ protected:
     };
     xr_vector<Entry> m_play_list;
     bool m_next_track{}; // a track that ends gives way to another
+    bool m_silent{};     // the last try started nothing: the next one waits a second
     u32 m_next_try{};
 };

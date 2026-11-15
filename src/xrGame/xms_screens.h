@@ -41,4 +41,30 @@ void Describe();
 
 // QA: the screen the next showings of a surface get. "game", "<module id>.<screen id>", or "off" to pick again.
 bool Force(pcstr surface, pcstr what);
+
+// The radio's music of the modules, for the scripts that make the world's radios play it (xms.radio()).
+struct RadioTrack
+{
+    const XMS::Module* module{};
+    const XMS::TrackDecl* track{};
+    xr_string sound;    // what the radio plays: a `sound` track's own name, a file's mount
+    bool copyrighted{};
+    xr_string streamer; // what plays in its place in the streamer mode; empty for none
+};
+
+struct RadioPlaylist
+{
+    const XMS::Module* module{};
+    const XMS::PlaylistDecl* playlist{};
+    xr_vector<xr_string> sounds; // its tracks' sound names, in its order
+};
+
+struct Radio
+{
+    const XMS::Module* only{}; // [radio] music = only: the last module of the load order that says so
+    xr_vector<RadioTrack> tracks; // the tracks whose `play` says radio, in load order
+    xr_vector<RadioPlaylist> playlists;
+};
+
+Radio RadioMusic();
 } // namespace XmsScreens

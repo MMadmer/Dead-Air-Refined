@@ -483,11 +483,33 @@ void parse_track_key(TrackDecl& t, pcstr key, pcstr value)
     if (0 == xr_strcmp(key, "file"))
         t.file = value;
     else if (0 == xr_strcmp(key, "play"))
+    {
         t.play = surface_mask(value);
+        xr_vector<xr_string> names;
+        split_list(lower_copy(value).c_str(), names);
+        t.radio = std::find(names.begin(), names.end(), "radio") != names.end();
+    }
     else if (0 == xr_strcmp(key, "weight"))
         t.weight = number_of(value, 1.f, 0.f, 1000.f);
     else if (0 == xr_strcmp(key, "volume"))
         t.volume = number_of(value, 1.f, 0.f, 1.f);
+    else if (0 == xr_strcmp(key, "sound"))
+        t.sound = value;
+    else if (0 == xr_strcmp(key, "copyrighted") || 0 == xr_strcmp(key, "streamer"))
+        t.stray_rights = true;
+}
+
+void parse_playlist_key(PlaylistDecl& p, pcstr key, pcstr value)
+{
+    if (0 == xr_strcmp(key, "title"))
+        p.title = display_text(value);
+    else if (0 == xr_strcmp(key, "tracks"))
+    {
+        p.tracks.clear();
+        split_list(lower_copy(value).c_str(), p.tracks);
+    }
+    else if (0 == xr_strcmp(key, "order"))
+        p.shuffle = 0 != _stricmp(value, "list");
 }
 
 template <typename Entry>
@@ -593,6 +615,29 @@ void finish_screens(Module& m)
     for (size_t i = s.tracks.size(); i-- > 0;)
     {
         TrackDecl& t = s.tracks[i];
+        if (t.stray_rights)
+            Msg("! XMS: module [%s] track [%s]: copyrighted and streamer are no keys of a track - the mark belongs in "
+                "the sound's description (.sndasset)", m.id.c_str(), t.id.c_str());
+        // `sound`: a sound of the game or of the module, played under its own name - nothing is mounted
+        if (!t.sound.empty())
+        {
+            if (!t.file.empty())
+                Msg("! XMS: module [%s] track [%s] names a file and a sound - the sound plays", m.id.c_str(),
+                    t.id.c_str());
+            t.file.clear();
+            xr_string sound = lower_copy(t.sound.c_str());
+            if (extension_of(sound) == ".ogg")
+                sound.resize(sound.size() - 4);
+            if (!plain_id(t.id) || !normalize_rel_path(sound))
+            {
+                Msg("! XMS: module [%s] track [%s] ignored - it needs an id of a-z, 0-9 and _, and a sound name "
+                    "under sounds", m.id.c_str(), t.id.c_str());
+                s.tracks.erase(s.tracks.begin() + i);
+                continue;
+            }
+            t.sound = t.name = sound;
+            continue;
+        }
         if (!plain_id(t.id) || !normalize_rel_path(t.file) || extension_of(t.file) != ".ogg")
         {
             Msg("! XMS: module [%s] track [%s] ignored - it needs an id of a-z, 0-9 and _, and an .ogg inside the module", m.id.c_str(), t.id.c_str());
@@ -602,6 +647,50 @@ void finish_screens(Module& m)
         t.name = "xms_screens\\" + folder + "\\" + t.id;
         mount("sounds\\" + t.name + ".ogg", t.file);
     }
+
+    // The radio plays a track as a sound, like any sound a script names: a track whose `play` says radio and every
+    // track a playlist names. A `sound` track is that sound; a file of the module is mounted under a name of its own.
+    const auto track_of = [&](const xr_string& id) -> TrackDecl* {
+        const auto it = std::find_if(s.tracks.begin(), s.tracks.end(), [&](const TrackDecl& t) { return t.id == id; });
+        return it == s.tracks.end() ? nullptr : &*it;
+    };
+    const auto on_radio = [&](TrackDecl& t) {
+        if (!t.radio_name.empty())
+            return;
+        if (!t.sound.empty())
+        {
+            t.radio_name = t.sound;
+            return;
+        }
+        t.radio_name = "xms_radio\\" + folder + "\\" + t.id;
+        mount("sounds\\" + t.radio_name + ".ogg", t.file);
+    };
+    for (size_t i = s.playlists.size(); i-- > 0;)
+    {
+        PlaylistDecl& p = s.playlists[i];
+        if (!plain_id(p.id))
+        {
+            Msg("! XMS: module [%s] playlist [%s] ignored - an id takes a-z, 0-9 and _", m.id.c_str(), p.id.c_str());
+            s.playlists.erase(s.playlists.begin() + i);
+            continue;
+        }
+        if (p.title.empty())
+            p.title = p.id;
+        for (size_t k = p.tracks.size(); k-- > 0;)
+        {
+            if (TrackDecl* t = track_of(p.tracks[k]))
+                on_radio(*t);
+            else
+            {
+                Msg("! XMS: module [%s] playlist [%s]: track [%s] left out - the module has no such track",
+                    m.id.c_str(), p.id.c_str(), p.tracks[k].c_str());
+                p.tracks.erase(p.tracks.begin() + k);
+            }
+        }
+    }
+    for (TrackDecl& t : s.tracks)
+        if (t.radio)
+            on_radio(t);
 }
 
 void parse_manifest(Module& m, char* text)
@@ -695,6 +784,13 @@ void parse_manifest(Module& m, char* text)
             parse_screen_key(entry_of(m.screens.screens, section + 7), key, value);
         else if (0 == strncmp(section, "track.", 6) && section[6])
             parse_track_key(entry_of(m.screens.tracks, section + 6), key, value);
+        else if (0 == strncmp(section, "playlist.", 9) && section[9])
+            parse_playlist_key(entry_of(m.screens.playlists, section + 9), key, value);
+        else if (0 == xr_strcmp(section, "radio"))
+        {
+            if (0 == xr_strcmp(key, "music"))
+                m.screens.only_radio = 0 == _stricmp(value, "only");
+        }
         else if (0 == xr_strcmp(section, "vfs"))
             m.vfs_maps.push_back({lower_copy(key), value});
         else if (0 == xr_strcmp(section, "redirects"))

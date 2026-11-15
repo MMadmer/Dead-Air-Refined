@@ -332,9 +332,84 @@ BOOL CPEDef::Load2(CInifile& ini)
         }
         Compile(m_EActionList);
     }
+#else
+    if (ini.section_exist("actions") && !LoadActions2(ini))
+        return FALSE;
 #endif
 
     return TRUE;
+}
+
+// [actions] of a loose file: `size`, then the bytes of the effect's PED_CHUNK_ACTIONLIST in hex, split over
+// data_0000, data_0001, ... in order. They become m_Actions exactly as Load copies that chunk, so the effect
+// emits what the archive's would. A list LoadActions could not take is refused here, with the file.
+bool CPEDef::LoadActions2(const CInifile& ini)
+{
+    constexpr pcstr section = "actions";
+    const auto refuse = [this](pcstr why) {
+        Msg("! Loose particle effect '%s': [actions] %s", m_Name.c_str(), why);
+        return false;
+    };
+
+    pcstr size_text = ini.line_exist(section, "size") ? ini.r_string(section, "size") : nullptr;
+    if (!size_text || !*size_text)
+        return refuse("has no size");
+    char* end = nullptr;
+    const unsigned long long declared = strtoull(size_text, &end, 10);
+    if (*end || !isdigit(u8(*size_text)) || declared > 16 * 1024 * 1024)
+        return refuse("has a size that is no byte count");
+
+    const auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
+        return -1;
+    };
+
+    xr_vector<u8> bytes;
+    bytes.reserve(size_t(declared));
+    string256 why;
+    u32 line = 0;
+    for (; bytes.size() < declared; ++line)
+    {
+        string32 key;
+        xr_sprintf(key, "data_%04u", line);
+        pcstr hex = ini.line_exist(section, key) ? ini.r_string(section, key) : nullptr;
+        if (!hex || !*hex)
+        {
+            xr_sprintf(why, "ends before %s: %zu of its %llu bytes", key, bytes.size(), declared);
+            return refuse(why);
+        }
+        for (pcstr c = hex; *c; c += 2)
+        {
+            const int high = nibble(c[0]);
+            const int low = c[1] ? nibble(c[1]) : -1;
+            if (high < 0 || low < 0)
+            {
+                xr_sprintf(why, "%s is no even run of hex digits", key);
+                return refuse(why);
+            }
+            bytes.push_back(u8(high << 4 | low));
+        }
+    }
+    string32 next;
+    xr_sprintf(next, "data_%04u", line);
+    if (bytes.size() != declared || ini.line_exist(section, next))
+    {
+        xr_sprintf(why, "holds more than its size of %llu bytes", declared);
+        return refuse(why);
+    }
+
+    IReader list(bytes.data(), bytes.size());
+    if (!bytes.empty() && !ParticleManager()->CheckActions(list, why))
+        return refuse(why);
+
+    m_Actions.clear();
+    m_Actions.w(bytes.data(), bytes.size());
+    return true;
 }
 
 void CPEDef::Save2(CInifile& ini)

@@ -71,8 +71,9 @@ struct WorldRules
     }
 };
 
-// [screens], [screen.<id>] and [track.<id>] of a manifest: the module's loading and menu screens, each a
-// stack of layers, and their music. Contract: docs/dead-air/MODDING.md, "Screens and music".
+// [screens], [screen.<id>], [track.<id>], [playlist.<id>] and [radio] of a manifest: the module's loading and menu
+// screens, each a stack of layers, their music and the radio's. Contract: docs/dead-air/MODDING.md, "Screens and
+// music".
 enum ScreenSurface : u8
 {
     ScreenLoading,
@@ -136,14 +137,29 @@ struct ScreenDecl
     xr_vector<ScreenLayer> layers; // bottom first
 };
 
+// A track's music is a file of the module (`file`), mounted under a sound name of its own, or a sound of the game
+// (`sound`), played under its own name. Whether it is copyrighted is said by that sound's description alone.
 struct TrackDecl
 {
     xr_string id;
-    xr_string file; // inside the module, '\' separators
-    xr_string name; // the sound name it is mounted under
-    u32 play{};     // the surfaces whose shuffle it joins; none: only where a screen names it
+    xr_string file;  // inside the module, '\' separators; empty for a `sound` track
+    xr_string sound; // a sound name, under sounds without the extension; wins over `file`
+    xr_string name;  // the sound name the menus and the loading screen play: `sound`, or the mount of `file`
+    u32 play{};      // the surfaces whose shuffle it joins; none: only where a screen names it
+    bool radio{false}; // `play` says radio: the radios of the world shuffle it among their music
     float weight{1.f};
     float volume{1.f};
+    xr_string radio_name; // the sound name the radio plays; empty when no radio plays it
+    bool stray_rights{false}; // the manifest wrote copyrighted / streamer here, where they mean nothing
+};
+
+// [playlist.<id>] of a manifest: a station of the radio, the module's tracks in an order.
+struct PlaylistDecl
+{
+    xr_string id;
+    xr_string title;              // text or a string table id, as [module] name
+    xr_vector<xr_string> tracks;  // track ids of the module
+    bool shuffle{true};           // `order = shuffle`; false: `order = list`
 };
 
 struct ScreensRules
@@ -152,8 +168,10 @@ struct ScreensRules
     bool only_screens[2]{};
     bool only_music[2]{};
     bool next_track[2]{}; // a track that ends gives way to another instead of starting again
+    bool only_radio{false}; // [radio] music = only: this module's radio tracks are the radio's whole music
     xr_vector<ScreenDecl> screens;
     xr_vector<TrackDecl> tracks;
+    xr_vector<PlaylistDecl> playlists;
     static u32 Side(ScreenSurface s) { return s == ScreenLoading ? 0 : 1; }
 };
 

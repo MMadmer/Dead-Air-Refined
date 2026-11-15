@@ -14,12 +14,21 @@ A track of the manifest joins the radio with `radio` in its `play`:
 
 ```ini
 [track.night_road]
-file        = music\night_road.ogg
-play        = radio          ; with loading or menu as well, if it plays there too
-weight      = 2              ; how often, against the other tracks of the radio (a game track weighs 1)
-volume      = 0.8            ; scales the radio's own volume, which its logic may set
-copyrighted = true           ; a commercial recording: not played in the streamer mode
-streamer    = night_road_free ; optional: a track of this module (or a sound name) played instead
+sound  = music\my_mod\night_road  ; a sound the module ships (or any sound of the game); file = <a file of the
+                                  ; module> instead plays a file, which is never copyrighted
+play   = radio                    ; with loading or menu as well, if it plays there too
+weight = 2                        ; how often, against the other tracks of the radio (a game track weighs 1)
+volume = 0.8                      ; scales the radio's own volume, which its logic may set
+```
+
+and, for a commercial recording, its description beside it, `gamedata\sounds\music\my_mod\night_road.sndasset`:
+
+```lua
+return {
+  snd = 1,
+  copyrighted = true,                          -- not played in the streamer mode
+  streamer = [[music\my_mod\night_road_free]], -- optional: a sound played in its place
+}
 ```
 
 The radios of the world shuffle such tracks among the game's own radio music. A track never plays
@@ -48,12 +57,13 @@ playlist whose module is switched off later, the radios play everything until it
 
 ### Copyrighted
 
-A sound is copyrighted when its description says `copyrighted = true` (a `.sndasset`), when its
-manifest track says so, or when the game's own list names it (below). In the streamer mode the engine
-refuses to start such a sound by itself, from any script and from the engine; the radio does not even
-try it: a copyrighted track with a replacement (`streamer =` of the track or of the description, a
-sound that is not copyrighted itself) plays the replacement in its place, so a playlist keeps its
-length and its order, and one without is passed over. A radio with nothing left is silent and starts
+A sound is copyrighted when its description says `copyrighted = true` (a `.sndasset`), else when the
+game's own list names it (below); that is the one place it is said - a track of the manifest carries no
+such key, so a track that is copyrighted is a `sound` track whose description says so. In the streamer
+mode the engine refuses to start such a sound by itself, from any script and from the engine; the radio
+does not even try it: a copyrighted track with a replacement (`streamer =` of the description, a sound
+that is not copyrighted itself) plays the replacement in its place, so a playlist keeps its length and
+its order, and one without is passed over. A radio with nothing left is silent and starts
 again as soon as something may play - the mode switched off, the station changed. The same choice
 holds wherever a script picks music from a list: the other themes of the radios, the 3d themes of
 `script_sound.ltx` that pick at random (the guitar and harmonica themes among them), the combat music.

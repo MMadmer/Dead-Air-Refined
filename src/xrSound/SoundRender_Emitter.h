@@ -147,4 +147,5 @@ public:
 
 private:
     void stop_target();
+    void release_owner();
 };

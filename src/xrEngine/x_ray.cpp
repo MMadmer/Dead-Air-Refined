@@ -467,6 +467,9 @@ CApplication::CApplication(pcstr commandLine, GameModule* game, const RendererMo
     execUserScript();
     StartupProfileCheckpoint("User configuration applied");
 
+    // what the streamer mode keeps from playing: read before the sound engine starts, on this thread, where the
+    // config reader and the modules' patches of the game's list live
+    snd_rights_read();
     soundConfigurationReady.store(true, std::memory_order_release);
     soundConfigurationReady.notify_one();
     StartupProfileCheckpoint("Sound initialization released");

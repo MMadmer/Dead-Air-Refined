@@ -13,6 +13,7 @@ target_sources_grouped(
     SoundRender_Core_Processor.cpp
     SoundRender_Core_SourceManager.cpp
     SoundRender_Core_StartStop.cpp
+    SoundRender_Rights.cpp
 )
 
 target_sources_grouped(

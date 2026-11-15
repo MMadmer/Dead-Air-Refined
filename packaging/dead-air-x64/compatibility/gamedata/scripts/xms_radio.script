@@ -699,8 +699,10 @@ local function install_ph_sound()
 			self.xms_volume = me.volume
 			self.xms_written = nil
 		end
+		-- only while it plays: a sound_object's volume is read off its playing sound, and reading it from one
+		-- that is not playing - ended, refused by the streamer mode - faults the game
 		local snd = self.played_sound
-		if (snd ~= nil and self.xms_volume and self.xms_volume ~= 1) then
+		if (snd ~= nil and self.xms_volume and self.xms_volume ~= 1 and snd:playing()) then
 			local v = snd.volume
 			if (v ~= self.xms_written) then
 				local scaled = v * self.xms_volume

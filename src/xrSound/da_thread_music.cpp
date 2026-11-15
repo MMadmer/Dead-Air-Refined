@@ -224,10 +224,22 @@ std::unique_ptr<Player> s_player;
 
 void da_thread_music_play(const xr_vector<DaThreadMusicTrack>& tracks, bool next_track)
 {
+    // the streamer mode: a copyrighted track gives way to its replacement or is passed over; none left is silence
+    xr_vector<DaThreadMusicTrack> playable;
+    playable.reserve(tracks.size());
+    for (const DaThreadMusicTrack& track : tracks)
+    {
+        if (!psSoundStreamerMode || !snd_copyrighted(track.name.c_str()))
+            playable.push_back(track);
+        else if (xr_string instead = snd_replacement(track.name.c_str()); !instead.empty())
+            playable.push_back({ std::move(instead), track.weight, track.volume });
+        else
+            Msg("* [screens] music: %s is copyrighted - passed over", track.name.c_str());
+    }
     std::lock_guard guard(s_lock);
     s_player.reset();
-    if (!tracks.empty())
-        s_player = std::make_unique<Player>(tracks, next_track);
+    if (!playable.empty())
+        s_player = std::make_unique<Player>(playable, next_track);
 }
 
 void da_thread_music_stop()

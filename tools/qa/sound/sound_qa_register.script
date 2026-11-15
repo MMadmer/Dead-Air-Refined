@@ -1,0 +1,169 @@
+-- The sound QA module's registrar (tools\qa\sound\Run-SoundQa.ps1): what the streamer mode and the radio of the
+-- modules answer, and what sounds started from a script do. Every answer is a log line "SOUNDQA <name> = <value>".
+
+local function say(name, value) xms.log("SOUNDQA " .. name .. " = " .. tostring(value)) end
+
+say("api", xms.sound_api)
+say("mode", xms.streamer_mode())
+for _, n in ipairs({ "sound_qa\\cr_rep", "sound_qa\\cr_none", "sound_qa\\cr_bad", "sound_qa\\cr_missing",
+	"sound_qa\\free", "sound_qa\\listed", "sound_qa\\mask_any", "SOUND_QA/CR_REP.ogg", "music\\radio\\music_1",
+	"radio\\01\\anything", "xms_radio\\sound_qa\\t_file", "xms_screens\\sound_qa\\t_file" }) do
+	say("copyrighted " .. n, xms.sound_copyrighted(n))
+	say("replacement " .. n, xms.sound_replacement(n))
+end
+
+local r = xms.radio()
+say("radio only", r.only)
+for i, t in ipairs(r.tracks) do
+	say("radio track " .. i, table.concat({ t.module, t.id, t.sound, tostring(t.copyrighted), tostring(t.streamer),
+		tostring(t.volume), tostring(t.weight) }, "|"))
+end
+for i, p in ipairs(r.playlists) do
+	say("radio playlist " .. i, table.concat({ p.module, p.id, p.title, p.order, table.concat(p.tracks, ",") }, "|"))
+end
+get_console():execute("xms_screens")
+say("done", true)
+
+-- ---- a new game: sounds started from a script -------------------------------------------------------------
+local held = {}
+local t0, step = nil, 0
+
+local function start(tag, name, how)
+	local a = db.actor
+	local s = sound_object(name)
+	if (how == "2d") then
+		s:play(a, 0, sound_object.s2d)
+	elseif (how == "looped") then
+		s:play_at_pos(a, a:position(), 0, sound_object.s3d + sound_object.looped)
+	else
+		s:play_at_pos(a, a:position(), 0, sound_object.s3d)
+	end
+	say("play " .. tag, s:playing())
+	say("length " .. tag, s:length())
+	held[tag] = s
+	return s
+end
+
+-- a radio of the level - a ph_sound object on a radio theme - else any object with custom data of its own
+local function find_stock_custom_data()
+	local sim = alife()
+	local any
+	for id = 1, 65534 do
+		local se = sim:object(id)
+		if (se and se:section_name() ~= "sound_qa_radio") then
+			local ok, ini = pcall(se.spawn_ini, se)
+			if (ok and ini and ini:section_exist("logic") and ini:line_exist("logic", "active")) then
+				local active = ini:r_string("logic", "active") or ""
+				if (string.find(active, "^ph_sound") and ini:section_exist(active) and ini:line_exist(active, "snd")) then
+					return "radio|" .. se:name() .. "|" .. se:section_name() .. "|" .. active .. "|" .. tostring(ini:r_string(active, "snd"))
+				end
+				any = any or ("logic|" .. se:name() .. "|" .. se:section_name() .. "|" .. active)
+			end
+		end
+	end
+	return any
+end
+
+local radio_id
+
+local function begin()
+	local a = db.actor
+	start("none 2d", "sound_qa\\cr_none", "2d")
+	start("none 3d", "sound_qa\\cr_none", "3d")
+	start("none looped", "sound_qa\\cr_none", "looped")
+	start("bad 2d", "sound_qa\\cr_bad", "2d")
+	start("missing 3d", "sound_qa\\cr_missing", "3d")
+	start("listed 2d", "sound_qa\\listed", "2d")
+	start("mask 3d", "sound_qa\\mask_any", "3d")
+	if (getFS():exist("$game_sounds$", "music\\radio\\music_1.ogg")) then
+		start("game radio 3d", "music\\radio\\music_1", "3d")
+	else
+		say("play game radio 3d", "absent")
+	end
+	say("rep own length", sound_object("sound_qa\\cr_rep"):length())
+	say("free own length", sound_object("sound_qa\\free"):length())
+	start("rep 3d", "sound_qa\\cr_rep", "3d")
+	start("rep looped", "sound_qa\\cr_rep", "looped")
+	start("free 2d", "sound_qa\\free", "2d")
+	start("radio file", "xms_radio\\sound_qa\\t_file", "3d")
+	start("radio sound", "sound_qa\\cr_rep", "2d")
+	held["rep looped"]:stop()
+
+	-- a radio whose custom_data names a file, and one of the level whose custom data is its own text
+	local p = a:position()
+	p.x = p.x + 1.5
+	p.y = p.y + 0.3
+	local se = alife():create("sound_qa_radio", p, a:level_vertex_id(), a:game_vertex_id())
+	radio_id = se and se.id
+	local ini = se and se:spawn_ini()
+	say("radio se ini", ini and ini:section_exist("xms_radio") and ini:r_string("xms_radio", "playlist") or "<none>")
+	say("stock custom data", find_stock_custom_data() or "<none>")
+end
+
+-- the steps, by the clock of the level; true when the test is over
+local t_level, t0, step = nil, nil, 0
+local function tick()
+	local now = time_global()
+	t_level = t_level or now
+	if (not t0) then
+		-- the level settles first: the loading screen, the key it waits for
+		if (now - t_level > 2000) then
+			say("level", level.name())
+			begin()
+			t0 = time_global()
+		end
+		return false
+	end
+	if (step == 0 and now - t0 > 3000) then
+		step = 1
+		say("rep ended", not held["rep 3d"]:playing())
+		say("rep length after", held["rep 3d"]:length())
+		say("free ended", not held["free 2d"]:playing())
+		get_console():execute("snd_streamer_mode 0")
+		say("mode now", xms.streamer_mode())
+		local s = sound_object("sound_qa\\cr_none")
+		s:play(db.actor, 0, sound_object.s2d + sound_object.looped)
+		held.switch = s
+		say("off plays", s:playing())
+	elseif (step == 1 and now - t0 > 4500) then
+		step = 2
+		say("off still plays", held.switch:playing())
+		get_console():execute("snd_streamer_mode 1")
+	elseif (step == 2 and now - t0 > 5500) then
+		step = 3
+		say("switched on stops", not held.switch:playing())
+		say("refused stays silent", not held["none 2d"]:playing() and not held["none 3d"]:playing())
+	elseif (step == 3) then
+		local obj = radio_id and level.object_by_id(radio_id)
+		if (obj or now - t0 > 60000) then
+			local ini = obj and obj:spawn_ini()
+			say("radio online", obj ~= nil)
+			say("radio obj ini", ini and ini:section_exist("xms_radio") and ini:r_string("xms_radio", "playlist") or "<none>")
+			say("radio obj logic", ini and ini:section_exist("logic") and ini:r_string("logic", "active") or "<none>")
+			if (obj and xms_radio and xms_radio.get) then
+				local binding, from, now_plays = xms_radio.get(obj)
+				say("radio binding", tostring(binding) .. "|" .. tostring(from) .. "|" .. tostring(now_plays))
+			end
+			say("game done", true)
+			return true
+		end
+	end
+	return false
+end
+
+-- A new game starts on fake_start and jumps to the level the new-game screen picked. A window on a hidden desktop
+-- has no focus: the level would pause itself, and a paused level runs no actor callback - a level call does.
+local begun = false
+RegisterScriptCallback("actor_on_first_update", function()
+	get_console():execute("rs_always_active on")
+	get_console():execute("g_pause_in_background 0")
+	get_console():execute("main_menu off")
+	pcall(function() device():pause(false) end)
+	if (begun or level.name() == "fake_start") then return end
+	begun = true
+	level.add_call(function()
+		pcall(function() device():pause(false) end)
+		return tick()
+	end, function() end)
+end)
+

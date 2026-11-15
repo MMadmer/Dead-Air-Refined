@@ -280,11 +280,7 @@ void CSoundRender_Emitter::update(float fTime, float dt)
             Event_Propagade();
     }
     else if (owner_data)
-    {
-        VERIFY(this == owner_data->feedback);
-        owner_data->feedback = 0;
-        owner_data = 0;
-    }
+        release_owner();
 }
 
 IC void volume_lerp(float& c, float t, float s, float dt)

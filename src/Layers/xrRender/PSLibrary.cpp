@@ -211,6 +211,9 @@ void CPSLibrary::LoadLooseOverrides()
         return;
 
     u32 replaced_ped = 0, added_ped = 0, replaced_pgd = 0, added_pgd = 0, failed = 0;
+    // the action lists the files carried: how many, their bytes, and their CRC-32s XORed, whatever the order
+    u32 with_actions = 0, action_crc = 0;
+    size_t action_bytes = 0;
     bool appended = false;
 
     string_path fn, p_dir, p_name, p_ext, name;
@@ -232,6 +235,12 @@ void CPSLibrary::LoadLooseOverrides()
                 xr_delete(def);
                 ++failed;
                 continue;
+            }
+            if (ini.section_exist("actions"))
+            {
+                ++with_actions;
+                action_bytes += def->m_Actions.size();
+                action_crc ^= crc32(def->m_Actions.pointer(), u32(def->m_Actions.size()));
             }
 
             const PS::PEDIt it = FindPEDIt(name);
@@ -286,6 +295,9 @@ void CPSLibrary::LoadLooseOverrides()
 
     Msg("* Loose particles: %u effects replaced, %u added; %u groups replaced, %u added; %u failed",
         replaced_ped, added_ped, replaced_pgd, added_pgd, failed);
+    if (with_actions)
+        Msg("* Loose particles: %u effect(s) carry their action list, %zu bytes, crc %08x", with_actions, action_bytes,
+            action_crc);
 }
 
 void CPSLibrary::OnDestroy()

@@ -337,6 +337,57 @@ size_t CParticleManager::LoadActions(int alist_id, IReader& R)
     return pa->size();
 }
 
+// What LoadActions reads without meeting a type CreateAction cannot make or reading past the list: a count, then
+// that many actions, each whole. An action is as long as what its Save writes, the bytes its Load reads; the last
+// two floats of a PATargetColor are read only while the list has bytes left. Bytes after the last action are left
+// alone, as LoadActions leaves them.
+bool CParticleManager::CheckActions(IReader& R, string256& why)
+{
+    if (R.elapsed() < intptr_t(sizeof(u32)))
+    {
+        xr_strcpy(why, "holds no action count");
+        return false;
+    }
+    const u32 count = R.r_u32();
+    for (u32 k = 0; k < count; ++k)
+    {
+        if (R.elapsed() < intptr_t(sizeof(u32)))
+        {
+            xr_sprintf(why, "ends before action %u of %u", k + 1, count);
+            return false;
+        }
+        const u32 type = R.r_u32();
+        if (type > PAScatterID || type == PACallActionListID_obsolette)
+        {
+            xr_sprintf(why, "action %u of %u is of no type the game knows (%u)", k + 1, count, type);
+            return false;
+        }
+
+        ParticleAction* action = CreateAction(PActionEnum(type));
+        CMemoryWriter written;
+        action->Save(written);
+        xr_delete(action);
+        const size_t whole = written.size();
+        const size_t left = size_t(R.elapsed());
+        size_t take = whole;
+        if (type == PATargetColorID)
+        {
+            take = whole - 2 * sizeof(float);
+            if (!ShadowOfChernobylMode)
+                for (u32 timing = 0; timing < 2 && left > take; ++timing)
+                    take += sizeof(float);
+        }
+        if (left < take)
+        {
+            xr_sprintf(why, "action %u of %u (type %u) is cut short: %zu of its %zu bytes", k + 1, count, type, left,
+                take);
+            return false;
+        }
+        R.advance(take);
+    }
+    return true;
+}
+
 void CParticleManager::SaveActions(int alist_id, IWriter& W)
 {
     // Execute the specified action list.

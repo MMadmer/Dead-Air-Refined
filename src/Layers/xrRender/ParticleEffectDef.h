@@ -116,6 +116,8 @@ public:
 
     void Save2(CInifile& ini);
     BOOL Load2(CInifile& ini);
+    // the compiled action list a loose file carries in [actions]; false, with a line, when it is malformed
+    bool LoadActions2(const CInifile& ini);
 
 #ifdef _EDITOR
     // change Copy&Equal if variables changed

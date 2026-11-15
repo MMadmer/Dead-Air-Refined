@@ -59,6 +59,21 @@ XRSOUND_API void da_thread_music_play(const xr_vector<DaThreadMusicTrack>& track
 XRSOUND_API void da_thread_music_stop(); // fades out
 XRSOUND_API void da_thread_music_shutdown();
 
+// The streamer mode (snd_streamer_mode): while it is on, a copyrighted sound does not start, or the sound named to play
+// in its place starts instead. A sound is copyrighted when its description (a module's .sndasset) says so, else when
+// the game's list (configs\dead_air_x64_sound_rights.ltx, [copyrighted]) names it. Contract: docs/dead-air/MODDING.md,
+// "Streamer mode".
+XRSOUND_API extern int psSoundStreamerMode;
+// Reads the game's list once, on the main thread before the sound engine starts: through the config reader, so a
+// module's #file patch of it counts.
+XRSOUND_API void snd_rights_read();
+// By a sound's name: its path under sounds without the extension, case and slashes not mattering.
+XRSOUND_API bool snd_copyrighted(pcstr name);
+// What plays in its place while the mode is on: a sound that exists and is not copyrighted itself; "" for none.
+XRSOUND_API xr_string snd_replacement(pcstr name);
+// Whether the mode lets it play: free, or copyrighted with a replacement.
+XRSOUND_API bool snd_playable(pcstr name);
+
 XRSOUND_API extern float psSoundOcclusionScale;
 // The room the geometry forms around the listener where no zone is authored (0 off, 2 logs the probes), and the highs
 // a fully occluded sound loses on top of the stock gain (mB at 5 kHz).
@@ -306,6 +321,12 @@ public:
     u32 dwBytesTotal{};
     float fTimeTotal{};
 
+    // While the streamer mode plays a replacement in this sound's place: what the sound is itself, given back when
+    // the replacement stops.
+    CSound_source* own_handle{};
+    u32 own_bytes{};
+    float own_time{};
+
     CSound(CSound_source* src) : handle(src) { VERIFY(src); }
     ~CSound() override { GEnv.Sound->destroy(*this); }
 };
@@ -369,9 +390,11 @@ struct resptrcode_sound : public resptr_base<CSound>
         VerSndUnlocked();
         if (auto* feedback = _feedback())
             feedback->stop(false);
-        _set(xr_new<CSound>(from->handle));
-        p_->dwBytesTotal = from->dwBytesTotal;
-        p_->fTimeTotal = from->fTimeTotal;
+        // a copy of the sound itself, not of a replacement playing in its place
+        const bool stand_in = from->own_handle;
+        _set(xr_new<CSound>(stand_in ? from->own_handle : from->handle));
+        p_->dwBytesTotal = stand_in ? from->own_bytes : from->dwBytesTotal;
+        p_->fTimeTotal = stand_in ? from->own_time : from->fTimeTotal;
         p_->fn_attached[0] = from->fn_attached[0];
         p_->fn_attached[1] = from->fn_attached[1];
         p_->g_type = (game_type == sg_SourceType) ? p_->handle->game_type() : game_type;

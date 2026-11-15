@@ -38,6 +38,8 @@ struct Sound
     bool has_min{false}, has_max{false}, has_volume{false}, has_ai{false}, has_type{false};
     float min_distance{1.f}, max_distance{300.f}, volume{1.f}, ai_distance{300.f};
     xr_vector<xr_string> type; // the game's sound type words, ORed
+    bool copyrighted{false};   // not played while the streamer mode is on
+    xr_string streamer;        // the sound that plays in its place then, the game's name; empty for none
 };
 
 struct Surface
@@ -84,6 +86,7 @@ XRCORE_API const Model* FindModel(pcstr name);
 
 // Keyed by the game's name, lower case with back slashes.
 XRCORE_API const xr_map<xr_string, Texture>& Textures();
+XRCORE_API const xr_map<xr_string, Sound>& Sounds();
 
 // The surface of a visual a model pool loads by `visual_name`: a model's own name when it has
 // no children (`whole`), "<model>:<n>" for its n-th child. Null when it is not described.

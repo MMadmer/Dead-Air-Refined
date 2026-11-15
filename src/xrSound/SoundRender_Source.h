@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 struct OggVorbis_File;
 
 enum class SoundFormat : u8
@@ -29,10 +31,38 @@ struct SoundSourceInfo
     u32   gameType  {};
 };
 
+// The streamer mode's word on one source, asked the first time the mode is on when it starts (SoundRender_Rights.cpp)
+// and kept: a name is matched once.
+struct SoundStreamerWord
+{
+    enum : u8
+    {
+        Unasked,
+        Free,
+        Copyrighted, // with `instead`, a replacement plays in its place; without, it does not play
+    };
+    std::atomic<u8> state{Unasked};
+    std::atomic<class CSoundRender_Source*> instead{};
+
+    SoundStreamerWord() = default;
+    SoundStreamerWord(SoundStreamerWord&& other) noexcept : state(other.state.load()), instead(other.instead.load()) {}
+    SoundStreamerWord& operator=(SoundStreamerWord&& other) noexcept
+    {
+        state = other.state.load();
+        instead = other.instead.load();
+        return *this;
+    }
+};
+
 class XRSOUND_API CSoundRender_Source final : public CSound_source
 {
     shared_str pname;
     shared_str fname;
+
+public:
+    mutable SoundStreamerWord streamer_word;
+
+private:
 
     float fTimeTotal{};
     u32 dwBytesTotal{};

@@ -48,5 +48,6 @@ public:
     ParticleAction* CreateAction(PActionEnum action_id) override;
     size_t LoadActions(int alist_id, IReader& R) override;
     void SaveActions(int alist_id, IWriter& W) override;
+    bool CheckActions(IReader& R, string256& why) override;
 };
 } // namespace PAPI

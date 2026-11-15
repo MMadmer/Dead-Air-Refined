@@ -7,6 +7,7 @@
 #include "ui/UIModsWnd.h"
 #include "xms_world.h"
 #include "xms_pda.h"
+#include "xms_screens.h"
 #include "save_extension_gameplay.h"
 #include "save_extension_chunk_ids.h"
 #include "PhraseDialog.h"
@@ -2687,6 +2688,61 @@ luabind::object xms_native_kept_modules(lua_State* L)
 
 luabind::object xms_native_forgotten(lua_State* L) { return id_table(L, XmsSaves::Forgotten()); }
 
+// ---- the streamer mode and the radio (MODDING.md, "Streamer mode", "Screens and music") ----------------------
+
+bool xms_native_streamer_mode() { return psSoundStreamerMode != 0; }
+bool xms_native_sound_copyrighted(pcstr name) { return name && snd_copyrighted(name); }
+
+luabind::object xms_native_sound_replacement(lua_State* L, pcstr name)
+{
+    const xr_string instead = name ? snd_replacement(name) : xr_string();
+    return instead.empty() ? luabind::object() : luabind::object(L, instead.c_str());
+}
+
+// { only = <module id | nil>, tracks = { { module, id, sound, copyrighted, streamer, volume, weight }, ... },
+//   playlists = { { module, id, title, order, tracks = { <sound name>, ... } }, ... } }
+luabind::object xms_native_radio(lua_State* L)
+{
+    const XmsScreens::Radio radio = XmsScreens::RadioMusic();
+    luabind::object result = luabind::newtable(L);
+    if (radio.only)
+        result["only"] = radio.only->id.c_str();
+    luabind::object tracks = luabind::newtable(L);
+    int index = 1;
+    for (const XmsScreens::RadioTrack& t : radio.tracks)
+    {
+        luabind::object row = luabind::newtable(L);
+        row["module"] = t.module->id.c_str();
+        row["id"] = t.track->id.c_str();
+        row["sound"] = t.sound.c_str();
+        row["copyrighted"] = t.copyrighted;
+        if (!t.streamer.empty())
+            row["streamer"] = t.streamer.c_str();
+        row["volume"] = t.track->volume;
+        row["weight"] = t.track->weight;
+        tracks[index++] = row;
+    }
+    result["tracks"] = tracks;
+    luabind::object playlists = luabind::newtable(L);
+    index = 1;
+    for (const XmsScreens::RadioPlaylist& p : radio.playlists)
+    {
+        luabind::object row = luabind::newtable(L);
+        row["module"] = p.module->id.c_str();
+        row["id"] = p.playlist->id.c_str();
+        row["title"] = p.playlist->title.c_str();
+        row["order"] = p.playlist->shuffle ? "shuffle" : "list";
+        luabind::object sounds = luabind::newtable(L);
+        int k = 1;
+        for (const xr_string& sound : p.sounds)
+            sounds[k++] = sound.c_str();
+        row["tracks"] = sounds;
+        playlists[index++] = row;
+    }
+    result["playlists"] = playlists;
+    return result;
+}
+
 // ---- virtual dialogs (NQ) --------------------------------------------------
 
 bool xms_native_dialog_register(pcstr id, pcstr init_func) { return CPhraseDialog::RegisterVirtual(id, init_func); }
@@ -2870,6 +2926,14 @@ function xms.dispatch_forget(id)
         if not ok then xms.log("! xms.on_forget: " .. tostring(err)) end
     end
 end
+
+-- The streamer mode and the radio's music of the modules (docs/dead-air/MODDING.md, "Streamer mode",
+-- "Screens and music"; docs/dead-air/RADIO.md); feature-test with xms.sound_api.
+xms.sound_api = 1
+xms.streamer_mode = xms_native_streamer_mode           -- () -> true while snd_streamer_mode is on
+xms.sound_copyrighted = xms_native_sound_copyrighted   -- (sound name) -> true when it is copyrighted
+xms.sound_replacement = xms_native_sound_replacement   -- (sound name) -> what plays in its place in the mode | nil
+xms.radio = xms_native_radio                           -- () -> { only, tracks = {...}, playlists = {...} }
 
 -- Console commands of the modules (docs/dead-air/MODDING.md, "Console commands"); feature-test
 -- with xms.commands_api. mod.ltx [commands] name = <script>.<function>: the engine calls
@@ -3134,7 +3198,11 @@ void xms_registrator::script_register(lua_State* luaState)
         def("xms_native_module_present", &xms_native_module_present),
         def("xms_native_section_owner", &xms_native_section_owner),
         def("xms_native_kept_modules", &xms_native_kept_modules),
-        def("xms_native_forgotten", &xms_native_forgotten)
+        def("xms_native_forgotten", &xms_native_forgotten),
+        def("xms_native_streamer_mode", &xms_native_streamer_mode),
+        def("xms_native_sound_copyrighted", &xms_native_sound_copyrighted),
+        def("xms_native_sound_replacement", &xms_native_sound_replacement),
+        def("xms_native_radio", &xms_native_radio)
     ];
     XmsWorld::ScriptRegister(luaState);
     XmsPda::ScriptRegister(luaState);

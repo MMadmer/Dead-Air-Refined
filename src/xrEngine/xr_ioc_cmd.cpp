@@ -1175,6 +1175,8 @@ void CCC_Register()
     CMD4(CCC_Integer, "snd_targets", &psSoundTargets, 4, 256);
     CMD4(CCC_Integer, "snd_cache_size", &psSoundCacheSizeMB, 4, 64);
     CMD3(CCC_Token, "snd_precache_all", &psSoundPrecacheAll, snd_precache_all_token);
+    // the streamer mode: nothing copyrighted plays (xrSound's SoundRender_Rights.cpp)
+    CMD4(CCC_Integer, "snd_streamer_mode", &psSoundStreamerMode, 0, 1);
 
 #ifdef DEBUG
     CMD3(CCC_Mask, "snd_stats", &g_stats_flags, st_sound);

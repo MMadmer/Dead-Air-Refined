@@ -30,6 +30,14 @@ void CSoundRender_Core::update(const Fvector& P, const Fvector& D, const Fvector
     }
     s_emitters_u++;
 
+    // the streamer mode came on: what may no longer play stops before this update
+    if (m_streamer_mode != psSoundStreamerMode)
+    {
+        m_streamer_mode = psSoundStreamerMode;
+        if (m_streamer_mode)
+            streamer_stop_copyrighted();
+    }
+
     const auto update_emitter = [this](CSoundRender_Emitter* emitter)
     {
         const bool ignore = emitter->bIgnoringTimeFactor;

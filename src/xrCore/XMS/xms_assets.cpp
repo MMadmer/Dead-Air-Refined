@@ -144,6 +144,11 @@ void parse_sound(const LuaValue& v, Sound& s)
                 s.type.push_back(normal(word.s));
         s.has_type = type->type == LuaValue::String || type->type == LuaValue::Table;
     }
+    // the streamer mode's: a key added within version 1, false and none when left out
+    s.copyrighted = v.flag("copyrighted", false);
+    s.streamer = normal(v.text("streamer"));
+    if (s.streamer.size() > 4 && s.streamer.ends_with(".ogg"))
+        s.streamer.resize(s.streamer.size() - 4);
 }
 
 void parse_model(const LuaValue& v, Model& m)
@@ -283,6 +288,7 @@ const Texture* FindTexture(pcstr name) { return find(registry().textures, name);
 const Sound* FindSound(pcstr name) { return find(registry().sounds, name); }
 const Model* FindModel(pcstr name) { return find(registry().models, name); }
 const xr_map<xr_string, Texture>& Textures() { return registry().textures; }
+const xr_map<xr_string, Sound>& Sounds() { return registry().sounds; }
 
 const Surface* FindSurface(pcstr visual_name, bool whole, const Model** model)
 {

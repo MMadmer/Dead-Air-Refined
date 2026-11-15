@@ -933,6 +933,11 @@ piece's own texture (`<name>@piece<n>`) is described as its texture is.
 | `volume` | number, `1` | its base volume |
 | `ai_distance` | metres | how far the AI hears it |
 | `type` | a word or a list of words, ORed | the game's sound type: `weapon_shooting`, `item_picking_up`, `monster_step`, `world_ambient`, `anomaly_idle`, ... - the names of `ai_sounds.h` without `SOUND_TYPE_`, in lower case; the parts (`weapon`, `shooting`, ...) as well; `no_sound` is none |
+| `copyrighted` | boolean, `false` | it is not played while the [streamer mode](#streamer-mode) is on |
+| `streamer` | a sound name | what plays in its place then: a sound that exists and is not copyrighted itself; left out, nothing does |
+
+`copyrighted` and `streamer` are keys added within version 1: a description that has them is still
+`snd = 1`, and an older game passes them by.
 
 **A model** (`mesh`) is applied when the model is loaded the first time; every instance of it
 shares the result.
@@ -1165,13 +1170,35 @@ for a reason that points at the game rather than at the mod.
 Individual particle effects and groups can be replaced or added through loose
 files without rebuilding `particles.xr`:
 
-- Location: `gamedata/particles/**` (also works from XDB archives and JSGME
-  layers — the engine enumerates the virtual namespace with normal VFS
-  precedence, loose files win over archives exactly like other gamedata).
+- Location: `gamedata/particles/**` (also works from XDB archives, JSGME
+  layers and modules — the engine enumerates the virtual namespace with normal
+  VFS precedence, loose files win over archives exactly like other gamedata). A
+  module's files are listed in folders the game itself does not have too: the
+  folders above a module's file are entered into the namespace with it.
   Content bundles are archives in that same namespace and lose to loose files
   like every other archive.
 - Format: the engine's ini-style single-particle formats — `.pe` for an effect,
   `.pg` for a group (the same files the SDK particle editor reads and writes).
+  An effect's `.pe` carries its compiled action list - what emits and moves the
+  particles, the bytes of the effect's action-list chunk in `particles.xr` - in
+  a section of its own:
+
+  ```ini
+  [actions]
+  size      = 496                      ; the bytes of the list
+  data_0000 = 0500000015000000...      ; hex, the bytes in order
+  data_0001 = ...                      ; data_0002, ... continue it
+  ```
+
+  The bytes become the effect's action list exactly as the archive's chunk
+  would. `size` must be the number of bytes the lines decode to, every line an
+  even run of hex digits, with no line past the last one the size needs; the
+  list must be one the game can run: a count, then that many actions of types
+  the game knows, none cut short (a list that ends inside an action, or names an
+  unknown type, is malformed). An ini line holds at most 4094 characters - a
+  longer one stops the game while the file is read - so a line of 1024 bytes
+  (2048 digits) is well inside it. A `.pe` without `[actions]` is read as before
+  and the effect it makes has no actions: it emits nothing.
 - Naming: the effect name is the file path without extension relative to the
   particles directory. `gamedata/particles/anomaly2/effects/x.pe` defines
   effect `anomaly2\effects\x`; the on-disk layout must mirror archive names to
@@ -1180,11 +1207,17 @@ files without rebuilding `particles.xr`:
   file fully restores archive behavior. With no loose files present the
   registry is byte-identical to the archive.
 - Failure handling: a malformed file is reported in the log with its path and
-  skipped; the archive definition stays intact. The load summary line reports
-  replaced/added/failed counts.
-- Limitations: only the runtime parser's subset of effect data is honored;
-  editor-only action data that the game parser does not read is ignored. The
-  base game ships no loose overrides — the capability exists for addons.
+  skipped, a malformed `[actions]` with a line saying what is wrong with it
+  (`! Loose particle effect '<name>': [actions] ...`); the archive definition
+  stays intact. The load summary line reports replaced/added/failed counts, and
+  a second one the effects that carried an action list:
+  `* Loose particles: <n> effect(s) carry their action list, <bytes> bytes, crc <x>`
+  (the CRC-32 of each list, XORed together, so the order does not matter).
+- Limitations: the game reads the effect data of the runtime parser and the
+  compiled `[actions]`; the editor's per-action sections (`action_0000`, ... and
+  `_effect`'s `action_count`), which only the SDK particle editor compiles into a
+  list, are ignored. The base game ships no loose overrides — the capability
+  exists for addons.
 
 ## Addon script audit
 
@@ -4018,10 +4051,58 @@ layer   = art\title.html
 
 [track.rain]
 file   = music\rain.ogg
-play   = loading, menu     ; the surfaces whose shuffle it joins; leave out to play only where a screen names it
+play   = loading, menu     ; the surfaces whose shuffle it joins: loading, menu, radio; leave out to play only
+                           ; where a screen or a playlist names it
 weight = 1
 volume = 0.8
+
+[track.night_road]
+sound  = music\my_mod\night_road  ; a sound name instead of a file: see below
+play   = menu, radio
+
+[playlist.road_songs]
+title  = st_my_mod_road_songs     ; text or a string table id, as [module] name
+tracks = night_road, rain         ; tracks of this module
+order  = list                     ; shuffle (the default): every track once a pass, in a new order each pass
+
+[radio]
+music  = mix                      ; only: this module's radio tracks are the radios' whole common music
 ```
+
+A track's music is a file of the module (`file`) or a sound (`sound`): a name under `sounds` without the
+extension, exactly what a script would play - a sound the module ships (`gamedata\sounds\<name>.ogg`, with its
+`.sndasset` description beside it) or any sound of the game. With both keys `sound` wins, and the log says so. A
+`file` is mounted under a name of its own (`xms_screens\<module>\<track>` for the menus and the loading screen,
+`xms_radio\<module>\<track>` for the radio, a dot of the module id written as `_`); a `sound` is played under its
+own name everywhere, and nothing is mounted for it. Whether a track is copyrighted is its sound's to say, in the
+sound's description (see *Streamer mode* below): a track has no such key, and `copyrighted` or `streamer` written on
+one does nothing but a line in the log. A `file` track has no description and is never copyrighted.
+
+**The radio.** A track with `radio` in its `play` joins the common music the radios of the world shuffle among the
+game's own; a playlist is a station of its own, a named list of the module's tracks (a track it names that the
+module does not have is left out with a line), and every track a playlist names is the radio's whatever its `play`
+says. `[radio] music = only` makes this module's radio tracks the whole common music, as the screens' keys do (the
+last module of the load order that says so); `mix`, the default, adds them. What the world's radios do with it is
+the game's scripts' (`scripts\xms_radio.script`, `docs\dead-air\RADIO.md`); they read it through one call:
+
+```lua
+xms.radio() --> {
+  only = "<module id>",          -- nil unless a module holds the radio's music with [radio] music = only
+  tracks = {                     -- the tracks whose play says radio, in load order
+    { module = "my_mod", id = "night_road", sound = "music\\my_mod\\night_road",
+      copyrighted = true, streamer = "music\\my_mod\\night_road_free", volume = 1, weight = 1 },
+    ...
+  },
+  playlists = {
+    { module = "my_mod", id = "road_songs", title = "st_my_mod_road_songs", order = "list",
+      tracks = { "music\\my_mod\\night_road", "xms_radio\\my_mod\\rain" } },
+  },
+}
+```
+
+`sound` is the name to play (a `sound` track's own name, a `file` track's mount); `copyrighted` and `streamer`
+are what the streamer mode's one lookup answers for that name (`streamer` nil for none). Feature-test with
+`xms.sound_api`.
 
 Paths are inside the module, in any folder. A layer is told by its file:
 
@@ -4042,8 +4123,45 @@ A screen limited to levels or modes is chosen once they are known - a few second
 the screen stands empty under the bar instead of showing a picture that changes. A video keeps quiet unless its screen
 says `music = video`; on `sound = false` a layer keeps quiet even then. In the menus a video has no sound at all.
 
-`xms_screens` lists what the modules declare and what would be chosen now; `xms_screens_force <loading|menu|pause>
-<game|<module id>.<screen id>|off>` fixes what the next showings get.
+`xms_screens` lists what the modules declare - screens, tracks, playlists - and what would be chosen now, the
+radio's tracks and playlists among it; `xms_screens_force <loading|menu|pause> <game|<module id>.<screen id>|off>`
+fixes what the next showings get.
+
+## Streamer mode
+
+For a player who streams or records: while the mode is on, nothing copyrighted plays - on the radio, in the menus,
+on the loading screen, anywhere.
+
+- **What is copyrighted** is decided by one lookup by the sound's name (its path under `sounds` without the
+  extension, case and slashes not mattering): the sound's description says so (`copyrighted = true` in a module's
+  `.sndasset`, see *A module's models, textures and sounds*), else the game's own list names it. A sound may name
+  what plays in its place: `streamer = "<sound name>"` in the description; in the game's list, a line
+  `<name or mask> = <replacement>`. A replacement that is copyrighted itself, or that is no sound of the game,
+  counts as none, with one line in the log; there are no chains.
+- **The game's list** is `configs\dead_air_x64_sound_rights.ltx`, `[copyrighted]`: one line per sound name or
+  mask (`*` is any run of characters), a bare line for none, `= <sound name>` for a replacement. It is read once,
+  when the sound engine starts, through the config reader: a module's `#file dead_air_x64_sound_rights.ltx` patch
+  adds to it. No file is an empty list. The log says what there is:
+  `* [streamer] copyrighted: <n> line(s) of the game's list, <m> sound(s) of modules by their descriptions`.
+- **The switch** is the console variable `snd_streamer_mode` (0 or 1, 0 by default), saved with the player's sound
+  options; Options > Sound shows it as a check (the row `streamer_mode` of `dead_air_x64_sound_options.ltx`).
+- **What does not play.** The sound engine decides before it starts a source, for every way a sound starts - 2D,
+  3D, looped, without feedback, from a script and from the engine. A copyrighted sound does not start: the caller
+  holds a sound that is not playing, exactly as one that ended at once (`sound_object:playing()` is false, a sound
+  theme or the NPCs' speech moves on, a scheme waits out its pause and asks again). One with a replacement starts
+  the replacement in its place with the caller's position, volume, loop and 2D or 3D, and the caller holds a sound
+  that plays; the replacement's own description (distances, volume) is the replacement's. A copyrighted sound that
+  is playing when the mode is switched on stops. The log says it once per sound:
+  `~ [streamer] <name>: copyrighted - not played` or `... - <replacement> plays in its place`.
+- **The music of the loading screen and the menus** passes a copyrighted track over, or plays its replacement, and
+  takes the next; with none left it is silent. The radios' scripts do the same with their tracks and playlists
+  (`docs\dead-air\RADIO.md`).
+- **Scripts:** `xms.streamer_mode()` -> boolean; `xms.sound_copyrighted(name)` -> boolean;
+  `xms.sound_replacement(name)` -> the replacement's sound name, or nil (also when the replacement is copyrighted
+  itself). They exist where the `xms` table does - with at least one module enabled; feature-test with
+  `xms.sound_api`.
+- With the mode off a sound costs one flag test more than before; with it on, a sound's name is matched once and
+  the answer is kept.
 
 ## NPC AI: what scripts and configs see now
 

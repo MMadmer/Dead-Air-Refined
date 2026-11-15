@@ -128,7 +128,16 @@ public:
     bool i_allow_play(const CSoundRender_Emitter* E);
     bool i_locked() override { return isLocked; }
 
+    // The streamer mode (SoundRender_Rights.cpp): the replacement that plays in a source's place, null for none;
+    // `refused` when the source may not play at all.
+    CSoundRender_Source* streamer_instead(CSoundRender_Source* own, bool& refused);
+    bool streamer_admits(ref_sound& S, bool& flat);
+    void streamer_stop_copyrighted();
+
     void env_apply();
+
+private:
+    int m_streamer_mode{}; // the mode the last update saw
 };
 
 extern CSoundRender_Core* SoundRender;

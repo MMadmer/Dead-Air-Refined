@@ -1402,6 +1402,22 @@ const CLocatorAPI::file* CLocatorAPI::GetFileDesc(pcstr path)
 
 const CLocatorAPI::file* CLocatorAPI::xms_register(pcstr vpath, u32 size, u32 modif)
 {
+    // A module's file may lie in folders the game has none of (gamedata\particles\...). Register enters only the
+    // folder the file is in, so the folders above it are entered here, as a scan enters the folders it walks: a
+    // listing of such a folder (file_list of gamedata\particles\) finds the module's files.
+    const xr_string path = vpath;
+    xr_vector<xr_string> missing;
+    for (size_t end = path.rfind(_DELIMITER); end != xr_string::npos && end > 0; end = path.rfind(_DELIMITER, end - 1))
+    {
+        file folder;
+        const xr_string name = path.substr(0, end + 1);
+        folder.name = name.c_str();
+        if (m_files.find(folder) != m_files.end())
+            break;
+        missing.push_back(name);
+    }
+    for (auto it = missing.rbegin(); it != missing.rend(); ++it)
+        Register(it->c_str(), VFS_STANDARD_FILE, 0, 0, 0, 0, 0);
     return Register(vpath, VFS_STANDARD_FILE, 0, 0, size, size, modif);
 }
 

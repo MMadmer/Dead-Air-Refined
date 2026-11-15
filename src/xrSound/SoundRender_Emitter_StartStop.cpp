@@ -50,11 +50,25 @@ void CSoundRender_Emitter::i_stop()
     if (owner_data)
     {
         Event_ReleaseOwner();
-        VERIFY(this == owner_data->feedback);
-        owner_data->feedback = NULL;
-        owner_data = NULL;
+        release_owner();
     }
     m_current_state = stStopped;
+}
+
+// The sound no longer plays: its owner holds no emitter, and a sound a replacement of the streamer mode played in
+// the place of is itself again.
+void CSoundRender_Emitter::release_owner()
+{
+    VERIFY(this == owner_data->feedback);
+    owner_data->feedback = nullptr;
+    if (owner_data->own_handle)
+    {
+        owner_data->handle = owner_data->own_handle;
+        owner_data->dwBytesTotal = owner_data->own_bytes;
+        owner_data->fTimeTotal = owner_data->own_time;
+        owner_data->own_handle = nullptr;
+    }
+    owner_data = nullptr;
 }
 
 void CSoundRender_Emitter::stop(bool isDeffered)

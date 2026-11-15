@@ -228,6 +228,8 @@ public:
     virtual ParticleAction* CreateAction(PActionEnum type) = 0;
     virtual size_t LoadActions(int alist_id, IReader& R) = 0;
     virtual void SaveActions(int alist_id, IWriter& W) = 0;
+    // Whether LoadActions takes the list as it is; false and why when it does not.
+    virtual bool CheckActions(IReader& R, string256& why) = 0;
 };
 
 PARTICLES_API IParticleManager* ParticleManager();
