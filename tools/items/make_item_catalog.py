@@ -17,6 +17,17 @@ Inputs, all in this folder:
                                                          on disk is what they make
     python tools\\items\\make_item_catalog.py --check --game <configs folder>
                                                          also: every `like` section exists there
+    python tools\\items\\make_item_catalog.py --calibrate --game <configs folder>
+                                                         rewrite the `required` column of item_keys.tsv
+                                                         by the game's real items (below), then run again
+
+`required` comes from the code: a key read without a default. The code reads many keys only under a
+condition the extraction cannot see (a launcher's keys only when the weapon has one), so a key may be
+marked for classes that live without it. --calibrate settles it by the data: a key stays required for a
+class when every real item of that class in the game's configs has it after inheritance (for a HUD key:
+every HUD section those items name); a class of which one real item lacks it is taken out. A class the
+game has no item of keeps what the code says. A real item is a section that resolves the keys every
+item needs (class, inv_name, inv_weight, cost, inv_grid_x): a template is none.
 
 Regenerating reproduces the file byte for byte: the output depends on the inputs alone (sorted,
 LF line ends, ASCII). Do not edit the catalog by hand; edit the notes and run this again.
@@ -337,6 +348,101 @@ def class_of(sections, name, depth=0):
     return None
 
 
+def game_keys(folder):
+    """Every section of the configs under a folder: its parents, the names of its own keys, its class and hud."""
+    found = {}
+    for dp, _, files in sorted(os.walk(folder)):
+        for fn in sorted(files):
+            if not fn.lower().endswith(".ltx"):
+                continue
+            cur = None
+            with open(os.path.join(dp, fn), encoding="cp1251", errors="replace") as f:
+                for line in f:
+                    line = line.split(";", 1)[0].strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    m = re.match(r"^\[([^\]]+)\]\s*(?::\s*(.*))?$", line)
+                    if m:
+                        cur = found.setdefault(m.group(1).strip().lower(), {"parents": [], "keys": set(), "values": {}})
+                        if m.group(2):
+                            cur["parents"] = [x.strip().lower() for x in m.group(2).split(",") if x.strip()]
+                    elif cur is not None:
+                        key, _, value = line.partition("=")
+                        key = key.strip()
+                        cur["keys"].add(key)
+                        if key in ("class", "hud"):
+                            cur["values"][key] = value.strip()
+    return found
+
+
+def resolved(sections, name, memo, depth=0):
+    """The keys a section has after inheritance, and its `class` and `hud` values."""
+    if name in memo:
+        return memo[name]
+    s = sections.get(name)
+    if s is None or depth > 32:
+        return set(), {}
+    keys, values = set(), {}
+    for parent in s["parents"]:
+        pk, pv = resolved(sections, parent, memo, depth + 1)
+        keys |= pk
+        values.update(pv)
+    keys |= s["keys"]
+    values.update(s["values"])
+    memo[name] = (keys, values)
+    return memo[name]
+
+
+def calibrate(folder):
+    """Rewrites the `required` column of item_keys.tsv by the game's real items. Answers what changed."""
+    classes = read_tsv(os.path.join(HERE, "item_classes.tsv"))
+    family_of = {r["class"]: r["family"] for r in classes}
+    sections, memo = game_keys(folder), {}
+    real, huds = {}, {}
+    for name in sorted(sections):
+        keys, values = resolved(sections, name, memo)
+        if not {"class", "inv_name", "inv_weight", "cost", "inv_grid_x"} <= keys:
+            continue
+        cls = values.get("class", "")
+        real.setdefault(cls, []).append(name)
+        hud = values.get("hud", "").lower()
+        if hud in sections:
+            huds.setdefault(cls, []).append(hud)
+
+    path = os.path.join(HERE, "item_keys.tsv")
+    with open(path, encoding="ascii", newline="") as f:
+        lines = f.read().split("\n")
+    header, changed = None, []
+    for n, line in enumerate(lines):
+        if not line or line.startswith("#"):
+            continue
+        cells = line.split("\t")
+        if header is None:
+            header = cells
+            continue
+        row = dict(zip(header, cells))
+        if row["scope"] not in ("item", "hud") or row["required"] == "0" or row["pattern"] == "1":
+            continue
+        families = None if row["families"] == "*" else set(csv(row["families"]))
+        of_key = sorted(c for c, fam in family_of.items() if families is None or fam in families)
+        marked = of_key if row["required"] == "1" else csv(row["required"])
+        keep = []
+        for cls in marked:
+            targets = (huds if row["scope"] == "hud" else real).get(cls, [])
+            if all(row["key"] in resolved(sections, t, memo)[0] for t in targets):
+                keep.append(cls)
+        if row["required"] == "1" and keep == of_key:
+            continue
+        new = ",".join(keep) if keep else "0"
+        if new != row["required"]:
+            changed.append("%s.%s: %d of %d class(es) keep it" % (row["scope"], row["key"], len(keep), len(marked)))
+            cells[header.index("required")] = new
+            lines[n] = "\t".join(cells)
+    with open(path, "w", encoding="ascii", newline="") as f:
+        f.write("\n".join(lines))
+    return changed
+
+
 def counts(model):
     entries = model["entries"].values()
     lines = ["%d keys: %d with a written title, %d with help, %d common, %d required" % (
@@ -360,7 +466,18 @@ def main(argv):
     ap.add_argument("--check", action="store_true", help="check the inputs and the catalog on disk")
     ap.add_argument("--game", help="the game's configs folder: every family's `like` section must exist there")
     ap.add_argument("--out", default=OUT, help="where the catalog goes")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="rewrite the `required` column of item_keys.tsv by the game's real items (needs --game)")
     a = ap.parse_args(argv)
+    if a.calibrate:
+        if not a.game:
+            print("error: --calibrate needs --game <the game's configs folder>")
+            return 1
+        changed = calibrate(a.game)
+        for line in changed:
+            print(line)
+        print("%d key(s) narrowed in item_keys.tsv: run make_item_catalog.py to write the catalog" % len(changed))
+        return 0
     try:
         notes, order = read_ltx(os.path.join(HERE, "item_catalog_notes.ltx"))
         keys = read_tsv(os.path.join(HERE, "item_keys.tsv"))

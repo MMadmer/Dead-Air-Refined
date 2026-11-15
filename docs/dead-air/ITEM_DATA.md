@@ -100,7 +100,18 @@ python tools\items\make_item_catalog.py --check             check the inputs, an
 python tools\items\make_item_catalog.py --check --game <configs folder>
                                                             also: every family's `like` sections exist there
                                                             and are of the family's classes
+python tools\items\make_item_catalog.py --calibrate --game <configs folder>
+                                                            narrow `required` in item_keys.tsv by the
+                                                            game's real items, then write the catalog again
 ```
+
+`required` starts from the code: a key read without a default. The code reads many keys only under
+a condition no extraction sees - a launcher's keys only when the weapon has a launcher - so
+`--calibrate` settles it by the data: a key stays required for a class when every real item of that
+class in the game's configs has it after inheritance (for a HUD key: every HUD section those items
+name), and a class of which one real item lives without it is taken out. A class the game has no
+item of keeps what the code says. So the flag never says more than the game's own items prove: a
+key that is required only under a condition (a launcher's class of grenades) is not marked.
 
 The inputs are in `tools\items\`: `item_keys.tsv` (every key the code reads, extracted from the
 engine and the scripts: scope, key, type, required, default, families, the source line),
