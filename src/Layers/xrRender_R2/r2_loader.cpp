@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "Layers/xrRender/FHierrarhyVisual.h"
+#include "Layers/xrRender/FLOD.h"
 #include "Layers/xrRender/FTreeVisual.h"
 #include "xrEngine/Environment.h"
 #include "xrEngine/WindVegSound.h"
@@ -1044,6 +1045,11 @@ constexpr float piece_margin = 50.f;
 constexpr float piece_leave_factor = 1.25f;
 constexpr u32 piece_keep_ms = 5000;
 constexpr u32 piece_check_frames = 8;
+// The pieces a task has read are made together: when nothing more is to be read, when so many wait, or after so many
+// frames. Every change of the tree makes the trees' registry, the ray tracing scene and the lamps' caches again, so a
+// queue of pieces - the far plane moved, the camera jumped - is a few such changes and not one a frame.
+constexpr size_t piece_batch = 8;
+constexpr u32 piece_batch_frames = 30;
 // Every attach renames the piece's own textures anew: no other piece, nor a later load of this one, meets them.
 std::atomic<u32> piece_serial{};
 
@@ -1143,6 +1149,8 @@ struct CRender::LevelPieces
 
     xr_vector<Piece*> pieces;
     Piece* reading{}; // the one piece a task reads, at most
+    xr_vector<u32> ready; // read, waiting to be made with the others
+    u32 ready_frame{}; // when the first of them was read
     u32 next_check{};
     bool first_frame{true};
 };
@@ -1267,7 +1275,13 @@ bool piece_parse_geom(PieceGeom& geom, bool fast, CRender::PieceTables& tables, 
     {
         IReader* sw = file.open_chunk(fsL_SWIS);
         bool ok = sw && sw->elapsed() >= 4;
-        const u32 count = ok ? sw->r_u32() : 0;
+        u32 count = ok ? sw->r_u32() : 0;
+        // The count is the file's word: an item is twenty bytes at least, and the chunk holds only so many.
+        if (ok && size_t(count) > size_t(sw->elapsed()) / 20)
+        {
+            ok = false;
+            count = 0;
+        }
         tables.swis.resize(count);
         for (u32 i = 0; ok && i < count; ++i)
         {
@@ -1310,7 +1324,8 @@ void piece_create_buffers(const PieceGeom& geom, bool fast, CRender::PieceTables
         ibs[i].CreateFromData(geom.ibs[i].data, geom.ibs[i].size);
 }
 
-bool piece_check_range(const PieceGeom& geom, IReader& chunk, xr_string& error, u32 index, bool fast)
+bool piece_check_range(const PieceGeom& geom, IReader& chunk, xr_string& error, u32 index, bool fast,
+    u32* vertices = nullptr, u32* indices = nullptr)
 {
     if (chunk.elapsed() < 24)
     {
@@ -1325,12 +1340,42 @@ bool piece_check_range(const PieceGeom& geom, IReader& chunk, xr_string& error, 
         piece_fail(error, "visual %u: its %sgeometry lies outside the piece's buffers", index, fast ? "fast " : "");
         return false;
     }
+    if (vertices)
+        *vertices = vcount;
+    if (indices)
+        *indices = icount;
     return true;
+}
+
+// Sliding windows against the geometry they draw from: one at least, and each inside the visual's own indices
+// and vertices - the renderer draws a window without looking at it again.
+bool piece_check_windows(IReader& from, u32 count, u32 vertices, u32 indices)
+{
+    if (!count || size_t(count) * sizeof(FSlideWindow) > size_t(from.elapsed()))
+        return false;
+    for (u32 i = 0; i < count; ++i)
+    {
+        FSlideWindow window;
+        from.r(&window, sizeof(window));
+        if (u64(window.offset) + u64(window.num_tris) * 3 > indices || window.num_verts > vertices)
+            return false;
+    }
+    return true;
+}
+
+// The windows a progressive visual carries itself (OGF_SWIDATA): sixteen reserved bytes, the count, the windows.
+bool piece_check_swidata(IReader& chunk, size_t size, u32 vertices, u32 indices)
+{
+    if (size < 20 || size_t(chunk.elapsed()) < size)
+        return false;
+    chunk.advance(16);
+    const u32 count = chunk.r_u32();
+    return size_t(count) <= (size - 20) / sizeof(FSlideWindow) && piece_check_windows(chunk, count, vertices, indices);
 }
 
 // Every id a visual names, against the piece's own tables: a visual of a piece can never reach the level's.
 bool piece_check_visual(IReader& chunk, u32 index, u32 shaders, const PieceGeom& geom, const PieceGeom* fast,
-    u32 swis, xr_string& error)
+    const xr_vector<FSlideWindowItem>& swis, xr_string& error)
 {
     ogf_header H;
     if (chunk.find_chunk(OGF_HEADER) != sizeof(H))
@@ -1356,37 +1401,57 @@ bool piece_check_visual(IReader& chunk, u32 index, u32 shaders, const PieceGeom&
         piece_fail(error, "visual %u carries a container a static visual does not", index);
         return false;
     }
+    const bool drawn = H.type == MT_NORMAL || H.type == MT_PROGRESSIVE || H.type == MT_TREE_ST || H.type == MT_TREE_PM;
+    const bool parent = H.type == MT_HIERRARHY || H.type == MT_LOD;
+    u32 vertices = 0, indices = 0;
     const bool geometry = chunk.find_chunk(OGF_GCONTAINER);
-    if (geometry && !piece_check_range(geom, chunk, error, index, false))
+    if (geometry && !piece_check_range(geom, chunk, error, index, false, &vertices, &indices))
         return false;
-    if ((H.type == MT_NORMAL || H.type == MT_PROGRESSIVE || H.type == MT_TREE_ST || H.type == MT_TREE_PM) &&
-        !geometry && !chunk.find_chunk(OGF_VERTICES))
+    // A visual that is drawn draws from the piece's buffers: one that carries its own vertices would be read by
+    // counts nothing here has looked at.
+    if (drawn && !geometry)
     {
-        piece_fail(error, "visual %u has no geometry", index);
-        return false;
-    }
-    if ((H.type == MT_TREE_ST || H.type == MT_TREE_PM) && (!geometry || !chunk.find_chunk(OGF_TREEDEF2)))
-    {
-        piece_fail(error, "visual %u: a tree without its geometry or its definition", index);
+        piece_fail(error, "visual %u has no geometry in the piece's buffers", index);
         return false;
     }
-    if (H.type == MT_PROGRESSIVE && !chunk.find_chunk(OGF_SWIDATA))
+    // The tree's definition: its matrix and the two colour scales, as the tree reads them.
+    if ((H.type == MT_TREE_ST || H.type == MT_TREE_PM) &&
+        chunk.find_chunk(OGF_TREEDEF2) < sizeof(Fmatrix) + 2 * (sizeof(Fvector) + 2 * sizeof(float)))
     {
-        piece_fail(error, "visual %u: a progressive visual without its windows", index);
+        piece_fail(error, "visual %u: a tree without its definition, or with one cut short", index);
         return false;
     }
-    if (H.type == MT_LOD && !chunk.find_chunk(OGF_LODDEF2))
+    if (H.type == MT_PROGRESSIVE)
     {
-        piece_fail(error, "visual %u: a LOD without its definition", index);
+        const size_t size = chunk.find_chunk(OGF_SWIDATA);
+        if (!piece_check_swidata(chunk, size, vertices, indices))
+        {
+            piece_fail(error, "visual %u: a progressive visual without its windows, or with windows outside it",
+                index);
+            return false;
+        }
+    }
+    // Eight faces of four vertices each, as the LOD reads them.
+    if (H.type == MT_LOD && chunk.find_chunk(OGF_LODDEF2) < 8 * sizeof(FLOD::_face::v))
+    {
+        piece_fail(error, "visual %u: a LOD without its definition, or with one cut short", index);
         return false;
     }
     if (chunk.find_chunk(OGF_FASTPATH))
     {
+        u32 fast_vertices = 0, fast_indices = 0;
         IReader* path = chunk.open_chunk(OGF_FASTPATH);
         IReader* def = path ? path->open_chunk(OGF_GCONTAINER) : nullptr;
-        const bool ok = def && fast && piece_check_range(*fast, *def, error, index, true);
+        bool ok = def && fast && piece_check_range(*fast, *def, error, index, true, &fast_vertices, &fast_indices);
         if (def)
             def->close();
+        // A progressive visual's fast geometry has windows of its own.
+        bool windows = true;
+        if (ok && H.type == MT_PROGRESSIVE)
+        {
+            const size_t size = path->find_chunk(OGF_SWIDATA);
+            windows = piece_check_swidata(*path, size, fast_vertices, fast_indices);
+        }
         if (path)
             path->close();
         if (!ok)
@@ -1395,14 +1460,36 @@ bool piece_check_visual(IReader& chunk, u32 index, u32 shaders, const PieceGeom&
                 piece_fail(error, "visual %u has fast geometry and the piece no piece.geomx", index);
             return false;
         }
+        if (!windows)
+        {
+            piece_fail(error, "visual %u: its fast geometry has no windows, or windows outside it", index);
+            return false;
+        }
     }
     if (H.type == MT_TREE_PM)
     {
-        if (chunk.find_chunk(OGF_SWICONTAINER) < 4 || chunk.r_u32() >= swis)
+        const u32 id = chunk.find_chunk(OGF_SWICONTAINER) >= 4 ? chunk.r_u32() : u32(-1);
+        if (id >= swis.size())
         {
             piece_fail(error, "visual %u names a sliding window the piece does not have", index);
             return false;
         }
+        // The piece's window item against this tree's own geometry.
+        const FSlideWindowItem& item = swis[id];
+        bool inside = item.count > 0 && item.sw;
+        for (u32 i = 0; inside && i < item.count; ++i)
+            inside = u64(item.sw[i].offset) + u64(item.sw[i].num_tris) * 3 <= indices && item.sw[i].num_verts <= vertices;
+        if (!inside)
+        {
+            piece_fail(error, "visual %u: its sliding windows lie outside its geometry", index);
+            return false;
+        }
+    }
+    // A hierarchy and a LOD are their children: without the list their loader stops the game.
+    if (parent && !chunk.find_chunk(OGF_CHILDREN_L))
+    {
+        piece_fail(error, "visual %u: a hierarchy without its children", index);
+        return false;
     }
     if (const size_t size = chunk.find_chunk(OGF_CHILDREN_L))
     {
@@ -1548,7 +1635,7 @@ void piece_read(const PieceState& piece, PieceLoad& out)
         if (!chunk)
             break;
         const bool ok = piece_check_visual(*chunk, index, shader_count, geom, has_fast ? &fast : nullptr,
-            u32(out.tables.swis.size()), out.error);
+            out.tables.swis, out.error);
         chunk->close();
         if (!ok)
         {
@@ -1904,16 +1991,15 @@ void CRender::PiecesFrame()
     };
 
     xr_vector<u32> leaving, arriving;
-    // A finished task: one piece a frame is made.
+    // A finished task: its piece waits for the others being read.
     if (P.reading && !P.reading->reading.load(std::memory_order_acquire))
     {
         const auto it = std::find(P.pieces.begin(), P.pieces.end(), P.reading);
         const u32 index = u32(it - P.pieces.begin());
         P.reading = nullptr;
-        if (wanted(*P.pieces[index]))
-            arriving.push_back(index);
-        else
-            piece_free_load(P.pieces[index]->load);
+        if (P.ready.empty())
+            P.ready_frame = Device.dwFrame;
+        P.ready.push_back(index);
     }
 
     const bool first = P.first_frame;
@@ -1946,6 +2032,28 @@ void CRender::PiecesFrame()
                 piece_read(piece, *piece.load);
                 arriving.push_back(i);
             }
+        }
+    }
+
+    // What was read is made together (piece_batch): now, when no other piece is waiting to be read.
+    if (!P.ready.empty())
+    {
+        bool more = !!P.reading;
+        for (size_t i = 0; !more && i < P.pieces.size(); ++i)
+        {
+            const LevelPieces::Piece& piece = *P.pieces[i];
+            more = !piece.attached && !piece.failed && !piece.load && wanted(piece);
+        }
+        if (first || !more || P.ready.size() >= piece_batch || Device.dwFrame >= P.ready_frame + piece_batch_frames)
+        {
+            for (const u32 i : P.ready)
+            {
+                if (wanted(*P.pieces[i]))
+                    arriving.push_back(i);
+                else
+                    piece_free_load(P.pieces[i]->load);
+            }
+            P.ready.clear();
         }
     }
 

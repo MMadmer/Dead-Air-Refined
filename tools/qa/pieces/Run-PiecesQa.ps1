@@ -14,6 +14,10 @@
       OnLoadsOff  the module, r__pieces_stream 0, loading the save made without it
       OffLoadsOn  no module, loading the save made with it
       R5, R6      the module on DirectX 12 and Vulkan
+      Corrupt     the module with its piece damaged on purpose, one launch a way (break_piece.py: a
+                  sliding window outside its visual, a table of windows that claims too many, a
+                  hierarchy without its children, a tree's definition cut short): the game refuses
+                  the piece with a line of its log and goes on without it
       Scout       no module, the camera's place only (for picking a box)
 
     The frames of On are compared with the three of Off (Compare-Frames.py); every launch wants the
@@ -31,7 +35,7 @@ param(
     [string]$Level = 'l01_escape',
     [string]$Box,
     [string]$Away,
-    # Comma-separated: Scout, Off, On, OnLoadsOff, OffLoadsOn, R5, R6.
+    # Comma-separated: Scout, Off, On, OnLoadsOff, OffLoadsOn, R5, R6, Corrupt.
     [string]$Phases = 'Off,On,OnLoadsOff,OffLoadsOn',
     # The box may hold vegetation: the comparison draws both frames the stock way (-CompareConsole).
     [switch]$AllowTrees,
@@ -50,7 +54,7 @@ $ErrorActionPreference = 'Stop'
 
 $phaseList = @($Phases -split '\s*,\s*' | Where-Object { $_ })
 foreach ($phase in $phaseList) {
-    if ($phase -notin @('Scout', 'Off', 'On', 'OnLoadsOff', 'OffLoadsOn', 'R5', 'R6')) { throw "Unknown phase: $phase" }
+    if ($phase -notin @('Scout', 'Off', 'On', 'OnLoadsOff', 'OffLoadsOn', 'R5', 'R6', 'Corrupt')) { throw "Unknown phase: $phase" }
 }
 
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -74,9 +78,12 @@ $helper = Join-Path $repositoryRoot 'tools\qa\Start-DetachedHiddenDesktopProcess
 $capture = Join-Path $repositoryRoot 'tools\qa\Capture-HiddenDesktopWindow.ps1'
 $compare = Join-Path $repositoryRoot 'tools\qa\Compare-Frames.py'
 $cutter = Join-Path $PSScriptRoot 'cut_piece.py'
+$breaker = Join-Path $PSScriptRoot 'break_piece.py'
 $userSavedGames = Join-Path $GameRoot 'appdata\savedgames'
 $layersKey = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers'
-$fatalPattern = 'FATAL ERROR|stack trace:|Assertion|Expression\s*:|access violation|reader overflow|Lua error|! \[pieces\]'
+# What stops the game; a piece refused is a failure too, except where the piece was damaged on purpose.
+$fatalCore = 'FATAL ERROR|stack trace:|Assertion|Expression\s*:|access violation|reader overflow|Lua error'
+$fatalPattern = "$fatalCore|! \[pieces\]"
 
 $saveOff = 'pieces_qa_off'
 $saveOn = 'pieces_qa_on'
@@ -196,7 +203,9 @@ function Invoke-PiecesLaunch {
         [bool]$Shots = $false,
         [string]$AwayTo = '',
         [string]$WriteSave = '',
-        [string[]]$Console = @()
+        [string[]]$Console = @(),
+        # The way the live module's piece is damaged before the launch (break_piece.py): the game has to refuse it.
+        [string]$Break = ''
     )
     # An engine of the last launch may still be closing its device after its log ended.
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
@@ -208,6 +217,11 @@ function Invoke-PiecesLaunch {
     $shotDir = Join-Path $phaseResult 'screens'
     New-Item -ItemType Directory -Path $shotDir -Force | Out-Null
     Set-Module -On $ModuleOn
+    if ($Break) {
+        $piece = Get-ChildItem -LiteralPath (Join-Path $qaModules "$moduleId\levels\$Level\pieces") -Directory | Select-Object -First 1
+        & python $breaker --piece $piece.FullName --how $Break
+        if ($LASTEXITCODE -ne 0) { throw "break_piece.py failed ($LASTEXITCODE)" }
+    }
     Set-QaUserLtx -Extra $Console
     $ini = @('[qa]', "shots = $(if ($Shots) { 'true' } else { 'false' })")
     if ($AwayTo) { $ini += "away = $AwayTo" }
@@ -300,12 +314,18 @@ function Invoke-PiecesLaunch {
 
     $problems = [Collections.Generic.List[string]]::new()
     if (-not @($lines | Where-Object { $_ -match 'PIECESQA: DONE' }).Count) { $problems.Add('the probe never reached DONE') }
-    foreach ($line in @($lines | Where-Object { $_ -match $fatalPattern })) { $problems.Add("log: $($line.Trim())") }
+    $fatal = if ($Break) { $fatalCore } else { $fatalPattern }
+    foreach ($line in @($lines | Where-Object { $_ -match $fatal })) { $problems.Add("log: $($line.Trim())") }
     if ($exitCode -ne 0) { $problems.Add("exit code $exitCode") }
     foreach ($dump in @(Get-ChildItem -LiteralPath $qaLogs -File -Filter '*.mdmp' -ErrorAction SilentlyContinue)) { $problems.Add("crash dump $($dump.Name)") }
     $pieceLines = @($lines | Where-Object { $_ -match '\[pieces\]|PIECESQA: (camera|away|back|saved)|visual overlays' })
     foreach ($line in $pieceLines) { Write-Host "   $($line.Trim())" }
-    if ($ModuleOn -and -not @($pieceLines | Where-Object { $_ -match '\[pieces\] .*: attached' }).Count) { $problems.Add('the piece never attached') }
+    $attachedLines = @($pieceLines | Where-Object { $_ -match '\[pieces\] .*: attached' }).Count
+    if ($Break) {
+        if (-not @($pieceLines | Where-Object { $_ -match '^\s*! \[pieces\] ' }).Count) { $problems.Add('the damaged piece was not refused') }
+        if ($attachedLines) { $problems.Add('the damaged piece attached') }
+    }
+    elseif ($ModuleOn -and -not $attachedLines) { $problems.Add('the piece never attached') }
     if (-not $ModuleOn -and @($pieceLines | Where-Object { $_ -match '\[pieces\]' }).Count) { $problems.Add('piece lines without the module') }
     foreach ($problem in $problems) { $script:failures.Add("[$Name] $problem"); Write-Host "   problem: $problem" }
     $script:summary.Add([pscustomobject]@{ Phase = $Name; Result = $(if ($problems.Count) { 'FAIL' } else { 'PASS' }); Seconds = [int]$seconds; Log = $logCopy })
@@ -357,6 +377,12 @@ foreach ($phase in $phaseList) {
         'OffLoadsOn' { [void](Invoke-PiecesLaunch -Name OffLoadsOn -ModuleOn $false -LoadSave $saveOn) }
         'R5' { Copy-BaseSave; [void](Invoke-PiecesLaunch -Name R5 -ModuleOn $true -LoadSave $SaveName -Renderer '-r5') }
         'R6' { Copy-BaseSave; [void](Invoke-PiecesLaunch -Name R6 -ModuleOn $true -LoadSave $SaveName -Renderer '-r6') }
+        'Corrupt' {
+            foreach ($how in @('windows', 'swis', 'children', 'tree')) {
+                Copy-BaseSave
+                [void](Invoke-PiecesLaunch -Name "Corrupt-$how" -ModuleOn $true -LoadSave $SaveName -Break $how)
+            }
+        }
     }
 }
 

@@ -564,9 +564,14 @@ set on the thread that loads them, for that time only): a dynamic model loading 
 meanwhile resolves against the level, and a piece's visual can never reach a level table, nor the
 reverse. Before anything of a piece is made, every id its visuals name - the shader, the vertex and
 index buffers and the ranges in them, the fast geometry, the sliding window, the children (an
-earlier visual of the piece) - is checked against what the piece has; a piece that fails is refused
-with a `! [pieces]` line and the level goes on without it. Its visuals never enter `Visuals`, its
-shaders never the level's table.
+earlier visual of the piece) - is checked against what the piece has, and so is everything a
+visual's loader reads without looking: a visual that is drawn takes its geometry from the piece's
+buffers and nowhere else, a tree has its whole definition, a LOD its eight faces, a hierarchy and a
+LOD their children, and every sliding window - a progressive visual's own, its fast geometry's, a
+tree's item of the piece's table - is one at least and lies inside that visual's indices and
+vertices; the table of windows is no longer than its chunk can hold. A piece that fails is refused
+with a `! [pieces]` line and the level goes on without it: a module is content from anywhere, and no
+file of it may stop the game. Its visuals never enter `Visuals`, its shaders never the level's table.
 
 **Its own textures.** A texture of the shader table whose file lies in the piece's folder is
 registered under a name that keeps its first characters - the deferred blender tells a lightmap by
@@ -574,7 +579,9 @@ the third texture's name starting `lmap` - and adds `@piece<n>` (a counter: no o
 later load of the same piece, meets it). The texture loader resolves that name to the folder's file
 before the season's folders, `$level$` and `$game_textures$` (`texture_resolve_name`, `texture_load`),
 on whichever thread loads it. The textures go with the piece's shaders; they are never left to the
-level's unload snapshot.
+level's unload snapshot. A piece's own texture is described - its bump, its detail texture, its
+material - as the texture before the `@piece` is (`TextureDescrManager`): a terrain a piece lights
+keeps what the terrain's texture has.
 
 **Attach and detach** happen at the frame's safe point, the top of `CRender::Calculate`, before any
 view walks the sector roots: the root joins its sector root's children, and the root's box grows only
@@ -589,8 +596,11 @@ trees draw as models.
 
 **Streaming.** A manager looks at the distances every 8 frames: a piece is wanted while the camera is
 nearer than the weather's far plane plus its radius plus 50 m, and leaves at 1.25 times that, after
-5 seconds attached at least. The files are read, checked and the device buffers made on a task; the
-shaders, textures and visuals are made at the safe point, one piece a frame. `stream = false` and the
+5 seconds attached at least. The files are read, checked and the device buffers made on a task, one
+piece at a time; the shaders, textures and visuals are made at the safe point, and the pieces that
+were read are made together - when no other is waiting to be read, when eight wait, or after thirty
+frames - because every change of the tree makes the trees' registry, the ray tracing scene and the
+lamps' caches again: a far plane that moved is a few such changes, not one a frame. `stream = false` and the
 console's `r__pieces_stream 0` load the pieces with the level (inside `level_Load`, after the
 vegetation's census, before the GPU registry and the clusters) and keep them; the streamed ones the
 camera can reach when the level starts are loaded in its first frame, all at once, so the level never

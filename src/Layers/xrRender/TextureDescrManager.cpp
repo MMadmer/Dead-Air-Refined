@@ -263,9 +263,25 @@ CTextureDescrMngr::~CTextureDescrMngr()
     m_detail_scalers.clear();
 }
 
+namespace
+{
+// A level piece's own texture goes by "<texture>@piece<n>": it is the texture of that name with the piece's light in
+// it, and it is described - its bump, its detail texture, its material - as that texture is.
+shared_str described_name(const shared_str& tex_name)
+{
+    pcstr name = tex_name.c_str();
+    pcstr at = name ? strstr(name, "@piece") : nullptr;
+    if (!at)
+        return tex_name;
+    string_path base;
+    strncpy_s(base, name, size_t(at - name));
+    return base;
+}
+} // namespace
+
 shared_str CTextureDescrMngr::GetBumpName(const shared_str& tex_name) const
 {
-    map_TD::const_iterator I = m_texture_details.find(tex_name);
+    map_TD::const_iterator I = m_texture_details.find(described_name(tex_name));
     if (I != m_texture_details.end())
     {
         if (I->second.m_spec)
@@ -278,7 +294,7 @@ shared_str CTextureDescrMngr::GetBumpName(const shared_str& tex_name) const
 
 BOOL CTextureDescrMngr::UseSteepParallax(const shared_str& tex_name) const
 {
-    map_TD::const_iterator I = m_texture_details.find(tex_name);
+    map_TD::const_iterator I = m_texture_details.find(described_name(tex_name));
     if (I != m_texture_details.end())
     {
         if (I->second.m_spec)
@@ -301,7 +317,7 @@ BOOL CTextureDescrMngr::UseSteepParallax(const shared_str& tex_name) const
 
 float CTextureDescrMngr::GetMaterial(const shared_str& tex_name) const
 {
-    map_TD::const_iterator I = m_texture_details.find(tex_name);
+    map_TD::const_iterator I = m_texture_details.find(described_name(tex_name));
     if (I != m_texture_details.end())
     {
         if (I->second.m_spec)
@@ -314,7 +330,7 @@ float CTextureDescrMngr::GetMaterial(const shared_str& tex_name) const
 
 void CTextureDescrMngr::GetTextureUsage(const shared_str& tex_name, bool& bDiffuse, bool& bBump) const
 {
-    map_TD::const_iterator I = m_texture_details.find(tex_name);
+    map_TD::const_iterator I = m_texture_details.find(described_name(tex_name));
     if (I != m_texture_details.end())
     {
         if (I->second.m_assoc)
@@ -328,14 +344,14 @@ void CTextureDescrMngr::GetTextureUsage(const shared_str& tex_name, bool& bDiffu
 
 BOOL CTextureDescrMngr::GetDetailTexture(const shared_str& tex_name, LPCSTR& res, R_constant_setup*& CS) const
 {
-    map_TD::const_iterator I = m_texture_details.find(tex_name);
+    map_TD::const_iterator I = m_texture_details.find(described_name(tex_name));
     if (I != m_texture_details.end())
     {
         if (I->second.m_assoc)
         {
             texture_assoc* TA = I->second.m_assoc;
             res = TA->detail_name.c_str();
-            map_CS::const_iterator It2 = m_detail_scalers.find(tex_name);
+            map_CS::const_iterator It2 = m_detail_scalers.find(described_name(tex_name));
             CS = It2 == m_detail_scalers.end() ? 0 : It2->second;
             return TRUE;
         }
