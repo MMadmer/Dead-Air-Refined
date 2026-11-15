@@ -750,9 +750,9 @@ piece's own texture (`<name>@piece<n>`) is described as its texture is.
 | `detail` | `false`, a table | the detail texture laid over it; `false` none |
 | `detail.texture` | a texture name | required for a detail |
 | `detail.scale` | number, `1` | how many times it repeats over the texture |
-| `detail.on` | `diffuse` (default), `bump`, `both` | what it is laid on |
+| `detail.on` | `diffuse` (default), `bump`, `both`, `none` | what it is laid on; `none` names it and lays it on nothing |
 | `material` | `oren_nayar`, `blinn`, `phong`, `metal`, or the `.thm`'s number | the lighting model |
-| `weight` | 0..1, `0` | how far the lighting goes towards the next model (`oren_nayar` -> `blinn` -> `phong` -> `metal` -> `oren_nayar`) |
+| `weight` | 0..1, `0` | how far the lighting goes towards the next model (`oren_nayar` -> `blinn` -> `phong` -> `metal` -> `oren_nayar`); without `material` it moves from `blinn`, the model of a texture nobody describes |
 
 **A sound** (`snd`) wins over what its `.ogg` states:
 
@@ -772,7 +772,7 @@ shares the result.
 | `surfaces[n].texture`, `.shader` | names | left out, the child keeps its own; a child beyond the list keeps both |
 | `bones` | a list of `{ name = ... }` | the named bones' physics |
 | `bones[].shape` | `none`, `box`, `sphere`, `cylinder` | the kind of the bone's shape; its size is the model's, so a kind the bone has no size for is refused with a line |
-| `bones[].mass` | kilograms | |
+| `bones[].mass` | kilograms, above zero | a value that is no such number is left out |
 | `bones[].material` | a dynamic game material | another one is refused with a line |
 | `userdata` | a string | replaces the model's user data (the ltx text of `OGF_S_USERDATA`) |
 | `animations` | a list of `{ name = ... }` | the named motions |

@@ -58,6 +58,18 @@ int main()
         expect(v.get("3") && v.get("3")->n == 7, "a number key that is not the next index");
     }
 
+    {
+        // a long string as an item of a list, whatever its text begins with
+        XMS::LuaValue v;
+        std::string error;
+        const bool ok = read("return { words = { [[one]], [==[two]]]==], \"three\", [[ [four] ]] } }", v, error);
+        const XMS::LuaValue* words = ok ? v.get("words") : nullptr;
+        expect(words && words->arr.size() == 4, "long strings are items of a list");
+        expect(words && words->arr.size() == 4 && words->arr[0].s == "one" && words->arr[1].s == "two]]" &&
+                words->arr[2].s == "three" && words->arr[3].s == " [four] ",
+            "each with its own text");
+    }
+
     expect(refused("return { a = 1 }\nreturn 2", "line 2: "), "two values are refused, on their line");
     expect(refused("return {\n  a = os.exit(),\n}", "line 2: "), "a call is refused, on its line");
     expect(refused("return {\n\n  a = 1 + 2 }", "line 3: "), "an expression is refused, on its line");

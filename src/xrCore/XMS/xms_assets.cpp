@@ -92,8 +92,9 @@ void parse_texture(const LuaValue& v, Texture& t)
             t.detail = 1;
             t.detail_name = normal(detail->text("texture"));
             t.detail_scale = float(detail->number("scale", 1.0));
+            // left out it is laid on the colour; "none" names it and lays it on nothing
             const xr_string on = normal(detail->text("on"));
-            t.detail_diffuse = on != "bump";
+            t.detail_diffuse = on != "bump" && on != "none";
             t.detail_bump = on == "bump" || on == "both";
         }
     }
@@ -115,6 +116,12 @@ void parse_texture(const LuaValue& v, Texture& t)
             t.has_material = true;
             t.material = base + (material->type == LuaValue::String ? clampr(float(v.number("weight", 0.0)), 0.f, 1.f) : 0.f);
         }
+    }
+    else if (const LuaValue* weight = v.get("weight"); weight && weight->type == LuaValue::Number)
+    {
+        // a weight alone moves from the model a texture nobody describes has: "blinn"
+        t.has_material = true;
+        t.material = 1.f + clampr(float(weight->n), 0.f, 1.f);
     }
 }
 
@@ -161,7 +168,9 @@ void parse_model(const LuaValue& v, Model& m)
             Bone b;
             b.name = row.text("name");
             b.shape = normal(row.text("shape"));
-            if (const LuaValue* mass = row.get("mass"); mass && mass->type == LuaValue::Number)
+            // a mass the physics can take: a number above zero, not an infinity
+            if (const LuaValue* mass = row.get("mass");
+                mass && mass->type == LuaValue::Number && std::isfinite(float(mass->n)) && mass->n > 0.0)
             {
                 b.has_mass = true;
                 b.mass = float(mass->n);

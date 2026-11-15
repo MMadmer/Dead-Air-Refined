@@ -248,7 +248,7 @@ class DataReader
                 else
                     return fail("a key is a string or a number");
             }
-            else if (*p == '[')
+            else if (*probe == '[')
                 p = probe; // a long string as a value: long_open moved past its bracket
             else if (ident_start(*p))
             {
