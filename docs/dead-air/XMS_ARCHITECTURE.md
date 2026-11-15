@@ -9,7 +9,8 @@ Status: **P0–P4 implemented in the engine** (2026-08-11), P5–P6 are design. 
 | Phase | State | Where in code |
 |---|---|---|
 | P0 registry/order/mounting/ledger | implemented | `src/xrCore/XMS/xms_core.{h,cpp}`, hooks in `LocatorAPI.cpp` (`xms_register`, redirect in `r_open_impl`, remount in `rescan_path`, initialization in `_initialize`) |
-| P1 LTX merge + `.ltxp` | implemented | merge in `Xr_ini.cpp` (`insert_section`/`xms_merge_section`, layers in `Sect`), patches in `XMS/xms_ltx.cpp`, invoked from `x_ray.cpp::InitSettings` |
+| P1 LTX merge + `.ltxp` | implemented | merge in `Xr_ini.cpp` (`insert_section`/`xms_merge_section`, layers in `Sect`), patches in `XMS/xms_ltx.cpp` (read by `XMS/xms_ltxp.cpp` into directives), invoked from `x_ray.cpp::InitSettings` after the game's own overlays. A module's change of a key reaches the sections that inherit it (`Sect::XmsParents` / `XmsOwn`, the rule in `XMS/xms_inherit.h`, the child index made at the first change); `#file <path>` patches are kept by file and applied by every read-only `CInifile` read from files under `$game_config$` that read that file (itself or an `#include`), once it is whole (`CInifile::xms_apply_file_patches`; `game.ltx` and the engine settings after the stage; a script's `ini_file` made writable is read as written). The ability `config-file-patches`. QA: `tools/qa/ltx/Run-LtxQa.ps1` (the reader and the rule), `tools/qa/items/Run-ItemsQa.ps1` (in game). Contract: MODDING.md, "Patches of any config" |
+| Items | implemented | `*.itemasset` anywhere in an enabled module, read by `XMS/xms_items.cpp` in the config stage after the module's characters and before its overlays: new sections (`[section] : base`), changes of sections that exist, their strings (published with the characters' `PublishGenerated`, swept by `FinishCharacters`), icons, hud and other sections through the `CInifile` XMS calls at the module's layer; recipes into `[xms_craft]`; loot, stock, scenes and lists as `#file` patches. The ability `item-assets`. QA: as above. Contract: MODDING.md, "A module's items" |
 | P1 XML `.xmlp` | implemented | `XMS/xms_xml.cpp`, hook in `XMLDocument::Load`; the mutation API added to the tinyxml fork (`Xms*` methods) |
 | P1 layered string table | implemented | `StringTable.cpp` (sort by layer + `CompositionHash` in the cache signature) |
 | P2 multicast callbacks | implemented | `script_callback_ex.h` (subscribers with a 0–1 fast path), `game_object:add_callback/remove_callback` in `script_game_object_*` |
@@ -277,6 +278,12 @@ This is where "logical composition" lives: mod A edits `visual`, mod B edits `co
 changes arrive. If both edit `visual` — the later one wins, which is exactly the behavior the
 player would get from JSGME anyway, only now with a report entry.
 
+* **A section an item made** (`Sect::xms_item`) that the same module's overlay defines again is
+  merged as if it came from another layer, the file's keys winning, with one log line; a second
+  file of the module defining it again is the stop it always was.
+* **The merge is a change like any other**: the keys it brings reach the sections that inherit
+  them (5.2), and they become the section's own.
+
 ### 5.2 Directive patches `.ltxp`
 
 Scanned from `<module>/patch/*.ltxp` of every enabled module (`xms_ltx.cpp`, flat, no recursion) after `pSettings` is composed. A mod edits one
@@ -292,10 +299,37 @@ cost          = 3000             ; set
 
 [!wpn_obsolete]                  ; delete a section
 [madmer.wpn_gold] : wpn_ak74     ; a new section with inheritance
+
+#file misc\death_generic.ltx     ; what follows patches that config, wherever it is read
+[item_count]
+madmer_wpn_gold = 0, 1
+#file                            ; back to the system config
 ```
 
-The injection point is after `InitSettings` (`src/xrEngine/x_ray.cpp:187`), before the first reader.
-`pSettings` stays `const` for the game; the patch pass works at composition time.
+The injection point is after `InitSettings` (`src/xrEngine/x_ray.cpp`), once the game's own overlays
+(`dead_air_x64_ai.ltx`, `dead_air_x64_pda3d_items.ltx`, `dead_air_x64_animations.ltx`) are in, before
+the first reader. `pSettings` stays `const` for the game; the patch pass works at composition time.
+Per module, in the load order: its characters, its items (`*.itemasset`), its `gamedata\configs\xms\*.ltx`,
+its `patch\*.ltxp`.
+
+**A change reaches what inherits.** A section copies its parents' keys when it is read; on top of the copy
+it remembers its parents (`Sect::XmsParents`) and the keys it says itself (`Sect::XmsOwn`: its own lines, a
+merge into it, a directive on it, a key a directive took away), both only while modules are active and only
+for a section with parents. Every XMS change of a key (`xms_set_line`, `xms_remove_line`, the list ops, a
+merge, a section made with parents) recomputes that key in the sections naming the changed one as a parent,
+through a child index (parent -> children) made at the first change: a child that does not say the key takes
+it from its LAST parent that has it, or loses it when none has; a child whose value did not change stops the
+walk (`XMS::PropagateKey`, `xms_inherit.h`). No ledger row is written for a child.
+
+**`#file`.** The reader (`xms_ltxp.cpp`) tags every directive with the config it patches (its path under
+`configs`, lower case, `\`). A directive of the system config - no `#file`, or a file the system config is
+read from - is applied at once; any other is kept in a registry by file, in module order, with a ledger row
+naming the file. Every `CInifile` read from files notes the files under `$game_config$` it reads (itself and
+every `#include`, masks included) while modules may patch them; a read-only one applies the registry's
+directives for those files once it is whole (in one pass, modules in load order, at each module's layer, with
+the inheritance above). Never an ini opened for writing, never a string-made one; a script's `ini_file` keeps
+a parse with the patches and one without in its cache and takes the latter when Lua makes it writable. With
+no file patch registered nothing is noted and nothing is applied.
 
 ### 5.3 XML
 

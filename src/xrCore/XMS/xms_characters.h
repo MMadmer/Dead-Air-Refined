@@ -15,6 +15,7 @@ class CInifile;
 namespace XMS
 {
 struct Module;
+struct LuaValue;
 
 // What a module's characters add to system.ltx. The files they need are already published.
 struct CharacterConfigs
@@ -28,6 +29,19 @@ struct CharacterConfigs
 // False when the module has no character the game can use.
 bool BuildCharacters(const Module& m, const CInifile& settings, CharacterConfigs& out);
 
-// Takes away what earlier starts published and this one did not.
+// Takes away what earlier starts published and this one did not - the characters' files and the
+// items' alike.
 void FinishCharacters();
+
+// What the game makes for its own loaders from a module's descriptions (the characters', the
+// items'): written under $app_data_root$\xms_generated\<relative> when it changed and mounted at
+// <relative> under $game_data$.
+void PublishGenerated(const xr_string& relative, const xr_string& text);
+// Text a module wrote - UTF-8 when a tool wrote it, Windows-1251 when a person did - as the game
+// reads it, and as the text of an XML element.
+xr_string GameText(const xr_string& text);
+xr_string XmlText(const xr_string& text);
+// A text of one string or { language = text } in a language, falling back to rus; the languages it names.
+xr_string TextIn(const LuaValue& text, pcstr lang);
+void LanguagesOf(const LuaValue& text, xr_vector<xr_string>& out);
 }

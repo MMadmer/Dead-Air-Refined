@@ -71,8 +71,9 @@ struct State
     string_path registry_path{};
     string_path report_path{};
     xr_string staged_root; // modules\.staged\ with a trailing delimiter, empty until the FS is up
-    // ltx parse attribution stack
+    // ltx parse attribution stack, and the files beside it (the callers' strings, for log lines)
     xr_vector<u16> ltx_layer_stack;
+    xr_vector<pcstr> ltx_file_stack;
     u32 composition_hash{0};
     // game modes active for the current session
     xr_vector<xr_string> active_modes;
@@ -2318,13 +2319,36 @@ void ListFilesRelative(pcstr dir, pcstr mask, bool recursive, xr_vector<xr_strin
     std::sort(out.begin(), out.end());
 }
 
-void PushLtxFile(pcstr physical_path) { st().ltx_layer_stack.push_back(LayerOfPath(physical_path)); }
+void PushLtxFile(pcstr physical_path)
+{
+    st().ltx_layer_stack.push_back(LayerOfPath(physical_path));
+    st().ltx_file_stack.push_back(physical_path);
+}
 
 void PopLtxFile()
 {
     auto& stack = st().ltx_layer_stack;
     if (!stack.empty())
         stack.pop_back();
+    auto& files = st().ltx_file_stack;
+    if (!files.empty())
+        files.pop_back();
+}
+
+pcstr CurrentLtxFile()
+{
+    const auto& files = st().ltx_file_stack;
+    return files.empty() || !files.back() ? "" : files.back();
+}
+
+const Module* ModuleOfLayer(u16 layer)
+{
+    if (!layer)
+        return nullptr;
+    for (const Module& m : st().modules)
+        if (!m.disabled && m.layer == layer)
+            return &m;
+    return nullptr;
 }
 
 u16 CurrentLtxLayer()

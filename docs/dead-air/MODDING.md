@@ -24,7 +24,12 @@ Spawn ids: every module holds a range of ids for the objects its spawn layers ad
                      ; full-file overrides); later modules win per file
   gamedata/configs/xms/*.ltx   ; NEW config sections, merged into system.ltx
   patch/*.ltxp       ; config directives: key = v, +list_key = a, -list_key = b,
-                     ; !key (delete), [!section] (delete), [new] : parent
+                     ; !key (delete), [!section] (delete), [new] : parent;
+                     ; #file <path under configs> patches that config wherever
+                     ; it is read (#file alone: system.ltx again); a change
+                     ; reaches the sections that inherit the key (below,
+                     ; "Patches of any config")
+  **/*.itemasset     ; items, new ones and changes of the game's ("A module's items")
   patch/*.xmlp       ; XML DOM patches: <xms-patch target="ui\file.xml">
                      ; <append into="a:b"/>, <set-attr/>, <replace/>, <remove/>
   spawn/*.xspawn     ; additive spawn ops:
@@ -695,6 +700,151 @@ xms_trade         = misc\trade\my_mod\barkeep.ltx
   clears that clock, so the next trade restocks at once - a quest ties a shop's refresh to a
   night that begins or a caravan that came, and the restock hours stay a fallback.
 
+### Patches of any config
+
+A `.ltxp` patches the system config (`system.ltx` as composed) until it says otherwise:
+
+```ini
+[wpn_ak74]
++ammo_class = ammo_9x18_pmm        ; reaches wpn_ak74_kobra, wpn_ak74_ps01 and what inherits from them
+
+#file misc\death_generic.ltx       ; what follows patches that config
+[item_count]
+my_mod_sil = 0, 1
+
+#file misc\trade\trade_presets.ltx ; every trader's file includes it
+[merchant]
+my_mod_sil = 1
+
+#file                              ; back to the system config
+[my_mod_tuning]
+k = 1
+```
+
+- **A change reaches what inherits.** A section remembers the parents it names (`[child] : a, b`)
+  and which keys are its own lines. When a module changes a key of a section - a line of its
+  overlay merged into it, a `.ltxp` directive, an item - every section that inherits that key from
+  it takes the change: a section that does not say the key itself and that no later parent gives
+  it to (`[x] : a, b` takes from `b` what both have), through a chain as well. A key taken away
+  (`!key`) falls back to an earlier parent's value, or goes. A key a module's directive set or took
+  away on a section is that section's own from then on. `[section] : parents` on a section that
+  exists still leaves its parents as they are, and the ledger gets one row, for the section the
+  module changed. Before this a section copied its parents' keys when it was read, so a patch of a
+  parent never reached its children: `+ammo_class` on `wpn_ak74` left every scope variant as it was.
+- **`#file <path>`** sends the directives after it to the config of that path under `configs`
+  (case and slashes do not matter); `#file` alone goes back to the system config. The operators are
+  the same. A key after a `#file` and before a header changes nothing, as one before any header.
+- **Every ini that reads the file by its name gets the patch** - opened by itself (a script's
+  `ini_file("misc\\death_generic.ltx")`, an engine reader) or pulled in by another file's
+  `#include` (masks too) - once it has been read whole, with the inheritance above: a line added to
+  `[base]` of `death_items_by_communities.ltx` reaches every community that inherits `[base]`, one
+  added to `trade_presets.ltx [merchant]` every trader's `[..]:merchant`. Modules apply in their
+  load order, each module's directives in the order they are written.
+- A `#file` naming a file the system config itself is read from (`weapons\w_ak74.ltx`) is a patch
+  of the system config, applied with the module's other directives; another ini reading that file
+  gets it too.
+- **A config the game writes is read as written**: an ini opened for writing, or a script's
+  `ini_file` made writable (`set_readonly(false)`, what `ini_file_ex` does to save), never carries
+  a module's patch into the player's file. An ini made from a string (`create_ini_file`, custom
+  data) is never patched.
+- The log says what is kept, `* XMS: <n> patch op(s) of <f> other config file(s) kept for when
+  they are read`, and what each ini took, `* XMS: <file>: <n> patch op(s) of modules applied, <s>
+  skipped` (a script reads a file once a session). The ledger and `xms_why` name the file: `xms_why
+  death_generic` answers `misc\death_generic.ltx: item_count.my_mod_sil` with the module and what it
+  does.
+- The game's own overlays (`dead_air_x64_ai.ltx`, `dead_air_x64_pda3d_items.ltx`,
+  `dead_air_x64_animations.ltx`) are in before the module stage: a module patches and inherits
+  their sections like any other of the game's.
+
+A game that does this states `config-file-patches` in its version resources' `EngineAbilities`;
+an older one reads every `#file` line as a line it ignores and applies what follows to the system
+config, and leaves the sections that inherit a changed one as they were read.
+
+### A module's items
+
+A module's inventory items are `.itemasset` files, one per item, anywhere in the module. One is a
+NEW item or a CHANGE of an item that exists - the game's, or another module's. The game reads them
+when the configs come up and makes the sections, the strings and the list entries itself.
+
+```lua
+-- a new item
+return {
+  item = 1,
+  id = "sil_diy",                       -- a-z 0-9 _; the file name when left out
+  section = "wpn_sil_diy",              -- "<module>_<id>" when left out
+  base = "wpn_sil_pbs1",                -- or a list: `[section] : a, b`
+  name = { rus = "...", eng = "..." },  -- or one string (Russian)
+  description = { rus = "..." },
+  icon = { texture = [[ui\my_icons]], x = 3, y = 0, w = 2, h = 1 },
+  set = { cost = 1200, inv_weight = 0.4, visual = [[dynamics\weapons\wpn_sil\wpn_sil_diy]] },
+  hud = { base = "wpn_addon_silencer_hud", set = { item_visual = [[...]] } },
+  sections = { { name = "wpn_sil_diy_sounds", base = "base_sounds", set = { snd_shoot = [[weapons\sil\diy_shot]] } } },
+  craft = { { at = "itm_repairkit_tier_1", parts = { "jar", "textile_patch_m", "rope", "flashlight_broken" } } },
+  loot  = { count = { 0, 1 }, chance = 0.01, by = { bandit = 0.03 } },
+  sold  = { { by = "trade_military", count = 1, chance = 0.5 } },
+}
+
+-- a change
+return {
+  item = 1,
+  edit = "wpn_ak74",
+  set   = { snd_shoot = [[weapons\ak74\ak74_shoot]] },
+  unset = { "snd_shoot1" },
+  add   = { ammo_class = { "ammo_5.45x39_ap" } },
+  drop  = { ammo_class = "ammo_5.45x39_fmj" },
+  hud   = { set = { hands_position = { 0.02, -0.01, 0.1 } }, unset = { "anm_bore" } },
+}
+```
+
+| Key | Takes | What the game makes of it |
+|---|---|---|
+| `item` | integer | The format's version, 1. A file without it is version 1. |
+| `id` | string | A new item's id: `a-z 0-9 _`, not starting with a digit, up to 48. The file name (lower case, anything else `_`) when left out. |
+| `section` | string | A new item's section: `a-z 0-9 _ . -`, under 64 characters (a save reads a section into 64). `<module>_<id>` when left out. |
+| `base` | string or list | A new item's parents, `[section] : a, b` - a later one wins over an earlier one. A section of the game, of a module loaded before, or of another item of this module (it waits for that one). |
+| `abstract` | boolean | A template: its section with `set`, `unset`, `add`, `drop` and nothing else - no strings, icon, hud, sections or lists. |
+| `edit` | string | Instead of `id`, `section`, `base`, `abstract`: the section the file changes. |
+| `name`, `short_name`, `description` | string or `{ lang = text }` | The strings `<section>_name`, `<section>_short`, `<section>_descr` in `configs\text\<lang>\<module>_items.xml` (published like the characters' tables: every language the items name, and always `rus` and `eng`, falling back to `rus`; UTF-8 becomes Windows-1251), and `inv_name`, `inv_name_short`, `description` naming them. `short_name` left out: `inv_name_short` is the name. Left out altogether: the base's (a new item) or unchanged (a change). A string id that exists is named with `set = { inv_name = "st_x" }`. |
+| `icon` | `{ texture, x, y, w, h }` | `icons_texture` (left out: taken away, the game's atlas), `inv_grid_x`, `inv_grid_y`, `inv_grid_width`, `inv_grid_height` (`w`, `h` left out: what the section has), in cells of 50 px. A picture (`"icons/x.png"`, `{ file = ... }`) is what a module build turns into this form: the game passes it by with one line, `! XMS: [<module>] <file>: the icon names a picture, which only a built module turns into a texture - the item keeps the icon it has`. |
+| `set` | `{ key = value }` | The section's keys: a string as written, a number without needless decimals, `true` / `false`, a list (`{ a, b }`) as `a, b`. |
+| `unset` | list of keys | Taken away. |
+| `add`, `drop` | `{ key = member or { members } }` | Members added to (when not there) or taken out of a comma list, as `+key` and `-key` do. |
+| `hud` | `{ base, set, unset, add, drop }` | A new item: `<section>_hud` over `base` (left out: over the hud section its bases name), and `hud = <section>_hud` unless `set.hud` says otherwise. A change: the changes go to the section the item's `hud` names once its `set` is applied; `base` is refused there. |
+| `sections` | list | `{ name, base, set, unset, add, drop }` makes a section (`a-z 0-9 _ . -`, it must not exist); `{ edit, set, unset, add, drop }` changes one that exists. |
+| `craft` | list of `{ at, count = 1, parts }` | One line a recipe in the system config's `[xms_craft]`: `<n> = <at>, <section>, <count>, <part>, ...` with one to four parts, `n` going on after the highest number the section holds. The craft window adds them to the recipes of the tool or workbench `at` names. |
+| `loot` | `{ count, chance, by }` | `misc\death_generic.ltx [item_count] <section> = <count>` (`{ min, max }` as `min, max`); `misc\death_items_by_communities.ltx [base] <section> = <chance>`, which every community that inherits `[base]` takes, and `[<name>] <section> = <chance>` for each `by` entry (a community or `<community>_<rank>`). |
+| `sold` | list of `{ by, supplies = "supplies_1", count = 1, chance = 1 }` | `misc\trade\<by>.ltx` (or `by` itself when it ends in `.ltx`, a path under `configs`): `[<supplies>] <section> = <count>, <chance>` for each supplies section named. |
+| `scene` | string or table | `items\items\animations_settings.ltx [<section>] : <like>` (the string is `like`); `sound`, `camera`, `time`, `helmet`, `anm`, `hud_anm` are its `snd`, `cam`, `tm`, `helm`, `anm`, `hud_anm`. With `hud = { base, set, ... }` the scene's own HUD section `item_ea_<section>_hud` in the system config, and `anm = item_ea_<section>` unless `anm` is written. |
+| `lists` | list of rows | `{ file, section, key, value }` sets `key = value` in `[section]` of that config (`file` a path under `configs`, left out the system config; `key` left out the item's section; `value` left out a bare key); `{ file, section, key, add = member }` / `drop` change a list. |
+| `editor` | table | Passed by, like every key the game does not read. |
+
+- **The order**: per module, in the load order, its characters, then its items - the new ones
+  first (one whose base is another new item of the module waits for it), then the changes in the
+  order of their paths - then its `gamedata\configs\xms\*.ltx`, then its `.ltxp`. What a module's
+  own overlays and patches say of an item still counts. A section an item made that the module's
+  own overlay defines again is merged, the file's keys winning, with one line, `! XMS: [<module>]
+  section [<name>] is defined by an item and by <file>: the file's keys win`, instead of the stop a
+  section defined twice in one layer is.
+- **Through the config's own calls, never through text**: a value never meets the text reader's
+  comment and quote rules. Everything an item writes carries the module's layer and reaches the
+  sections that inherit it (`add` on `wpn_ak74` reaches the scope variants); `loot`, `sold`,
+  `scene` and `lists` are patches of the configs they name, as `#file` makes them.
+- **Nothing is defaulted that the base gives**: an author starts from a base of the same kind that
+  works and writes the difference. An item the game would stop on (a key a class requires that the
+  base does not give) stops it the way a hand-written section does; the authoring side checks that.
+- **A refused item stops nothing**: one line, `! XMS: [<module>] <file>: left out - <why>`, for a
+  new item without a base, an unknown base, a change that also names `id`, `section`, `base` or
+  `abstract`, a change of a section that is not there, a new section (or `<section>_hud`, or a
+  section of `sections`) that exists already, a section that is not `a-z 0-9 _ . -` or is 64
+  characters or longer, a key that is no name, a value that holds a line break or is no value, a
+  recipe of more than four parts; a file that is not data says its line, and one made for a newer
+  game `! <module>\<file>: made for a newer game (version N, this game reads up to M)`, as every
+  asset reader of the game does. The log sums it up: `* XMS: [<module>] <n> item(s) read from the
+  module (<new> new, <changes> change(s))`.
+
+A game that does this states `item-assets` in its version resources' `EngineAbilities`; an older
+one never looks for the files.
+
 ### A module's models, textures and sounds
 
 A module ships its textures, sounds and models in the game's own containers - `.dds`, `.ogg`,
@@ -732,7 +882,7 @@ return {
   texture, a sound or a model without a description - and every old mod's `.thm`, plain `.ogg` and
   plain `.ogf` - behaves exactly as before.
 - **The version rule** holds for every reader of a module's assets - these three, the characters
-  (`npc`) and the PDA layouts (`pda`); the quests and behaviour graphs have theirs
+  (`npc`), the items (`item`) and the PDA layouts (`pda`); the quests and behaviour graphs have theirs
   (`ASSET_MIGRATE` in `xms_nq_load.script`). A header above the version the game reads is left out
   with one line, `! <module>\<file>: made for a newer game (version N, this game reads up to M)`; an
   older one is read through the reader's chain of small steps, one per version. Every kind is at

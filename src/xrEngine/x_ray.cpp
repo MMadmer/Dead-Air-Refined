@@ -236,12 +236,12 @@ void InitSettings()
         }
     }
 
-    // module config overlays + .ltxp directive patches on top of system.ltx
-    XMS::ApplyConfigStage(const_cast<CInifile*>(pSettings));
-
-    // Refined compat: engine-shipped item sections (the 3D PDA animator item) merged on top
-    // of system.ltx through the same overlay path XMS uses. No DA file is overridden; the
-    // file is optional and lives in the compatibility archive.
+    // Refined compat: engine-shipped item sections (the 3D PDA animator item, the item scenes'
+    // HUD sections) merged on top of system.ltx through the same overlay path XMS uses. No DA
+    // file is overridden; the files are optional and live in the compatibility archive. They
+    // are the game's own sections, so they go in before the module stage: a module's overlay
+    // inherits them and its patches find them, as on every other section of the game. They only
+    // add sections, so a game without modules reads the same either way.
     for (pcstr overlay : {"dead_air_x64_pda3d_items.ltx", "dead_air_x64_animations.ltx"})
     {
         if (!FS.exist("$game_config$", overlay))
@@ -254,6 +254,12 @@ void InitSettings()
             FS.r_close(R);
         }
     }
+
+    // module items, config overlays + .ltxp directive patches on top of system.ltx
+    XMS::ApplyConfigStage(const_cast<CInifile*>(pSettings));
+    // the two configs read before the stage take what modules patch of their files like any later one
+    pGameIni->xms_apply_file_patches();
+    const_cast<CInifile*>(pSettingsGrizzly)->xms_apply_file_patches();
 
     AnimationBlend::LoadSettings(pSettings);
 

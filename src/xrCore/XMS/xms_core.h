@@ -415,6 +415,10 @@ XRCORE_API void ListFilesRelative(pcstr dir, pcstr mask, bool recursive, xr_vect
 XRCORE_API void PushLtxFile(pcstr physical_path);
 XRCORE_API void PopLtxFile();
 XRCORE_API u16 CurrentLtxLayer();
+// The file PushLtxFile named last, for a log line; "" when none. Valid while it is pushed.
+XRCORE_API pcstr CurrentLtxFile();
+// The enabled module at that layer; null for the base game.
+XRCORE_API const Module* ModuleOfLayer(u16 layer);
 XRCORE_API bool LtxMergeEnabled();
 XRCORE_API void SetLtxMergeEnabled(bool enabled);
 }

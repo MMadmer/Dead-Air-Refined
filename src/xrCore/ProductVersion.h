@@ -28,8 +28,13 @@
 //   exactly (XMS_ARCHITECTURE.md 8.4);
 // - ai-edits: a module's levels\<level>\overlay.aiedit moves and closes the level's AI nodes in place (8.4);
 // - asset-descriptions: a module's .texasset, .sndasset and .meshasset files describe its textures, sounds
-//   and models over what their .thm, .ogg and .ogf say (MODDING.md, "A module's models, textures and sounds").
-#define DAR_ENGINE_ABILITIES "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions"
+//   and models over what their .thm, .ogg and .ogf say (MODDING.md, "A module's models, textures and sounds");
+// - item-assets: a module's .itemasset files make new inventory items and change the game's, with their
+//   strings, icons, recipes, loot, stock and scenes (MODDING.md, "A module's items");
+// - config-file-patches: a .ltxp `#file <path>` patches that config wherever it is read, and a change of a
+//   section reaches the sections that inherit it (MODDING.md, "Patches of any config").
+#define DAR_ENGINE_ABILITIES \
+    "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions item-assets config-file-patches"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined

@@ -77,10 +77,21 @@ public:
         // XMS: layer that produced the section; per-item layers appear only
         // after a cross-layer merge (parallel to Data, else empty).
         u16 xms_layer{0};
+        // XMS: made by a module's item, which that module's own overlay may define again
+        bool xms_item{false};
         xr_vector<u16> XmsItemLayers;
+        // XMS: the parents the section names after ':', in order, and the keys it says itself - by a
+        // line of its own, a merge into it or a directive on it - rather than copied from them when it
+        // was read. A module's change of a parent's key reaches the keys a section does not say itself;
+        // a key a directive took away is its own as well. Kept only while modules are active, and
+        // only for a section with parents.
+        xr_vector<shared_str> XmsParents;
+        xr_vector<shared_str> XmsOwn;
 
         bool line_exist(pcstr line, pcstr* value = nullptr);
         void rebuild_index();
+        bool xms_own(const shared_str& key) const;
+        void xms_note_own(const shared_str& key);
     };
 
     using Root = xr_vector<Sect*>;
@@ -106,10 +117,20 @@ private:
     Root DATA;
     xr_vector<xr_string> m_includes;
     xr_flat_hash_map<pcstr, Sect*, Sect::StringHash, Sect::StringEqual> m_sectionIndex;
+    // XMS: the configs it was read from by their paths under $game_config$ (noted only while a module
+    // may patch them), and whether the modules' patches of those files changed it
+    xr_vector<xr_string> m_xmsFiles;
+    bool m_xmsPatched{false};
+    // XMS: parent -> the sections that name it, made at the first change that has to reach them
+    xr_flat_hash_map<shared_str, xr_vector<shared_str>, std::hash<shared_str>> m_xmsChildren;
+    bool m_xmsChildrenMade{false};
 
     void Load(IReader* F, pcstr path, allow_include_func_t allow_include_func = nullptr);
     void insert_section(Sect* section);
     Sect* find_section(pcstr section) const;
+    void xms_note_file(pcstr path);
+    void xms_note_child(const Sect& section);
+    void xms_reach_children(const Sect& changed, const shared_str& key);
 
 public:
     CInifile(IReader* F, pcstr path = nullptr, allow_include_func_t allow_include_func = nullptr);
@@ -121,18 +142,34 @@ public:
     virtual ~CInifile();
 
     // XMS patch/overlay API. Deliberately ignores the read-only flag: it runs
-    // during composition, before the game reads anything.
+    // during composition, before the game reads anything (and on a config a
+    // module patches, once it has been read). A change reaches the sections
+    // that inherit the key from the changed one. `layer` is the layer a change
+    // is attributed to; left out, the one of the file being read.
+    static constexpr u16 XmsFileLayer = u16(-1);
     // Returns true when the key existed before (old value in old_value).
-    bool xms_set_line(pcstr S, pcstr L, pcstr V, shared_str* old_value = nullptr);
+    bool xms_set_line(pcstr S, pcstr L, pcstr V, shared_str* old_value = nullptr, u16 layer = XmsFileLayer);
     bool xms_remove_line(pcstr S, pcstr L);
     bool xms_remove_section(pcstr S);
     // Creates an empty section (optionally inheriting comma-separated parents
     // resolved against this ini). No-op when the section exists.
-    bool xms_create_section(pcstr S, pcstr parents_csv);
+    bool xms_create_section(pcstr S, pcstr parents_csv, u16 layer = XmsFileLayer);
+    // The section was made by a module's item: that module's own overlay may define it again.
+    void xms_mark_item_section(pcstr S);
     // Parses a physical file into this ini with cross-layer merge semantics.
     void xms_load_overlay(pcstr physical_path);
     // VFS flavour for files living inside game archives (compat item sections).
     void xms_load_overlay(IReader* R, pcstr name, pcstr base_dir);
+    // Applies what modules patch of the configs it was read from (`#file`); a read-only ini read
+    // from files does it by itself once it has been read whole.
+    void xms_apply_file_patches();
+    const xr_vector<xr_string>& xms_files() const { return m_xmsFiles; }
+    bool xms_patched() const { return m_xmsPatched; }
+
+protected:
+    void xms_set_patched(bool patched) noexcept { m_xmsPatched = patched; }
+
+public:
 
     bool save_as(pcstr new_fname = nullptr);
     void save_as(IWriter& writer, bool bcheck = false) const;

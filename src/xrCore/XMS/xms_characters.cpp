@@ -792,6 +792,12 @@ bool BuildCharacters(const Module& m, const CInifile& settings, CharacterConfigs
     return true;
 }
 
+void PublishGenerated(const xr_string& relative, const xr_string& text) { publish(relative, text); }
+xr_string GameText(const xr_string& text) { return game_text(text); }
+xr_string XmlText(const xr_string& text) { return xml(text); }
+xr_string TextIn(const LuaValue& text, pcstr lang) { return text_in(text, lang); }
+void LanguagesOf(const LuaValue& text, xr_vector<xr_string>& out) { languages_of(text, out); }
+
 void FinishCharacters()
 {
     Published& state = published();

@@ -227,10 +227,15 @@ target_sources_grouped(
     XMS/xms_core.h
     XMS/xms_cut_clip.cpp
     XMS/xms_cut_clip.h
+    XMS/xms_inherit.h
+    XMS/xms_items.cpp
+    XMS/xms_items.h
     XMS/xms_level_edits.cpp
     XMS/xms_level_edits.h
     XMS/xms_ltx.cpp
     XMS/xms_ltx.h
+    XMS/xms_ltxp.cpp
+    XMS/xms_ltxp.h
     XMS/xms_luadata.cpp
     XMS/xms_luadata.h
     XMS/xms_xml.cpp

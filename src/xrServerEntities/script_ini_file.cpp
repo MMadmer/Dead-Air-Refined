@@ -12,6 +12,7 @@
 #include "ai_space.h"
 #include "object_factory.h"
 #include "xrCore/xrDebug.h"
+#include "xrCore/XMS/xms_ltx.h"
 
 namespace
 {
@@ -26,9 +27,18 @@ xr_map<xr_string, CInifile*>& parse_cache()
 
 // Sect copies cleanly: Name and every Item hold shared_str, so a copy shares the same
 // interned buffers, and LineIndex keys - raw pointers into those buffers - stay valid.
+// What a section inherits and says itself (XmsParents, XmsOwn) serves a module's change
+// while a config is composed; a script's copy is made after that and never needs it, and a
+// script opens the same files over and over, so the copy leaves it out.
 CInifile::Sect* clone_section(const CInifile::Sect& source)
 {
-    return xr_new<CInifile::Sect>(source);
+    auto* copy = xr_new<CInifile::Sect>();
+    copy->Name = source.Name;
+    copy->Data = source.Data;
+    copy->LineIndex = source.LineIndex;
+    copy->xms_layer = source.xms_layer;
+    copy->XmsItemLayers = source.XmsItemLayers;
+    return copy;
 }
 
 // The cache is keyed by the path the FS resolved, and a save is handed the same path with the
@@ -47,40 +57,60 @@ xr_string cache_key(pcstr path)
 }
 } // namespace
 
-void CScriptIniFile::load_cached(pcstr resolvedPath)
+void CScriptIniFile::load_cached(pcstr resolvedPath, bool patched)
 {
     auto& cache = parse_cache();
-    const xr_string key(cache_key(resolvedPath));
+    // what modules patch of a file is in one parse, the file as written in another
+    const xr_string key(cache_key(resolvedPath) + (patched ? "" : "|as written"));
 
     auto it = cache.find(key);
     if (it == cache.end())
     {
         // The first open goes through the ordinary path, so includes and the module
         // layers behave exactly as they always have.
+        if (!patched)
+            XMS::HoldFilePatches(true);
         CInifile* parsed = xr_new<CInifile>(resolvedPath, true, true, false);
+        if (!patched)
+            XMS::HoldFilePatches(false);
         it = cache.emplace(key, parsed).first;
     }
 
     const CInifile::Root& source = it->second->sections();
     CInifile::Root& target = sections();
+    for (auto* section : target)
+        xr_delete(section);
     target.clear();
     target.reserve(source.size());
     for (const auto* section : source)
         target.emplace_back(clone_section(*section));
+    xms_set_patched(it->second->xms_patched());
 
     // The clones are different objects from the cached originals, and every lookup in
     // this file goes through the section index rather than the vector.
     rebuild_section_index();
 }
 
+void CScriptIniFile::set_writable(bool writable)
+{
+    // a file the game writes back gets what it says, not what modules patch of it
+    if (writable && xms_patched())
+        load_cached(fname(), false);
+    set_readonly(!writable);
+}
+
 void CScriptIniFile::forget_cached_parse(pcstr resolvedPath)
 {
     auto& cache = parse_cache();
-    const auto it = cache.find(cache_key(resolvedPath));
-    if (it == cache.end())
-        return;
-    xr_delete(it->second);
-    cache.erase(it);
+    const xr_string key(cache_key(resolvedPath));
+    for (const xr_string& variant : {key, key + "|as written"})
+    {
+        const auto it = cache.find(variant);
+        if (it == cache.end())
+            continue;
+        xr_delete(it->second);
+        cache.erase(it);
+    }
 }
 
 void CScriptIniFile::forget_cached_parses()
@@ -96,14 +126,14 @@ CScriptIniFile::CScriptIniFile(LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtSta
     : inherited(update("$game_config$", szFileName), ReadOnly, false, SaveAtEnd)
 {
     if (bLoadAtStart)
-        load_cached(fname());
+        load_cached(fname(), ReadOnly != FALSE);
 }
 
 CScriptIniFile::CScriptIniFile(LPCSTR initial, LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtStart, BOOL SaveAtEnd)
     : inherited(update(initial, szFileName), ReadOnly, false, SaveAtEnd)
 {
     if (bLoadAtStart)
-        load_cached(fname());
+        load_cached(fname(), ReadOnly != FALSE);
 }
 
 LPCSTR CScriptIniFile::update(LPCSTR initial, LPCSTR file_name)

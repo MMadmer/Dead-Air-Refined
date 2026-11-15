@@ -133,7 +133,7 @@ void CScriptIniFile::script_register(lua_State* luaState)
                     functor(section->Name.c_str());
                 }
             })
-            .def("set_readonly", +[](CScriptIniFile* self, bool value) { self->set_readonly(value); })
+            .def("set_readonly", +[](CScriptIniFile* self, bool value) { self->set_writable(!value); })
             //Alundaio: END
             .def("fname", +[](const CScriptIniFile* self) { return self->fname(); })
             .def("section_exist", (bool (CScriptIniFile::*)(pcstr) const)&CScriptIniFile::section_exist)

@@ -55,7 +55,12 @@ public:
     // here, so every object still owns writable sections of its own - Lua can call
     // set_readonly(false) and w_string() on one of these, and must not be able to
     // scribble on another script's copy.
-    void load_cached(pcstr resolvedPath);
+    // `patched`: with what modules patch of the files it reads (`#file`); a file the game
+    // writes is read as written.
+    void load_cached(pcstr resolvedPath, bool patched = true);
+    // Lua's set_readonly: an ini made writable drops what modules patch of its files first, so
+    // a save never carries a patch into the player's file.
+    void set_writable(bool writable);
     static void forget_cached_parses();
     // A file the game WRITES leaves the cache describing what it used to hold, so the
     // write drops its entry and the next open parses the file again.
