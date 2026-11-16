@@ -752,6 +752,9 @@ k = 1
   exists still leaves its parents as they are, and the ledger gets one row, for the section the
   module changed. Before this a section copied its parents' keys when it was read, so a patch of a
   parent never reached its children: `+ammo_class` on `wpn_ak74` left every scope variant as it was.
+- **An inventory icon is one thing**: `icons_texture` and the rectangle on it (`inv_grid_x`, `inv_grid_y`). A
+  section that states its own rectangle keeps its texture when a parent's texture changes - an item given a
+  picture of its own (its icon on the module's atlas) leaves its variants with their own icons as they were.
 - **`#file <path>`** sends the directives after it to the config of that path under `configs`
   (case and slashes do not matter); `#file` alone goes back to the system config. The operators are
   the same. A key after a `#file` and before a header changes nothing, as one before any header.

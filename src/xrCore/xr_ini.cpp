@@ -375,7 +375,16 @@ struct IniInheritance
         return found != sections.end() ? found->second : nullptr;
     }
     const xr_vector<shared_str>& parents(const Node& section) const { return section.XmsParents; }
-    bool own(const Node& section, const Name& key) const { return section.xms_own(key); }
+    bool own(const Node& section, const Name& key) const
+    {
+        if (section.xms_own(key))
+            return true;
+        // an inventory icon is its texture and its rectangle on it together: a section that states its own
+        // rectangle keeps the texture it had when a parent's texture changes, or it would show its cells of
+        // another picture
+        static const shared_str texture("icons_texture"), x("inv_grid_x"), y("inv_grid_y");
+        return key == texture && (section.xms_own(x) || section.xms_own(y));
+    }
     bool get(const Node& section, const Name& key, Value& value) const
     {
         const auto found = section.LineIndex.find(key.c_str());

@@ -257,6 +257,8 @@ say("craft_overlay", r(ini, "xms_craft", "items_qa_own"))
 say("variant_weight", r(ini, "items_qa_pm_gold_variant", "inv_weight"))
 say("variant_of_variant", r(ini, "items_qa_pm_gold_variant2", "qa_variant"))
 say("order_marker", r(ini, "wpn_pm", "qa_order"))
+say("icon_parent", r(ini, "medkit_script", "icons_texture"))
+say("icon_variant", r(ini, "bandage_script", "icons_texture"))
 say("long_parent", ini:section_exist("items_qa_long_parent"))
 local big = r(ini, "items_qa_list", "big")
 say("big_list", #big .. "|" .. string.sub(big, -2))
@@ -394,6 +396,8 @@ return {
     # two changes of one key: the later path wins, and `weapons\a` comes before `weapons2\a`
     'order\weapons\a.itemasset' = 'return { item = 1, edit = "wpn_pm", set = { qa_order = "weapons" } }'
     'order\weapons2\a.itemasset' = 'return { item = 1, edit = "wpn_pm", set = { qa_order = "weapons2" } }'
+    # an icon on another texture: bandage_script inherits medkit_script and states its own cells
+    'items\medkit_icon.itemasset' = 'return { item = 1, edit = "medkit_script", icon = { texture = [[ui\ui_actor_portrets]], x = 0, y = 0, w = 1, h = 1 } }'
     'bad\no_base.itemasset' = 'return { item = 1, id = "nobase" }'
     'bad\unknown_base.itemasset' = 'return { item = 1, id = "ub", base = "no_such_section_qa" }'
     'bad\exists.itemasset' = 'return { item = 1, section = "wpn_pm", base = "wpn_pm" }'
@@ -443,7 +447,7 @@ Write-Host '== A: the configs'
 $published = Join-Path $qaAppData 'xms_generated'
 $log = Invoke-Engine -Phase 'configs' -Commands @('xms_why death_generic', 'xms_why trade_presets') -WaitFor @('ITEMSQA done')
 $s = { param($name) Said $log $name }
-Assert-That 'the items are read, new and changes' ($log -match '\* XMS: \[items_qa\] 8 item\(s\) read from the module \(4 new, 4 change\(s\)\)')
+Assert-That 'the items are read, new and changes' ($log -match '\* XMS: \[items_qa\] 9 item\(s\) read from the module \(4 new, 5 change\(s\)\)')
 Assert-That 'a new item is its section over its base' ((& $s 'pm_section') -eq 'true' -and (& $s 'pm_inherited') -ne '<none>') "fire_modes = $(& $s 'pm_inherited')"
 Assert-That 'its own keys' ((& $s 'pm_weight') -eq '0.75')
 Assert-That 'the module''s overlay defines it again: merged, the file''s keys win' (((& $s 'pm_cost') -eq '777') -and
@@ -459,6 +463,8 @@ Assert-That 'a made section starts from the item''s own section, and from an ear
     ((& $s 'variant_of_variant') -eq '1')) "weight: $(& $s 'variant_weight'), of the variant: $(& $s 'variant_of_variant')"
 Assert-That 'the module''s overlay adds a recipe of its own to the section the items made' (((& $s 'craft_overlay') -replace ' ', '') -eq 'itm_repairkit_tier_1,bread,1,jar') (& $s 'craft_overlay')
 Assert-That 'of two changes of one key the later path wins, weapons before weapons2' ((& $s 'order_marker') -eq 'weapons2') (& $s 'order_marker')
+Assert-That 'an icon is its texture and its cells: a variant with cells of its own keeps its texture' (((& $s 'icon_parent') -eq 'ui\ui_actor_portrets') -and
+    ((& $s 'icon_variant') -eq '<none>')) "item: $(& $s 'icon_parent'), variant: $(& $s 'icon_variant')"
 Assert-That 'a parent of 600 characters names no section' (((& $s 'long_parent') -eq 'false') -and
     ($log -match '! XMS: \[items_qa_long_parent\] cannot inherit missing section \[a{511}\]'))
 Assert-That 'a list of 4899 characters takes one more member' ((& $s 'big_list') -eq '4902|zz') (& $s 'big_list')

@@ -15,6 +15,11 @@
     those items have - an item's HUD section and its use scene's - is played once the way the game warms a scene
     up, each call guarded, so a motion or a model the game lacks is a line of game-fails.txt and not a stopped
     game; then a few of the items are really taken in the hands. -MenuOnly stops at the main menu.
+
+    -DumpConfigs (with -MenuOnly) writes what the game composed at the main menu into the results: every section of
+    the system config with its keys as the game resolves them, then each config of -DumpFiles opened by its name,
+    as a script opens it (configs-dump.txt, cp1251). -WithoutModule runs the same with the module left out, so two
+    dumps say exactly what a module changes of the game's configs.
 #>
 [CmdletBinding()]
 param(
@@ -36,6 +41,11 @@ param(
     [int]$SilentSeconds = 90,
     [ValidateRange(60, 3500)] [int]$TimeoutSeconds = 420,
     [switch]$MenuOnly,
+    # at the main menu: the composed configs into configs-dump.txt; -DumpFiles names the configs opened by name too
+    [switch]$DumpConfigs,
+    [string[]]$DumpFiles = @(),
+    # the module left out of the root: what the game composes without it
+    [switch]$WithoutModule,
     # the QA root of the last run is used again as it is (a kept one): no copying, a run starts at once
     [switch]$Reuse,
     [switch]$Keep
@@ -118,7 +128,7 @@ function New-Root {
         New-Item -ItemType Directory -Path $d -Force | Out-Null
     }
     New-Item -ItemType Junction -Path (Join-Path $qaRoot 'database') -Target (Join-Path $GameRoot 'database') | Out-Null
-    New-Item -ItemType Junction -Path (Join-Path $qaModules $moduleId) -Target $Module | Out-Null
+    if (-not $WithoutModule) { New-Item -ItemType Junction -Path (Join-Path $qaModules $moduleId) -Target $Module | Out-Null }
     Copy-Item -LiteralPath (Join-Path $GameRoot 'fsgame.ltx') -Destination (Join-Path $qaRoot 'fsgame.ltx') -Force
     $meta = Join-Path $qaRoot '.dead-air-x64'
     New-Item -ItemType Directory -Path $meta -Force | Out-Null
@@ -276,7 +286,9 @@ mode = *
 '@
 New-Item -ItemType Directory -Path (Join-Path $probe 'scripts') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'module_qa_register.script') -Destination (Join-Path $probe 'scripts\register.script') -Force
-Write-ModuleFile $probe 'gamedata\configs\module_qa.ltx' "[module_qa]`r`nhold = $Hold`r`nhold_ms = $HoldMs`r`nper_frame = $PerFrame`r`n$(if ($HoldFirst.Count) { "hold_first = $($HoldFirst -join ',')`r`n" })"
+Write-ModuleFile $probe 'gamedata\configs\module_qa.ltx' ("[module_qa]`r`nhold = $Hold`r`nhold_ms = $HoldMs`r`nper_frame = $PerFrame`r`n" +
+    $(if ($HoldFirst.Count) { "hold_first = $($HoldFirst -join ',')`r`n" }) +
+    $(if ($DumpConfigs) { "dump = true`r`n" + $(if ($DumpFiles.Count) { "dump_files = $($DumpFiles -join ',')`r`n" }) }))
 
 try {
     if ($MenuOnly) {
@@ -295,8 +307,22 @@ try {
     $other = @(Complaints $log "^! ")
     $other | Set-Content -LiteralPath (Join-Path $resultRoot "$phase-complaints.txt") -Encoding utf8
     Write-Host "   lines that start with '!': $($other.Count) ($phase-complaints.txt)"
-    Assert-That 'the module is mounted' ($log -match [regex]::Escape("] $moduleId ")) ''
-    Assert-That 'its item assets are read' ((& $s 'item assets') -match '^[1-9]' -and (& $s 'unread') -eq '0') "$(& $s 'item assets') assets, $(& $s 'unread') unread"
+    if ($WithoutModule) {
+        Assert-That 'the module is left out' (-not ($log -match [regex]::Escape("] $moduleId "))) ''
+    } else {
+        Assert-That 'the module is mounted' ($log -match [regex]::Escape("] $moduleId ")) ''
+    }
+    if ($DumpConfigs) {
+        $dump = Join-Path $qaAppData 'module_qa_dump.txt'
+        Assert-That 'the configs are dumped' ((Test-Path -LiteralPath $dump) -and ((& $s 'dump') -eq 'written')) (& $s 'dump')
+        if (Test-Path -LiteralPath $dump) {
+            Copy-Item -LiteralPath $dump -Destination (Join-Path $resultRoot 'configs-dump.txt') -Force
+            Write-Host "   the composed configs: $(Join-Path $resultRoot 'configs-dump.txt')"
+        }
+    }
+    if (-not $WithoutModule) {
+        Assert-That 'its item assets are read' ((& $s 'item assets') -match '^[1-9]' -and (& $s 'unread') -eq '0') "$(& $s 'item assets') assets, $(& $s 'unread') unread"
+    }
     Assert-That 'every section they make or change is there' ((& $s 'missing') -eq '0') "$(& $s 'missing') missing, first: $(& $s 'missing 1')"
     Write-Host "   motions of first-person sections: $(& $s 'motions'); items with a HUD: $(& $s 'to hold')"
     if (-not $MenuOnly) {

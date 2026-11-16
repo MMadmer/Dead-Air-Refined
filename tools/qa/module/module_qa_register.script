@@ -89,6 +89,36 @@ say("missing", #missing)
 for i = 1, math.min(#missing, 40) do say("missing " .. i, missing[i]) end
 say("motions", #plays)
 say("to hold", #draws)
+
+-- -DumpConfigs: what the game composed - the system config, then the configs a script opens by name
+local function dump_ini(out, ini, title)
+	out:write("== ", title, "\n")
+	ini:section_for_each(function(s)
+		out:write("[", s, "]\n")
+		for i = 0, ini:line_count(s) - 1 do
+			local _, k, v = ini:r_line(s, i, "", "")
+			out:write(k, "=", v or "", "\n")
+		end
+	end)
+end
+local dump_opt = ini_file("module_qa.ltx")
+if (dump_opt:section_exist("module_qa") and dump_opt:line_exist("module_qa", "dump")) then
+	local out = io.open(getFS():update_path("$app_data_root$", "module_qa_dump.txt"), "wb")
+	if (out) then
+		dump_ini(out, sys, "system.ltx")
+		if (dump_opt:line_exist("module_qa", "dump_files")) then
+			for f in string.gmatch(dump_opt:r_string("module_qa", "dump_files") or "", "[^,]+") do
+				f = string.gsub(f, "^%s*(.-)%s*$", "%1")
+				local ok, ini = pcall(ini_file, f)
+				if (ok and ini) then dump_ini(out, ini, f) end
+			end
+		end
+		out:close()
+		say("dump", "written")
+	else
+		say("dump", "the file could not be opened")
+	end
+end
 say("menu done", true)
 
 -- ---- a new game -------------------------------------------------------------------------------------------------
