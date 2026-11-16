@@ -300,6 +300,19 @@ static Fvector read_by_shape(const shared_str& sect_name, pcstr key, bool is_16x
     return pSettings->r_fvector3(sect_name, asked);
 }
 
+// The same for a placement a section may leave out altogether.
+static Fvector read_by_shape_or_zero(const shared_str& sect_name, pcstr key, bool is_16x9)
+{
+    string128 asked, other;
+    strconcat(asked, key, is_16x9 ? "_16x9" : "");
+    strconcat(other, key, is_16x9 ? "" : "_16x9");
+    if (pSettings->line_exist(sect_name, asked))
+        return pSettings->r_fvector3(sect_name, asked);
+    if (pSettings->line_exist(sect_name, other))
+        return pSettings->r_fvector3(sect_name, other);
+    return Fvector{0.f, 0.f, 0.f};
+}
+
 Fmatrix hud_item_measures::load(const shared_str& sect_name, IKinematics* K)
 {
     const bool is_16x9 = UICore::is_widescreen();
@@ -1257,13 +1270,10 @@ u32 player_hud::scene_play(u8 hand, pcstr section, pcstr anim, bool mix_in, floa
         return 0;
     }
 
-    {
-        const Fvector zero{ 0.f, 0.f, 0.f };
-        pcstr key = UICore::is_widescreen() ? "hands_position_16x9" : "hands_position";
-        m_scene_hands_pos = pSettings->read_if_exists<Fvector>(sect, key, zero);
-        pcstr rkey = UICore::is_widescreen() ? "hands_orientation_16x9" : "hands_orientation";
-        m_scene_hands_rot = pSettings->read_if_exists<Fvector>(sect, rkey, zero);
-    }
+    // a scene's hands sit where its section says, by the form of the screen's shape or, tuned on one
+    // kind of screen, by the other; a scene that says neither keeps them where the motion puts them
+    m_scene_hands_pos = read_by_shape_or_zero(sect, "hands_position", UICore::is_widescreen());
+    m_scene_hands_rot = read_by_shape_or_zero(sect, "hands_orientation", UICore::is_widescreen());
 
     const motion_descr& M = motion->m_animations[Random.randI(motion->m_animations.size())];
 

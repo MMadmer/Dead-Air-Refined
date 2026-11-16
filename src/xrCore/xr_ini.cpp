@@ -533,19 +533,20 @@ static void xms_merge_section(CInifile::Sect* dst, CInifile::Sect* src, xr_vecto
         }
         const u32 index = found->second;
         const u16 old_layer = dst->XmsItemLayers[index];
-        xr_sprintf(subject, "%s.%s", dst->Name.c_str(), item.first.c_str());
+        // cut to the buffers: an overlay's value is as long as its author made it
+        snprintf(subject, sizeof subject, "%s.%s", dst->Name.c_str(), item.first.c_str());
         if (src_layer >= old_layer)
         {
-            xr_sprintf(loser, "layer %u = %s", u32(old_layer),
+            snprintf(loser, sizeof loser, "layer %u = %s", u32(old_layer),
                 dst->Data[index].second.c_str() ? dst->Data[index].second.c_str() : "");
-            xr_sprintf(winner, "layer %u = %s", u32(src_layer), item.second.c_str() ? item.second.c_str() : "");
+            snprintf(winner, sizeof winner, "layer %u = %s", u32(src_layer), item.second.c_str() ? item.second.c_str() : "");
             dst->Data[index].second = item.second;
             dst->XmsItemLayers[index] = src_layer;
         }
         else
         {
-            xr_sprintf(loser, "layer %u = %s", u32(src_layer), item.second.c_str() ? item.second.c_str() : "");
-            xr_sprintf(winner, "layer %u = %s", u32(old_layer),
+            snprintf(loser, sizeof loser, "layer %u = %s", u32(src_layer), item.second.c_str() ? item.second.c_str() : "");
+            snprintf(winner, sizeof winner, "layer %u = %s", u32(old_layer),
                 dst->Data[index].second.c_str() ? dst->Data[index].second.c_str() : "");
         }
         XMS::AddConflict(XMS::ConflictKind::LtxKey, subject, loser, winner);
@@ -573,11 +574,11 @@ void CInifile::insert_section(Sect* section)
         // the section is one the module's item made and its own overlay says
         // more of; different layers = the XMS cross-mod merge path
         const bool same_layer = existing->xms_layer == section->xms_layer;
-        if (!XMS::LtxMergeEnabled() || (same_layer && !existing->xms_item))
+        if (!XMS::LtxMergeEnabled() || (same_layer && !existing->xms_item && !existing->xms_rows))
             xrDebug::Fatal(DEBUG_INFO, "Duplicate section '%s' found.", section->Name.c_str());
         else
         {
-            if (same_layer)
+            if (same_layer && existing->xms_item)
             {
                 const XMS::Module* owner = XMS::ModuleOfLayer(section->xms_layer);
                 pcstr file = XMS::CurrentLtxFile();
@@ -585,9 +586,9 @@ void CInifile::insert_section(Sect* section)
                     file += owner->root.size();
                 Msg("! XMS: [%s] section [%s] is defined by an item and by %s: the file's keys win",
                     owner ? owner->id.c_str() : "?", section->Name.c_str(), file);
-                // a second file of the module defining it again is the data bug it always was
-                existing->xms_item = false;
             }
+            // a second file of the module defining it again is the data bug it always was
+            existing->xms_item = existing->xms_rows = false;
             xr_vector<shared_str> keys;
             xms_merge_section(existing, section, keys);
             for (const shared_str& key : keys)
@@ -1343,6 +1344,7 @@ bool CInifile::xms_set_line(pcstr S, pcstr L, pcstr V, shared_str* old_value, u1
         section = xr_new<Sect>();
         section->Name = S;
         section->xms_layer = layer;
+        section->xms_rows = m_xmsItemStage;
         const auto position = std::lower_bound(DATA.begin(), DATA.end(), section->Name.c_str(), sect_pred);
         DATA.insert(position, section);
         m_sectionIndex.emplace(section->Name.c_str(), section);
@@ -1419,6 +1421,7 @@ bool CInifile::xms_create_section(pcstr S, pcstr parents_csv, u16 layer)
     Sect* section = xr_new<Sect>();
     section->Name = S;
     section->xms_layer = layer == XmsFileLayer ? XMS::CurrentLtxLayer() : layer;
+    section->xms_rows = m_xmsItemStage;
     if (parents_csv && parents_csv[0])
     {
         const u32 count = _GetItemCount(parents_csv);

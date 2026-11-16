@@ -321,6 +321,17 @@ valid current chunk, a semantically invalid or duplicate object record is
 ignored without discarding other valid records. Non-finite floating-point
 values are never applied. Unknown AFO1 mask bits are ignored by version 1.
 
+What a chunk of a module says is checked before it is used. An object record
+is read back only when it is what the game writes for an object: two packets,
+each inside the record and opened by its id, the first naming the record's own
+section; anything else is dropped with its line, `its record is malformed`. A
+spawn range a save names for an absent module tells that module's objects from
+the game's only when it lies in the ids modules are given and crosses no other
+module's range; another range is ignored with one line. A length inside a
+module's own data that is no whole number from zero up ends the read of that
+value. A kept task record is read the way `.scoc` reads the task registry: a
+save made by a stranger is trusted no further than the original game trusts one.
+
 ## Capture and commit
 
 Extension capture shares the existing 3 ms main-thread save budget. WEX1,

@@ -378,8 +378,14 @@ XRCORE_API bool SpawnRangeOf(pcstr module_id, u32& base, u32& size);
 XRCORE_API bool SpawnLocalId(pcstr module_id, pcstr key, u32& id);
 
 // Adopt a range recorded in a savegame manifest (self-healing when the local
-// registry file was deleted). Never shrinks an existing allocation.
+// registry file was deleted). Never shrinks an existing allocation, and takes
+// only a range SpawnRangeValid passes.
 XRCORE_API void AdoptSpawnRange(pcstr module_id, u32 base, u32 size);
+
+// Whether a range a save names for a module can be that module's: inside the
+// ids modules are given, and crossing no other module's range. A save is a
+// file: what it says of ids is checked before objects are told apart by it.
+XRCORE_API bool SpawnRangeValid(pcstr module_id, u32 base, u32 size);
 
 // Persistent u8 level id for a module-added level (allocated from 128 up,
 // stable across runs, recorded in savegame manifests). False when exhausted.
@@ -423,9 +429,14 @@ XRCORE_API bool ReadIniRecords(pcstr physical_path, xr_vector<IniRecord>& out);
 // Non-recursive physical listing of dir+mask, name-sorted for determinism.
 XRCORE_API void ListFiles(pcstr dir, pcstr mask, xr_vector<xr_string>& out);
 
+// The order a module's files are taken in, wherever the order decides something (two items that
+// change one section, two patches of one key): the paths compared byte by byte with their ASCII
+// letters lower-cased and '/' between folders - so `a\k` comes before `a2\k`, and `B` after `a`.
+XRCORE_API bool PathOrderLess(const xr_string& left, const xr_string& right);
+
 // Files under `dir` (trailing delimiter) whose NAME matches `mask` ('*' and
 // '?', case-insensitive), optionally descending into subfolders. Results are
-// paths relative to `dir` with '\' separators, sorted for determinism.
+// paths relative to `dir` with '\' separators, in the order of PathOrderLess.
 XRCORE_API void ListFilesRelative(pcstr dir, pcstr mask, bool recursive, xr_vector<xr_string>& out);
 
 // ---- ltx parse context -----------------------------------------------------

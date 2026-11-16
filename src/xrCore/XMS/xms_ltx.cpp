@@ -155,9 +155,9 @@ char* trim(char* text)
 // comma list helpers for +key / -key ops
 void list_to_items(pcstr value, xr_vector<xr_string>& out)
 {
-    string4096 buf;
-    xr_strcpy(buf, value ? value : "");
-    for (char* cursor = buf; cursor && *cursor;)
+    // a list is as long as the modules made it: no fixed buffer
+    xr_string buf(value ? value : "");
+    for (char* cursor = buf.data(); cursor && *cursor;)
     {
         char* comma = strchr(cursor, ',');
         if (comma)
@@ -235,7 +235,7 @@ void enumerate_files(pcstr dir, pcstr mask, xr_vector<xr_string>& out)
             out.emplace_back(xr_string(dir) + entry.name);
     } while (_findnext(handle, &entry) == 0);
     _findclose(handle);
-    std::sort(out.begin(), out.end()); // deterministic within a module
+    std::sort(out.begin(), out.end(), PathOrderLess); // the one order of a module's files
 }
 
 // ---- what modules patch of configs other than the system config ---------------------------
@@ -276,6 +276,7 @@ void keep_file_patches(const Module& m, const xr_vector<const LtxDirective*>& li
     FilePatches& p = file_patches();
     const unsigned base = p.blocks;
     unsigned top = 0;
+    // the ledger's texts are cut to their buffers: a module writes names and values of any length
     string512 subject;
     for (const LtxDirective* d : list)
     {
@@ -293,7 +294,7 @@ void keep_file_patches(const Module& m, const xr_vector<const LtxDirective*>& li
         switch (d->op)
         {
         case LtxDirective::RemoveSection:
-            xr_sprintf(subject, "%s: [%s]", f.c_str(), d->section.c_str());
+            snprintf(subject, sizeof subject, "%s: [%s]", f.c_str(), d->section.c_str());
             AddConflict(ConflictKind::LtxSection, subject, "the file", (m.id + " (removed)").c_str());
             break;
         case LtxDirective::Set:
@@ -303,7 +304,7 @@ void keep_file_patches(const Module& m, const xr_vector<const LtxDirective*>& li
         {
             if (!d->block)
                 break;
-            xr_sprintf(subject, "%s: %s.%s", f.c_str(), d->section.c_str(), d->key.c_str());
+            snprintf(subject, sizeof subject, "%s: %s.%s", f.c_str(), d->section.c_str(), d->key.c_str());
             pcstr how = d->op == LtxDirective::Set ? " = " : d->op == LtxDirective::Add ? " += " : d->op == LtxDirective::Drop ? " -= " : nullptr;
             const xr_string winner = how ? m.id + how + d->value : m.id + " (removed)";
             AddConflict(ConflictKind::LtxKey, subject, "the file", winner.c_str());
@@ -360,7 +361,7 @@ void ApplyDirectives(CInifile& ini, const LtxDirective* const* list, size_t coun
             {
                 if (ledger)
                 {
-                    xr_sprintf(subject, "[%s]", d.section.c_str());
+                    snprintf(subject, sizeof subject, "[%s]", d.section.c_str());
                     AddConflict(ConflictKind::LtxSection, subject, "base/other", (xr_string(module) + " (removed)").c_str());
                 }
                 ++counts.ops;
@@ -380,8 +381,8 @@ void ApplyDirectives(CInifile& ini, const LtxDirective* const* list, size_t coun
             shared_str old_value;
             if (ini.xms_set_line(section, d.key.c_str(), d.value.c_str(), &old_value, layer) && ledger)
             {
-                xr_sprintf(subject, "%s.%s", section, d.key.c_str());
-                xr_sprintf(winner, "%s = %s", module, d.value.c_str());
+                snprintf(subject, sizeof subject, "%s.%s", section, d.key.c_str());
+                snprintf(winner, sizeof winner, "%s = %s", module, d.value.c_str());
                 AddConflict(ConflictKind::LtxKey, subject, old_value.c_str() ? old_value.c_str() : "", winner);
             }
             ++counts.ops;
@@ -495,12 +496,16 @@ void ApplyConfigStage(CInifile* ini)
             }
         }
         {
+            // what the items make - their sections and the rows they add - the module's own
+            // overlays below may say more of: merged, never a duplicate
             xr_vector<LtxDirective> lists;
+            ini->xms_item_stage(true);
             if (BuildItems(m, *ini, lists))
             {
                 DirectiveCounts counts;
                 route(*ini, m, lists, counts);
             }
+            ini->xms_item_stage(false);
         }
 
         // 1) whole-file overlays with brand new / merged sections

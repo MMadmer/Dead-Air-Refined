@@ -502,6 +502,9 @@ bool plan_sections(const Value& a, ItemPlan& p, LuaString& why)
     return true;
 }
 
+// one click of Craft makes that many objects at once: more is a typing mistake that would stop the game
+constexpr double kMaxRecipeCount = 1000;
+
 bool plan_craft(const Value& a, ItemPlan& p, LuaString& why)
 {
     const Value* list = a.get("craft");
@@ -520,8 +523,9 @@ bool plan_craft(const Value& a, ItemPlan& p, LuaString& why)
         r.at = at && at->type == Value::String ? lower(at->s) : LuaString();
         if (!plain_name(r.at))
             why = "a recipe names the tool or workbench it is made at: at";
-        else if (count && (count->type != Value::Number || count->n < 1 || count->n != std::floor(count->n)))
-            why = "a recipe's count is a whole number from 1";
+        else if (count && (count->type != Value::Number || count->n < 1 || count->n > kMaxRecipeCount ||
+                     count->n != std::floor(count->n)))
+            why = "a recipe's count is a whole number from 1 to 1000";
         else if (!names(row.get("parts"), r.parts) || r.parts.empty() || r.parts.size() > 4)
             why = "a recipe takes one to four parts";
         if (!why.empty())
@@ -982,9 +986,27 @@ Ready ready(const CInifile& ini, const ItemPlan& p, xr_string& why)
         return Ready::Wait;
     if (p.hud && p.hud_parents_given && missing_base(p.hud_parents, " of its hud"))
         return Ready::Wait;
+    // a row may start from what the item itself makes before it: its own section, its hud, an earlier
+    // row - a scope variant of a new weapon is written in the weapon's own file
+    xr_vector<xr_string> made;
+    if (!p.edit)
+    {
+        made.push_back(p.section);
+        if (p.hud)
+            made.push_back(p.section + "_hud");
+    }
     for (const ItemSection& s : p.sections)
-        if (s.make && missing_base(s.parents, (" of [" + s.name + "]").c_str()))
-            return Ready::Wait;
+    {
+        if (!s.make)
+            continue;
+        for (const xr_string& base : split(s.parents))
+            if (!ini.section_exist(base.c_str()) && std::find(made.begin(), made.end(), base) == made.end())
+            {
+                why = "an unknown base [" + base + "] of [" + s.name + "]";
+                return Ready::Wait;
+            }
+        made.push_back(s.name);
+    }
     return Ready::Go;
 }
 

@@ -154,7 +154,9 @@ void parse_manifest(const xr_vector<u8>& payload)
             ++missing;
             Msg("! XMS: save was made with module [%s %s] which is no longer installed", id.c_str(), version.c_str());
             XMS::AddConflict(XMS::ConflictKind::Other, id.c_str(), "present in savegame", "missing at load");
-            bs().orphans.push_back({ id, version, ns, base, size });
+            // the objects of an absent module are told by its range: only one that can be a module's
+            const bool own_range = XMS::SpawnRangeValid(id.c_str(), base, size);
+            bs().orphans.push_back({ id, version, ns, own_range ? base : 0, own_range ? size : 0 });
         }
         else if (current->version != version.c_str())
             Msg("* XMS: module [%s] version changed since the save: %s -> %s", id.c_str(), version.c_str(),
@@ -1302,6 +1304,38 @@ bool chunk_module(const SaveExtensionContainer::Chunk& chunk, pcstr& module, pcs
     return cursor.ok && module[0];
 }
 
+// A record is the two packets the game writes for an object, each behind its length and opened by
+// its id, the first naming the section the record was checked for. The object reader trusts every
+// byte it is handed, so a record that is anything else never reaches it.
+bool record_frames(const ObjectRecord& record)
+{
+    u32 at = 0;
+    for (u32 packet = 0; packet < 2; ++packet)
+    {
+        if (record.size - at < sizeof(u16))
+            return false;
+        u16 count;
+        memcpy(&count, record.state + at, sizeof count);
+        at += sizeof count;
+        if (count < sizeof(u16) || count >= NET_PacketSizeLimit || count > record.size - at)
+            return false;
+        u16 id;
+        memcpy(&id, record.state + at, sizeof id);
+        if (id != (packet ? M_UPDATE : M_SPAWN))
+            return false;
+        if (!packet)
+        {
+            // the name ends inside the packet and is the section's
+            const u8* name = record.state + at + sizeof id;
+            const u32 room = count - u32(sizeof id);
+            if (!memchr(name, 0, room) || xr_strcmp(reinterpret_cast<pcstr>(name), record.section))
+                return false;
+        }
+        at += count;
+    }
+    return true;
+}
+
 pcstr restore_refusal(const CALifeObjectRegistry& registry, const ObjectRecord& record)
 {
     if (!pSettings->section_exist(record.section) || !pSettings->line_exist(record.section, "class"))
@@ -1316,7 +1350,7 @@ pcstr restore_refusal(const CALifeObjectRegistry& registry, const ObjectRecord& 
         if (xr_strcmp(parent->s_name.c_str(), record.parent_section))
             return "its owner is no longer what it was";
     }
-    if (record.size < 2 * sizeof(u16))
+    if (!record_frames(record))
         return "its record is malformed";
     return nullptr;
 }
@@ -1924,9 +1958,11 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
             const u32 size = cursor.get<u32>();
             if (!cursor.ok || !id[0] || present(id))
                 continue;
-            if (size)
+            // a range that cannot be a module's would take the game's own objects out with it
+            const bool own_range = XMS::SpawnRangeValid(id, base, size);
+            if (own_range)
                 XMS::AdoptSpawnRange(id, base, size);
-            kept_candidate(id, version, ns, base, size);
+            kept_candidate(id, version, ns, own_range ? base : 0, own_range ? size : 0);
         }
     }
     for (const auto& orphan : XmsGame::bs().orphans)

@@ -4353,6 +4353,9 @@ do
 	xms_saves.on_game_start()
 	stock.asm.CALifeStorageManager_load("save", "0", true, nil)
 	check(xms.storage("mod_m") == early and early.counter == 3, "a table handed out before the save was read gets the save's contents")
+	-- a damaged chunk: a length that is no length is a bad value, and the read ends
+	check(xms_saves.decode_value("{s-4:") == nil and xms_saves.decode_value("{s1.5:ab}") == nil, "a string of a negative or broken length reads as nothing, at once")
+	check(xms_saves.decode_value("{s1:as1:b}").a == "b", "and a sound one still reads")
 end
 if (failed > 0) then fail_dump() end
 

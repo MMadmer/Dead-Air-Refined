@@ -281,6 +281,10 @@ void CScriptIniFile::w_u8(pcstr S, pcstr L, u8 V, pcstr comment)
 bool CScriptIniFile::save_as(pcstr new_fname)
 {
     THROW2(new_fname, "File name is null");
+    // a file that is written gets what the file says, not what modules patch of it: the patches are
+    // the game's view of a config, and written out they would outlive their module
+    if (xms_patched())
+        load_cached(fname(), false);
     const bool saved = inherited::save_as(new_fname);
     // The parse cache exists because scripts reopen the same static .ltx thousands of times a
     // session. A handful of files are not static: the game writes its own settings back, and

@@ -766,8 +766,12 @@ k = 1
   gets it too.
 - **A config the game writes is read as written**: an ini opened for writing, or a script's
   `ini_file` made writable (`set_readonly(false)`, what `ini_file_ex` does to save), never carries
-  a module's patch into the player's file. An ini made from a string (`create_ini_file`, custom
-  data) is never patched.
+  a module's patch into the player's file; `save_as` of one opened for reading writes the file's
+  own lines too, and the ini goes on without the patches. An ini made from a string
+  (`create_ini_file`, custom data) or from bytes already in memory is never patched.
+- **A config opened before the modules' configs come up** is patched when they do only when it is
+  one the game holds for the whole session - the system config, `game.ltx`, the engine's own
+  settings. Nothing else is opened that early; a reader added there later reads the file as written.
 - The log says what is kept, `* XMS: <n> patch op(s) of <f> other config file(s) kept for when
   they are read`, and what each ini took, `* XMS: <file>: <n> patch op(s) of modules applied, <s>
   skipped` (a script reads a file once a session). The ledger and `xms_why` name the file: `xms_why
@@ -831,7 +835,7 @@ return {
 | `unset` | list of keys | Taken away. |
 | `add`, `drop` | `{ key = member or { members } }` | Members added to (when not there) or taken out of a comma list, as `+key` and `-key` do. |
 | `hud` | `{ base, set, unset, add, drop }` | A new item: `<section>_hud` over `base` (left out: over the hud section its bases name), and `hud = <section>_hud` unless `set.hud` says otherwise. A change: the changes go to the section the item's `hud` names once its `set` is applied; `base` is refused there. |
-| `sections` | list | `{ name, base, set, unset, add, drop }` makes a section (`a-z 0-9 _ . -`, it must not exist); `{ edit, set, unset, add, drop }` changes one that exists. |
+| `sections` | list | `{ name, base, set, unset, add, drop }` makes a section (`a-z 0-9 _ . -`, it must not exist; its `base` is a section that is there or one the item makes before it - its own, its HUD's, an earlier row's); `{ edit, set, unset, add, drop }` changes one that exists. |
 | `craft` | list of `{ at, count = 1, parts }` | One line a recipe in the system config's `[xms_craft]`: `<n> = <at>, <section>, <count>, <part>, ...` with one to four parts, `n` going on after the highest number the section holds. The craft window adds them to the recipes of the tool or workbench `at` names. |
 | `loot` | `{ count, chance, by }` | `misc\death_generic.ltx [item_count] <section> = <count>` (`{ min, max }` as `min, max`); `misc\death_items_by_communities.ltx [base] <section> = <chance>`, which every community that inherits `[base]` takes, and `[<name>] <section> = <chance>` for each `by` entry (a community or `<community>_<rank>`). |
 | `sold` | list of `{ by, supplies = "supplies_1", count = 1, chance = 1 }` | `misc\trade\<by>.ltx` (or `by` itself when it ends in `.ltx`, a path under `configs`): `[<supplies>] <section> = <count>, <chance>` for each supplies section named. |
@@ -842,14 +846,25 @@ return {
 - **The two forms of a placement key**: a HUD section's `hands_position`, `hands_orientation`,
   `aim_hud_offset_pos`, `aim_hud_offset_rot`, `gl_hud_offset_pos` and `gl_hud_offset_rot` are read plain on a
   4:3 screen and with `_16x9` on a wide one. A section that has one form alone - tuned on one kind of
-  screen - is read by that form on both; the game stops only when neither is there.
+  screen - is read by that form on both; the game stops only when neither is there. A use scene's
+  HUD section reads its `hands_position` and `hands_orientation` the same way, and may leave them
+  out: the hands then stay where the motion puts them.
 - **The order**: per module, in the load order, its characters, then its items - the new ones
   first (one whose base is another new item of the module waits for it), then the changes in the
   order of their paths - then its `gamedata\configs\xms\*.ltx`, then its `.ltxp`. What a module's
   own overlays and patches say of an item still counts. A section an item made that the module's
   own overlay defines again is merged, the file's keys winning, with one line, `! XMS: [<module>]
   section [<name>] is defined by an item and by <file>: the file's keys win`, instead of the stop a
-  section defined twice in one layer is.
+  section defined twice in one layer is. The same holds, with nothing said, for a section made for
+  the rows items add - `[xms_craft]`, a scene's HUD section, a section a `lists` row made: the
+  module's overlay adds its own rows to it.
+- **The order of paths** is one everywhere a module's files are taken in turn (items, overlays,
+  patches, characters): the paths compared byte by byte as the game reads them, their ASCII letters
+  lower-cased and `/` between folders. So `items\weapons\ak` comes before `items\weapons2\ak`, and
+  `B.itemasset` after `a.itemasset`; of two changes of one key the later path wins.
+- **A name is cut, never trusted**: a parent a patch or an overlay names is read up to 511
+  characters (a longer one names no section, and the block is skipped like any unknown parent); a
+  list a module grows has no limit of its own.
 - **Through the config's own calls, never through text**: a value never meets the text reader's
   comment and quote rules. Everything an item writes carries the module's layer and reaches the
   sections that inherit it (`add` on `wpn_ak74` reaches the scope variants); `loot`, `sold`,

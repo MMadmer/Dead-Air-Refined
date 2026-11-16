@@ -83,7 +83,15 @@ pstr _GetItem(pcstr src, int index, pstr dst, u32 const dst_size, char separator
     pcstr ptr;
     ptr = _SetPos(src, index, separator);
     if (ptr)
-        _CopyVal(ptr, dst, separator);
+    {
+        // an item longer than the buffer is cut, never written past it (0: a caller that gave no size)
+        pcstr end = strchr(ptr, separator);
+        size_t n = end ? size_t(end - ptr) : xr_strlen(ptr);
+        if (dst_size && n >= dst_size)
+            n = dst_size - 1;
+        strncpy(dst, ptr, n);
+        dst[n] = 0;
+    }
     else
         xr_strcpy(dst, dst_size, def);
     if (trim)

@@ -66,8 +66,9 @@ function parse_recipe(key, value, ini)
 	if (at == "" or result == "") then return nil, "it names no tool or no result" end
 	if (#f > 7) then return nil, "more than four parts" end
 	count = (count == "") and 1 or tonumber(count)
-	if not (count and count >= 1 and count == math.floor(count)) then
-		return nil, "the count is no whole number of 1 or more"
+	-- one click makes that many objects at once
+	if not (count and count >= 1 and count <= 1000 and count == math.floor(count)) then
+		return nil, "the count is no whole number from 1 to 1000"
 	end
 	if not (ini:section_exist(result)) then return nil, "the result " .. result .. " is no section" end
 	local parts = {}

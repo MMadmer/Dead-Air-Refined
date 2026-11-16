@@ -139,11 +139,11 @@ my_mod_rounds   = verstak_ammo, ammo_9x18_fmj, 40, ammo_bad, ammo_bad
   `itm_repairkit_tier_2`, `itm_repairkit_tier_3`, `itm_drugkit`) or a workbench of Revolution II
   (`verstak_other`, `verstak_weapon`, `verstak_ammo`, ...). A recipe for a section the window is
   never opened with is simply never shown.
-- `count` is how many of the result are made, 1 when left empty. A result whose section name
+- `count` is how many of the result are made, 1 when left empty, 1000 at most. A result whose section name
   holds `ammo_` is made as that many rounds, in boxes, like the window's own ammo recipes.
 - Up to four parts. `-`, an empty part or a part left out at the end is no part.
 - A recipe whose result or part is no section of the system config, whose count is no whole
-  number of 1 or more, or that has more than four parts is left out with one log line,
+  number from 1 to 1000, or that has more than four parts is left out with one log line,
   `! xms_items: craft recipe <key> is left out - <why>`.
 
 The recipes are listed after the window's own ones, in the order of their keys (the engine hands

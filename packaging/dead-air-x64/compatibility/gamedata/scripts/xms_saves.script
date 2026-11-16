@@ -135,7 +135,8 @@ local function take(s, i, depth)
 	if (c == "s") then
 		local j = string.find(s, ":", i + 1, true)
 		local n = j and tonumber(string.sub(s, i + 1, j - 1))
-		if not (n and j + n <= #s) then error("bad string at " .. i) end
+		-- a length is a whole number that is not negative: a negative one walked the reader backwards for ever
+		if not (n and n >= 0 and n == math.floor(n) and j + n <= #s) then error("bad string at " .. i) end
 		return string.sub(s, j + 1, j + n), j + n + 1
 	end
 	if (c == CTIME_KEY) then

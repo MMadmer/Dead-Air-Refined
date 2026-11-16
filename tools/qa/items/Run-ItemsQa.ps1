@@ -148,7 +148,11 @@ function Install-Module {
 function Invoke-Engine {
     param([string]$Phase, [string[]]$Commands, [string[]]$WaitFor, [string]$Start = '')
     Get-Process xrEngine -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $qaEngine } | Stop-Process -Force
-    if (Test-Path -LiteralPath $qaLog) { Remove-Item -LiteralPath $qaLog -Force }
+    # the log of the last start may still be held for a moment (the game ending, a scanner reading it)
+    for ($try = 0; (Test-Path -LiteralPath $qaLog) -and $try -lt 120; $try++) {
+        try { Remove-Item -LiteralPath $qaLog -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds 250 }
+    }
+    if (Test-Path -LiteralPath $qaLog) { throw "The log of the last start is still held: $qaLog" }
     Set-UserLtx -Commands $Commands
     New-Item -Path $layersKey -Force | Out-Null
     New-ItemProperty -Path $layersKey -Name $qaEngine -Value '~ HIGHDPIAWARE' -PropertyType String -Force | Out-Null
@@ -186,9 +190,19 @@ function Invoke-Engine {
             if ($launcher) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
         }
         Remove-ItemProperty -Path $layersKey -Name $qaEngine -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force }
+        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force -ErrorAction SilentlyContinue }
     }
-    $log = if (Test-Path -LiteralPath $qaLog) { [IO.File]::ReadAllText($qaLog, $cp1251) } else { '' }
+    # the game may still hold its log as it ends: read it shared, and again when the read is refused
+    $log = ''
+    for ($try = 0; $try -lt 20 -and (Test-Path -LiteralPath $qaLog); $try++) {
+        try {
+            $stream = [IO.FileStream]::new($qaLog, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]'ReadWrite, Delete')
+            try { $log = [IO.StreamReader]::new($stream, $cp1251).ReadToEnd() } finally { $stream.Dispose() }
+            break
+        } catch [IO.IOException] {
+            Start-Sleep -Milliseconds 250
+        }
+    }
     Assert-That "$Phase finished without an engine fault" (-not ($log -match 'FATAL ERROR|stack trace:|Assertion failed'))
     return $log
 }
@@ -239,6 +253,13 @@ if ini:section_exist("xms_craft") then
 	end
 end
 say("craft", table.concat(recipes, " | "))
+say("craft_overlay", r(ini, "xms_craft", "items_qa_own"))
+say("variant_weight", r(ini, "items_qa_pm_gold_variant", "inv_weight"))
+say("variant_of_variant", r(ini, "items_qa_pm_gold_variant2", "qa_variant"))
+say("order_marker", r(ini, "wpn_pm", "qa_order"))
+say("long_parent", ini:section_exist("items_qa_long_parent"))
+local big = r(ini, "items_qa_list", "big")
+say("big_list", #big .. "|" .. string.sub(big, -2))
 
 say("ak74_ammo", r(ini, "wpn_ak74", "ammo_class"))
 say("kobra_ammo", r(ini, "wpn_ak74_kobra", "ammo_class"))
@@ -337,7 +358,10 @@ return {
   icon = { texture = [[ui\ui_icon_equipment]], x = 4, y = 6, w = 2, h = 1 },
   set = { cost = 12345, inv_weight = 0.75 },
   hud = { set = { qa_marker = "hud of its own" } },
-  sections = { { name = "items_qa_pm_gold_extra", base = "wpn_pm", set = { cost = 1 } } },
+  sections = { { name = "items_qa_pm_gold_extra", base = "wpn_pm", set = { cost = 1 } },
+               -- a row starts from what the item makes before it: its own section, an earlier row
+               { name = "items_qa_pm_gold_variant", base = "items_qa_pm_gold", set = { qa_variant = 1 } },
+               { name = "items_qa_pm_gold_variant2", base = "items_qa_pm_gold_variant" } },
   craft = { { at = "itm_repairkit_tier_1", parts = { "jar", "rope" } },
             { at = "itm_repairkit_tier_2", count = 2, parts = { "jar", "rope", "jar", "rope" } } },
   loot = { count = { 0, 2 }, chance = 0.05, by = { bandit = 0.5 } },
@@ -367,6 +391,9 @@ return {
 }
 '@
     'items\pm_icon.itemasset' = 'return { item = 1, edit = "wpn_pm", icon = "icons/pm.png" }'
+    # two changes of one key: the later path wins, and `weapons\a` comes before `weapons2\a`
+    'order\weapons\a.itemasset' = 'return { item = 1, edit = "wpn_pm", set = { qa_order = "weapons" } }'
+    'order\weapons2\a.itemasset' = 'return { item = 1, edit = "wpn_pm", set = { qa_order = "weapons2" } }'
     'bad\no_base.itemasset' = 'return { item = 1, id = "nobase" }'
     'bad\unknown_base.itemasset' = 'return { item = 1, id = "ub", base = "no_such_section_qa" }'
     'bad\exists.itemasset' = 'return { item = 1, section = "wpn_pm", base = "wpn_pm" }'
@@ -383,8 +410,12 @@ cost = 777
 ; and inherits a section of the game's own overlays
 [items_qa_pda_child]:pda_show_animator
 qa = 1
+
+; the rows its items add sit in a section of their making: the overlay adds its own
+[xms_craft]
+items_qa_own = itm_repairkit_tier_1, bread, 1, jar
 '@
-    'patch\qa.ltxp' = @'
+    'patch\qa.ltxp' = (@'
 [wpn_ak74]
 +ammo_class = ammo_5.56x45_ss190
 
@@ -403,14 +434,16 @@ items_qa_marker = 1
 #file
 [items_qa_system]
 k = 1
-'@
+'@ + "`r`n; a parent of 600 characters names no section: the block is skipped`r`n[items_qa_long_parent] : " + ('a' * 600) +
+        "`r`nk = 1`r`n`r`n; a list longer than any fixed buffer`r`n[items_qa_list]`r`n+big = " +
+        ((0..699 | ForEach-Object { 'qa{0:d4}' -f $_ }) -join ',') + "`r`n+big = zz`r`n")
 }
 
 Write-Host '== A: the configs'
 $published = Join-Path $qaAppData 'xms_generated'
 $log = Invoke-Engine -Phase 'configs' -Commands @('xms_why death_generic', 'xms_why trade_presets') -WaitFor @('ITEMSQA done')
 $s = { param($name) Said $log $name }
-Assert-That 'the items are read, new and changes' ($log -match '\* XMS: \[items_qa\] 6 item\(s\) read from the module \(4 new, 2 change\(s\)\)')
+Assert-That 'the items are read, new and changes' ($log -match '\* XMS: \[items_qa\] 8 item\(s\) read from the module \(4 new, 4 change\(s\)\)')
 Assert-That 'a new item is its section over its base' ((& $s 'pm_section') -eq 'true' -and (& $s 'pm_inherited') -ne '<none>') "fire_modes = $(& $s 'pm_inherited')"
 Assert-That 'its own keys' ((& $s 'pm_weight') -eq '0.75')
 Assert-That 'the module''s overlay defines it again: merged, the file''s keys win' (((& $s 'pm_cost') -eq '777') -and
@@ -422,6 +455,13 @@ Assert-That 'the icon in the game''s form' ((& $s 'pm_icon') -eq 'ui\ui_icon_equ
 Assert-That 'its hud section, over the base''s' (((& $s 'pm_hud') -eq 'items_qa_pm_gold_hud') -and ((& $s 'pm_hud_visual') -match 'wpn_pm_hud') -and
     ((& $s 'pm_hud_marker') -eq 'hud of its own'))
 Assert-That 'a section it makes' ((& $s 'pm_extra') -eq '1')
+Assert-That 'a made section starts from the item''s own section, and from an earlier row' (((& $s 'variant_weight') -eq '0.75') -and
+    ((& $s 'variant_of_variant') -eq '1')) "weight: $(& $s 'variant_weight'), of the variant: $(& $s 'variant_of_variant')"
+Assert-That 'the module''s overlay adds a recipe of its own to the section the items made' (((& $s 'craft_overlay') -replace ' ', '') -eq 'itm_repairkit_tier_1,bread,1,jar') (& $s 'craft_overlay')
+Assert-That 'of two changes of one key the later path wins, weapons before weapons2' ((& $s 'order_marker') -eq 'weapons2') (& $s 'order_marker')
+Assert-That 'a parent of 600 characters names no section' (((& $s 'long_parent') -eq 'false') -and
+    ($log -match '! XMS: \[items_qa_long_parent\] cannot inherit missing section \[a{511}\]'))
+Assert-That 'a list of 4899 characters takes one more member' ((& $s 'big_list') -eq '4902|zz') (& $s 'big_list')
 Assert-That 'an item based on another item of the module waits for it' (((& $s 'child_cost') -eq '1') -and ((& $s 'child_parent_hud') -eq 'items_qa_pm_gold_hud'))
 Assert-That 'a template is a section with no strings' ((& $s 'template') -eq '<none>')
 Assert-That 'the recipes in [xms_craft]' ((& $s 'craft') -match '\d+=itm_repairkit_tier_1, items_qa_pm_gold, 1, jar, rope' -and

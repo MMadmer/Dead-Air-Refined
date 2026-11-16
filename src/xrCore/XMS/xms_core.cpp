@@ -2214,12 +2214,27 @@ bool SpawnLocalId(pcstr module_id, pcstr key, u32& id)
     return true;
 }
 
+bool SpawnRangeValid(pcstr module_id, u32 base, u32 size)
+{
+    if (!module_id || !size || base < kSpawnRangeFloor || size > kSpawnIdCeiling || base > kSpawnIdCeiling - size)
+        return false;
+    for (const auto& [id, rec] : st().range_by_id)
+        if (xr_strcmp(id.c_str(), module_id) && base < rec.base + rec.size && rec.base < base + size)
+            return false;
+    return true;
+}
+
 void AdoptSpawnRange(pcstr module_id, u32 base, u32 size)
 {
     State& s = st();
     const auto it = s.range_by_id.find(module_id);
     if (it != s.range_by_id.end())
         return; // local registry wins; it is grow-only anyway
+    if (!SpawnRangeValid(module_id, base, size))
+    {
+        Msg("! XMS: the save's spawn range of [%s] (%u+%u) is not one a module can have: ignored", module_id, base, size);
+        return;
+    }
     SpawnRangeRec rec;
     rec.base = base;
     rec.size = size;
@@ -2415,7 +2430,25 @@ void ListFilesRelative(pcstr dir, pcstr mask, bool recursive, xr_vector<xr_strin
     if (!dir || !dir[0] || !mask || !mask[0])
         return;
     list_relative(dir, xr_string(), mask, recursive, out);
-    std::sort(out.begin(), out.end());
+    std::sort(out.begin(), out.end(), PathOrderLess);
+}
+
+bool PathOrderLess(const xr_string& left, const xr_string& right)
+{
+    const auto key = [](char c) -> u8
+    {
+        if (c == '\\')
+            return u8('/');
+        return c >= 'A' && c <= 'Z' ? u8(c - 'A' + 'a') : u8(c);
+    };
+    const size_t n = std::min(left.size(), right.size());
+    for (size_t i = 0; i < n; ++i)
+    {
+        const u8 a = key(left[i]), b = key(right[i]);
+        if (a != b)
+            return a < b;
+    }
+    return left.size() < right.size();
 }
 
 void PushLtxFile(pcstr physical_path)

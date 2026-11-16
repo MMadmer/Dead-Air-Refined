@@ -79,6 +79,9 @@ public:
         u16 xms_layer{0};
         // XMS: made by a module's item, which that module's own overlay may define again
         bool xms_item{false};
+        // XMS: made while a module's items were applied, for the rows they add (a craft recipe, a
+        // scene's HUD, a list): that module's own overlay may say more of it, and nothing is said
+        bool xms_rows{false};
         xr_vector<u16> XmsItemLayers;
         // XMS: the parents the section names after ':', in order, and the keys it says itself - by a
         // line of its own, a merge into it or a directive on it - rather than copied from them when it
@@ -124,6 +127,8 @@ private:
     // XMS: parent -> the sections that name it, made at the first change that has to reach them
     xr_flat_hash_map<shared_str, xr_vector<shared_str>, std::hash<shared_str>> m_xmsChildren;
     bool m_xmsChildrenMade{false};
+    // XMS: a module's items are being applied: what is made now is theirs
+    bool m_xmsItemStage{false};
 
     void Load(IReader* F, pcstr path, allow_include_func_t allow_include_func = nullptr);
     void insert_section(Sect* section);
@@ -156,6 +161,7 @@ public:
     bool xms_create_section(pcstr S, pcstr parents_csv, u16 layer = XmsFileLayer);
     // The section was made by a module's item: that module's own overlay may define it again.
     void xms_mark_item_section(pcstr S);
+    void xms_item_stage(bool on) noexcept { m_xmsItemStage = on; }
     // Parses a physical file into this ini with cross-layer merge semantics.
     void xms_load_overlay(pcstr physical_path);
     // VFS flavour for files living inside game archives (compat item sections).
