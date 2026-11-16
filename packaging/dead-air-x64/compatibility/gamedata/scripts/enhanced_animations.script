@@ -134,6 +134,10 @@ function start_anim(anim_section_hud)
 	-- The sixth argument is the scene length: a longer cycle is hurried to fit it, a shorter one
 	-- plays at its own pace and the hands leave with its end (stretched, medicine played slow).
 	local scene_ms = used_item and ini_eff:r_float_ex(used_item, "tm") or 0
+	-- `fit = cut`: a longer cycle keeps its own pace and the scene's end cuts it, instead of being hurried
+	if (used_item and ini_eff:r_string_ex(used_item, "fit") == "cut") then
+		scene_ms = 0
+	end
 	local before = game.hud_scene_id()
 	game.play_hud_motion(2, anim_section_hud, "anm_ea_show", false, speed, scene_ms and math.floor(scene_ms) or 0)
 	local id = game.hud_scene_id()
@@ -143,7 +147,11 @@ end
 function anim_manager_item(anim_section_hud)
 	item_usage_snd = sound_object(ini_eff:r_string_ex(used_item, "snd"))
 	item_usage_snd:play(db.actor, 0, sound_object.s2d)
-	level.add_cam_effector(ini_eff:r_string_ex(used_item, "cam"), 8555, false, "")
+	-- a scene may move no camera at all: its `cam` left empty
+	local cam = ini_eff:r_string_ex(used_item, "cam")
+	if (cam and cam ~= "") then
+		level.add_cam_effector(cam, 8555, false, "")
+	end
 	tmr = ini_eff:r_float_ex(used_item, "tm")
 	anim_exist_tm = tmr * 0.001
 	anim_use_time = anim_exist_tm * 0.367

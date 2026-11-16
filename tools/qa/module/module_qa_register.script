@@ -1,6 +1,7 @@
 -- The probe of tools\qa\module\Run-ModuleInGameQa.ps1: a module of its own beside the module under test. It reads
 -- the item assets of every other module. In a new game it plays every motion (`anm_*`) of every first-person
--- section those items have - an item's HUD section and its use scene's - the way the game itself warms a scene
+-- section those items have - an item's HUD section and its use scene's, and the sections the runner names (a
+-- script's own scenes) - the way the game itself warms a scene
 -- up, each call guarded: a motion or a model the game lacks is one "MODQA fail" line instead of a stopped game,
 -- and the whole of a large module takes seconds. Then a few of the items are really taken in the hands.
 -- Every answer is a log line "MODQA <name> = <value>".
@@ -59,11 +60,12 @@ end
 
 local missing, plays, draws, huds = {}, {}, {}, {}
 local function add_hud(sec, hud, what)
-	if not (hud and hud ~= "" and sys:section_exist(hud)) or huds[hud] then return end
+	if not (hud and hud ~= "" and sys:section_exist(hud)) or huds[hud] then return false end
 	huds[hud] = true
 	for _, m in ipairs(motions_of(hud)) do
 		plays[#plays + 1] = { item = sec, hud = hud, key = m.key, value = m.value, what = what }
 	end
+	return true
 end
 for _, sec in ipairs(sections) do
 	if not (sys:section_exist(sec)) then
@@ -83,7 +85,35 @@ for _, sec in ipairs(sections) do
 		end
 	end
 end
+-- first-person sections no item names, which the runner lists (-PlayHuds): a script's own scenes; `name*` is
+-- every section whose name starts so
+local named = 0
+local named_opt = ini_file("module_qa.ltx")
+if (named_opt:section_exist("module_qa") and named_opt:line_exist("module_qa", "play_huds")) then
+	local prefixes = {}
+	for name in string.gmatch(named_opt:r_string("module_qa", "play_huds") or "", "[^,%s]+") do
+		local prefix = string.match(name, "^(.-)%*$")
+		if (prefix) then
+			prefixes[#prefixes + 1] = prefix
+		elseif (sys:section_exist(name)) then
+			if (add_hud(name, name, "named")) then named = named + 1 end
+		else
+			missing[#missing + 1] = name
+		end
+	end
+	if (#prefixes > 0) then
+		sys:section_for_each(function(s)
+			for _, p in ipairs(prefixes) do
+				if (string.sub(s, 1, #p) == p) then
+					if (add_hud(s, s, "named")) then named = named + 1 end
+					break
+				end
+			end
+		end)
+	end
+end
 say("item assets", #sections)
+say("named huds", named)
 say("unread", unread)
 say("missing", #missing)
 for i = 1, math.min(#missing, 40) do say("missing " .. i, missing[i]) end

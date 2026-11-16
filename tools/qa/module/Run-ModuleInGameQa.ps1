@@ -14,7 +14,8 @@
     every section its item assets make or change is there; then every motion (anm_*) of every first-person section
     those items have - an item's HUD section and its use scene's - is played once the way the game warms a scene
     up, each call guarded, so a motion or a model the game lacks is a line of game-fails.txt and not a stopped
-    game; then a few of the items are really taken in the hands. -MenuOnly stops at the main menu.
+    game; then a few of the items are really taken in the hands. -PlayHuds adds first-person sections no item names
+    (a script's own scenes). -MenuOnly stops at the main menu.
 
     -DumpConfigs (with -MenuOnly) writes what the game composed at the main menu into the results: every section of
     the system config with its keys as the game resolves them, then each config of -DumpFiles opened by its name,
@@ -35,6 +36,9 @@ param(
     [int]$HoldMs = 2000,
     # sections to hold before the sample
     [string[]]$HoldFirst = @(),
+    # first-person sections no item names whose motions are played too (a script's scenes); `name*` is every
+    # section whose name starts so
+    [string[]]$PlayHuds = @(),
     # how many motions are played in one frame (1: a frame is drawn after each, to find the one a frame stops on)
     [int]$PerFrame = 60,
     # the game is taken to have stopped when its log is silent this long
@@ -288,6 +292,7 @@ New-Item -ItemType Directory -Path (Join-Path $probe 'scripts') -Force | Out-Nul
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'module_qa_register.script') -Destination (Join-Path $probe 'scripts\register.script') -Force
 Write-ModuleFile $probe 'gamedata\configs\module_qa.ltx' ("[module_qa]`r`nhold = $Hold`r`nhold_ms = $HoldMs`r`nper_frame = $PerFrame`r`n" +
     $(if ($HoldFirst.Count) { "hold_first = $($HoldFirst -join ',')`r`n" }) +
+    $(if ($PlayHuds.Count) { "play_huds = $($PlayHuds -join ',')`r`n" }) +
     $(if ($DumpConfigs) { "dump = true`r`n" + $(if ($DumpFiles.Count) { "dump_files = $($DumpFiles -join ',')`r`n" }) }))
 
 try {
@@ -324,7 +329,7 @@ try {
         Assert-That 'its item assets are read' ((& $s 'item assets') -match '^[1-9]' -and (& $s 'unread') -eq '0') "$(& $s 'item assets') assets, $(& $s 'unread') unread"
     }
     Assert-That 'every section they make or change is there' ((& $s 'missing') -eq '0') "$(& $s 'missing') missing, first: $(& $s 'missing 1')"
-    Write-Host "   motions of first-person sections: $(& $s 'motions'); items with a HUD: $(& $s 'to hold')"
+    Write-Host "   motions of first-person sections: $(& $s 'motions'); items with a HUD: $(& $s 'to hold'); sections named by -PlayHuds: $(& $s 'named huds')"
     if (-not $MenuOnly) {
         $fails = @([regex]::Matches($log, 'MODQA fail = ([^\r\n]*)') | ForEach-Object { $_.Groups[1].Value.Trim() })
         $fails | Set-Content -LiteralPath (Join-Path $resultRoot 'game-fails.txt') -Encoding utf8

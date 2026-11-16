@@ -229,6 +229,11 @@ cost = 1200                      ; read from here: the mechanic's price, shown a
   a property that sums stock and module upgrades sums both.
 - `stalkers_upgrade_info.ltx` and the upgrade window's layout (`ui\inventory_upgrade.xml`) are not
   part of this: a `#file` patch and an `.xmlp` reach them.
+- The 4:3 layout the game took from Revolution II did not parse - one scheme was left open - so a
+  4:3 screen had no upgrade panel at the mechanic, and it lacked ten schemes of the 16:9 layout
+  (the binoculars, the Mosins, the MP-412 and the guns that share its scheme, the SVT-40, the heavy
+  respirators among them). The game ships it corrected in its own gamedata, the ten schemes spread
+  over the 4:3 columns as the rest are.
 
 A game without modules runs the stock functions untouched and reads `item_upgrades.ltx` once.
 
