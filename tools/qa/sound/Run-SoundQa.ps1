@@ -27,10 +27,10 @@ param(
     [string]$BuildRoot,
     # everything the run makes lives here; it must be under the system temp folder
     [string]$WorkRoot = (Join-Path ([IO.Path]::GetTempPath()) 'dar-sound-qa'),
-    # a converted module's loose effects, every .pe with its [actions] (read only)
-    [string]$ConvertedParticles = 'D:\XFinedProjects\WeaponsEvolution2026\gamedata\particles',
-    # a few short .ogg files to make the module's sounds of (read only)
-    [string]$SoundSource = 'D:\XFinedProjects\WeaponsEvolution\gamedata\sounds\blindside\kiparis',
+    # a module's loose effects, every .pe with its [actions]: its gamedata\particles folder (read only)
+    [Parameter(Mandatory)] [string]$ConvertedParticles,
+    # five short .ogg files of different lengths the module's sounds are made of (read only)
+    [Parameter(Mandatory)] [ValidateCount(5, 5)] [string[]]$SoundFiles,
     [string]$VidMode = '1024x768',
     [int]$TimeoutSeconds = 300,
     [switch]$SkipGame,
@@ -55,8 +55,9 @@ if (-not ($work + '\').StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCa
 if (($work + '\').StartsWith($GameRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw "The work root must not lie inside the installed game: $work"
 }
-foreach ($source in @($ConvertedParticles, $SoundSource)) {
-    if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw "No such folder: $source" }
+if (-not (Test-Path -LiteralPath $ConvertedParticles -PathType Container)) { throw "No such folder: $ConvertedParticles" }
+foreach ($source in $SoundFiles) {
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or [IO.Path]::GetExtension($source) -ne '.ogg') { throw "No such .ogg file: $source" }
 }
 
 $qaRoot = Join-Path $work 'root'
@@ -69,7 +70,6 @@ $resultRoot = Join-Path $work ("results\" + (Get-Date -Format 'yyyyMMdd-HHmmss')
 $compatGameData = Join-Path $repositoryRoot 'packaging\dead-air-x64\compatibility\gamedata'
 $manifestPath = Join-Path $repositoryRoot 'packaging\dead-air-x64\installer\runtime-files.txt'
 $helper = Join-Path $repositoryRoot 'tools\qa\Start-DetachedHiddenDesktopProcess.ps1'
-$limited = 'D:\Games\XFined-Editor\tools\rust\limited.py'
 $utf8 = [Text.UTF8Encoding]::new($false)
 $cp1251 = [Text.Encoding]::GetEncoding(1251)
 New-Item -ItemType Directory -Path $resultRoot -Force | Out-Null
@@ -167,7 +167,11 @@ function Write-ModuleFile {
 function Invoke-Engine {
     param([string]$Phase, [string[]]$Commands, [string[]]$WaitFor, [string]$Start = '')
     Get-Process xrEngine -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $qaEngine } | Stop-Process -Force
-    if (Test-Path -LiteralPath $qaLog) { Remove-Item -LiteralPath $qaLog -Force }
+    # the log of the last start may still be held for a moment (the game ending, a scanner reading it)
+    for ($try = 0; (Test-Path -LiteralPath $qaLog) -and $try -lt 120; $try++) {
+        try { Remove-Item -LiteralPath $qaLog -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds 250 }
+    }
+    if (Test-Path -LiteralPath $qaLog) { throw "The log of the last start is still held: $qaLog" }
     Set-UserLtx -Commands $Commands
     $desktop = "DeadAirSound$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
     $pidFile = Join-Path $resultRoot "$Phase-engine.pid"
@@ -202,9 +206,19 @@ function Invoke-Engine {
             $launcher = Get-Process -Id ([int](Get-Content -LiteralPath $launcherFile -Raw)) -ErrorAction SilentlyContinue
             if ($launcher) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
         }
-        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force }
+        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force -ErrorAction SilentlyContinue }
     }
-    $log = if (Test-Path -LiteralPath $qaLog) { [IO.File]::ReadAllText($qaLog, $cp1251) } else { '' }
+    # the game may still hold its log as it ends: read it shared, and again when the read is refused
+    $log = ''
+    for ($try = 0; $try -lt 20 -and (Test-Path -LiteralPath $qaLog); $try++) {
+        try {
+            $stream = [IO.FileStream]::new($qaLog, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]'ReadWrite, Delete')
+            try { $log = [IO.StreamReader]::new($stream, $cp1251).ReadToEnd() } finally { $stream.Dispose() }
+            break
+        } catch [IO.IOException] {
+            Start-Sleep -Milliseconds 250
+        }
+    }
     Assert-That "$Phase finished without an engine fault" (-not ($log -match 'FATAL ERROR|stack trace:|Assertion failed|IReader overflow'))
     return $log
 }
@@ -292,12 +306,11 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sound_qa_register.script') -Des
 # sounds: copyrighted with a replacement, without, with a copyrighted replacement, with a missing one; free ones
 $sounds = Join-Path $module 'gamedata\sounds\sound_qa'
 New-Item -ItemType Directory -Path $sounds -Force | Out-Null
-foreach ($pair in @(@('cr_rep', 'kiparis_reload_empty'), @('cr_none', 'kiparis_holster'), @('cr_bad', 'kiparis_draw'),
-        @('cr_missing', 'kiparis_reload'), @('free', 'kiparis_unjam'), @('listed', 'kiparis_holster'), @('mask_any', 'kiparis_draw'))) {
-    Copy-Item -LiteralPath (Join-Path $SoundSource "$($pair[1]).ogg") -Destination (Join-Path $sounds "$($pair[0]).ogg") -Force
+foreach ($pair in @(@('cr_rep', 0), @('cr_none', 1), @('cr_bad', 2), @('cr_missing', 3), @('free', 4), @('listed', 1), @('mask_any', 2))) {
+    Copy-Item -LiteralPath $SoundFiles[$pair[1]] -Destination (Join-Path $sounds "$($pair[0]).ogg") -Force
 }
 New-Item -ItemType Directory -Path (Join-Path $module 'music') -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $SoundSource 'kiparis_reload_empty.ogg') -Destination (Join-Path $module 'music\file_track.ogg') -Force
+Copy-Item -LiteralPath $SoundFiles[0] -Destination (Join-Path $module 'music\file_track.ogg') -Force
 Write-ModuleFile $sounds 'cr_rep.sndasset' 'return { snd = 1, copyrighted = true, streamer = [[sound_qa\free]] }'
 Write-ModuleFile $sounds 'cr_none.sndasset' 'return { snd = 1, copyrighted = true }'
 Write-ModuleFile $sounds 'cr_bad.sndasset' 'return { snd = 1, copyrighted = true, streamer = [[sound_qa\cr_none]] }'

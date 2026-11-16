@@ -177,7 +177,11 @@ function Write-ModuleFile {
 function Invoke-Engine {
     param([string]$Phase, [string[]]$WaitFor, [string]$Start = '', [int]$Seconds = $TimeoutSeconds)
     Get-Process xrEngine -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $qaEngine } | Stop-Process -Force
-    if (Test-Path -LiteralPath $qaLog) { Remove-Item -LiteralPath $qaLog -Force }
+    # the log of the last start may still be held for a moment (the game ending, a scanner reading it)
+    for ($try = 0; (Test-Path -LiteralPath $qaLog) -and $try -lt 120; $try++) {
+        try { Remove-Item -LiteralPath $qaLog -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds 250 }
+    }
+    if (Test-Path -LiteralPath $qaLog) { throw "The log of the last start is still held: $qaLog" }
     Set-UserLtx
     $desktop = "DeadAirModule$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
     $pidFile = Join-Path $resultRoot "$Phase-engine.pid"
@@ -221,9 +225,19 @@ function Invoke-Engine {
             $launcher = Get-Process -Id ([int](Get-Content -LiteralPath $launcherFile -Raw)) -ErrorAction SilentlyContinue
             if ($launcher) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
         }
-        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force }
+        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force -ErrorAction SilentlyContinue }
     }
-    $log = if (Test-Path -LiteralPath $qaLog) { [IO.File]::ReadAllText($qaLog, $cp1251) } else { '' }
+    # the game may still hold its log as it ends: read it shared, and again when the read is refused
+    $log = ''
+    for ($try = 0; $try -lt 20 -and (Test-Path -LiteralPath $qaLog); $try++) {
+        try {
+            $stream = [IO.FileStream]::new($qaLog, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]'ReadWrite, Delete')
+            try { $log = [IO.StreamReader]::new($stream, $cp1251).ReadToEnd() } finally { $stream.Dispose() }
+            break
+        } catch [IO.IOException] {
+            Start-Sleep -Milliseconds 250
+        }
+    }
     $fault = [regex]::Match($log, '(?s)(FATAL ERROR.{0,1200})')
     Assert-That "$Phase finished without an engine fault" (-not ($log -match 'FATAL ERROR|stack trace:|Assertion failed')) $(
         if ($fault.Success) { ($fault.Groups[1].Value -replace '\s+', ' ').Substring(0, [Math]::Min(600, ($fault.Groups[1].Value -replace '\s+', ' ').Length)) })

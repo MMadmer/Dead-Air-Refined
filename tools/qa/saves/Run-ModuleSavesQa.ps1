@@ -29,7 +29,8 @@
     e    A changed: an item's section gone, another's class changed - those dropped with their lines, the rest back.
     f    B off, xms_forget saves_qa_b, saved; B on: nothing of B comes back.
     i    no module: a new game's save holds no placeholder and no module chunk.
-    o    an older save: the installed engine saves a game with a module's spawn-layer box in .scop; loaded here
+    o    an older save: an engine from before this (-OlderRuntime: a folder with its runtime files; the installed
+         game's by default) saves a game with a module's spawn-layer box in .scop; loaded here
          without the module the box is kept and a placeholder holds its id; with the module it is back, once.
     h    the limits the log says: a new game in a module's own mode, with the module changing a stock box in place.
 #>
@@ -42,6 +43,11 @@ param(
     [string]$VidMode = '1024x768',
     [int]$TimeoutSeconds = 600,
     [switch]$RebuildRoot,
+    # (o): the folder the older game's runtime files are taken from - what it holds of them, the rest from the
+    # installed game. Left out: the installed game, while that is still a game from before module saves.
+    [string]$OlderRuntime,
+    # (o) alone
+    [switch]$OlderSaveOnly,
     [switch]$Keep
 )
 
@@ -180,7 +186,11 @@ function Set-Plan {
 function Invoke-Engine {
     param([string]$Phase, [string[]]$WaitFor, [string]$Start, [string]$Extra = '')
     Get-Process xrEngine -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $qaEngine } | Stop-Process -Force
-    if (Test-Path -LiteralPath $qaLog) { Remove-Item -LiteralPath $qaLog -Force }
+    # the log of the last start may still be held for a moment (the game ending, a scanner reading it)
+    for ($try = 0; (Test-Path -LiteralPath $qaLog) -and $try -lt 120; $try++) {
+        try { Remove-Item -LiteralPath $qaLog -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds 250 }
+    }
+    if (Test-Path -LiteralPath $qaLog) { throw "The log of the last start is still held: $qaLog" }
     Set-UserLtx
     New-Item -Path $layersKey -Force | Out-Null
     New-ItemProperty -Path $layersKey -Name $qaEngine -Value '~ HIGHDPIAWARE' -PropertyType String -Force | Out-Null
@@ -217,9 +227,19 @@ function Invoke-Engine {
             if ($launcher) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
         }
         Remove-ItemProperty -Path $layersKey -Name $qaEngine -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force }
+        if (Test-Path -LiteralPath $qaLog) { Copy-Item -LiteralPath $qaLog -Destination (Join-Path $resultRoot "$Phase.log") -Force -ErrorAction SilentlyContinue }
     }
-    $log = if (Test-Path -LiteralPath $qaLog) { [IO.File]::ReadAllText($qaLog, $cp1251) } else { '' }
+    # the game may still hold its log as it ends: read it shared, and again when the read is refused
+    $log = ''
+    for ($try = 0; $try -lt 20 -and (Test-Path -LiteralPath $qaLog); $try++) {
+        try {
+            $stream = [IO.FileStream]::new($qaLog, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]'ReadWrite, Delete')
+            try { $log = [IO.StreamReader]::new($stream, $cp1251).ReadToEnd() } finally { $stream.Dispose() }
+            break
+        } catch [IO.IOException] {
+            Start-Sleep -Milliseconds 250
+        }
+    }
     Assert-That "$Phase finished without an engine fault" (-not ($log -match 'FATAL ERROR|stack trace:|Assertion failed|Expression\s*:'))
     Assert-That "$Phase has no script error" (-not ($log -match 'SCRIPT ERROR|LUA error|Lua error|stack traceback'))
     return $log
@@ -320,6 +340,10 @@ Install-Modules
 $names = @('pistol_actor', 'box', 'pistol_box', 'npc', 'pistol_npc', 'guide', 'declared', 'weapon', 'gone', 'morph', 'knife_b', 'gauss_b', 'crate', 'msquad', 'msquad_member', 'gsquad', 'gsquad_member')
 $moduleOf = @{ pistol_actor = 'a'; pistol_box = 'a'; pistol_npc = 'a'; guide = 'a'; declared = 'a'; gone = 'a'; morph = 'a'; crate = 'a'; msquad = 'a'; msquad_member = 'a'; gsquad = 'a'; gsquad_member = 'a'; knife_b = 'b'; gauss_b = 'b'; box = ''; npc = ''; weapon = '' }
 
+if (-not $OlderRuntime) { $OlderRuntime = $GameRoot }
+$OlderRuntime = (Resolve-Path -LiteralPath $OlderRuntime).Path
+
+if (-not $OlderSaveOnly) {
 Write-Host '== new: a game with both modules, saved'
 Set-NewGame
 Set-Plan '{ phase = "new", save = "saves_qa_1" }'
@@ -499,9 +523,12 @@ $i = Read-Save 'saves_qa_i'
 Assert-That 'i: no placeholder' (-not @($i.records | Where-Object { $_.section -eq 'space_restrictor' -and $_.name -like 'xms_ph_*' }).Count)
 Assert-That 'i: no module chunk' (-not @($i.scov.chunks | Where-Object { $_.type -match '^58(4d|4c|4f|45)' -or $_.type -in @('31534d58', '314b4d58') }).Count) (($i.scov.chunks.type) -join ' ')
 
-Write-Host '== o: an older save - a module''s spawn-layer object inside .scop, written by the installed engine'
+}
+
+Write-Host "== o: an older save - a module's spawn-layer object inside .scop, written by the engine of $OlderRuntime"
+Get-ChildItem -LiteralPath $qaModules -Directory | Remove-Item -Recurse -Force
 Install-Module -Id 'saves_qa_o' -Files @{ 'spawn\saves_qa.xspawn' = $moduleA['spawn\saves_qa.xspawn'] }
-Update-Runtime -From $GameRoot
+Update-Runtime -From $OlderRuntime
 try {
     Set-NewGame
     Set-Plan '{ phase = "plain", save = "saves_qa_o1" }'
@@ -525,6 +552,7 @@ if ($crates.Count -eq 1) {
     Assert-That 'o: back with its id, not placed twice' ((Said $log 'check old crate') -eq 'present' -and -not ($log -match 'late spawn: \+')) (Said $log 'check old crate')
 }
 
+if (-not $OlderSaveOnly) {
 Write-Host '== h: the limits said in the log - a game in a module''s mode, a module changing the game''s own objects'
 Get-ChildItem -LiteralPath $qaModules -Directory | Remove-Item -Recurse -Force
 Install-Module -Id 'saves_qa_h' -Files @{ 'spawn\saves_qa.xspawn' = "[obj:base:l01_escape/esc_inventory_box_0000]`r`nop = modify`r`ndisabled = false`r`n" }
@@ -535,6 +563,7 @@ $log = Invoke-Engine -Phase 'h' -Start 'server(all/single/alife/new) client(loca
 Assert-That 'h: the changes to the game''s own objects are said' ($log -match '! XMS: \[saves_qa_h\] changes 1 and removes 0 of the game''s own objects in place') ([regex]::Match($log, '[^\r\n]*in place[^\r\n]*').Value)
 Assert-That 'h: the module''s mode is said' ($log -match '! XMS: this game runs mode \[saves_qa_h\] of module \[saves_qa_h\]') ([regex]::Match($log, '[^\r\n]*this game runs[^\r\n]*').Value)
 Set-NewGame
+}
 
 Remove-Item -LiteralPath $qaScript -Force -ErrorAction SilentlyContinue
 if (-not $Keep) { Remove-Root }
