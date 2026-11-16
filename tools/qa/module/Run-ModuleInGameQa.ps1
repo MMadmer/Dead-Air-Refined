@@ -15,7 +15,8 @@
     those items have - an item's HUD section and its use scene's - is played once the way the game warms a scene
     up, each call guarded, so a motion or a model the game lacks is a line of game-fails.txt and not a stopped
     game; then a few of the items are really taken in the hands. -PlayHuds adds first-person sections no item names
-    (a script's own scenes). -MenuOnly stops at the main menu.
+    (a script's own scenes). -MenuOnly stops at the main menu. -PackedCompat reads the game's own files from the
+    compatibility archive of -GameRoot instead of laying the repository's loose: a release as a player has it.
 
     -DumpConfigs (with -MenuOnly) writes what the game composed at the main menu into the results: every section of
     the system config with its keys as the game resolves them, then each config of -DumpFiles opened by its name,
@@ -50,6 +51,9 @@ param(
     [string[]]$DumpFiles = @(),
     # the module left out of the root: what the game composes without it
     [switch]$WithoutModule,
+    # the game's own files read from GameRoot's compatibility archive (database\xtra_dead_air_x64.xdb0), the way a
+    # release ships them, instead of laid loose from the repository
+    [switch]$PackedCompat,
     # the QA root of the last run is used again as it is (a kept one): no copying, a run starts at once
     [switch]$Reuse,
     [switch]$Keep
@@ -145,7 +149,7 @@ function New-Root {
         if (Test-Path -LiteralPath $s) { Copy-Item -LiteralPath $s -Destination $qaAppData -Recurse -Force }
     }
     Copy-Tree (Join-Path $GameRoot 'gamedata') $qaGameData
-    Copy-Tree $compatGameData $qaGameData
+    if (-not $PackedCompat) { Copy-Tree $compatGameData $qaGameData }
     $manifest = @(Get-Content -LiteralPath $manifestPath | Where-Object { $_.Trim() -ne '' })
     foreach ($file in $manifest) {
         $built = Join-Path $BuildRoot $file
@@ -178,6 +182,8 @@ function Set-NewGame {
     if ($at -lt 0) { $lines = @('[character_creation]') + $lines; $at = 0 }
     $start = @('new_game_faction = stalker', 'new_game_faction_position = _rookie_village')
     $lines = $lines[0..$at] + $start + $(if ($at + 1 -lt $lines.Count) { $lines[($at + 1)..($lines.Count - 1)] } else { @() })
+    # a root without loose game files (-PackedCompat) has no configs folder yet: the game makes this file there too
+    New-Item -ItemType Directory -Path (Split-Path -Parent $options) -Force | Out-Null
     [IO.File]::WriteAllLines($options, [string[]]$lines, $cp1251)
 }
 
