@@ -38,28 +38,35 @@ IC void CScriptSound::SetMaxDistance(const float fMaxDistance)
     m_sound.set_range(GetMinDistance(), fMaxDistance);
 }
 
+// A sound that is not playing has no parameters to read - one that never started (the streamer
+// mode left it out, a play that found no free target) as much as one that ended: what a script
+// reads then is a sound's defaults, never a null.
 IC float CScriptSound::GetFrequency() const
 {
     VERIFY(m_sound._handle() || m_bIsNoSound);
-    return (m_sound.get_params()->freq);
+    const CSound_params* params = m_sound.get_params();
+    return params ? params->freq : 1.f;
 }
 
 IC float CScriptSound::GetMinDistance() const
 {
     VERIFY(m_sound._handle() || m_bIsNoSound);
-    return (m_sound.get_params()->min_distance);
+    const CSound_params* params = m_sound.get_params();
+    return params ? params->min_distance : 0.f;
 }
 
 IC float CScriptSound::GetMaxDistance() const
 {
     VERIFY(m_sound._handle() || m_bIsNoSound);
-    return (m_sound.get_params()->max_distance);
+    const CSound_params* params = m_sound.get_params();
+    return params ? params->max_distance : 0.f;
 }
 
 IC float CScriptSound::GetVolume() const
 {
     VERIFY(m_sound._handle() || m_bIsNoSound);
-    return (m_sound.get_params()->volume);
+    const CSound_params* params = m_sound.get_params();
+    return params ? params->volume : 1.f;
 }
 
 IC bool CScriptSound::IsPlaying() const

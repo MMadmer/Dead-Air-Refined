@@ -117,17 +117,39 @@ void CSoundRender_Emitter::set_cursor(u32 p)
 {
     m_stream_cursor = p;
 
-    if (owner_data._get() && owner_data->fn_attached[0].size())
+    // a stand-in the streamer mode put in a sound's place plays for the whole sound: the sound's own
+    // tails stay in it, untouched, for when it is given back
+    if (!owner_data._get() || owner_data->own_handle)
+        return;
+    while (owner_data->fn_attached[0].size())
     {
-        u32 bt = ((CSoundRender_Source*)owner_data->handle)->bytes_total();
-        if (m_stream_cursor >= m_cur_handle_cursor + bt)
+        const u32 bt = ((CSoundRender_Source*)owner_data->handle)->bytes_total();
+        if (m_stream_cursor < m_cur_handle_cursor + bt)
+            break;
+        CSoundRender_Source* tail = SoundRender->i_create_source(owner_data->fn_attached[0].c_str());
+        owner_data->fn_attached[0] = owner_data->fn_attached[1];
+        owner_data->fn_attached[1] = "";
+        // a tail is a sound of its own: with the streamer mode on it is asked like any other, and what
+        // plays in its place - or nothing - takes its part of the sound's length
+        if (psSoundStreamerMode && tail)
         {
-            SoundRender->i_destroy_source((CSoundRender_Source*)owner_data->handle);
-            owner_data->handle = SoundRender->i_create_source(owner_data->fn_attached[0].c_str());
-            owner_data->fn_attached[0] = owner_data->fn_attached[1];
-            owner_data->fn_attached[1] = "";
-            m_cur_handle_cursor = get_cursor(true);
+            bool refused = false;
+            CSoundRender_Source* instead = SoundRender->streamer_instead(tail, refused);
+            if (instead || refused)
+            {
+                const u32 bytes = instead ? instead->bytes_total() : 0;
+                const float seconds = instead ? instead->length_sec() : 0.f;
+                owner_data->dwBytesTotal = owner_data->dwBytesTotal - tail->bytes_total() + bytes;
+                owner_data->fTimeTotal = owner_data->fTimeTotal - tail->length_sec() + seconds;
+                fTimeToStop = fTimeToStop - tail->length_sec() + seconds;
+                tail = instead;
+            }
         }
+        if (!tail)
+            continue;
+        SoundRender->i_destroy_source((CSoundRender_Source*)owner_data->handle);
+        owner_data->handle = tail;
+        m_cur_handle_cursor = get_cursor(true);
     }
 }
 

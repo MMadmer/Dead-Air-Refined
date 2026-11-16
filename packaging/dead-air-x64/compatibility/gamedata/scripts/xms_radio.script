@@ -27,7 +27,9 @@
 -- the other themes of xr_sound.ltx, the 3d themes of script_sound.ltx, the combat music.
 --
 -- Engine calls, each feature-tested: xms.radio(), xms.streamer_mode(), xms.sound_copyrighted(name),
--- xms.sound_replacement(name), xms.save_data / xms.load_data.
+-- xms.sound_replacement(name), xms.save_data / xms.load_data. The streamer mode is the game's own
+-- option and works with no module enabled, when the modules' table is not made: its three calls are
+-- then asked of the engine's functions themselves.
 -- Contract: docs/dead-air/RADIO.md.
 
 local THEMES_FILE = "plugins\\xr_sound.ltx"
@@ -58,8 +60,15 @@ local function ns(name)
 	return rawget(_G, name) or _G[name]
 end
 
+local ENGINE_OWN = {
+	streamer_mode = "xms_native_streamer_mode",
+	sound_copyrighted = "xms_native_sound_copyrighted",
+	sound_replacement = "xms_native_sound_replacement",
+}
+
 local function engine_call(name, ...)
 	local f = xms and xms[name]
+	if (type(f) ~= "function" and ENGINE_OWN[name]) then f = rawget(_G, ENGINE_OWN[name]) end
 	if (type(f) ~= "function") then return nil, false end
 	local ok, v = pcall(f, ...)
 	if not (ok) then
@@ -881,8 +890,8 @@ function install()
 end
 
 function on_game_start()
-	-- -no_xms: no modules, no streamer mode, nothing to do
-	if not (xms) then return end
+	-- an engine that knows neither modules nor the streamer mode: nothing to do
+	if not (xms or rawget(_G, ENGINE_OWN.streamer_mode)) then return end
 	install()
 	RegisterScriptCallback("actor_on_first_update", on_first_update)
 end

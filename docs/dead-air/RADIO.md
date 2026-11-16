@@ -67,6 +67,11 @@ its order, and one without is passed over. A radio with nothing left is silent a
 again as soon as something may play - the mode switched off, the station changed. The same choice
 holds wherever a script picks music from a list: the other themes of the radios, the 3d themes of
 `script_sound.ltx` that pick at random (the guitar and harmonica themes among them), the combat music.
+The mode is the game's own option and needs no module: with none enabled the pickers pass over the
+game's copyrighted music in the same way. A sound's attached tail (`attach_tail`) is a sound of its
+own and is asked like one; a replacement that plays in a sound's place plays for the whole sound,
+its tails included. A script that reads a sound's volume, frequency or distances while the sound
+does not play - refused, or ended - reads a sound's defaults.
 
 ### A radio of your own
 

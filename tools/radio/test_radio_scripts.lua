@@ -789,6 +789,34 @@ local function run_stock(dir)
 	end
 end
 
+section("no module enabled: the streamer mode is still the game's")
+do
+	-- the modules' table is not made; the engine's own functions are there
+	new_state({})
+	local engine = xms
+	xms = nil
+	G.xms_native_streamer_mode = engine.streamer_mode
+	G.xms_native_sound_copyrighted = engine.sound_copyrighted
+	G.xms_native_sound_replacement = engine.sound_replacement
+	local xr = load_script("xms_radio", SCRIPT)
+	ENGINE.rights = { [GAME_RADIO[1]] = true }
+	ENGINE.replace = {}
+	check(xr.stock_wanted(1) == true, "the mode off: the stock picker runs untouched")
+	ENGINE.streamer = true
+	local c = count(picks(xr, 1, GAME_RADIO, 200))
+	check(c[GAME_RADIO[1]] == nil and (c[GAME_RADIO[2]] or 0) > 0, "the mode on: a copyrighted track of the game is never chosen")
+	CALLBACKS = {}
+	xr.on_game_start()
+	check(next(CALLBACKS["actor_on_first_update"] or {}) ~= nil, "the script starts without the modules' table")
+	-- an engine with neither: nothing is touched
+	G.xms_native_streamer_mode, G.xms_native_sound_copyrighted, G.xms_native_sound_replacement = nil, nil, nil
+	xr = load_script("xms_radio", SCRIPT)
+	CALLBACKS = {}
+	xr.on_game_start()
+	check(next(CALLBACKS) == nil, "an engine that knows neither modules nor the mode: the script does nothing")
+	ENGINE.streamer, ENGINE.rights, ENGINE.replace = false, {}, {}
+end
+
 for _, dir in ipairs(stock_dirs) do
 	local ok, err = pcall(run_stock, dir)
 	check(ok, "the stock run of " .. dir .. " ended: " .. tostring(err))
