@@ -8,101 +8,73 @@ Writes:
 both under packaging/dead-air-x64/compatibility/gamedata: the sheet is small and belongs to the window that draws
 it, so it travels with the game's own files rather than with the content.
 
-One round picture per kind of link, in the order of XMS::LinkKind, the way the menu's community page shows
-its own: Telegram, AP-PRO and GitHub are that page's pictures (remote/icons), the rest are drawn here in the
-same manner - a disc in the service's colour with its mark in white. Drawn at 4x and filtered down; RGB runs
-to the edge of each disc so bilinear filtering never darkens the rim.
+One round picture per kind of link, in the order of XMS::LinkKind, made of the services' own marks and nothing
+drawn here: Telegram, AP-PRO and GitHub are the menu's community page's pictures (remote/icons); Discord, Boosty and
+Patreon are their official marks in their brand colours, ModDB its own site icon (tools/graphics/link_icons, where
+the README names each source). RGB runs to the edge of each disc so bilinear filtering never darkens the rim.
 """
+import io
 import os
 import struct
 import sys
 
+import pymupdf as fitz
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
 OUT_ROOT = os.path.join(REPO, "packaging", "dead-air-x64", "compatibility", "gamedata")
 ICONS = os.path.join(REPO, "remote", "icons")
+MARKS = os.path.join(HERE, "link_icons")
 SHEET_W, SHEET_H = 512, 64
 CELL = 48      # a picture on the sheet
 PITCH = 64     # from one picture to the next
 PAD = (PITCH - CELL) // 2
-W = 512        # working size of a drawn picture
+W = 512        # working size of a picture
 
 # XMS::LinkKind, in order; the key is the one [links] uses
 KINDS = ["ap_pro", "moddb", "github", "telegram", "discord", "boosty", "patreon"]
 
 
 def disc_mask(size):
+    from PIL import ImageDraw
     m = Image.new("L", (size, size), 0)
     ImageDraw.Draw(m).ellipse((0, 0, size - 1, size - 1), fill=255)
     return m
 
 
-def font(name, size):
-    return ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", name), size)
+def from_file(folder, name):
+    return Image.open(os.path.join(folder, name)).convert("RGBa").resize((W, W), Image.LANCZOS).convert("RGBA")
 
 
-def centred(d, text, f, cy, fill, dx=0):
-    box = d.textbbox((0, 0), text, font=f)
-    d.text(((W - (box[2] - box[0])) / 2 - box[0] + dx, cy - (box[3] - box[1]) / 2 - box[1]), text, font=f, fill=fill)
+def mark(name, colour):
+    """An official mark (a one-path SVG) in `colour`, at `W` pixels square."""
+    svg = open(os.path.join(MARKS, name), encoding="utf-8").read().replace("<path ", '<path fill="%s" ' % colour, 1)
+    doc = fitz.open(stream=svg.encode("utf-8"), filetype="svg")
+    page = doc[0]
+    pix = page.get_pixmap(matrix=fitz.Matrix(W / page.rect.width, W / page.rect.height), alpha=True)
+    return Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGBA").resize((W, W), Image.LANCZOS)
 
 
-def from_file(name):
-    return Image.open(os.path.join(ICONS, name)).convert("RGBa").resize((W, W), Image.LANCZOS).convert("RGBA")
-
-
-def moddb():
-    img = Image.new("RGBA", (W, W), (176, 26, 26, 255))
-    d = ImageDraw.Draw(img)
-    centred(d, "DB", font("ariblk.ttf", 250), W * 0.5, (255, 255, 255, 255))
-    return img
-
-
-def discord():
-    blurple = (88, 101, 242, 255)
-    img = Image.new("RGBA", (W, W), blurple)
-    mark = Image.new("L", (W, W), 0)
-    d = ImageDraw.Draw(mark)
-    u = W / 100.0
-    body = [(27, 33), (40, 28), (43, 33), (57, 33), (60, 28), (73, 33), (84, 63), (71, 73), (66, 66), (34, 66), (29, 73),
-            (16, 63)]
-    d.polygon([(x * u, y * u) for x, y in body], fill=255)
-    # the corners of the polygon rounded
-    mark = mark.filter(ImageFilter.GaussianBlur(2.2 * u)).point(lambda v: 255 if v > 127 else 0)
-    mark = mark.filter(ImageFilter.GaussianBlur(0.35 * u))
-    d = ImageDraw.Draw(mark)
-    for cx in (40, 60):
-        d.ellipse(((cx - 6.3) * u, (51 - 7.3) * u, (cx + 6.3) * u, (51 + 7.3) * u), fill=0)
-    img.paste((255, 255, 255, 255), (0, 0), mark)
-    return img
-
-
-def boosty():
-    img = Image.new("RGBA", (W, W), (241, 95, 44, 255))
-    d = ImageDraw.Draw(img)
-    centred(d, "b", font("arialbi.ttf", 400), W * 0.47, (255, 255, 255, 255), dx=-W * 0.02)
-    return img
-
-
-def patreon():
-    img = Image.new("RGBA", (W, W), (255, 66, 77, 255))
-    d = ImageDraw.Draw(img)
-    u = W / 100.0
-    d.rectangle((25 * u, 24 * u, 36 * u, 77 * u), fill=(255, 255, 255, 255))
-    d.ellipse((41 * u, 24 * u, 79 * u, 62 * u), fill=(255, 255, 255, 255))
+def on_disc(background, name, colour, scale):
+    """The mark centred on a disc of `background`, `scale` of its width, as the services draw their app icons."""
+    img = Image.new("RGBA", (W, W), background)
+    side = int(W * scale)
+    m = mark(name, colour).resize((side, side), Image.LANCZOS)
+    img.alpha_composite(m, ((W - side) // 2, (W - side) // 2))
     return img
 
 
 MAKERS = {
-    "ap_pro": lambda: from_file("ap-pro.png"),
-    "moddb": moddb,
-    "github": lambda: from_file("github.png"),
-    "telegram": lambda: from_file("telegram.png"),
-    "discord": discord,
-    "boosty": boosty,
-    "patreon": patreon,
+    "ap_pro": lambda: from_file(ICONS, "ap-pro.png"),
+    # the site's own icon is a square: its middle, where the wrench is, makes the disc
+    "moddb": lambda: from_file(MARKS, "moddb.png"),
+    "github": lambda: from_file(ICONS, "github.png"),
+    "telegram": lambda: from_file(ICONS, "telegram.png"),
+    "discord": lambda: on_disc((0x58, 0x65, 0xF2, 255), "discord.svg", "#FFFFFF", 0.58),
+    "boosty": lambda: on_disc((0xF1, 0x5F, 0x2C, 255), "boosty.svg", "#FFFFFF", 0.56),
+    "patreon": lambda: on_disc((0xFF, 0xFF, 0xFF, 255), "patreon.svg", "#000000", 0.5),
 }
 
 
