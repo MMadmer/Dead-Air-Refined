@@ -194,6 +194,11 @@ XRCORE_API Origin CurrentOrigin();
 // Whether the console may run this command now (9.2). Always true outside protected mode and
 // for the player's own commands.
 XRCORE_API bool AllowConsole(pcstr command, xr_string& why);
+
+// Whether `url` is a web address and nothing else: http:// or https://, a host, plain ASCII and
+// no character that ends an argument of a command line. What opens a link checks it first, in
+// any mode.
+XRCORE_API bool WebAddress(pcstr url);
 // One log line per refusal: "! [protect] <what> refused: <why>".
 XRCORE_API void Refused(pcstr what, pcstr why, pcstr where = nullptr);
 } // namespace Protect

@@ -13,6 +13,8 @@
 #include "object_factory.h"
 #include "xrCore/xrDebug.h"
 #include "xrCore/XMS/xms_ltx.h"
+#include "xrCore/XMS/xms_catalog.h"
+#include "xrScriptEngine/script_protect.hpp"
 
 namespace
 {
@@ -120,19 +122,35 @@ void CScriptIniFile::forget_cached_parses()
     parse_cache().clear();
 }
 
+namespace
+{
+// Protected mode (MOD_CATALOG 9.3): the name is a script's and may climb out of the folder it
+// starts in, so the file is read only where a script may read. Refused, the object is an empty
+// config, as it is for a file that is not there.
+bool may_read(pcstr path)
+{
+    xr_string why;
+    if (XMS::Protect::Allow(path, XMS::Protect::Access::Read, why))
+        return true;
+    const xr_string what = xr_string("ini_file(\"") + path + "\")";
+    ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr, what.c_str(), why.c_str());
+    return false;
+}
+} // namespace
+
 CScriptIniFile::CScriptIniFile(IReader* F, LPCSTR path) : inherited(F, path) {}
 CScriptIniFile::CScriptIniFile(LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtStart, BOOL SaveAtEnd)
     // The base is told not to load: the parse comes from the cache below instead.
     : inherited(update("$game_config$", szFileName), ReadOnly, false, SaveAtEnd)
 {
-    if (bLoadAtStart)
+    if (bLoadAtStart && may_read(fname()))
         load_cached(fname(), ReadOnly != FALSE);
 }
 
 CScriptIniFile::CScriptIniFile(LPCSTR initial, LPCSTR szFileName, BOOL ReadOnly, BOOL bLoadAtStart, BOOL SaveAtEnd)
     : inherited(update(initial, szFileName), ReadOnly, false, SaveAtEnd)
 {
-    if (bLoadAtStart)
+    if (bLoadAtStart && may_read(fname()))
         load_cached(fname(), ReadOnly != FALSE);
 }
 

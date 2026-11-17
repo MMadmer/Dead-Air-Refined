@@ -174,6 +174,32 @@ function run()
 	say("unc_read", f ~= nil)
 	if f then f:close() end
 
+	-- LuaJIT opens the FFI library by itself at the first 64-bit literal a chunk holds
+	local literal = loadstring("return 1LL")
+	if literal then pcall(literal) end
+	say("ffi_after_literal", pcall(require, "ffi"))
+	-- its buffers hand out raw pointers
+	say("string_buffer_available", pcall(require, "string.buffer"))
+
+	-- a mode letter of the C runtime: the file is deleted when it is closed, though it was opened to read
+	local doomed = appdata .. "protect_probe_mode.txt"
+	f = io.open(doomed, "w")
+	if f then f:write("x") f:close() end
+	local opened = io.open(doomed, "rD")
+	if opened then opened:close() end
+	say("open_mode_deletes", not exists(doomed))
+	os.remove(doomed)
+
+	-- asking the disk about any path, a network one included
+	local sought = appdata .. "protect_probe_sp.txt"
+	f = io.open(sought, "w")
+	if f then f:close() end
+	local found = package.searchpath and package.searchpath("protect_probe_sp", appdata .. "?.txt")
+	say("searchpath_available", type(found) == "string")
+	os.remove(sought)
+	local length = getFS():file_length("C:\\Windows\\win.ini")
+	say("fs_length_outside", type(length) == "number" and length > 0)
+
 	-- the file of commands console() loads: the game's file system lists what was there at its
 	-- start, so it is written a start ahead
 	f = io.open(appdata .. "protect_probe_cmds.ltx", "w")
@@ -201,7 +227,30 @@ function console()
 	c:execute("cfg_load C:\\Windows\\win")
 	c:execute("save ..\\..\\protect_probe_save")
 	c:execute("start server(protect_probe/single/alife/new) client(192.0.2.1)")
+	c:execute("screenshot 1 ..\\..\\protect_probe_shot")
+	c:execute("dbg_probe_any \\\\192.0.2.1\\share\\x")
+	-- a page for a forgotten password went to a command interpreter once
+	pcall(function() main_menu.get_main_menu():GetLoginMngr():forgot_password("protect_probe & echo") end)
 	printf("PROTECTQA: CONSOLE DONE")
+end
+
+-- The network for scripts (xms.http): what it refuses, and a request to the QA's own mock and back.
+function network(port)
+	printf("NETQA: allowed %s", tostring(xms.http.allowed()))
+	local id, why = xms.http.request({ url = "https://localhost/x" })
+	printf("NETQA: localhost %s %s", tostring(id), tostring(why))
+	id, why = xms.http.request({ url = "https://192.168.1.1/x" })
+	printf("NETQA: lan %s %s", tostring(id), tostring(why))
+	id, why = xms.http.request({ url = "https://user@example.org/x" })
+	printf("NETQA: user %s %s", tostring(id), tostring(why))
+	id, why = xms.http.request({ url = "https://example.org/x", headers = { Host = "evil.example" } })
+	printf("NETQA: header %s %s", tostring(id), tostring(why))
+	id, why = xms.http.request({ url = "http://127.0.0.1:" .. port .. "/echo?a=1&b=2", method = "POST", body = "ping",
+		headers = { ["Content-Type"] = "text/plain" } }, function(answer)
+		printf("NETQA: answer ok=%s status=%s body=%s type=%s", tostring(answer.ok), tostring(answer.status),
+			tostring(answer.body), tostring(answer.headers and answer.headers["content-type"]))
+	end)
+	printf("NETQA: sent %s %s", type(id), tostring(why))
 end
 '''
 
@@ -292,6 +341,7 @@ def publish_release(assets, mod_id, version, github, files, key=None, card=True,
                   'author      = "QA"', 'description = "Модуль для QA каталога; %s.\\nВторая строка."' % mod_id,
                   "website     = https://ap-pro.ru/forums/topic/15259-konkurs-kvestov-2026/",
                   "mode        = plain", "tags        = story, quests",
+                  *CARD_EXTRA.get(mod_id, ()),
                   "manifest    = mod.ltx, %d, %s" % (len(man), hashlib.sha256(man).hexdigest())]
         if thumbnail:
             thumb = files["thumbnail.dds"]
@@ -304,6 +354,13 @@ def publish_release(assets, mod_id, version, github, files, key=None, card=True,
         f.write(text)
     return {"descriptor": text.encode("utf-8"), "package_sha": packages[0][2],
             "package_shas": [p[2] for p in packages], "thumbnail": files.get("thumbnail.dds")}
+
+
+# what a card says besides the usual: the links by their kinds (one that is no page of its service,
+# which the game drops) and the network mark
+CARD_EXTRA = {"qa.cat.good": ("moddb       = https://www.moddb.com/mods/qa-good", "telegram    = https://t.me/qa_good",
+                              "discord     = https://discord.gg/qagood", "boosty      = https://boosty.to",
+                              "patreon     = https://www.patreon.com/qa_good", "network     = 1")}
 
 
 def install_module(qa_root, mod_id, files):
@@ -417,8 +474,13 @@ def make_fixture(qa_root, assets, port):
 
     # the probe rides in an ordinary module: protection is the game's, not a module's
     install_module(qa_root, "qa.legacy", {
-        "mod.ltx": b"[module]\r\nid = qa.legacy\r\nname = QA Legacy\r\nversion = 1.0\r\napi = 1\r\ntarget = default\r\n",
-        "gamedata/scripts/qa_protect_probe.script": PROBE.encode("utf-8")})
+        "mod.ltx": b"[module]\r\nid = qa.legacy\r\nname = QA Legacy\r\nversion = 1.0\r\napi = 1\r\ntarget = default\r\n"
+                   b"\r\n[links]\r\ntelegram = https://t.me/qa_legacy\r\nboosty = https://boosty.to\r\n"
+                   b"patreon = https://patreon.com.evil.example/x\r\n",
+        "gamedata/scripts/qa_protect_probe.script": PROBE.encode("utf-8"),
+        # what marks the module: its code names the game's network API
+        "gamedata/scripts/qa_net.script": b"-- xms.http in a comment is no use of it\r\n"
+                                          b"function ask(url, done)\r\n\treturn xms.http.request(url, done)\r\nend\r\n"})
 
     # ---- the catalog
     catalog = os.path.join(assets, "catalog")
@@ -697,12 +759,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.send_body(200, f.read(), "application/json")
             else:
                 self.send_body(404, b'{"error": {"code": "NotFoundError"}}', "application/json")
+        elif parts == ["echo"]:
+            self.send_body(200, ("echo:GET:%s" % urllib.parse.urlparse(self.path).query).encode("ascii"), "text/plain")
         else:
             self.send_body(404, b"not found")
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         data = self.rfile.read(length)
+        if urllib.parse.urlparse(self.path).path == "/echo":
+            # what a script of a module asked comes back as it was asked
+            self.send_body(200, b"echo:POST:" + urllib.parse.urlparse(self.path).query.encode("ascii") + b":" + data,
+                           self.headers.get("Content-Type", "text/plain"))
+            return
         if urllib.parse.urlparse(self.path).path != "/inbox":
             self.send_body(404, b"not found")
             return

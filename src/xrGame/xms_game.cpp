@@ -29,6 +29,7 @@
 #include "xrServerEntities/xrMessages.h"
 #include "GameTaskDefs.h"
 #include "xrCore/XMS/xms_catalog.h"
+#include "xms_net.h"
 #include "xrEngine/XR_IOConsole.h"
 #include "xrEngine/xr_ioc_cmd.h"
 
@@ -2905,6 +2906,47 @@ xms.dialog_register = xms_native_dialog_register
 xms.dialog_unregister = xms_native_dialog_unregister
 xms.dialog_invalidate = xms_native_dialog_invalidate
 
+-- The network (docs/dead-air/MODDING.md, "The network"); feature-test with xms.http_api. A
+-- module whose code names xms.http carries the network mark where players pick and manage
+-- modules, and the game answers requests only while an enabled module carries it.
+xms.http_api = 1
+do
+    local waiting = {}
+    local function header_lines(headers)
+        if type(headers) ~= "table" then return "" end
+        local lines = {}
+        for name, value in pairs(headers) do
+            lines[#lines + 1] = tostring(name) .. ": " .. tostring(value) .. "\r\n"
+        end
+        table.sort(lines)
+        return table.concat(lines)
+    end
+    xms.http = {
+        -- ({ url, method, headers, body, timeout } | url, function(answer)) -> id | nil, why
+        -- answer: { ok, status, body, error, headers }
+        request = function(options, done)
+            if type(options) == "string" then options = { url = options } end
+            if type(options) ~= "table" then return nil, "the request is a table or an address" end
+            local id, why = xms_native_http_request(tostring(options.url or ""), tostring(options.method or "GET"),
+                header_lines(options.headers), options.body ~= nil and tostring(options.body) or "",
+                tonumber(options.timeout) or 0)
+            if not id then return nil, why end
+            waiting[id] = done
+            return id
+        end,
+        cancel  = function(id) waiting[id] = nil xms_native_http_cancel(id) end,
+        allowed = xms_native_http_allowed, -- () -> true | false, why
+    }
+    -- the engine's: a request has ended
+    xms._http_done = function(id, ok, status, body, why, headers)
+        local done = waiting[id]
+        waiting[id] = nil
+        if type(done) == "function" then
+            done({ ok = ok, status = status, body = body, error = why, headers = headers })
+        end
+    end
+end
+
 -- World rules of the mode (docs/dead-air/MODDING.md, "World rules"); feature-test with
 -- xms.world_api. Rules are named by their manifest keys: original_npcs, random_stalkers,
 -- mutants, npc_quests, story_quests.
@@ -3204,6 +3246,7 @@ void run_bootstrap(lua_State* L)
 
 void xms_registrator::script_register(lua_State* luaState)
 {
+    XmsNet::Register(luaState);
     using namespace luabind;
 
     module(luaState)

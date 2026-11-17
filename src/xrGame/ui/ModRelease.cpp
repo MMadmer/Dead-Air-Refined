@@ -4,6 +4,8 @@
 #include "StdAfx.h"
 #include "ModRelease.h"
 
+#include "xrCore/XMS/xms_core.h"
+
 #ifdef XR_PLATFORM_WINDOWS
 #include "xrContentSync/ContentHash.h"
 
@@ -211,6 +213,8 @@ void mod_parse_card_line(std::string_view key, std::string_view value, ModReleas
         card.descriptionEng = mod_text(value);
     else if (key == "website")
         card.website = value;
+    else if (key == "network")
+        card.network = value == "1";
     else if (key == "mode")
         card.mode = value;
     else if (key == "mode_title")
@@ -235,6 +239,14 @@ void mod_parse_card_line(std::string_view key, std::string_view value, ModReleas
         mod_parse_file_ref(value, card.thumbnail);
     else if (key == "manifest")
         mod_parse_file_ref(value, card.manifest);
+    else
+    {
+        // a link of the card: kept only when it is a page of that service
+        for (size_t kind = 0; kind != XMS::LinkKinds; ++kind)
+            if (XMS::LinkKind(kind) != XMS::LinkKind::GitHub && key == XMS::LinkKey(XMS::LinkKind(kind)) &&
+                XMS::ValidLink(XMS::LinkKind(kind), xr_string(value).c_str()))
+                card.links[kind] = value;
+    }
 }
 }
 

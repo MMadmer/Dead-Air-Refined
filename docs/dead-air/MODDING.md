@@ -372,6 +372,12 @@ that is not listed keeps updating from its own GitHub releases exactly as before
 DDS the authoring tool makes from any picture, and `[module] tags`, words from a fixed
 list ([MOD_CATALOG 6](MOD_CATALOG.md#6-manifest-additions)).
 
+**Links.** `[links]` names where the module's card leads - `ap_pro`, `moddb`,
+`telegram`, `discord`, `boosty`, `patreon`, each a page of its own service - and the
+card shows a small round picture for each, with GitHub's taken from `[update] github`
+([MOD_UPDATES 1.5](MOD_UPDATES.md#15-links)). A link that is no page of its service is
+ignored with a line in the log.
+
 A catalog module is game data only ([MOD_CATALOG 8](MOD_CATALOG.md#8-content-policy)):
 no program, library, archive (`.db`/`.xdb` included) or compiled Lua under any
 name, and only files of the listed kinds; the game refuses to install or update
@@ -380,10 +386,14 @@ a release that breaks this. Its scripts run in **protected mode**
 with a catalog module enabled so does EVERY other Lua script, whoever ships it
 (the game, loose `gamedata`, a JSGME mod, any module; shader `.s` files too):
 
-- `ffi`, `os.execute`, `io.popen`, `package.loadlib`, `string.dump` and most of
-  `debug` are gone; `load`, `loadstring`, `require` and the rest take source
-  text only, never bytecode, and `marshal` carries no functions
+- `ffi`, `string.buffer`, `os.execute`, `io.popen`, `package.loadlib`,
+  `package.searchpath`, `string.dump` and most of `debug` are gone; `load`,
+  `loadstring`, `require` and the rest take source text only, never bytecode,
+  `marshal` carries no functions, and `io.open` takes the modes of the language only
+  (`r`, `w`, `a` with `+` and `b`)
   ([MOD_CATALOG 9.2](MOD_CATALOG.md#92-the-lua-state));
+- the network is reached through the game's own requests and no other way (below,
+  "The network");
 - files are read only inside the game folder and the player's data folder, and
   written there only as data (`txt`, `ltx`, `xml`, `json`, saves and a few more
   kinds), never under `modules\`, `mods\` or `gamedata\scripts\` and never into
@@ -400,6 +410,45 @@ and line; `xms_protect` prints the state and why. Protection stays on after the
 last catalog module is removed, until the player turns it off in the Mods window
 ([MOD_CATALOG 9.1](MOD_CATALOG.md#91-when)). Unless the player turns it on, a
 game that never had a catalog module runs every script exactly as before.
+
+### The network
+
+A module's script asks a server through the game, in protected mode and outside it alike
+([MOD_CATALOG 9.4](MOD_CATALOG.md#94-the-network)); feature-test with `xms.http_api`.
+
+```lua
+local id, why = xms.http.request({
+    url     = "https://api.example.org/v1/scores?mode=night",
+    method  = "POST",                                  -- GET when left out
+    headers = { ["Content-Type"] = "application/json" },
+    body    = '{"score": 1200}',
+    timeout = 20,                                      -- seconds, 60 at most
+}, function(answer)
+    -- answer.ok (a 2xx status), answer.status, answer.body, answer.headers (names in
+    -- lower case), answer.error (when no answer came)
+end)
+-- id is the request, to give to xms.http.cancel(id); nil and a sentence when it is refused
+```
+
+`xms.http.request("https://...", done)` is a GET. `xms.http.allowed()` answers whether
+the game takes requests now, and why not.
+
+- Only `https://` to a public server by its name; no address by number, nothing of this
+  computer or the home network. A redirect is not followed: the answer carries the status
+  and the `location` header, and the script asks again.
+- A request carries what the script gives it and nothing of the player: no cookie, no
+  sign-in. A body is 256 KB at most, an answer 4 MB.
+- The answer comes on the game's thread, a frame or more later; the game never waits for
+  the network.
+
+**The mark.** A module whose code names `xms.http` - or one of the libraries and programs
+that reach the network by themselves - **works with the network**, and the game says so
+where players pick and manage modules: on the card in the Mod Browser, on the card of the
+installed module ("Network access"), and in the question before an install or an update
+([MOD_CATALOG 10.4](MOD_CATALOG.md#104-the-network-mark)). Nothing is stated for it and
+nothing can take it off: the game reads the module's own files. The game answers requests
+only while an enabled module carries the mark, so a module that hides its use of the
+network gets no answer by itself.
 
 ### NQ quest graphs
 

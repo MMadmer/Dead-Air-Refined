@@ -138,6 +138,15 @@
             <tags x="100.5" y="92" width="241.5" height="18">
                 <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
             </tags>
+            <link x="99.375" y="109.5" width="15.75" height="21" step="17.25">
+                <normal fill="#00000000" line="#00000000" border="1.5" radius="10.5"/>
+                <highlight fill="#00000000" line="#E8E6E0FF" border="1.5" radius="10.5"/>
+                <pushed fill="#00000000" line="#BDB9AEFF" border="1.5" radius="10.5"/>
+            </link>
+            <link_icon x="100.5" y="111" width="13.5" height="18" stretch="1"/>
+            <network x="244.5" y="111" width="97.5" height="18">
+                <text font="letterica16" align="r" vert_align="c" r="217" g="164" b="65">st_mods_network</text>
+            </network>
             <star x="12" y="132" width="10.5" height="14" kind="star" fill="#D2BE73FF" line="#5E5B55FF" step="12.75"/>
             <rating x="80.25" y="128" width="261.75" height="22">
                 <text font="letterica16" align="l" vert_align="c" r="154" g="150" b="140"/>
@@ -166,22 +175,14 @@
                 <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
                 <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
             </vt_report>
-            <primary x="12" y="230" width="92.24" height="28">
+            <primary x="12" y="230" width="108" height="28">
                 <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_install</text>
                 <normal fill="#00000000" line="#D2BE73FF" border="1" radius="2" text="#D2BE73FF"/>
                 <highlight fill="#D2BE73FF" line="#D2BE73FF" text="#0B0B0BFF"/>
                 <pushed fill="#B8A45EFF" line="#B8A45EFF" text="#0B0B0BFF"/>
                 <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
             </primary>
-            <website x="107.24" y="230" width="75.64" height="28">
-                <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_website</text>
-                <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
-                <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
-                <pushed fill="#BDB9AEFF" line="#BDB9AEFF" text="#0B0B0BFF"/>
-                <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
-                <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
-            </website>
-            <toggle x="185.88" y="230" width="79.33" height="28">
+            <toggle x="123" y="230" width="108" height="28">
                 <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_disable</text>
                 <normal fill="#00000000" line="#E8E6E099" border="1" radius="2" text="#ECE9E2FF"/>
                 <highlight fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
@@ -189,7 +190,7 @@
                 <checked fill="#E8E6E0FF" line="#E8E6E0FF" text="#0B0B0BFF"/>
                 <disabled fill="#00000000" line="#E8E6E02E" text="#5E5B55FF"/>
             </toggle>
-            <remove x="268.21" y="230" width="73.79" height="28">
+            <remove x="234" y="230" width="108" height="28">
                 <text font="letterica16" align="c" vert_align="c" r="236" g="233" b="226">st_mods_remove</text>
                 <normal fill="#00000000" line="#DC645AB3" border="1" radius="2" text="#DC645AFF"/>
                 <highlight fill="#DC645AFF" line="#DC645AFF" text="#0B0B0BFF"/>

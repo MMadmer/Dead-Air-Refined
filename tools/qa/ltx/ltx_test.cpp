@@ -5,6 +5,7 @@
 #include "xrCore/XMS/xms_inherit.h"
 #include "xrCore/XMS/xms_items.h"
 #include "xrCore/XMS/xms_ltxp.h"
+#include "xrCore/XMS/xms_netrule.h"
 #include "xrCore/XMS/xms_tables.h"
 
 #include <cstdio>
@@ -179,6 +180,42 @@ bool refused(const char* text, const char* why_starts)
     return !ok && why.rfind(why_starts, 0) == 0;
 }
 } // namespace
+
+// The network rule (MOD_CATALOG 10.4): the cases the catalog and whatever builds modules hold too.
+static int network_rule_cases()
+{
+    struct Case
+    {
+        const char* text;
+        unsigned line; // 0: the text does not work with the network
+    };
+    static const Case cases[] = {
+        {"xms.http.request(u, f)", 1},
+        {"local h = xms . http", 1},
+        {"-- xms.http\nlocal h = xms[\"http\"]", 2},
+        {"local s = [[\nrequire('socket.http')\n]]", 2},
+        {"os.execute('CURL -s x')", 1},
+        {"--[[ xms.http\n winhttp ]] local a = 1", 0},
+        {"-- curl", 0},
+        {"local xms_http = 1; local recurl = 2; xms.httpx()", 0},
+        {"local url = \"https://example.org\"", 0},
+        {"xmshttp()", 0},
+        {"return { nodes = { { kind = \"lua\", code = \"xms.http.request(u)\" } } }", 1},
+    };
+    int failed = 0;
+    for (const Case& c : cases)
+    {
+        unsigned line = 0;
+        const bool uses = XMS::NetRule::UsesNetwork(c.text, &line);
+        if (uses != (c.line != 0) || (uses && line != c.line))
+        {
+            std::printf("FAIL network rule: [%s] answered %s line %u, wanted line %u\n", c.text, uses ? "yes" : "no", line,
+                c.line);
+            ++failed;
+        }
+    }
+    return failed;
+}
 
 int main()
 {
@@ -487,6 +524,8 @@ int main()
     expect(XMS::ItemValueText(n, text) && text == "1e-05", "a small number keeps its digits");
     n.n = -3;
     expect(XMS::ItemValueText(n, text) && text == "-3", "a whole number is written whole");
+
+    failures += network_rule_cases();
 
     std::printf("%d failure(s)\n", failures);
     return failures ? 1 : 0;

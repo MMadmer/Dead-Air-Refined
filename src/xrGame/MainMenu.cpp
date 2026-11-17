@@ -35,6 +35,8 @@
 #include "ui/ModOptOut.h"
 #include "ui/UIXmsScreenLayers.h"
 #include "xms_screens.h"
+#include "xms_net.h"
+#include "xrCore/XMS/xms_catalog.h"
 #include "xrGame/game_type.h"
 
 #include "DemoInfo.h"
@@ -715,6 +717,9 @@ void CMainMenu::OnFrame()
         }
     }
 
+    // the answers to the requests of scripts, in the menu and in the game alike
+    XmsNet::Pump();
+
     if (IsActive())
     {
         // the Mod Browser's thumbnails arrive on a worker; the file system takes them here
@@ -1389,9 +1394,14 @@ void CMainMenu::OnDownloadMPMap(CUIWindow* w, void* d)
 {
     LPCSTR url = m_downloaded_mp_map_url.c_str();
 #ifdef XR_PLATFORM_WINDOWS
-    LPCSTR params = NULL;
-    STRCONCAT(params, "/C start ", url);
-    ShellExecute(0, "open", "cmd.exe", params, NULL, SW_SHOW);
+    // The address comes from a server. It is a web address or nothing, and it goes to the shell
+    // as an address, never through a command interpreter.
+    if (!XMS::Protect::WebAddress(url))
+    {
+        Msg("! a link that is not a web address is not opened");
+        return;
+    }
+    ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
 #else
     std::string command = "xdg-open " + std::string{url};
     std::ignore = system(command.c_str());

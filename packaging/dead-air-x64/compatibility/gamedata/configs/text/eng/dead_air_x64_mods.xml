@@ -300,6 +300,15 @@
     <string id="st_mods_keep">
         <text>Keep</text>
     </string>
+    <string id="st_mods_network">
+        <text>Network access</text>
+    </string>
+    <string id="st_mods_network_note">
+        <text>This mod uses the network: its scripts can send and receive data over the internet.</text>
+    </string>
+    <string id="st_mods_network_prompt">
+        <text>Note: this mod's scripts use the network - they can send and receive data over the internet.</text>
+    </string>
     <string id="st_mods_website">
         <text>Website</text>
     </string>

@@ -137,6 +137,8 @@ public:
     void Sort(u32 flags);
 };
 
+static bool fs_allowed(pcstr what, const xr_string& path, XMS::Protect::Access access);
+
 FS_file_list_ex::FS_file_list_ex(LPCSTR path, u32 flags, LPCSTR mask)
 {
     if (!xr_strcmp(path, "$game_saves$"))
@@ -144,7 +146,11 @@ FS_file_list_ex::FS_file_list_ex(LPCSTR path, u32 flags, LPCSTR mask)
 
     FS_Path* rootPath{};
     // Absolute paths are used by the shipped debug editors.
-    if (FS.get_path(path, &rootPath))
+    const bool alias = FS.get_path(path, &rootPath);
+    // a folder named by its path is listed wherever it is: in protected mode only where a script may read
+    if (!alias && XMS::Catalog::ProtectedMode() && !fs_allowed("file_list_open_ex", path ? path : "", XMS::Protect::Access::Read))
+        return;
+    if (alias)
         rootPath->m_Flags.set(FS_Path::flNeedRescan, TRUE);
     FS.m_Flags.set(CLocatorAPI::flNeedCheck, TRUE);
     FS.rescan_pathes();
@@ -222,6 +228,16 @@ static bool fs_allowed(pcstr what, const xr_string& path, XMS::Protect::Access a
     xr_sprintf(subject, "getFS():%s(\"%s\")", what, path.c_str());
     ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr, subject, why.c_str());
     return false;
+}
+
+// exist() with a type that asks the disk: a file the game lists answers without it, any other
+// path is a read - of a network path too, which would hand the player's credentials to its server.
+static FileStatus exist_on_disk(CLocatorAPI* fs, const xr_string& path, FSType type)
+{
+    if (XMS::Catalog::ProtectedMode() && type != FSType::Virtual && !fs->GetFileDesc(path.c_str()) &&
+        !fs_allowed("exist", path, XMS::Protect::Access::Read))
+        return FileStatus(false, true);
+    return fs->exist(path.c_str(), type);
 }
 
 void dir_delete_script_2(CLocatorAPI* fs, LPCSTR path, LPCSTR nm, int remove_files)
@@ -346,7 +362,14 @@ void fs_registrator::script_register(lua_State* luaState)
                     fs_allowed("file_rename", dest, XMS::Protect::Access::Write))
                     fs->file_rename(src, dest, overwrite);
             })
-            .def("file_length", &CLocatorAPI::file_length)
+            .def("file_length", +[](CLocatorAPI* fs, LPCSTR path) -> int
+            {
+                // a file the game does not list is asked of the disk: a read of it
+                if (XMS::Catalog::ProtectedMode() && path && !fs->GetFileDesc(path) &&
+                    !fs_allowed("file_length", path, XMS::Protect::Access::Read))
+                    return -1;
+                return fs->file_length(path);
+            })
             .def("file_copy", +[](CLocatorAPI* fs, LPCSTR src, LPCSTR dest)
             {
                 if (fs_allowed("file_copy", src, XMS::Protect::Access::Read) &&
@@ -361,8 +384,14 @@ void fs_registrator::script_register(lua_State* luaState)
                 fs->update_path(temp, path, name);
                 return fs->GetFileDesc(temp);
             })
-            .def("exist", (FileStatus(CLocatorAPI::*)(LPCSTR, FSType))(&CLocatorAPI::exist))
-            .def("exist", (FileStatus(CLocatorAPI::*)(LPCSTR, LPCSTR, FSType))(&CLocatorAPI::exist))
+            .def("exist", +[](CLocatorAPI* fs, LPCSTR name, FSType type)
+            {
+                return exist_on_disk(fs, name ? name : "", type);
+            })
+            .def("exist", +[](CLocatorAPI* fs, LPCSTR path, LPCSTR name, FSType type)
+            {
+                return exist_on_disk(fs, fs_physical(fs, path, name), type);
+            })
 
             .def("get_file_age", &CLocatorAPI::get_file_age)
             .def("get_file_age_str", &get_file_age_str)

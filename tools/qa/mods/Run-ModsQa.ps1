@@ -59,6 +59,9 @@ param(
 
     [string]$BuildRoot,
 
+    # where the QA root is built; left out, next to the installed game (<GameRoot>\_qa\mods)
+    [string]$QaRoot,
+
     [ValidatePattern('^[A-Za-z0-9_.-]+$')]
     [string]$ResultLabel = (Get-Date -Format 'yyyyMMdd-HHmmss'),
 
@@ -86,7 +89,7 @@ $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..'
 if (-not $BuildRoot) { $BuildRoot = Join-Path $repositoryRoot 'bin\x64\Release' }
 $GameRoot = (Resolve-Path -LiteralPath $GameRoot).Path
 
-$qaRoot = Join-Path $GameRoot '_qa\mods'
+$qaRoot = if ($QaRoot) { [IO.Path]::GetFullPath($QaRoot) } else { Join-Path $GameRoot '_qa\mods' }
 $qaAppData = Join-Path $qaRoot 'appdata'
 $qaGameData = Join-Path $qaRoot 'gamedata'
 $qaModules = Join-Path $qaRoot 'modules'
@@ -126,8 +129,14 @@ function Copy-TreeContents {
 }
 
 function Assert-NoTargetEngine {
-    $running = @(Get-Process xrEngine -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $qaEngine })
-    if ($running.Count) { throw "The QA engine is already running (pid $($running.Id -join ', ')); stop it first." }
+    # an engine that was just stopped may still be going away on a busy machine: it gets half a minute
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $running = @(Get-Process xrEngine -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $qaEngine })
+        if (-not $running.Count) { return }
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "The QA engine is already running (pid $($running.Id -join ', ')); stop it first."
 }
 
 function Get-Sha256 {
@@ -607,7 +616,8 @@ function Invoke-CatalogScenario {
     $escapes = @('ffi_available', 'os_execute_available', 'io_popen_available', 'loadlib_available', 'string_dump_available',
         'marshal_stores_functions', 'write_dll_in_game_root', 'write_script', 'write_fsgame', 'write_outside_game',
         'fs_w_open_dll', 'ini_save_as_bat', 'console_cfg_save_path', 'lfs_link_available', 'debug_getupvalue_available',
-        'alternate_stream_write')
+        'alternate_stream_write', 'ffi_after_literal', 'string_buffer_available', 'open_mode_deletes', 'searchpath_available',
+        'fs_length_outside')
 
     try {
         # ---- an ordinary game: no catalog module yet, every capability real; the installations
@@ -697,7 +707,8 @@ function Invoke-CatalogScenario {
         # ---- the installation lands, protection comes on, the probe hits every wall
         $log = Invoke-Engine -Phase 'catalog-protected' -Catalog -Commands @('xms_protect', 'xms_catalog refresh',
             'xms_catalog after run_string qa_protect_probe.run()', 'xms_catalog after run_string qa_protect_probe.console()',
-            'xms_catalog after xms_update all') -WaitFor @('PROTECTQA: DONE', 'PROTECTQA: CONSOLE DONE',
+            "xms_catalog after run_string qa_protect_probe.network($Port)",
+            'xms_catalog after xms_update all') -WaitFor @('PROTECTQA: DONE', 'PROTECTQA: CONSOLE DONE', 'NETQA: answer ',
             'xms_disable qa\.cat\.upd2 refused', 'qa\.cat\.upd: update 1\.1\.0 refused', 'qa\.cat\.upd2: 1\.1\.0 staged')
         Assert-That 'the browser installation is moved in by the next start' (($log -match 'module \[qa\.cat\.good\] 1\.0\.0 installed') -and
             (Test-Path -LiteralPath (Join-Path $qaModules 'qa.cat.good\mod.ltx')))
@@ -734,6 +745,20 @@ function Invoke-CatalogScenario {
         Assert-That 'nor run one from a file of commands' ($fromFile -eq 3) "$fromFile of 3 route(s)"
         Assert-That 'a file of commands by its full path in the game still loads' ($log -match 'protect_probe_cmds\.ltx\] successfully loaded')
         Assert-That 'one from outside the game does not' ($log -match '! \[protect\] cfg_load C:\\Windows\\win refused: outside the game and its data folder')
+        Assert-That 'a screenshot may not be given a path' ($log -match '! \[protect\] screenshot 1 \.\.\\\.\.\\protect_probe_shot refused: only the player may give this command a path')
+        Assert-That 'no command of a script names another computer' ($log -match '! \[protect\] dbg_probe_any \\\\192\.0\.2\.1\\share\\x refused: only the player may give a command a path outside the game')
+        Assert-That 'a script opens no page through the login manager' ($log -match '! \[protect\] login_manager:forgot_password refused: not available in protected mode')
+        # the network for scripts: marked by the module's own files, refused past public https, answered by the mock
+        Assert-That 'a module whose code names the network API carries the mark' ($log -match '\* XMS: \[qa\.legacy\] works with the network \(gamedata\\scripts\\qa_net\.script:3\)')
+        Assert-That 'and the API answers while it is enabled' ($log -match 'NETQA: allowed true')
+        Assert-That 'this computer is no public server' ($log -match "NETQA: localhost nil the host is a public server's name")
+        Assert-That 'nor is a device of the home network' ($log -match "NETQA: lan nil the host is a public server's name")
+        Assert-That 'an address carries no user name' ($log -match 'NETQA: user nil an address carries no user name')
+        Assert-That 'the connection''s headers are the game''s' ($log -match "NETQA: header nil the header Host is the game's")
+        Assert-That 'a request goes out and its answer comes back to the script' (($log -match 'NETQA: sent number') -and
+            ($log -match 'NETQA: answer ok=true status=200 body=echo:POST:a=1&b=2:ping type=text/plain'))
+        Assert-That 'a link that is no page of its service is dropped' (($log -match 'module \[qa\.legacy\] link boosty ignored') -and
+            ($log -match 'module \[qa\.legacy\] link patreon ignored'))
         Assert-That 'a save may not be given a path' ($log -match '! \[protect\] save \.\.\\\.\.\\protect_probe_save refused: only the player may give this command a path')
         Assert-That 'the game may not be sent to another computer' ($log -match
             '! \[protect\] start server\(protect_probe/single/alife/new\) client\(192\.0\.2\.1\) refused: only the player may connect the game to another computer')
@@ -752,7 +777,9 @@ function Invoke-CatalogScenario {
             'xms_mods answer yes', 'xms_mods wait 4000', 'xms_mods state',
             'xms_mods select qa.cat.vtparts', 'xms_mods wait 300', 'xms_mods state', 'xms_mods press vt_check', 'xms_mods wait 3000',
             'xms_mods state',
-            'xms_mods view installed', 'xms_mods select qa.cat.good', 'xms_mods press remove', 'xms_mods wait 300', 'xms_mods state',
+            'xms_mods select qa.cat.good', 'xms_mods wait 300', 'xms_mods state',
+            'xms_mods view installed', 'xms_mods select qa.legacy', 'xms_mods wait 300', 'xms_mods state',
+            'xms_mods select qa.cat.good', 'xms_mods press remove', 'xms_mods wait 300', 'xms_mods state',
             'xms_mods answer no', 'xms_mods press review', 'xms_mods wait 500', 'xms_mods state', 'xms_mods mark ui_done') -WaitFor @(
             '\[mods-ui\] mark ui_done')
         $views = [regex]::Matches($log, '\[mods-ui\] view (\w+), (\d+) item\(s\), sort (\w+), query "([^"]*)", tags (\S+)')
@@ -772,6 +799,13 @@ function Invoke-CatalogScenario {
         Assert-That 'Write a review opens the review' ($log -match '\[mods-ui\] review dialog for qa\.cat\.good')
         # the split release: the catalog's warning first, then what Check found in its second package
         $uiLog = Read-PhaseLog 'catalog-ui'
+        # the links as round pictures, by their kinds, and the network mark: a card's from the release, an installed module's from its files
+        Assert-That 'the browser''s card shows the links by their kinds and the network mark' ($uiLog -match
+            '\[mods-ui\] card qa\.cat\.good: network yes, links ap_pro=https://ap-pro\.ru/forums/topic/15259-konkurs-kvestov-2026/ moddb=https://www\.moddb\.com/mods/qa-good github=https://github\.com/\S+ telegram=https://t\.me/qa_good discord=https://discord\.gg/qagood patreon=https://www\.patreon\.com/qa_good\s')
+        Assert-That 'an installed module shows its own links and the mark its files earn' ($uiLog -match
+            '\[mods-ui\] card qa\.legacy: network yes, links telegram=https://t\.me/qa_legacy\s')
+        Assert-That 'and one whose files name no network carries no mark, whatever a card said' ($uiLog -match
+            '\[mods-ui\] card qa\.cat\.good: network no, links ap_pro=')
         $cards = [regex]::Matches($uiLog, '\[mods-ui\] card qa\.cat\.vtparts: status "[^"]*", primary "[^"]*"(?<off> \(off\))?, vt "(?<vt>[^"]*)"')
         Assert-That 'the window shows the catalog''s warning of a split release' ($cards.Count -eq 2 -and
             (Test-ModsText $cards[0].Groups['vt'].Value 'st_mods_vt_warn' 'ESET-NOD32')) $(if ($cards.Count) { $cards[0].Groups['vt'].Value })

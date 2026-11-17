@@ -69,6 +69,10 @@ struct Card
     xr_string author, authorEng;
     xr_string description, descriptionEng;
     xr_string website;
+    // by XMS::LinkKind; GitHub is the release's own repository and is not a key of the card
+    xr_string links[7];
+    // the module's code works with the network (MOD_CATALOG 10.4)
+    bool network{};
     xr_string mode; // "plain", "new <id>" or "mode <id>"
     xr_string modeTitle, modeTitleEng;
     xr_vector<xr_string> tags; // MOD_CATALOG 6.2, unknown words dropped

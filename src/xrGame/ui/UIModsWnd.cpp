@@ -11,6 +11,10 @@
 #include "UIXmlInit.h"
 #include "xrCore/XMS/xms_catalog.h"
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_netmark.h"
+#include "ModHttp.h"
+
+#include <shellapi.h>
 #include "xrEngine/xr_input.h"
 #include "xrEngine/xr_level_controller.h"
 #include "xrUICore/EditBox/UIEditBox.h"
@@ -368,7 +372,19 @@ bool CUIModsWnd::Init()
     m_vtCheck = mods_button(xml, "main:details:vt_check", m_details);
     m_vtReport = mods_button(xml, "main:details:vt_report", m_details);
     m_primary = mods_button(xml, "main:details:primary", m_details);
-    m_website = mods_button(xml, "main:details:website", m_details);
+    m_linkStep = xml.ReadAttribFlt("main:details:link", 0, "step", 22.f);
+    for (size_t kind = 0; kind != XMS::LinkKinds; ++kind)
+    {
+        m_linkIcons[kind] = UIHelper::CreateStatic(xml, "main:details:link_icon", m_details);
+        m_linkIcons[kind]->SetStretchTexture(true);
+        const xr_string texture = xr_string("ui_xms_link_") + XMS::LinkKey(XMS::LinkKind(kind));
+        m_linkIcons[kind]->InitTexture(texture.c_str(), false);
+        m_linkIcons[kind]->TextureOn();
+        m_links[kind] = mods_button(xml, "main:details:link", m_details);
+    }
+    m_linkOrigin = m_links[0]->GetWndPos();
+    m_linkIconOrigin = m_linkIcons[0]->GetWndPos();
+    m_network = UIHelper::CreateStatic(xml, "main:details:network", m_details);
     m_toggle = mods_button(xml, "main:details:toggle", m_details);
     m_remove = mods_button(xml, "main:details:remove", m_details);
     mods_shape(xml, "main:details:body_rule", m_details);
@@ -381,13 +397,18 @@ bool CUIModsWnd::Init()
     const std::pair<CUIShapeButton*, void (CUIModsWnd::*)(CUIWindow*, void*)> handlers[] = {
         {m_tabInstalled, &CUIModsWnd::OnInstalledTab}, {m_tabBrowser, &CUIModsWnd::OnBrowserTab},
         {m_protect, &CUIModsWnd::OnProtect}, {m_sortButton, &CUIModsWnd::OnSort}, {m_primary, &CUIModsWnd::OnPrimary},
-        {m_website, &CUIModsWnd::OnWebsite}, {m_toggle, &CUIModsWnd::OnToggle}, {m_remove, &CUIModsWnd::OnRemove},
+        {m_toggle, &CUIModsWnd::OnToggle}, {m_remove, &CUIModsWnd::OnRemove},
         {m_vtCheck, &CUIModsWnd::OnVtCheck}, {m_vtReport, &CUIModsWnd::OnVtReport},
         {m_updateAll, &CUIModsWnd::OnUpdateAll}, {m_back, &CUIModsWnd::OnBack}};
     for (const auto& [button, handler] : handlers)
     {
         Register(button);
         AddCallback(button, BUTTON_CLICKED, CUIWndCallback::void_function(this, handler));
+    }
+    for (CUIShapeButton* link : m_links)
+    {
+        Register(link);
+        AddCallback(link, BUTTON_CLICKED, CUIWndCallback::void_function(this, &CUIModsWnd::OnLink));
     }
 
     m_prompt = xr_new<CUIModsPrompt>();
@@ -479,7 +500,15 @@ void CUIModsWnd::BuildItems()
         item.description = mods_multiline(mods_card_text(card.description, card.descriptionEng));
         item.version = entry.release.version;
         item.tags = card.tags;
-        item.website = card.website;
+        for (size_t kind = 0; kind != XMS::LinkKinds; ++kind)
+            item.links[kind] = card.links[kind];
+        // a card of before the links names one page, AP-PRO's or ModDB's
+        for (const XMS::LinkKind kind : {XMS::LinkKind::ApPro, XMS::LinkKind::ModDb})
+            if (item.links[size_t(kind)].empty() && XMS::ValidLink(kind, card.website.c_str()))
+                item.links[size_t(kind)] = card.website;
+        if (XMS::ValidGithubRepo(entry.github.c_str()))
+            item.links[size_t(XMS::LinkKind::GitHub)] = "https://github.com/" + entry.github;
+        item.network = card.network;
         item.thumbnail = entry.thumbnailTexture;
         item.date = entry.listed;
         if (card.mode.starts_with("new "))
@@ -506,7 +535,10 @@ void CUIModsWnd::BuildItems()
             item.description = mods_multiline(mods_display(module.description));
             item.version = module.version;
             item.tags = mods_split_tags(module.tags);
-            item.website = module.website;
+            for (size_t kind = 0; kind != XMS::LinkKinds; ++kind)
+                item.links[kind] = module.links[kind];
+            // of the files on the disk, whatever a card says
+            item.network = XMS::NetMark::ModuleUsesNetwork(module);
             item.mode = module.mode.empty() ? mods_text("st_mods_mode_plain").c_str() :
                 module.mode == "*"          ? mods_text("st_mods_mode_any").c_str() :
                                               mods_format("st_mods_mode_existing", module.mode.c_str());
@@ -936,7 +968,17 @@ void CUIModsWnd::FillDetails(const Item& item)
     CUIStatic* description = xr_new<CUIStatic>("Mod description");
     CUIXmlInit::InitStatic(xml, "main:details:body_text", 0, description);
     description->SetWidth(m_body->GetDesiredChildWidth());
-    description->SetText(item.description.empty() ? mods_text("st_mods_no_description").c_str() : item.description.c_str());
+    xr_string text = item.description.empty() ? xr_string(mods_text("st_mods_no_description").c_str()) : item.description;
+    if (item.network)
+    {
+        // the first thing the card says, in the warning colour, in the same block as the description:
+        // the reviews below count on the description being the body's one first window
+        string64 color{};
+        xr_sprintf(color, "%%c[%u,%u,%u,%u]", color_get_A(m_warnColor), color_get_R(m_warnColor), color_get_G(m_warnColor),
+            color_get_B(m_warnColor));
+        text = xr_string(color) + mods_text("st_mods_network_note").c_str() + "%c[default]\\n \\n" + text;
+    }
+    description->SetText(text.c_str());
     description->AdjustHeightToText();
     m_body->AddWindow(description, true);
     m_reviewsShown.reset();
@@ -1166,7 +1208,20 @@ void CUIModsWnd::RefreshDetails()
     if (0 != xr_strcmp(m_primary->GetText(), mods_text(primary).c_str()))
         m_primary->SetText(mods_text(primary).c_str());
     m_primary->Enable(primaryEnabled);
-    m_website->Enable(!item->website.empty());
+    // the links the module has, packed from the left
+    u32 links = 0;
+    for (size_t kind = 0; kind != XMS::LinkKinds; ++kind)
+    {
+        const bool has = !item->links[kind].empty();
+        m_links[kind]->Show(has);
+        m_linkIcons[kind]->Show(has);
+        if (!has)
+            continue;
+        const float shift = m_linkStep * static_cast<float>(links++);
+        m_links[kind]->SetWndPos(Fvector2{m_linkOrigin.x + shift, m_linkOrigin.y});
+        m_linkIcons[kind]->SetWndPos(Fvector2{m_linkIconOrigin.x + shift, m_linkIconOrigin.y});
+    }
+    m_network->Show(item->network);
     m_toggle->Show(installed);
     m_remove->Show(installed);
     if (installed)
@@ -1218,6 +1273,20 @@ bool CUIModsWnd::OnKeyboardAction(int dik, EUIMessages keyboardAction)
 
 // ---- questions --------------------------------------------------------------------------------------
 
+// A link opens as a page of its own service or not at all.
+static void mods_open_link(XMS::LinkKind kind, const xr_string& url)
+{
+    if (!XMS::ValidLink(kind, url.c_str()))
+        return;
+    ShellExecuteW(nullptr, L"open", ModHttp::Widen(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+// What the player is told before a module whose code works with the network comes onto the disk.
+static xr_string mods_network_warning(bool network)
+{
+    return network ? xr_string(mods_text("st_mods_network_prompt").c_str()) + "\\n \\n" : xr_string();
+}
+
 // What VirusTotal said about a package the player is about to download, when it was a warning.
 static xr_string mods_vt_warning(const ModCatalog::Entry* entry)
 {
@@ -1231,7 +1300,8 @@ void CUIModsWnd::AskInstall(const Item& item)
     CUIModsPrompt::Question question;
     question.caption = mods_format("st_mods_install_caption", item.name.c_str());
     const u64 bytes = item.entry ? item.entry->release.PackageBytes() : 0;
-    question.text = mods_vt_warning(item.entry) + mods_format("st_mods_install_text", item.version.c_str(), mods_size(bytes).c_str()) +
+    question.text = mods_vt_warning(item.entry) + mods_network_warning(item.network) +
+        mods_format("st_mods_install_text", item.version.c_str(), mods_size(bytes).c_str()) +
         "\\n \\n" + mods_text("st_mods_disclaimer").c_str();
     question.accept = mods_text("st_mods_install").c_str();
     // the answer acts on what is selected then, which is this item: the prompt is modal
@@ -1245,7 +1315,8 @@ void CUIModsWnd::AskUpdate(const Item& item)
     const ModUpdateService::ModuleStatus* status = StatusOf(item);
     CUIModsPrompt::Question question;
     question.caption = mods_format("st_mods_update_caption", item.name.c_str());
-    question.text = mods_vt_warning(item.entry) +
+    // the release an update brings is the card's: what it says of the network is what comes
+    question.text = mods_vt_warning(item.entry) + mods_network_warning(item.entry ? item.entry->release.card.network : item.network) +
         mods_format("st_mods_update_text", status ? status->version.c_str() : "", mods_size(status ? status->totalBytes : 0).c_str()) +
         "\\n \\n" + mods_text("st_mods_disclaimer").c_str();
     question.accept = mods_text("st_mods_update").c_str();
@@ -1425,15 +1496,14 @@ void CUIModsWnd::OnPrimary(CUIWindow* window, void*)
     }
 }
 
-void CUIModsWnd::OnWebsite(CUIWindow*, void*)
+void CUIModsWnd::OnLink(CUIWindow* sender, void*)
 {
-    if (const Item* item = Selected())
-    {
-        if (item->Installed())
-            ModUpdateService::OpenWebsite(item->id.c_str());
-        else
-            ModCatalog::OpenWebsite(item->id.c_str());
-    }
+    const Item* item = Selected();
+    if (!item)
+        return;
+    for (size_t kind = 0; kind != XMS::LinkKinds; ++kind)
+        if (m_links[kind] == sender)
+            mods_open_link(XMS::LinkKind(kind), item->links[kind]);
 }
 
 void CUIModsWnd::OnToggle(CUIWindow*, void*)
@@ -1563,7 +1633,7 @@ void CUIModsWnd::RunCommand(const xr_string& command)
         m_snapshot = ModUpdateService::GetSnapshot();
         RefreshRows();
         RefreshDetails();
-        const std::pair<pcstr, CUIShapeButton*> buttons[] = {{"primary", m_primary}, {"website", m_website},
+        const std::pair<pcstr, CUIShapeButton*> buttons[] = {{"primary", m_primary},
             {"toggle", m_toggle}, {"remove", m_remove}, {"vt_check", m_vtCheck}, {"vt_report", m_vtReport},
             {"review", m_writeReview}, {"update_all", m_updateAll}, {"protect", m_protect}, {"sort", m_sortButton},
             {"installed", m_tabInstalled}, {"browser", m_tabBrowser}, {"back", m_back}};
@@ -1590,7 +1660,7 @@ void CUIModsWnd::RunCommand(const xr_string& command)
         Msg("* [mods-ui] mark %s", rest.c_str());
     else
         Msg("* [mods-ui] commands: view installed|browser, search <words>, clear, sort relevance|rating|newest|name, "
-            "tag <tag>, select <id>, press primary|website|toggle|remove|vt_check|vt_report|review|update_all|protect|sort|"
+            "tag <tag>, select <id>, press primary|toggle|remove|vt_check|vt_report|review|update_all|protect|sort|"
             "installed|browser|back, answer yes|no, key <text>, review <stars> <text>, send, state, wait <ms>, mark <text>");
 }
 
@@ -1613,10 +1683,19 @@ void CUIModsWnd::LogState()
             row->thumb->IsShown() ? "yes" : "no", row->selected ? " selected" : "");
     }
     if (const Item* item = Selected())
+    {
         Msg("* [mods-ui] card %s: status \"%s\", primary \"%s\"%s, vt \"%s\", rating \"%s\", reviews %u, review button %s",
             item->id.c_str(), m_status->GetText(), m_primary->GetText(), m_primary->IsEnabled() ? "" : " (off)",
             m_vt->IsShown() ? m_vt->GetText() : "-", m_rating->GetText(), m_body->GetSize() > 2 ? m_body->GetSize() - 2 : 0,
             m_writeReview ? (m_writeReview->IsEnabled() ? "on" : "off") : "none");
+        // the links by their kinds, as the card shows them, and the network mark
+        xr_string links;
+        for (size_t kind = 0; kind != XMS::LinkKinds; ++kind)
+            if (m_links[kind]->IsShown())
+                links += xr_string(links.empty() ? "" : " ") + XMS::LinkKey(XMS::LinkKind(kind)) + "=" + item->links[kind];
+        Msg("* [mods-ui] card %s: network %s, links %s", item->id.c_str(), m_network->IsShown() ? "yes" : "no",
+            links.empty() ? "-" : links.c_str());
+    }
     if (m_prompt->IsShown())
         Msg("* [mods-ui] prompt %s \"%s\"", m_prompt->WindowName().c_str(), m_prompt->Caption().c_str());
     if (m_review->IsShown())

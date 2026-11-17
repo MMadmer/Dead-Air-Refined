@@ -300,6 +300,15 @@
     <string id="st_mods_keep">
         <text>Оставить</text>
     </string>
+    <string id="st_mods_network">
+        <text>Доступ в сеть</text>
+    </string>
+    <string id="st_mods_network_note">
+        <text>Мод обращается к сети: его скрипты могут отправлять и получать данные через интернет.</text>
+    </string>
+    <string id="st_mods_network_prompt">
+        <text>Внимание: скрипты этого мода обращаются к сети - они могут отправлять и получать данные через интернет.</text>
+    </string>
     <string id="st_mods_website">
         <text>На сайт</text>
     </string>

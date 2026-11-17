@@ -69,7 +69,10 @@ private:
         xr_string name, author, version, description, mode, tagsText;
         xr_vector<xr_string> tags;
         xr_string thumbnail;
-        xr_string website;
+        // where the card leads, by XMS::LinkKind; empty where the module names none
+        xr_string links[7];
+        // its code works with the network: the card says so, and so does the question before an install
+        bool network{};
         xr_string date;
         // installed from the Mod Browser, then withdrawn by its author: the catalog takes no update of it
         bool withdrawn{};
@@ -112,7 +115,7 @@ private:
     void OnSort(CUIWindow*, void*);
     void OnTag(CUIWindow*, void*);
     void OnPrimary(CUIWindow*, void*);
-    void OnWebsite(CUIWindow*, void*);
+    void OnLink(CUIWindow*, void*);
     void OnToggle(CUIWindow*, void*);
     void OnRemove(CUIWindow*, void*);
     void OnVtCheck(CUIWindow*, void*);
@@ -167,7 +170,12 @@ private:
     CUIShapeButton* m_vtCheck{};
     CUIShapeButton* m_vtReport{};
     CUIShapeButton* m_primary{};
-    CUIShapeButton* m_website{};
+    // a round picture per kind of link with a ring over it, packed from the left
+    CUIShapeButton* m_links[7]{};
+    CUIStatic* m_linkIcons[7]{};
+    Fvector2 m_linkOrigin{}, m_linkIconOrigin{};
+    float m_linkStep{};
+    CUIStatic* m_network{};
     CUIShapeButton* m_toggle{};
     CUIShapeButton* m_remove{};
     CUIScrollView* m_body{};

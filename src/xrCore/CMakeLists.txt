@@ -234,6 +234,9 @@ target_sources_grouped(
     XMS/xms_level_edits.h
     XMS/xms_ltx.cpp
     XMS/xms_ltx.h
+    XMS/xms_netmark.cpp
+    XMS/xms_netmark.h
+    XMS/xms_netrule.h
     XMS/xms_tables.cpp
     XMS/xms_tables.h
     XMS/xms_ltxp.cpp

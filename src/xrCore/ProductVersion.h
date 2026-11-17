@@ -34,9 +34,13 @@
 // - table-assets: a module's .tradeasset, .lootasset and .recipeasset files add to a trader's stock, to
 //   the death loot and to the recipes (MODDING.md, "A module's traders, loot and recipes");
 // - config-file-patches: a .ltxp `#file <path>` patches that config wherever it is read, and a change of a
-//   section reaches the sections that inherit it (MODDING.md, "Patches of any config").
+//   section reaches the sections that inherit it (MODDING.md, "Patches of any config");
+// - module-links: mod.ltx [links] names the pages a module's card leads to, a key per service, and a
+//   release's card carries them (MOD_UPDATES.md 1.5);
+// - network-mark: scripts ask a server through xms.http, and a module whose code works with the network
+//   carries a mark where players pick and manage modules (MOD_CATALOG.md 9.4 and 10.4).
 #define DAR_ENGINE_ABILITIES \
-    "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions item-assets config-file-patches table-assets"
+    "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions item-assets config-file-patches table-assets module-links network-mark"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined

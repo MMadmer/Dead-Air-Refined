@@ -895,7 +895,8 @@ void CScriptEngine::init(export_func exporter, bool loadGlobalNamespace)
     luajit::open_lib(lua(), LUA_MATHLIBNAME, luaopen_math);
     luajit::open_lib(lua(), LUA_STRLIBNAME, luaopen_string);
     luajit::open_lib(lua(), LUA_BITLIBNAME, luaopen_bit);
-    // ffi is native code by definition: protected mode never opens it (MOD_CATALOG 9.2)
+    // ffi is native code by definition: a protected state never gets it (MOD_CATALOG 9.2;
+    // ScriptProtect::Apply closes the way LuaJIT would open it by itself)
     const bool protectedMode = XMS::Catalog::ProtectedMode();
     if (!protectedMode)
         luajit::open_lib(lua(), LUA_FFILIBNAME, luaopen_ffi);

@@ -10,6 +10,8 @@
 #include "player_name_modifyer.h"
 #include "ui/UICDkey.h"
 #include "secure_messaging.h"
+#include "xrCore/XMS/xms_catalog.h"
+#include "xrScriptEngine/script_protect.hpp"
 
 #if defined(XR_PLATFORM_WINDOWS)
 #include <shellapi.h>
@@ -403,9 +405,21 @@ bool login_manager::get_remember_me_from_registry()
 void login_manager::forgot_password(char const* url)
 {
 #ifdef XR_PLATFORM_WINDOWS
-    LPCSTR params = NULL;
-    STRCONCAT(params, "/C start ", url);
-    ShellExecute(0, "open", "cmd.exe", params, NULL, SW_SHOW);
+    // The address is a script's. It went to a command interpreter as a command line once: any
+    // text after the address was a program started in the player's name. It is a web address or
+    // nothing, handed to the shell as an address; in protected mode a script opens no page at all.
+    if (XMS::Catalog::ProtectedMode())
+    {
+        ScriptProtect::Refused(GEnv.ScriptEngine ? GEnv.ScriptEngine->lua() : nullptr,
+            "login_manager:forgot_password", "not available in protected mode");
+        return;
+    }
+    if (!XMS::Protect::WebAddress(url))
+    {
+        Msg("! a link that is not a web address is not opened");
+        return;
+    }
+    ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
 #else
     std::string command = "xdg-open " + std::string{url};
     std::ignore = system(command.c_str());

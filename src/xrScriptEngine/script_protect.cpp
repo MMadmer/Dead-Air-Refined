@@ -33,13 +33,14 @@ lua_CFunction g_mar_encode{}, g_mar_encode_begin{}, g_mar_decode{}, g_mar_clone{
 
 using Message = string512;
 
+// A script names the path: a long one is cut short, never an overflow that stops the game.
 PROTECT_HELPER void log_refusal(lua_State* L, pcstr what, pcstr detail, pcstr why)
 {
     string512 subject{};
     if (detail && *detail)
-        xr_sprintf(subject, "%s(\"%s\")", what, detail);
+        _snprintf_s(subject, sizeof(subject), _TRUNCATE, "%s(\"%s\")", what, detail);
     else
-        xr_strcpy(subject, what);
+        strncpy_s(subject, sizeof(subject), what, _TRUNCATE);
     XMS::Protect::Refused(subject, why, ScriptProtect::Location(L).c_str());
 }
 
@@ -47,7 +48,8 @@ PROTECT_HELPER void log_refusal(lua_State* L, pcstr what, pcstr detail, pcstr wh
 PROTECT_HELPER void refusal(lua_State* L, pcstr what, pcstr detail, pcstr why, Message& message)
 {
     log_refusal(L, what, detail, why);
-    xr_sprintf(message, "%s: refused by protected mode: %s", detail && *detail ? detail : what, why);
+    _snprintf_s(message, sizeof(message), _TRUNCATE, "%s: refused by protected mode: %s",
+        detail && *detail ? detail : what, why);
 }
 
 // True, with the message, when protected mode refuses `access` to `path`.
@@ -87,11 +89,38 @@ Access write_access_of(pcstr path)
 
 // ---- io and os ---------------------------------------------------------------------------------
 
+// The modes of the language: r, w or a, then + and b (or t) in either order. The C runtime takes
+// more letters, and they are not the script's to give: D deletes the file when it is closed -
+// a file opened to read, so the read rule alone let a script delete what it may not write (the
+// catalog's state among it, and with it protected mode at the next start) -, T, c, n, N, S, R
+// and ccs= change how the file is made, kept and inherited.
+bool plain_mode(pcstr mode)
+{
+    if (!mode[0] || !strchr("rwa", mode[0]))
+        return false;
+    bool plus = false, kind = false;
+    for (pcstr c = mode + 1; *c; ++c)
+    {
+        if (*c == '+' && !plus)
+            plus = true;
+        else if ((*c == 'b' || *c == 't') && !kind)
+            kind = true;
+        else
+            return false;
+    }
+    return true;
+}
+
 int io_open(lua_State* L)
 {
     const pcstr path = luaL_checkstring(L, 1);
     const pcstr mode = luaL_optstring(L, 2, "r");
     Message message{};
+    if (!plain_mode(mode))
+    {
+        refusal(L, "io.open", path, "the mode is r, w or a with + and b", message);
+        return push_refusal(L, message);
+    }
     if (denied(L, "io.open", path, strpbrk(mode, "wa+") ? Access::Write : Access::Read, message))
         return push_refusal(L, message);
     return g_io_open(L);
@@ -205,14 +234,19 @@ PROTECT_HELPER Search search_lua_file(
         xr_string candidate;
         for (const char c : pattern)
             candidate += c == '?' ? module : xr_string(1, c);
+        // The rule comes before the disk: package.path is the script's to set, and asking a
+        // network path whether a file is there hands the player's credentials to its server.
+        if (denied(L, "require", candidate.c_str(), Access::Read, message))
+        {
+            list += "\n\tno file '" + candidate + "' (refused by protected mode)";
+            continue;
+        }
         const DWORD attributes = GetFileAttributesA(candidate.c_str());
         if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
         {
             list += "\n\tno file '" + candidate + "'";
             continue;
         }
-        if (denied(L, "require", candidate.c_str(), Access::Read, message))
-            return Search::Refused;
         strncpy_s(file, sizeof(file), candidate.c_str(), _TRUNCATE);
         return Search::Found;
     }
@@ -440,6 +474,40 @@ void clear_module(lua_State* L, pcstr registryTable, pcstr name)
     }
     lua_pop(L, 1);
 }
+
+// A module nothing of the state may name: not loaded, not waiting to be loaded. require reads
+// the registry's table, which package.loaded only starts out as.
+void forget_module(lua_State* L, pcstr name)
+{
+    clear_module(L, "loaded", name);
+    clear_module(L, "preload", name);
+    for (pcstr table : {"_LOADED", "_PRELOAD"})
+    {
+        lua_getfield(L, LUA_REGISTRYINDEX, table);
+        if (lua_istable(L, -1))
+        {
+            lua_pushnil(L);
+            lua_setfield(L, -2, name);
+        }
+        lua_pop(L, 1);
+    }
+}
+
+// LuaJIT opens the FFI library by itself - the first time a chunk holds a 64-bit or complex
+// literal (1LL, 1i), and for a string buffer's pointers - and the library enters itself among
+// the loaded modules as it opens: one literal, and require("ffi") answered native code. It opens
+// once per state. So it is opened here, before any script, and what it entered is taken away:
+// nothing opens it again, and nothing of the state names it. The numbers such a literal makes
+// stay what they are - numbers; no pointer comes of them.
+void close_ffi(lua_State* L)
+{
+    lua_pushcfunction(L, luaopen_ffi);
+    lua_call(L, 0, 0);
+    forget_module(L, "ffi");
+    // its buffers hand out raw pointers, read and written by index
+    forget_module(L, "string.buffer");
+    forget_module(L, "jit.util");
+}
 } // namespace
 
 void ScriptProtect::Refused(lua_State* L, pcstr what, pcstr why)
@@ -476,12 +544,11 @@ void ScriptProtect::Apply(lua_State* L)
     set_removed(L, "io", "tmpfile", "io.tmpfile");
     set_removed(L, "string", "dump", "string.dump");
     set_removed(L, "package", "loadlib", "package.loadlib");
+    // it asks the disk about any path it is given, a network one included
+    set_removed(L, "package", "searchpath", "package.searchpath");
     set_removed(L, "lfs", "link", "lfs.link");
     set_removed(L, "lfs", "chdir", "lfs.chdir");
-    clear_module(L, "loaded", "ffi");
-    clear_module(L, "preload", "ffi");
-    clear_module(L, "loaded", "jit.util");
-    clear_module(L, "preload", "jit.util");
+    close_ffi(L);
 
     // files
     wrap(L, "io", "open", io_open, g_io_open, "io.open");
@@ -534,16 +601,33 @@ void ScriptProtect::Apply(lua_State* L)
     wrap(L, "marshal", "clone", mar_clone, g_mar_clone, "marshal.clone");
     wrap(L, "marshal", "decode", mar_decode, g_mar_decode, "marshal.decode");
 
-    // debug: what error reports and the profiler use, nothing that reaches around the guards
+    // debug: what error reports and the profiler use and nothing else - named by what stays, so a
+    // function a later LuaJIT adds is gone without a word here
     if (push_table(L, "debug"))
     {
-        for (pcstr name : {"getupvalue", "setupvalue", "upvalueid", "upvaluejoin", "getlocal", "setlocal",
-                 "getregistry", "getmetatable", "setmetatable", "getfenv", "setfenv", "debug"})
+        lua_newtable(L);
+        for (pcstr name : {"traceback", "getinfo", "sethook", "gethook"})
         {
-            lua_pushnil(L);
+            lua_getfield(L, -2, name);
             lua_setfield(L, -2, name);
         }
-        lua_pop(L, 1);
+        // the table scripts hold stays the same object: emptied, then filled with the four
+        lua_pushnil(L);
+        while (lua_next(L, -3))
+        {
+            lua_pop(L, 1);
+            lua_pushvalue(L, -1);
+            lua_pushnil(L);
+            lua_rawset(L, -5);
+        }
+        lua_pushnil(L);
+        while (lua_next(L, -2))
+        {
+            lua_pushvalue(L, -2);
+            lua_insert(L, -2);
+            lua_rawset(L, -5);
+        }
+        lua_pop(L, 2);
     }
 
     lua_settop(L, top);

@@ -1170,13 +1170,29 @@ bool AllowConsole(pcstr command, xr_string& why)
     }
     // the commands that turn their argument into a file name to write or load keep it a name
     const bool dots = !args.empty() && args.find_first_not_of('.') == std::string_view::npos;
-    for (const std::string_view naming : {"cfg_save", "save", "save_silent", "load", "demo_record", "demo_play"})
+    for (const std::string_view naming :
+        {"cfg_save", "save", "save_silent", "load", "demo_record", "demo_play", "screenshot"})
         if (iequals(name, naming) && (path || dots))
         {
             why = "only the player may give this command a path";
             return false;
         }
 
+    // Whatever the command, a script's argument names no other computer, no drive and no folder
+    // above: the commands that take a file are not all known by name here, and a network path
+    // asked for a file hands the player's credentials to its server. cfg_load goes by the read
+    // rule above.
+    if (!iequals(name, "cfg_load"))
+    {
+        const bool network = args.find("\\\\") != std::string_view::npos || args.find("//") != std::string_view::npos;
+        const bool drive = args.find(":\\") != std::string_view::npos || args.find(":/") != std::string_view::npos;
+        const bool above = args.find("..\\") != std::string_view::npos || args.find("../") != std::string_view::npos;
+        if (network || drive || above)
+        {
+            why = "only the player may give a command a path outside the game";
+            return false;
+        }
+    }
     // a single-player game connects to itself; another address is a server nobody vetted
     if (iequals(name, "start"))
     {
@@ -1189,6 +1205,21 @@ bool AllowConsole(pcstr command, xr_string& why)
             }
     }
     return true;
+}
+
+bool WebAddress(pcstr url)
+{
+    if (!url)
+        return false;
+    const std::string_view text(url);
+    const size_t scheme = text.starts_with("https://") ? 8 : text.starts_with("http://") ? 7 : 0;
+    if (!scheme || text.size() <= scheme || text.size() > 2048)
+        return false;
+    for (const char c : text)
+        if (static_cast<unsigned char>(c) <= ' ' || static_cast<unsigned char>(c) >= 0x7f || strchr("\"<>\\^`{|}", c))
+            return false;
+    const char first = text[scheme];
+    return (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9');
 }
 
 void Refused(pcstr what, pcstr why, pcstr where)

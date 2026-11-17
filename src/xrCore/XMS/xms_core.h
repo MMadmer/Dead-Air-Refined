@@ -199,6 +199,9 @@ struct Module
     xr_string author;
     xr_string description; // '\n' separates lines
     xr_string website;       // empty unless it passed ValidWebsite
+    // [links]: where the module's card leads, by kind (LinkKind); each empty unless it passed
+    // ValidLink. GitHub is never written: it is the update repository.
+    xr_string links[7];
     xr_string update_github; // "owner/repo", empty unless it passed ValidGithubRepo
     // MOD_CATALOG 6: a DDS picture inside the module ('\' separators, never climbing out) and
     // the tags of the fixed vocabulary, as the manifest spells them
@@ -302,6 +305,23 @@ XRCORE_API bool ModuleEnabledNextStart(pcstr id);
 // https:// on ap-pro.ru or moddb.com and nothing else. The allow-list is code on purpose:
 // a manifest must not be able to send the player anywhere it likes.
 XRCORE_API bool ValidWebsite(pcstr url);
+
+// The places a module's card links to (MOD_UPDATES.md 1.5), each with an address rule of its
+// own: the page is that service's and nothing else. The order is the order the card shows.
+enum class LinkKind : u8
+{
+    ApPro,
+    ModDb,
+    GitHub,
+    Telegram,
+    Discord,
+    Boosty,
+    Patreon,
+};
+inline constexpr size_t LinkKinds = 7;
+// The key of [links] and of a release's card: ap_pro, moddb, github, telegram, discord, boosty, patreon.
+XRCORE_API pcstr LinkKey(LinkKind kind);
+XRCORE_API bool ValidLink(LinkKind kind, pcstr url);
 
 // "owner/repo" in GitHub's own character set.
 XRCORE_API bool ValidGithubRepo(pcstr repo);

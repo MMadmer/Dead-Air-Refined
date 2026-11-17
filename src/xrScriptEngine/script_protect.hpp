@@ -13,7 +13,8 @@ namespace ScriptProtect
 {
 // Called after the standard libraries, marshal, lfs and jit are open and before any script
 // runs: removes what reaches native code or programs, wraps what touches files. The engine does
-// not open ffi at all in protected mode; this does not undo it if it did.
+// not hand ffi to a protected state; this opens it once and takes it away again, because LuaJIT
+// would otherwise open it by itself at the first 64-bit literal a script holds.
 void Apply(lua_State* L);
 
 // The script and line of the innermost Lua frame, for the log of a refusal.

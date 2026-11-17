@@ -13,8 +13,8 @@ order of importance:
 
 1. **Its scripts cannot harm the computer.** While any module from the catalog is enabled
    the game runs every script in *protected mode* (section 9): no native code, no
-   programs, no network, no file outside the game's own data, no file the game or Windows
-   would later load as code.
+   programs, no file outside the game's own data, no file the game or Windows
+   would later load as code, and no way to the network but the game's own requests (9.4).
 2. **It contains no program.** A catalog module holds game data only - no executable,
    library, OS script, archive or precompiled code (section 8). The game refuses to
    install or update one that does, whatever signed it.
@@ -39,6 +39,12 @@ order of importance:
 6. **VirusTotal.** Every listed release was scanned by its author and has a public
    VirusTotal report the player can open; with the player's own free VirusTotal key the
    game checks the live report before it installs (section 11).
+7. **The network is said out loud.** A module's code may work with the network - it is
+   not forbidden - and a module whose code does carries a mark the player cannot miss: on
+   its card in the Mod Browser, on the card of the installed module, and in the question
+   before an install or an update (10.4). In protected mode the only way out is the game's
+   own request, to a public https server, and it answers only while a module that carries
+   the mark is enabled (9.4): what the player is told is what can happen.
 
 What protected mode does not cover: the game's own data. A module may still do inside the
 game what modules have always done - change the rules, the world, the saves it writes. That
@@ -100,6 +106,8 @@ name@eng    = "Overnight Delivery"
 author      = "Madmer"
 description = "Night shifts of a courier in the Zone.\nA new game mode."
 website     = https://ap-pro.ru/stuff/zov_pripjati/overnight-delivery-r600/
+telegram    = https://t.me/overnight_delivery
+network     = 1
 mode        = new darf-overnight-delivery
 mode_title  = "Overnight Delivery"
 tags        = story, quests
@@ -118,6 +126,13 @@ sig = 0123456789abcdef:...
 - `mode` is `plain` (the ordinary game), `new <mode id>` (a mode the module brings) or
   `mode <mode id>` (a mode another module or the game has); `mode_title` is its title.
 - `tags`: see 6.2.
+- `website` is the module's own page (section 7, requirement 4). The other links of the
+  module - `ap_pro`, `moddb`, `telegram`, `discord`, `boosty`, `patreon` - are keys of
+  their own, each a page of its service by MOD_UPDATES 1.5; one that is not is dropped by
+  the game and refuses a listing. The GitHub link is not written: it is the repository
+  the release comes from.
+- `network = 1`: the module's code works with the network (10.4). The key is left out
+  otherwise. The game shows the mark on the card and in the question before an install.
 - `thumbnail` and `manifest`: a file of the release - path as in the index, size, SHA-256.
   `manifest` is the release's `mod.ltx`; the game checks at install that the index lists
   the same file, so the card and the installed manifest are one text.
@@ -347,7 +362,10 @@ and the catalog's `accept` workflow judges the submission by them (10.2):
    does not stop the listing.
 5. The release passes the content policy (section 8) and the script report has no
    blocking finding (10.3). Its other findings are notes in the verdict and stop no
-   listing: protected mode stops every one of them.
+   listing: protected mode stops every one of them. A module whose code works with the
+   network says so on its card (`network = 1`, 10.4): code that does and a card that does
+   not refuse the listing. A link of the card that is no page of its service refuses it
+   too (MOD_UPDATES 1.5).
 6. The submission is opened by the owner of the module's repository, whose GitHub
    account is at least `min_account_days` old. A younger one is refused, with the day it
    may submit again: a submission that waited would be judged every half hour, and a pile
@@ -434,12 +452,15 @@ shader `.s` files are Lua too).
 
 | Removed | |
 |---|---|
-| `ffi` | not opened at all |
+| `ffi` | never handed to a script. LuaJIT opens the library by itself the first time a chunk holds a 64-bit or complex literal (`1LL`, `1i`) and enters it among the loaded modules, where `require("ffi")` would find it; so the game opens it once, before any script, and takes it out of every table that names it. Such a literal still makes a number, and no pointer comes of it |
+| `string.buffer` | its buffers hand out raw pointers a script reads and writes by index |
 | `package.loadlib`, the C and all-in-one searchers, `package.cpath` | native modules |
+| `package.searchpath` | asks the disk about any path, a network one included |
+| `login_manager:forgot_password` | it opens a page; a script opens none |
 | `os.execute`, `io.popen`, `os.tmpname`, `os.getenv`, `io.tmpfile` | programs, the world outside |
 | `string.dump` | bytecode |
 | `jit.util` | engine internals |
-| `debug.*` except `traceback`, `getinfo`, `sethook`, `gethook` | reaching around the guards |
+| `debug.*` except `traceback`, `getinfo`, `sethook`, `gethook` | reaching around the guards; named by what stays, so a function a later LuaJIT adds is gone too |
 | `lfs.link`, `lfs.chdir` | links, moving the relative root |
 | `CUIMapList:StartDedicatedServer` | a process launch |
 
@@ -447,9 +468,10 @@ shader `.s` files are Lua too).
 |---|---|
 | `load`, `loadstring`, `loadfile`, `dofile`, `require` | text chunks only - never bytecode |
 | `marshal.encode/decode/clone` | no functions: a function travels as bytecode (a table's `__persist` always hands one over); a userdata's `__persist` that returns Lua source instead, as the game's `CTime` does, is text and passes - every save holds CTimes |
-| `io.open`, `io.lines`, `io.input`, `io.output`, `os.remove`, `os.rename`, `lfs.*` | the path rules of 9.3 |
-| `getFS()`: `w_open`, `file_copy`, `file_rename`, `file_delete`, `dir_delete`, `append_path` | the path rules of 9.3 |
-| `ini_file:save`, `ini_file:save_as` | the path rules of 9.3 |
+| `io.open`, `io.lines`, `io.input`, `io.output`, `os.remove`, `os.rename`, `lfs.*` | the path rules of 9.3. `io.open` takes the modes of the language and no other: `r`, `w` or `a`, then `+` and `b` or `t`. The C runtime knows more letters - `D` deletes the file when it is closed, though it was opened to read - and they are refused |
+| `require` and `package.path` | a file is asked of the disk only where the read rule allows: the rule comes before the disk, so a network path in `package.path` is never touched |
+| `getFS()`: `w_open`, `file_copy`, `file_rename`, `file_delete`, `dir_delete`, `append_path`, `r_open`; `exist` with a type that asks the disk, `file_length` of a file the game does not list, `file_list_open_ex` of a folder by its path | the path rules of 9.3 |
+| `ini_file(...)`, `ini_file:save`, `ini_file:save_as` | the path rules of 9.3: the name is a script's and may climb out of the folder it starts in |
 | `get_console()`: `execute`, `execute_script`, `execute_deferred` | the console rules below |
 
 A refused call logs `! [protect] <what> refused: <why>` with the script and line, and
@@ -471,13 +493,23 @@ keeps the origin of the one that ran it.
   `xms_catalog after <command>` runs the command later as whoever asked.
 - A command is one line. A value with a line break would become a line of its own in
   `user.ltx`, which runs as the player's at the next start.
-- `cfg_save`, `save`, `save_silent`, `load`, `demo_record` and `demo_play` take a name,
-  never a path (`\`, `/`, `:` or nothing but dots).
+- `cfg_save`, `save`, `save_silent`, `load`, `demo_record`, `demo_play` and `screenshot`
+  take a name, never a path (`\`, `/`, `:` or nothing but dots).
+- Whatever the command, its argument names no other computer (`\\`, `//`), no drive
+  (`:\`, `:/`) and no folder above (`..\`, `../`): the commands that take a file are not
+  all known by name, and a network path asked for a file hands the player's Windows
+  credentials to its server.
 - `cfg_load` takes a name, or a path the read rule of 9.3 allows (never a network path:
   reading one hands the player's Windows credentials to its server): the stock scripts load
   files of commands from the game's configs by their path. Each line it runs is checked in
   turn. `xms_mods <command>` (the Mods window's buttons, 14) is the player's too.
 - `start` connects to `client(localhost)` only: a single-player game connects to itself.
+
+A link the game opens for a script or a server - in any mode - is a web address and
+nothing else (`http://` or `https://`, a host, plain ASCII, none of the characters that
+end an argument of a command line), handed to the shell as an address. It never goes
+through a command interpreter: `login_manager:forgot_password` once did, and whatever
+followed the address was a program started in the player's name.
 
 ### 9.3 Paths
 
@@ -491,6 +523,31 @@ refused outright.
   any `desktop.ini` (Explorer reads it when the folder is opened, network icon paths
   included), and only files with no extension or one of
   `txt log ltx xml json csv ini cfg dat sav scop scoc scov tmp bak md`.
+
+### 9.4 The network
+
+A script reaches the network through the game and no other way: `xms.http` (MODDING.md,
+"The network"). It is the same in protected mode and outside it.
+
+- **Where**: `https://` only, to a public server by its name - not this computer, not an
+  address by its number, not a name only a local network knows (`localhost`, `.local`,
+  `.lan`, `.internal`, `.home`, `.arpa`, `.test`, `.invalid`), no user part, port 443 or
+  1024-65535. The server's certificate is checked by Windows.
+- **What goes out**: the method (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`), up to
+  16 headers of the script's own (never `Host`, `Cookie`, `User-Agent`, `Content-Length`
+  or the other headers of the connection) and a body of up to 256 KB. Nothing of the
+  player: no cookie, no stored sign-in, and the player's Windows sign-in never answers a
+  server. A redirect is not followed: the script gets the status and follows it itself,
+  through the same rule.
+- **What comes back**: the status, the headers and up to 4 MB of the body, on the game's
+  own thread, a frame after the answer arrives. Four requests are on the wire at once and
+  32 wait behind them.
+- **For whom**: the game answers only while an enabled module carries the network mark
+  (10.4). A module that hides its use of the network from the rule carries no mark and
+  gets no answer by itself.
+
+What a script sends is its own choice of what it may read: the game's own data and the
+player's data folder (9.3). That is why the mark is said out loud.
 
 ## 10. Submission and acceptance
 
@@ -639,15 +696,50 @@ new comment, so the author is notified once per change, not every half hour.
 
 ### 10.3 The script report
 
-The catalog reads every `.script` of the release with a Lua tokenizer. **Blocking**:
+The catalog reads every file of the release that carries code with a Lua tokenizer:
+scripts (`.script`, `.lua`), shader scripts (`.s`), and the strings of the assets that
+carry code as text (`.nqasset`, `.behasset`, `.pdaasset`) - a string of such an asset that
+calls something (holds a `(`) is read as a script. **Blocking**:
 `ffi`, `os.execute`, `io.popen`, `package.loadlib`, `string.dump`, bytecode,
-`StartDedicatedServer`, `lfs.link`. **Reported, not blocking** (notes in the verdict,
+`StartDedicatedServer`, `lfs.link`, `jit.util`, `require` of `ffi`, `string.buffer` or
+`jit.util`, `forgot_password`. **Reported, not blocking** (notes in the verdict,
 10.2): `load`/`loadstring`/`require` of a computed string, `_G[...]`, `setfenv`,
-`debug.*`, `getFS()` writes, `ini_file:save_as`, `get_console():execute`, long encoded
-blobs, `string.char` chains. Protected mode stops every one of them anyway; the report
-stops a module that could only work without it.
+`debug.*`, `getFS()` writes, `ini_file:save_as`, `get_console():execute`,
+`package.searchpath` / `loaders` / `searchers` / `preload` / `cpath`, `os.exit`, long
+encoded blobs, `string.char` chains, a string that names a program of the system
+(`cmd.exe`, `powershell`, `rundll32`, `regsvr32`, `mshta`, `wscript`, `cscript`,
+`schtasks`). Protected mode stops every one of them anyway; the report stops a module
+that could only work without it.
 
-### 10.4 A person, optionally
+### 10.4 The network mark
+
+A module **works with the network** when a file of it that carries code (10.3) does. The
+rule is one text for the game, the catalog and whatever builds modules, and it reads the
+file itself, never a statement about it:
+
+- the file's text without its Lua comments, ASCII in lower case; strings stay - code is
+  passed around as text;
+- it holds the game's API - the word `xms`, then one or more of space, tab, `.`, `[`,
+  `]`, `"`, `'`, then the word `http` (`xms.http`, `xms["http"]`) -, or one of the names
+  that reach the network by themselves, as a whole word: `winhttp`, `wininet`, `urlmon`,
+  `ws2_32`, `wsock32`, `luasocket`, `socket.core`, `socket.http`, `curl`, `wget`,
+  `bitsadmin`, `invoke-webrequest`, `invoke-restmethod`, `webclient`,
+  `urldownloadtofile`. A word ends where a letter, a digit or `_` does not follow.
+
+Nobody states the mark and nobody can take it off:
+
+- **the game** works it out from the files of every installed module - once per run, at
+  the first question - and shows it on the module's card; the same answer decides
+  whether `xms.http` answers at all (9.4);
+- **a release's card** says `network = 1` (section 4), written by the authoring tool from
+  the same rule, so the Mod Browser shows the mark before anything is downloaded and the
+  question before an install says it;
+- **the catalog** reads the release's files by the same rule when it judges: code that
+  works with the network under a card that does not say so refuses the listing.
+
+The mark is a fact about the module, not a fault: it refuses nothing by itself.
+
+### 10.5 A person, optionally
 
 Nothing requires a person: the workflows of 10.2 list, withdraw and publish by themselves.
 The local tools stay for whoever maintains the catalog by hand:

@@ -1166,6 +1166,8 @@ target_sources(xrGame PRIVATE
     xms_game.h
     xms_graph_composer.cpp
     xms_spawn_composer.cpp
+    xms_net.cpp
+    xms_net.h
     xms_pda.cpp
     xms_pda.h
     xms_screens.cpp

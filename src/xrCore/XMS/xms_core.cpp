@@ -700,8 +700,15 @@ void parse_manifest(Module& m, char* text)
         text += 3;
 
     xr_string website, github, pda_layout, thumbnail;
+    xr_string links[LinkKinds];
     parse_plain_ini(text, [&](pcstr section, pcstr key, pcstr value)
     {
+        if (0 == xr_strcmp(section, "links"))
+        {
+            for (size_t kind = 0; kind != LinkKinds; ++kind)
+                if (LinkKind(kind) != LinkKind::GitHub && 0 == xr_strcmp(key, LinkKey(LinkKind(kind))))
+                    links[kind] = value;
+        }
         if (0 == xr_strcmp(section, "module"))
         {
             if (0 == xr_strcmp(key, "id"))
@@ -835,6 +842,22 @@ void parse_manifest(Module& m, char* text)
         m.update_github = std::move(github);
     else if (!github.empty())
         Msg("! XMS: module [%s] update source ignored - [update] github must be owner/repo", m.id.c_str());
+    // [links]: each kind by its own rule; a refused one is dropped with a word, like the website
+    for (size_t kind = 0; kind != LinkKinds; ++kind)
+    {
+        if (links[kind].empty())
+            continue;
+        if (ValidLink(LinkKind(kind), links[kind].c_str()))
+            m.links[kind] = std::move(links[kind]);
+        else
+            Msg("! XMS: module [%s] link %s ignored - it is not a page of that service", m.id.c_str(), LinkKey(LinkKind(kind)));
+    }
+    // the one link of an older manifest is one of the two it could be
+    for (const LinkKind kind : {LinkKind::ApPro, LinkKind::ModDb})
+        if (m.links[size_t(kind)].empty() && ValidLink(kind, m.website.c_str()))
+            m.links[size_t(kind)] = m.website;
+    if (!m.update_github.empty())
+        m.links[size_t(LinkKind::GitHub)] = "https://github.com/" + m.update_github;
     if (!thumbnail.empty())
     {
         if (normalize_rel_path(thumbnail))
@@ -1660,6 +1683,50 @@ bool ValidWebsite(pcstr url)
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
             std::string_view("-._~/?#&=%+").find(c) != std::string_view::npos;
     });
+}
+
+pcstr LinkKey(LinkKind kind)
+{
+    static constexpr pcstr keys[LinkKinds] = {"ap_pro", "moddb", "github", "telegram", "discord", "boosty", "patreon"};
+    return keys[size_t(kind) < LinkKinds ? size_t(kind) : 0];
+}
+
+bool ValidLink(LinkKind kind, pcstr url)
+{
+    constexpr std::string_view scheme = "https://";
+    const std::string_view text = url ? std::string_view(url) : std::string_view();
+    if (text.size() <= scheme.size() || text.size() > 512 || text.substr(0, scheme.size()) != scheme)
+        return false;
+    // the host whole, as in ValidWebsite: a prefix would pass t.me.evil.example and t.me@evil.example
+    const std::string_view rest = text.substr(scheme.size());
+    const size_t slash = rest.find('/');
+    xr_string host(rest.substr(0, slash));
+    xr_strlwr(host);
+    const std::string_view path = slash == std::string_view::npos ? std::string_view() : rest.substr(slash);
+    if (!std::ranges::all_of(path, [](char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                std::string_view("-._~/?#&=%+").find(c) != std::string_view::npos;
+        }))
+        return false;
+    const auto on = [&](std::initializer_list<std::string_view> hosts)
+    {
+        return std::ranges::find(hosts, std::string_view(host)) != hosts.end();
+    };
+    // a page of the service, not the service's front door
+    const bool page = path.size() > 1;
+    switch (kind)
+    {
+    case LinkKind::ApPro: return on({"ap-pro.ru", "www.ap-pro.ru"});
+    case LinkKind::ModDb: return on({"moddb.com", "www.moddb.com"});
+    case LinkKind::GitHub: return on({"github.com"}) && page;
+    case LinkKind::Telegram: return on({"t.me", "telegram.me"}) && page;
+    case LinkKind::Discord:
+        return (on({"discord.gg"}) && page) || (on({"discord.com", "www.discord.com"}) && path.starts_with("/invite/") && path.size() > 8);
+    case LinkKind::Boosty: return on({"boosty.to"}) && page;
+    case LinkKind::Patreon: return on({"patreon.com", "www.patreon.com"}) && page;
+    }
+    return false;
 }
 
 bool ValidGithubRepo(pcstr repo)

@@ -26,6 +26,7 @@ github      = Madmer/agroprom-story
 | `[module] author` | Display text. |
 | `[module] description` | Display text, may span lines through `\n`. |
 | `[module] website` | The module's page. AP-PRO or ModDB only, see 1.3. |
+| `[links]` | Where the module's card leads, a key per service: see 1.5. |
 | `[module] thumbnail` | A 256 x 256 DXT1/DXT5 DDS inside the module, shown next to it: [MOD_CATALOG.md](MOD_CATALOG.md) 6.1. |
 | `[module] tags` | Words of a fixed list the Mod Browser filters by: [MOD_CATALOG.md](MOD_CATALOG.md) 6.2. |
 | `[update] github` | `owner/repo` of the GitHub repository whose releases update the module. |
@@ -71,6 +72,40 @@ configuration: extending it is a game release.
 `owner/repo`: the owner is 1-39 characters of `A-Z a-z 0-9 -`, the repository is
 1-100 characters of `A-Z a-z 0-9 - . _` and is neither `.` nor `..`. One key
 names one provider; another provider would be another key.
+
+### 1.5 Links
+
+```ini
+[links]
+ap_pro   = https://ap-pro.ru/forums/topic/1234-agroprom-story/
+moddb    = https://www.moddb.com/mods/agroprom-story
+telegram = https://t.me/agroprom_story
+discord  = https://discord.gg/abc123
+boosty   = https://boosty.to/madmer
+patreon  = https://www.patreon.com/madmer
+```
+
+A module's card shows a small round picture for every link it has, in this order:
+AP-PRO, ModDB, GitHub, Telegram, Discord, Boosty, Patreon. Each key takes a page of its
+own service and nothing else; one that is not is ignored with a line in the log, and the
+others stay. The rule of 1.3 holds for every link - `https://` in lower case, the host
+whole and in any case, no user info and no port, the same characters after it, 512 bytes
+at most - with the hosts of the kind:
+
+| Key | Hosts | And |
+|---|---|---|
+| `ap_pro` | `ap-pro.ru`, `www.ap-pro.ru` | |
+| `moddb` | `moddb.com`, `www.moddb.com` | |
+| `telegram` | `t.me`, `telegram.me` | a page: something after the `/` |
+| `discord` | `discord.gg`; `discord.com`, `www.discord.com` | a page; on `discord.com` the path starts with `/invite/` |
+| `boosty` | `boosty.to` | a page |
+| `patreon` | `patreon.com`, `www.patreon.com` | a page |
+
+**GitHub is not written**: the card's GitHub link is `https://github.com/<[update]
+github>`. `[module] website` (1.3) is the one link of a manifest written before this
+section: the game reads it as the `ap_pro` or the `moddb` link, whichever host it has,
+while `[links]` names none of that kind. The hosts are code, like the website's:
+extending them is a game release.
 
 ## 2. Release contract (**frozen**)
 
@@ -360,8 +395,10 @@ update must not be staged under a running game.
 
 The window lists every discovered XMS module, enabled or not, and selects the
 first one with an update until the player picks a row. `Update` is enabled for
-an available or failed update, `Update all` while anything is available,
-`Website` when the manifest carries a valid one. Keys: the UI move actions walk
+an available or failed update, `Update all` while anything is available.
+The card shows the module's links as round pictures (1.5), each opening its page, and
+the words "Network access" when the module's code works with the network
+([MOD_CATALOG.md](MOD_CATALOG.md) 10.4). Keys: the UI move actions walk
 the list, `ui_accept` is `Update`, `F5` is `Update all`, `quit` closes the
 window; downloads go on without it, and the restart question brings it back.
 
