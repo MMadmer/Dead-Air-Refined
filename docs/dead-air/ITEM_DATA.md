@@ -124,8 +124,10 @@ value the game's LTX reader would cut (a `;`) or misread.
 
 ## 2. Craft recipes from data
 
-A module adds recipes to the craft window of a tool or a workbench with lines in the system
-config's `[xms_craft]`, from a `.ltxp` patch or a `configs\xms\*.ltx` overlay:
+A module adds recipes to the craft window of a tool or a workbench with its `.recipeasset` files
+(MODDING.md, "A module's traders, loot and recipes"): the game writes each as a line of the system
+config's `[xms_craft]`. The section is the game's own form of a recipe, and a `.ltxp` patch or a
+`configs\xms\*.ltx` overlay may write the lines directly:
 
 ```ini
 [xms_craft]

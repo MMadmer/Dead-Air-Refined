@@ -1,6 +1,6 @@
 # What a module's config patches and items say, without the game: builds the .ltxp reader
 # (src\xrCore\XMS\xms_ltxp.cpp), the inheritance rule (xms_inherit.h), the item planner
-# (xms_items.cpp) and the module data reader they stand on, with their cases (ltx_test.cpp), into
+# (xms_items.cpp), the planner of a module's traders, loot and recipes (xms_tables.cpp) and the module data reader they stand on, with their cases (ltx_test.cpp), into
 # _work\ltx-qa and runs them.
 param(
     [string]$OutputDirectory = ""
@@ -28,6 +28,7 @@ $sources = @(
     (Join-Path $PSScriptRoot "ltx_test.cpp"),
     (Join-Path $xms "xms_ltxp.cpp"),
     (Join-Path $xms "xms_items.cpp"),
+    (Join-Path $xms "xms_tables.cpp"),
     (Join-Path $xms "xms_luadata.cpp")
 ) | ForEach-Object { '"{0}"' -f $_ }
 $testExecutable = Join-Path $outputPath "ltx_test.exe"

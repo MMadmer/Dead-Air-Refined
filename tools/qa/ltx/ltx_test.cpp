@@ -5,6 +5,7 @@
 #include "xrCore/XMS/xms_inherit.h"
 #include "xrCore/XMS/xms_items.h"
 #include "xrCore/XMS/xms_ltxp.h"
+#include "xrCore/XMS/xms_tables.h"
 
 #include <cstdio>
 #include <cstring>
@@ -146,6 +147,28 @@ bool has(const Directives& list, XMS::LtxDirective::Op op, const char* key, cons
     return false;
 }
 
+bool table(XMS::TableKind kind, const char* text, XMS::TablePlan& out, std::string& why)
+{
+    XMS::LuaValue v;
+    std::string error;
+    if (!XMS::ReadLuaData(text, std::strlen(text), v, error))
+    {
+        why = error;
+        return false;
+    }
+    return XMS::PlanTable(kind, v, out, why);
+}
+
+bool table_refused(XMS::TableKind kind, const char* text, const char* why_starts)
+{
+    XMS::TablePlan p;
+    std::string why;
+    const bool ok = table(kind, text, p, why);
+    if (ok || why.rfind(why_starts, 0) != 0)
+        std::printf("     got: %s\n", ok ? "(planned)" : why.c_str());
+    return !ok && why.rfind(why_starts, 0) == 0;
+}
+
 bool refused(const char* text, const char* why_starts)
 {
     XMS::ItemPlan p;
@@ -267,13 +290,8 @@ int main()
   hud = { base = "wpn_addon_silencer_hud", set = { item_visual = [[a\b]] } },
   sections = { { name = "wpn_sil_diy_sounds", base = "base_sounds", set = { snd_shoot = [[weapons\sil\diy_shot]] } },
                { edit = "wpn_pm", add = { scopes = "sil_diy" } } },
-  craft = { { at = "itm_repairkit_tier_1", parts = { "jar", "textile_patch_m", "rope", "flashlight_broken" } } },
-  loot  = { count = { 0, 1 }, chance = 0.01, by = { bandit = 0.03 } },
-  sold  = { { by = "trade_military", count = 1, chance = 0.5 }, { by = "misc\\trade\\trade_barman.ltx", supplies = { "supplies_1", "supplies_2" } } },
-  scene = { like = "vodka", sound = [[interface\item_usage\vodka_drink]], time = 7200, helmet = false,
-            hud = { base = "item_ea_vodka_hud", set = { item_visual = [[x\y]] } } },
-  lists = { { file = "plugins\\itms_manager.ltx", section = "stackable" },
-            { section = "addons_table", key = "silencers", add = "qa_sil_diy" } },
+  scene = { like = "vodka", sound = [[interface\item_usage\vodka_drink]], time = 7200, helmet = false, fit = "cut",
+            hud = { base = "item_ea_vodka_hud", set = { item_visual = [[x\y]] } }, set = { my_mod_scene = true } },
   editor = { note = "the game reads none of this" },
 })", p, why);
         expect(ok, "a new item is planned");
@@ -298,18 +316,6 @@ int main()
         expect(p.sections.size() == 2 && p.sections[0].make && p.sections[0].parents == "base_sounds" && !p.sections[1].make &&
                 has(p.sections[1].ops, XMS::LtxDirective::Add, "scopes", "sil_diy"),
             "a section it makes and one it changes");
-        expect(p.craft.size() == 1 && p.craft[0].at == "itm_repairkit_tier_1" && p.craft[0].count == 1 && p.craft[0].parts.size() == 4,
-            "a recipe");
-        const auto* count = find(p.lists, XMS::LtxDirective::Set, "item_count", "qa_sil_diy", "misc\\death_generic.ltx");
-        expect(count && count->value == "0, 1", "loot: its line of [item_count]");
-        const auto* base = find(p.lists, XMS::LtxDirective::Set, "base", "qa_sil_diy", "misc\\death_items_by_communities.ltx");
-        expect(base && base->value == "0.01", "loot: its chance in [base], which every community inherits");
-        const auto* bandit = find(p.lists, XMS::LtxDirective::Set, "bandit", "qa_sil_diy", "misc\\death_items_by_communities.ltx");
-        expect(bandit && bandit->value == "0.03", "loot: a community's own chance");
-        const auto* military = find(p.lists, XMS::LtxDirective::Set, "supplies_1", "qa_sil_diy", "misc\\trade\\trade_military.ltx");
-        expect(military && military->value == "1, 0.5", "sold: a trader by its config's name");
-        expect(find(p.lists, XMS::LtxDirective::Set, "supplies_2", "qa_sil_diy", "misc\\trade\\trade_barman.ltx"),
-            "sold: a config by its path, in every supplies section it names");
         const auto* scene = find(p.lists, XMS::LtxDirective::Section, "qa_sil_diy", "", "items\\items\\animations_settings.ltx");
         expect(scene && scene->parents == "vodka", "scene: the item's section over the scene it is like");
         expect(find(p.lists, XMS::LtxDirective::Set, "qa_sil_diy", "snd", "items\\items\\animations_settings.ltx") &&
@@ -320,9 +326,11 @@ int main()
         expect(anm && anm->value == "item_ea_qa_sil_diy", "scene: its own hud gives the scene its animation");
         const auto* hud = find(p.lists, XMS::LtxDirective::Section, "item_ea_qa_sil_diy_hud", "", "");
         expect(hud && hud->parents == "item_ea_vodka_hud", "scene: the hud section in the system config");
-        const auto* stack = find(p.lists, XMS::LtxDirective::Set, "stackable", "qa_sil_diy", "plugins\\itms_manager.ltx");
-        expect(stack && stack->value.empty(), "lists: the item's section as a bare key");
-        expect(find(p.lists, XMS::LtxDirective::Add, "addons_table", "silencers", ""), "lists: a list of the system config");
+        const auto* fit = find(p.lists, XMS::LtxDirective::Set, "qa_sil_diy", "fit", "items\\items\\animations_settings.ltx");
+        expect(fit && fit->value == "cut", "scene: how a long cycle fits the scene");
+        const auto* own = find(p.lists, XMS::LtxDirective::Set, "qa_sil_diy", "my_mod_scene", "items\\items\\animations_settings.ltx");
+        expect(own && own->value == "true", "scene: a key of its own, as the scene's section holds it");
+        expect(p.foreign.empty(), "an item that says only what it is has nothing of another file's");
         bool headed = true;
         unsigned block = 0;
         for (const XMS::LtxDirective& d : p.lists)
@@ -364,9 +372,14 @@ int main()
         const auto* scene = find(p.lists, XMS::LtxDirective::Section, "qa_my_drink", "", "items\\items\\animations_settings.ltx");
         expect(scene && scene->parents == "vodka", "a scene by the item it is like");
         XMS::ItemPlan t;
-        expect(plan("return { item = 1, id = 'mixin', abstract = true, set = { a = 1 }, name = 'x', loot = { count = 1 } }", t, why) &&
+        expect(plan("return { item = 1, id = 'mixin', abstract = true, set = { a = 1 }, name = 'x', scene = 'vodka' }", t, why) &&
                 t.abstract_ && t.texts.empty() && t.lists.empty() && t.own.size() == 1,
             "a template is its section and nothing else");
+        XMS::ItemPlan f;
+        expect(plan("return { item = 1, base = 'a', sold = { { by = 'trade_military' } }, loot = { count = 1 }, "
+                    "craft = { { at = 'kit', parts = { 'a' } } }, lists = { { section = 's' } } }", f, why) &&
+                f.foreign.size() == 4 && f.lists.empty(),
+            "what another file owns - stock, loot, a recipe, a line of a config - is named and never read from an item");
     }
     expect(refused("return { item = 1, edit = 'wpn_ak74', id = 'x' }", "a change names its section with edit alone"),
         "a change that also names a new item is refused");
@@ -384,11 +397,88 @@ int main()
         "a key that is no name is refused");
     expect(refused("return { item = 1, base = 'a', set = { x = { y = 1 } } }", "the value of x is no"),
         "a value that is no value is refused");
-    expect(refused("return { item = 1, base = 'a', craft = { { at = 'kit', parts = { 'a', 'b', 'c', 'd', 'e' } } } }",
-               "a recipe takes one to four parts"),
-        "a recipe of five parts is refused");
     expect(refused("return { item = 1, edit = 'x', hud = { base = 'y' } }", "hud of a change"),
         "a change's hud takes no base");
+
+    // ---- a trader, a loot table, recipes -------------------------------------------------------------
+    {
+        XMS::TablePlan p;
+        std::string why;
+        const bool ok = table(XMS::TableKind::Trade, R"(return {
+  trade = 1,
+  trader = "Trade_Military",
+  stock = {
+    { item = "QA_Sil_Diy", count = 1, chance = 0.5 },
+    { item = "qa_ammo", supplies = { "supplies_1", "Supplies_2" }, count = 40 },
+    { item = "vodka", count = 0 },
+  },
+})", p, why);
+        expect(ok && p.rows == 3 && p.recipes.empty(), "a trader's stock is planned");
+        if (!ok)
+            std::printf("     why: %s\n", why.c_str());
+        const auto* one = find(p.lists, XMS::LtxDirective::Set, "supplies_1", "qa_sil_diy", "misc\\trade\\trade_military.ltx");
+        expect(one && one->value == "1, 0.5", "a row is the item's line of the trader's first stock, in lower case");
+        const auto* two = find(p.lists, XMS::LtxDirective::Set, "supplies_2", "qa_ammo", "misc\\trade\\trade_military.ltx");
+        expect(two && two->value == "40, 1", "in every stock section it names, the chance 1 when left out");
+        expect(find(p.lists, XMS::LtxDirective::RemoveKey, "supplies_1", "vodka", "misc\\trade\\trade_military.ltx"),
+            "a count of 0 takes the item off the shelf");
+        XMS::TablePlan q;
+        expect(table(XMS::TableKind::Trade, "return { trade = 1, trader = [[misc\\trade\\trade_barman.ltx]], stock = { { item = 'a' } } }", q, why) &&
+                find(q.lists, XMS::LtxDirective::Set, "supplies_1", "a", "misc\\trade\\trade_barman.ltx"),
+            "a trader by its config's path");
+        bool headed = true;
+        unsigned block = 0;
+        for (const XMS::LtxDirective& d : p.lists)
+        {
+            if (d.op == XMS::LtxDirective::Section)
+                block = d.block;
+            else
+                headed = headed && d.block == block && d.block != 0;
+        }
+        expect(headed, "every line of a table is under its own header");
+    }
+    {
+        XMS::TablePlan p;
+        std::string why;
+        const bool ok = table(XMS::TableKind::Loot,
+            "return { loot = 1, drops = { { item = 'qa_sil_diy', count = { 0, 1 }, chance = 0.01, by = { Bandit = 0.03 } } } }", p, why);
+        expect(ok && p.rows == 1, "a loot table is planned");
+        const auto* count = find(p.lists, XMS::LtxDirective::Set, "item_count", "qa_sil_diy", "misc\\death_generic.ltx");
+        expect(count && count->value == "0, 1", "loot: its line of [item_count]");
+        const auto* base = find(p.lists, XMS::LtxDirective::Set, "base", "qa_sil_diy", "misc\\death_items_by_communities.ltx");
+        expect(base && base->value == "0.01", "loot: its chance in [base], which every community inherits");
+        const auto* bandit = find(p.lists, XMS::LtxDirective::Set, "bandit", "qa_sil_diy", "misc\\death_items_by_communities.ltx");
+        expect(bandit && bandit->value == "0.03", "loot: a community's own chance");
+    }
+    {
+        XMS::TablePlan p;
+        std::string why;
+        const bool ok = table(XMS::TableKind::Recipes,
+            "return { recipe = 1, recipes = { { makes = 'QA_Sil_Diy', at = 'itm_repairkit_tier_1', "
+            "parts = { 'jar', 'textile_patch_m', 'rope', 'flashlight_broken' } }, { makes = 'bread', count = 2, at = 'kit', parts = 'jar' } } }",
+            p, why);
+        expect(ok && p.recipes.size() == 2 && p.lists.empty(), "recipes are planned");
+        expect(ok && p.recipes[0].makes == "qa_sil_diy" && p.recipes[0].at == "itm_repairkit_tier_1" && p.recipes[0].count == 1 &&
+                p.recipes[0].parts.size() == 4 && p.recipes[1].count == 2 && p.recipes[1].parts.size() == 1,
+            "a recipe: what it makes, where, how many, from what");
+    }
+    expect(table_refused(XMS::TableKind::Trade, "return { trade = 1, stock = {} }", "a trader file names the trader"),
+        "a trader file without its trader is refused");
+    expect(table_refused(XMS::TableKind::Trade, "return { trade = 1, trader = '..\\\\x.ltx', stock = {} }", "trader is a trader's config"),
+        "a trader that climbs out of the configs is refused");
+    expect(table_refused(XMS::TableKind::Trade, "return { trade = 1, trader = 't', stock = { { count = 1 } } }", "a row of stock names its item"),
+        "a stock row without its item is refused");
+    expect(table_refused(XMS::TableKind::Trade, "return { trade = 1, trader = 't', stock = { { item = 'a', count = -1 } } }", "stock.count"),
+        "a count below 0 is refused");
+    expect(table_refused(XMS::TableKind::Loot, "return { loot = 1, drops = { { item = 'a', count = 'many' } } }", "drops.count"),
+        "a count that is no number is refused");
+    expect(table_refused(XMS::TableKind::Recipes,
+               "return { recipe = 1, recipes = { { makes = 'x', at = 'kit', parts = { 'a', 'b', 'c', 'd', 'e' } } } }",
+               "a recipe takes one to four parts"),
+        "a recipe of five parts is refused");
+    expect(table_refused(XMS::TableKind::Recipes, "return { recipe = 1, recipes = { { at = 'kit', parts = { 'a' } } } }",
+               "a recipe names what it makes"),
+        "a recipe that makes nothing is refused");
 
     XMS::LuaValue n;
     n.type = XMS::LuaValue::Number;

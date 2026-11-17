@@ -309,7 +309,8 @@ madmer_wpn_gold = 0, 1
 The injection point is after `InitSettings` (`src/xrEngine/x_ray.cpp`), once the game's own overlays
 (`dead_air_x64_ai.ltx`, `dead_air_x64_pda3d_items.ltx`, `dead_air_x64_animations.ltx`) are in, before
 the first reader. `pSettings` stays `const` for the game; the patch pass works at composition time.
-Per module, in the load order: its characters, its items (`*.itemasset`), its `gamedata\configs\xms\*.ltx`,
+Per module, in the load order: its characters, its items (`*.itemasset`), its traders, loot tables and recipes
+(`*.tradeasset`, `*.lootasset`, `*.recipeasset`), its `gamedata\configs\xms\*.ltx`,
 its `patch\*.ltxp`.
 
 **A change reaches what inherits.** A section copies its parents' keys when it is read; on top of the copy

@@ -22,17 +22,15 @@ namespace
 {
 using Value = LuaValue;
 
-constexpr const char* kDeathCounts = "misc\\death_generic.ltx";
-constexpr const char* kDeathChances = "misc\\death_items_by_communities.ltx";
 constexpr const char* kScenes = "items\\items\\animations_settings.ltx";
 
-LuaString lower(LuaString text)
-{
-    for (char& c : text)
-        if (c >= 'A' && c <= 'Z')
-            c = char(c - 'A' + 'a');
-    return text;
-}
+using assetline::Lists;
+
+LuaString lower(LuaString text) { return assetline::Lower(std::move(text)); }
+bool plain_name(const LuaString& name) { return assetline::PlainName(name); }
+bool plain_value(const LuaString& value) { return assetline::PlainValue(value); }
+LuaString number_text(double n) { return assetline::NumberText(n); }
+bool names(const Value* v, LuaVector<LuaString>& out) { return assetline::Names(v, out); }
 
 // A section an item makes: what a save reads into 64 characters.
 bool section_name(const LuaString& name)
@@ -41,26 +39,6 @@ bool section_name(const LuaString& name)
         return false;
     for (const char c : name)
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-'))
-            return false;
-    return true;
-}
-
-// A section or a key a config line can hold.
-bool plain_name(const LuaString& name)
-{
-    if (name.empty() || name.size() > 255)
-        return false;
-    for (const char c : name)
-        if (static_cast<unsigned char>(c) < 0x21 || c == 0x7f || std::strchr("[]=;,\"", c))
-            return false;
-    return true;
-}
-
-// A value a config line can hold: no line break, no other control character.
-bool plain_value(const LuaString& value)
-{
-    for (const char c : value)
-        if ((static_cast<unsigned char>(c) < 0x20 && c != '\t') || c == 0x7f)
             return false;
     return true;
 }
@@ -75,16 +53,6 @@ bool valid_id(const LuaString& id)
     return true;
 }
 
-LuaString number_text(double n)
-{
-    char buffer[64];
-    if (n == std::floor(n) && std::fabs(n) < 1e15)
-        std::snprintf(buffer, sizeof buffer, "%lld", static_cast<long long>(n));
-    else
-        std::snprintf(buffer, sizeof buffer, "%.15g", n);
-    return buffer;
-}
-
 LuaString joined(const LuaVector<LuaString>& parts, const char* separator)
 {
     LuaString out;
@@ -95,27 +63,6 @@ LuaString joined(const LuaVector<LuaString>& parts, const char* separator)
         out += parts[i];
     }
     return out;
-}
-
-// A string or a list of strings; false for anything else.
-bool names(const Value* v, LuaVector<LuaString>& out)
-{
-    if (!v)
-        return true;
-    if (v->type == Value::String)
-    {
-        out.push_back(v->s);
-        return true;
-    }
-    if (v->type != Value::Table || !v->keys.empty())
-        return false;
-    for (const Value& x : v->arr)
-    {
-        if (x.type != Value::String)
-            return false;
-        out.push_back(x.s);
-    }
-    return true;
 }
 
 // The members of a list a change adds or drops: one value or a list of values.
@@ -162,33 +109,6 @@ LtxDirective key_op(LtxDirective::Op op, const LuaString& key, const LuaString& 
     d.value = value;
     return d;
 }
-
-// Directives of another config (or of the system config, `file` empty), each block with its header.
-struct Lists
-{
-    LuaVector<LtxDirective>& out;
-    unsigned block{0};
-    LuaString file, section;
-
-    void header(const LuaString& f, const LuaString& s, const LuaString& parents = LuaString())
-    {
-        LtxDirective d;
-        d.op = LtxDirective::Section;
-        d.block = ++block;
-        d.file = file = f;
-        d.section = section = s;
-        d.parents = parents;
-        out.push_back(d);
-    }
-    void line(LtxDirective::Op op, const LuaString& key, const LuaString& value)
-    {
-        LtxDirective d = key_op(op, key, value);
-        d.block = block;
-        d.file = file;
-        d.section = section;
-        out.push_back(d);
-    }
-};
 
 // set / unset / add / drop of one section, in that order
 bool changes(const Value& t, LuaVector<LtxDirective>& ops, LuaString& why, const LuaString& where)
@@ -502,166 +422,6 @@ bool plan_sections(const Value& a, ItemPlan& p, LuaString& why)
     return true;
 }
 
-// one click of Craft makes that many objects at once: more is a typing mistake that would stop the game
-constexpr double kMaxRecipeCount = 1000;
-
-bool plan_craft(const Value& a, ItemPlan& p, LuaString& why)
-{
-    const Value* list = a.get("craft");
-    if (!list)
-        return true;
-    if (list->type != Value::Table || !list->keys.empty())
-    {
-        why = "craft is a list of { at, count, parts }";
-        return false;
-    }
-    for (const Value& row : list->arr)
-    {
-        ItemRecipe r;
-        const Value* at = row.type == Value::Table ? row.get("at") : nullptr;
-        const Value* count = row.type == Value::Table ? row.get("count") : nullptr;
-        r.at = at && at->type == Value::String ? lower(at->s) : LuaString();
-        if (!plain_name(r.at))
-            why = "a recipe names the tool or workbench it is made at: at";
-        else if (count && (count->type != Value::Number || count->n < 1 || count->n > kMaxRecipeCount ||
-                     count->n != std::floor(count->n)))
-            why = "a recipe's count is a whole number from 1 to 1000";
-        else if (!names(row.get("parts"), r.parts) || r.parts.empty() || r.parts.size() > 4)
-            why = "a recipe takes one to four parts";
-        if (!why.empty())
-            return false;
-        r.count = count ? int(count->n) : 1;
-        for (LuaString& part : r.parts)
-        {
-            part = lower(part);
-            if (!plain_name(part))
-            {
-                why = "a part of a recipe names a section no config can hold";
-                return false;
-            }
-        }
-        p.craft.push_back(r);
-    }
-    return true;
-}
-
-bool plan_loot(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
-{
-    const Value* loot = a.get("loot");
-    if (!loot)
-        return true;
-    if (loot->type != Value::Table || !loot->arr.empty())
-    {
-        why = "loot is { count, chance, by }";
-        return false;
-    }
-    if (const Value* count = loot->get("count"))
-    {
-        LuaString text;
-        if (count->type == Value::Number)
-            text = number_text(count->n);
-        else if (count->type == Value::Table && count->keys.empty() && count->arr.size() == 2 &&
-            count->arr[0].type == Value::Number && count->arr[1].type == Value::Number)
-            text = number_text(count->arr[0].n) + ", " + number_text(count->arr[1].n);
-        else
-        {
-            why = "loot.count is a number or { min, max }";
-            return false;
-        }
-        out.header(kDeathCounts, "item_count");
-        out.line(LtxDirective::Set, p.section, text);
-    }
-    if (const Value* chance = loot->get("chance"))
-    {
-        if (chance->type != Value::Number)
-        {
-            why = "loot.chance is a number";
-            return false;
-        }
-        // every community and rank inherits [base]
-        out.header(kDeathChances, "base");
-        out.line(LtxDirective::Set, p.section, number_text(chance->n));
-    }
-    if (const Value* by = loot->get("by"))
-    {
-        if (by->type != Value::Table || !by->arr.empty())
-        {
-            why = "loot.by is { <community or community_rank> = chance }";
-            return false;
-        }
-        for (size_t i = 0; i < by->keys.size(); ++i)
-        {
-            const LuaString who = lower(by->keys[i]);
-            if (!plain_name(who) || by->vals[i].type != Value::Number)
-            {
-                why = "loot.by is { <community or community_rank> = chance }";
-                return false;
-            }
-            out.header(kDeathChances, who);
-            out.line(LtxDirective::Set, p.section, number_text(by->vals[i].n));
-        }
-    }
-    return true;
-}
-
-bool plan_sold(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
-{
-    const Value* sold = a.get("sold");
-    if (!sold)
-        return true;
-    if (sold->type != Value::Table)
-    {
-        why = "sold is a list of { by, supplies, count, chance }";
-        return false;
-    }
-    // one row may stand alone
-    const Value* rows = sold;
-    Value single;
-    if (!sold->keys.empty())
-    {
-        single.type = Value::Table;
-        single.arr.push_back(*sold);
-        rows = &single;
-    }
-    for (const Value& row : rows->arr)
-    {
-        const Value* by = row.type == Value::Table ? row.get("by") : nullptr;
-        if (!by || by->type != Value::String || by->s.empty())
-        {
-            why = "a row of sold names the trader's config: by";
-            return false;
-        }
-        const LuaString name = lower(by->s);
-        const bool path = name.size() > 4 && name.compare(name.size() - 4, 4, ".ltx") == 0;
-        const LuaString file = ConfigPath(path ? name : "misc\\trade\\" + name + ".ltx");
-        LuaVector<LuaString> supplies;
-        const Value* count = row.get("count");
-        const Value* chance = row.get("chance");
-        if (file.empty() || file.find(':') != LuaString::npos || !plain_value(file))
-            why = "sold.by is a trader's config, or a config's path under configs";
-        else if (!names(row.get("supplies"), supplies))
-            why = "sold.supplies is a section of the trader's config or a list of them";
-        else if ((count && count->type != Value::Number) || (chance && chance->type != Value::Number))
-            why = "sold.count and sold.chance are numbers";
-        if (!why.empty())
-            return false;
-        if (supplies.empty())
-            supplies.push_back("supplies_1");
-        const LuaString line = number_text(count ? count->n : 1.0) + ", " + number_text(chance ? chance->n : 1.0);
-        for (const LuaString& s : supplies)
-        {
-            if (!plain_name(lower(s)))
-            {
-                why = "sold.supplies names a section no config can hold";
-                return false;
-            }
-            out.header(file, lower(s));
-            out.line(LtxDirective::Set, p.section, line);
-        }
-    }
-    return true;
-}
-
 bool plan_scene(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
 {
     const Value* scene = a.get("scene");
@@ -670,7 +430,7 @@ bool plan_scene(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
     const Value* t = scene->type == Value::Table ? scene : nullptr;
     if (!t && scene->type != Value::String)
     {
-        why = "scene is the item whose scene it takes, or { like, sound, camera, time, helmet, anm, hud_anm, hud }";
+        why = "scene is the item whose scene it takes, or { like, sound, camera, time, helmet, fit, anm, hud_anm, hud, set }";
         return false;
     }
     const Value* like = t ? t->get("like") : scene;
@@ -690,13 +450,24 @@ bool plan_scene(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
             why = "scene.hud is { base, set, unset, add, drop }";
         return false;
     }
+    // the scene's other keys, as its section holds them: what a module's own scripts read of it
+    LuaVector<LtxDirective> own_ops;
+    if (const Value* set = t ? t->get("set") : nullptr)
+    {
+        Value only;
+        only.type = Value::Table;
+        only.keys.push_back("set");
+        only.vals.push_back(*set);
+        if (!changes(only, own_ops, why, "scene: "))
+            return false;
+    }
 
     out.header(kScenes, p.section, parents);
     if (t)
     {
         // the keys the game's scene script reads, under the names an author writes
         for (const auto& [from, to] : {std::pair{"sound", "snd"}, {"camera", "cam"}, {"time", "tm"}, {"helmet", "helm"},
-                 {"anm", "anm"}, {"hud_anm", "hud_anm"}})
+                 {"fit", "fit"}, {"anm", "anm"}, {"hud_anm", "hud_anm"}})
             if (const Value* v = t->get(from))
             {
                 LuaString text;
@@ -707,6 +478,8 @@ bool plan_scene(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
                 }
                 out.line(LtxDirective::Set, to, text);
             }
+        for (const LtxDirective& d : own_ops)
+            out.line(d.op, d.key, d.value);
     }
     if (hud)
     {
@@ -720,73 +493,90 @@ bool plan_scene(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
     }
     return true;
 }
+} // namespace
+} // namespace itemasset
 
-bool plan_lists(const Value& a, ItemPlan& p, Lists& out, LuaString& why)
+namespace assetline
 {
-    const Value* rows = a.get("lists");
-    if (!rows)
-        return true;
-    if (rows->type != Value::Table || !rows->keys.empty())
-    {
-        why = "lists is a list of { file, section, key, value } and { file, section, key, add | drop }";
+LuaString Lower(LuaString text)
+{
+    for (char& c : text)
+        if (c >= 'A' && c <= 'Z')
+            c = char(c - 'A' + 'a');
+    return text;
+}
+
+bool PlainName(const LuaString& name)
+{
+    if (name.empty() || name.size() > 255)
         return false;
-    }
-    for (const Value& row : rows->arr)
+    for (const char c : name)
+        if (static_cast<unsigned char>(c) < 0x21 || c == 0x7f || std::strchr("[]=;,\"", c))
+            return false;
+    return true;
+}
+
+bool PlainValue(const LuaString& value)
+{
+    for (const char c : value)
+        if ((static_cast<unsigned char>(c) < 0x20 && c != '\t') || c == 0x7f)
+            return false;
+    return true;
+}
+
+LuaString NumberText(double n)
+{
+    char buffer[64];
+    if (n == std::floor(n) && std::fabs(n) < 1e15)
+        std::snprintf(buffer, sizeof buffer, "%lld", static_cast<long long>(n));
+    else
+        std::snprintf(buffer, sizeof buffer, "%.15g", n);
+    return buffer;
+}
+
+bool Names(const LuaValue* v, LuaVector<LuaString>& out)
+{
+    if (!v)
+        return true;
+    if (v->type == LuaValue::String)
     {
-        if (row.type != Value::Table)
-        {
-            why = "a row of lists is { file, section, key, value }";
+        out.push_back(v->s);
+        return true;
+    }
+    if (v->type != LuaValue::Table || !v->keys.empty())
+        return false;
+    for (const LuaValue& x : v->arr)
+    {
+        if (x.type != LuaValue::String)
             return false;
-        }
-        const Value* file = row.get("file");
-        const Value* section = row.get("section");
-        const Value* key = row.get("key");
-        const Value* value = row.get("value");
-        const Value* add = row.get("add");
-        const Value* drop = row.get("drop");
-        const LuaString path = file && file->type == Value::String ? ConfigPath(file->s) : LuaString();
-        if (file && (path.empty() || path.find(':') != LuaString::npos || !plain_value(path)))
-            why = "a row of lists names a config by its path under configs";
-        else if (!section || section->type != Value::String || !plain_name(lower(section->s)))
-            why = "a row of lists names its section";
-        else if (key && (key->type != Value::String || !plain_name(key->s)))
-            why = "a row of lists names a key a config can hold";
-        else if (int(value != nullptr) + int(add != nullptr) + int(drop != nullptr) > 1)
-            why = "a row of lists sets a value, adds to a list or drops from one: one of them";
-        if (!why.empty())
-            return false;
-        out.header(path, lower(section->s));
-        const LuaString name = key ? key->s : p.section;
-        if (add || drop)
-        {
-            LuaVector<LuaString> list;
-            if (!members(add ? *add : *drop, list))
-            {
-                why = "a row of lists adds or drops a member or a list of them";
-                return false;
-            }
-            for (const LuaString& member : list)
-                if (!plain_value(member) || member.find(',') != LuaString::npos)
-                {
-                    why = "a row of lists holds a member no list can carry";
-                    return false;
-                }
-            out.line(add ? LtxDirective::Add : LtxDirective::Drop, name, joined(list, ","));
-            continue;
-        }
-        LuaString text;
-        if (value && (!ItemValueText(*value, text) || !plain_value(text)))
-        {
-            why = "a row of lists holds a value no config can carry";
-            return false;
-        }
-        // no value is a bare key
-        out.line(LtxDirective::Set, name, text);
+        out.push_back(x.s);
     }
     return true;
 }
-} // namespace
-} // namespace itemasset
+
+void Lists::header(const LuaString& f, const LuaString& s, const LuaString& parents)
+{
+    LtxDirective d;
+    d.op = LtxDirective::Section;
+    d.block = ++block;
+    d.file = file = f;
+    d.section = section = s;
+    d.parents = parents;
+    out.push_back(d);
+}
+
+void Lists::line(LtxDirective::Op op, const LuaString& key, const LuaString& value)
+{
+    LtxDirective d;
+    d.op = op;
+    d.block = block;
+    d.file = file;
+    d.section = section;
+    d.key = key;
+    d.value = value;
+    out.push_back(d);
+}
+} // namespace assetline
 
 bool ItemValueText(const LuaValue& value, LuaString& out)
 {
@@ -826,6 +616,11 @@ bool PlanItem(const LuaValue& asset, const LuaString& module, const LuaString& f
         why = "an item file returns one table";
         return false;
     }
+    // what another file owns - a trader's shelf, the death loot, a recipe, a line of any config - is
+    // not an item's to say: named, so the log can say where it belongs, and never read
+    for (const char* key : {"sold", "loot", "craft", "lists"})
+        if (asset.get(key))
+            out.foreign.push_back(key);
     if (!plan_identity(asset, module, file, out, why) || !changes(asset, out.own, why, LuaString()))
         return false;
     // a template is its section and nothing else
@@ -833,8 +628,7 @@ bool PlanItem(const LuaValue& asset, const LuaString& module, const LuaString& f
         return true;
     Lists lists{out.lists};
     return plan_texts(asset, out, why) && plan_icon(asset, out, why) && plan_hud(asset, out, why) &&
-        plan_sections(asset, out, why) && plan_craft(asset, out, why) && plan_loot(asset, out, lists, why) &&
-        plan_sold(asset, out, lists, why) && plan_scene(asset, out, lists, why) && plan_lists(asset, out, lists, why);
+        plan_sections(asset, out, why) && plan_scene(asset, out, lists, why);
 }
 } // namespace XMS
 
@@ -1010,35 +804,6 @@ Ready ready(const CInifile& ini, const ItemPlan& p, xr_string& why)
     return Ready::Go;
 }
 
-// `<n> = at, result, count, part, ...`: n goes on after the highest number the section holds, padded so that the
-// order of the keys as text, which is how a section's lines come back, is the order the recipes were added in
-void add_recipes(CInifile& ini, const Module& m, const ItemPlan& p)
-{
-    if (p.craft.empty())
-        return;
-    u32 next = 1;
-    if (ini.section_exist("xms_craft"))
-        for (const CInifile::Item& item : ini.r_section("xms_craft").Data)
-        {
-            const pcstr key = item.first.c_str();
-            bool number = key && *key;
-            for (pcstr c = key; number && *c; ++c)
-                number = *c >= '0' && *c <= '9';
-            if (number)
-                next = std::max(next, u32(atoi(key)) + 1);
-        }
-    for (const ItemRecipe& r : p.craft)
-    {
-        string32 count, key;
-        xr_sprintf(count, "%d", r.count);
-        xr_sprintf(key, "%06u", next++);
-        xr_string line = r.at + ", " + p.section + ", " + count;
-        for (const xr_string& part : r.parts)
-            line += ", " + part;
-        ini.xms_set_line("xms_craft", key, line.c_str(), nullptr, m.layer);
-    }
-}
-
 void apply(CInifile& ini, const Module& m, const ItemPlan& p)
 {
     if (!p.edit)
@@ -1071,7 +836,6 @@ void apply(CInifile& ini, const Module& m, const ItemPlan& p)
         if (s.make)
             ini.xms_mark_item_section(s.name.c_str());
     }
-    add_recipes(ini, m, p);
 }
 
 void publish_texts(const Module& m, const xr_vector<ItemText>& texts)
@@ -1146,6 +910,10 @@ bool BuildItems(const Module& m, CInifile& settings, xr_vector<LtxDirective>& li
             Msg("! XMS: [%s] %s: the icon names a picture, which only a built module turns into a texture - the item "
                 "keeps the icon it has",
                 m.id.c_str(), p.file.c_str());
+        for (const xr_string& key : p.foreign)
+            Msg("! XMS: [%s] %s: '%s' is not an item's to say and is not read - a trader's stock is a .tradeasset, "
+                "the death loot a .lootasset, a recipe a .recipeasset, a line of another config a .ltxp",
+                m.id.c_str(), p.file.c_str(), key.c_str());
         texts.insert(texts.end(), p.texts.begin(), p.texts.end());
         // every plan numbers its blocks from 1; side by side they stay apart
         const unsigned base = blocks;

@@ -3,9 +3,10 @@
 
 #pragma once
 
-// XMS config composition: per-module items (*.itemasset), ltx overlays (gamedata\configs\xms\*.ltx)
-// and directive patches (patch\*.ltxp) applied to a fully built CInifile; what they patch of other
-// configs (`#file`) is kept and applied to every ini that reads those files.
+// XMS config composition: per-module items (*.itemasset), traders, loot tables and recipes
+// (*.tradeasset, *.lootasset, *.recipeasset), ltx overlays (gamedata\configs\xms\*.ltx) and directive
+// patches (patch\*.ltxp) applied to a fully built CInifile; what they patch of other configs (`#file`)
+// is kept and applied to every ini that reads those files.
 
 #include "xrCore/xrCore.h"
 #include "xms_ltxp.h"
@@ -14,7 +15,7 @@ class XRCORE_API CInifile;
 
 namespace XMS
 {
-// Applies every enabled module's items, config overlays and .ltxp patches to the
+// Applies every enabled module's items, tables, config overlays and .ltxp patches to the
 // given ini, in module load order. Called once right after InitSettings
 // builds pSettings. No-op when XMS is inactive.
 XRCORE_API void ApplyConfigStage(CInifile* ini);

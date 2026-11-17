@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    A module's items and patches of any config, in the real game: *.itemasset, `#file` in .ltxp, and a change
-    that reaches the sections inheriting it.
+    A module's items, its traders, loot and recipes, and patches of any config, in the real game: *.itemasset,
+    *.tradeasset, *.lootasset, *.recipeasset, `#file` in .ltxp, and a change that reaches the sections inheriting it.
 
 .DESCRIPTION
     Starts the freshly built engine on a hidden desktop from a QA root of its own (under _work, with the game's
     archives joined by a junction), with a module generated here, and judges by the log and by what the
     module's registrar reads back. The installed game stays read-only.
 
-    A  the main menu: the items' sections, strings, icon, hud, recipes; a stock weapon changed with `add`,
-       reaching its scope variants; the death loot, a trader's stock, an item scene and a plugin list, each
-       read by the script that reads it; a module patch of a base overlay's section; a config the game
-       writes back read as written; the refusals
+    A  the main menu: the items' sections, strings, icon, hud; a stock weapon changed with `add`, reaching its
+       scope variants; a trader's stock, the death loot and the recipes of the module's own files and an item
+       scene, each read by the script that reads it; a key of another file's in an item named and never read;
+       a module patch of a base overlay's section; a config the game writes back read as written; the refusals
     B  a new game: the new items spawn into the actor's inventory under their names
     C  no module at all (-Identity): a new game started by the installed engine and by the new build, each
        dumping the composed system config, game.ltx and four configs scripts read; the dumps must be equal
@@ -275,6 +275,7 @@ say("base_overlay", r(ini, "da_hud_animations", "wpn_hand_01"))
 say("base_overlay_child", r(ini, "items_qa_pda_child", "hud"))
 say("system_list", r(ini, "items_qa_list", "k"))
 say("system_patch", r(ini, "items_qa_system", "k"))
+say("foreign_set", r(ini, "items_qa_foreign", "qa_foreign"))
 
 say("drink_hud", ini:section_exist("item_ea_items_qa_drink_hud"))
 say("drink_hud_visual", r(ini, "item_ea_items_qa_drink_hud", "item_visual"))
@@ -285,6 +286,8 @@ say("scene_snd", r(scenes, "items_qa_drink", "snd"))
 say("scene_tm", r(scenes, "items_qa_drink", "tm"))
 say("scene_anm", r(scenes, "items_qa_drink", "anm"))
 say("scene_helm", r(scenes, "items_qa_drink", "helm"))
+say("scene_fit", r(scenes, "items_qa_drink", "fit"))
+say("scene_own", r(scenes, "items_qa_drink", "items_qa_scene"))
 
 local death = ini_file("misc\\death_generic.ltx")
 say("loot_included", death:section_exist("stalker_novice") and death:line_count("base"))
@@ -293,10 +296,13 @@ say("loot_base", r(death, "base", "items_qa_pm_gold"))
 say("loot_stalker", r(death, "stalker", "items_qa_pm_gold"))
 say("loot_bandit", r(death, "bandit", "items_qa_pm_gold"))
 say("loot_keep", r(death, "keep_items", "items_qa_marker"))
+say("foreign_loot", r(death, "item_count", "items_qa_foreign"))
 
 local trade = ini_file("misc\\trade\\trade_military.ltx")
 say("sold_1", r(trade, "supplies_1", "items_qa_pm_gold"))
 say("sold_2", r(trade, "supplies_2", "items_qa_pm_gold"))
+say("sold_gone", r(trade, "supplies_1", "flask_empty"))
+say("foreign_sold", r(trade, "supplies_1", "items_qa_foreign"))
 say("preset_merchant", r(trade, "merchant", "items_qa_marker"))
 say("preset_inherited", r(trade, "trade_generic_sell", "items_qa_marker"))
 local other_trade = ini_file("misc\\trade\\trade_barman.ltx")
@@ -364,21 +370,41 @@ return {
                -- a row starts from what the item makes before it: its own section, an earlier row
                { name = "items_qa_pm_gold_variant", base = "items_qa_pm_gold", set = { qa_variant = 1 } },
                { name = "items_qa_pm_gold_variant2", base = "items_qa_pm_gold_variant" } },
-  craft = { { at = "itm_repairkit_tier_1", parts = { "jar", "rope" } },
-            { at = "itm_repairkit_tier_2", count = 2, parts = { "jar", "rope", "jar", "rope" } } },
-  loot = { count = { 0, 2 }, chance = 0.05, by = { bandit = 0.5 } },
-  sold = { { by = "trade_military", count = 2, chance = 0.25 } },
   editor = { note = "passed by" },
 }
 '@
+    # who sells it, who carries it and what makes it: each in the file of the side that owns it
+    'trade\military.tradeasset' = @'
+return {
+  trade = 1,
+  trader = "trade_military",
+  stock = {
+    { item = "items_qa_pm_gold", count = 2, chance = 0.25 },
+    { item = "flask_empty", count = 0 },
+  },
+}
+'@
+    'loot\dead.lootasset' = @'
+return { loot = 1, drops = { { item = "items_qa_pm_gold", count = { 0, 2 }, chance = 0.05, by = { bandit = 0.5 } } } }
+'@
+    'craft\workbench.recipeasset' = @'
+return {
+  recipe = 1,
+  recipes = {
+    { makes = "items_qa_pm_gold", at = "itm_repairkit_tier_1", parts = { "jar", "rope" } },
+    { makes = "items_qa_pm_gold", at = "itm_repairkit_tier_2", count = 2, parts = { "jar", "rope", "jar", "rope" } },
+  },
+}
+'@
+    'bad\no_trader.tradeasset' = 'return { trade = 1, stock = { { item = "bread" } } }'
+    # an item that says another file's lines: named in the log, never read
+    'items\foreign.itemasset' = 'return { item = 1, id = "foreign", base = "bread", set = { qa_foreign = 1 }, sold = { { by = "trade_military" } }, loot = { count = 9 } }'
     'items\drink.itemasset' = @'
 return {
   item = 1, id = "drink", base = "vodka",
   name = "Напиток",
-  scene = { like = "vodka", time = 5000, helmet = true,
+  scene = { like = "vodka", time = 5000, helmet = true, fit = "cut", set = { items_qa_scene = true },
             hud = { base = "item_ea_vodka_hud", set = { item_visual = [[dynamics\weapons\wpn_eat\vodki\wpn_vodka_cmuphob_hud.ogf]] } } },
-  lists = { { file = "plugins\\itms_manager.ltx", section = "stackable" },
-            { section = "items_qa_list", key = "k", value = { 1, 2.5, "x" } } },
 }
 '@
     'items\mixin.itemasset' = 'return { item = 1, id = "mixin", abstract = true, set = { qa = 1 }, name = "never" }'
@@ -435,9 +461,16 @@ items_qa_marker = true
 [merchant]
 items_qa_marker = 1
 
+#file plugins\itms_manager.ltx
+[stackable]
+items_qa_drink =
+
 #file
 [items_qa_system]
 k = 1
+
+[items_qa_list]
+k = 1, 2.5, x
 '@ + "`r`n; a parent of 600 characters names no section: the block is skipped`r`n[items_qa_long_parent] : " + ('a' * 600) +
         "`r`nk = 1`r`n`r`n; a list longer than any fixed buffer`r`n[items_qa_list]`r`n+big = " +
         ((0..699 | ForEach-Object { 'qa{0:d4}' -f $_ }) -join ',') + "`r`n+big = zz`r`n")
@@ -447,7 +480,12 @@ Write-Host '== A: the configs'
 $published = Join-Path $qaAppData 'xms_generated'
 $log = Invoke-Engine -Phase 'configs' -Commands @('xms_why death_generic', 'xms_why trade_presets') -WaitFor @('ITEMSQA done')
 $s = { param($name) Said $log $name }
-Assert-That 'the items are read, new and changes' ($log -match '\* XMS: \[items_qa\] 9 item\(s\) read from the module \(4 new, 5 change\(s\)\)')
+Assert-That 'the items are read, new and changes' ($log -match '\* XMS: \[items_qa\] 10 item\(s\) read from the module \(5 new, 5 change\(s\)\)')
+Assert-That 'the traders, the loot and the recipes are read from their own files' ($log -match '\* XMS: \[items_qa\] 1 trader\(s\), 1 loot table\(s\) and 1 recipe file\(s\) read from the module \(5 row\(s\)\)')
+Assert-That 'a trader file without its trader is left out' ($log -match '! XMS: \[items_qa\] bad\\no_trader\.tradeasset: left out - a trader file names the trader')
+Assert-That 'stock and loot written in an item are named and never read' (($log -match "! XMS: \[items_qa\] items\\foreign\.itemasset: 'sold' is not an item's to say") -and
+    ($log -match "! XMS: \[items_qa\] items\\foreign\.itemasset: 'loot' is not an item's to say") -and ((& $s 'foreign_set') -eq '1') -and
+    ((& $s 'foreign_loot') -eq '<none>') -and ((& $s 'foreign_sold') -eq '<none>'))
 Assert-That 'a new item is its section over its base' ((& $s 'pm_section') -eq 'true' -and (& $s 'pm_inherited') -ne '<none>') "fire_modes = $(& $s 'pm_inherited')"
 Assert-That 'its own keys' ((& $s 'pm_weight') -eq '0.75')
 Assert-That 'the module''s overlay defines it again: merged, the file''s keys win' (((& $s 'pm_cost') -eq '777') -and
@@ -492,7 +530,9 @@ Assert-That 'a #file patch of a .ltxp' ((& $s 'loot_keep') -eq 'true')
 Assert-That 'sold: the trader''s supplies, and the supplies that inherit them' (((& $s 'sold_1') -eq '2, 0.25') -and ((& $s 'sold_2') -eq '2, 0.25'))
 Assert-That 'a patch of a file an #include pulls in, and the sections inheriting it' (((& $s 'preset_merchant') -eq '1') -and ((& $s 'preset_inherited') -eq '1') -and
     ((& $s 'preset_other_trader') -eq '1'))
-Assert-That 'lists: a bare key in a plugin''s config' ((& $s 'stackable') -eq '<bare>') (& $s 'stackable')
+Assert-That 'a count of 0 takes an item off a trader''s shelf' ((& $s 'sold_gone') -eq '<none>') (& $s 'sold_gone')
+Assert-That 'a scene''s own keys: how the cycle fits, and a key of the module''s' (((& $s 'scene_fit') -eq 'cut') -and ((& $s 'scene_own') -eq 'true'))
+Assert-That 'a bare key in a plugin''s config, from a patch' ((& $s 'stackable') -eq '<bare>') (& $s 'stackable')
 Assert-That 'an ini the game writes back is read as written' (((& $s 'writable') -eq '<none>') -and ((& $s 'writable_stock') -ne '<none>'))
 $written = Join-Path $qaAppData 'items_qa_written.ltx'
 Assert-That 'and what it saves carries no patch' ((Test-Path -LiteralPath $written) -and
@@ -523,7 +563,7 @@ if (Test-Path -LiteralPath $strings) {
 }
 $report = Join-Path $qaAppData 'xms_report.json'
 Assert-That 'the report carries the file patches' ((Test-Path -LiteralPath $report) -and ([IO.File]::ReadAllText($report)).Contains('misc\\trade\\trade_presets.ltx: merchant.items_qa_marker'))
-Assert-That 'nothing else of the module was refused' (-not ([regex]::Matches($log, '! XMS: \[items_qa\][^\r\n]*') | Where-Object { $_.Value -notmatch 'bad\\|defined by an item|pm_icon' }))
+Assert-That 'nothing else of the module was refused' (-not ([regex]::Matches($log, '! XMS: \[items_qa\][^\r\n]*') | Where-Object { $_.Value -notmatch 'bad\\|defined by an item|pm_icon|foreign\.itemasset' }))
 
 if (-not $SkipGame) {
     Write-Host '== B: a new game: the items are the game''s'

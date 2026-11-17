@@ -5,9 +5,10 @@
 
 // XMS items - a module's inventory items. One .itemasset per item, anywhere in the module, is a NEW
 // item or a CHANGE of one that exists: the game reads them when the configs come up and makes the
-// sections, the strings and the list entries itself. Contract: docs/dead-air/MODDING.md, "A module's
-// items". What an asset asks for (its plan) is free of the engine's types under
-// XMS_LUADATA_STANDALONE, for tools/qa/ltx.
+// sections, the strings and the use scene itself. An item says what the item is and nothing of
+// another thing: who sells it, who carries it and what makes it are files of their own
+// (xms_tables.h). Contract: docs/dead-air/MODDING.md, "A module's items". What an asset asks for
+// (its plan) is free of the engine's types under XMS_LUADATA_STANDALONE, for tools/qa/ltx.
 
 #include "xms_ltxp.h"
 
@@ -22,14 +23,6 @@ struct ItemText
 {
     LuaString id;
     LuaValue text;
-};
-
-// `<n> = at, result, count, part, ...` of the system config's [xms_craft]
-struct ItemRecipe
-{
-    LuaString at;
-    int count{1};
-    LuaVector<LuaString> parts;
 };
 
 // Another section the item makes or changes.
@@ -59,10 +52,11 @@ struct ItemPlan
     LuaVector<LtxDirective> hud_ops; // section left empty
     LuaVector<ItemSection> sections;
     LuaVector<ItemText> texts;
-    LuaVector<ItemRecipe> craft;
-    // loot, sold, scene and lists: directives of other configs, and of the system config (no file)
+    // the use scene: directives of the scenes' config, and of the system config (no file) for its hud
     LuaVector<LtxDirective> lists;
     bool icon_picture{false}; // the icon is a picture only a built module turns into a texture
+    // keys the file has that are another file's to say (`sold`, `loot`, `craft`, `lists`): never read
+    LuaVector<LuaString> foreign;
 };
 
 // What an asset of the module (`file` its path inside the module) asks for. False with `why`, the
@@ -73,12 +67,37 @@ bool PlanItem(const LuaValue& asset, const LuaString& module, const LuaString& f
 // boolean as true / false, a list of those joined by ", ". False for anything else.
 bool ItemValueText(const LuaValue& value, LuaString& out);
 
+// What the readers of a module's data share.
+namespace assetline
+{
+LuaString Lower(LuaString text);
+// A section or a key a config line can hold.
+bool PlainName(const LuaString& name);
+// A value a config line can hold: no line break, no other control character.
+bool PlainValue(const LuaString& value);
+// A number without needless decimals.
+LuaString NumberText(double n);
+// A string or a list of strings; false for anything else. Nothing (no key) is an empty list.
+bool Names(const LuaValue* v, LuaVector<LuaString>& out);
+
+// Directives of another config (or of the system config, `file` empty), each block with its header.
+struct Lists
+{
+    LuaVector<LtxDirective>& out;
+    unsigned block{0};
+    LuaString file, section;
+
+    void header(const LuaString& f, const LuaString& s, const LuaString& parents = LuaString());
+    void line(LtxDirective::Op op, const LuaString& key, const LuaString& value);
+};
+} // namespace assetline
+
 #ifndef XMS_LUADATA_STANDALONE
 struct Module;
 
 // Makes the module's items in `settings` - new sections first, then changes in the order of their
-// paths - and appends what they say of other configs and of the system config's lists to `lists`.
-// False when the module has no item.
+// paths - and appends their use scenes, lines of the scenes' config, to `lists`. False when the
+// module has no item.
 bool BuildItems(const Module& m, CInifile& settings, xr_vector<LtxDirective>& lists);
 #endif
 } // namespace XMS

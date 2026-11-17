@@ -7,6 +7,7 @@
 #include "xms_characters.h"
 #include "xms_core.h"
 #include "xms_items.h"
+#include "xms_tables.h"
 #include "xrCommon/xr_unordered_map.h"
 #include "xrCore/xr_ini.h"
 
@@ -496,11 +497,14 @@ void ApplyConfigStage(CInifile* ini)
             }
         }
         {
-            // what the items make - their sections and the rows they add - the module's own
-            // overlays below may say more of: merged, never a duplicate
+            // what the items make - their sections - and the rows the module's tables add (a trader's
+            // stock, the death loot, recipes) the module's own overlays below may say more of: merged,
+            // never a duplicate. The tables come after the items they name.
             xr_vector<LtxDirective> lists;
             ini->xms_item_stage(true);
-            if (BuildItems(m, *ini, lists))
+            const bool items = BuildItems(m, *ini, lists);
+            const bool tables = BuildTables(m, *ini, lists);
+            if (items || tables)
             {
                 DirectiveCounts counts;
                 route(*ini, m, lists, counts);
