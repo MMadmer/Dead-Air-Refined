@@ -3,6 +3,7 @@
 
 #include "Level.h"
 #include "level_sounds.h"
+#include "xrCore/XMS/xms_level_things.h"
 
 //-----------------------------------------------------------------------------
 // static level sounds
@@ -184,6 +185,33 @@ void CLevelSoundManager::Load()
             m_StaticSounds.back().Load(*OBJ);
         }
         FS.r_close(F);
+    }
+    // what the modules add to the level: sounds beside the level's own
+    {
+        XMS::LevelThings things;
+        XMS::ReadLevelThings(things);
+        for (const XMS::LevelSound& s : things.sounds)
+        {
+            // a sound the game has not is left out: creating it would stop the game
+            string_path found;
+            xr_string file = s.name + ".ogg";
+            if (!FS.exist(found, "$game_sounds$", file.c_str()))
+            {
+                Msg("! [level things] the sound '%s' is no sound of the game: left out", s.name.c_str());
+                continue;
+            }
+            m_StaticSounds.push_back(SStaticSound());
+            SStaticSound& made = m_StaticSounds.back();
+            made.m_Source.create(s.name.c_str(), st_Effect, sg_SourceType);
+            made.m_Position = s.position;
+            made.m_Volume = s.volume;
+            made.m_Freq = s.frequency;
+            made.m_ActiveTime = s.active;
+            made.m_PlayTime = s.play;
+            made.m_PauseTime = s.pause;
+            made.m_NextTime = 0;
+            made.m_StopTime = 0;
+        }
     }
 
     // music

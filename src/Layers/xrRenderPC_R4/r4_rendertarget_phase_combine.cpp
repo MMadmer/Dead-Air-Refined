@@ -2,6 +2,7 @@
 #include "xrEngine/IGame_Persistent.h"
 #include "xrEngine/Environment.h"
 #include "Layers/xrRender/dxEnvironmentRender.h"
+#include "Layers/xrRender/xms_glows.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #include "da_async.h"
 #include "da_vrs.h"
@@ -757,6 +758,8 @@ void CRenderTarget::phase_combine()
     //	if FP16-BLEND !not! supported - draw flares here, overwise they are already in the bloom target
     /* if (!RImplementation.o.fp16_blend)*/
     PIX_EVENT(LENS_FLARES);
+    // XMS: the modules' glows, under the lens flares
+    xms_glows_render();
     g_pGamePersistent->Environment().RenderFlares(); // lens-flares
     GpuTimers.End(dx11GpuTimers::PostFinal);
 

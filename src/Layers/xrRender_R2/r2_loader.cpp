@@ -8,6 +8,8 @@
 #include "xrCore/stream_reader.h"
 #include "xrCore/XMS/xms_core.h"
 #include "xrCore/XMS/xms_level_edits.h"
+#include "xrCore/XMS/xms_level_things.h"
+#include "Layers/xrRender/xms_glows.h"
 #include "xrCore/_fbox2.h"
 
 #include <algorithm>
@@ -212,6 +214,10 @@ void CRender::level_Load(IReader* fs)
     g_pGamePersistent->LoadTitle("st_loading_lights");
     LoadLights(fs);
 
+    // XMS: the glows the modules add
+    if (!GEnv.isDedicatedServer)
+        xms_glows_level_load();
+
     // End
     g_pGamePersistent->LoadEnd();
 
@@ -345,6 +351,7 @@ void CRender::level_Unload()
     // graph is still intact.
     Unload3DFluid();
 #endif
+    xms_glows_level_unload();
 
     // The pieces hang on the same roots, attached after the overlays: they go first.
     UnloadPieces();
@@ -2620,6 +2627,63 @@ void CRender::Load3DFluid()
         }
 
         FS.r_close(F);
+    }
+
+    // XMS: the volumes the modules add over the level. Each is handed to the volume's own loader
+    // as a record of the level's file, made here from values that were read as numbers: nothing
+    // of a module is taken as bytes.
+    XMS::LevelThings things;
+    XMS::ReadLevelThings(things);
+    for (const XMS::LevelFog& fog : things.fogs)
+    {
+        string_path profile;
+        if (!FS.exist(profile, "$game_config$", fog.profile.c_str()))
+        {
+            Msg("! [level things] the fog profile '%s' is none of the game's configs: the volume is left out",
+                fog.profile.c_str());
+            continue;
+        }
+        // a profile a module names is asked before it is read: the loader reads its keys without
+        // asking, and one that is missing stops the game
+        xr_string why;
+        if (!dx113DFluidData::ProfileReads(fog.profile, why))
+        {
+            Msg("! [level things] the fog profile '%s' is no profile of a fog volume (%s): the volume is left out",
+                fog.profile.c_str(), why.c_str());
+            continue;
+        }
+        CMemoryWriter record;
+        record.w_string(fog.profile.c_str());
+        const Fmatrix box = fog.box.transform();
+        record.w(&box, sizeof(box));
+        record.w_u32(u32(fog.occluders.size()));
+        for (const XMS::LevelBox& o : fog.occluders)
+        {
+            const Fmatrix occluder = o.transform();
+            record.w(&occluder, sizeof(occluder));
+        }
+        IReader stream(record.pointer(), record.size());
+        dx113DFluidVolume* volume = xr_new<dx113DFluidVolume>();
+        volume->Load("", &stream, 0);
+
+        // it hangs on the sector it stands in; a volume outside every sector is drawn by none
+        auto& dsgraph = get_imm_context();
+        const auto sector_id = dsgraph.detect_sector(volume->getVisData().sphere.P);
+        // a place with nothing of the level under or over it is in no sector
+        const bool in_sector =
+            sector_id != IRender_Sector::INVALID_SECTOR_ID && size_t(sector_id) < dsgraph.Sectors.size();
+        auto* sector = in_sector ? static_cast<CSector*>(dsgraph.get_sector(sector_id)) : nullptr;
+        dxRender_Visual* root = sector ? sector->root() : nullptr;
+        if (!root || root->getType() != MT_HIERRARHY)
+        {
+            Msg("! [level things] a fog volume at %.1f, %.1f, %.1f stands in no sector of the level: left out",
+                fog.box.position.x, fog.box.position.y, fog.box.position.z);
+            volume->Release();
+            xr_delete(volume);
+            continue;
+        }
+        static_cast<FHierrarhyVisual*>(root)->children.push_back(volume);
+        m_fluid_volumes.push_back({root, volume});
     }
 }
 

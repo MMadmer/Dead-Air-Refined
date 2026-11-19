@@ -25,6 +25,7 @@ Status: **P0–P4 implemented in the engine** (2026-08-11), P5–P6 are design. 
 | P6 collision | implemented | the module's `overlay.xcform` is merged into the static CDB in `CObjectSpace::Load` BEFORE the tree is built: overlay triangles go to the end; materials by name through the GMLib resolver; the cache is keyed by `crc ^ hash(overlays)`; the embedded OPCODE tree is ignored when overlays are present |
 | P6 cutting | implemented | XCF1 **v2** carries a cut-box list after the triangles: a base triangle fully inside a box is dropped BEFORE `Create()`. Indices after it shift — that is safe, because a triangle index never survives level load (verified across all ~60 consumers of `rq_result.element`); the only serialization is the OPCODE tree in `objspace.bin` and the tail of `level.cform`, both already invalidated via `crc ^ hash` and `cacheStream = nullptr`. Vertices are NOT removed (that would require remapping `TRI::verts` for every consumer). Known consequences, documented: `level.ai` nodes are coordinate-based and do not disappear with the geometry; `detect_sector` casts a ray into collision, so a cut floor breaks sector detection |
 | P6 exact cuts and AI edits | implemented | section 8.4. `levels\<level>\overlay.cut` (`XCU1`): regions that clip the base level's static collision in `CObjectSpace::Load` before the tree is built (new vertices appended after the overlays', the cache keyed by `crc ^ hash(overlays) ^ hash(cuts)`) and the level's own normal and progressive visuals in `CRender::ApplyLevelCuts` (`r2_loader.cpp`, R4, R5 and R6: buffers of their own, read again from `level.geom`); `levels\<level>\overlay.aiedit` (`XAE1`): nodes moved and closed in place in `CLevelGraph::xms_apply_ai_edits`. One reader and one clip in `src/xrCore/XMS/xms_level_edits.*` and `xms_cut_clip.*`. The abilities `level-cuts` and `ai-edits`. QA of the clip: `tools/qa/cuts/Run-CutClipQa.ps1` |
+| P6 level things | implemented | section 8.5. `levels\<level>\overlay.things` (text): sounds, particle effects, lights, environment modifiers, glows, fog volumes and sound environments a module puts beside a level's own - read by `src/xrCore/XMS/xms_level_things.*`, applied in `CLevel::Load_GameSpecific_After` (effects into the level's static particles, lights kept by the level until it unloads, sound environments merged with the level's into the sound engine's geometry), `CLevelSoundManager::Load` (static sounds), `CEnvironment::mods_load` (modifiers), `CRender::Load3DFluid` (fog volumes) and `src/Layers/xrRender/xms_glows.*` (glows, drawn where the lens flares are). The ability `level-things` |
 | P6 AI map | implemented (experimental) | `overlay.aimap` appends NodeCompressed13 nodes to a heap copy of the array; the columnar index honestly falls back to a full scan with a warning when sorting is violated; the cross-table clamps on OOB nodes. Limitation: packed positions must land on the level's base grid |
 | P6 level pieces | implemented | `<module>\levels\<level>\pieces\<name>\` (section 8.3): a compiled, lightmapped part of the level's picture with its own shader table, buffers and lightmap pages, hung on the level's sectors and streamed by distance; `CRender::LoadPieces` / `PiecesFrame` / `UnloadPieces` (`r2_loader.cpp`), the same in R4, R5 and R6. The ability `level-pieces` (`ProductVersion.h`). QA: `tools/qa/pieces/Run-PiecesQa.ps1` |
 | P6 visuals | implemented | `<module>\levels\<level>\overlay_visuals.ltx` lists world `.ogf` files (editor export); `CRender::LoadOverlayVisuals` (`r2_loader.cpp`) loads them physically (bypassing the VFS — otherwise last-writer-wins would kill every module's contribution but the last), detects the sector by the visual's center and push_backs into the root's `children`; the root's box grows **only** when the overlay actually exceeds it (otherwise the sector's base geometry loses fcvInside); `UnloadOverlayVisuals` detaches and frees on `level_Unload`. Section keys: `file` (required), `mode` (an extra mode gate), `sector` (a forced id). Skeletons/dynamics are rejected. For small things the alternative is a regular spawn (P4) |
@@ -759,6 +760,52 @@ closed, <s> skipped` (a closed node counts as moved too). The engine states the 
 `level-cuts` and `ai-edits` in its version resources.
 
 ---
+
+### 8.5 Level things
+
+A module that brings life to a level it does not own - a campfire's crackle, smoke over a barrel, a
+lamp in a room, a haze in a cellar - says so in one text file, `<module>\levels\<level>\overlay.things`.
+It is read physically from every applying module (`ModuleApplies`), in module order, like
+`overlay.xcform`; an older game never looks for the name and loads the level as it is. One reader
+serves every library that uses it (`src/xrCore/XMS/xms_level_things.*`). Nothing of the level's own
+is replaced or removed: a module's things stand beside the level's static sounds, particle effects,
+lights, environment modifiers, fog volumes and sound environments. A level of a module's own uses the
+same file for what a level's own files do not carry: glows, sound environments and spot lights. The
+engine says the ability as `level-things`.
+
+The file is blocks of `[kind:name]` with `key = value` lines; `;` starts a comment. Numbers are
+separated by commas; positions are metres, angles radians. A block that does not read is left out
+with one log line, and so is the rest of a file past 4096 things - the cap is each file's own, a
+module never takes the room of another's; a block keeps its first 32 lines; a file larger than 4 MB
+is refused. A name of a sound or an effect is the game's own way of naming one: letters, digits,
+`_`, `-`, `$`, a space and the slashes between folders, with no extension and no dot. A level's load
+reads the files once, whoever asks (the sounds, the effects and lights, the environment): what is
+read is kept while the level and the files are the same, so a problem is said once.
+
+| Block | Keys | What the game does |
+|---|---|---|
+| `[sound:<name>]` | `name` (a sound of the game or of a module), `position`, `volume` (1), `frequency` (1), `active = from, to` (game time of the day, ms; both 0: always), `play = a, b` and `pause = a, b` (ms, each picked between the two; both pauses 0: it loops) | a static sound of the level, played as the level's own are; a name that is no sound is left out and said |
+| `[particles:<name>]` | `name` (an effect or a group), `position`, `rotation = heading, pitch, bank` | a static effect of the level; a name the particle library has not draws nothing and is said by the renderer |
+| `[light:<name>]` | `type = point \| spot`, `position`, `direction`, `color = r, g, b`, `range`, `cone` (a spot's whole angle), `shadows = true` | a light of the level that is on for as long as the level is loaded |
+| `[env:<name>]` | `position`, `radius`, `power`, and any of `far_plane`, `fog_color`, `fog_density`, `ambient`, `sky_color`, `hemi_color` | an environment modifier beside the level's own; a value it does not say it does not change |
+| `[glow:<name>]` | `position`, `texture`, `radius` (0.5 m), `shader` (left out, `effects\flare` or the game's `effects\glow`: the lens flares' shader; `effects\sun`: the sun's, hidden by depth as well), `color = r, g, b` (1, 1, 1), `fixed = true` (the same size on the screen at any distance: `radius` is then a share of half the screen's height, kept between 0.001 and 1) | a picture that always faces the viewer, added to the frame where the lens flares are drawn; it comes up while nothing of the level stands between the eye and its place and goes when something does (a quarter of a second either way), and is not drawn past 90 m. A glow is drawn with one of those two shaders alone: any other name is drawn with the flares' and said once in the log - every other shader of the game is made for geometry a glow has not, and stops the game or draws nothing. A shader said empty is a shader not said |
+| `[fog:<name>]` | `profile` (a file of the game's configs, said from there), `position`, `rotation = heading, pitch, bank`, `size = x, y, z` of the box it fills, and any number of lines `occluder = position, rotation, size` (nine numbers) for the boxes it flows around | a volume of flowing fog beside the level's own (`level.fog_vol`), hung on the render sector its middle stands in; at most 16 a module's file - the cap is each file's own -, each with at most 16 occluders. A profile is asked before it is read: it has `[volume]` with `EmittersNum` (64 at most) and a section `emitterNN` for each emitter with every key the volume's loader reads (`Type`, `Position` or `WorldPosition`, `Radius`, `Sigma`, `FlowDirection`, `FlowSpeed`, `Density`, `ApplyDensity`, `ApplyImpulse`; a `SimpleDraught` also `DraughtPeriod`, `DraughtPhase`, `DraughtAmp`). A profile the game has not, a file that is no such profile and a volume that stands in no sector (nothing of the level under or over its middle) are left out and said |
+| `[sound_env:<name>]` | `position`, `rotation`, `size` of a box, `inner`, `outer` (sound environments of the game by name) | a box of the level's sound environment geometry beside the level's own (`level.snd_env`): a sound source inside it is in `inner`, one straight above it in `outer`, as the sound engine reads the level's own boxes. A name the game's environment library has not leaves the box out and is said |
+
+A box is the unit cube scaled by `size`, turned by `rotation` and moved to `position`; a size is
+kept between a centimetre and 4000 m. The names of a texture, a shader, an environment are names of
+the game's own (letters, digits, `_`, `-`, `$`, a space, the slashes between folders); a fog profile
+is a file name with its extension and no step up. Nothing of a module is taken as bytes: a fog
+volume and the sound environment geometry are made by the engine from the numbers it read and handed
+to the level's own loaders in the level's own formats.
+
+The glows are the modules' alone. The glows a level's own file lists, and the ones lamps ask the
+renderer for, are not drawn - they were not before there were modules, and a module does not change
+how the game's own levels look.
+
+Level things are level data, like the level's own: they are made when the level loads and gone
+when it unloads, and no save holds them. A module that is disabled or removed takes its things with
+it at the next load.
 
 ## 9. Layer 6 — Saves: install and remove mods without "delete your save"
 

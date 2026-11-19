@@ -139,6 +139,7 @@ CLevel::~CLevel()
     for (auto& ps : m_StaticParticles)
         CParticlesObject::Destroy(ps);
     m_StaticParticles.clear();
+    m_ModuleLights.clear();
     // Unload sounds
     // unload prefetched sounds
     sound_registry.clear();

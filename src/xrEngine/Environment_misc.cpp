@@ -13,6 +13,7 @@
 #include "IGame_Level.h"
 #include "Common/object_broker.h"
 #include "Common/LevelGameDef.h"
+#include "xrCore/XMS/xms_level_things.h"
 #include "xrCommon/xr_hash_map.h"
 
 #include <atomic>
@@ -896,6 +897,25 @@ void CEnvironment::mods_load()
             id++;
         }
         FS.r_close(fs);
+    }
+    // what the modules add to the level: modifiers beside the level's own
+    {
+        XMS::LevelThings things;
+        XMS::ReadLevelThings(things);
+        for (const XMS::LevelEnv& e : things.envs)
+        {
+            CEnvModifier& m = Modifiers.emplace_back(CEnvModifier());
+            m.position = e.position;
+            m.radius = e.radius;
+            m.power = e.power;
+            m.far_plane = e.far_plane;
+            m.fog_color = e.fog_color;
+            m.fog_density = e.fog_density;
+            m.ambient = e.ambient;
+            m.sky_color = e.sky_color;
+            m.hemi_color = e.hemi_color;
+            m.use_flags.assign(e.use);
+        }
     }
 
     load_level_specific_ambients();

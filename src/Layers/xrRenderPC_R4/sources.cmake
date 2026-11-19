@@ -141,6 +141,8 @@ set(XRAY_RENDER_R4_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/Utils/dxHashHelper.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/VertexCache.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/WallmarksEngine.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/xms_glows.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../xrRender/xms_glows.h"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/xrRender_console.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/xrStripify.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../xrRender/xr_effgamma.cpp"

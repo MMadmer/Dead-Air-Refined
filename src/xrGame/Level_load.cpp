@@ -14,6 +14,11 @@
 #include "xrEngine/Rain.h"
 #include "xrEngine/Environment.h"
 #include "da_snow_bake.h"
+#include "xrCore/XMS/xms_level_things.h"
+#include "Common/LevelStructure.hpp"
+#include "xrSound/SoundRender_Environment.h"
+
+#include <array>
 
 namespace
 {
@@ -39,6 +44,148 @@ struct water_cell
     int body;    // which connected sheet this cell belongs to, -1 until the flood fill runs
     bool used;
 };
+
+// The level's sound environments with the modules' boxes beside them, handed to the sound engine
+// as one geometry in the level's own format. A box's faces look outward: a ray straight down from
+// above the box meets a front face - the outer environment -, from inside it a back face - the
+// inner one -, which is how the sound engine reads the level's own.
+void set_sound_environments(ISoundScene* scene, IReader* level, const xr_vector<XMS::LevelSoundEnv>& boxes)
+{
+    SoundEnvironment_LIB* library = Engine.Sound.get_env_library();
+    if (!library)
+    {
+        if (!boxes.empty())
+            Msg("! [level things] the game has no sound environments: %u boxes of the modules are left out",
+                u32(boxes.size()));
+        if (level)
+            scene->set_geometry_env(level);
+        return;
+    }
+    xr_vector<xr_string> names;
+    xr_vector<Fvector> verts;
+    xr_vector<CDB::TRI> tris;
+    if (level)
+    {
+        IReader* named = level->open_chunk(0);
+        IReader* geometry = level->open_chunk(1);
+        if (named && geometry && geometry->length() >= sizeof(hdrCFORM))
+        {
+            while (!named->eof())
+            {
+                string256 name;
+                named->r_stringZ(name, sizeof(name));
+                names.emplace_back(name);
+            }
+            hdrCFORM header;
+            geometry->r(&header, sizeof(header));
+            const u64 need = u64(header.vertcount) * sizeof(Fvector) + u64(header.facecount) * sizeof(CDB::TRI);
+            if (need <= u64(geometry->elapsed()))
+            {
+                const auto* v = static_cast<const Fvector*>(geometry->pointer());
+                const auto* t = reinterpret_cast<const CDB::TRI*>(v + header.vertcount);
+                verts.assign(v, v + header.vertcount);
+                tris.assign(t, t + header.facecount);
+            }
+        }
+        if (named)
+            named->close();
+        if (geometry)
+            geometry->close();
+        // a file of the level that does not read as it should is left to its own loader
+        if (tris.empty() && !names.empty())
+        {
+            if (!boxes.empty())
+                Msg("! [level things] the level's own sound environments do not read as geometry: %u boxes of "
+                    "the modules are left out",
+                    u32(boxes.size()));
+            scene->set_geometry_env(level);
+            return;
+        }
+        if (tris.empty())
+            names.clear();
+    }
+    const size_t own_names = names.size();
+    const auto id_of = [&](const xr_string& name) -> int {
+        for (size_t i = 0; i < names.size(); ++i)
+            if (0 == xr_stricmp(names[i].c_str(), name.c_str()))
+                return int(i);
+        if (library->GetID(name.c_str()) < 0 || names.size() >= 0xffff)
+            return -1;
+        names.push_back(name);
+        return int(names.size() - 1);
+    };
+    u32 added = 0;
+    for (const XMS::LevelSoundEnv& e : boxes)
+    {
+        const int inner = id_of(e.inner);
+        const int outer = id_of(e.outer);
+        if (inner < 0 || outer < 0)
+        {
+            Msg("! [level things] the sound environment '%s' is none of the game's: its box is left out",
+                inner < 0 ? e.inner.c_str() : e.outer.c_str());
+            continue;
+        }
+        const Fmatrix box = e.box.transform();
+        const u32 base = u32(verts.size());
+        // the corners of the unit cube: bit 0 is x, bit 1 y, bit 2 z
+        for (u32 corner = 0; corner < 8; ++corner)
+        {
+            Fvector p;
+            p.set(corner & 1 ? 0.5f : -0.5f, corner & 2 ? 0.5f : -0.5f, corner & 4 ? 0.5f : -0.5f);
+            box.transform_tiny(p);
+            verts.push_back(p);
+        }
+        for (u32 axis = 0; axis < 3; ++axis)
+        {
+            const u32 u = 1u << ((axis + 1) % 3);
+            const u32 v = 1u << ((axis + 2) % 3);
+            for (u32 side = 0; side < 2; ++side)
+            {
+                const u32 at = side << axis;
+                // around the face so that it looks along +axis; the far side is walked the other way
+                u32 quad[4] = {at, at | u, at | u | v, at | v};
+                if (!side)
+                    std::swap(quad[1], quad[3]);
+                for (const auto& corners : {std::array<u32, 3>{0, 1, 2}, std::array<u32, 3>{0, 2, 3}})
+                {
+                    CDB::TRI t;
+                    for (u32 k = 0; k < 3; ++k)
+                        t.verts[k] = base + quad[corners[k]];
+                    t.dummy = (u32(inner) << 16) | u32(outer);
+                    tris.push_back(t);
+                }
+            }
+        }
+        ++added;
+    }
+    if (!added)
+    {
+        if (level)
+            scene->set_geometry_env(level);
+        return;
+    }
+    hdrCFORM header{};
+    header.version = CFORM_CURRENT_VERSION;
+    header.vertcount = u32(verts.size());
+    header.facecount = u32(tris.size());
+    header.aabb.invalidate();
+    for (const Fvector& p : verts)
+        header.aabb.modify(p);
+    CMemoryWriter merged;
+    merged.open_chunk(0);
+    for (const xr_string& name : names)
+        merged.w_stringZ(name.c_str());
+    merged.close_chunk();
+    merged.open_chunk(1);
+    merged.w(&header, sizeof(header));
+    merged.w(verts.data(), verts.size() * sizeof(Fvector));
+    merged.w(tris.data(), tris.size() * sizeof(CDB::TRI));
+    merged.close_chunk();
+    IReader stream(merged.pointer(), merged.size());
+    scene->set_geometry_env(&stream);
+    Msg("* [level things] %u sound environment boxes beside the level's %u faces (%u environments named)", added,
+        u32(tris.size()) - added * 12, u32(names.size() - own_names));
+}
 
 bool is_liquid(const CDB::TRI& tri)
 {
@@ -814,18 +961,59 @@ bool CLevel::Load_GameSpecific_After()
         FS.r_close(F);
     }
 
+    // What the modules add to the level: effects and lights, beside the level's own.
+    if (!GEnv.isDedicatedServer)
+    {
+        XMS::LevelThings things;
+        XMS::ReadLevelThings(things);
+        const Fvector still = {0.f, 0.f, 0.f};
+        for (const XMS::LevelParticles& p : things.particles)
+        {
+            Fmatrix at;
+            at.setHPB(p.rotation.x, p.rotation.y, p.rotation.z);
+            at.c.set(p.position.x, p.position.y + 0.01f, p.position.z);
+            CParticlesObject* effect = CParticlesObject::Create(p.name.c_str(), FALSE, false);
+            effect->UpdateParent(at, still);
+            effect->Play(false);
+            m_StaticParticles.push_back(effect);
+        }
+        for (const XMS::LevelLight& l : things.lights)
+        {
+            ref_light light = GEnv.Render->light_create();
+            light->set_type(l.spot ? IRender_Light::SPOT : IRender_Light::POINT);
+            light->set_shadow(l.shadows);
+            light->set_position(l.position);
+            Fvector right;
+            right.crossproduct(Fvector().set(0.f, 1.f, 0.f), l.direction);
+            if (right.square_magnitude() < 1e-6f)
+                right.set(1.f, 0.f, 0.f);
+            right.normalize();
+            light->set_rotation(l.direction, right);
+            light->set_range(l.range);
+            light->set_cone(l.cone);
+            light->set_color(l.color.x, l.color.y, l.color.z);
+            light->set_active(true);
+            m_ModuleLights.push_back(light);
+        }
+    }
+
     if (!GEnv.isDedicatedServer)
     {
         // loading static sounds
         VERIFY(m_level_sound_manager);
         m_level_sound_manager->Load();
 
-        // loading sound environment
-        if (FS.exist(fn_game, "$level$", "level.snd_env"))
+        // loading sound environment: the level's own, with the boxes the modules add beside it
         {
-            IReader* F = FS.r_open(fn_game);
-            Sound->set_geometry_env(F);
-            FS.r_close(F);
+            IReader* F = FS.exist(fn_game, "$level$", "level.snd_env") ? FS.r_open(fn_game) : nullptr;
+            XMS::LevelThings things;
+            XMS::ReadLevelThings(things);
+            if (!things.sound_envs.empty())
+                set_sound_environments(Sound, F, things.sound_envs);
+            else if (F)
+                Sound->set_geometry_env(F);
+            if (F)
+                FS.r_close(F);
         }
         // loading SOM
         if (FS.exist(fn_game, "$level$", "level.som"))

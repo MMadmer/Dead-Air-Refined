@@ -153,6 +153,16 @@ sectors are still detected by rays into the collision. A game that does this
 states `level-cuts` and `ai-edits` in its version resources' `EngineAbilities`;
 an older game ignores both files and loads the level uncut.
 
+`levels/<level>/overlay.things` (text) puts sounds, particle effects, lights,
+environment modifiers, glows, fog volumes and sound environments of the module on
+a level beside the level's own - blocks of `[sound:<name>]`, `[particles:<name>]`,
+`[light:<name>]`, `[env:<name>]`, `[glow:<name>]`, `[fog:<name>]` and
+`[sound_env:<name>]` with `key = value` lines (`XMS_ARCHITECTURE.md`, 8.5). Nothing
+of the level is replaced, and no save holds them: they are made as the level loads.
+A level of the module's own uses the same file for its glows, its sound
+environments and its spot lights. A game that does this states `level-things`; an
+older game ignores the file.
+
 The `.ogf` must be baked in **world space** (the authoring tool's OGF export does that)
 and static — skeletons and dynamics are rejected with a log line. Every module
 contributes its own registry; these files live outside `gamedata/` on purpose,

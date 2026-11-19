@@ -225,6 +225,8 @@ public:
     // Static particles
     using POVec = xr_vector<CParticlesObject*>;
     POVec m_StaticParticles;
+    // The lights the modules add to the level (levels\<level>\overlay.things).
+    xr_vector<ref_light> m_ModuleLights;
     game_cl_GameState* game = nullptr;
     bool m_bGameConfigStarted = false;
     bool game_configured = false;

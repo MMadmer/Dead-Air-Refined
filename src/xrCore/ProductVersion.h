@@ -39,8 +39,11 @@
 //   release's card carries them (MOD_UPDATES.md 1.5);
 // - network-mark: scripts ask a server through xms.http, and a module whose code works with the network
 //   carries a mark where players pick and manage modules (MOD_CATALOG.md 9.4 and 10.4).
+// - level-things: a module's levels\<level>\overlay.things adds sounds, particle effects, lights,
+//   environment modifiers, glows, fog volumes and sound environments to a level, beside the level's
+//   own (XMS_ARCHITECTURE.md 8.5).
 #define DAR_ENGINE_ABILITIES \
-    "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions item-assets config-file-patches table-assets module-links network-mark"
+    "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions item-assets config-file-patches table-assets module-links network-mark level-things"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined

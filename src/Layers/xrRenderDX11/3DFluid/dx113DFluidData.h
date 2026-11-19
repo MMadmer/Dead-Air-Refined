@@ -150,6 +150,11 @@ public:
     void ReparseProfile(const xr_string& Profile);
 #endif
 
+    // Whether a profile holds everything the volume's loader reads without asking. The level's own
+    // profiles are the game's and are read as they are; a profile a module names is asked first,
+    // because a key that is missing there stops the game. `why` says what is missing.
+    static bool ProfileReads(const xr_string& Profile, xr_string& why);
+
 private:
     typedef dx113DFluidEmitters::CEmitter CEmitter;
 

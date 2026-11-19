@@ -123,6 +123,60 @@ void dx113DFluidData::InitProcedural(const Fmatrix& transform, const Settings& s
     m_Emitters.clear();
 }
 
+bool dx113DFluidData::ProfileReads(const xr_string& Profile, xr_string& why)
+{
+    // a volume simulates every emitter each frame: more than this is no profile of a fog
+    constexpr u32 max_emitters = 64;
+    string_path fn;
+    FS.update_path(fn, "$game_config$", Profile.c_str());
+    CInifile ini(fn, TRUE, TRUE, FALSE);
+    if (!ini.section_exist("volume") || !ini.line_exist("volume", "EmittersNum"))
+    {
+        why = "it has no [volume] with EmittersNum";
+        return false;
+    }
+    const u32 count = ini.r_u32("volume", "EmittersNum");
+    if (count > max_emitters)
+    {
+        why = "it names more emitters than a volume takes";
+        return false;
+    }
+    static const pcstr always[] = {
+        "Type", "Radius", "Sigma", "FlowDirection", "FlowSpeed", "Density", "ApplyDensity", "ApplyImpulse"};
+    static const pcstr draught[] = {"DraughtPeriod", "DraughtPhase", "DraughtAmp"};
+    for (u32 i = 0; i < count; ++i)
+    {
+        string32 section;
+        xr_sprintf(section, "emitter%02u", i);
+        const auto lacks = [&](pcstr key) {
+            if (ini.line_exist(section, key))
+                return false;
+            why = "[";
+            why += section;
+            why += "] has no ";
+            why += key;
+            return true;
+        };
+        if (!ini.section_exist(section))
+        {
+            why = "it has no [";
+            why += section;
+            why += "]";
+            return false;
+        }
+        for (pcstr key : always)
+            if (lacks(key))
+                return false;
+        if (!ini.line_exist(section, "Position") && lacks("WorldPosition"))
+            return false;
+        if (ini.r_token(section, "Type", emitter_type_token) == dx113DFluidEmitters::ET_SimpleDraught)
+            for (pcstr key : draught)
+                if (lacks(key))
+                    return false;
+    }
+    return true;
+}
+
 void dx113DFluidData::ParseProfile(const xr_string& Profile)
 {
     string_path fn;
