@@ -1,0 +1,62 @@
+-- A probe of its own beside the module under test: once the level has settled the player is put at each view of
+-- `shots.ltx` ([shots] view_<n> = x, y, z, yaw degrees, hour), a moment passes, and a screenshot is taken.
+-- Every step is a log line "SHOTS <what>".
+
+local function say(what) xms.log("SHOTS " .. tostring(what)) end
+
+local views = {}
+do
+	local ini = ini_file("shots.ltx")
+	if (ini and ini:section_exist("shots")) then
+		for i = 0, ini:line_count("shots") - 1 do
+			local _, key, value = ini:r_line("shots", i, "", "")
+			local x, y, z, yaw, hour = string.match(value or "", "([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)")
+			if (x) then
+				views[#views + 1] = { name = key, pos = vector():set(tonumber(x), tonumber(y), tonumber(z)), yaw = math.rad(tonumber(yaw)), hour = tonumber(hour) }
+			end
+		end
+	end
+end
+say("views " .. #views)
+
+local begun, at, state, since = false, 0, "settle", nil
+RegisterScriptCallback("actor_on_first_update", function()
+	if (begun or level.name() == "fake_start") then return end
+	begun = true
+	level.add_call(function()
+		pcall(function() device():pause(false) end)
+		local now = time_global()
+		since = since or now
+		if (state == "settle") then
+			if (now - since < 9000) then return false end
+			get_console():execute("hud_draw off")
+			get_console():execute("g_god on")
+			get_console():execute("r3_volumetric_smoke on")
+			state, since = "next", now
+		elseif (state == "next") then
+			at = at + 1
+			local v = views[at]
+			if not (v) then
+				say("done")
+				return true
+			end
+			-- the hour of the view: the game's clock is moved forward to it
+			local ahead = (v.hour - level.get_time_hours()) % 24
+			if (ahead > 0) then level.change_game_time(0, ahead, 0) end
+			db.actor:set_actor_position(v.pos)
+			db.actor:set_actor_direction(-v.yaw)
+			say("at " .. v.name)
+			state, since = "look", now
+		elseif (state == "look") then
+			-- the weather and the lights follow the clock, the fog flows in
+			if (now - since < 6000) then return false end
+			get_console():execute("screenshot 1")
+			say("shot " .. views[at].name)
+			state, since = "rest", now
+		elseif (state == "rest") then
+			if (now - since < 1500) then return false end
+			state, since = "next", now
+		end
+		return false
+	end, function() end)
+end)

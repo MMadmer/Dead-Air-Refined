@@ -595,10 +595,34 @@ void set_pp_effector_factor2(int id, float f)
 
 #include "relation_registry.h"
 
+namespace
+{
+// A community a script names. One the game has not - a name a script made from somebody else's
+// data, or no name at all - is said once and taken for none: the question is answered as neutral
+// and the change is not made. Asked the old way it stopped the game, in the middle of whatever
+// the script was reacting to.
+bool script_community(LPCSTR name, CHARACTER_COMMUNITY& out, pcstr asking)
+{
+    out.set(name ? name : "", true);
+    if (out.index() != NO_COMMUNITY_INDEX)
+        return true;
+    static xr_vector<xr_string> said;
+    const xr_string key = name ? name : "";
+    if (said.size() < 32 && std::find(said.begin(), said.end(), key) == said.end())
+    {
+        said.push_back(key);
+        Msg("! [script] relation_registry.%s: the game has no community '%.64s' - taken for none", asking,
+            key.c_str());
+    }
+    return false;
+}
+} // namespace
+
 int g_community_goodwill(LPCSTR _community, int _entity_id)
 {
     CHARACTER_COMMUNITY c;
-    c.set(_community);
+    if (!script_community(_community, c, "community_goodwill"))
+        return 0;
 
     return RELATION_REGISTRY().GetCommunityGoodwill(c.index(), u16(_entity_id));
 }
@@ -606,23 +630,26 @@ int g_community_goodwill(LPCSTR _community, int _entity_id)
 void g_set_community_goodwill(LPCSTR _community, int _entity_id, int val)
 {
     CHARACTER_COMMUNITY c;
-    c.set(_community);
+    if (!script_community(_community, c, "set_community_goodwill"))
+        return;
     RELATION_REGISTRY().SetCommunityGoodwill(c.index(), u16(_entity_id), val);
 }
 
 void g_change_community_goodwill(LPCSTR _community, int _entity_id, int val)
 {
     CHARACTER_COMMUNITY c;
-    c.set(_community);
+    if (!script_community(_community, c, "change_community_goodwill"))
+        return;
     RELATION_REGISTRY().ChangeCommunityGoodwill(c.index(), u16(_entity_id), val);
 }
 
 int g_get_community_relation(LPCSTR comm_from, LPCSTR comm_to)
 {
     CHARACTER_COMMUNITY community_from;
-    community_from.set(comm_from);
     CHARACTER_COMMUNITY community_to;
-    community_to.set(comm_to);
+    if (!script_community(comm_from, community_from, "community_relation") ||
+        !script_community(comm_to, community_to, "community_relation"))
+        return 0;
 
     return RELATION_REGISTRY().GetCommunityRelation(community_from.index(), community_to.index());
 }
@@ -630,9 +657,10 @@ int g_get_community_relation(LPCSTR comm_from, LPCSTR comm_to)
 void g_set_community_relation(LPCSTR comm_from, LPCSTR comm_to, int value)
 {
     CHARACTER_COMMUNITY community_from;
-    community_from.set(comm_from);
     CHARACTER_COMMUNITY community_to;
-    community_to.set(comm_to);
+    if (!script_community(comm_from, community_from, "set_community_relation") ||
+        !script_community(comm_to, community_to, "set_community_relation"))
+        return;
 
     RELATION_REGISTRY().SetCommunityRelation(community_from.index(), community_to.index(), value);
 }

@@ -109,3 +109,8 @@ closed with every finalizer, a new one opened) run without a script error.
 - Userdata die in a slightly different order within a cycle once some were set aside. Finalizers of luabind objects do
   not depend on each other's order.
 - A metatable with `__gc` set on a luabind object of a trivial class through `debug.setmetatable` is not honoured.
+- `relation_registry.community_relation`, `community_goodwill`, `set_community_relation`, `set_community_goodwill`
+  and `change_community_goodwill` asked about a community the game has not (a name a script made from somebody
+  else's data, an empty one, `nil`) no longer stop the game: the name is said once in the log, a question is
+  answered as neutral (0) and a change is not made. A script that reacts to a death by asking the relation of
+  everyone around used to end the game on the first character with such a community.

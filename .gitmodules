@@ -38,6 +38,8 @@
 [submodule "Externals/DirectXTex"]
 	path = Externals/DirectXTex
 	url = https://github.com/microsoft/DirectXTex.git
+	# the build applies patches/directxtex-cmake4-shader-command.patch to its working copy
+	ignore = dirty
 [submodule "Externals/mimalloc"]
 	path = Externals/mimalloc
 	url = https://github.com/microsoft/mimalloc.git

@@ -312,8 +312,14 @@ try {
     }
     $phase = if ($MenuOnly) { 'menu' } else { 'game' }
     $s = { param($n) Said $log $n }
-    $refused = @(Complaints $log "^! XMS")
+    # what the module system says of a module that takes the game's own objects out or changes them is a
+    # fact for the author - the saves keep those objects as the module left them -, not something it refused
+    $said = @(Complaints $log "^! XMS")
+    $notices = @($said | Where-Object { $_ -match "of the game's own objects in place" })
+    $refused = @($said | Where-Object { $_ -notmatch "of the game's own objects in place" })
     $refused | Set-Content -LiteralPath (Join-Path $resultRoot "$phase-refused.txt") -Encoding utf8
+    $notices | Set-Content -LiteralPath (Join-Path $resultRoot "$phase-notices.txt") -Encoding utf8
+    foreach ($n in $notices) { Write-Host "   note: $n" }
     Assert-That 'the module system refuses nothing' (-not $refused.Count) $(if ($refused.Count) { "$($refused.Count) line(s), first: $($refused[0])" })
     $other = @(Complaints $log "^! ")
     $other | Set-Content -LiteralPath (Join-Path $resultRoot "$phase-complaints.txt") -Encoding utf8
