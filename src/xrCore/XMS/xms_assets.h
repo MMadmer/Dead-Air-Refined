@@ -20,9 +20,10 @@ namespace XMS::Assets
 struct Texture
 {
     xr_string file; // <module>\<path inside it>, for the log
-    bool described{true}; // false for `use` ui and cube: the game describes no such texture
+    bool described{true}; // false for `use` ui, cube and bump: the game describes no such texture
     s8 bump{-1}; // -1 unstated, 0 none, 1 a bump pair
-    xr_string bump_name; // empty: <name>_bump
+    xr_string bump_name; // the bump map's name when bump_named; else <name>_bump
+    bool bump_named{false}; // the description names it - an empty name is a bump map of no name
     bool parallax{false};
     s8 detail{-1}; // -1 unstated, 0 none, 1 a detail texture
     xr_string detail_name;

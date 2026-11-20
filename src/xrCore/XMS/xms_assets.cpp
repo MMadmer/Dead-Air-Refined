@@ -69,7 +69,7 @@ bool read_text(const xr_string& path, xr_string& out)
 void parse_texture(const LuaValue& v, Texture& t)
 {
     const xr_string use = normal(v.text("use"));
-    t.described = use != "ui" && use != "cube";
+    t.described = use != "ui" && use != "cube" && use != "bump";
 
     if (const LuaValue* bump = v.get("bump"))
     {
@@ -78,6 +78,8 @@ void parse_texture(const LuaValue& v, Texture& t)
         else if (bump->type == LuaValue::Table)
         {
             t.bump = 1;
+            // `texture` said, even empty, is the name a .thm gives: an empty one names no bump map
+            t.bump_named = bump->get("texture") != nullptr;
             t.bump_name = normal(bump->text("texture"));
             t.parallax = bump->flag("parallax", false);
         }
@@ -85,16 +87,19 @@ void parse_texture(const LuaValue& v, Texture& t)
 
     if (const LuaValue* detail = v.get("detail"))
     {
+        const xr_string on = detail->type == LuaValue::Table ? normal(detail->text("on")) : xr_string();
         if (detail->type == LuaValue::Bool && !detail->b)
             t.detail = 0;
-        else if (detail->type == LuaValue::Table && !detail->text("texture").empty())
+        // a detail texture of no name, or one laid on nothing, is none - as a .thm says it
+        else if (detail->type == LuaValue::Table && (detail->text("texture").empty() || on == "none"))
+            t.detail = 0;
+        else if (detail->type == LuaValue::Table)
         {
             t.detail = 1;
             t.detail_name = normal(detail->text("texture"));
             t.detail_scale = float(detail->number("scale", 1.0));
-            // left out it is laid on the colour; "none" names it and lays it on nothing
-            const xr_string on = normal(detail->text("on"));
-            t.detail_diffuse = on != "bump" && on != "none";
+            // left out it is laid on the colour
+            t.detail_diffuse = on != "bump";
             t.detail_bump = on == "bump" || on == "both";
         }
     }

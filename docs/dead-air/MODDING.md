@@ -1059,14 +1059,14 @@ piece's own texture (`<name>@piece<n>`) is described as its texture is.
 
 | Key | Takes | Means |
 |---|---|---|
-| `use` | `surface`, `normal`, `terrain`, `ui`, `cube` | `ui` and `cube` are described nowhere, like such a `.thm` |
+| `use` | `surface`, `normal`, `terrain`, `ui`, `cube`, `bump` | `ui`, `cube` and `bump` are described nowhere, like such a `.thm`: what the game's own description of that name says stays |
 | `bump` | `false`, `true`, a table | the bump pair `<name>_bump` / `<name>_bump#`; `false` none |
-| `bump.texture` | a texture name | another pair than `<name>_bump` |
+| `bump.texture` | a texture name | another pair than `<name>_bump`; said empty (`""`), a bump map of no name - none is drawn, as a `.thm` that uses a bump map and names none |
 | `bump.parallax` | boolean, `false` | the steep parallax of the pair's height |
-| `detail` | `false`, a table | the detail texture laid over it; `false` none |
-| `detail.texture` | a texture name | required for a detail |
+| `detail` | `false`, a table | the detail texture laid over it; `false` none - also over a detail texture `textures.ltx` gives the name |
+| `detail.texture` | a texture name | required for a detail: a `detail` table without it is no detail, as such a `.thm` says |
 | `detail.scale` | number, `1` | how many times it repeats over the texture |
-| `detail.on` | `diffuse` (default), `bump`, `both`, `none` | what it is laid on; `none` names it and lays it on nothing |
+| `detail.on` | `diffuse` (default), `bump`, `both`, `none` | what it is laid on; `none` names it and lays it on nothing - no detail for the game |
 | `material` | `oren_nayar`, `blinn`, `phong`, `metal`, or the `.thm`'s number | the lighting model |
 | `weight` | 0..1, `0` | how far the lighting goes towards the next model (`oren_nayar` -> `blinn` -> `phong` -> `metal` -> `oren_nayar`); without `material` it moves from `blinn`, the model of a texture nobody describes |
 

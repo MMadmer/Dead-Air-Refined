@@ -249,7 +249,7 @@ void CTextureDescrMngr::ApplyDescriptions()
         }
         else if (tex.bump == 1)
         {
-            spec().m_bump_name = tex.bump_name.empty() ? (name + "_bump").c_str() : tex.bump_name.c_str();
+            spec().m_bump_name = tex.bump_named ? tex.bump_name.c_str() : (name + "_bump").c_str();
             spec().m_use_steep_parallax = tex.parallax;
         }
         if (tex.has_material)
