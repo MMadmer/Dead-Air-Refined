@@ -1,0 +1,2 @@
+# frozen modules are kept byte for byte: no line ending is ever converted
+* -text
