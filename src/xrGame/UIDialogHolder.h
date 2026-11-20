@@ -34,10 +34,16 @@ public:
 
 class CDialogHolder : public pureFrame, public CUIDebuggable
 {
+    friend class CUIDialogWnd;
+
     // dialogs
     xr_vector<recvItem> m_input_receivers;
     xr_vector<dlgItem> m_dialogsToRender;
     xr_vector<dlgItem> m_dialogsToRender_new;
+    // Dialogs whose holder link points here. The link is weak both ways: a dying dialog leaves the lists, a dying
+    // holder clears the links.
+    xr_vector<CUIDialogWnd*> m_linked_dialogs;
+    CDialogHolder* m_next_holder{};
     u32 m_become_visible_time{};
     bool m_b_in_update;
     bool m_is_foremost{};
@@ -45,13 +51,22 @@ class CDialogHolder : public pureFrame, public CUIDebuggable
     void StartMenu(CUIDialogWnd* pDialog, bool bDoHideIndicators);
     void StopMenu(CUIDialogWnd* pDialog);
 
+    static void OnDialogDestroyed(CUIDialogWnd* pDialog);
+    static void OnWindowDestroyed(CUIWindow* pWindow);
+    void ForgetDialog(CUIDialogWnd* pDialog);
+    void ForgetWindow(CUIWindow* pWindow);
+
 protected:
     void DoRenderDialogs();
     void CleanInternals();
     void UpdateCursorVisibility();
+    void StopScriptDialogs();
 
 public:
     CDialogHolder();
+    // The dialogs' back-links and the holder chain are this object's identity.
+    CDialogHolder(const CDialogHolder&) = delete;
+    CDialogHolder& operator=(const CDialogHolder&) = delete;
     ~CDialogHolder() override;
 
     // dialogs

@@ -485,7 +485,7 @@ public:
     void collect_placements()
     {
         Census& C = census();
-        u32 known = 0, oversize = 0;
+        u32 known = 0, oversize = 0, lying = 0;
         const float sbc = ps_r__Tree_SBC * 1.3333f;
         for (u32 ci = 0; ci < C.candidates.size(); ++ci)
         {
@@ -506,6 +506,12 @@ public:
             if (scale_y < g_data.min_scale || top > g_data.max_top[kind->cls])
             {
                 oversize += top > g_data.max_top[kind->cls] ? 1u : 0u;
+                continue;
+            }
+            // A model lying on the ground stays the stock dead wood: a grown bush would stand up on its root and sway.
+            if (first->lying())
+            {
+                ++lying;
                 continue;
             }
             // The static lighting the stock tree shader gives a vertex at mid height (hemi x H_MODELS).
@@ -554,8 +560,9 @@ public:
                 }
             }
         }
-        Msg("* [shrubs] %u FLODs of tree parts, %u stock bushes of the data (%u placements), %u kept stock (oversize)",
-            u32(C.candidates.size()), known - oversize, u32(placements.size()), oversize);
+        Msg("* [shrubs] %u FLODs of tree parts, %u stock bushes of the data (%u placements), %u kept stock (oversize), %u "
+            "kept stock (lying)",
+            u32(C.candidates.size()), known - oversize - lying, u32(placements.size()), oversize, lying);
     }
 
     // The placements' species: the community of the spot (the Red Forest's for the red stock, the grass under it, else

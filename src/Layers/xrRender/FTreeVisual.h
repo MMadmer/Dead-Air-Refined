@@ -45,7 +45,7 @@ struct FTreeVisualWind
     Fvector4 now; // state, frequency factor, root gust, root deviation
     Fvector4 previous; // the same as the previous frame drew with (motion vectors)
     float height; // tallest visual of the root above it
-    float gate; // 1: the root carries foliage, the wind moves it
+    float gate; // 1: the root carries foliage and stands (FTreeVisual::rigid false), the wind moves it
 };
 
 class FTreeVisual : public dxRender_Visual, public IRender_Mesh
@@ -90,8 +90,11 @@ public:
 
     // The vegetation-audio layer harvests tree world positions once per level load.
     const Fvector& root_position() const { return xform.c; }
-    // No foliage on this root - a stump, a log, a snag: the wind does not move it.
+    // No foliage on this root - a stump, a log, a snag - or it lies: the wind does not move it.
     bool rigid() const;
+    // The root lies on the ground (a felled tree, a log, a wood pile, a model laid on its side): dead wood, whatever
+    // foliage it carries, and no procedural plant stands in for it.
+    bool lying() const;
 
     // Read accessors for the GPU-driven registry and the ray tracing scene (gpudriven.md 3.2).
     const Fmatrix& world() const { return xform; }

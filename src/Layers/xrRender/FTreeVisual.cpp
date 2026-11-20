@@ -44,6 +44,14 @@ struct TreeWindShared
     // and the motors all belong to a plant, and a plant has leaves. A trunk_wave visual with
     // no leaf_wave sibling at its root is wood, and wood stands still.
     bool foliage{};
+    // A felled tree keeps its twigs, so leaves alone do not make a plant: the bend is a standing one and on a trunk along
+    // the ground it moves the whole length. The root's wood (trunk_wave boxes, world space) decides (tree_wind_lies).
+    Fbox wood{};
+    float root_y{};
+    bool toppled{};
+    bool lying{};
+
+    bool plant() const { return foliage && !lying; }
 };
 
 static xr_map<u64, TreeWindShared*> g_tree_wind_shared;
@@ -66,7 +74,21 @@ static u64 tree_wind_key(const Fvector& root)
     return q(root.x) | (q(root.y) << 21) | (q(root.z) << 42);
 }
 
-static TreeWindShared* tree_wind_shared_acquire(const Fvector& root, float top, bool foliage)
+// Wood of half a metre or more lies when the placement turns the model's up axis over 60 degrees off the vertical, when
+// it is under 0.4 as tall as its horizontal reach (the diagonal, the same at any yaw), or when over 0.35 of its height
+// hangs below the root. Thresholds from every stock level's placements; a root without wood never lies.
+static bool tree_wind_lies(const TreeWindShared& s)
+{
+    if (!s.wood.is_valid())
+        return false;
+    const Fvector size = Fvector().sub(s.wood.vMax, s.wood.vMin);
+    if (std::max({size.x, size.y, size.z}) < 0.5f)
+        return false;
+    const float reach = _sqrt(size.x * size.x + size.z * size.z);
+    return s.toppled || size.y < 0.4f * reach || s.root_y - s.wood.vMin.y > 0.35f * size.y;
+}
+
+static TreeWindShared* tree_wind_shared_acquire(const Fvector& root, float top, bool foliage, bool toppled, const Fbox* wood)
 {
     std::lock_guard lock(g_tree_wind_shared_lock);
     const u64 key = tree_wind_key(root);
@@ -75,10 +97,16 @@ static TreeWindShared* tree_wind_shared_acquire(const Fvector& root, float top, 
     {
         s = xr_new<TreeWindShared>();
         s->key = key;
+        s->wood.invalidate();
+        s->root_y = root.y;
     }
     ++s->refs;
     s->top = std::max(s->top, top);
     s->foliage |= foliage;
+    s->toppled |= toppled;
+    if (wood)
+        s->wood.merge(*wood);
+    s->lying = tree_wind_lies(*s);
     // Natural frequency from the real height, f = 1.0 / sqrt(H) Hz: a 15 m crown swings at
     // ~0.26 Hz, a 3 m bush at ~0.6 (the field regression sits a little above; this leans
     // toward the slower sway the trees had before they knew their height).
@@ -180,7 +208,9 @@ void FTreeVisual::Load(const char* N, IReader* data, u32 dwFlags)
         const ref_ps& ps = shader->E[0]->passes[0]->ps;
         foliage = ps && ps->cName.c_str() && strstr(ps->cName.c_str(), "_aref");
     }
-    m_shared = tree_wind_shared_acquire(xform.c, std::max(vis.box.vMax.y - xform.c.y, 1.f), foliage);
+    const bool toppled = xform.j.y < 0.5f * xform.j.magnitude();
+    m_shared = tree_wind_shared_acquire(
+        xform.c, std::max(vis.box.vMax.y - xform.c.y, 1.f), foliage, toppled, foliage ? nullptr : &vis.box);
 
     /*if (RImplementation.o.ffp && dcl_equal(vFormat, mu_model_decl_unpacked))
     {
@@ -304,10 +334,10 @@ Fvector4 FTreeVisual::tree_wind_row() const
     // w carries two things (decoded by da_tree_row_valid / da_tree_row_gate in the shaders):
     // 1 + gate for a visual on its own analytic field, 3 + gate when the shared root sample
     // is valid; 0 stays the older producers' "no state, full bend". The gate is the root's
-    // foliage: a stump or a log reads 0 and the wind passes it by.
+    // foliage on standing wood: a stump, a log or a felled tree reads 0 and the wind passes it by.
     if (!m_shared)
         return Fvector4{1.f, 0.f, 0.f, 2.f};
-    const float gate = m_shared->foliage ? 1.f : 0.f;
+    const float gate = m_shared->plant() ? 1.f : 0.f;
     const auto& s = *m_shared;
     // A quantized key can also join distinct nearby roots. Those visuals keep their own
     // analytic field instead of borrowing the other root's shader sample.
@@ -544,7 +574,9 @@ void FTreeVisual::Copy(dxRender_Visual* pSrc)
     PCOPY(c_bias);
 }
 
-bool FTreeVisual::rigid() const { return !m_shared || !m_shared->foliage; }
+bool FTreeVisual::rigid() const { return !m_shared || !m_shared->plant(); }
+
+bool FTreeVisual::lying() const { return m_shared && m_shared->lying; }
 
 FTreeVisualColors FTreeVisual::colors() const
 {
@@ -565,7 +597,7 @@ FTreeVisualWind FTreeVisual::wind_state() const
     wind.now.set(state.z, state.w, tree.y, tree.z);
     wind.previous = wind_prev_row();
     wind.height = tree.x;
-    wind.gate = m_shared && m_shared->foliage ? 1.f : 0.f;
+    wind.gate = m_shared && m_shared->plant() ? 1.f : 0.f;
     return wind;
 }
 

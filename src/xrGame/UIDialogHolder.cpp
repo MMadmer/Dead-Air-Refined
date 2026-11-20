@@ -1,6 +1,7 @@
 #include "StdAfx.h"
 #include "UIDialogHolder.h"
 #include "ui/UIDialogWnd.h"
+#include "ui/UIScriptWnd.h"
 #include "UIGameCustom.h"
 #include "xrUICore/Cursor/UICursor.h"
 #include "Level.h"
@@ -23,15 +24,118 @@ recvItem::recvItem(CUIDialogWnd* r)
 }
 bool operator==(const recvItem& i1, const recvItem& i2) { return i1.m_item == i2.m_item; }
 
+namespace
+{
+// Every holder alive, chained through m_next_holder. A dialog can sit in the lists of a holder it has no link to
+// (AddDialogToRender alone, a script's raw SetMainInputReceiver), so a dying dialog asks all of them. A plain pointer
+// so that windows freed by static destructors never meet a destroyed registry.
+CDialogHolder* g_first_holder = nullptr;
+} // namespace
+
 CDialogHolder::CDialogHolder()
 {
     m_b_in_update = false;
+    // AddDialogToRender takes any window, and a script's CUIStatic dies without a dialog's destructor.
+    if (!g_first_holder)
+        CUIWindow::SetDestroyHandler(&CDialogHolder::OnWindowDestroyed);
+    m_next_holder = g_first_holder;
+    g_first_holder = this;
     RegisterDebuggable();
 }
 
 CDialogHolder::~CDialogHolder()
 {
+    for (CDialogHolder** link = &g_first_holder; *link; link = &(*link)->m_next_holder)
+    {
+        if (*link == this)
+        {
+            *link = m_next_holder;
+            break;
+        }
+    }
+    if (!g_first_holder)
+        CUIWindow::SetDestroyHandler(nullptr);
+
+    xr_vector<CUIDialogWnd*> linked;
+    linked.swap(m_linked_dialogs);
+    for (CUIDialogWnd* dialog : linked)
+        dialog->SetHolder(nullptr);
+
     UnregisterDebuggable();
+}
+
+void CDialogHolder::OnDialogDestroyed(CUIDialogWnd* pDialog)
+{
+    for (CDialogHolder* holder = g_first_holder; holder; holder = holder->m_next_holder)
+        holder->ForgetDialog(pDialog);
+}
+
+void CDialogHolder::OnWindowDestroyed(CUIWindow* pWindow)
+{
+    for (CDialogHolder* holder = g_first_holder; holder; holder = holder->m_next_holder)
+        holder->ForgetWindow(pWindow);
+}
+
+// Runs inside the dialog's destructor, possibly while Lua is closing its state: nothing here calls into any window,
+// and the cursor is left to the next UpdateCursorVisibility.
+void CDialogHolder::ForgetDialog(CUIDialogWnd* pDialog)
+{
+    // The input stack hands over as StopMenu and SetMainInputReceiver do: the receiver above inherits the saved
+    // HUD state, the top one restores it.
+    for (size_t i = m_input_receivers.size(); i > 0; --i)
+    {
+        if (m_input_receivers[i - 1].m_item != pDialog)
+            continue;
+
+        const Flags8 saved = m_input_receivers[i - 1].m_flags;
+        if (i < m_input_receivers.size())
+        {
+            m_input_receivers[i].m_flags.set(recvItem::eCrosshair, saved.test(recvItem::eCrosshair));
+            m_input_receivers[i].m_flags.set(recvItem::eIndicators, saved.test(recvItem::eIndicators));
+        }
+        else if (UseIndicators())
+        {
+            psHUD_Flags.set(HUD_CROSSHAIR_RT, saved.test(recvItem::eCrosshair));
+            if (auto* game_ui = smart_cast<CUIGameCustom*>(this))
+                game_ui->ShowGameIndicators(saved.test(recvItem::eIndicators));
+        }
+        m_input_receivers.erase(m_input_receivers.begin() + (i - 1));
+    }
+
+    ForgetWindow(pDialog);
+}
+
+// OnFrame may be walking the render list (a Lua GC step inside a window's Update), so the entry is only emptied and
+// disabled; OnFrame drops disabled entries after its loop.
+void CDialogHolder::ForgetWindow(CUIWindow* pWindow)
+{
+    const auto forget = [pWindow](xr_vector<dlgItem>& dialogs)
+    {
+        for (dlgItem& item : dialogs)
+        {
+            if (item.wnd == pWindow)
+            {
+                item.wnd = nullptr;
+                item.enabled = false;
+            }
+        }
+    };
+    forget(m_dialogsToRender);
+    forget(m_dialogsToRender_new);
+}
+
+// The script windows still open leave the way a close takes them, top first, while their Lua state still runs.
+void CDialogHolder::StopScriptDialogs()
+{
+    for (size_t i = m_input_receivers.size(); i > 0; --i)
+    {
+        // a close may take more than one entry along
+        if (i > m_input_receivers.size())
+            continue;
+
+        if (auto* wnd = smart_cast<CUIDialogWndEx*>(m_input_receivers[i - 1].m_item))
+            wnd->HideDialog();
+    }
 }
 
 void CDialogHolder::StartMenu(CUIDialogWnd* pDialog, bool bDoHideIndicators)
@@ -810,8 +914,9 @@ bool CDialogHolder::FillDebugTree(const CUIDebugState& debugState)
     {
         if (ImGui::TreeNode(&m_input_receivers, "Input receivers: %zu", m_input_receivers.size()))
         {
-            for (const auto& item : m_input_receivers)
-                item.m_item->FillDebugTree(debugState);
+            // by index: a script window's tree walks its Lua table, and a GC step there may drop a receiver
+            for (size_t i = 0; i < m_input_receivers.size(); ++i)
+                m_input_receivers[i].m_item->FillDebugTree(debugState);
             ImGui::TreePop();
         }
     }
@@ -823,7 +928,10 @@ bool CDialogHolder::FillDebugTree(const CUIDebugState& debugState)
         if (ImGui::TreeNode(&m_dialogsToRender, "Dialogs to render: %zu", m_dialogsToRender.size()))
         {
             for (const auto& item : m_dialogsToRender)
-                item.wnd->FillDebugTree(debugState);
+            {
+                if (item.wnd)
+                    item.wnd->FillDebugTree(debugState);
+            }
             ImGui::TreePop();
         }
     }

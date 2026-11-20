@@ -230,7 +230,7 @@ void CRender::level_Load(IReader* fs)
     {
         auto& tree_out = g_pGamePersistent->Environment().wind_veg_trees;
         tree_out.clear();
-        u32 rigid = 0;
+        u32 rigid = 0, lying = 0;
         // -wvdbg: what the tree shader is bending, per level shader entry ("blender/texture"):
         // count, height, and whether the root carries foliage. The answer to "the stump sways"
         // starts with the blender a stump was built with.
@@ -245,6 +245,8 @@ void CRender::level_Load(IReader* fs)
                 tree_out.push_back(T->root_position());
                 if (T->rigid())
                     ++rigid;
+                if (T->lying())
+                    ++lying;
                 if (dump)
                 {
                     shared_str tex("?");
@@ -265,11 +267,12 @@ void CRender::level_Load(IReader* fs)
             }
         }
         // rigid = tree-shader visuals whose root carries no foliage (stumps, logs, snags, the
-        // trunk_wave odds and ends): the wind leaves them alone, which is worth a number in the
-        // log when someone says it does not.
-        Msg("* [wind-veg] %u tree positions published, %u rigid", u32(tree_out.size()), rigid);
+        // trunk_wave odds and ends) or lies (felled trees, wood piles, models laid on their side):
+        // the wind leaves them alone, which is worth a number in the log when someone says it
+        // does not. lying = the visuals on a lying root, foliage or not.
+        Msg("* [wind-veg] %u tree positions published, %u rigid, %u lying", u32(tree_out.size()), rigid, lying);
         for (const auto& [tex, k] : kinds)
-            Msg("* [wind-veg] tree kind [%s]: %u visual(s), %u with foliage at the root, height %.1f..%.1f m",
+            Msg("* [wind-veg] tree kind [%s]: %u visual(s), %u with foliage at a standing root, height %.1f..%.1f m",
                 tex.c_str(), k.count, k.foliage, k.h_min, k.h_max);
     }
 

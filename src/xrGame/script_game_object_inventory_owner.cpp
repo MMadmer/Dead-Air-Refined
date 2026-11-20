@@ -1842,7 +1842,8 @@ void CScriptGameObject::unregister_in_combat()
     stalker->agent_manager().member().unregister_in_combat(stalker);
 }
 
-CCoverPoint const* CScriptGameObject::find_best_cover(Fvector position_to_cover_from)
+// A pointer for the same reason as best_cover: a vector luabind no longer holds came in as a null reference.
+CCoverPoint const* CScriptGameObject::find_best_cover(const Fvector* position_to_cover_from)
 {
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&object());
     if (!stalker)
@@ -1851,8 +1852,20 @@ CCoverPoint const* CScriptGameObject::find_best_cover(Fvector position_to_cover_
             LuaMessageType::Error, "CAI_Stalker : cannot access class member find_best_cover!");
         return (0);
     }
+    if (!position_to_cover_from)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CAI_Stalker : find_best_cover without a position [%s]!", object().cName().c_str());
+        return (0);
+    }
+    if (!stalker->m_ce_best)
+    {
+        GEnv.ScriptEngine->script_log(
+            LuaMessageType::Error, "CAI_Stalker : find_best_cover on a destroyed object [%s]!", object().cName().c_str());
+        return (0);
+    }
 
-    return (stalker->find_best_cover(position_to_cover_from));
+    return (stalker->find_best_cover(*position_to_cover_from));
 }
 
 bool CScriptGameObject::suitable_smart_cover(CScriptGameObject* object)

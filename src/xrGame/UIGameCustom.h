@@ -4,6 +4,7 @@
 #include "inventory_space.h"
 #include "gametype_chooser.h"
 #include "UIDialogHolder.h"
+#include "xrCore/Events/Notifier.h"
 #include "xrEngine/CustomHUD.h"
 #include "script_game_object.h"
 #include "xrCommon/xr_string.h"
@@ -85,6 +86,7 @@ protected:
     CUIActorMenu* ActorMenu;
     CUIPdaWnd* PdaMenu;
     bool showGameIndicators;
+    CEventNotifierCallback::CID m_script_reset_cid;
 
 public:
     // XXX nitrocaster: make not public

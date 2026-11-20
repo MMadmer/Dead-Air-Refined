@@ -18,11 +18,14 @@ class XRUICORE_API CUIWindow : public CUIDebuggable
 {
 public:
     using PPModeHandler = void (*)(CUIWindow*, bool);
+    using DestroyHandler = void (*)(CUIWindow*);
 
     CUIWindow(pcstr window_name);
     ~CUIWindow() override;
 
     static void SetPPModeHandler(PPModeHandler handler);
+    // Called from every window's destructor: the game's dialog holders keep raw pointers to the windows they draw.
+    static void SetDestroyHandler(DestroyHandler handler);
     void SetPPMode();
     void ResetPPMode();
     bool GetPPMode() const { return m_bPP; }
@@ -443,6 +446,7 @@ protected:
 
 private:
     static PPModeHandler m_ppModeHandler;
+    static DestroyHandler m_destroyHandler;
     bool m_bPP{};
     bool m_shapeSkinDrawn{};
     std::unique_ptr<SUIShapeSkin> m_shapeSkin;

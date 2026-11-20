@@ -63,7 +63,9 @@ struct CSoundObject;
 struct CHitObject;
 };
 
-const CCoverPoint* CScriptGameObject::best_cover(const Fvector& position, const Fvector& enemy_position, float radius,
+// The positions come as pointers: a script may hand over a vector whose object luabind no longer holds, and a reference
+// to it was a null one (the 1.6.3 level-change crash in CCoverEvaluatorCloseToEnemy::setup). No position, no cover.
+const CCoverPoint* CScriptGameObject::best_cover(const Fvector* position, const Fvector* enemy_position, float radius,
     float min_enemy_distance, float max_enemy_distance)
 {
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&object());
@@ -80,20 +82,18 @@ const CCoverPoint* CScriptGameObject::best_cover(const Fvector& position, const 
             LuaMessageType::Error, "CGameObject : best_cover on a destroyed object [%s]!", object().cName().c_str());
         return (0);
     }
-    // The evaluators die in net_Destroy while a script planner may still hold the wrapper
-    // through a level change - the last scheduled think arrives after the object is gone.
-    if (!stalker->m_ce_best)
+    if (!position || !enemy_position)
     {
         GEnv.ScriptEngine->script_log(
-            LuaMessageType::Error, "CGameObject : best_cover on a destroyed object [%s]!", object().cName().c_str());
+            LuaMessageType::Error, "CGameObject : best_cover without a position [%s]!", object().cName().c_str());
         return (0);
     }
-    stalker->m_ce_best->setup(enemy_position, min_enemy_distance, max_enemy_distance, 0.f);
-    const CCoverPoint* point = ai().cover_manager().best_cover(position, radius, *stalker->m_ce_best);
+    stalker->m_ce_best->setup(*enemy_position, min_enemy_distance, max_enemy_distance, 0.f);
+    const CCoverPoint* point = ai().cover_manager().best_cover(*position, radius, *stalker->m_ce_best);
     return (point);
 }
 
-const CCoverPoint* CScriptGameObject::safe_cover(const Fvector& position, float radius, float min_distance)
+const CCoverPoint* CScriptGameObject::safe_cover(const Fvector* position, float radius, float min_distance)
 {
     CAI_Stalker* stalker = smart_cast<CAI_Stalker*>(&object());
     if (!stalker)
@@ -107,14 +107,14 @@ const CCoverPoint* CScriptGameObject::safe_cover(const Fvector& position, float 
             LuaMessageType::Error, "CGameObject : safe_cover on a destroyed object [%s]!", object().cName().c_str());
         return (0);
     }
-    if (!stalker->m_ce_safe)
+    if (!position)
     {
         GEnv.ScriptEngine->script_log(
-            LuaMessageType::Error, "CGameObject : safe_cover on a destroyed object [%s]!", object().cName().c_str());
+            LuaMessageType::Error, "CGameObject : safe_cover without a position [%s]!", object().cName().c_str());
         return (0);
     }
     stalker->m_ce_safe->setup(min_distance);
-    const CCoverPoint* point = ai().cover_manager().best_cover(position, radius, *stalker->m_ce_safe);
+    const CCoverPoint* point = ai().cover_manager().best_cover(*position, radius, *stalker->m_ce_safe);
     return (point);
 }
 

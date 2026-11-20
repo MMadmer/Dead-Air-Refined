@@ -15,6 +15,7 @@
 #include "Actor.h"
 #include "Inventory.h"
 #include "game_cl_base.h"
+#include "ai_space.h"
 
 #include "ui/UICellItem.h" //Alundaio
 //#include "script_game_object.h" //Alundaio
@@ -40,12 +41,25 @@ CUIGameCustom::CUIGameCustom()
     ShowCrosshair(true);
 
     InventoryUtilities::CreateShaders();
+
+    // A load on the same level keeps this UI and restarts the script engine, whose state owns the script windows.
+    class CScriptResetCb : public CEventNotifierCallbackWithCid
+    {
+        CUIGameCustom* m_game_ui;
+
+    public:
+        CScriptResetCb(CID cid, CUIGameCustom* game_ui) : CEventNotifierCallbackWithCid(cid), m_game_ui(game_ui) {}
+        void ProcessEvent() override { m_game_ui->StopScriptDialogs(); }
+    };
+
+    m_script_reset_cid = ai().template Subscribe<CScriptResetCb>(CAI_Space::EVENT_SCRIPT_ENGINE_RESET, this);
 }
 
 bool g_b_ClearGameCaptions = false;
 
 CUIGameCustom::~CUIGameCustom()
 {
+    ai().Unsubscribe(m_script_reset_cid, CAI_Space::EVENT_SCRIPT_ENGINE_RESET);
     InventoryUtilities::DestroyShaders();
 
     delete_data(CustomStatics);

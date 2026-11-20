@@ -979,13 +979,17 @@ void CUIActorMenu::OnInventoryToolClicked(CUIWindow* w, void* d)
 bool CUIActorMenu::CellPassesItemFilter(CUICellItem* itm)
 {
     const PIItem item = static_cast<PIItem>(itm->m_pData);
-    return !item || inventory_tools::classify(*item) == m_item_filter;
+    if (!item)
+        return true;
+    // A cell may outlive its item until the next PruneDeadCells (a sort merging stacks, a filter clicked in the same frame).
+    return CInventoryItem::IsAlive(item) && inventory_tools::classify(*item) == m_item_filter;
 }
 
 void CUIActorMenu::SetItemFilter(EItemCategory category)
 {
     if (category >= EItemCategory::Count)
         category = EItemCategory::All;
+    PruneDeadCells();
     m_item_filter = category;
 
     // A selection that stays on screen stays selected (the upgrade target among them); only a
@@ -1018,6 +1022,8 @@ bool CUIActorMenu::SortInventoryPane(EInventoryPane pane)
     {
         return false;
     }
+    // The sort reads every cell's item, the ones the filter hides too.
+    PruneDeadCells();
 
     // New stacks are created in the inventory the pane shows. A box or a body the player may not
     // take from is left as it is.

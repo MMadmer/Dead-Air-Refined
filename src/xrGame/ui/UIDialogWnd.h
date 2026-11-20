@@ -22,7 +22,7 @@ public:
     bool OnControllerAction(int axis, const ControllerAxisState& state, EUIMessages controller_action) override;
 
     CDialogHolder* GetHolder() const { return m_pParentHolder; }
-    void SetHolder(CDialogHolder* h) { m_pParentHolder = h; }
+    void SetHolder(CDialogHolder* h);
 
     virtual bool StopAnyMove() { return true; }
     // Every press, hold, wheel and look is the window's: the game's scripts, the game and the actor get none while it

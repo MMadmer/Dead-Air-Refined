@@ -1455,7 +1455,7 @@ public:
     void collect_placements()
     {
         Census& C = census();
-        u32 known = 0, stock = 0, no_skel = 0, tiny = 0;
+        u32 known = 0, stock = 0, lying = 0, no_skel = 0, tiny = 0;
         const float sbc = ps_r__Tree_SBC * 1.3333f;
         for (u32 ci = 0; ci < C.candidates.size(); ++ci)
         {
@@ -1474,6 +1474,12 @@ public:
             }
             if (kind_pin && key != kind_pin)
                 continue;
+            // A tree lying on the ground stays the stock dead wood: a grown one would stand on its transform and sway.
+            if (C.parts[c.parts[0]].visual->lying())
+            {
+                ++lying;
+                continue;
+            }
             Skel* S = k.skel.size() ? skeleton(k.skel) : nullptr;
             if (!S)
             {
@@ -1524,9 +1530,9 @@ public:
                                                        : std::clamp((g_data.young_h[1] - P.top) / (g_data.young_h[1] - g_data.young_h[0]), 0.f, 1.f);
             placements.push_back(P);
         }
-        Msg("* [trees] %u FLODs of tree parts, %u stock trees of the data: %u placements, %u kept stock by class, %u without a "
-            "skeleton, %u too small",
-            u32(C.candidates.size()), known, u32(placements.size()), stock, no_skel, tiny);
+        Msg("* [trees] %u FLODs of tree parts, %u stock trees of the data: %u placements, %u kept stock by class, %u lying, "
+            "%u without a skeleton, %u too small",
+            u32(C.candidates.size()), known, u32(placements.size()), stock, lying, no_skel, tiny);
     }
 
     // The placements' species: the kind's own, else its community's (the Red Forest's for the red stock, else the grass

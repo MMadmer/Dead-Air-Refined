@@ -7,6 +7,7 @@
 #include "xrEngine/editor_helper.h"
 
 CUIWindow::PPModeHandler CUIWindow::m_ppModeHandler{};
+CUIWindow::DestroyHandler CUIWindow::m_destroyHandler{};
 
 CUIWindow::CUIWindow(pcstr window_name) : m_windowName(window_name)
 {
@@ -16,6 +17,8 @@ CUIWindow::CUIWindow(pcstr window_name) : m_windowName(window_name)
 
 CUIWindow::~CUIWindow()
 {
+    if (m_destroyHandler)
+        m_destroyHandler(this);
     ResetPPMode();
 
     // Both directions of the message-target link die with this window: whoever
@@ -60,6 +63,8 @@ void CUIWindow::SetPPModeHandler(PPModeHandler handler)
 {
     m_ppModeHandler = handler;
 }
+
+void CUIWindow::SetDestroyHandler(DestroyHandler handler) { m_destroyHandler = handler; }
 
 void CUIWindow::SetPPMode()
 {

@@ -838,7 +838,8 @@ CUICellItem* CUICellContainer::FindSimilar(CUICellItem* itm)
 #endif
         //Alundaio: Don't stack equipped items
         PIItem iitem = (PIItem)i->m_pData;
-        if (iitem && !iitem->CanStack())
+        // A cell may outlive its item until the menu prunes it.
+        if (iitem && (!CInventoryItem::IsAlive(iitem) || !iitem->CanStack()))
             continue;
 
         if (iitem && iitem->m_pInventory)

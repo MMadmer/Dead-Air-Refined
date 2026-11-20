@@ -601,9 +601,9 @@ public:
     void enable_memory_object(CScriptGameObject* object, bool enable);
     int active_sound_count();
     int active_sound_count(bool only_playing);
-    const CCoverPoint* best_cover(const Fvector& position, const Fvector& enemy_position, float radius,
+    const CCoverPoint* best_cover(const Fvector* position, const Fvector* enemy_position, float radius,
         float min_enemy_distance, float max_enemy_distance);
-    const CCoverPoint* safe_cover(const Fvector& position, float radius, float min_distance);
+    const CCoverPoint* safe_cover(const Fvector* position, float radius, float min_distance);
     CScriptIniFile* spawn_ini() const;
     bool active_zone_contact(u16 id);
 
@@ -776,7 +776,7 @@ public:
 
     void register_in_combat();
     void unregister_in_combat();
-    CCoverPoint const* find_best_cover(Fvector position_to_cover_from);
+    CCoverPoint const* find_best_cover(const Fvector* position_to_cover_from);
 
     // approved by Dima smart covers functions
     bool use_smart_covers_only() const;

@@ -8,7 +8,33 @@ CUIDialogWnd::CUIDialogWnd(pcstr window_name) : CUIWindow(window_name)
     m_bShowMe = false;
 }
 
-CUIDialogWnd::~CUIDialogWnd() {}
+CUIDialogWnd::~CUIDialogWnd()
+{
+    // A window may die while a holder still lists it: Lua frees script windows at its GC and at the script engine
+    // restart of a load, shown or not, and a holder kept the freed pointer for its next frame.
+    SetHolder(nullptr);
+    CDialogHolder::OnDialogDestroyed(this);
+}
+
+void CUIDialogWnd::SetHolder(CDialogHolder* h)
+{
+    if (m_pParentHolder == h)
+        return;
+
+    if (m_pParentHolder)
+    {
+        auto& linked = m_pParentHolder->m_linked_dialogs;
+        const auto it = std::find(linked.begin(), linked.end(), this);
+        if (it != linked.end())
+            linked.erase(it);
+    }
+
+    m_pParentHolder = h;
+
+    if (h)
+        h->m_linked_dialogs.push_back(this);
+}
+
 void CUIDialogWnd::Show(bool status)
 {
     inherited::Show(status);
