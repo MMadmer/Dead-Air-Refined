@@ -1,0 +1,10 @@
+-- A character of this module. The game reads this file as it is - see docs/MOD_QUICKSTART.md.
+return {
+	npc       = 1,
+	id        = "newcharacter",
+	name      = "New character",
+	community = "stalker",
+	visual    = "actors\\stalker_neutral\\stalker_neutral_1",
+	icon      = "ui_inGame2_neutral_2",
+	rank      = 300,
+}

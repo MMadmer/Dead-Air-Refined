@@ -1,0 +1,12 @@
+-- A new item of this module. It starts from an item of the game (`base`) and says what is
+-- different; `edit = "<section>"` instead of `base` changes an item that exists.
+-- `Grizzly-Cmd.exe reference item` lists every key, the linked game's catalog what each means.
+return {
+  item = 1,
+  -- the section in the game is "<module>_newitem"; `section = "..."` names it
+  base = "bread",
+  -- a plain string is the Russian text; { rus = "...", eng = "..." } gives every language
+  name = "New item",
+  description = "What the player reads about it.",
+  set = { cost = 100, inv_weight = 0.3 },
+}

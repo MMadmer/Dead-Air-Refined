@@ -1,0 +1,3 @@
+Built by Grizzly Editor 0.7.0 on 2026-11-20 from its own templates:
+one asset of every kind (quest, behaviour, character, pda, item, trader, loot, recipes, model, texture, sound).
+Frozen: never rebuilt, never edited. Every later game loads it (Run-OldModulesQa.ps1).

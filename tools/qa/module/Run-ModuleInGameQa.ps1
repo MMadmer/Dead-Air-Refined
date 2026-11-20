@@ -83,8 +83,14 @@ if (($work + '\').StartsWith($GameRoot.TrimEnd('\') + '\', [StringComparison]::O
 $cp1251 = [Text.Encoding]::GetEncoding(1251)
 $utf8 = [Text.UTF8Encoding]::new($false)
 $moduleId = ''
+# the mode a new game starts in for this module: the one it targets or brings, none for the ordinary game
+$moduleMode = ''
+$section = ''
 foreach ($line in [IO.File]::ReadAllLines((Join-Path $Module 'mod.ltx'), $cp1251)) {
-    if ($line -match '^\s*id\s*=\s*([a-z0-9_]+)') { $moduleId = $Matches[1]; break }
+    if ($line -match '^\s*\[([^\]]+)\]') { $section = $Matches[1].Trim(); continue }
+    if ($section -eq 'module' -and -not $moduleId -and $line -match '^\s*id\s*=\s*([a-z0-9_]+)') { $moduleId = $Matches[1] }
+    if ($section -eq 'module' -and $line -match '^\s*mode\s*=\s*([A-Za-z0-9_.-]+)') { $moduleMode = $Matches[1] }
+    if ($section -eq 'provides_mode' -and -not $moduleMode -and $line -match '^\s*id\s*=\s*([A-Za-z0-9_.-]+)') { $moduleMode = $Matches[1] }
 }
 if (-not $moduleId) { throw "mod.ltx of $Module names no id" }
 Write-Host "== module: $moduleId ($Module)"
@@ -177,10 +183,12 @@ function Set-UserLtx {
 function Set-NewGame {
     $options = Join-Path $qaGameData 'configs\axr_options.ltx'
     $lines = if (Test-Path -LiteralPath $options) { @([IO.File]::ReadAllLines($options, $cp1251)) } else { @('[character_creation]') }
-    $lines = @($lines | Where-Object { $_ -notmatch '^\s*new_game_faction(_position)?\s*=' })
+    # the installed game's own choice of modes is the player's: a new game here starts in the module's mode alone
+    $lines = @($lines | Where-Object { $_ -notmatch '^\s*new_game_faction(_position)?\s*=' -and $_ -notmatch '^\s*new_game_.+_mode\s*=' })
     $at = [array]::IndexOf($lines, ($lines | Where-Object { $_ -match '^\[character_creation\]' } | Select-Object -First 1))
     if ($at -lt 0) { $lines = @('[character_creation]') + $lines; $at = 0 }
     $start = @('new_game_faction = stalker', 'new_game_faction_position = _rookie_village')
+    if ($moduleMode) { $start += "new_game_$($moduleMode)_mode = true" }
     $lines = $lines[0..$at] + $start + $(if ($at + 1 -lt $lines.Count) { $lines[($at + 1)..($lines.Count - 1)] } else { @() })
     # a root without loose game files (-PackedCompat) has no configs folder yet: the game makes this file there too
     New-Item -ItemType Directory -Path (Split-Path -Parent $options) -Force | Out-Null

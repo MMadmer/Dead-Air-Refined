@@ -33,6 +33,13 @@
             <pushed fill="#E8E6E026" line="#E8E6E0B3" text="#ECE9E2FF"/>
             <checked fill="#00000000" line="#7FB069B3" text="#7FB069FF"/>
         </protect>
+        <versions x="484" y="52" width="222" height="24" icon="cross" icon_size="11">
+            <text font="letterica16" align="l" vert_align="c" r="236" g="233" b="226" x="26">st_mods_versions_off</text>
+            <normal fill="#00000000" line="#E8E6E04D" border="1" radius="2" text="#9A968CFF"/>
+            <highlight fill="#E8E6E014" line="#E8E6E0B3" text="#ECE9E2FF"/>
+            <pushed fill="#E8E6E026" line="#E8E6E0B3" text="#ECE9E2FF"/>
+            <checked fill="#00000000" line="#D9A441B3" text="#D9A441FF"/>
+        </versions>
         <separator x="60" y="94" width="904" height="1" fill="#E8E6E033"/>
         <summary x="60" y="108" width="904" height="88">
             <text x="0" y="4" width="704" height="26">

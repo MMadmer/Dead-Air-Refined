@@ -18,6 +18,12 @@
     <string id="st_mods_protect_off">
         <text>Protected mode: off</text>
     </string>
+    <string id="st_mods_versions_on">
+        <text>Other game versions: on</text>
+    </string>
+    <string id="st_mods_versions_off">
+        <text>Other game versions: off</text>
+    </string>
     <string id="st_mods_summary">
         <text>Installed mods: %u</text>
     </string>
@@ -207,11 +213,14 @@
     <string id="st_mods_status_available">
         <text>Version %s is available, about %s to download</text>
     </string>
+    <string id="st_mods_status_available_other">
+        <text>Version %s is available, about %s to download. It is made for Dead Air: Refined %s and may not work on this one</text>
+    </string>
     <string id="st_mods_status_reissue">
         <text>The author has fixed version %s, about %s to download</text>
     </string>
     <string id="st_mods_status_blocked">
-        <text>Version %s requires Dead Air: Refined %s</text>
+        <text>Version %s requires Dead Air: Refined %s. Turn on Other game versions above to install it all the same</text>
     </string>
     <string id="st_mods_status_blocked_schema">
         <text>A newer game version is required to update</text>

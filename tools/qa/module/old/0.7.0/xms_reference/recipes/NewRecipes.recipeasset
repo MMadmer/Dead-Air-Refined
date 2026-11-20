@@ -1,0 +1,8 @@
+-- Recipes: what is made (`makes`), at which tool or workbench (`at`), from one to four parts.
+-- `Grizzly-Cmd.exe reference recipes` lists every key.
+return {
+  recipe = 1,
+  recipes = {
+    { makes = "bread", count = 1, at = "itm_repairkit_tier_1", parts = { "jar", "rope" } },
+  },
+}

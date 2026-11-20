@@ -1782,8 +1782,13 @@ void CRender::LoadPieces()
                 else if (r.key == "mode")
                     gated = !r.value.empty() && !XMS::ModeActive(r.value.c_str());
             }
-            if (version != int(piece_format_version))
-                piece_fail(problem, "piece.ltx is of version %d, the game reads %u", version, piece_format_version);
+            // every version up to the game's reads (a step per version after it, none yet): only the
+            // future is refused, by name
+            if (version > int(piece_format_version))
+                piece_fail(problem, "piece.ltx is made for a newer game (version %d, this game reads up to %u)", version,
+                    piece_format_version);
+            else if (version < 1)
+                piece_fail(problem, "piece.ltx says no version");
             else if (!box_ok)
                 problem.assign("piece.ltx has no valid box");
             else if (piece->sector < -1)

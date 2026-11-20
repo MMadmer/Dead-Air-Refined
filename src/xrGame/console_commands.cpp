@@ -102,6 +102,7 @@ extern float air_resistance_epsilon;
 
 // ui/UpdateService.cpp - the major-release notice switch.
 extern int g_dar_major_update_notice;
+extern int g_mods_any_game_version;
 extern int g_dar_community_links;
 // ui/UIDamageIndicator.cpp - the side a hit came from, round the crosshair
 extern int g_dar_damage_indicator;
@@ -4053,6 +4054,7 @@ void CCC_RegisterCommands()
     // name (CConsole::GetBool accepts CCC_Integer) and user.ltx keeps it across launches.
     // Updates within the installed major line are not gated on anything.
     CMD4(CCC_Integer, "dar_major_update_notice", &g_dar_major_update_notice, 0, 1);
+    CMD4(CCC_Integer, "mods_any_game_version", &g_mods_any_game_version, 0, 1);
     // the community panel of the main menu and the pause menu (ui/UICommunityPanel)
     CMD4(CCC_Integer, "dar_community_links", &g_dar_community_links, 0, 1);
     CMD4(CCC_Integer, "dar_damage_indicator", &g_dar_damage_indicator, 0, 1);

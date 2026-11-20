@@ -773,7 +773,10 @@ lights, environment modifiers, fog volumes and sound environments. A level of a 
 same file for what a level's own files do not carry: glows, sound environments and spot lights. The
 engine says the ability as `level-things`.
 
-The file is blocks of `[kind:name]` with `key = value` lines; `;` starts a comment. Numbers are
+The file is blocks of `[kind:name]` with `key = value` lines; `;` starts a comment. Its own block
+`[things]` says `version` (1; a file without it is version 1): a file of a newer version is refused
+whole with one log line naming both versions, and an older one goes through the steps of the versions
+after it, so a module made for any earlier game keeps its things. Numbers are
 separated by commas; positions are metres, angles radians. A block that does not read is left out
 with one log line, and so is the rest of a file past 4096 things - the cap is each file's own, a
 module never takes the room of another's; a block keeps its first 32 lines; a file larger than 4 MB

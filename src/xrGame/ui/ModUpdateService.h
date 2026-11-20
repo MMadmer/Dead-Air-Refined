@@ -36,8 +36,9 @@ struct ModuleStatus
     // took it down and published it again. The same update, told to the player in other words -
     // "1.0.0 is available" over an installed 1.0.0 reads like a fault.
     bool reissue{};
-    // Blocked only: the game version the release asks for. Empty when it is the descriptor
-    // schema this build cannot read, which no version number on our side can express.
+    // The game version a release asks for when this game is older: Blocked, or Available when
+    // the player takes releases made for other game versions (AnyGameVersion). Empty for a
+    // descriptor schema this build cannot read, which no version number on our side can express.
     xr_string requiresGame;
     // log-grade reason behind CheckFailed and Failed
     xr_string message;
@@ -60,6 +61,15 @@ struct Snapshot
     // the queue ran dry with at least one module staged and the player has not been asked yet
     bool restartPrompt{};
 };
+
+// The player's word (Mods > Other game versions, `mods_any_game_version`, off by default): a
+// release that asks for a newer game than this one is installed and updated all the same - it
+// may not work, and the Mods menu says so. A descriptor schema this build cannot read stays out:
+// nothing of it can be read. Setting it saves the player's settings and checks again.
+bool AnyGameVersion();
+void SetAnyGameVersion(bool on);
+// The modules whose release was judged by the game version it asks for are checked again.
+void RecheckGameVersions();
 
 // Once per process from the main menu, and again from the Mods window: a pass only touches
 // modules that were never checked or whose last check failed.

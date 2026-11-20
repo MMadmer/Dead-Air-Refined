@@ -25,6 +25,9 @@ constexpr size_t max_name = 260;
 // a volume of fog is a simulation of its own: a level holds a handful
 constexpr size_t max_fogs = 16;
 constexpr size_t max_occluders = 16;
+// `[things] version`: a file without it is version 1. A newer file is refused whole, by name; an
+// older one goes through the steps of the versions after it (none yet: 1 is the only one).
+constexpr int things_version = 1;
 
 struct Block
 {
@@ -409,10 +412,29 @@ void read_file(const Module& m, pcstr level, const xr_string& path, LevelThings&
             u32(max_things));
         blocks.resize(max_things);
     }
+    // the file's own block: its version, never a thing
+    int version = 1;
+    for (const Block& b : blocks)
+        if (b.kind == "things" && b.name.empty())
+            if (pcstr v = b.value("version"))
+                version = atoi(v);
+    if (version > things_version)
+    {
+        Msg("! [level things] %s: made for a newer game (version %d, this game reads up to %d), refused", path.c_str(),
+            version, things_version);
+        return;
+    }
+    if (version < 1)
+    {
+        Msg("! [level things] %s: [things] says no version, refused", path.c_str());
+        return;
+    }
     size_t taken = 0;
     const size_t fogs_before = out.fogs.size();
     for (const Block& b : blocks)
     {
+        if (b.kind == "things" && b.name.empty())
+            continue;
         if (pcstr why = read_block(b, out, fogs_before))
             Msg("! [level things] %s: [%s:%s] %s, left out", path.c_str(), b.kind.c_str(), b.name.c_str(), why);
         else

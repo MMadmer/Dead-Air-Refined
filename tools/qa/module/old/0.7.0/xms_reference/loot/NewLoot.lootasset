@@ -1,0 +1,8 @@
+-- What the dead carry: an item, how many, and the chance - for everybody (`chance`) and for a
+-- community or a community and a rank (`by`). `Grizzly-Cmd.exe reference loot` lists every key.
+return {
+  loot = 1,
+  drops = {
+    { item = "bread", count = { 0, 1 }, chance = 0.05, by = { bandit = 0.1 } },
+  },
+}

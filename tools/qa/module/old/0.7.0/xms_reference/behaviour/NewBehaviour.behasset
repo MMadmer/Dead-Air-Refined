@@ -1,0 +1,11 @@
+return {
+  beh = 1,
+  id = "newbehaviour",
+  title = "New behaviour",
+  roles = { squad = { title = "Squad", many = true } },
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "finish" } },
+
+    { id = "finish", kind = "flow.end", params = { status = "completed" } },
+  },
+}

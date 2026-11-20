@@ -1,0 +1,5 @@
+-- A texture: put its picture beside this file.
+return {
+  tex = 1,
+  source = "NewTexture.png",
+}

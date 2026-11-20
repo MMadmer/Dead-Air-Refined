@@ -15,6 +15,22 @@
 #include "xrCore/XMS/xms_core.h"
 #include "xrEngine/XR_IOConsole.h"
 
+// the player's word: releases made for a newer game are taken all the same (`mods_any_game_version`)
+int g_mods_any_game_version = 0;
+
+bool ModUpdateService::AnyGameVersion() { return g_mods_any_game_version != 0; }
+
+void ModUpdateService::SetAnyGameVersion(bool on)
+{
+    if ((g_mods_any_game_version != 0) == on)
+        return;
+    g_mods_any_game_version = on ? 1 : 0;
+    Console->Execute("cfg_save");
+    Msg("* [mods] releases made for other game versions: %s", on ? "taken" : "refused");
+    // what was blocked or available is judged again
+    RecheckGameVersions();
+}
+
 #ifdef XR_PLATFORM_WINDOWS
 #include <shellapi.h>
 #include <winhttp.h>
@@ -485,12 +501,18 @@ bool mod_reissued(ModHttpSession& session, size_t moduleIndex, const XMS::Module
     return compared == ModCompare::Differs;
 }
 
-// a release this build cannot read, or one that asks for a newer game
+// a release that asks for a newer game than this one
+bool mod_needs_newer_game(const ModRelease::Descriptor& descriptor)
+{
+    return !descriptor.requiresGame.empty() &&
+        ModRelease::ParseVersion(descriptor.requiresGame) > ModRelease::ParseVersion(DeadAirRefined::Version);
+}
+
+// a release this build cannot read, or one that asks for a newer game the player did not take
 bool mod_release_blocked(const ModRelease::Descriptor& descriptor)
 {
     return descriptor.schema > ModRelease::SupportedSchema ||
-        (!descriptor.requiresGame.empty() &&
-            ModRelease::ParseVersion(descriptor.requiresGame) > ModRelease::ParseVersion(DeadAirRefined::Version));
+        (mod_needs_newer_game(descriptor) && !ModUpdateService::AnyGameVersion());
 }
 
 // Turns a descriptor into the state the Mods menu shows. True when the release can be taken.
@@ -502,8 +524,9 @@ bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRele
     reissue = reissue && !ahead;
     const bool newer = ahead || reissue;
     const bool unreadable = descriptor.schema > ModRelease::SupportedSchema;
-    const bool gameTooOld = !unreadable && !descriptor.requiresGame.empty() &&
-        ModRelease::ParseVersion(descriptor.requiresGame) > ModRelease::ParseVersion(DeadAirRefined::Version);
+    const bool gameTooOld = !unreadable && mod_needs_newer_game(descriptor);
+    // the player takes releases made for other game versions: said, not refused
+    const bool refused = gameTooOld && !ModUpdateService::AnyGameVersion();
 
     mod_set_status(index, [&](ModuleStatus& status)
     {
@@ -513,9 +536,9 @@ bool mod_evaluate(size_t index, const xr_string& installedVersion, const ModRele
         status.requiresGame = newer && gameTooOld ? descriptor.requiresGame : xr_string();
         status.totalBytes = newer && !unreadable ? downloadBytes : 0;
         status.downloadedBytes = 0;
-        status.state = !newer ? State::Current : (unreadable || gameTooOld) ? State::Blocked : State::Available;
+        status.state = !newer ? State::Current : (unreadable || refused) ? State::Blocked : State::Available;
     });
-    return newer && !unreadable && !gameTooOld;
+    return newer && !unreadable && !refused;
 }
 
 // ---- the mod catalog (docs/dead-air/MOD_CATALOG.md) -----------------------------------------
@@ -996,8 +1019,10 @@ void mod_run_install(ModHttpSession& session, const xr_string& id)
         return;
     }
     const bool unreadable = descriptor.schema > ModRelease::SupportedSchema;
-    if (unreadable || (!descriptor.requiresGame.empty() &&
-            ModRelease::ParseVersion(descriptor.requiresGame) > ModRelease::ParseVersion(DeadAirRefined::Version)))
+    if (mod_needs_newer_game(descriptor) && !unreadable && ModUpdateService::AnyGameVersion())
+        Msg("~ [mods] %s %s asks for Dead Air: Refined %s and is installed all the same: the player takes other game versions",
+            id.c_str(), descriptor.version.c_str(), descriptor.requiresGame.c_str());
+    if (mod_release_blocked(descriptor))
     {
         mod_set_status(ModInstallSlot, [&](ModuleStatus& status)
         {
@@ -1824,6 +1849,27 @@ void ModUpdateService::StartCheck()
     mod_wake_worker(service);
 }
 
+void ModUpdateService::RecheckGameVersions()
+{
+    ModService& service = mod_service();
+    std::lock_guard lock(service.mutex);
+    mod_initialize(service);
+    bool any = false;
+    for (ModuleStatus& status : service.modules)
+    {
+        const bool judged = status.state == State::Blocked || (status.state == State::Available && !status.requiresGame.empty());
+        if (!judged || (status.state == State::Blocked && status.requiresGame.empty()))
+            continue;
+        status.state = State::Unchecked;
+        status.requiresGame.clear();
+        any = true;
+    }
+    if (!any)
+        return;
+    service.checkRequested = true;
+    mod_wake_worker(service);
+}
+
 bool ModUpdateService::StartUpdate(pcstr moduleId)
 {
     ModService& service = mod_service();
@@ -2039,6 +2085,7 @@ void ModUpdateService::Shutdown()
 }
 #else
 void ModUpdateService::StartCheck() {}
+void ModUpdateService::RecheckGameVersions() {}
 void ModUpdateService::CatalogRefreshed() {}
 bool ModUpdateService::StartUpdate(pcstr) { return false; }
 u32 ModUpdateService::StartUpdateAll() { return 0; }

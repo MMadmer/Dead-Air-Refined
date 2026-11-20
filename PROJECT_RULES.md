@@ -91,7 +91,13 @@ the process described here.
   already shipped is neither changed nor removed. A mod built by an earlier authoring tool
   version must keep working after any game update — this is the condition of
   the two projects' independent evolution and is not negotiable within
-  optimizations or refactorings.
+  optimizations or refactorings. It is proven, not promised: `tools/qa/module/old`
+  holds modules as released tools built them - frozen, never rebuilt or edited,
+  each tool release adding its own reference module (one asset of every kind) -
+  and `tools/qa/module/Run-OldModulesQa.ps1` loads every one into a new game. A
+  change that touches what a module ships runs it before it is deployed, and a
+  format a module ships is read at every version up to the game's: a newer one is
+  refused by name, an older one goes through its steps.
 - Savegames must not be overwritten, deleted, or included in a managed
   installer/update payload. Any format migration requires a separate explicit
   decision and a reversible plan.

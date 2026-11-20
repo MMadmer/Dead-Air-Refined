@@ -1109,6 +1109,12 @@ try {
     Assert-That 'update for a deleted module is discarded' ($log -match 'module \[qa\.nosource\] is no longer installed' -and
         -not (Test-Path -LiteralPath (Join-Path $qaModules 'qa.nosource')))
     Assert-That 'staging folder is gone after recovery' (-not (Test-Path -LiteralPath $qaStaged))
+
+    # ---- Other game versions: the player's word takes a release made for a newer game
+    $log = Invoke-Engine -Phase 'versions' -Commands @('mods_any_game_version 1', 'xms_update qa.blocked') -WaitFor @(
+        '\[mods\] qa\.blocked: 3\.0\.0 staged')
+    Assert-That 'with other game versions taken, a release for a newer game is staged' ($log -match
+        '\[mods\] qa\.blocked: 3\.0\.0 staged')
 }
 finally {
     if ($mockProcess -and -not $mockProcess.HasExited) { Stop-Process -Id $mockProcess.Id -Force -ErrorAction SilentlyContinue }

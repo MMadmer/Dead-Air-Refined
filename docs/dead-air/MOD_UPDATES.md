@@ -288,10 +288,18 @@ Per module the client fetches the descriptor and compares:
 |---|---|
 | HTTP 404 | no release |
 | descriptor invalid, id mismatch | check failed |
-| `schema` above 1, or `requires_game` above the running game | blocked |
+| `schema` above 1 | blocked |
+| `requires_game` above the running game | blocked; available, said as made for that game, when the player takes other game versions |
 | `version` above the installed one | available |
 | `version` equal to the installed one, content differs | available, as a fix |
 | otherwise | current |
+
+**Other game versions** is the player's word, off unless they turn it on (the Mods window's header,
+the console's `mods_any_game_version 1`, kept in the player's settings): a release whose
+`requires_game` is above the running game is then installed and updated all the same - from the
+Mod Browser too - and the Mods window says it is made for that game and may not work on this one.
+A descriptor of a `schema` this game cannot read stays blocked whatever the player says: nothing of
+it can be read. Turning it on or off judges again every module that waited for it.
 
 For an available update the client also fetches the index and tells the player
 how much there is to download: the packed size of every file the installed

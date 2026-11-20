@@ -1,0 +1,42 @@
+-- The PDA interface of this module: what the PDA shows instead of its stock tabs.
+-- Pick it in Mod > PDA Interface (or mod.set set={"pda":{"layout":...}}). Format: docs/pda/PDA_FORMAT.md.
+return {
+  pda = 1,
+  id = "new_pda",
+  title = "New PDA",
+  start = "home",
+  keys = { map = "map" },
+
+  colors = { bg = "#101114", bar = "#18191E", card = "#1F2128", line = "#2E323C",
+             accent = "#FFD21E", text = "#F4F4F6", muted = "#9AA0AB" },
+
+  styles = {
+    tab = { kind = "button", color = "none", hover = "#FFFFFF0D", text_color = "muted",
+            text_selected = "accent", icon_color = "muted", icon_selected = "accent",
+            font = "letterica16", align = "center", valign = "bottom", icon_size = 26 },
+  },
+
+  chrome = {
+    { kind = "rect", x = 0, y = 0, w = 960, h = 680, color = "bg" },
+    { kind = "rect", x = 0, y = 0, w = 960, h = 64, color = "bar" },
+    { kind = "text", x = 24, y = 0, w = 600, h = 64, text = "{title}", font = "letterica25", color = "text" },
+    { kind = "text", x = 800, y = 0, w = 136, h = 64, text = "{time}", color = "muted", align = "right" },
+    { kind = "rect", x = 0, y = 604, w = 960, h = 76, color = "bar" },
+    { style = "tab", x = 0, y = 604, w = 320, h = 76, text = "Home", icon = "ui_xms_icon_home", page = "home" },
+    { style = "tab", x = 320, y = 604, w = 320, h = 76, text = "Map", icon = "ui_xms_icon_map", page = "map" },
+    { style = "tab", x = 640, y = 604, w = 320, h = 76, text = "Journal", icon = "ui_xms_icon_list", page = "journal" },
+  },
+
+  pages = {
+    { id = "home", title = "Home", widgets = {
+      { kind = "group", x = 24, y = 88, w = 912, h = 160, radius = 18, color = "card", widgets = {
+        { kind = "text", x = 24, y = 20, w = 860, h = 34, text = "Hello, {actor}", font = "letterica25", color = "text" },
+        { kind = "text", x = 24, y = 60, w = 860, h = 80, text = "Your screens go here.", color = "muted", valign = "top", wrap = true },
+      } },
+    } },
+    { id = "map", title = "Map", widgets = {
+      { kind = "map", x = 16, y = 80, w = 928, h = 508, color = "#0B0C0F" },
+    } },
+    { id = "journal", title = "Journal", stock = "eptTasks" },
+  },
+}

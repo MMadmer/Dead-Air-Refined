@@ -309,6 +309,7 @@ bool CUIModsWnd::Init()
     m_tabInstalled = mods_button(xml, "main:tab_installed", this);
     m_tabBrowser = mods_button(xml, "main:tab_browser", this);
     m_protect = mods_button(xml, "main:protect", this);
+    m_versions = mods_button(xml, "main:versions", this);
     mods_shape(xml, "main:separator", this);
 
     // the browser's search, sort and tags
@@ -396,7 +397,8 @@ bool CUIModsWnd::Init()
 
     const std::pair<CUIShapeButton*, void (CUIModsWnd::*)(CUIWindow*, void*)> handlers[] = {
         {m_tabInstalled, &CUIModsWnd::OnInstalledTab}, {m_tabBrowser, &CUIModsWnd::OnBrowserTab},
-        {m_protect, &CUIModsWnd::OnProtect}, {m_sortButton, &CUIModsWnd::OnSort}, {m_primary, &CUIModsWnd::OnPrimary},
+        {m_protect, &CUIModsWnd::OnProtect}, {m_versions, &CUIModsWnd::OnVersions}, {m_sortButton, &CUIModsWnd::OnSort},
+        {m_primary, &CUIModsWnd::OnPrimary},
         {m_toggle, &CUIModsWnd::OnToggle}, {m_remove, &CUIModsWnd::OnRemove},
         {m_vtCheck, &CUIModsWnd::OnVtCheck}, {m_vtReport, &CUIModsWnd::OnVtReport},
         {m_updateAll, &CUIModsWnd::OnUpdateAll}, {m_back, &CUIModsWnd::OnBack}};
@@ -815,6 +817,10 @@ void CUIModsWnd::Update()
     m_protect->SetText(mods_text(protectedMode ? "st_mods_protect_on" : "st_mods_protect_off").c_str());
     m_protect->checked = protectedMode;
     m_protect->icon = protectedMode ? SUIShapeStyle::Kind::Check : SUIShapeStyle::Kind::Cross;
+    const bool anyVersion = ModUpdateService::AnyGameVersion();
+    m_versions->SetText(mods_text(anyVersion ? "st_mods_versions_on" : "st_mods_versions_off").c_str());
+    m_versions->checked = anyVersion;
+    m_versions->icon = anyVersion ? SUIShapeStyle::Kind::Check : SUIShapeStyle::Kind::Cross;
 
     // the list's own message: nothing installed, nothing found, the catalog on its way
     xr_string status;
@@ -1108,6 +1114,14 @@ void CUIModsWnd::RefreshDetails()
     case State::Current: text = mods_text("st_mods_status_current").c_str(), color = m_goodColor; break;
     case State::NoRelease: text = mods_text("st_mods_status_no_release").c_str(); break;
     case State::Available:
+        // taken although it asks for a newer game: the player's word, and the risk said
+        if (!status->requiresGame.empty())
+        {
+            text = mods_format("st_mods_status_available_other", status->version.c_str(),
+                mods_size(status->totalBytes).c_str(), status->requiresGame.c_str());
+            color = m_warnColor;
+            break;
+        }
         text = mods_format(status->reissue ? "st_mods_status_reissue" : "st_mods_status_available", status->version.c_str(),
             mods_size(status->totalBytes).c_str());
         color = m_accentColor;
@@ -1203,7 +1217,10 @@ void CUIModsWnd::RefreshDetails()
     else
     {
         primary = state == State::Failed || state == State::Refused ? "st_mods_retry" : "st_mods_install";
-        primaryEnabled = !blocked && (!status || state == State::Failed || state == State::Refused);
+        // an installation a newer game's requirement stopped is asked again once the player takes other versions
+        const bool versionOnly = state == State::Blocked && status && !status->requiresGame.empty() &&
+            ModUpdateService::AnyGameVersion();
+        primaryEnabled = !blocked && (!status || state == State::Failed || state == State::Refused || versionOnly);
     }
     if (0 != xr_strcmp(m_primary->GetText(), mods_text(primary).c_str()))
         m_primary->SetText(mods_text(primary).c_str());
@@ -1439,6 +1456,8 @@ void CUIModsWnd::OnProtect(CUIWindow* window, void*)
         Msg("! [mods] protected mode not switched: %s", error.c_str());
 }
 
+void CUIModsWnd::OnVersions(CUIWindow*, void*) { ModUpdateService::SetAnyGameVersion(!ModUpdateService::AnyGameVersion()); }
+
 void CUIModsWnd::OnSort(CUIWindow*, void*)
 {
     m_sort = static_cast<Sort>((static_cast<u8>(m_sort) + 1) % static_cast<u8>(Sort::Count));
@@ -1635,7 +1654,8 @@ void CUIModsWnd::RunCommand(const xr_string& command)
         RefreshDetails();
         const std::pair<pcstr, CUIShapeButton*> buttons[] = {{"primary", m_primary},
             {"toggle", m_toggle}, {"remove", m_remove}, {"vt_check", m_vtCheck}, {"vt_report", m_vtReport},
-            {"review", m_writeReview}, {"update_all", m_updateAll}, {"protect", m_protect}, {"sort", m_sortButton},
+            {"review", m_writeReview}, {"update_all", m_updateAll}, {"protect", m_protect}, {"versions", m_versions},
+            {"sort", m_sortButton},
             {"installed", m_tabInstalled}, {"browser", m_tabBrowser}, {"back", m_back}};
         for (const auto& [name, button] : buttons)
             if (rest == name && button && button->IsEnabled() && button->IsShown())

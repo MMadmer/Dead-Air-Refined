@@ -112,6 +112,7 @@ private:
     void OnInstalledTab(CUIWindow*, void*);
     void OnBrowserTab(CUIWindow*, void*);
     void OnProtect(CUIWindow*, void*);
+    void OnVersions(CUIWindow*, void*);
     void OnSort(CUIWindow*, void*);
     void OnTag(CUIWindow*, void*);
     void OnPrimary(CUIWindow*, void*);
@@ -136,6 +137,8 @@ private:
     CUIShapeButton* m_tabInstalled{};
     CUIShapeButton* m_tabBrowser{};
     CUIShapeButton* m_protect{};
+    // releases made for other game versions: taken or refused
+    CUIShapeButton* m_versions{};
     // the installed view's summary, the browser's toolbar: the same place
     CUIWindow* m_summary{};
     CUIStatic* m_summaryText{};

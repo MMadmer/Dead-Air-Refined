@@ -1,0 +1,11 @@
+return {
+  nq = 1,
+  id = "newquest",
+  title = "New quest",
+  activation = "auto",
+  nodes = {
+    { id = "start", kind = "trigger.start", out = { next = "finish" } },
+
+    { id = "finish", kind = "flow.end", params = { status = "completed" } },
+  },
+}
