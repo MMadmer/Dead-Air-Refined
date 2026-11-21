@@ -89,7 +89,12 @@ $section = ''
 foreach ($line in [IO.File]::ReadAllLines((Join-Path $Module 'mod.ltx'), $cp1251)) {
     if ($line -match '^\s*\[([^\]]+)\]') { $section = $Matches[1].Trim(); continue }
     if ($section -eq 'module' -and -not $moduleId -and $line -match '^\s*id\s*=\s*([a-z0-9_]+)') { $moduleId = $Matches[1] }
-    if ($section -eq 'module' -and $line -match '^\s*mode\s*=\s*([A-Za-z0-9_.-]+)') { $moduleMode = $Matches[1] }
+    # a list of modes starts the new game in the first that is a mode (`plain` is the ordinary game, `*` every one)
+    if ($section -eq 'module' -and $line -match '^\s*mode\s*=\s*(.+)$') {
+        $moduleMode = @($Matches[1].Split(',') | ForEach-Object { $_.Trim().ToLowerInvariant() } |
+            Where-Object { $_ -match '^[a-z0-9_.-]+$' -and $_ -ne 'plain' } | Select-Object -First 1)[0]
+        if (-not $moduleMode) { $moduleMode = '' }
+    }
     if ($section -eq 'provides_mode' -and -not $moduleMode -and $line -match '^\s*id\s*=\s*([A-Za-z0-9_.-]+)') { $moduleMode = $Matches[1] }
 }
 if (-not $moduleId) { throw "mod.ltx of $Module names no id" }

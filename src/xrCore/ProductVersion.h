@@ -5,10 +5,10 @@
 
 #define DAR_VERSION_MAJOR 1
 #define DAR_VERSION_MINOR 6
-#define DAR_VERSION_PATCH 4
+#define DAR_VERSION_PATCH 5
 #define DAR_VERSION_BUILD 0
 #define DAR_VERSION_RESOURCE DAR_VERSION_MAJOR, DAR_VERSION_MINOR, DAR_VERSION_PATCH, DAR_VERSION_BUILD
-#define DAR_VERSION_STRING "1.6.4"
+#define DAR_VERSION_STRING "1.6.5"
 #define DAR_WIDEN_IMPL(value) L##value
 #define DAR_WIDEN(value) DAR_WIDEN_IMPL(value)
 #define DAR_VERSION_WSTRING DAR_WIDEN(DAR_VERSION_STRING)
@@ -42,8 +42,10 @@
 // - level-things: a module's levels\<level>\overlay.things adds sounds, particle effects, lights,
 //   environment modifiers, glows, fog volumes and sound environments to a level, beside the level's
 //   own (XMS_ARCHITECTURE.md 8.5).
+// - mode-lists: mod.ltx [module] mode names several modes at once, `plain` among them for the ordinary
+//   game, and a module that brings a mode may name others beside it (MODDING.md, "Game modes").
 #define DAR_ENGINE_ABILITIES \
-    "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions item-assets config-file-patches table-assets module-links network-mark level-things"
+    "fsltx-in-place long-paths level-pieces level-cuts ai-edits asset-descriptions item-assets config-file-patches table-assets module-links network-mark level-things mode-lists"
 
 #ifndef RC_INVOKED
 namespace DeadAirRefined

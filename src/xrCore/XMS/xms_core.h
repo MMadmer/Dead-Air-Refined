@@ -193,7 +193,10 @@ struct Module
     xr_string name;    // human readable
     xr_string version; // 1-4 dot-separated numbers when the module takes updates, else free-form
     xr_string root;    // absolute physical path, trailing delimiter
-    xr_string mode;    // gate: "" = ordinary game only (unless provides_modes), "*" = everywhere, else that mode
+    // gate (ModuleApplies): "" = the ordinary game only (unless provides_modes), "*" = everywhere, else a comma
+    // list of mode ids where `plain` names the ordinary game - as written, lower-cased, and split in `modes`
+    xr_string mode;
+    xr_vector<xr_string> modes;
     // Mods menu metadata (docs/dead-air/MOD_UPDATES.md). Text is kept as the manifest
     // spells it - UTF-8, or Windows-1251 in a hand-written file - and may be a string table id.
     xr_string author;
@@ -419,12 +422,17 @@ XRCORE_API void AdoptLevelId(pcstr level_name, u8 id);
 XRCORE_API void SetActiveModes(pcstr csv);
 XRCORE_API pcstr ActiveModesCsv();
 XRCORE_API bool ModeActive(pcstr mode_id);
+// The word of a module's mode list that names the ordinary game: a game started with no mode.
+inline constexpr char PlainMode[] = "plain";
 // True when the module's level work applies to the CURRENT game:
-//   mode = <id>  -> that mode is active
-//   mode = *     -> always
-//   no mode      -> the module provides a mode? that mode is active
-//                   : the ordinary game (no active modes at all)
+//   mode = *             -> always
+//   mode = <id>, <id>... -> one of them is active; `plain` is the ordinary game (no active mode)
+//   a mode it provides   -> that mode is active, beside the ones it names
+//   no mode, none provided -> the ordinary game
 XRCORE_API bool ModuleApplies(const Module& m);
+// The same for a game started in `mode_id` alone ("" = the ordinary game): what the new-game screen offers
+// of a module before the game exists.
+XRCORE_API bool ModuleRunsIn(const Module& m, pcstr mode_id);
 
 // ---- material resolution (set by the game once GMLib is alive) --------------
 

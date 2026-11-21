@@ -156,6 +156,9 @@
     <string id="st_mods_mode_new">
         <text>Новый режим: %s</text>
     </string>
+    <string id="st_mods_mode_list">
+        <text>Режимы: %s</text>
+    </string>
     <string id="st_mods_mode_existing">
         <text>Режим: %s</text>
     </string>

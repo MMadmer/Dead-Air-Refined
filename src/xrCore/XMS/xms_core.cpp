@@ -718,7 +718,11 @@ void parse_manifest(Module& m, char* text)
             else if (0 == xr_strcmp(key, "version"))
                 m.version = value;
             else if (0 == xr_strcmp(key, "mode"))
+            {
                 m.mode = lower_copy(value);
+                m.modes.clear();
+                split_list(m.mode.c_str(), m.modes);
+            }
             else if (0 == xr_strcmp(key, "author"))
                 m.author = display_text(value);
             else if (0 == xr_strcmp(key, "description"))
@@ -2376,22 +2380,36 @@ bool ModuleApplies(const Module& m)
     // "*" opts out of gating: the module's level work lands in every game
     if (m.mode == "*")
         return true;
-    if (m.mode.empty())
-    {
-        // a module that BRINGS a mode is implicitly for that mode
-        if (!m.provides_modes.empty())
-        {
-            for (const ProvidedMode& p : m.provides_modes)
-                if (ModeActive(p.id.c_str()))
-                    return true;
-            return false;
-        }
-        // no mode at all = built for the ORDINARY game; a stock new game has
-        // no active modes, and a campaign like Revolution II must not inherit
-        // props that were never made for it
-        return st().active_modes.empty();
-    }
-    return ModeActive(m.mode.c_str());
+    // a stock new game has no active modes, and a campaign like Revolution II must not inherit props
+    // that were never made for it
+    const bool plain = st().active_modes.empty();
+    // a module that BRINGS a mode is for that mode, and for the ones it names beside it
+    for (const ProvidedMode& p : m.provides_modes)
+        if (ModeActive(p.id.c_str()))
+            return true;
+    // no mode at all = built for the ORDINARY game, unless it only brings its own
+    if (m.modes.empty())
+        return m.provides_modes.empty() && plain;
+    for (const xr_string& id : m.modes)
+        if (id == PlainMode ? plain : ModeActive(id.c_str()))
+            return true;
+    return false;
+}
+
+bool ModuleRunsIn(const Module& m, pcstr mode_id)
+{
+    const xr_string wanted = mode_id ? lower_copy(mode_id) : xr_string();
+    if (m.mode == "*")
+        return true;
+    for (const ProvidedMode& p : m.provides_modes)
+        if (p.id == wanted)
+            return true;
+    if (m.modes.empty())
+        return m.provides_modes.empty() && wanted.empty();
+    for (const xr_string& id : m.modes)
+        if (id == PlainMode ? wanted.empty() : id == wanted)
+            return true;
+    return false;
 }
 
 void SetMaterialResolver(MaterialResolver resolver) { st().material_resolver = resolver; }

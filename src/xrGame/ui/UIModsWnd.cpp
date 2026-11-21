@@ -35,6 +35,16 @@ xr_string mods_format(pcstr id, auto... args)
     return text;
 }
 
+// a string table text with its %s replaced by `value`: a module's own text has no limit of length, which a
+// formatting buffer would have
+xr_string mods_with(pcstr id, const xr_string& value)
+{
+    xr_string text = mods_text(id).c_str();
+    if (const size_t at = text.find("%s"); at != xr_string::npos)
+        text.replace(at, 2, value);
+    return text;
+}
+
 // "3.2 MB", or kilobytes for a release small enough to read as "0.0 MB"
 xr_string mods_size(u64 bytes)
 {
@@ -120,6 +130,27 @@ xr_vector<xr_string> mods_split_tags(const xr_string& text)
 }
 
 xr_string mods_tag_label(const xr_string& tag) { return mods_text(("st_mods_tag_" + tag).c_str()).c_str(); }
+
+// What an installed module says of the games it is for: every game, the ordinary game, its own mode, a mode
+// of the game, or several of them by name (`plain` read as the ordinary game).
+xr_string mods_module_mode(const XMS::Module& module)
+{
+    if (module.mode == "*")
+        return mods_text("st_mods_mode_any").c_str();
+    xr_vector<xr_string> names;
+    for (const XMS::ProvidedMode& p : module.provides_modes)
+        names.push_back(p.title.empty() ? p.id : mods_display(p.title));
+    for (const xr_string& id : module.modes)
+        names.push_back(id == XMS::PlainMode ? xr_string(mods_text("st_mods_mode_plain").c_str()) : id);
+    if (names.empty())
+        return mods_text("st_mods_mode_plain").c_str();
+    if (names.size() == 1)
+        return mods_with(module.provides_modes.empty() ? "st_mods_mode_existing" : "st_mods_mode_new", names[0]);
+    xr_string joined;
+    for (const xr_string& name : names)
+        joined += (joined.empty() ? "" : ", ") + name;
+    return mods_with("st_mods_mode_list", joined);
+}
 
 xr_string mods_tags_text(const xr_vector<xr_string>& tags)
 {
@@ -513,10 +544,36 @@ void CUIModsWnd::BuildItems()
         item.network = card.network;
         item.thumbnail = entry.thumbnailTexture;
         item.date = entry.listed;
+        // MOD_CATALOG 6: plain | any | new <id> | mode <id> | modes <id>, <id>...; the title is the card's
+        const xr_string title = mods_card_text(card.modeTitle, card.modeTitleEng);
         if (card.mode.starts_with("new "))
-            item.mode = mods_format("st_mods_mode_new", mods_card_text(card.modeTitle, card.modeTitleEng).c_str());
+            item.mode = mods_with("st_mods_mode_new", title);
+        else if (card.mode.starts_with("modes "))
+        {
+            // the plain game has no title on the card: it is said in the game's own words, first
+            bool plain = false;
+            for (size_t at = 6; at < card.mode.size();)
+            {
+                size_t end = card.mode.find(',', at);
+                if (end == xr_string::npos)
+                    end = card.mode.size();
+                xr_string word = card.mode.substr(at, end - at);
+                while (!word.empty() && word.front() == ' ')
+                    word.erase(0, 1);
+                while (!word.empty() && word.back() == ' ')
+                    word.pop_back();
+                plain = plain || word == XMS::PlainMode;
+                at = end + 1;
+            }
+            xr_string names = plain ? xr_string(mods_text("st_mods_mode_plain").c_str()) : xr_string();
+            if (!title.empty())
+                names += (names.empty() ? "" : ", ") + title;
+            item.mode = mods_with("st_mods_mode_list", names);
+        }
         else if (card.mode.starts_with("mode "))
-            item.mode = mods_format("st_mods_mode_existing", mods_card_text(card.modeTitle, card.modeTitleEng).c_str());
+            item.mode = mods_with("st_mods_mode_existing", title);
+        else if (card.mode == "any")
+            item.mode = mods_text("st_mods_mode_any").c_str();
         else
             item.mode = mods_text("st_mods_mode_plain").c_str();
     };
@@ -541,9 +598,7 @@ void CUIModsWnd::BuildItems()
                 item.links[kind] = module.links[kind];
             // of the files on the disk, whatever a card says
             item.network = XMS::NetMark::ModuleUsesNetwork(module);
-            item.mode = module.mode.empty() ? mods_text("st_mods_mode_plain").c_str() :
-                module.mode == "*"          ? mods_text("st_mods_mode_any").c_str() :
-                                              mods_format("st_mods_mode_existing", module.mode.c_str());
+            item.mode = mods_module_mode(module);
             auto [thumbnail, fresh] = m_installedThumbnails.try_emplace(module.id.c_str());
             if (fresh)
                 thumbnail->second = ModCatalog::InstalledThumbnail(module);

@@ -663,13 +663,8 @@ luabind::object lua_choices(lua_State* L, pcstr mode_id)
     int n = 0;
     for (const XMS::Module& m : XMS::Modules())
     {
-        if (m.disabled || !m.world.declared)
-            continue;
-        bool provides = false;
-        for (const XMS::ProvidedMode& p : m.provides_modes)
-            if (same(p.id.c_str(), mode_id))
-                provides = true;
-        if (!provides && !same(m.mode.c_str(), mode_id))
+        // a module for several modes offers its rules in each of them
+        if (m.disabled || !m.world.declared || !XMS::ModuleRunsIn(m, mode_id))
             continue;
         for (u32 i = 0; i < Rules::Count; ++i)
         {

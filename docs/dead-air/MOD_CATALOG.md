@@ -123,8 +123,12 @@ sig = 0123456789abcdef:...
   table id resolved (the browser shows modules that are not installed, whose string tables
   it does not have). Text follows MOD_UPDATES 1.1; `<key>@eng` is the English text, used
   when the game runs in English, the plain key otherwise.
-- `mode` is `plain` (the ordinary game), `new <mode id>` (a mode the module brings) or
-  `mode <mode id>` (a mode another module or the game has); `mode_title` is its title.
+- `mode` is `plain` (the ordinary game), `any` (every game), `new <mode id>` (a mode the
+  module brings), `mode <mode id>` (a mode another module or the game has) or `modes <id>,
+  <id>...` (several of them - `plain` among them is the ordinary game, a mode the module brings
+  is named first); `mode_title` is its title - for `modes` the titles of the modes but `plain`
+  joined by `, `, the game saying the plain game in its own words. A game before `any` and
+  `modes` reads either as `plain`.
 - `tags`: see 6.2.
 - `website` is the module's own page (section 7, requirement 4). The other links of the
   module - `ap_pro`, `moddb`, `telegram`, `discord`, `boosty`, `patreon` - are keys of

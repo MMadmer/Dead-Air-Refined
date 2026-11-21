@@ -297,12 +297,18 @@ Runtime facts:
   `overlay_visuals.ltx` (both the added `.ogf` and the `hide` boxes) and the
   composite `game.graph` all ask `XMS::ModuleApplies` before contributing, so a
   map edit made for one campaign cannot appear in another.
-- The gate's three states. `mode = <id>` applies when that mode is active.
-  **No `mode=` at all means the ORDINARY game only**: a stock new game runs
-  with no active modes, and a campaign like Revolution II must not inherit
-  props that were never made for it. (A module that declares
-  `[provides_mode]` is implicitly gated to its own mode instead.)
+- The gate. `mode = <id>` applies when that mode is active, and `mode = <id>,
+  <id>, ...` when one of the modes it names is - a module for several
+  campaigns at once; the word `plain` in the list is the ORDINARY game (a game
+  started with no mode), so `mode = plain, metro` is the ordinary game and
+  Metro. **No `mode=` at all means the ORDINARY game only**: a stock new game
+  runs with no active modes, and a campaign like Revolution II must not inherit
+  props that were never made for it. A module that declares `[provides_mode]`
+  is gated to its own mode, and to the ones its `mode=` names beside it.
   `mode = *` opts out of gating - the module's level work lands everywhere.
+  A game that reads lists states `mode-lists` among its abilities; an older
+  one reads a list as one id that is never active, so a module that names
+  several modes is for Dead Air: Refined 1.6.5 or newer.
 - What it does NOT gate: the VFS mount, the config stage (`.ltxp`, new LTX
   sections), XML patches and module scripts. Those run at engine start, before
   the player has chosen anything, so they apply in every game. Keep

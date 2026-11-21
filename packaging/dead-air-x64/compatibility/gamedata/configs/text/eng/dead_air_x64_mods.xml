@@ -156,6 +156,9 @@
     <string id="st_mods_mode_new">
         <text>New mode: %s</text>
     </string>
+    <string id="st_mods_mode_list">
+        <text>Modes: %s</text>
+    </string>
     <string id="st_mods_mode_existing">
         <text>Mode: %s</text>
     </string>
