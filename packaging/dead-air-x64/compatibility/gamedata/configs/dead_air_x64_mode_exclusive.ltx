@@ -24,6 +24,17 @@ check_metro_mode
 check_rev2_mode
 check_rev_mode
 
+; The MODIFIERS of the screen: a ticked one is no game mode, so a game with
+; hardcore (one life) or easy ticked is still the plain game and every module
+; made for the plain game applies in it. The engine reads this list when a new
+; game starts; a key that is listed nowhere stays a mode, as it always was.
+[modifiers]
+check_hardcore
+check_easy_mode
+check_rerum_mode
+check_good_wpn
+check_good_loot
+
 ; The module-mode dropdown band (dead_air_x64_mode_select.script): the strip
 ; the base xmlp patch (patch\dead_air_x64_newgame_band.xmlp) opens between
 ; the loadout section and the modes/options block. Drawn only when at least

@@ -141,7 +141,14 @@ xr_string mods_module_mode(const XMS::Module& module)
     for (const XMS::ProvidedMode& p : module.provides_modes)
         names.push_back(p.title.empty() ? p.id : mods_display(p.title));
     for (const xr_string& id : module.modes)
-        names.push_back(id == XMS::PlainMode ? xr_string(mods_text("st_mods_mode_plain").c_str()) : id);
+    {
+        // a mode it brings is named once, by its title, above
+        bool own = false;
+        for (const XMS::ProvidedMode& p : module.provides_modes)
+            own = own || p.id == id;
+        if (!own)
+            names.push_back(id == XMS::PlainMode ? xr_string(mods_text("st_mods_mode_plain").c_str()) : id);
+    }
     if (names.empty())
         return mods_text("st_mods_mode_plain").c_str();
     if (names.size() == 1)

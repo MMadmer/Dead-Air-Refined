@@ -131,25 +131,28 @@ bool valid_id(pcstr id)
 
 void split_list(pcstr value, xr_vector<xr_string>& out)
 {
-    // comma separated, entries trimmed, version constraints after a space are dropped
-    string4096 buf;
-    xr_strcpy(buf, value);
-    for (char* cursor = buf; cursor && *cursor;)
+    // comma separated, entries trimmed, version constraints after a space are dropped; a module's own
+    // value has no limit of length, so no fixed buffer
+    if (!value)
+        return;
+    const std::string_view all(value);
+    size_t at = 0;
+    while (at <= all.size())
     {
-        char* comma = strchr(cursor, ',');
-        if (comma)
-            *comma = 0;
-        while (*cursor == ' ' || *cursor == '\t')
-            ++cursor;
-        char* end = cursor + xr_strlen(cursor);
-        while (end > cursor && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r'))
-            *--end = 0;
+        size_t comma = all.find(',', at);
+        if (comma == std::string_view::npos)
+            comma = all.size();
+        std::string_view item = all.substr(at, comma - at);
+        while (!item.empty() && (item.front() == ' ' || item.front() == '\t'))
+            item.remove_prefix(1);
+        while (!item.empty() && (item.back() == ' ' || item.back() == '\t' || item.back() == '\r'))
+            item.remove_suffix(1);
         // strip a version constraint ("mod.id >=1.0" / "mod.id = *")
-        if (char* space = strchr(cursor, ' '))
-            *space = 0;
-        if (*cursor)
-            out.emplace_back(cursor);
-        cursor = comma ? comma + 1 : nullptr;
+        if (const size_t space = item.find(' '); space != std::string_view::npos)
+            item = item.substr(0, space);
+        if (!item.empty())
+            out.emplace_back(item.data(), item.size());
+        at = comma + 1;
     }
 }
 
@@ -846,6 +849,16 @@ void parse_manifest(Module& m, char* text)
         m.update_github = std::move(github);
     else if (!github.empty())
         Msg("! XMS: module [%s] update source ignored - [update] github must be owner/repo", m.id.c_str());
+    // "plain" and "*" are words of the mode line, never a mode a module brings
+    for (size_t i = m.provides_modes.size(); i-- > 0;)
+    {
+        const xr_string& id = m.provides_modes[i].id;
+        if (!id.empty() && id != PlainMode && id != "*")
+            continue;
+        Msg("! XMS: module [%s] mode [%s] ignored - plain and * name the games a module is for", m.id.c_str(),
+            id.c_str());
+        m.provides_modes.erase(m.provides_modes.begin() + i);
+    }
     // [links]: each kind by its own rule; a refused one is dropped with a word, like the website
     for (size_t kind = 0; kind != LinkKinds; ++kind)
     {

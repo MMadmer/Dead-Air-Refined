@@ -294,6 +294,61 @@ void OnSnapshotLoaded(const SaveExtensionContainer::ChunkList& chunks)
     XmsSaves::OnSnapshotLoaded(chunks);
 }
 
+namespace
+{
+// The ids of the new-game screen's MODIFIERS - "hardcore" (one life), "easy" - whose keys still end with
+// _mode (new_game_hardcore_mode): the checkboxes [modifiers] of dead_air_x64_mode_exclusive.ltx names.
+// That file is the game's word about the installed screen; a mod that replaces the screen replaces it.
+// Without it nothing is told apart, and every _mode key stays a mode as before.
+xr_vector<xr_string> NewGameModifierIds()
+{
+    xr_vector<xr_string> out;
+    IReader* reader = FS.exist("$game_config$", "dead_air_x64_mode_exclusive.ltx")
+        ? FS.r_open("$game_config$", "dead_air_x64_mode_exclusive.ltx")
+        : nullptr;
+    if (!reader)
+        return out;
+    const xr_string text(static_cast<pcstr>(reader->pointer()), reader->length());
+    FS.r_close(reader);
+    bool inside = false;
+    for (size_t at = 0; at < text.size();)
+    {
+        size_t end = text.find('\n', at);
+        if (end == xr_string::npos)
+            end = text.size();
+        std::string_view line(text.data() + at, end - at);
+        at = end + 1;
+        if (const size_t comment = line.find(';'); comment != std::string_view::npos)
+            line = line.substr(0, comment);
+        while (!line.empty() && (line.front() == ' ' || line.front() == '\t'))
+            line.remove_prefix(1);
+        while (!line.empty() && (line.back() == ' ' || line.back() == '\t' || line.back() == '\r'))
+            line.remove_suffix(1);
+        if (line.empty())
+            continue;
+        if (line.front() == '[')
+        {
+            inside = line == "[modifiers]";
+            continue;
+        }
+        if (!inside)
+            continue;
+        // check_hardcore and check_easy_mode name new_game_hardcore_mode and new_game_easy_mode
+        xr_string id(line.substr(0, line.find_first_of(" \t=")));
+        if (id.size() > 6 && 0 == _strnicmp(id.c_str(), "check_", 6))
+            id.erase(0, 6);
+        if (id.size() > 5 && 0 == _stricmp(id.c_str() + id.size() - 5, "_mode"))
+            id.erase(id.size() - 5);
+        if (id.empty())
+            continue;
+        xr_strlwr(&id[0]);
+        if (std::find(out.begin(), out.end(), id) == out.end())
+            out.push_back(id);
+    }
+    return out;
+}
+} // namespace
+
 void SyncModesFromNewGameOptions()
 {
     // A fresh game inherits nothing from the session before it: the mode set,
@@ -348,6 +403,8 @@ void SyncModesFromNewGameOptions()
     // Lua is worse than one that is off in both.
     constexpr pcstr suffix = "_mode";
     const size_t suffix_len = xr_strlen(suffix);
+    // a modifier of the screen is no mode: a plain game with "hardcore" ticked is still the plain game
+    const xr_vector<xr_string> modifiers = NewGameModifierIds();
     xr_string csv;
     for (const auto& item : ini.r_section(section).Data)
     {
@@ -365,6 +422,8 @@ void SyncModesFromNewGameOptions()
         if (id.empty())
             continue;
         xr_strlwr(&id[0]);
+        if (std::find(modifiers.begin(), modifiers.end(), id) != modifiers.end())
+            continue;
         if (!csv.empty())
             csv += ",";
         csv += id;

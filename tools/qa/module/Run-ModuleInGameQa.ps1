@@ -85,6 +85,7 @@ $utf8 = [Text.UTF8Encoding]::new($false)
 $moduleId = ''
 # the mode a new game starts in for this module: the one it targets or brings, none for the ordinary game
 $moduleMode = ''
+$ownMode = ''
 $section = ''
 foreach ($line in [IO.File]::ReadAllLines((Join-Path $Module 'mod.ltx'), $cp1251)) {
     if ($line -match '^\s*\[([^\]]+)\]') { $section = $Matches[1].Trim(); continue }
@@ -95,8 +96,10 @@ foreach ($line in [IO.File]::ReadAllLines((Join-Path $Module 'mod.ltx'), $cp1251
             Where-Object { $_ -match '^[a-z0-9_.-]+$' -and $_ -ne 'plain' } | Select-Object -First 1)[0]
         if (-not $moduleMode) { $moduleMode = '' }
     }
-    if ($section -eq 'provides_mode' -and -not $moduleMode -and $line -match '^\s*id\s*=\s*([A-Za-z0-9_.-]+)') { $moduleMode = $Matches[1] }
+    if ($section -eq 'provides_mode' -and -not $ownMode -and $line -match '^\s*id\s*=\s*([A-Za-z0-9_.-]+)') { $ownMode = $Matches[1] }
 }
+# a mode the module brings goes first, as the editor's Play starts it
+if ($ownMode) { $moduleMode = $ownMode }
 if (-not $moduleId) { throw "mod.ltx of $Module names no id" }
 Write-Host "== module: $moduleId ($Module)"
 

@@ -308,7 +308,9 @@ Runtime facts:
   `mode = *` opts out of gating - the module's level work lands everywhere.
   A game that reads lists states `mode-lists` among its abilities; an older
   one reads a list as one id that is never active, so a module that names
-  several modes is for Dead Air: Refined 1.6.5 or newer.
+  several modes is for Dead Air: Refined 1.6.5 or newer. One old shape reads
+  wider since 1.6.5: a module with `[provides_mode] Y` and `mode = X` applied
+  in X alone before; it applies in X and in its own Y now, as the line says.
 - What it does NOT gate: the VFS mount, the config stage (`.ltxp`, new LTX
   sections), XML patches and module scripts. Those run at engine start, before
   the player has chosen anything, so they apply in every game. Keep
@@ -330,8 +332,13 @@ Runtime facts:
   required and the value has to read `true`, so the other `new_game_*` booleans
   the same screen writes (`good_wpn`, `good_loot`, `unlocked_guide`, ...) stay
   what they are - options, not modes - and a mode is never active in the engine
-  while the game's own `is_*_mode()` helpers say it is off. A save that carries
-  no XMS manifest starts from an EMPTY set, so an old save can never inherit
+  while the game's own `is_*_mode()` helpers say it is off. A modifier of
+  the screen is no mode whatever its key ends with (1.6.6; before, such a
+  game was no plain game to a module): the checkboxes `[modifiers]` of
+  `dead_air_x64_mode_exclusive.ltx` names - hardcore (one life), easy, rerum,
+  good weapons, good loot. A mod that replaces the screen replaces that file;
+  a key it does not list stays a mode. A save
+  that carries no XMS manifest starts from an EMPTY set, so an old save can never inherit
   the modes of the session before it. A module adding its OWN mode only
   declares it in the manifest - see below.
 - `scripts/register.script` runs on its own, in load order, right after the `xms` API
@@ -508,6 +515,9 @@ screen is built in Lua by the game. A module that declares one in its manifest
 id    = my_campaign
 title = Моя кампания      ; what the player reads, not a string id
 ```
+
+(`plain` and `*` are no ids of a mode: they are words of the `mode` line, and
+such an entry is ignored with a line in the log, 1.6.6)
 
 shows up on that screen through Refined's **module-mode dropdown**: one shared
 combo in the band between the loadout section and the modes/options block
