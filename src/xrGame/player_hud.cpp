@@ -230,10 +230,33 @@ void attachable_hud_item::update(bool bForce)
 
 void attachable_hud_item::update_hud_additional(Fmatrix& trans) const
 {
-    if (m_parent_hud_item)
-    {
-        m_parent_hud_item->UpdateHudAdditonal(trans);
-    }
+    if (!m_parent_hud_item)
+        return;
+    m_parent_hud_item->UpdateHudAdditonal(trans);
+
+    // Leaning out (lookout): the item's lean offset, in step with the head roll and gone while it
+    // is raised to aim, so the sights stay where the aim offset put them.
+    const Fvector& lean_pos = m_measures.m_lean_offset[0];
+    const Fvector& lean_rot = m_measures.m_lean_offset[1];
+    if (lean_pos.square_magnitude() < EPS_S && lean_rot.square_magnitude() < EPS_S)
+        return;
+    const CActor* actor = smart_cast<const CActor*>(m_parent_hud_item->object().H_Parent());
+    if (!actor)
+        return;
+    const float lean = actor->LookoutFactor() * (1.f - clampr(m_parent_hud_item->GetHudAimFactor(), 0.f, 1.f));
+    if (fis_zero(lean))
+        return;
+    const float side = lean < 0.f ? -1.f : 1.f;
+    const float k = _abs(lean);
+
+    Fmatrix offset, step;
+    offset.rotateX(lean_rot.x * k);
+    step.rotateY(lean_rot.y * side * k);
+    offset.mulA_43(step);
+    step.rotateZ(lean_rot.z * side * k);
+    offset.mulA_43(step);
+    offset.translate_over(lean_pos.x * side * k, lean_pos.y * k, lean_pos.z * k);
+    trans.mulB_43(offset);
 }
 
 void attachable_hud_item::setup_firedeps(firedeps& fd)
@@ -367,6 +390,9 @@ Fmatrix hud_item_measures::load(const shared_str& sect_name, IKinematics* K)
     m_hands_offset[0][2] = read_by_shape(sect_name, "gl_hud_offset_pos", is_16x9);
     m_hands_offset[1][2] = read_by_shape(sect_name, "gl_hud_offset_rot", is_16x9);
 
+    m_lean_offset[0] = read_by_shape_or_zero(sect_name, "lean_hud_offset_pos", is_16x9);
+    m_lean_offset[1] = read_by_shape_or_zero(sect_name, "lean_hud_offset_rot", is_16x9);
+
     R_ASSERT2(pSettings->line_exist(sect_name, "fire_point") == pSettings->line_exist(sect_name, "fire_bone"),
         sect_name.c_str());
     R_ASSERT2(pSettings->line_exist(sect_name, "fire_point2") == pSettings->line_exist(sect_name, "fire_bone2"),
@@ -438,6 +464,9 @@ Fmatrix hud_item_measures::load_monolithic(const shared_str& sect_name, IKinemat
         m_fire_point2_offset = {};
         m_shell_point_offset = {};
     }
+
+    m_lean_offset[0] = read_by_shape_or_zero(sect_name, "lean_hud_offset_pos", UICore::is_widescreen());
+    m_lean_offset[1] = read_by_shape_or_zero(sect_name, "lean_hud_offset_rot", UICore::is_widescreen());
 
     load_inertion_params(sect_name);
     m_prop_flags.set(e_16x9_mode_now, UICore::is_widescreen());

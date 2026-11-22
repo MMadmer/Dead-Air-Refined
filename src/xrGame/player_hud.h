@@ -51,6 +51,9 @@ struct hud_item_measures
     };
 
     Fvector m_hands_offset[2][3]{}; // pos,rot/ normal,aim,GL
+    // The hands at a full lean to the RIGHT, camera space: position in metres, rotation in radians
+    // like aim_hud_offset_rot. A left lean mirrors it. Zero (the default) changes nothing.
+    Fvector m_lean_offset[2]{};
     Fvector m_hands_attach[2]{}; // pos,rot
     Fvector m_item_attach[2]{}; // pos,rot
 

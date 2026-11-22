@@ -459,6 +459,8 @@ public:
     void g_sv_Orientate(u32 mstate_rl, float dt);
     void g_Orientate(u32 mstate_rl, float dt);
     bool g_LadderOrient();
+    // How far the player leans out right now: -1 full left .. 1 full right (the head roll).
+    float LookoutFactor() const;
     void UpdateMotionIcon(u32 mstate_rl);
 
     bool CanAccelerate();

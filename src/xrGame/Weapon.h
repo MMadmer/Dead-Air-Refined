@@ -178,6 +178,7 @@ public:
     void renderable_Render(u32 context_id, IRenderable* root) override;
     void render_hud_mode() override;
     float GetHudFov();
+    float GetHudAimFactor() const override { return m_zoom_params.m_fZoomRotationFactor; }
     bool need_renderable() override;
 
     virtual void render_item_ui();

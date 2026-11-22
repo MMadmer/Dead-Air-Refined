@@ -502,6 +502,8 @@ void CActor::g_Orientate(u32 mstate_rl, float dt)
         r_torso_tgt_roll = angle_normalize_signed(r_torso_tgt_roll);
     }
 }
+float CActor::LookoutFactor() const { return clampr(r_torso.roll / ACTOR_RLOOKOUT_ANGLE, -1.f, 1.f); }
+
 bool CActor::g_LadderOrient()
 {
     Fvector leader_norm;

@@ -923,6 +923,12 @@ return {
   screen - is read by that form on both; the game stops only when neither is there. A use scene's
   HUD section reads its `hands_position` and `hands_orientation` the same way, and may leave them
   out: the hands then stay where the motion puts them.
+- **Leaning out**: `lean_hud_offset_pos` (metres) and `lean_hud_offset_rot` (radians, like
+  `aim_hud_offset_rot`), plain or `_16x9`, are where the item goes in front of the eye at a full lean
+  to the right, on top of everything else; a left lean mirrors them (x of the position, the turn
+  about the vertical and the roll). They follow the head as it leans and fade out while the item
+  is raised to aim, so the sights stay put. Left out or `0,0,0` - what every config the game ships
+  says - the item stays as it was.
 - **The order**: per module, in the load order, its characters, then its items - the new ones
   first (one whose base is another new item of the module waits for it), then the changes in the
   order of their paths - then its traders, loot tables and recipes, then its
