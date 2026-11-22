@@ -181,6 +181,9 @@ public:
             DestroyContext();
             return VK_ERROR_INITIALIZATION_FAILED;
         }
+        // The chain is known before the functions: a failed query below still lets DestroyContext take the chain with
+        // whatever destroy it got (SDK 2.4: the chain outlives its context and holds the surface).
+        m_chain = chain;
         m_fn = {};
         m_fn.header.type = FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_FUNCTIONS_VK;
         if (ffx->Query(&m_context, &m_fn.header) != FFX_API_RETURN_OK || !m_fn.pOutCreateSwapchainFFXAPI ||

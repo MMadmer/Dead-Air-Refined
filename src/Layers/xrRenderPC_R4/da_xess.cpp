@@ -108,36 +108,43 @@ void da_xess_vk_instance_extensions(std::vector<const char*>& out)
     }
 }
 
-void da_xess_vk_device_requirements(void* instance, void* physicalDevice, void* features2, std::vector<const char*>& out)
+void da_xess_vk_device_extensions(void* instance, void* physicalDevice, std::vector<const char*>& out)
 {
     g_vk_device_ready = false;
     const DaXess* xess = load();
-    if (!xess || !instance || !physicalDevice || !features2)
+    if (!xess || !instance || !physicalDevice)
         return;
     uint32_t count = 0;
     const char* const* names = nullptr;
-    xess_result_t result = xess->RequiredDeviceExtensions(static_cast<VkInstance>(instance),
+    const xess_result_t result = xess->RequiredDeviceExtensions(static_cast<VkInstance>(instance),
         static_cast<VkPhysicalDevice>(physicalDevice), &count, &names);
     if (result != XESS_RESULT_SUCCESS)
     {
         Msg("~ [XeSS] this Vulkan device lacks what XeSS needs (%d): XeSS is off on Vulkan", int(result));
         return;
     }
-    // XeSS writes the features it needs into the chain it is given and adds the structures the chain lacks.
+    for (uint32_t i = 0; i < count; ++i)
+        out.push_back(names[i]);
+}
+
+void* da_xess_vk_device_features(void* instance, void* physicalDevice, void* features2)
+{
+    g_vk_device_ready = false;
+    const DaXess* xess = load();
+    if (!xess || !instance || !physicalDevice || !features2)
+        return nullptr;
+    // XeSS writes the features it needs into the chain it is given and adds the structures the chain lacks; the head
+    // it hands back is the chain vkCreateDevice gets.
     void* chain = features2;
-    result = xess->RequiredDeviceFeatures(static_cast<VkInstance>(instance), static_cast<VkPhysicalDevice>(physicalDevice),
-        &chain);
-    if (result != XESS_RESULT_SUCCESS)
+    const xess_result_t result = xess->RequiredDeviceFeatures(static_cast<VkInstance>(instance),
+        static_cast<VkPhysicalDevice>(physicalDevice), &chain);
+    if (result != XESS_RESULT_SUCCESS || !chain)
     {
         Msg("~ [XeSS] this Vulkan device lacks the features XeSS needs (%d): XeSS is off on Vulkan", int(result));
-        return;
-    }
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        if (std::none_of(out.begin(), out.end(), [&](const char* n) { return !strcmp(n, names[i]); }))
-            out.push_back(names[i]);
+        return nullptr;
     }
     g_vk_device_ready = true;
+    return chain;
 }
 
 bool da_xess_vk_device_ready() { return g_vk_device_ready; }

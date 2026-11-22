@@ -91,7 +91,7 @@ class xess_upscaler final : public IUpscaler
 {
     xess_context_handle_t m_context{};
     u32 m_displayW{}, m_displayH{};
-    bool m_warnedVelocity{};
+    bool m_resetNext{};
     string64 m_name{};
 
 public:
@@ -134,7 +134,7 @@ public:
             Msg("~ [XeSS] the graphics driver is older than XeSS recommends");
         m_displayW = displayW;
         m_displayH = displayH;
-        m_warnedVelocity = false;
+        m_resetNext = true;
         xr_sprintf(m_name, "XeSS %u.%u.%u (%s)", xess->version.major, xess->version.minor, xess->version.patch,
             kXessApi == 12 ? "DX12" : kXessApi == 13 ? "Vulkan" : "DX11");
         Msg("* [XeSS] ready through [%s]: %ux%u -> %ux%u", m_name, Device.dwRenderWidth, Device.dwRenderHeight,
@@ -179,10 +179,14 @@ public:
                 frame.displayW, frame.displayH, m_displayW, m_displayH);
             return false;
         }
-        if (!frame.velocity && !m_warnedVelocity)
+        // A frame drawn without motion vectors (the save screenshot under the pause menu) has nothing XeSS can
+        // reconstruct from (they are required): it is stretched, and the history starts over on the next frame that
+        // has them. Not a failure - that would end XeSS for the session.
+        if (!frame.velocity)
         {
-            Msg("! [XeSS] no motion vectors: the frame is reconstructed as if nothing moved");
-            m_warnedVelocity = true;
+            RImplementation.Target->phase_upscale_identity();
+            m_resetNext = true;
+            return true;
         }
         // Stored NDC(cur) - NDC(prev), y up; XeSS wants prev - cur in render pixels, y down. The jitter is AMD's
         // convention too: render pixels, y down, the offset the projection carried.
@@ -264,7 +268,7 @@ public:
         p.jitterOffsetX = frame.jitterX;
         p.jitterOffsetY = frame.jitterY;
         p.exposureScale = 1.f;
-        p.resetHistory = frame.reset ? 1u : 0u;
+        p.resetHistory = frame.reset || m_resetNext ? 1u : 0u;
         p.inputWidth = frame.renderW;
         p.inputHeight = frame.renderH;
 #if defined(XR_D3D12)
@@ -284,6 +288,7 @@ public:
             Msg("! [XeSS] execution failed (%d)", int(result));
             return false;
         }
+        m_resetNext = false;
         return true;
     }
 

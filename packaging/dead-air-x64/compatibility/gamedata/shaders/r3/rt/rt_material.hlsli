@@ -60,7 +60,8 @@ bool rt_fog_extras_on( RtShade s )
 }
 
 // combine_1: the fogged colour of a point at `wp` seen from `cam`.
-float3 rt_fog_apply( float3 color, float3 wp, float3 cam, RtShade s, TextureCube sky0, TextureCube sky1 )
+// The combine's haze between cam and wp: its share (returned) and its colour.
+float rt_fog_at( float3 wp, float3 cam, RtShade s, TextureCube sky0, TextureCube sky1, out float3 fog_color )
 {
 	const float dist = length( wp - cam );
 	float fog = saturate( dist * s.fog_params.w + s.fog_params.x );
@@ -79,7 +80,14 @@ float3 rt_fog_apply( float3 color, float3 wp, float3 cam, RtShade s, TextureCube
 			fog_rgb = lerp( fog_rgb, sky, saturate( s.fog.x ) );
 		}
 	}
-	fog = rt_fog_ceiling( fog, s );
+	fog_color = fog_rgb;
+	return rt_fog_ceiling( fog, s );
+}
+
+float3 rt_fog_apply( float3 color, float3 wp, float3 cam, RtShade s, TextureCube sky0, TextureCube sky1 )
+{
+	float3 fog_rgb;
+	const float fog = rt_fog_at( wp, cam, s, sky0, sky1, fog_rgb );
 	return lerp( color, fog_rgb, fog );
 }
 

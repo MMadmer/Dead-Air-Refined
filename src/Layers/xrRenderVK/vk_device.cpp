@@ -2086,9 +2086,31 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     if (transferFamily != ~0u)
         addQueue(transferFamily, 1, &transferPriority);
 
-    if (info.deviceRequirements)
-        info.deviceRequirements(instance, physical, &features2, dext);
-    VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &features2};
+    void* featureHead = &features2;
+    if (info.deviceExtensions && info.deviceFeatures)
+    {
+        std::vector<const char*> sdk;
+        info.deviceExtensions(instance, physical, sdk);
+        const char* missing = nullptr;
+        for (const char* name : sdk)
+        {
+            if (!ext.Has(name))
+                missing = name;
+        }
+        if (missing)
+            Log("~ %s lacks %s (asked for by an SDK): it is left out", props.deviceName, missing);
+        else
+        {
+            for (const char* name : sdk)
+            {
+                if (!Listed(dext, name))
+                    dext.push_back(name);
+            }
+            if (void* head = info.deviceFeatures(instance, physical, &features2))
+                featureHead = head;
+        }
+    }
+    VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, featureHead};
     dci.queueCreateInfoCount = u32(queues.size());
     dci.pQueueCreateInfos = queues.data();
     dci.enabledExtensionCount = u32(dext.size());

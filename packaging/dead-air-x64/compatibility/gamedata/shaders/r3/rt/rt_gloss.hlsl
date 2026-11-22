@@ -143,11 +143,11 @@ void main( uint3 id : SV_DispatchThreadID )
 			const float cone = cone0 + refl.y * t;
 			const RtHitSurface hs = rt_hit_surface( geo, inst, tri, h.bary, h.o2w, dir, cone, view );
 			const float sun = rf_sun_visibility( hit, hs.normal, cone );
-			const float3 lit = rt_hit_light( hs, sun, shade, gl_env0, gl_env1, view );
+			float3 lit = rt_hit_light( hs, sun, shade, gl_env0, gl_env1, view );
+			// as the frame copy has it (fogged from the camera), so the two blend without a seam
+			lit = rt_fog_apply( lit, hit, view.camera.xyz, shade, gl_sky0, gl_sky1 );
 			color = lerp( lit, reused.rgb, reused.w );
 		}
-		// The haze along the reflected path; the combine adds the camera's own on the surface.
-		color = rt_fog_apply( color, hit, origin, shade, gl_sky0, gl_sky1 );
 		alpha = 1.0f;
 	}
 	[branch] if ( seen_at.z > 0.0f )
@@ -157,7 +157,7 @@ void main( uint3 id : SV_DispatchThreadID )
 		const float3 ps = rt_to_world( rt_view_pos( uv * view.size.xy, zs, view ), view );
 		const float4 seen = gl_previous( ps );
 		const float w = seen_at.z * seen.w;
-		color = lerp( color, rt_fog_apply( seen.rgb, ps, origin, shade, gl_sky0, gl_sky1 ), w );
+		color = lerp( color, seen.rgb, w );
 		alpha = lerp( alpha, 1.0f, w );
 	}
 	// The weight ramps in above the lowest gloss traced, so the threshold draws no edge.

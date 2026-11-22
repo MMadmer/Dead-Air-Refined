@@ -695,7 +695,7 @@ bool da_rt_wanted()
         return setting && da_rt_pass_ready(effect) && da_rt_targets_ready(effect);
     };
     return wanted(RtEffect::Reflections, ps_r__rt_reflections) || wanted(RtEffect::Shadows, ps_r__rt_shadows) ||
-        wanted(RtEffect::AO, ps_r__rtao);
+        wanted(RtEffect::AO, ps_r__rtao) || wanted(RtEffect::GI, ps_r__rt_gi);
 }
 
 void da_rt_collect()
@@ -1746,10 +1746,12 @@ void da_rt_update_dynamic(DaRtSection& section)
     // Per chosen root: its candidates, and how many of them reached the top level.
     const u32 roots = u32(g_rt_sel.roots.size());
     xr_vector<u32> expected(roots, 0), added(roots, 0);
+    // (the player's parts that cast nothing are left out of the scene: no ray's)
+    const auto counted = [](u32 root, bool casts) { return casts || root < g_rt_sel.actor_first; };
     for (const DaRtRigidCandidate& c : rigid)
-        ++expected[c.root];
+        expected[c.root] += counted(c.root, c.casts) ? 1u : 0u;
     for (const DaRtSkinCandidate& c : skin)
-        ++expected[c.root];
+        expected[c.root] += counted(c.root, c.casts) ? 1u : 0u;
 
     DaRtFrameDynamic frame;
     const u32 frame_index = Device.dwFrame;
@@ -1837,8 +1839,12 @@ void da_rt_update_dynamic(DaRtSection& section)
         record.ib = ib_bindless;
         record.albedo = da_rt_dynamic_texture(mesh.albedo);
         record.flags = mesh.flags | kGeomAbsolute;
-        const u8 cast_mask = c.root >= g_rt_sel.actor_first ? kMaskActor : kMaskDynamic;
-        add_instance(c.world, record, c.casts ? cast_mask : kMaskNoShadow, c.hemi, da_rt_address(entry.as), c.root);
+        // The player's shadow model is for the shadow rays alone: a part of it that casts none is no ray's at all.
+        const bool actor = c.root >= g_rt_sel.actor_first;
+        if (actor && !c.casts)
+            continue;
+        add_instance(c.world, record, actor ? kMaskActor : c.casts ? kMaskDynamic : kMaskNoShadow, c.hemi,
+            da_rt_address(entry.as), c.root);
     }
 
     // Characters: pre-skinned into their own vertices, the structure refitted (rebuilt every 30 frames).
@@ -1978,8 +1984,11 @@ void da_rt_update_dynamic(DaRtSection& section)
         const auto it = g_scene.skinned.find(c.child);
         if (it == g_scene.skinned.end() || !it->second.built || it->second.last_frame != frame_index)
             continue;
-        const u8 cast_mask = c.root >= g_rt_sel.actor_first ? kMaskActor : kMaskSkinned;
-        add_instance(c.world, it->second.record, c.casts ? cast_mask : kMaskNoShadow, c.hemi, da_rt_address(it->second.as), c.root);
+        const bool actor = c.root >= g_rt_sel.actor_first;
+        if (actor && !c.casts)
+            continue;
+        add_instance(c.world, it->second.record, actor ? kMaskActor : c.casts ? kMaskSkinned : kMaskNoShadow, c.hemi,
+            da_rt_address(it->second.as), c.root);
     }
 
     // Engine buffers first seen this frame, and every tracked one again (they decay at each submission);
@@ -2103,6 +2112,9 @@ void da_rt_evict_dynamic()
 void da_rt_scene_release()
 {
 #if defined(DA_RT_LANE)
+    // What the last scene traced names objects of a scene that is gone (their addresses come back as others').
+    g_rt_traced_last.clear();
+    g_rt_actor_traced_last = false;
     // The level stays: its walk is made again when an effect comes back on.
     const bool level = g_scene.level;
     if (!HW.pDevice)

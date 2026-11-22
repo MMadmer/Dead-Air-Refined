@@ -593,10 +593,10 @@ void da_rt_device_create()
         // Capability gaps are no errors; a chain that should have worked is.
         const bool expected = caps.raytracingTier < 11 || model < 0x65 || (da_native_disabled_features() & DaNativeDisableRT);
         Msg("%c [rt] unavailable: %s", expected ? '*' : '!', g_rt_device.reason);
-        if (ps_r__rt_reflections || ps_r__rt_shadows || ps_r__rtao)
+        if (ps_r__rt_reflections || ps_r__rt_shadows || ps_r__rtao || ps_r__rt_gi)
         {
-            Msg("! [rt] r__rt_reflections, r__rt_shadows and r__rtao are switched off");
-            ps_r__rt_reflections = ps_r__rt_shadows = ps_r__rtao = 0;
+            Msg("! [rt] r__rt_reflections, r__rt_shadows, r__rtao and r__rt_gi are switched off");
+            ps_r__rt_reflections = ps_r__rt_shadows = ps_r__rtao = ps_r__rt_gi = 0;
         }
     }
 #else

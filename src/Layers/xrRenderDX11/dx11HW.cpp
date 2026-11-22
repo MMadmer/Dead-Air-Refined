@@ -314,7 +314,8 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         if (ThisInstanceIsGlobal())
         {
             info.externalRequirements = &da_vk_requirements;
-            info.deviceRequirements = &da_xess_vk_device_requirements;
+            info.deviceExtensions = &da_xess_vk_device_extensions;
+            info.deviceFeatures = &da_xess_vk_device_features;
             info.deviceCreated = &da_streamline_vk_device_created;
             info.deviceProc = &da_streamline_vk_device_proc;
             // AMD FSR frame generation presents and acquires on queues of its own.

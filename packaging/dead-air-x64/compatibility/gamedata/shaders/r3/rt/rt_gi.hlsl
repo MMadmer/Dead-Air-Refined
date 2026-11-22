@@ -34,6 +34,8 @@ Texture2D<float4>	gi_scene	: register( t3 );
 TextureCube			gi_env0		: register( t4 );
 TextureCube			gi_env1		: register( t5 );
 Texture2D<float4>	rf_clouds	: register( t6 );
+TextureCube			gi_sky0		: register( t7 );
+TextureCube			gi_sky1		: register( t8 );
 
 RWTexture2D<float4>	gi_out		: register( u0 );
 RWTexture2D<float>	gi_z		: register( u1 );
@@ -51,14 +53,19 @@ uint2 gi_trace_pixel( uint2 id )
 	return min( id * 2u + offset, uint2( view.size.xy ) - 1u );
 }
 
-// The previous frame's linear colour of a world point the current frame shows (weight 0 off its screen).
+// The previous frame's light of a world point the current frame shows (weight 0 off its screen or without a copy):
+// the copy is fogged from the camera, as the combine leaves it; the haze comes off again (a deep haze leaves too
+// little of the point: its weight fades and the hit is shaded instead).
 float4 gi_previous( float3 p )
 {
 	const float3 prev = rt_project( p, view.vp_prev );
-	[branch] if ( prev.z <= 0.05f || any( prev.xy <= 0.0f ) || any( prev.xy >= 1.0f ) )
+	[branch] if ( gi.y <= 0.0f || prev.z <= 0.05f || any( prev.xy <= 0.0f ) || any( prev.xy >= 1.0f ) )
 		return 0.0f;
 	const float3 c = gi_scene.SampleLevel( rt_linear_clamp, prev.xy, 0 ).rgb * gi.y;
-	return float4( c, rf_edge_fade( prev.xy ) );
+	float3 fog_rgb;
+	const float fog = rt_fog_at( p, view.camera.xyz, shade, gi_sky0, gi_sky1, fog_rgb );
+	const float3 lit = max( ( c - fog_rgb * fog ) / max( 1.0f - fog, 0.05f ), 0.0f );
+	return float4( lit, rf_edge_fade( prev.xy ) * saturate( ( 0.85f - fog ) / 0.2f ) );
 }
 
 // The crowns in a ray's way, as whole cards (no alpha test, the first one ends it): the light a canopy lets through.
@@ -91,6 +98,10 @@ float4 gi_ray( float3 origin, float3 dir, float cone0, float3 sky, bool foliage 
 	const RfHit h = rf_trace_masked( ray, cone0, foliage ? ( refl_mask.x & ~RT_MASK_TRUNK ) : refl_mask.x );
 	[branch] if ( h.t < 0.0f )
 	{
+		// Below the horizon a miss is the far ground under a drop (a high wall, an eave over a street, a cliff): the
+		// cube's own lower half, no sky of the open-ground share.
+		[branch] if ( dir.y <= 0.0f )
+			return float4( rt_sky_diffuse( dir, shade, gi_env0, gi_env1 ), 0.0f );
 		const float canopy = foliage ? 1.0f : gi_canopy( origin, dir, gi2.y );
 		return float4( sky * canopy, canopy );
 	}

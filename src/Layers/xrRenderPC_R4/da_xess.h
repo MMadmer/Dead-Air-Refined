@@ -57,7 +57,9 @@ xess_quality_settings_t da_xess_quality(int quality);
 // the physical device's choice and vkCreateDevice), merged into the layer's own: dx11HW.cpp hands these to
 // xrvk::CreateDevice next to Streamline's.
 void da_xess_vk_instance_extensions(std::vector<const char*>& out);
-void da_xess_vk_device_requirements(void* instance, void* physicalDevice, void* features2, std::vector<const char*>& out);
+void da_xess_vk_device_extensions(void* instance, void* physicalDevice, std::vector<const char*>& out);
+// Writes XeSS's features into the chain; the chain's head (null: XeSS cannot run on this device).
+void* da_xess_vk_device_features(void* instance, void* physicalDevice, void* features2);
 // Whether this device was made with what XeSS asked for (else it cannot run on it).
 bool da_xess_vk_device_ready();
 #endif

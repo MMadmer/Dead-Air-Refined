@@ -573,15 +573,16 @@ bool da_rt_gi_wanted(const DaRtTargets* rt) { return rt && rt->gloss_scene && da
 } // namespace
 #endif
 
-const ref_rt* da_rt_gloss_scene_target()
+const ref_rt* da_rt_gloss_scene_target(bool gi)
 {
 #if defined(DA_RT_LANE)
     DaRtTargets* rt = da_rt_targets();
-    if (!da_rt_gloss_wanted(rt) && !da_rt_gi_wanted(rt))
+    if (gi ? !da_rt_gi_wanted(rt) : !da_rt_gloss_wanted(rt))
         return nullptr;
     rt->gloss_scene_frame = Device.dwFrame;
     return &rt->gloss_scene;
 #else
+    UNUSED(gi);
     return nullptr;
 #endif
 }
@@ -684,8 +685,10 @@ void da_rt_gi_pass(CBackend& cmd_list)
     const DaRtSceneBinding& scene = da_rt_scene_binding();
     const bool history = rt->gi_frame + 1 == frame && !da_history_reset();
     const u32 cur = rt->gi_current, prev = cur ^ 1u;
-    // Without the previous frame's colour (the first frame, a restart) the rays shade every hit themselves.
-    const bool scene_copy = rt->gloss_scene_frame + 1 == frame;
+    // The previous frame's colour: the copy the glossy pass or the screen-space reflections had the combine write, or
+    // the traced passes' own; without one (the first frame, a restart) the rays shade every hit themselves.
+    const ref_rt* copy = rt->gloss_scene_frame + 1 == frame ? &rt->gloss_scene : t.ssr_scene_last();
+    const bool scene_copy = copy != nullptr;
 
     DaRtGiConstants c{};
     c.view = da_rt_view(0);
@@ -705,8 +708,8 @@ void da_rt_gi_pass(CBackend& cmd_list)
     ID3D11ShaderResourceView* depth = da_rt_srv(da_rt_depth(t));
     ID3D11ShaderResourceView* position = da_rt_srv(t.rt_Position);
     ID3D11ShaderResourceView* normal = RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal);
-    ID3D11ShaderResourceView* trace_in[7] = {depth, position, normal, scene_copy ? da_rt_srv(rt->gloss_scene) : nullptr,
-        da_rt_srv(rt->t_env0), da_rt_srv(rt->t_env1), da_rt_srv(rt->t_clouds)};
+    ID3D11ShaderResourceView* trace_in[9] = {depth, position, normal, scene_copy ? da_rt_srv(*copy) : nullptr,
+        da_rt_srv(rt->t_env0), da_rt_srv(rt->t_env1), da_rt_srv(rt->t_clouds), da_rt_srv(rt->t_sky0), da_rt_srv(rt->t_sky1)};
     ID3D11UnorderedAccessView* trace_out[2] = {rt->gi_raw->pUAView, rt->gi_z->pUAView};
 
     DaRtGiTemporalConstants tc{};
@@ -730,7 +733,7 @@ void da_rt_gi_pass(CBackend& cmd_list)
         d.constants_size = sizeof(c);
         d.scene = scene.tlas;
         d.inputs = trace_in;
-        d.input_count = 7;
+        d.input_count = 9;
         d.outputs = trace_out;
         d.output_count = 2;
         for (u32 i = 0; i < da_rt_max_tables; ++i)
@@ -798,7 +801,8 @@ void da_rt_lamps_select(xr_vector<light*>& shadowed, xr_vector<light*>& traced, 
     if (!wanted)
         return;
     // The owners, each once, with what keeps one on its map: the procedural shrubs cast into it and are no part of the
-    // scene.
+    // scene; a sphere reaching past the characters the scene traces round the camera (they would cast into it no
+    // more).
     struct Owner
     {
         light* L;
@@ -807,13 +811,15 @@ void da_rt_lamps_select(xr_vector<light*>& shadowed, xr_vector<light*>& traced, 
     };
     xr_vector<Owner> owners;
     const Fvector& eye = Device.vCameraPosition;
+    const float reach = da_rt_tier().skinned_radius;
     for (light* f : shadowed)
     {
         light* L = f->omnipart_owner ? f->omnipart_owner : f;
         auto it = std::find_if(owners.begin(), owners.end(), [L](const Owner& o) { return o.L == L; });
         if (it == owners.end())
         {
-            owners.push_back({L, std::max(L->position.distance_to(eye) - L->range, 0.f), false});
+            const float d = L->position.distance_to(eye);
+            owners.push_back({L, std::max(d - L->range, 0.f), d + L->range > reach});
             it = owners.end() - 1;
         }
         if (da_veg_light_casts(f))
@@ -889,14 +895,14 @@ void da_rt_lamps_pass(CBackend& cmd_list)
     ID3D11ShaderResourceView* position = da_rt_srv(t.rt_Position);
     ID3D11ShaderResourceView* normal = RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal);
     ID3D11ShaderResourceView* inputs[3] = {depth, position, normal};
-    bool done = true;
+    bool done = false;
     {
         dx11GpuTimerScope gpu(dx11GpuTimers::RtLamps);
         DaRtSection section;
-        if (!section)
-            return;
-        da_rt_require_geometry(section);
-        const u32 masks = (g_rt_lamps.count + 3) / 4;
+        done = !!section;
+        if (done)
+            da_rt_require_geometry(section);
+        const u32 masks = done ? (g_rt_lamps.count + 3) / 4 : 0u;
         for (u32 m = 0; m < masks && done; ++m)
         {
             DaRtLampConstants c{};

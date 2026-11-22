@@ -209,9 +209,13 @@ void CRenderTarget::phase_combine()
         RCache.ClearRT(rt_Generic_0_r, {});
         RCache.ClearRT(rt_Generic_1_r, {});
         static const ref_rt none;
-        const ref_rt* gloss_scene = _menu_pp ? nullptr : da_rt_gloss_scene_target();
+        // One copy of the frame, read next frame: the traced glossy reflections', else the screen-space reflections'
+        // (the global illumination reads either), else the global illumination's own.
+        const ref_rt* gloss_scene = _menu_pp ? nullptr : da_rt_gloss_scene_target(false);
         if (!gloss_scene && !_menu_pp)
             gloss_scene = ssr_scene_target();
+        if (!gloss_scene && !_menu_pp)
+            gloss_scene = da_rt_gloss_scene_target(true);
         if (gloss_scene)
             RCache.ClearRT((*gloss_scene)->pRT, {});
         u_setrt(RCache, rt_Generic_0_r, rt_Generic_1_r, gloss_scene ? *gloss_scene : none, rt_MSAADepth);

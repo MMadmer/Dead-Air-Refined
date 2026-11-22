@@ -73,7 +73,9 @@ bool da_rt_ao_pass(CBackend& cmd_list);     // the AO slot: true = RTAO ran inst
 void da_rt_gloss_pass(CBackend& cmd_list);  // after the AO slot, before combine_1: glossy reflections
 void da_rt_gi_pass(CBackend& cmd_list);     // after the AO slot, before combine_1: diffuse global illumination
 // combine_1's third target this frame: its linear colour for the next frame's glossy reflections (null: none).
-const ref_rt* da_rt_gloss_scene_target();
+// The traced passes' frame copy for combine_1's third target: the glossy reflections' (gi false), or the global
+// illumination's when neither they nor the screen-space reflections take one (gi true); null when not wanted.
+const ref_rt* da_rt_gloss_scene_target(bool gi);
 void da_rt_reflections_pass(CBackend& cmd_list); // after the scene grab, before the puddles
 
 // Lamps (dxr.md 3.12). The frame's shadowed lamp faces the rays shade instead of their shadow maps leave `shadowed`

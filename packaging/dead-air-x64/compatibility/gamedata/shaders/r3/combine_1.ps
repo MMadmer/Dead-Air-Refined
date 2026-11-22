@@ -344,9 +344,6 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 
 	fog = da_fog_ceiling( fog );
 
-	// The traced passes' copy of the frame (rt_gloss.hlsl, rt_gi.hlsl): the light the surfaces send, before the fog
-	// between them and the camera.
-	const float3 scene_light = color;
                       	color			= lerp     		(color,fog_rgb,fog);        			//
         float        	skyblend		= saturate		(fog*fog);
 
@@ -368,7 +365,7 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 //		color = occ; // holger test
 		//color = gbd.N;
         _out        	o;
-        o.scene        	= float4( scene_light, 0.0f );
+        o.scene        	= float4( color, 0.0f );
         tonemap        	(o.low, o.high, color, tm_scale )	;
 	// QA (r__spec_ggx 2): the G-buffer's gloss as grey after the tone map, the stock materials only (foliage and
 	// snow black).

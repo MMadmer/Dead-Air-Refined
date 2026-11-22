@@ -536,8 +536,7 @@ place of the probes in the specular term. Here the engine's opaque surfaces refl
   water's rays (`rt/rt_reflect.hlsli`, shared): a screen-space march short of the traced hit, the hit from the
   screen where the frame shows it, else shaded off screen with the sun ray of High - but linear: the frame's
   colour is the previous frame's linear `combine_1` output (its third target, `$user$rt_gloss_scene`, bound
-  only while the pass runs, before the fog), reprojected, and the off-screen shading skips the tonemap; the haze
-  along the reflected path is applied to both (3.13). Output premultiplied
+  only while the pass runs), reprojected, and the off-screen shading skips the tonemap but takes the camera's haze. Output premultiplied
   by the confidence, with the hit distance.
 - **Temporal upscale** (`rt/rt_gloss_temporal.hlsl`, full resolution): the 3x3 blocks around a pixel weighted
   by distance (Gaussian), depth and normal, in a tonemapped space (x / (1 + max x)); their mean and spread clip
@@ -584,8 +583,10 @@ evenly as the open field, no bounce from a sunlit wall, no colour from a lamp. W
     the light bounces off. The full alpha test of the crowns along every ray cost 31 ms on Ultra; the card test
     costs 1.
   - Hit on screen (the previous frame shows the point, depth agrees): the frame's linear light there, everything
-    included (lamps, fires, the torch, their own bounces) - the copy is taken before the fog (`combine_1`,
-    third target).
+    included (lamps, fires, the torch, their own bounces) - from the copy the glossy pass or the screen-space
+    reflections had `combine_1` write (its third target, fogged from the camera), else the pass's own; the camera's
+    haze is taken off again (`rt_fog_at`), and a hit deep in the haze is shaded instead.
+  - A miss below the horizon is the far ground under a drop: the cube's lower half, no sky share.
   - Hit off screen: the albedo under the sun (its own shadow ray, the crowns' card test and the clouds' shadow,
     3.13) plus the sky over its vertex hemisphere at 0.35 of its weight, emissive materials glowing.
   Output: radiance and the share of rays that reached the sky.
@@ -605,7 +606,8 @@ The nearest shadowed lamps take their shadow from rays instead of the atlas (`da
 `r2_R_lights.cpp`, before the atlas packing):
 - **Choice**: the owners (a point lamp's six faces go together) sorted by the distance from the camera to their
   sphere, `lamps_max` of them (Medium 4, High 8, Ultra 12). A lamp keeps its map when the procedural shrubs cast
-  into it (`da_veg_light_casts`). A face with a volumetric beam (the torch's, with the volumetric lights on) stays in
+  into it (`da_veg_light_casts`) or its sphere reaches past the characters the scene traces round the camera
+  (`skinned_radius`). A face with a volumetric beam (the torch's, with the volumetric lights on) stays in
   the atlas for the beam's march, its surfaces lit through the traced mask all the same.
 - **Trace** (`rt/rt_light_shadow.hlsl`, render resolution, after the G-buffer, four lamps a dispatch into one
   RGBA8 mask, `$user$rt_lamps0..2`): a ray from every pixel inside a lamp's reach toward a point of its bulb (radius
@@ -621,9 +623,10 @@ The nearest shadowed lamps take their shadow from rays instead of the atlas (`da
 - `rt_cloud_transmittance` (`rt_material.hlsli`): the cloud deck's map (`$user$cloud_map`, its alpha) sampled
   where the sun's ray crosses the deck base; every traced sun term off screen (reflections, glossy surfaces, GI
   hits) multiplies it in (`RF_CLOUDS`), as the sun accumulation does for the screen.
-- Fog: the traced passes' frame copy is the light before the camera's fog; a glossy reflection takes the haze along
-  its own path (surface to hit, `rt_fog_apply`), the combine the camera's on the surface. The water's reflections
-  stay in the tonemapped, fogged space of `rt_SSR` (3.7).
+- Fog: the frame copy is fogged from the camera, as the screen-space reflections expect it; the glossy pass fogs its
+  off-screen hits the same way (`rt_fog_apply`, camera to hit) so both blend without a seam, and the global
+  illumination takes the haze off its reused hits. The water's reflections stay in the tonemapped, fogged space of
+  `rt_SSR` (3.7).
 
 ### 3.14 Quality tiers (`kTiers`, `da_rt_passes.cpp`; latched per frame)
 | | Low | Medium | High | Ultra |

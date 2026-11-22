@@ -270,6 +270,11 @@ function opt_video:Refresh()
 	local sharpening = self:IsOn("fsr") or self:IsOn("dlss")
 	self:SetState("aa", not (sharpening or self:IsOn("xess")), "st_da_x64_video_hint_aa_upscaler")
 	self:SetState("upscale_sharpness", sharpening, "st_da_x64_video_hint_upscale_sharpness_off")
+	-- XeSS where it cannot run on this renderer and card: greyed with the reason (InitStates).
+	local xess = self.rows.xess
+	if (xess) then
+		self:SetState("xess", xess.off_hint == nil, xess.off_hint)
+	end
 
 	local renderer = self.rows.renderer
 	local chosen = (renderer ~= nil) and renderer.ctrl:CurrentID() or nil

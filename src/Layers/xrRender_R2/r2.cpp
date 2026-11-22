@@ -1420,6 +1420,8 @@ void CRender::add_Visual(u32 context_id, IRenderable* root, IRenderVisual* V, Fm
 {
     // TODO: this whole function should be replaced by a list of renderables+xforms returned from `renderable_Render` call
     auto& dsgraph = get_context(context_id);
+    if (dsgraph.o.rt_skip_visual && V == dsgraph.o.rt_skip_visual)
+        return;
     if (dsgraph.o.mirror_actor && root)
     {
         // A reflection through the plane of the root's right axis: on the body (the root's own xform) it is a mirror
