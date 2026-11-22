@@ -3725,6 +3725,34 @@ public:
     }
 };
 
+// qa_hands_bone <bone>: one line with where a bone of the hands model is (model space) and how far
+// the strongest cycle on it has run. Called every frame by a probe it traces a looping motion, the
+// turn of the loop included (QA of the loop seams, LoopSeam.h).
+class CCC_QaHandsBone : public IConsole_Command
+{
+public:
+    CCC_QaHandsBone(pcstr name) : IConsole_Command(name) {}
+    void Execute(pcstr args) override
+    {
+        IKinematicsAnimated* hands = g_player_hud ? g_player_hud->hands_model() : nullptr;
+        if (!hands || !args || !args[0])
+            return;
+        IKinematics* k = hands->dcast_PKinematics();
+        const u16 bone = k->LL_BoneID(args);
+        if (bone == BI_NONE)
+            return;
+        float time = -1.f, total = 0.f, power = -1.f;
+        const u32 blends = hands->LL_PartBlendsCount(0);
+        for (u32 i = 0; i < blends; ++i)
+            if (const CBlend* b = hands->LL_PartBlend(0, i))
+                if (b->blendAmount > power)
+                    power = b->blendAmount, time = b->timeCurrent, total = b->timeTotal;
+        const Fvector& c = k->LL_GetTransform(bone).c;
+        Msg("* [qa] bone %s %.6f %.6f %.6f t %.4f of %.4f frame %u dt %.4f blends %u", args, c.x, c.y, c.z, time, total,
+            Device.dwFrame, Device.fTimeDelta, blends);
+    }
+};
+
 // qa_hands_rig <hud section>: load another hands rig under whatever is in the hands, which is
 // what an outfit change does. The rigs do not carry the same motion sets, and
 // an item left holding ids from the previous one crashed the game between two frames of the
@@ -4695,6 +4723,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_QaRainShelter, "qa_rain_shelter");
     CMD1(CCC_VisorWipe, "visor_wipe");
     CMD1(CCC_QaHandsState, "qa_hands_state");
+    CMD1(CCC_QaHandsBone, "qa_hands_bone");
     CMD1(CCC_QaVisorState, "qa_visor_state");
     CMD1(CCC_QaRainColumn, "qa_rain_column");
     CMD1(CCC_QaNpcGround, "qa_npc_ground");

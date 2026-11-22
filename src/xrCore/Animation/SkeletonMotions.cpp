@@ -3,6 +3,8 @@
 #pragma hdrstop
 
 #include "SkeletonMotions.hpp"
+#include "LoopSeam.h"
+#include "xrCore/XMS/xms_assets.h"
 
 #include "AnimationBlendSettings.hpp"
 #include "FMesh.hpp"
@@ -253,6 +255,29 @@ BOOL motions_value::load(pcstr N, IReader* data, vecBones* bones)
     for (u32 i = 0; i < bones->size(); i++)
         m_motions[bones->at(i)->name].resize(dwCNT);
 
+    static const bool loop_log = strstr(Core.Params, "-anim_loop_log");
+    // The flags a motion plays with: a module's description of the model owning this file
+    // (<model>.ogf, <model>.omf) changes them later (CKinematicsAnimated::describe_motions).
+    xr_vector<pcstr> names(m_mdefs.size(), "?");
+    for (const auto& [motion_name, index] : m_motion_map)
+        if (index < names.size())
+            names[index] = motion_name.c_str();
+    xr_string stem = N;
+    if (const size_t dot = stem.rfind('.'); dot != xr_string::npos)
+        stem.erase(dot);
+    const XMS::Assets::Model* described = XMS::Assets::FindModel(stem.c_str());
+    const auto plays_with = [&](u16 index) {
+        u16 flags = m_mdefs[index].flags;
+        if (described)
+            for (const XMS::Assets::Animation& row : described->animations)
+                if (!xr_stricmp(row.name.c_str(), names[index]))
+                    flags = u16((flags | row.set) & ~row.clear);
+        return flags;
+    };
+    xr_vector<anim_loop::RawTrack> raw;
+    xr_vector<anim_loop::BuiltTrack> built;
+    xr_vector<u16> raw_bones;
+
     // load motions
     for (u16 m_idx = 0; m_idx < (u16)dwCNT; m_idx++)
     {
@@ -267,11 +292,15 @@ BOOL motions_value::load(pcstr N, IReader* data, vecBones* bones)
         VERIFY3(I->second == m_idx, "Invalid motion index:", mname);
 #endif
         const u32 dwLen = MS->r_u32();
+        // The motion's tracks are read first and created after: a cycle's seam may be rebuilt
+        // (LoopSeam.h).
+        raw.clear();
+        raw_bones.clear();
+        bool legacy = false;
         for (u32 i = 0; i < bones->size(); i++)
         {
             const u16 bone_id = rm_bones[i];
             VERIFY2(bone_id != BI_NONE, "Invalid remap index.");
-            CMotion& M = m_motions[bones->at(bone_id)->name][m_idx];
 
             const bool missingTrack = MS->elapsed() < intptr_t(sizeof(u8));
             const u8 flags = missingTrack ? 0 : *static_cast<const u8*>(MS->pointer());
@@ -317,42 +346,91 @@ BOOL motions_value::load(pcstr N, IReader* data, vecBones* bones)
                 break;
             }
 
-            M.set_count(dwLen);
-            M.set_flags(MS->r_u8());
-
-            if (M.test_flag(flRKeyAbsent))
+            anim_loop::RawTrack& t = raw.emplace_back();
+            raw_bones.push_back(bone_id);
+            t.flags = MS->r_u8();
+            if (t.flags & flRKeyAbsent)
             {
-                CKeyQR* r = (CKeyQR*)MS->pointer();
-                const u32 crc_q = crc32(r, sizeof(CKeyQR));
-                M._keysR.create(crc_q, 1, r);
+                t.r = static_cast<const CKeyQR*>(MS->pointer());
                 MS->advance(1 * sizeof(CKeyQR));
             }
             else
             {
-                const u32 crc_q = MS->r_u32();
-                M._keysR.create(crc_q, dwLen, (CKeyQR*)MS->pointer());
+                MS->r_u32(); // crc of the keys: recomputed below, the count may change
+                t.r = static_cast<const CKeyQR*>(MS->pointer());
                 MS->advance(dwLen * sizeof(CKeyQR));
             }
-            if (M.test_flag(flTKeyPresent))
+            if (t.flags & flTKeyPresent)
             {
-                const u32 crc_t = MS->r_u32();
-                if (M.test_flag(flTKey16IsBit))
-                {
-                    M._keysT16.create(crc_t, dwLen, (CKeyQT16*)MS->pointer());
-                    MS->advance(dwLen * sizeof(CKeyQT16));
-                }
-                else
-                {
-                    M._keysT8.create(crc_t, dwLen, (CKeyQT8*)MS->pointer());
-                    MS->advance(dwLen * sizeof(CKeyQT8));
-                };
-
-                MS->r_fvector3(M._sizeT);
-                MS->r_fvector3(M._initT);
+                MS->r_u32();
+                t.t = MS->pointer();
+                MS->advance(dwLen * (t.flags & flTKey16IsBit ? sizeof(CKeyQT16) : sizeof(CKeyQT8)));
+                MS->r_fvector3(t.size_t_);
+                MS->r_fvector3(t.init_t);
             }
             else
             {
-                MS->r_fvector3(M._initT);
+                MS->r_fvector3(t.init_t);
+            }
+        }
+        // the bind-pose fallback above made the remaining tracks itself
+        legacy = raw.size() < bones->size();
+
+        anim_loop::Result closed;
+        built.assign(raw.size(), {});
+        if (!legacy && anim_loop::Enabled() && m_idx < m_mdefs.size())
+            closed = anim_loop::Close(raw, dwLen, plays_with(m_idx), built);
+        const u32 count = dwLen;
+        if (loop_log && (closed.rebuilt || closed.resting))
+            Msg("* [anim-loop] %s [%s]: %u frame(s), %u channel(s) rebuilt, seam kink %.1f -> %.1f of the clip's own, "
+                "%u kinked channel(s) at rest on one side left", N, m_idx < names.size() ? names[m_idx] : "?", count,
+                closed.rebuilt, closed.worst_before, closed.worst_after, closed.resting);
+
+        for (size_t i = 0; i < raw.size(); ++i)
+        {
+            const anim_loop::RawTrack& t = raw[i];
+            const anim_loop::BuiltTrack& b = built[i];
+            CMotion& M = m_motions[bones->at(raw_bones[i])->name][m_idx];
+            M.set_count(count);
+            u8 flags = t.flags;
+            if (b.pos)
+                flags |= flTKey16IsBit;
+            M.set_flags(flags);
+
+            if (t.flags & flRKeyAbsent)
+                M._keysR.create(crc32(t.r, sizeof(CKeyQR)), 1, const_cast<CKeyQR*>(t.r));
+            else if (b.rot)
+                M._keysR.create(crc32(b.r.data(), u32(count * sizeof(CKeyQR))), count, const_cast<CKeyQR*>(b.r.data()));
+            else
+                M._keysR.create(crc32(t.r, u32(count * sizeof(CKeyQR))), count, const_cast<CKeyQR*>(t.r));
+
+            if (t.flags & flTKeyPresent)
+            {
+                if (b.pos)
+                {
+                    M._keysT16.create(crc32(b.t.data(), u32(count * sizeof(CKeyQT16))), count, const_cast<CKeyQT16*>(b.t.data()));
+                    M._sizeT = b.size_t_;
+                    M._initT = b.init_t;
+                }
+                else
+                {
+                    if (t.flags & flTKey16IsBit)
+                    {
+                        auto* keys = static_cast<CKeyQT16*>(const_cast<void*>(t.t));
+                        M._keysT16.create(crc32(keys, u32(count * sizeof(CKeyQT16))), count, keys);
+                    }
+                    else
+                    {
+                        auto* keys = static_cast<CKeyQT8*>(const_cast<void*>(t.t));
+                        M._keysT8.create(crc32(keys, u32(count * sizeof(CKeyQT8))), count, keys);
+                    }
+                    M._sizeT = t.size_t_;
+                    M._initT = t.init_t;
+                }
+            }
+            else
+            {
+                M._initT = t.init_t;
             }
         }
     }

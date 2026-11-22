@@ -243,10 +243,17 @@ void attachable_hud_item::update_hud_additional(Fmatrix& trans) const
     const CActor* actor = smart_cast<const CActor*>(m_parent_hud_item->object().H_Parent());
     if (!actor)
         return;
-    const float lean = actor->LookoutFactor() * (1.f - clampr(m_parent_hud_item->GetHudAimFactor(), 0.f, 1.f));
+    // aiming with either hand raises the whole view: an item in the other hand straightens too
+    float aim = m_parent_hud_item->GetHudAimFactor();
+    if (g_player_hud)
+        for (u16 i = 0; i < 2; ++i)
+            if (const attachable_hud_item* held = g_player_hud->attached_item(i); held && held->m_parent_hud_item)
+                aim = _max(aim, held->m_parent_hud_item->GetHudAimFactor());
+    const float lean = actor->LookoutFactor() * (1.f - clampr(aim, 0.f, 1.f));
     if (fis_zero(lean))
         return;
-    const float side = lean < 0.f ? -1.f : 1.f;
+    // the left-handed hud comes in mirrored on x, which turns the side offsets over
+    const float side = (lean < 0.f ? -1.f : 1.f) * (psHUD_Flags.test(HUD_LEFT_HANDED) ? -1.f : 1.f);
     const float k = _abs(lean);
 
     Fmatrix offset, step;

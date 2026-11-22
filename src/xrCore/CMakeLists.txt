@@ -25,6 +25,8 @@ target_sources_grouped(
     Animation/Motion.hpp
     Animation/AnimationBlendSettings.hpp
     Animation/SkeletonMotionDefs.hpp
+    Animation/LoopSeam.cpp
+    Animation/LoopSeam.h
     Animation/SkeletonMotions.cpp
     Animation/SkeletonMotions.hpp
 )
