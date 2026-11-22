@@ -488,6 +488,9 @@ XRCORE_API const Module* ModuleOfSection(const shared_str& section);
 XRCORE_API void NoteFileSectionCreated(pcstr file, pcstr section, u16 layer);
 XRCORE_API const Module* ModuleOfFileSection(pcstr file, pcstr section);
 // A section of the game whose class a module changed counts as made by that module.
+// The class the game itself gives such a section (empty for a section no module changed the class
+// of): what wrote its objects into a world save made without that module.
+XRCORE_API shared_str ClassBeforeModules(const shared_str& section);
 // The module that made the ammo_class (grenades: grenade_class) list of a section of the game
 // longer than `index`; null when the index is within the list the game itself gives it, or the
 // section is no section of the game. Kept from the config stage (xms_ltx.cpp).

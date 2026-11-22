@@ -209,6 +209,27 @@ comes back where the `.scop` field still holds what Refined wrote there (same id
 section CRC, the `written` value or CRC unchanged); otherwise the record is dropped with
 its line - so a weapon the base game reloaded keeps the ammo it was given there.
 
+**A class a module changes, on a save made without the module.** A world save made while
+no module changed the class of a section holds that section's objects written by the
+class the game gives it, and `.scop` keeps them so: nothing of the module enters it. Loaded
+with a module that gives the section another class (a bolt-action rifle made a
+single-loading shotgun class, `WP_SVD` -> `WP_ASHTG`), the object is read by its section's
+class now. Where that class reads the record's update as written (the layouts agree:
+`WP_SVD` -> `WP_LR300`), nothing changes; where it would read past the record's end (a
+shotgun's cartridge list after a rifle's record), the object is made again from its spawn
+data alone - its place, owner, condition and upgrades, a weapon's ammo, addons and state,
+the `STATE` the classes of a kind share - its live state (a physics pose, a weapon's zoom
+and fire mode, a shotgun's cartridge list) at its class's defaults, with one line naming
+the object, both classes and the module (`! Saved object [id] of [section]: its saved state
+is not its class's (...); it is made from its spawn data`). An object whose spawn data its
+class cannot read either is left out of the world with its line. The records are read from
+copies zero-padded past their end, as the spawn file's are, and the record's own size says
+whether a reader ran past it: until 1.6.7 that read ended the game (`NET_Packet read
+overflow`). Every rule holds for a section whose class a mod's own config changed too; the
+line then names no module. From then on the object is the module's (above): the next save
+writes it into the module's chunk of `.scov` and a placeholder into `.scop`, and it comes
+back from there with the module's class. QA: `tools/qa/water/class_change_save.lua`.
+
 **What the game's own objects carry of a module's data** follows `WEX1`: the `.scop`
 record keeps what the base game understands, the module's `0x5845|ns` the rest. A loaded
 ammo type or a grenade type that indexes past the list the base game gives the weapon's

@@ -128,8 +128,16 @@ void watch_classes(const CInifile& ini, ClassWatch& watch, u16 layer)
     watch_lists(ini, base_values().grenades, "grenade_class", grenade_growth(), layer);
 }
 
+// The class the game gives a section whose class a module changed (ClassBeforeModules).
+xr_unordered_map<shared_str, shared_str, std::hash<shared_str>>& classes_before()
+{
+    static xr_unordered_map<shared_str, shared_str, std::hash<shared_str>> before;
+    return before;
+}
+
 void note_changed_classes(const CInifile& ini, const ClassWatch& watch)
 {
+    classes_before().clear();
     for (const auto& [name, layer] : watch.by)
     {
         const shared_str& base_class = base_values().classes[name];
@@ -138,6 +146,7 @@ void note_changed_classes(const CInifile& ini, const ClassWatch& watch)
         if (!m || !now || now == base_class)
             continue;
         NoteSectionCreated(ini, name, layer);
+        classes_before()[name] = base_class;
         Msg("* XMS: [%s] changes the class of [%s] (%s -> %s): its objects are the module's in a save", m->id.c_str(),
             name.c_str(), base_class.c_str(), now.c_str());
     }
@@ -595,6 +604,15 @@ const Module* ModuleOfFileSection(pcstr file, pcstr section)
         return nullptr;
     const auto found = sections.find(file_section_key(file, section));
     return found == sections.end() ? nullptr : ModuleOfLayer(found->second);
+}
+
+shared_str ClassBeforeModules(const shared_str& section)
+{
+    const auto& before = classes_before();
+    if (!section || before.empty())
+        return {};
+    const auto found = before.find(section);
+    return found == before.end() ? shared_str() : found->second;
 }
 
 const Module* ListEntryModule(const shared_str& section, bool grenades, u32 index)

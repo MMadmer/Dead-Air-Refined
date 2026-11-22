@@ -9,6 +9,7 @@
 #include "StdAfx.h"
 #include "alife_object_registry.h"
 #include "xms_game.h"
+#include "xrCore/XMS/xms_core.h"
 #include "ai_debug.h"
 #include "xrServerEntities/xrMessages.h"
 #include "xrServer_Objects_ALife_Items.h"
@@ -360,6 +361,37 @@ CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream)
     return get_object(file_stream, packet);
 }
 
+namespace
+{
+// Zeros past a record's end, so a reader that runs past it reads zeros there instead of ending the game; the record's
+// own size tells whether it did (the spawn file's records are read so too, server_entity_wrapper.cpp).
+constexpr u32 SavedRecordPadding = 256;
+
+u32 pad_saved_record(NET_Packet& packet)
+{
+    const u32 size = packet.B.count;
+    const u32 padding = std::min(SavedRecordPadding, NET_PacketSizeLimit - size);
+    std::fill_n(packet.B.data + size, padding, u8{});
+    packet.B.count = size + padding;
+    return size;
+}
+
+// Why an object's record reads past its end, for its line: a module changed its section's class, so the save (made
+// without the module) wrote it by the class the game gives the section.
+void why_unread(pcstr section, xr_string& why)
+{
+    const shared_str before = XMS::ClassBeforeModules(shared_str(section));
+    if (!before)
+    {
+        why = "the class its section has now is not the one it was saved by";
+        return;
+    }
+    const XMS::Module* m = XMS::ModuleOfSection(shared_str(section));
+    why = make_string("it was saved as %s, the class the game gives [%s]; module [%s] makes it %s", before.c_str(), section,
+        m ? m->id.c_str() : "?", pSettings->r_string(section, "class"));
+}
+} // namespace
+
 CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream, NET_Packet& packet)
 {
     u16 u_id;
@@ -368,7 +400,10 @@ CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream, N
     CHECK_OR_EXIT(packet.B.count < NET_PacketSizeLimit,
         make_string("Invalid spawn packet size: %u", packet.B.count));
     file_stream.r(packet.B.data, packet.B.count);
-    packet.B.data[packet.B.count] = 0;
+    // (Kept for a second reading below: the update comes into the same packet.)
+    static thread_local xr_vector<u8> spawn_bytes;
+    spawn_bytes.assign(packet.B.data, packet.B.data + packet.B.count);
+    const u32 spawn_size = pad_saved_record(packet);
     packet.r_begin(u_id);
     R_ASSERT2(M_SPAWN == u_id, "Invalid packet ID (!= M_SPAWN)");
 
@@ -397,18 +432,48 @@ CSE_ALifeDynamicObject* CALifeObjectRegistry::get_object(IReader& file_stream, N
     CSE_ALifeDynamicObject* tpALifeDynamicObject = smart_cast<CSE_ALifeDynamicObject*>(tpSE_Abstract);
     R_ASSERT2(tpALifeDynamicObject, "Non-ALife object in the saved game!");
     tpALifeDynamicObject->Spawn_Read(packet);
+    const bool spawn_unread = packet.r_tell() > spawn_size;
 
     // Update
-    packet.B.count = file_stream.r_u16();
-    CHECK_OR_EXIT(packet.B.count < NET_PacketSizeLimit,
-        make_string("Invalid update packet size: %u", packet.B.count));
-    file_stream.r(packet.B.data, packet.B.count);
-    packet.B.data[packet.B.count] = 0;
+    const u32 update_size = file_stream.r_u16();
+    CHECK_OR_EXIT(update_size < NET_PacketSizeLimit, make_string("Invalid update packet size: %u", update_size));
+    packet.B.count = update_size;
+    file_stream.r(packet.B.data, update_size);
+    pad_saved_record(packet);
+
+    // A record its class reads past the end of was written by another class: the save was made while the section had
+    // another class (a module that changes the class of a section of the game, enabled after the save; a mod's config).
+    // Its spawn data is the object as the game describes it - place, owner, condition, a weapon's ammo, addons and
+    // state, the STATE every class of a kind shares -, so the object is made from that alone, its live state (a
+    // physics pose, a weapon's zoom and fire mode, a shotgun's cartridge list) at its class's defaults. (Unpadded, the
+    // reader ran past the record and ended the game: "NET_Packet read overflow".)
     packet.r_begin(u_id);
     R_ASSERT2(M_UPDATE == u_id, "Invalid packet ID (!= M_UPDATE)");
     tpALifeDynamicObject->UPDATE_Read(packet);
+    if (!spawn_unread && packet.r_tell() <= update_size)
+        return tpALifeDynamicObject;
 
-    return (tpALifeDynamicObject);
+    xr_string why;
+    why_unread(s_name, why);
+    const u16 id = tpALifeDynamicObject->ID;
+    F_entity_Destroy(tpSE_Abstract);
+    if (spawn_unread)
+    {
+        // Not even its spawn data is the class's: nothing of it can be told, it stays out of the world.
+        Msg("! Saved object [%u] of [%s] is left out: its spawn data is not its class's (%s)", id, s_name, why.c_str());
+        return nullptr;
+    }
+    Msg("! Saved object [%u] of [%s]: its saved state is not its class's (%s); it is made from its spawn data", id,
+        s_name, why.c_str());
+    tpSE_Abstract = F_entity_Create(s_name, true);
+    tpALifeDynamicObject = smart_cast<CSE_ALifeDynamicObject*>(tpSE_Abstract);
+    R_ASSERT2(tpALifeDynamicObject, "Non-ALife object in the saved game!");
+    std::copy(spawn_bytes.begin(), spawn_bytes.end(), packet.B.data);
+    packet.B.count = u32(spawn_bytes.size());
+    pad_saved_record(packet);
+    packet.r_begin(u_id);
+    tpALifeDynamicObject->Spawn_Read(packet);
+    return tpALifeDynamicObject;
 }
 
 void CALifeObjectRegistry::load(IReader& file_stream)
