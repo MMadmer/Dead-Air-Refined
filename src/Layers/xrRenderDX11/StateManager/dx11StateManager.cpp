@@ -54,6 +54,7 @@ void dx11StateManager::Reset()
     m_iDepthBias = 0;
     m_fSlopeDepthBias = 0.f;
     m_fDepthBiasClamp = 0.f;
+    m_bOverrideFrontCCW = false;
     m_uiSampleMask = 0xffffffff;
 }
 
@@ -75,6 +76,8 @@ void dx11StateManager::SetRasterizerState(ID3DRasterizerState* pRState)
         EnableScissoring(m_bOverrideScissoringValue);
     if (m_bOverrideDepthBias)
         ApplyDepthBias();
+    if (m_bOverrideFrontCCW)
+        ApplyFrontFace();
 }
 
 void dx11StateManager::SetDepthStencilState(ID3DDepthStencilState* pDSState)
@@ -487,6 +490,27 @@ void dx11StateManager::OverrideDepthBias(bool bOverride, INT bias, float slope, 
     m_fSlopeDepthBias = slope;
     m_fDepthBiasClamp = clamp;
     ApplyDepthBias();
+}
+
+// Every rasterizer state the engine makes has a clockwise front (dx11StateUtils::ResetDescription), so off restores
+// the state's own winding.
+void dx11StateManager::ApplyFrontFace()
+{
+    ValidateRDesc();
+    const BOOL ccw = m_bOverrideFrontCCW ? TRUE : FALSE;
+    if (m_RDesc.FrontCounterClockwise != ccw)
+    {
+        m_bRSChanged = true;
+        m_RDesc.FrontCounterClockwise = ccw;
+    }
+}
+
+void dx11StateManager::OverrideFrontCCW(bool bOverride)
+{
+    if (m_bOverrideFrontCCW == bOverride)
+        return;
+    m_bOverrideFrontCCW = bOverride;
+    ApplyFrontFace();
 }
 
 void dx11StateManager::OverrideScissoring(bool bOverride, BOOL bValue)

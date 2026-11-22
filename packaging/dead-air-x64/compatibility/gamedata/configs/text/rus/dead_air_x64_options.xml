@@ -133,6 +133,12 @@
 	<string id="ui_mm_crouch_toggle_hint">
 		<text>Приседание переключается нажатием, а не держится, пока зажата клавиша.</text>
 	</string>
+	<string id="ui_mm_left_handed">
+		<text>Левша</text>
+	</string>
+	<string id="ui_mm_left_handed_hint">
+		<text>Оружие держится в левой руке, детектор и другие предметы — в правой.</text>
+	</string>
 	<string id="ui_mm_pause_in_background_hint">
 		<text>Игра встаёт на паузу, когда её окно теряет фокус, например при Alt+Tab.</text>
 	</string>

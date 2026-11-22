@@ -8,6 +8,7 @@
 #include "ActorEffector.h"
 #include "WeaponMagazinedWGrenade.h" // XXX: move somewhere
 #include "GamePersistent.h"
+#include "xrCore/Animation/Motion.hpp"
 
 player_hud* g_player_hud = nullptr;
 extern ENGINE_API shared_str current_player_hud_sect;
@@ -25,6 +26,7 @@ float g_hud_scene_item_scale_adj = 1.f;
 float g_hud_scene_seat_in = 2.5f;
 float g_hud_scene_seat_out = 9.f;
 int g_hud_scene_dbg = 0;
+int g_hud_cycle_match = 1;
 
 // Data-driven lists of extra hand-animation omfs. Loaded once; the render side appends them to
 // every hands model created while the loading flag is raised. The 3D PDA set comes from its own
@@ -100,6 +102,180 @@ CBlend* PlayHudCycle(IKinematicsAnimated& model, const u16 part, const MotionID 
         B->timeCurrent = (B->timeTotal > EPS_S) ? _min(start_time, B->timeTotal - EPS_S) : start_time;
     return B;
 }
+
+void hud_pose_trail::capture(IKinematics& model)
+{
+    const u16 n = model.LL_BoneCount();
+    now.swap(before);
+    now.resize(n);
+    for (u16 i = 0; i < n; ++i)
+        now[i] = model.LL_GetTransform(i).c;
+    dt = Device.fTimeDelta;
+}
+
+namespace
+{
+// Forward kinematics of a motion's own keys, frame by frame, in the model's space.
+class motion_pose
+{
+public:
+    motion_pose(IKinematicsAnimated& ka, const MotionID& M)
+        : ka(ka), K(*ka.dcast_PKinematics()), M(M), n(K.LL_BoneCount()), order(n), xf(n)
+    {
+        // parents before children
+        xr_vector<u16> depth(n);
+        for (u16 b = 0; b < n; ++b)
+        {
+            order[b] = b;
+            for (u16 p = K.LL_GetData(b).GetParentID(); p < n; p = K.LL_GetData(p).GetParentID())
+                ++depth[b];
+        }
+        std::stable_sort(order.begin(), order.end(), [&](u16 a, u16 b) { return depth[a] < depth[b]; });
+    }
+
+    u32 frames() const
+    {
+        const CMotion* root = ka.LL_GetRootMotion(M);
+        return root ? root->get_count() : 0;
+    }
+
+    void at(u32 f, xr_vector<Fvector>& out)
+    {
+        out.resize(n);
+        for (const u16 b : order)
+        {
+            CMotion& m = *ka.LL_GetMotion(M, b);
+            const CKeyQR& r = m._keysR[m.test_flag(flRKeyAbsent) ? 0 : f];
+            Fquaternion q;
+            q.set(r.w * KEY_QuantI, r.x * KEY_QuantI, r.y * KEY_QuantI, r.z * KEY_QuantI).normalize();
+            Fvector t = m._initT;
+            if (m.test_flag(flTKeyPresent))
+            {
+                if (m.test_flag(flTKey16IsBit))
+                {
+                    const CKeyQT16& k = m._keysT16[f];
+                    t.set(k.x1 * m._sizeT.x + m._initT.x, k.y1 * m._sizeT.y + m._initT.y, k.z1 * m._sizeT.z + m._initT.z);
+                }
+                else
+                {
+                    const CKeyQT8& k = m._keysT8[f];
+                    t.set(k.x1 * m._sizeT.x + m._initT.x, k.y1 * m._sizeT.y + m._initT.y, k.z1 * m._sizeT.z + m._initT.z);
+                }
+            }
+            Fmatrix local;
+            local.mk_xform(q, t);
+            const u16 p = K.LL_GetData(b).GetParentID();
+            if (p < n)
+                xf[b].mul_43(xf[p], local);
+            else
+                xf[b] = local;
+            out[b] = xf[b].c;
+        }
+    }
+
+private:
+    IKinematicsAnimated& ka;
+    IKinematics& K;
+    MotionID M;
+    u16 n;
+    xr_vector<u16> order;
+    xr_vector<Fmatrix> xf;
+};
+
+struct pose_copy
+{
+    IKinematics* model;
+    const hud_pose_trail* trail;
+};
+
+// The time a cycle taking over from another cycle starts at: the frame whose pose and motion come
+// nearest the bones as they are now, so the crossfade runs between matching phases instead of
+// pulling the hands back to the new cycle's first frame. 0 when no other cycle leads now.
+// ka plays M and leads; copies are the hud models whose shown bones count (one copy of the hands
+// hides the other arm), each with the trail of its own bones.
+float match_cycle_start(IKinematicsAnimated& ka, const MotionID& M, float speed, std::initializer_list<pose_copy> copies)
+{
+    const CMotionDef* def = ka.LL_GetMotionDef(M);
+    if (!g_hud_cycle_match || !def || (def->flags & esmStopAtEnd))
+        return 0.f;
+    struct strongest final : IterateBlendsCallback
+    {
+        const CBlend* blend{};
+        void operator()(CBlend& B) override
+        {
+            if (B.playing && B.blend_state() != CBlend::eFREE_SLOT && (!blend || B.blendAmount > blend->blendAmount))
+                blend = &B;
+        }
+    } leading;
+    ka.LL_IterateBlends(leading);
+    if (!leading.blend || leading.blend->stop_at_end || leading.blend->motionID == M)
+        return 0.f;
+
+    motion_pose fk(ka, M);
+    const u16 n = ka.dcast_PKinematics()->LL_BoneCount();
+    const u32 count = fk.frames();
+    if (count < 4)
+        return 0.f;
+    // the bones a copy shows: a hidden arm's matrices are moved out of sight
+    struct counted_copy
+    {
+        const hud_pose_trail* trail;
+        xr_vector<u16> bones;
+    };
+    xr_vector<counted_copy> counted;
+    for (const pose_copy& c : copies)
+    {
+        if (!c.model || !c.trail || c.trail->now.size() != n || c.model->LL_BoneCount() != n)
+            continue;
+        counted_copy& cc = counted.emplace_back();
+        cc.trail = c.trail;
+        for (u16 b = 0; b < n; ++b)
+            if (c.model->LL_GetBoneVisible(b))
+                cc.bones.push_back(b);
+    }
+    if (counted.empty())
+        return 0.f;
+
+    // how far the pose is, and the motion over a tenth of a second
+    const float rate = SAMPLE_FPS * def->Speed() * speed;
+    constexpr float tau = 0.1f;
+    xr_vector<Fvector> cur, next;
+    fk.at(0, cur);
+    float best = flt_max, first = 0.f;
+    u32 best_frame = 0;
+    for (u32 f = 0; f + 1 < count; ++f)
+    {
+        fk.at(f + 1, next);
+        float cost = 0.f;
+        for (const counted_copy& c : counted)
+        {
+            const hud_pose_trail& trail = *c.trail;
+            const bool moving = trail.before.size() == n && trail.dt > EPS_S;
+            for (const u16 b : c.bones)
+            {
+                cost += cur[b].distance_to_sqr(trail.now[b]);
+                if (moving)
+                {
+                    Fvector v_new, v_now;
+                    v_new.sub(next[b], cur[b]).mul(rate);
+                    v_now.sub(trail.now[b], trail.before[b]).div(trail.dt);
+                    cost += tau * tau * v_new.distance_to_sqr(v_now);
+                }
+            }
+        }
+        if (cost < best)
+            best = cost, best_frame = f;
+        if (!f)
+            first = cost;
+        cur.swap(next);
+    }
+
+    if (g_hud_cycle_match > 1)
+        Msg("* [hud-cycle] frame %u of %u, cost %.6f (frame 0: %.6f), %u copies", best_frame, count, best, first,
+            u32(counted.size()));
+    return float(best_frame) / SAMPLE_FPS;
+}
+} // namespace
 
 const player_hud_motion* player_hud_motion_container::find_motion(const shared_str& name) const
 {
@@ -225,6 +401,8 @@ void attachable_hud_item::update(bool bForce)
         // stale - without the invalidation the attached item lags the hands it hangs on.
         ka->dcast_PKinematics()->CalculateBones_Invalidate();
         ka->dcast_PKinematics()->CalculateBones(TRUE);
+        if (m_monolithic)
+            m_trail.capture(*ka->dcast_PKinematics());
     }
 }
 
@@ -253,7 +431,7 @@ void attachable_hud_item::update_hud_additional(Fmatrix& trans) const
     if (fis_zero(lean))
         return;
     // the left-handed hud comes in mirrored on x, which turns the side offsets over
-    const float side = (lean < 0.f ? -1.f : 1.f) * (psHUD_Flags.test(HUD_LEFT_HANDED) ? -1.f : 1.f);
+    const float side = (lean < 0.f ? -1.f : 1.f) * g_hud_mirror;
     const float k = _abs(lean);
 
     Fmatrix offset, step;
@@ -638,10 +816,14 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
             root_binst.mTransform.identity();
         }
 
+        // the item model keeps in step with the hands; a monolithic one is its own hands
+        const float start = !m_monolithic ? m_parent->cycle_start() :
+            bMixIn                        ? match_cycle_start(*ka, M2, speed, {{m_model, &m_trail}}) :
+                                            0.f;
         const u16 pc = ka->partitions().count();
         for (u16 pid = 0; pid < pc; ++pid)
         {
-            CBlend* B = PlayHudCycle(*ka, pid, M2, bMixIn, speed);
+            CBlend* B = PlayHudCycle(*ka, pid, M2, bMixIn, speed, start);
             R_ASSERT(B);
         }
 
@@ -945,8 +1127,6 @@ void player_hud::render_shadow(u32 context_id, IRenderable* root)
         GEnv.Render->add_Visual(context_id, root, m_scene_item_visual, m_scene_item_transform);
 }
 
-#include "xrCore/Animation/Motion.hpp"
-
 u32 player_hud::motion_length(const shared_str& anim_name, const shared_str& hud_name, const CMotionDef*& md)
 {
     // no definition unless one is found: a stale one kept from the last motion read its marks
@@ -986,7 +1166,8 @@ u32 player_hud::motion_length(const MotionID& M, const CMotionDef*& md, float sp
 void player_hud::update(const Fmatrix& cam_trans)
 {
     Fmatrix trans = cam_trans;
-    if (psHUD_Flags.test(HUD_LEFT_HANDED))
+    g_hud_mirror = psHUD_Flags.test(HUD_LEFT_HANDED) ? -1.f : 1.f;
+    if (g_hud_mirror < 0.f)
     {
         // faster than multiplication by flip matrix
         trans.m[0][0] = -trans.m[0][0];
@@ -1075,12 +1256,14 @@ void player_hud::update(const Fmatrix& cam_trans)
         m_model->UpdateTracks();
         m_model->dcast_PKinematics()->CalculateBones_Invalidate();
         m_model->dcast_PKinematics()->CalculateBones(TRUE);
+        m_trail.capture(*m_model->dcast_PKinematics());
 
         if (m_model_2)
         {
             m_model_2->UpdateTracks();
             m_model_2->dcast_PKinematics()->CalculateBones_Invalidate();
             m_model_2->dcast_PKinematics()->CalculateBones(TRUE);
+            m_trail_2.capture(*m_model_2->dcast_PKinematics());
         }
     }
 
@@ -1165,7 +1348,7 @@ void player_hud::play_blend(u16 pid, const MotionID& M, BOOL bMixIn, float speed
         {
             if (i == 1)
                 continue;
-            PlayHudCycle(*m_model, i, M, bMixIn, speed);
+            PlayHudCycle(*m_model, i, M, bMixIn, speed, start_time);
         }
         m_model->dcast_PKinematics()->CalculateBones_Invalidate();
         break;
@@ -1540,11 +1723,25 @@ bool player_hud::scene_active() const
 
 u32 player_hud::anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotionDef*& md, float speed, IKinematicsAnimated* itemModel)
 {
+    m_cycle_start = 0.f;
     if (!itemModel && m_model)
     {
         // One item drives BOTH hands (it is held with two). Two items - each its own half.
         const u16 pid = (attached_item(0) && attached_item(1)) ? ((part == 0) ? u16(2) : u16(1)) : u16(0);
-        play_blend(pid, M, bMixIn, speed, false);
+        // A cycle after a cycle starts where its pose meets the hands. Matched on the left copy,
+        // which plays it on every partition; the right one has the other arm hidden.
+        if (bMixIn)
+        {
+            IKinematics* right = m_model->dcast_PKinematics();
+            IKinematics* left = m_model_2 ? m_model_2->dcast_PKinematics() : nullptr;
+            if (pid == 0)
+                m_cycle_start = match_cycle_start(*m_model, M, speed, {{right, &m_trail}, {left, &m_trail_2}});
+            else if (pid == 1 && m_model_2)
+                m_cycle_start = match_cycle_start(*m_model_2, M, speed, {{left, &m_trail_2}});
+            else
+                m_cycle_start = match_cycle_start(*m_model, M, speed, {{right, &m_trail}});
+        }
+        play_blend(pid, M, bMixIn, speed, false, m_cycle_start);
     }
 
     return motion_length(M, md, speed, itemModel);
@@ -1847,20 +2044,11 @@ void player_hud::OnMovementChanged(ACTOR_DEFS::EMoveCommand cmd) const
     CHudItem* hudItem0 = m_attached_items[0] ? m_attached_items[0]->m_parent_hud_item : nullptr;
     CHudItem* hudItem1 = m_attached_items[1] ? m_attached_items[1]->m_parent_hud_item : nullptr;
 
-    if (cmd == 0)
-    {
-        if (hudItem0 && hudItem0->GetState() == CHUDState::eIdle)
-            hudItem0->PlayAnimIdle();
-
-        if (hudItem1 && hudItem1->GetState() == CHUDState::eIdle)
-            hudItem1->PlayAnimIdle();
-    }
-    else
-    {
-        if (hudItem0)
-            hudItem0->OnMovementChanged(cmd);
-
-        if (hudItem1)
-            hudItem1->OnMovementChanged(cmd);
-    }
+    // A stop (cmd 0) picks the idle cycle again like any other change: through the item, so a
+    // transition clip running is not cut and a cycle already playing is not started over.
+    const ACTOR_DEFS::EMoveCommand move = cmd ? cmd : ACTOR_DEFS::mcAnyMove;
+    if (hudItem0)
+        hudItem0->OnMovementChanged(move);
+    if (hudItem1)
+        hudItem1->OnMovementChanged(move);
 }

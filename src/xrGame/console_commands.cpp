@@ -4266,6 +4266,9 @@ void CCC_RegisterCommands()
         CMD4(CCC_SessionFloat, "hud_scene_seat_in", &g_hud_scene_seat_in, 0.5f, 20.f);
         CMD4(CCC_SessionFloat, "hud_scene_seat_out", &g_hud_scene_seat_out, 0.5f, 40.f);
         CMD4(CCC_SessionInteger, "hud_scene_dbg", &g_hud_scene_dbg, 0, 1);
+        // a hud cycle taking over from another one starts at the frame nearest the hands' pose (2: and logs it)
+        extern int g_hud_cycle_match;
+        CMD4(CCC_Integer, "hud_cycle_match", &g_hud_cycle_match, 0, 2);
         CMD1(CCC_HudSceneItemDump, "hud_scene_item_dump");
     }
 

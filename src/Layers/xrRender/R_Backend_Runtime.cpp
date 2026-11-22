@@ -103,6 +103,9 @@ void CBackend::Invalidate()
     stencil_pass = u32(-1);
     stencil_zfail = u32(-1);
     cull_mode = u32(-1);
+#if defined(USE_OGL)
+    winding_flip = u32(-1);
+#endif
     fill_mode = u32(-1);
     z_enable = u32(-1);
     z_func = u32(-1);

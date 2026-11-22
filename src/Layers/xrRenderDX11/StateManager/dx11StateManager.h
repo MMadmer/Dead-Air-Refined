@@ -49,10 +49,14 @@ public:
     void OverrideScissoring(bool bOverride = true, BOOL bValue = TRUE);
     //	Hardware depth bias on every rasterizer state while shadow casters draw (off = the states' own).
     void OverrideDepthBias(bool bOverride, INT bias = 0, float slope = 0.f, float clamp = 0.f);
+    //	Counter-clockwise front faces on every rasterizer state, each state's cull mode kept: the draws of a
+    //	mirrored world matrix (off = the states' own clockwise front).
+    void OverrideFrontCCW(bool bOverride);
 
 private:
     void ValidateRDesc();
     void ApplyDepthBias();
+    void ApplyFrontFace();
     void ValidateDSDesc();
     void ValidateBDesc();
 
@@ -97,6 +101,7 @@ private:
     INT m_iDepthBias;
     float m_fSlopeDepthBias;
     float m_fDepthBiasClamp;
+    bool m_bOverrideFrontCCW;
     u32 m_uiSampleMask;
 
     CBackend& cmd_list;

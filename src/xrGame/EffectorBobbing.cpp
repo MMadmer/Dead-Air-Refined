@@ -28,6 +28,7 @@ CEffectorBobbing::CEffectorBobbing()
     m_fSpeedRun = pSettings->r_float(BOBBING_SECT, "run_speed");
     m_fSpeedWalk = pSettings->r_float(BOBBING_SECT, "walk_speed");
     m_fSpeedLimp = pSettings->r_float(BOBBING_SECT, "limp_speed");
+    m_amplitude_smooth_time = pSettings->read_if_exists<float>(BOBBING_SECT, "amplitude_smooth_time", 0.15f);
 }
 
 CEffectorBobbing::~CEffectorBobbing() {}
@@ -68,23 +69,30 @@ bool CEffectorBobbing::ProcessCam(SCamEffectorInfo& info)
         Fvector dangle;
         float k = ((dwMState & ACTOR_DEFS::mcCrouch) ? CROUCH_FACTOR : 1.f);
 
-        float A, ST;
+        float A, pace;
 
         if (isActorAccelerated(dwMState, m_bZoomMode))
         {
             A = m_fAmplitudeRun * k;
-            ST = m_fSpeedRun * fTime * k;
+            pace = m_fSpeedRun * k;
         }
         else if (is_limping)
         {
             A = m_fAmplitudeLimp * k;
-            ST = m_fSpeedLimp * fTime * k;
+            pace = m_fSpeedLimp * k;
         }
         else
         {
             A = m_fAmplitudeWalk * k;
-            ST = m_fSpeedWalk * fTime * k;
+            pace = m_fSpeedWalk * k;
         }
+        m_phase = std::fmod(m_phase + pace * Device.fTimeDelta, PI_MUL_2);
+        const float ST = m_phase;
+        if (m_amplitude_smooth_time > EPS_S)
+            m_amplitude += (A - m_amplitude) * (1.f - std::exp(-Device.fTimeDelta / m_amplitude_smooth_time));
+        else
+            m_amplitude = A;
+        A = m_amplitude;
 
         float _sinA = _abs(_sin(ST) * A) * fReminderFactor;
         float _cosA = _cos(ST) * A * fReminderFactor;

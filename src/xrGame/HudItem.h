@@ -85,6 +85,15 @@ protected:
     u32 m_startedMotionState;
     u8 m_started_rnd_anim_idx;
     bool m_bStopAtEndAnimIsRunning;
+    // A movement change is picking the idle cycle again: the cycle already playing is kept.
+    bool m_movement_reselect{};
+    // Sprint transitions, for content that has them: anm_idle_sprint_start / anm_idle_sprint_end
+    // followed by the suffix of the sprint cycle (anm_idle_sprint_w_gl -> anm_idle_sprint_start_w_gl).
+    // The sprint has begun for this item (with that suffix); the stop-at-end clip running is one.
+    bool m_sprint_latched{};
+    bool m_transition_running{};
+    xr_string m_sprint_suffix;
+    shared_str SprintTransition(const shared_str& motion);
 
 public:
     virtual void Load(LPCSTR section);
@@ -101,6 +110,7 @@ public:
     virtual void PlaySound(pcstr alias, const Fvector& position, u8 index); //Alundaio: Play at index
     virtual bool Action(u16 cmd, u32 flags) { return false; }
     void OnMovementChanged(ACTOR_DEFS::EMoveCommand cmd);
+    bool TransitionRunning() const { return m_transition_running; }
 
     virtual void TransformPosFromWorldToHud(Fvector& worldPos);
     virtual void TransformDirFromWorldToHud(Fvector& worldDir);

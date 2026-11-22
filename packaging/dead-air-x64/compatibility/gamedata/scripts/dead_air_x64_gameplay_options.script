@@ -23,6 +23,8 @@ local function on_init(menu)
 	menu.gameplay_options["infinite_bolts"] = {typ="check"}
 	menu.gameplay_options["pause_in_background"] = {typ="check"}
 	menu.gameplay_options["crosshair_dot"] = {typ="check"}
+	-- The hud mirrored: the weapon in the left hand, the detector and other items in the right.
+	menu.gameplay_options["left_handed"] = {typ="check"}
 	-- The same switch the major-release notice offers. It covers ONLY that notice: updates
 	-- inside the installed major line are always checked. Caption: ui_mm_major_update_notice.
 	menu.gameplay_options["major_update_notice"] = {typ="check"}
@@ -63,6 +65,11 @@ local function on_set_values(menu, opt_manager)
 	local crosshair_dot = menu.gameplay_options["crosshair_dot"]
 	if (crosshair_dot and crosshair_dot.ctrl) then
 		crosshair_dot.ctrl:SetCheck(console:get_bool("hud_crosshair_dot"))
+	end
+
+	local left_handed = menu.gameplay_options["left_handed"]
+	if (left_handed and left_handed.ctrl) then
+		left_handed.ctrl:SetCheck(console:get_bool("hud_left_handed"))
 	end
 
 	local major_update_notice = menu.gameplay_options["major_update_notice"]
@@ -116,6 +123,11 @@ local function on_accept(menu, opt_manager, console)
 	local crosshair_dot = menu.gameplay_options["crosshair_dot"]
 	if (crosshair_dot and crosshair_dot.ctrl) then
 		console:execute("hud_crosshair_dot " .. (crosshair_dot.ctrl:GetCheck() and "1" or "0"))
+	end
+
+	local left_handed = menu.gameplay_options["left_handed"]
+	if (left_handed and left_handed.ctrl) then
+		console:execute("hud_left_handed " .. (left_handed.ctrl:GetCheck() and "1" or "0"))
 	end
 
 	local major_update_notice = menu.gameplay_options["major_update_notice"]

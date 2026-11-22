@@ -929,6 +929,24 @@ return {
   about the vertical and the roll). They follow the head as it leans and fade out while the item
   is raised to aim, so the sights stay put. Left out or `0,0,0` - what every config the game ships
   says - the item stays as it was.
+- **Sprint transitions**: a HUD section may carry `anm_idle_sprint_start` and `anm_idle_sprint_end`,
+  followed by the suffix of the sprint cycle they belong to (`anm_idle_sprint_w_gl` takes
+  `anm_idle_sprint_start_w_gl`, `anm_idle_sprint_empty` takes `anm_idle_sprint_start_empty`). The
+  start clip plays when the item's sprint cycle would begin, the end clip when another idle cycle
+  takes over from the sprint; when it is over, the idle cycle the movement calls for at that moment
+  plays. Only a clip that stops at its end counts as a transition; without one the cycles change as
+  before. Shooting, reloading or anything else that leaves idle ends the sprint as far as the
+  transitions go.
+- **Cycle changes**: when the movement picks the cycle already playing (another direction, the walk
+  key) it runs on instead of starting over; crouching or walking while on the move picks the
+  cycle again. A cycle that takes over from another one starts at the frame whose pose and motion
+  are nearest the hands as they are, for every section, nothing to add (`hud_cycle_match 0` turns
+  it off, `2` logs each choice).
+- **Left-handed**: the Game tab's Left-handed option (`hud_left_handed`) mirrors the whole hud: the
+  hands, the weapon in the left hand, the detector and other items in the right, shells, throws,
+  lean and the actor's shadow with them. The 3D PDA's screen and every hud UI canvas (an item's
+  `hud_ui_*`, the Elite detector's) read as they are. A mod's PDA screen shader can read the
+  mirror from `hud_mirror.x` (-1 mirrored, 1 not), as `model_pda_screen.ps` does.
 - **The order**: per module, in the load order, its characters, then its items - the new ones
   first (one whose base is another new item of the module waits for it), then the changes in the
   order of their paths - then its traders, loot tables and recipes, then its

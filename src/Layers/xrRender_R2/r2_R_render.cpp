@@ -843,7 +843,7 @@ void CRender::Render()
     da_hzb_keep_previous(RCache);
 #endif
 
-    VERIFY(dsgraph.mapDistort.empty());
+    VERIFY(dsgraph.mapDistort.empty() && dsgraph.mapHUDDistort.empty());
 }
 
 void CRender::render_forward()

@@ -63,6 +63,12 @@ struct R_dsgraph_structure
         u8 smap_cache{ 0 };
         // render_graph's share of the fill: 1 the statics alone, the trees and the moving casters kept for a second call.
         u8 smap_draw{ 0 };
+        // The moving objects' draws flip the front face of a mirrored world matrix (negative determinant): the hud
+        // passes, the hud self-shadow map, and the shadow maps the left-handed actor casts into.
+        bool mirror_winding{ false };
+        // While the actor's shadow is inserted (build_subspace): add_Visual reflects his body and gear through his
+        // own sagittal plane, the left-handed hud's third-person look.
+        bool mirror_actor{ false };
         // The face's tree list: the fill records into it, a cached face inserts it in place of the static walk.
         xr_vector<dxRender_Visual*>* smap_trees{ nullptr };
         // A dynamic-object list collected ahead of time. When set, build_subspace_dynamic filters it
@@ -85,6 +91,8 @@ struct R_dsgraph_structure
     R_dsgraph::mapHUD_T mapHUD;
     R_dsgraph::mapLOD_T mapLOD;
     R_dsgraph::mapSorted_T mapDistort;
+    // The hud's distortive elements: drawn after the world's, through the hud's projection and depth range.
+    R_dsgraph::mapHUD_T    mapHUDDistort;
     R_dsgraph::mapHUD_T    mapHUDSorted;
 
 #if RENDER != R_R1
@@ -201,6 +209,8 @@ struct R_dsgraph_structure
         o.smap_cache = 0;
         o.smap_draw = 0;
         o.smap_trees = nullptr;
+        o.mirror_winding = false;
+        o.mirror_actor = false;
         gd_view = 0;
         gd_walk = 0;
 
@@ -253,6 +263,7 @@ struct R_dsgraph_structure
         mapHUD.clear();
         mapLOD.clear();
         mapDistort.clear();
+        mapHUDDistort.clear();
         mapHUDSorted.clear();
 
 #if RENDER != R_R1

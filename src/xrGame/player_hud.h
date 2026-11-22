@@ -9,6 +9,31 @@ class player_hud;
 class CHudItem;
 class CMotionDef;
 
+// -1 while the hud is drawn mirrored (the left-handed mode), else 1 (player_hud::update).
+extern ENGINE_API float g_hud_mirror;
+
+// A canvas drawn on a mirrored hud item would read backwards: it is mirrored back across its own
+// middle (canvas in the ui coordinates the world matrix takes).
+inline void hud_unmirror_canvas(Fmatrix& world, const Frect& canvas)
+{
+    if (g_hud_mirror > 0.f)
+        return;
+    Fmatrix flip;
+    flip.identity();
+    flip._11 = -1.f;
+    flip.c.x = canvas.x1 + canvas.x2;
+    world.mulB_43(flip);
+}
+
+// Where the bones of a hud model were the last two frames, in model space: what a cycle taking
+// over from another cycle is matched against.
+struct hud_pose_trail
+{
+    xr_vector<Fvector> now, before;
+    float dt{};
+    void capture(IKinematics& model);
+};
+
 struct motion_descr
 {
     MotionID mid;
@@ -95,6 +120,7 @@ struct attachable_hud_item
     u16 m_attach_place_idx{};
     bool m_monolithic{};
     hud_item_measures m_measures;
+    hud_pose_trail m_trail; // a monolithic item's own, its hands are in it
 
     // runtime positioning
     Fmatrix m_attach_offset{};
@@ -151,6 +177,9 @@ public:
     void render_item_ui() const;
     bool render_item_ui_query() const;
     u32 anim_play(u16 part, const MotionID& M, BOOL bMixIn, const CMotionDef*& md, float speed, IKinematicsAnimated* itemModel);
+    // Where the cycle anim_play just laid on the hands started (seconds of the motion): the item
+    // model starts its own there too.
+    float cycle_start() const { return m_cycle_start; }
     const shared_str& section_name() const { return m_sect_name; }
     // The rig every non-monolithic item's cycles are bound against. Read-only, for the state
     // dump: when the hands hold nothing playable, the first question is which rig is loaded.
@@ -234,6 +263,8 @@ private:
     Fmatrix m_transform{ Fidentity };
     IKinematicsAnimated* m_model{};
     IKinematicsAnimated* m_model_2{};
+    hud_pose_trail m_trail, m_trail_2;
+    float m_cycle_start{};
     Fmatrix m_transform_2{ Fidentity };
     Fmatrix m_attach_offset_2{};
 

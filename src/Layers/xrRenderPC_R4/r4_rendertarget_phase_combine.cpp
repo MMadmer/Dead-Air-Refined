@@ -509,7 +509,7 @@ void CRenderTarget::phase_combine()
     auto& dsgraph = RImplementation.get_imm_context();
     BOOL bDistort = RImplementation.o.distortion_enabled; // This can be modified
     {
-        if ((0 == dsgraph.mapDistort.size()) && !_menu_pp)
+        if (dsgraph.mapDistort.empty() && dsgraph.mapHUDDistort.empty() && !_menu_pp)
             bDistort = FALSE;
         if (bDistort)
         {

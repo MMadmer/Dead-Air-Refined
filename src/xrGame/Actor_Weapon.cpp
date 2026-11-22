@@ -85,8 +85,12 @@ void CActor::g_fireParams(const CHudItem* pHudItem, Fvector& fire_pos, Fvector& 
     const CMissile* pMissile = smart_cast<const CMissile*>(pHudItem);
     if (pMissile)
     {
+        // a left hand throws from the left
+        Fvector local = pMissile->throw_point_offset();
+        if (g_hud_mirror < 0.f && HUDview())
+            local.x = -local.x;
         Fvector offset;
-        XFORM().transform_dir(offset, pMissile->throw_point_offset());
+        XFORM().transform_dir(offset, local);
         fire_pos.add(offset);
     }
 }

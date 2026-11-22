@@ -139,6 +139,10 @@ void CUIArtefactDetectorElite::Draw()
 {
     Fmatrix LM;
     GetUILocatorMatrix(LM);
+    // the screen of a mirrored detector reads as it is, its dots on the side their artefacts are
+    Frect screen;
+    GetAbsoluteRect(screen);
+    hud_unmirror_canvas(LM, screen);
 
     IUIRender::ePointType bk = UI().m_currentPointType;
 

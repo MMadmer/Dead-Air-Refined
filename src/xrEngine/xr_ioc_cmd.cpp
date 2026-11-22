@@ -869,6 +869,9 @@ ENGINE_API int g_player_hud_model_loading = 0;
 // (so the screen UVs are data, not geometry, and any pda*.xml layout keeps working).
 ENGINE_API Fvector4 g_pda_screen_affects = {0.f, 0.f, 1.f, 0.f};
 ENGINE_API Fvector4 g_pda_screen_rect = {0.f, 0.f, 1.f, 1.f};
+// The first-person hud drawn mirrored on x (the left-handed mode): -1, else 1. Set once a frame by
+// player_hud::update; renderers and gameplay read it instead of the console flag.
+ENGINE_API float g_hud_mirror = 1.f;
 // Screen-space bbox (uv min.xy, max.xy) of the held 3D PDA for the TAA exclusion: the
 // device screen is a forward pass with no depth in the G-buffer, so reprojection under it
 // follows the BACKGROUND and smears the display. Empty when min > max.

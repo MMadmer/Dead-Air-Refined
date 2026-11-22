@@ -105,6 +105,8 @@ void CRender::render_hud_shadow()
     dsgraph.o.view_pos = Device.vCameraPosition;
     dsgraph.o.xform = combine;
     dsgraph.o.view_frustum.CreateFromMatrix(combine, FRUSTUM_P_ALL & (~FRUSTUM_P_NEAR));
+    // The left-handed hud's casters have mirrored matrices: their front faces flip, or the map holds their backs.
+    dsgraph.o.mirror_winding = true;
 
     g_pGameLevel->pHUD->Render_Shadow(context_id);
 

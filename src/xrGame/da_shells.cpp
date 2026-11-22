@@ -17,6 +17,7 @@
 
 // Cases that may exist at once; the quality preset sets it (xrRender_sync_preset_derived).
 extern ENGINE_API int ps_shells_max;
+extern ENGINE_API float g_hud_mirror;
 
 namespace da_shells
 {
@@ -818,6 +819,9 @@ bool eject(const Ejection& shot)
             break;
         }
     }
+    // a mirrored hud weapon has its port on the other side
+    if (shot.hud && g_hud_mirror < 0.f)
+        weights.x = -weights.x;
 
     if (shells.size() >= u32(ps_shells_max))
     {

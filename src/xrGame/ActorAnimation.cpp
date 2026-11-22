@@ -415,7 +415,9 @@ void CActor::g_SetAnimation(u32 mstate_rl)
         {
             g_player_hud->OnMovementChanged(mcSprint);
         }
-        else if ((mstate_rl & mcAnyMove) != (mstate_old & mcAnyMove))
+        // crouching or walking while on the move picks the cycle again too (moving / moving crouch)
+        else if ((mstate_rl & mcAnyMove) != (mstate_old & mcAnyMove) ||
+            ((mstate_rl & mcAnyMove) && ((mstate_rl ^ mstate_old) & (mcCrouch | mcAccel))))
         {
             g_player_hud->OnMovementChanged(mcAnyMove);
         }

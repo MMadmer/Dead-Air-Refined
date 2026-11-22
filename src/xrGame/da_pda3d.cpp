@@ -20,6 +20,7 @@ extern ENGINE_API Fvector4 g_pda_screen_affects;
 extern ENGINE_API Fvector4 g_pda_screen_rect;
 extern ENGINE_API Fvector4 g_pda_taa_bbox;
 extern ENGINE_API float psHUD_FOV;
+extern ENGINE_API float g_hud_mirror;
 
 int g_pda3d_dbg = 0;
 
@@ -346,7 +347,8 @@ bool joystick_step()
     if (joy.click_pending)
         dir = EDir::Click;
     else if (_abs(joy.accum.x) >= cfg.joystick_deadzone || _abs(joy.accum.y) >= cfg.joystick_deadzone)
-        dir = dir_by_angle(atan2f(joy.accum.y, joy.accum.x));
+        // the thumb of a mirrored hud pushes the stick to the side the cursor goes
+        dir = dir_by_angle(atan2f(joy.accum.y, g_hud_mirror < 0.f ? -joy.accum.x : joy.accum.x));
 
     joy.click_pending = false;
     joy.accum.set(0.f, 0.f);

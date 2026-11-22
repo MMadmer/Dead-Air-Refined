@@ -43,6 +43,12 @@
 	<string id="ui_mm_infinite_bolts_hint">
 		<text>Bolts are never used up. If you have run out, a bolt appears when this is switched on.</text>
 	</string>
+	<string id="ui_mm_left_handed">
+		<text>Left-handed</text>
+	</string>
+	<string id="ui_mm_left_handed_hint">
+		<text>Weapons are held in the left hand, the detector and other items in the right.</text>
+	</string>
 	<string id="ui_mm_crosshair_dot">
 		<text>Dot crosshair</text>
 	</string>

@@ -11,6 +11,7 @@
 #include "xrEngine/CameraBase.h"
 #include "player_hud.h"
 #include "xrCore/Animation/SkeletonMotions.hpp"
+#include "xrCore/Animation/Motion.hpp"
 #include "xrNetServer/NET_Messages.h"
 
 #include "xrUICore/ui_base.h"
@@ -72,6 +73,9 @@ public:
         Fmatrix world;
         world.mul(m_hud_item->m_item_transform, m_hud_item->m_model->LL_GetTransform(bone_id));
         world.mulB_43(m_transform);
+        Frect canvas;
+        m_canvas->GetAbsoluteRect(canvas);
+        hud_unmirror_canvas(world, canvas);
 
         const IUIRender::ePointType previous_point_type = UI().m_currentPointType;
         UI().m_currentPointType = IUIRender::pttLIT;
@@ -205,6 +209,9 @@ void CHudItem::OnEvent(NET_Packet& P, u16 type)
 void CHudItem::OnStateSwitch(u32 S, u32 oldState)
 {
     SetState(S);
+    // whatever leaves idle ends the sprint as far as its transitions go
+    if (S != eIdle)
+        m_sprint_latched = m_transition_running = false;
 
     if (object().Remote())
         SetNextState(S);
@@ -305,7 +312,11 @@ void CHudItem::UpdateCL()
             m_dwMotionEndTm = 0;
             m_dwMotionCurrTm = 0;
             m_bStopAtEndAnimIsRunning = false;
-            OnAnimationEnd(m_startedMotionState);
+            // a sprint transition hands over to the idle cycle the movement calls for now
+            if (std::exchange(m_transition_running, false) && GetState() == eIdle)
+                PlayAnimIdle();
+            else
+                OnAnimationEnd(m_startedMotionState);
         }
     }
 }
@@ -383,11 +394,20 @@ void CHudItem::on_a_hud_attach()
 
 u32 CHudItem::PlayHUDMotion(const shared_str& M, BOOL bMixIn, CHudItem* W, u32 state)
 {
-    u32 anim_time = PlayHUDMotion_noCB(M, bMixIn);
+    // A movement change that lands on the cycle already playing (another direction, the walk key)
+    // keeps it running: replayed, it started over from its first frame against itself.
+    if (m_movement_reselect && M == m_current_motion && m_current_motion_def && !(m_current_motion_def->flags & esmStopAtEnd) &&
+        !m_bStopAtEndAnimIsRunning)
+        return 0;
+
+    const shared_str transition = state == eIdle && HudItemData() ? SprintTransition(M) : shared_str{};
+    const shared_str& motion = transition.size() ? transition : M;
+    u32 anim_time = PlayHUDMotion_noCB(motion, bMixIn);
+    m_transition_running = transition.size() && anim_time;
     // A cycle the section names but the hands do not carry plays nothing (a mod's hud section, a rig
     // swapped under the item). A draw, a holster or a reload left without its end kept the item pending
     // for good; such a state ends after the 100 ms an item out of sight gets for a missing motion.
-    if (!anim_time && !StateOutlivesMotion(state) && HudCycleMissing(M))
+    if (!anim_time && !StateOutlivesMotion(state) && HudCycleMissing(motion))
         anim_time = 100;
     if (anim_time > 0)
     {
@@ -564,10 +584,33 @@ void CHudItem::OnMovementChanged(ACTOR_DEFS::EMoveCommand cmd)
     {
         if ((cmd == ACTOR_DEFS::mcSprint) || (cmd == ACTOR_DEFS::mcAnyMove))
         {
+            m_movement_reselect = true;
             PlayAnimIdle();
+            m_movement_reselect = false;
             ResetSubStateTime();
         }
     }
+}
+
+shared_str CHudItem::SprintTransition(const shared_str& motion)
+{
+    constexpr std::string_view sprint = "anm_idle_sprint";
+    const std::string_view name = motion.c_str() ? motion.c_str() : "";
+    const bool transition = name.starts_with("anm_idle_sprint_start") || name.starts_with("anm_idle_sprint_end");
+    const bool sprinting = name.starts_with(sprint) && !transition;
+    // only idle cycles take part: a sprint begins with its sprint cycle and ends with any other idle
+    if (transition || !name.starts_with("anm_idle") || sprinting == m_sprint_latched)
+        return {};
+    m_sprint_latched = sprinting;
+    if (sprinting)
+        m_sprint_suffix = name.substr(sprint.size());
+    string256 clip;
+    xr_sprintf(clip, "%s%s", sprinting ? "anm_idle_sprint_start" : "anm_idle_sprint_end", m_sprint_suffix.c_str());
+    // only a clip that stops at its end hands over; a cycle under that name would never end
+    const CMotionDef* md = nullptr;
+    if (!isHUDAnimationExist(clip, true) || !g_player_hud->motion_length(clip, HudSection(), md))
+        return {};
+    return clip;
 }
 
 extern ENGINE_API float psHUD_FOV;

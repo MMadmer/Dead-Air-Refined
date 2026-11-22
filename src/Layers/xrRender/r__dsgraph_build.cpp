@@ -15,6 +15,9 @@
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #endif
 
+// The left-handed hud's sign (xr_ioc_cmd.cpp), declared outside the render namespace like every engine variable.
+extern ENGINE_API float g_hud_mirror;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 using namespace R_dsgraph;
@@ -222,6 +225,16 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
     else if (SSA <= r_ssaDISCARD)
         return;
 
+    // HUD rendering.
+    // The decision is taken by phase, not by the flag alone: mapHUD and mapHUDSorted are drained
+    // by render_hud, which only the main pass calls, so anything a shadow context parks there is
+    // dropped without a trace and wiped by the next reset. renderable_HUD is a single plain bool
+    // on the object that the main pass raises for the length of its HUD draw, while the cascade
+    // and rain culling tasks run alongside it - a shadow task reading it mid-window would lose
+    // the first-person shadow caster for that frame. The main pass keeps its own z-prefill on
+    // PHASE_SMAP, so it is excluded by is_main_pass rather than by phase.
+    const bool hud = root && root->renderable_HUD() && !(o.phase == CRender::PHASE_SMAP && !o.is_main_pass);
+
     // Distortive geometry should be marked and R2 special-cases it
     // a) Allow to optimize RT order
     // b) Should be rendered to special distort buffer in another pass
@@ -232,7 +245,8 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
     {
         if (RImplementation.o.distortion && sh_d && sh_d->flags.bDistort && o.pmask[sh_d->flags.iPriority / 2])
         {
-            mapDistort.insert_anyway(distSQ, _MatrixItemS({ SSA, root, pVisual, xform, sh_d })); // sh_d -> L_special
+            (hud ? mapHUDDistort : mapDistort)
+                .insert_anyway(distSQ, _MatrixItemS({ SSA, root, pVisual, xform, sh_d })); // sh_d -> L_special
         }
     }
 
@@ -243,15 +257,7 @@ void R_dsgraph_structure::insert_dynamic(IRenderable* root, dxRender_Visual* pVi
     if (!o.pmask[sh->flags.iPriority / 2])
         return;
 
-    // HUD rendering.
-    // The decision is taken by phase, not by the flag alone: mapHUD and mapHUDSorted are drained
-    // by render_hud, which only the main pass calls, so anything a shadow context parks there is
-    // dropped without a trace and wiped by the next reset. renderable_HUD is a single plain bool
-    // on the object that the main pass raises for the length of its HUD draw, while the cascade
-    // and rain culling tasks run alongside it - a shadow task reading it mid-window would lose
-    // the first-person shadow caster for that frame. The main pass keeps its own z-prefill on
-    // PHASE_SMAP, so it is excluded by is_main_pass rather than by phase.
-    if (root && root->renderable_HUD() && !(o.phase == CRender::PHASE_SMAP && !o.is_main_pass))
+    if (hud)
     {
         if (sh->flags.bStrictB2F)
         {
@@ -1358,6 +1364,12 @@ void R_dsgraph_structure::build_subspace()
     // pass keeps its own z-prefill on PHASE_SMAP, hence the is_main_pass guard. A light he carries takes the body
     // but not the weapon and gear around the lamp (CActor::render_shadow_caster).
     if (o.phase == CRender::PHASE_SMAP && !o.is_main_pass && ps_r__actor_shadow && g_pGameLevel && g_pGameLevel->pHUD)
+    {
+        // The left-handed hud: he casts as a left-hander, his mirrored casters with their front faces flipped.
+        o.mirror_actor = g_hud_mirror < 0.f;
+        o.mirror_winding |= o.mirror_actor;
         g_pGameLevel->pHUD->Render_Actor_Shadow(context_id, o.view_pos, o.carried_light);
+        o.mirror_actor = false;
+    }
 }
 } // namespace xray::render::RENDER_NAMESPACE

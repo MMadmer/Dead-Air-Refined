@@ -177,6 +177,9 @@ private:
     u32 colorwrite_mask;
     u32 fill_mode;
     u32 cull_mode;
+#if defined(USE_OGL)
+    u32 winding_flip;
+#endif
     u32 z_enable;
     u32 z_func;
     u32 alpha_ref;
@@ -470,6 +473,9 @@ public:
     IC void set_ColorWriteEnable(u32 _rt, u32 _mask);
     IC void set_CullMode(u32 _mode);
     u32 get_CullMode() { return cull_mode; }
+    // The other winding faces front from here on, every pass's own cull mode kept: a world matrix with a negative
+    // determinant turns its triangles over.
+    IC void set_WindingFlip(bool flip);
     IC void set_FillMode(u32 _mode);
     void set_ClipPlanes(u32 _enable, Fplane* _planes = nullptr, u32 count = 0);
     void set_ClipPlanes(u32 _enable, Fmatrix* _xform = nullptr, u32 fmask = 0xff);

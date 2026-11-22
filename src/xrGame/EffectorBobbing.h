@@ -24,6 +24,12 @@ class CEffectorBobbing : public CEffectorCam
     float m_fSpeedWalk;
     float m_fSpeedLimp;
 
+    // The step phase runs on at the current pace, so a change of pace (walk, run, crouch) goes on
+    // from where the step was; the amplitude follows the pace's own over amplitude_smooth_time.
+    float m_phase{};
+    float m_amplitude{};
+    float m_amplitude_smooth_time{};
+
 public:
     CEffectorBobbing();
     virtual ~CEffectorBobbing();

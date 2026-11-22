@@ -1420,6 +1420,22 @@ void CRender::add_Visual(u32 context_id, IRenderable* root, IRenderVisual* V, Fm
 {
     // TODO: this whole function should be replaced by a list of renderables+xforms returned from `renderable_Render` call
     auto& dsgraph = get_context(context_id);
+    if (dsgraph.o.mirror_actor && root)
+    {
+        // A reflection through the plane of the root's right axis: on the body (the root's own xform) it is a mirror
+        // of its local x, and the weapon and gear move to the other hand with it.
+        const Fmatrix& base = root->GetRenderData().xform;
+        Fvector n = base.i;
+        n.normalize_safe();
+        const float plane = base.c.dotproduct(n);
+        Fmatrix mirrored = m;
+        mirrored.i.mad(n, -2.f * mirrored.i.dotproduct(n));
+        mirrored.j.mad(n, -2.f * mirrored.j.dotproduct(n));
+        mirrored.k.mad(n, -2.f * mirrored.k.dotproduct(n));
+        mirrored.c.mad(n, -2.f * (mirrored.c.dotproduct(n) - plane));
+        dsgraph.add_leafs_dynamic(root, (dxRender_Visual*)V, mirrored);
+        return;
+    }
     dsgraph.add_leafs_dynamic(root, (dxRender_Visual*)V, m);
 }
 void CRender::add_StaticWallmark(ref_shader& S, const Fvector& P, float s, CDB::TRI* T, Fvector* verts)

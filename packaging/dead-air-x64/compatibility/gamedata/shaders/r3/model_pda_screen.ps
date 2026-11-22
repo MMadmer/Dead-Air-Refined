@@ -12,6 +12,8 @@ uniform float4 m_affects;
 // The PDA dialog face sub-rect inside $user$ui, in UV (xy offset, zw size). Layout is DATA:
 // pda.xml vs pda_16.xml vs modded layouts all land here, nothing is baked into the mesh.
 uniform float4 pda_screen_rect;
+// The left-handed hud: x = -1 while the first-person hud is drawn mirrored on x, else 1.
+uniform float4 hud_mirror;
 
 // Change vs the original: float3 tc1:TEXCOORD1 is REMOVED - our model_def_lplanes.vs does
 // not emit it (DX11 refuses to link a PS input the VS lacks), and the body never read it.
@@ -71,6 +73,9 @@ float4 loading_main(v2p I)
 
 float4 main(v2p I) : SV_Target
 {
+    // A mirrored hud carries the screen's quad mirrored with it: its UV is flipped back first, so the feed, the
+    // boot sequence and the dead screen all read the right way round (the sub-rect maps the flipped UV).
+    I.tc0.x = hud_mirror.x < 0 ? 1 - I.tc0.x : I.tc0.x;
     float4 screen = (m_affects.a > 0 && m_affects.x >= 0.08f) ? loading_main(I) : problems_main(I);
     // Our additions over the original: the vs hands us a facing fade in c0 (the LCD dims at
     // grazing angles instead of glowing edge-on), and m_affects.z is a brightness knob.

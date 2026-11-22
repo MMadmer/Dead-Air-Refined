@@ -318,6 +318,8 @@ void CShootingObject::LoadFlameParticles(LPCSTR section, LPCSTR prefix)
     m_sSmokeParticlesCurrent = m_sSmokeParticles;
 }
 
+extern ENGINE_API float g_hud_mirror;
+
 void CShootingObject::OnShellDrop(const Fvector& play_pos, const Fvector& parent_vel)
 {
     if (!m_sShellParticles)
@@ -327,11 +329,6 @@ void CShootingObject::OnShellDrop(const Fvector& play_pos, const Fvector& parent
 
     CParticlesObject* pShellParticles = CParticlesObject::Create(m_sShellParticles.c_str(), TRUE);
 
-    Fmatrix particles_pos;
-    particles_pos.set(get_ParticlesXFORM());
-    particles_pos.c.set(play_pos);
-
-    pShellParticles->UpdateParent(particles_pos, parent_vel);
     CSpectator* tmp_spectr = smart_cast<CSpectator*>(Level().CurrentControlEntity());
     bool in_hud_mode = IsHudModeNow();
     if (in_hud_mode && tmp_spectr && (tmp_spectr->GetActiveCam() != CSpectator::eacFirstEye))
@@ -344,6 +341,15 @@ void CShootingObject::OnShellDrop(const Fvector& play_pos, const Fvector& parent
     {
         in_hud_mode = false;
     }
+
+    Fmatrix particles_pos;
+    particles_pos.set(get_ParticlesXFORM());
+    particles_pos.c.set(play_pos);
+    // the shells of a mirrored hud weapon fly out of its port on the other side
+    if (in_hud_mode && g_hud_mirror < 0.f)
+        particles_pos.i.invert();
+
+    pShellParticles->UpdateParent(particles_pos, parent_vel);
     pShellParticles->Play(in_hud_mode);
 }
 

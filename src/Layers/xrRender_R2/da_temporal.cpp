@@ -12,6 +12,9 @@
 #include "Layers/xrRenderPC_R4/da_framegen.h"
 #include "Layers/xrRenderPC_R4/da_rt.h"
 
+// The left-handed hud's sign (xr_ioc_cmd.cpp), declared outside the render namespace like every engine variable.
+extern ENGINE_API float g_hud_mirror;
+
 namespace xray::render::RENDER_NAMESPACE
 {
 namespace
@@ -36,6 +39,7 @@ Fvector g_da_prev_camera{};
 bool g_da_prev_camera_valid = false;
 bool g_da_prev_menu = true;
 bool g_da_stage_scene = false;
+float g_da_prev_hud_mirror = 1.f;
 
 // The unjittered view-projections of the motion vectors: the main view's, and the HUD's of the
 // frame it was last drawn on.
@@ -102,6 +106,11 @@ void da_temporal_frame_begin()
         da_history_request_reset("camera cut");
     g_da_prev_camera = eye;
     g_da_prev_camera_valid = true;
+
+    // The hud flipped sides: its motion vectors would reproject the hands onto last frame's other side.
+    if (g_hud_mirror != g_da_prev_hud_mirror)
+        da_history_request_reset("hud mirror");
+    g_da_prev_hud_mirror = g_hud_mirror;
 
     g_da_frame.reset = g_da_reset_pending;
     g_da_reset_pending = false;

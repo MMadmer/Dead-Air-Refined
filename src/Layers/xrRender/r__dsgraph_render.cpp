@@ -41,6 +41,15 @@ ICF float calcLOD(float ssa /*fDistSq*/, float /*R*/)
     return _sqrt(clampr((ssa - r_ssaGLOD_end) / (r_ssaGLOD_start - r_ssaGLOD_end), 0.f, 1.f));
 }
 
+// A world matrix of negative determinant (the left-handed hud, the actor's mirrored shadow) turns the visual's
+// triangles over. Not a particle's: it draws world-space quads built to face the camera, the matrix unused.
+ICF bool draws_mirrored(const dxRender_Visual* visual, const Fmatrix& m)
+{
+    return visual->Type != MT_PARTICLE_EFFECT &&
+        m._11 * (m._22 * m._33 - m._23 * m._32) - m._12 * (m._21 * m._33 - m._23 * m._31) +
+            m._13 * (m._21 * m._32 - m._22 * m._31) < 0.f;
+}
+
 #ifdef USE_DX11
 namespace
 {
@@ -388,11 +397,13 @@ bool pass_binds_anywhere(const SPass* pass)
 
 xr_vector<mapMatrix_T::value_type*> g_matrix_passes[SHADER_PASSES_MAX];
 
-void draw_matrix_item(CBackend& cmd, const _MatrixItem& item, bool fade)
+void draw_matrix_item(CBackend& cmd, const _MatrixItem& item, bool fade, bool mirror)
 {
     cmd.set_xform_world(item.Matrix);
     RImplementation.apply_object(cmd, item.pObject);
     cmd.apply_lmaterial();
+    if (mirror)
+        cmd.set_WindingFlip(draws_mirrored(item.pVisual, item.Matrix));
     const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
     cmd.LOD.set_LOD(LOD);
     const float cover = fade ? fade_cover(item.pVisual) : 1.f;
@@ -403,7 +414,7 @@ void draw_matrix_item(CBackend& cmd, const _MatrixItem& item, bool fade)
         cmd.LOD.set_fade(1.f);
 }
 
-void record_matrix_chunk(CBackend& cmd, u32 chunk, u32 chunks, bool fade)
+void record_matrix_chunk(CBackend& cmd, u32 chunk, u32 chunks, bool fade, bool mirror)
 {
     for (const auto& list : g_matrix_passes)
     {
@@ -421,10 +432,12 @@ void record_matrix_chunk(CBackend& cmd, u32 chunk, u32 chunks, bool fade)
                     cmd.set_Pass(pass->first);
                     bound = true;
                 }
-                draw_matrix_item(cmd, item, fade);
+                draw_matrix_item(cmd, item, fade, mirror);
             }
         }
     }
+    if (mirror)
+        cmd.set_WindingFlip(false);
 }
 
 // A deferred context's G-buffer state, as the immediate context has it for the main view.
@@ -511,7 +524,7 @@ bool R_dsgraph_structure::render_matrix_parallel(bool fade)
             {
                 CBackend& cmd = RImplementation.get_context(contexts[k]).cmd_list;
                 scene_context_begin(cmd, velocity);
-                record_matrix_chunk(cmd, k, chunks, fade);
+                record_matrix_chunk(cmd, k, chunks, fade, o.mirror_winding);
                 SSManager.UseSceneBias(cmd.context_id, false);
                 lists[k] = cmd.finish();
             }
@@ -543,10 +556,12 @@ bool R_dsgraph_structure::render_matrix_parallel(bool fade)
                     cmd_list.set_Pass(pass->first);
                     bound = true;
                 }
-                draw_matrix_item(cmd_list, item, fade);
+                draw_matrix_item(cmd_list, item, fade, o.mirror_winding);
             }
         }
     }
+    if (o.mirror_winding)
+        cmd_list.set_WindingFlip(false);
 
     for (u32 iPass = 0; iPass < SHADER_PASSES_MAX; ++iPass)
     {
@@ -679,7 +694,7 @@ void R_dsgraph_structure::render_static_parallel(bool fade)
             CBackend& cmd = RImplementation.get_context(contexts[t]).cmd_list;
             scene_context_begin(cmd, velocity);
             if (t >= chunks)
-                record_matrix_chunk(cmd, t - chunks, matrix_chunks, fade);
+                record_matrix_chunk(cmd, t - chunks, matrix_chunks, fade, o.mirror_winding);
             else
             {
                 cmd.set_xform_world(Fidentity);
@@ -915,6 +930,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
                     cmd_list.set_xform_world(item.Matrix);
                     RImplementation.apply_object(cmd_list, item.pObject);
                     cmd_list.apply_lmaterial();
+                    if (o.mirror_winding)
+                        cmd_list.set_WindingFlip(draws_mirrored(item.pVisual, item.Matrix));
 
                     const float LOD = calcLOD(item.ssa, item.pVisual->vis.sphere.R);
 #ifdef USE_DX11
@@ -939,6 +956,8 @@ void R_dsgraph_structure::render_graph(u32 _priority)
             cachedMatrixPasses[_priority][iPass] = nullptr;
             cachedMatrixItems[_priority][iPass] = nullptr;
         }
+        if (o.mirror_winding)
+            cmd_list.set_WindingFlip(false);
     }
 
 #ifdef XR_NATIVE
@@ -963,14 +982,13 @@ class hud_transform_helper
 #if RENDER == R_R4
     Fmatrix vp_nojit_old, vp_prev_old; // the motion vectors' view-projections of the world
 #endif
-    static u32 cullMode;
-    static bool isActive;
-
+    R_dsgraph_structure& dsgraph;
     CBackend& cmd_list;
+    bool mirror_winding_old;
 
 public:
-    explicit hud_transform_helper(CBackend& cmd_list_in)
-        : cmd_list(cmd_list_in)
+    explicit hud_transform_helper(R_dsgraph_structure& dsgraph_in)
+        : dsgraph(dsgraph_in), cmd_list(dsgraph_in.cmd_list), mirror_winding_old(dsgraph_in.o.mirror_winding)
     {
         // Change projection. Both carry the frame's jitter (da_temporal.h): the HUD is part of
         // the scene the temporal pass resolves.
@@ -1014,9 +1032,8 @@ public:
 
         RImplementation.rmNear(cmd_list);
 
-        // preserve culling mode
-        cullMode = cmd_list.get_CullMode();
-        isActive = true;
+        // The left-handed hud's items have mirrored matrices: render_item flips their front face, this context only.
+        dsgraph.o.mirror_winding = true;
     }
 
     ~hud_transform_helper()
@@ -1028,26 +1045,9 @@ public:
 #if RENDER == R_R4
         cmd_list.xforms.set_VP_motion(vp_nojit_old, vp_prev_old);
 #endif
-        // restore culling mode
-        cmd_list.set_CullMode(cullMode);
-        isActive = false;
-    }
-
-    static void apply_custom_state(CBackend& cmd_list)
-    {
-        if (!isActive || !psHUD_Flags.test(HUD_LEFT_HANDED))
-            return;
-
-        // Change culling mode if HUD meshes were flipped
-        if (cullMode != CULL_NONE)
-        {
-            cmd_list.set_CullMode(cullMode == CULL_CW ? CULL_CCW : CULL_CW);
-        }
+        dsgraph.o.mirror_winding = mirror_winding_old;
     }
 };
-
-u32 hud_transform_helper::cullMode = CULL_NONE;
-bool hud_transform_helper::isActive = false;
 
 template<class T>
 void __fastcall render_item(u32 context_id, const T& item)
@@ -1060,10 +1060,20 @@ void __fastcall render_item(u32 context_id, const T& item)
     dsgraph.cmd_list.set_xform_world(item.second.Matrix);
     RImplementation.apply_object(dsgraph.cmd_list, item.second.pObject);
     dsgraph.cmd_list.apply_lmaterial();
-    hud_transform_helper::apply_custom_state(dsgraph.cmd_list);
+    // Each material keeps its own cull mode; a mirrored matrix only swaps which winding faces front.
+    if (dsgraph.o.mirror_winding)
+        dsgraph.cmd_list.set_WindingFlip(draws_mirrored(V, item.second.Matrix));
     //--#SM+#-- Обновляем шейдерные данные модели [update shader values for this model]
     //RCache.hemi.c_update(V);
     V->Render(dsgraph.cmd_list, calcLOD(item.first, V->vis.sphere.R), dsgraph.o.phase == CRender::PHASE_SMAP);
+}
+
+// The passes' own front face again after a list whose items may have flipped it.
+ICF void restore_winding(u32 context_id)
+{
+    auto& dsgraph = RImplementation.get_context(context_id);
+    if (dsgraph.o.mirror_winding)
+        dsgraph.cmd_list.set_WindingFlip(false);
 }
 
 template<class T>
@@ -1071,6 +1081,7 @@ ICF void sort_front_to_back_render_and_clean(u32 context_id, T& vec)
 {
     vec.traverse_left_right(context_id, render_item);
     vec.clear();
+    restore_winding(context_id);
 }
 
 template<class T>
@@ -1078,6 +1089,7 @@ ICF void sort_back_to_front_render_and_clean(u32 context_id, T& vec)
 {
     vec.traverse_right_left(context_id, render_item);
     vec.clear();
+    restore_winding(context_id);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1089,7 +1101,7 @@ void R_dsgraph_structure::render_hud()
 
     if (!mapHUD.empty())
     {
-        hud_transform_helper helper{ cmd_list };
+        hud_transform_helper helper{ *this };
         sort_front_to_back_render_and_clean(context_id, mapHUD);
     }
 
@@ -1107,7 +1119,7 @@ void R_dsgraph_structure::render_hud_ui()
 
     PIX_EVENT_CTX(cmd_list, dsgraph_render_hud_ui);
 
-    hud_transform_helper helper{ cmd_list };
+    hud_transform_helper helper{ *this };
 
 #if RENDER != R_R1
     // Targets, use accumulator for temporary storage
@@ -1141,7 +1153,7 @@ void R_dsgraph_structure::render_sorted()
 
     if (!mapHUDSorted.empty())
     {
-        hud_transform_helper helper{ cmd_list };
+        hud_transform_helper helper{ *this };
         sort_back_to_front_render_and_clean(context_id, mapHUDSorted);
     }
 }
@@ -1158,7 +1170,7 @@ void R_dsgraph_structure::render_emissive()
 
     if (!mapHUDEmissive.empty())
     {
-        hud_transform_helper helper{ cmd_list };
+        hud_transform_helper helper{ *this };
         sort_front_to_back_render_and_clean(context_id, mapHUDEmissive);
     }
 #endif
@@ -1184,6 +1196,13 @@ void R_dsgraph_structure::render_distort()
     PIX_EVENT(dsgraph_render_distort);
 
     sort_back_to_front_render_and_clean(context_id, mapDistort);
+
+    // The hud's distortion over the world's, in the depth range and projection the hud was drawn with.
+    if (!mapHUDDistort.empty())
+    {
+        hud_transform_helper helper{ *this };
+        sort_back_to_front_render_and_clean(context_id, mapHUDDistort);
+    }
 }
 
 void R_dsgraph_structure::render_R1_box(IRender_Sector::sector_id_t sector_id, Fbox& BB, int sh)

@@ -29,6 +29,7 @@ extern ENGINE_API float psVisDistance;
 extern ENGINE_API Fvector4 g_pda_screen_affects;
 extern ENGINE_API Fvector4 g_pda_screen_rect;
 extern ENGINE_API Fvector4 g_pda_taa_bbox;
+extern ENGINE_API float g_hud_mirror;
 
 extern ENGINE_API float psHUD_FOV;
 
@@ -1089,6 +1090,11 @@ static class cl_pda_screen_rect : public R_constant_setup
             g_pda_screen_rect.w);
     }
 } binder_pda_screen_rect;
+// The left-handed hud (x: -1, else 1): the PDA screen reads its feed mirrored back.
+static class cl_hud_mirror : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, g_hud_mirror, 0.f, 0.f, 0.f); }
+} binder_hud_mirror;
 static class cl_pda_taa_bbox : public R_constant_setup
 {
     void setup(CBackend& cmd_list, R_constant* C) override
@@ -1454,6 +1460,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_rain2", &binder_da_rain2);
     r_Constant("m_affects", &binder_pda_affects);
     r_Constant("pda_screen_rect", &binder_pda_screen_rect);
+    r_Constant("hud_mirror", &binder_hud_mirror);
     r_Constant("pda_taa_bbox", &binder_pda_taa_bbox);
     r_Constant("various", &binder_various);
     r_Constant("various_rain", &binder_various_rain);

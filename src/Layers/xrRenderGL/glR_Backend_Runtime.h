@@ -475,6 +475,16 @@ ICF void CBackend::set_CullMode(u32 _mode)
     }
 }
 
+// The cull modes map onto a counter-clockwise GL front (glStateUtils::ConvertCullMode): the flip makes it clockwise.
+ICF void CBackend::set_WindingFlip(bool flip)
+{
+    if (winding_flip != u32(flip))
+    {
+        winding_flip = u32(flip);
+        CHK_GL(glFrontFace(flip ? GL_CW : GL_CCW));
+    }
+}
+
 ICF void CBackend::set_FillMode(u32 _mode)
 {
     if (fill_mode != _mode)

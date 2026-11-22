@@ -83,7 +83,8 @@ foreach ($f in $File) {
     if ($code -ne 0) {
         $failed++
         Write-Output "FAIL $f"
-        ($diag | Select-Object -First 60) | ForEach-Object { Write-Output "  $_" }
+        # errors first: a header's warnings repeat per include and push them out of the first lines
+        (@($diag | Where-Object { $_ -notmatch 'warning' }) + @($diag | Where-Object { $_ -match 'warning' }) | Select-Object -First 60) | ForEach-Object { Write-Output "  $_" }
         if (-not $diag) { $output | Select-Object -Last 30 | ForEach-Object { Write-Output "  $_" } }
     } else {
         $warn = @($diag | Where-Object { $_ -match 'warning' })

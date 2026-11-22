@@ -611,6 +611,11 @@ ICF void CBackend::set_CullMode(u32 _mode)
     cull_mode = _mode;
 }
 
+ICF void CBackend::set_WindingFlip(bool flip)
+{
+    StateManager.OverrideFrontCCW(flip);
+}
+
 ICF void CBackend::set_FillMode(u32 _mode)
 {
     StateManager.SetFillMode(_mode);
