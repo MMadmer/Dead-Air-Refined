@@ -1,0 +1,97 @@
+// Ray traced shadows of the local lamps (dxr.md 3.12): up to four lamps a pass, the visibility of each in one channel of
+// the pass's mask, which the lamps' volumes read in place of their shadow maps (da_light_volume.ps). A ray leaves every
+// render pixel's surface toward a point of the lamp's bulb (its radius jittered frame by frame, so the temporal
+// antialiasing softens the edge the way the bulb's size does) and stops short of the lamp's own fixture. The scene's
+// static world, moving objects and characters cast; a lamp the player carries (the torch above all) is not shadowed by
+// his own body, as its map was not.
+
+#include "rt_geometry.hlsli"
+
+cbuffer rt_light_constants : register( b0 )
+{
+	RtView	view;
+	float4	lamps[ 4 ];		// xyz world position, w 1 / range^2
+	float4	lamp_info[ 4 ];	// x the bulb's radius, y the fixture's reach the ray stops short of, z carried by the player (0/1)
+	uint4	lamp_count;		// x lamps in this pass, y rays a lamp
+};
+
+Texture2D<float>	ls_depth	: register( t0 );
+Texture2D<float4>	ls_position	: register( t1 );
+Texture2D<float4>	ls_normal	: register( t2 );
+
+RWTexture2D<unorm float4>	ls_out	: register( u0 );
+
+// One shadow ray: 1 where it reaches the lamp.
+float ls_ray( float3 origin, float3 to_lamp, float tmax, uint mask, float cone )
+{
+	RayDesc ray;
+	ray.Origin = origin;
+	ray.Direction = to_lamp;
+	ray.TMin = 0.01f;
+	ray.TMax = tmax;
+	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+	q.TraceRayInline( rt_scene, RAY_FLAG_NONE, mask, ray );
+	while ( q.Proceed() )
+	{
+		if ( q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
+			q.CommitNonOpaqueTriangleHit();
+	}
+	return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
+}
+
+[numthreads( 8, 8, 1 )]
+void main( uint3 id : SV_DispatchThreadID )
+{
+	if ( any( float2( id.xy ) >= view.size.xy ) )
+		return;
+	float4 visibility = 1.0f;
+	const float depth = ls_depth.Load( int3( id.xy, 0 ) );
+	[branch] if ( rt_is_sky( depth ) )
+	{
+		ls_out[ id.xy ] = visibility;
+		return;
+	}
+	const float z = rt_linear_z( depth, view );
+	const RtSurface s = rt_surface( ls_position, ls_normal, int2( id.xy ), view );
+	// The first-person hands keep the stock look (the volumes skip their shadow).
+	[branch] if ( rt_is_hud( z, s ) )
+	{
+		ls_out[ id.xy ] = visibility;
+		return;
+	}
+	const float3 p = rt_to_world( rt_view_pos( float2( id.xy ) + 0.5f, z, view ), view );
+	const float3 n = normalize( rt_dir_to_world( s.n_view, view ) );
+	const float cone = rt_pixel_size( z, view );
+	const uint rays = max( lamp_count.y, 1u );
+	const float2 noise = rt_noise2( id.xy, view.scene.w );
+
+	[loop] for ( uint i = 0u; i < min( lamp_count.x, 4u ); ++i )
+	{
+		const float3 to_lamp = lamps[ i ].xyz - p;
+		const float d2 = dot( to_lamp, to_lamp );
+		[branch] if ( d2 * lamps[ i ].w >= 1.0f )
+			continue;
+		const float dist = sqrt( d2 );
+		const float3 L = to_lamp / max( dist, 1e-4f );
+		// Off the surface on the lamp's side; leaf cards lit from behind keep their shadow.
+		const float3 side = dot( n, L ) >= 0.0f ? n : -n;
+		const float3 origin = p + side * ( 0.01f + 0.0015f * z );
+		const uint mask = lamp_info[ i ].z > 0.5f ? RT_RAYS_SHADOW_LAMP_CARRIED : RT_RAYS_SHADOW;
+		const float tmax = max( dist - lamp_info[ i ].y, 0.02f );
+		float lit = 0.0f;
+		[loop] for ( uint r = 0u; r < rays; ++r )
+		{
+			float3 dir = L;
+			[branch] if ( lamp_info[ i ].x > 0.0f )
+			{
+				const float2 u = frac( noise + float2( 0.7548776662f, 0.5698402910f ) * float( r + i * 3u ) );
+				dir = rt_cone_dir( L, lamp_info[ i ].x / max( dist, 0.05f ), u );
+			}
+			lit += ls_ray( origin, dir, tmax, mask, cone );
+		}
+		visibility[ i ] = lit / float( rays );
+	}
+	ls_out[ id.xy ] = visibility;
+}

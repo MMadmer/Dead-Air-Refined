@@ -86,6 +86,26 @@ void hmodel_parts
 	}
 }
 
+// The diffuse ambient with the ray traced light of the surroundings (rt_gi*.hlsl, da_rt_consumer.h) in place of the
+// sky's cube times the baked hemisphere: the material's response to that light (its table at the hemisphere h, 1 for
+// a surface the rays see whole), the ambient floor, the sky through a translucent blade.
+float3 hmodel_gi_diffuse( float3 gi, float m, float h, float3 Pnt, float3 normal )
+{
+	const float3 nw = mul( m_v2w, normal );
+	const float3 v2Pnt = mul( m_v2w, normalize( Pnt ) );
+	const float3 vreflect = reflect( v2Pnt, nw );
+	const float hspec = .5h + .5h * dot( vreflect, v2Pnt );
+	float hscale = h;
+#ifdef         USE_GAMMA_22
+	hscale = hscale * hscale;
+#endif
+	const float3 light = s_material.SampleLevel( smp_material, float3( hscale, hspec, da_lut_z( m ) ), 0 ).xxx;
+	float3 hd = gi * light + L_ambient.rgb;
+	[branch] if ( da_is_foliage( m ) )
+		hd *= 1.0f + 0.35f * da_foliage_tr( m );
+	return hd;
+}
+
 void hmodel
 (
 	out float3 hdiffuse, out float3 hspecular,

@@ -149,6 +149,19 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 #define r2_RT_rt_gloss_hist1 "$user$rt_gloss_hist1"
 #define r2_RT_rt_gloss "$user$rt_gloss"
 #define r2_RT_rt_gloss_scene "$user$rt_gloss_scene"
+// Ray traced global illumination (dxr.md 3.11): the trace, its depth, the history pairs, the filter's spare, the result.
+#define r2_RT_rt_gi_raw "$user$rt_gi_raw"
+#define r2_RT_rt_gi_z "$user$rt_gi_z"
+#define r2_RT_rt_gi_hist0 "$user$rt_gi_hist0"
+#define r2_RT_rt_gi_hist1 "$user$rt_gi_hist1"
+#define r2_RT_rt_gi_aux0 "$user$rt_gi_aux0"
+#define r2_RT_rt_gi_aux1 "$user$rt_gi_aux1"
+#define r2_RT_rt_gi_tmp "$user$rt_gi_tmp"
+#define r2_RT_rt_gi "$user$rt_gi"
+// The lamps' traced visibility (dxr.md 3.12), four lamps a mask.
+#define r2_RT_rt_lamps0 "$user$rt_lamps0"
+#define r2_RT_rt_lamps1 "$user$rt_lamps1"
+#define r2_RT_rt_lamps2 "$user$rt_lamps2"
 // [dx12:rt] end names
 
 #define     r2_base             "$user$base"

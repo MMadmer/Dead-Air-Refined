@@ -12,6 +12,12 @@ uniform float4		da_rt;
 // the confidence (0 = the sky's cube).
 Texture2D			s_rt_gloss;
 
+// The traced global illumination (dxr.md 3.11): da_rt_gi.x = 1 while it ran this frame; s_rt_gi rgb the light of the
+// surroundings (the combine's diffuse ambient in place of the sky's cube times the baked hemisphere), a the share of
+// it that came from the sky (< 0: a first-person pixel, which keeps its stock ambient).
+uniform float4		da_rt_gi;
+Texture2D			s_rt_gi;
+
 // The traced sun visibility of the render pixel (1 = lit), filtered.
 Texture2D<float>	s_rt_sun;
 // The mirror requests the water and puddle passes wrote: xy octahedral world direction, z view depth

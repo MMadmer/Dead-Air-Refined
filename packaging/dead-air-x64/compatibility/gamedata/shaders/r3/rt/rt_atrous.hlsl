@@ -31,9 +31,10 @@ float2 at_load( int2 p )
 {
 #ifdef RT_ATROUS_FIRST
 	const float4 h = at_source.Load( int3( p, 0 ) );
-	return float2( h.x, h.w );
+	return float2( h.x, abs( h.w ) );
 #else
-	return at_source.Load( int3( p, 0 ) );
+	const float2 v = at_source.Load( int3( p, 0 ) );
+	return float2( v.x, abs( v.y ) );
 #endif
 }
 

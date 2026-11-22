@@ -16,6 +16,7 @@ cbuffer rt_reflection_constants : register( b0 )
 	RtShade	shade;
 	float4	refl;		// x TMax, y cone spread per metre, z screen-edge margin in pixels, w off-screen sun rays (0/1)
 	uint4	refl_mask;	// x instance mask of the rays, y most screen-space steps of a ray
+	RtClouds clouds;
 };
 
 Texture2D<float4>	rf_request	: register( t0 );
@@ -26,9 +27,11 @@ TextureCube			rf_env0		: register( t4 );
 TextureCube			rf_env1		: register( t5 );
 TextureCube			rf_sky0		: register( t6 );
 TextureCube			rf_sky1		: register( t7 );
+Texture2D<float4>	rf_clouds	: register( t8 );
 
 RWTexture2D<float4>	rf_out		: register( u0 );
 
+#define RF_CLOUDS
 #include "rt_reflect.hlsli"
 
 [numthreads( 8, 8, 1 )]

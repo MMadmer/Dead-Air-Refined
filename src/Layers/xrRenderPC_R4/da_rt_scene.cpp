@@ -39,6 +39,10 @@
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #include "xrCore/Animation/Bone.hpp"
 #include "xrCore/FMesh.hpp"
+#include "xrEngine/CustomHUD.h"
+
+// The left-handed hud's sign (xr_ioc_cmd.cpp): the player's shadow model is mirrored with it.
+extern ENGINE_API float g_hud_mirror;
 #endif
 
 namespace xray::render::RENDER_NAMESPACE
@@ -99,6 +103,7 @@ enum : u8
     kMaskDynamic = 0x10,
     kMaskSkinned = 0x20,
     kMaskNoShadow = 0x40,
+    kMaskActor = 0x80, // the player's first-person shadow model (rt_common.hlsli RT_MASK_ACTOR)
 };
 enum : u32
 {
@@ -1277,6 +1282,8 @@ struct DaRtSkinCandidate
     Fmatrix world;
     float distance;
     float hemi;
+    u32 root; // DaRtSelection::roots
+    bool casts; // has a shadow element: the cascades drew its shadow
 };
 
 struct DaRtRigidCandidate
@@ -1287,7 +1294,36 @@ struct DaRtRigidCandidate
     Fvisual* visual;
     Fmatrix world;
     float hemi;
+    u32 root;
+    bool casts;
 };
+
+// The moving objects the rays take this frame, chosen on the main thread before the sun cascades are drawn
+// (da_rt_frame_collect): every renderable within reach by distance, characters to their cap, then the player's
+// first-person shadow model and what it carries. `skip` is what the near and middle cascades leave to the rays:
+// chosen now and traced whole by the last top level, so an object whose structure is still being built keeps its
+// shadow map for that frame instead of losing its shadow.
+struct DaRtSelection
+{
+    struct Root
+    {
+        IRenderable* renderable; // null: one of the player's casters
+        IRenderVisual* visual;
+        Fmatrix xform;
+        float distance;
+        float hemi;
+        bool character;
+    };
+    xr_vector<Root> roots;
+    u32 actor_first{}; // roots from here on are the player's
+    xr_vector<IRenderable*> skip; // sorted
+    bool actor_skip{};
+    bool shadows{}; // the sun's rays take the moving objects this frame
+};
+DaRtSelection g_rt_sel;
+// Traced whole by the last top level that held moving objects (sorted), and the player's casters.
+xr_vector<IRenderable*> g_rt_traced_last;
+bool g_rt_actor_traced_last{};
 
 u32 da_rt_dynamic_texture(const ref_texture& t)
 {
@@ -1491,32 +1527,44 @@ bool da_rt_build_rigid(DaRtSection& section, DaRtDynBlas& entry, const DaRtTrian
     return true;
 }
 
-void da_rt_collect_dynamic(xr_vector<DaRtRigidCandidate>& rigid, xr_vector<DaRtSkinCandidate>& skinned, const DaRtTier& tier)
+// The chosen roots' parts into candidates; `complete[root]` is false where a part that casts could not be taken (the
+// cascades keep such a root whole).
+void da_rt_collect_dynamic(xr_vector<DaRtRigidCandidate>& rigid, xr_vector<DaRtSkinCandidate>& skinned, xr_vector<u8>& complete,
+    const DaRtTier& tier)
 {
-    const Fvector& camera = Device.vCameraPosition;
-    xr_vector<ISpatial*> found;
-    g_pGamePersistent->SpatialSpace.q_sphere(found, 0, STYPE_RENDERABLE, camera, tier.rigid_radius);
-    IGameObject* viewer = g_pGameLevel ? g_pGameLevel->CurrentViewEntity() : nullptr;
-
     struct Walk
     {
         xr_vector<DaRtRigidCandidate>& rigid;
         xr_vector<DaRtSkinCandidate>& skinned;
         const DaRtTier& tier;
         float distance, hemi;
+        u32 root;
+        bool complete{true};
+
+        void lost(dxRender_Visual* v)
+        {
+            if (da_rt_casts_sun_shadow(v))
+                complete = false;
+        }
 
         void mesh(dxRender_Visual* v, const Fmatrix& world)
         {
             auto* f = dynamic_cast<Fvisual*>(v);
             ShaderElement* element = da_rt_scene_element(v);
             if (!f || !element || dynamic_cast<CSkeletonX*>(v))
+            {
+                if (f && !element)
+                    lost(v);
                 return;
+            }
             DaRtRigidCandidate c{};
             if (!da_rt_engine_mesh(f, element, c.mesh))
-                return;
+                return lost(v);
             c.visual = f;
             c.world = world;
             c.hemi = hemi;
+            c.root = root;
+            c.casts = da_rt_casts_sun_shadow(v);
             rigid.push_back(std::move(c));
         }
 
@@ -1526,27 +1574,29 @@ void da_rt_collect_dynamic(xr_vector<DaRtRigidCandidate>& rigid, xr_vector<DaRtS
             auto* f = dynamic_cast<Fvisual*>(child);
             ShaderElement* element = da_rt_scene_element(child);
             if (!skeleton || !f || !element)
-                return;
+                return lost(child);
             if (DaRtSkeletonAccess::single(*skeleton))
             {
                 // A part riding one bone: its bind-pose vertices, instanced with the bone's world.
                 const u16 bone = u16(DaRtSkeletonAccess::bone(*skeleton));
                 if (bone >= parent->LL_BoneCount())
-                    return;
+                    return lost(child);
                 DaRtRigidCandidate c{};
                 c.world.mul_43(world, parent->LL_GetTransform_R(bone));
                 c.skeleton = skeleton;
                 c.visual = f;
                 c.hemi = hemi;
+                c.root = root;
+                c.casts = da_rt_casts_sun_shadow(child);
                 c.model_data = da_rt_part_data(*skeleton).data;
                 if (!c.model_data)
-                    return;
+                    return lost(child);
                 c.mesh.albedo = da_rt_albedo(element);
                 c.mesh.flags = (da_rt_alpha_tested(element) ? kGeomAlpha : 0u) | (element->flags.bEmissive ? kGeomEmissive : 0u);
                 rigid.push_back(std::move(c));
             }
-            else if (distance <= tier.skinned_radius)
-                skinned.push_back({child, parent, skeleton, f, world, distance, hemi});
+            else
+                skinned.push_back({child, parent, skeleton, f, world, distance, hemi, root, da_rt_casts_sun_shadow(child)});
         }
 
         void visual(dxRender_Visual* v, const Fmatrix& world)
@@ -1574,6 +1624,42 @@ void da_rt_collect_dynamic(xr_vector<DaRtRigidCandidate>& rigid, xr_vector<DaRtS
         }
     };
 
+    complete.assign(g_rt_sel.roots.size(), 0);
+    for (u32 i = 0; i < g_rt_sel.roots.size(); ++i)
+    {
+        const DaRtSelection::Root& r = g_rt_sel.roots[i];
+        Walk walk{rigid, skinned, tier, r.distance, r.hemi, i};
+        walk.visual(static_cast<dxRender_Visual*>(r.visual), r.xform);
+        complete[i] = walk.complete ? 1 : 0;
+    }
+}
+
+// The reflection the left-handed hud gives the player's shadow casters (r2.cpp add_Visual): through the plane of the
+// body's right axis.
+Fmatrix da_rt_mirror_actor(const Fmatrix& m, const Fmatrix& body)
+{
+    Fvector n = body.i;
+    n.normalize_safe();
+    const float plane = body.c.dotproduct(n);
+    Fmatrix r = m;
+    r.i.mad(n, -2.f * r.i.dotproduct(n));
+    r.j.mad(n, -2.f * r.j.dotproduct(n));
+    r.k.mad(n, -2.f * r.k.dotproduct(n));
+    r.c.mad(n, -2.f * (r.c.dotproduct(n) - plane));
+    return r;
+}
+
+void da_rt_select_moving(const DaRtTier& tier, bool shadows)
+{
+    DaRtSelection& sel = g_rt_sel;
+    sel.roots.clear();
+    sel.skip.clear();
+    sel.actor_skip = false;
+    sel.shadows = shadows;
+    const Fvector& camera = Device.vCameraPosition;
+    xr_vector<ISpatial*> found;
+    g_pGamePersistent->SpatialSpace.q_sphere(found, 0, STYPE_RENDERABLE, camera, tier.rigid_radius);
+    IGameObject* viewer = g_pGameLevel ? g_pGameLevel->CurrentViewEntity() : nullptr;
     for (ISpatial* spatial : found)
     {
         IRenderable* renderable = spatial->dcast_Renderable();
@@ -1583,26 +1669,56 @@ void da_rt_collect_dynamic(xr_vector<DaRtRigidCandidate>& rigid, xr_vector<DaRtS
         if (!data.visual || data.hud || data.invisible)
             continue;
         auto* v = static_cast<dxRender_Visual*>(data.visual);
+        switch (v->Type)
+        {
+        case MT_HIERRARHY:
+        case MT_SKELETON_ANIM:
+        case MT_SKELETON_RIGID:
+        case MT_NORMAL:
+        case MT_PROGRESSIVE: break;
+        default: continue;
+        }
         const float distance = camera.distance_to(data.xform.c);
+        const bool character = v->Type == MT_SKELETON_ANIM;
+        if (distance > tier.rigid_radius || (character && distance > tier.skinned_radius))
+            continue;
         float hemi = 0.5f;
         if (data.pROS)
             hemi = 0.75f * static_cast<CROS_impl*>(data.pROS)->peek_hemi();
-        Walk walk{rigid, skinned, tier, distance, hemi};
-        walk.visual(v, data.xform);
+        sel.roots.push_back({renderable, data.visual, data.xform, distance, hemi, character});
     }
-    // The nearest skinned_max characters, each with every part: a model's parts sort together (one
-    // distance, then the model) and the cut falls between two models.
-    std::sort(skinned.begin(), skinned.end(), [](const DaRtSkinCandidate& a, const DaRtSkinCandidate& b) {
-        return a.distance != b.distance ? a.distance < b.distance : std::less<CKinematics*>()(a.parent, b.parent);
+    std::sort(sel.roots.begin(), sel.roots.end(), [](const DaRtSelection::Root& a, const DaRtSelection::Root& b) {
+        return a.distance != b.distance ? a.distance < b.distance : std::less<IRenderable*>()(a.renderable, b.renderable);
     });
+    // The nearest skinned_max characters; the others are left to their shadow maps whole.
     u32 characters = 0;
-    size_t keep = 0;
-    for (; keep < skinned.size(); ++keep)
+    sel.roots.erase(std::remove_if(sel.roots.begin(), sel.roots.end(),
+                        [&](const DaRtSelection::Root& r) { return r.character && ++characters > tier.skinned_max; }),
+        sel.roots.end());
+    sel.actor_first = u32(sel.roots.size());
+    // The player's first-person shadow model, which the spatial database does not hold.
+    if (shadows && ps_r__actor_shadow && g_pGameLevel && g_pGameLevel->pHUD)
     {
-        if ((!keep || skinned[keep].parent != skinned[keep - 1].parent) && ++characters > tier.skinned_max)
-            break;
+        xr_vector<std::pair<IRenderVisual*, Fmatrix>> casters;
+        g_pGameLevel->pHUD->Actor_Shadow_Casters(casters);
+        const Fmatrix body = casters.empty() ? Fidentity : casters.front().second;
+        for (const auto& [visual, xform] : casters)
+        {
+            if (!visual)
+                continue;
+            const Fmatrix m = g_hud_mirror < 0.f ? da_rt_mirror_actor(xform, body) : xform;
+            sel.roots.push_back({nullptr, visual, m, 0.f, 0.5f, false});
+        }
     }
-    skinned.resize(keep);
+    if (!shadows)
+        return;
+    for (u32 i = 0; i < sel.actor_first; ++i)
+    {
+        if (std::binary_search(g_rt_traced_last.begin(), g_rt_traced_last.end(), sel.roots[i].renderable))
+            sel.skip.push_back(sel.roots[i].renderable);
+    }
+    std::sort(sel.skip.begin(), sel.skip.end());
+    sel.actor_skip = sel.actor_first < sel.roots.size() && g_rt_actor_traced_last;
 }
 
 // The frame's moving objects, gathered by a worker from Calculate on (da_rt_frame_collect).
@@ -1612,6 +1728,7 @@ struct DaRtCollectJob
     u32 frame{u32(-1)};
     xr_vector<DaRtRigidCandidate> rigid;
     xr_vector<DaRtSkinCandidate> skin;
+    xr_vector<u8> complete; // per chosen root
 } g_rt_collect;
 
 // The moving objects of this frame into the structures, the tables and the top-level build.
@@ -1624,8 +1741,15 @@ void da_rt_update_dynamic(DaRtSection& section)
     {
         rigid.clear();
         skin.clear();
-        da_rt_collect_dynamic(rigid, skin, tier);
+        da_rt_collect_dynamic(rigid, skin, g_rt_collect.complete, tier);
     }
+    // Per chosen root: its candidates, and how many of them reached the top level.
+    const u32 roots = u32(g_rt_sel.roots.size());
+    xr_vector<u32> expected(roots, 0), added(roots, 0);
+    for (const DaRtRigidCandidate& c : rigid)
+        ++expected[c.root];
+    for (const DaRtSkinCandidate& c : skin)
+        ++expected[c.root];
 
     DaRtFrameDynamic frame;
     const u32 frame_index = Device.dwFrame;
@@ -1634,10 +1758,13 @@ void da_rt_update_dynamic(DaRtSection& section)
     // Every new structure this frame shares one scratch: sized for the frame's worst case.
     da_rt_dyn_scratch(32ull << 20);
 
-    const auto add_instance = [&](const Fmatrix& world, const DaRtGeometryRecord& record, u8 mask, float hemi, DaRtAddress as) {
+    const auto add_instance = [&](const Fmatrix& world, const DaRtGeometryRecord& record, u8 mask, float hemi, DaRtAddress as,
+                                  u32 root) {
         // A record without its buffers' slots (the bindless range was full) is left out, not traced.
         if (frame.instances.size() >= kMaxDynamicInstances || record.vb == kNone || record.ib == kNone || !as)
             return;
+        if (root < roots)
+            ++added[root];
         const u32 id = kInstanceDynamic | u32(frame.records.size());
         frame.records.push_back(record);
         DaRtInstanceDesc& d = frame.instances.emplace_back();
@@ -1710,7 +1837,8 @@ void da_rt_update_dynamic(DaRtSection& section)
         record.ib = ib_bindless;
         record.albedo = da_rt_dynamic_texture(mesh.albedo);
         record.flags = mesh.flags | kGeomAbsolute;
-        add_instance(c.world, record, kMaskDynamic, c.hemi, da_rt_address(entry.as));
+        const u8 cast_mask = c.root >= g_rt_sel.actor_first ? kMaskActor : kMaskDynamic;
+        add_instance(c.world, record, c.casts ? cast_mask : kMaskNoShadow, c.hemi, da_rt_address(entry.as), c.root);
     }
 
     // Characters: pre-skinned into their own vertices, the structure refitted (rebuilt every 30 frames).
@@ -1850,7 +1978,8 @@ void da_rt_update_dynamic(DaRtSection& section)
         const auto it = g_scene.skinned.find(c.child);
         if (it == g_scene.skinned.end() || !it->second.built || it->second.last_frame != frame_index)
             continue;
-        add_instance(c.world, it->second.record, kMaskSkinned, c.hemi, da_rt_address(it->second.as));
+        const u8 cast_mask = c.root >= g_rt_sel.actor_first ? kMaskActor : kMaskSkinned;
+        add_instance(c.world, it->second.record, c.casts ? cast_mask : kMaskNoShadow, c.hemi, da_rt_address(it->second.as), c.root);
     }
 
     // Engine buffers first seen this frame, and every tracked one again (they decay at each submission);
@@ -1883,7 +2012,25 @@ void da_rt_update_dynamic(DaRtSection& section)
     }
     // Every structure written above is complete before the top level reads it.
     section.accel_barrier();
-    da_rt_build_tlas(section, frame.instances.data(), dynamic_count, true);
+    const bool built = da_rt_build_tlas(section, frame.instances.data(), dynamic_count, true);
+
+    // What the next frame's cascades may leave to the rays: the roots every part of which is in this top level.
+    g_rt_traced_last.clear();
+    const bool traced = built && dynamic_count && g_rt_collect.complete.size() == roots;
+    bool actor = traced && g_rt_sel.actor_first < roots;
+    for (u32 i = 0; i < roots; ++i)
+    {
+        const bool reached = traced && g_rt_collect.complete[i] && added[i] == expected[i];
+        if (i < g_rt_sel.actor_first)
+        {
+            if (reached && expected[i])
+                g_rt_traced_last.push_back(g_rt_sel.roots[i].renderable);
+        }
+        else if (!reached)
+            actor = false;
+    }
+    std::sort(g_rt_traced_last.begin(), g_rt_traced_last.end());
+    g_rt_actor_traced_last = actor;
 }
 
 // Structures nobody used for a while go (after the GPU is done with them).
@@ -2017,18 +2164,49 @@ void da_rt_textures_replaced()
 #endif
 }
 
+bool da_rt_moving_wanted()
+{
+    return da_rt_live(RtEffect::AO) || da_rt_live(RtEffect::Reflections) || da_rt_live(RtEffect::Shadows) || da_rt_live(RtEffect::GI);
+}
+
+bool da_rt_traces_moving(IRenderable* root)
+{
+#if defined(DA_RT_LANE)
+    return root && std::binary_search(g_rt_sel.skip.begin(), g_rt_sel.skip.end(), root);
+#else
+    UNUSED(root);
+    return false;
+#endif
+}
+
+bool da_rt_traces_actor()
+{
+#if defined(DA_RT_LANE)
+    return g_rt_sel.actor_skip;
+#else
+    return false;
+#endif
+}
+
 void da_rt_frame_collect()
 {
 #if defined(DA_RT_LANE)
+    // Nothing chosen: the cascades draw every moving object.
+    g_rt_sel.roots.clear();
+    g_rt_sel.skip.clear();
+    g_rt_sel.actor_skip = false;
+    g_rt_sel.actor_first = 0;
     if (!da_rt_available() || !g_scene.level || !g_scene.ready || !da_rt_wanted())
         return;
-    if (!da_rt_live(RtEffect::AO) && !da_rt_live(RtEffect::Reflections))
+    if (!da_rt_moving_wanted())
         return;
+    // Chosen here, on the main thread, before the sun cascades are drawn: they leave the traced ones to the rays.
+    da_rt_select_moving(da_rt_tier(), da_rt_live(RtEffect::Shadows));
     g_rt_collect.frame = Device.dwFrame;
     g_rt_collect.rigid.clear();
     g_rt_collect.skin.clear();
     g_rt_collect.task = &TaskScheduler->AddTask([] {
-        da_rt_collect_dynamic(g_rt_collect.rigid, g_rt_collect.skin, da_rt_tier());
+        da_rt_collect_dynamic(g_rt_collect.rigid, g_rt_collect.skin, g_rt_collect.complete, da_rt_tier());
     });
 #endif
 }
@@ -2078,8 +2256,8 @@ void da_rt_frame_scene(CBackend& cmd_list)
         return;
     }
 
-    // Moving objects only matter to the occlusion and the reflections; the shadow rays mask them out.
-    const bool track = da_rt_live(RtEffect::AO) || da_rt_live(RtEffect::Reflections);
+    // Moving objects: every effect traces them now, the sun's shadow rays included.
+    const bool track = da_rt_moving_wanted();
     dx11GpuTimerScope gpu(dx11GpuTimers::RtScene);
     DaRtSection section;
     if (!section)

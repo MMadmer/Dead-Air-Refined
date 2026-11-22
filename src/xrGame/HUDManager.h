@@ -28,6 +28,7 @@ public:
     virtual void Render_Shadow(u32 context_id);
     virtual void Update_Actor_Shadow(bool enabled);
     virtual void Render_Actor_Shadow(u32 context_id, const Fvector& source, bool carried_light);
+    virtual void Actor_Shadow_Casters(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out);
     virtual void OnFrame();
 
     virtual void RenderUI();

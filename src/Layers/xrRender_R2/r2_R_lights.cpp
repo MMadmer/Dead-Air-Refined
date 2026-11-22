@@ -7,6 +7,7 @@
 #include "Layers/xrRenderPC_R4/da_particle_light.h"
 #include "Layers/xrRenderPC_R4/da_smap_cache.h"
 #include "Layers/xrRenderPC_R4/da_light_volumes.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
 #include "Layers/xrRender/da_grass_blades.h"
 #include "Layers/xrRenderDX11/dx11GpuTimers.h"
 #endif
@@ -72,6 +73,16 @@ void CRender::render_lights(light_Package& LP)
             shrub_lights.push_back({L, L->position, L->direction, L->range, L->cone, L->X.S.size, L->X.S.combine});
         da_veg_lights_prepare(get_imm_context().cmd_list, shrub_lights.data(), u32(shrub_lights.size()));
     }
+
+    const bool volumetricLightsEnabled = RImplementation.o.advancedpp &&
+        ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
+#if RENDER == R_R4
+    // The nearest shadowed lamps take their shadow from rays (dxr.md 3.12): their faces leave the atlas, and the pass
+    // traces their masks now, the G-buffer done.
+    static xr_vector<light*> rt_faces;
+    da_rt_lamps_select(LP.v_shadowed, rt_faces, volumetricLightsEnabled);
+    da_rt_lamps_pass(get_imm_context().cmd_list);
+#endif
 
     s_light_dynamic_casters.clear();
     if (ps_r__light_dyn_shared && !LP.v_shadowed.empty())
@@ -152,9 +163,6 @@ void CRender::render_lights(light_Package& LP)
 #endif
 
     auto& cmd_list = get_imm_context().cmd_list;
-
-    const bool volumetricLightsEnabled = RImplementation.o.advancedpp &&
-        ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
 
 #if RENDER != R_R4
     const auto accumulateUnshadowedSpot = [&](light* L)
@@ -654,12 +662,15 @@ void CRender::render_lights(light_Package& LP)
 #endif
 
 #if RENDER == R_R4
-    // No atlas batch this frame: the unshadowed lamps light on their own.
-    if (!shadowed_batches)
+    // The ray traced lamps after the batches, and with them the unshadowed lamps when no atlas batch took them.
+    if (!shadowed_batches || !rt_faces.empty())
     {
         Target->phase_accumulator(cmd_list);
         PIX_EVENT(LIGHT_VOLUMES);
-        da_lv_draw(cmd_list, L_spot_s, &lit_unshadowed);
+        da_lv_draw(cmd_list, rt_faces, shadowed_batches ? nullptr : &lit_unshadowed);
+        for (light* p_light : rt_faces)
+            render_indirect(p_light);
+        rt_faces.clear();
     }
     for (light* p_light : lit_unshadowed)
         render_indirect(p_light);

@@ -394,7 +394,12 @@ void CRender::Screenshot(ScreenshotMode mode /*= SM_NORMAL*/, pcstr name /*= nul
                 fs->w(saved.GetBufferPointer(), saved.GetBufferSize());
                 FS.w_close(fs);
             }
+            else
+                Msg("! Failed to make a screenshot: couldn't open %s", buf);
         }
+        else
+            Msg("! Failed to make a screenshot: JPEG encoding of format %u failed (0x%08x)",
+                u32(image.GetMetadata().format), u32(hr));
 
         // hq
         if (strstr(Core.Params, "-ss_tga"))

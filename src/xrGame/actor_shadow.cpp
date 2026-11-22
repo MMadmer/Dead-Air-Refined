@@ -148,6 +148,18 @@ void CActor::update_shadow_caster(bool enabled)
     }
 
     collect_shadow_items();
+    m_shadow_ready = true;
+}
+
+void CActor::shadow_casters(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out) const
+{
+    out.clear();
+    if (!m_shadow_ready)
+        return;
+    if (IRenderVisual* body = m_shadow_caster ? m_shadow_caster : Visual())
+        out.emplace_back(body, XFORM());
+    for (const auto& item : m_shadow_items)
+        out.emplace_back(item.visual, item.xform);
 }
 
 void CActor::render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source, bool carried_light)
@@ -182,6 +194,7 @@ void CActor::render_shadow_caster(u32 context_id, IRenderable* root, const Fvect
 
 void CActor::drop_shadow_caster()
 {
+    m_shadow_ready = false;
     m_shadow_bones.clear();
     m_shadow_items.clear();
     m_shadow_caster_name = nullptr;

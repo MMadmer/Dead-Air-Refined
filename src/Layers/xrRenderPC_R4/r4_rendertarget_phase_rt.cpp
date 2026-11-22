@@ -62,6 +62,10 @@ bool da_rt_targets_ready(RtEffect effect)
     }
     case RtEffect::Reflections:
         return rt->refl_req && rt->refl_req->pRT && rt->refl && rt->refl->pUAView && RImplementation.Target->rt_SSR;
+    case RtEffect::GI:
+        return rt->gi_raw && rt->gi_raw->pUAView && rt->gi_z && rt->gi_z->pUAView && rt->gi_hist[0] && rt->gi_hist[0]->pUAView &&
+            rt->gi_hist[1] && rt->gi_hist[1]->pUAView && rt->gi_aux[0] && rt->gi_aux[0]->pUAView && rt->gi_aux[1] &&
+            rt->gi_aux[1]->pUAView && rt->gi_tmp && rt->gi_tmp->pUAView && rt->gi && rt->gi->pUAView && rt->gloss_scene;
     default: return false;
     }
 }
@@ -135,7 +139,7 @@ void da_rt_targets_create(CRenderTarget& target)
 {
 #if defined(DA_RT_LANE)
     da_rt_targets_destroy(target);
-    if (!da_rt_available() || !(ps_r__rt_reflections || ps_r__rt_shadows || ps_r__rtao))
+    if (!da_rt_available() || !(ps_r__rt_reflections || ps_r__rt_shadows || ps_r__rtao || ps_r__rt_gi))
         return;
     // The first effect switched on on this device brings the pass pipelines.
     da_rt_passes_create();
@@ -169,8 +173,10 @@ void da_rt_targets_create(CRenderTarget& target)
         // The glossy surfaces' (dxr.md 3.9), for the quality the renderer started with.
         if (da_rt_tier_of(ps_r__rt_quality).gloss)
         {
-            rt->gloss_width = (w + 1) / 2;
-            rt->gloss_height = (h + 1) / 2;
+            // Ultra traces every pixel every frame; below, one of each 2x2 block in turn.
+            const bool full = da_rt_tier_of(ps_r__rt_quality).gloss_full;
+            rt->gloss_width = full ? w : (w + 1) / 2;
+            rt->gloss_height = full ? h : (h + 1) / 2;
             rt->gloss_raw.create(r2_RT_rt_gloss_raw, rt->gloss_width, rt->gloss_height, D3DFMT_A16B16G16R16F, 1, uav);
             rt->gloss_dist.create(r2_RT_rt_gloss_dist, rt->gloss_width, rt->gloss_height, D3DFMT_R16F, 1, uav);
             rt->gloss_hist[0].create(r2_RT_rt_gloss_hist0, w, h, D3DFMT_A16B16G16R16F, 1, uav);
@@ -178,6 +184,34 @@ void da_rt_targets_create(CRenderTarget& target)
             rt->gloss.create(r2_RT_rt_gloss, w, h, D3DFMT_A16B16G16R16F, 1, uav);
             rt->gloss_scene.create(r2_RT_rt_gloss_scene, w, h, D3DFMT_A16B16G16R16F, 1);
         }
+    }
+    if (ps_r__rt_gi)
+    {
+        // The trace resolution follows the quality the renderer started with.
+        rt->gi_half = da_rt_tier_of(ps_r__rt_quality).gi_half;
+        rt->gi_width = rt->gi_half ? (w + 1) / 2 : w;
+        rt->gi_height = rt->gi_half ? (h + 1) / 2 : h;
+        rt->gi_raw.create(r2_RT_rt_gi_raw, rt->gi_width, rt->gi_height, D3DFMT_A16B16G16R16F, 1, uav);
+        rt->gi_z.create(r2_RT_rt_gi_z, rt->gi_width, rt->gi_height, D3DFMT_R32F, 1, uav);
+        rt->gi_hist[0].create(r2_RT_rt_gi_hist0, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+        rt->gi_hist[1].create(r2_RT_rt_gi_hist1, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+        rt->gi_aux[0].create(r2_RT_rt_gi_aux0, w, h, D3DFMT_G16R16F, 1, uav);
+        rt->gi_aux[1].create(r2_RT_rt_gi_aux1, w, h, D3DFMT_G16R16F, 1, uav);
+        rt->gi_tmp.create(r2_RT_rt_gi_tmp, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+        rt->gi.create(r2_RT_rt_gi, w, h, D3DFMT_A16B16G16R16F, 1, uav);
+        // The previous frame's linear colour the rays reuse where the screen shows their hit (shared with the glossy
+        // reflections).
+        if (!rt->gloss_scene)
+            rt->gloss_scene.create(r2_RT_rt_gloss_scene, w, h, D3DFMT_A16B16G16R16F, 1);
+    }
+    // The clouds' shadow over the hits of the reflections and the global illumination.
+    rt->t_clouds.create(r2_RT_cloud_map);
+    // The lamps' traced visibility, for the quality the renderer started with.
+    if (ps_r__rt_shadows && da_rt_tier_of(ps_r__rt_quality).lamps_max)
+    {
+        static constexpr pcstr names[kRtLampMasks] = {r2_RT_rt_lamps0, r2_RT_rt_lamps1, r2_RT_rt_lamps2};
+        for (u32 i = 0; i < kRtLampMasks; ++i)
+            rt->lamps[i].create(names[i], w, h, D3DFMT_A8B8G8R8, 1, uav);
     }
     rt->t_env0.create(r2_T_envs0);
     rt->t_env1.create(r2_T_envs1);

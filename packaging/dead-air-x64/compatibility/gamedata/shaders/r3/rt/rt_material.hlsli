@@ -116,6 +116,42 @@ float3 rt_tonemap( float3 rgb, float scale, RtShade s )
 	return rt_grade( tm, s );
 }
 
+// ---- the clouds' shadow (da_clouds.h da_cloud_transmittance, its constants passed in) -----------
+
+struct RtClouds
+{
+	float4	params;		// da_cloud_params: y the deck's base above the level's ground
+	float4	params2;	// da_cloud_params2: w the shadow's density (0: none)
+	float4	map;		// da_cloud_map: xy the map's centre, z its edge, w 1 / z
+};
+
+// How much of the sun reaches a world point through the cloud deck overhead: the map's column transmittance where
+// the sun ray crosses the deck's base (the map's edge value past it), floored as the sun passes floor it.
+float rt_cloud_transmittance( float3 p, float3 to_sun, RtClouds c, Texture2D<float4> map )
+{
+	[branch] if ( c.params2.w < 0.003f || to_sun.y < 0.05f )
+		return 1.0f;
+	const float t = ( c.params.y - p.y ) / to_sun.y;
+	[branch] if ( t < 0.0f )
+		return 1.0f;
+	const float2 hit = p.xz + to_sun.xz * t;
+	const float2 uv = saturate( ( hit - c.map.xy ) * c.map.w + 0.5f );
+	const float T = max( map.SampleLevel( rt_linear_clamp, uv, 0 ).w, 0.12f );
+	return 1.0f - c.params2.w * ( 1.0f - T );
+}
+
+// ---- the sky's diffuse light (hmodel.h env_d) ---------------------------------------------------
+
+// The sky's light from a direction, as the combine takes it for a normal: the hemisphere cubes, their weather blend,
+// the env colour, squared for contrast.
+float3 rt_sky_diffuse( float3 dir, RtShade s, TextureCube env0, TextureCube env1 )
+{
+	const float3 e0 = env0.SampleLevel( rt_linear_clamp, dir, 0 ).rgb;
+	const float3 e1 = env1.SampleLevel( rt_linear_clamp, dir, 0 ).rgb;
+	const float3 e = s.env_color.rgb * lerp( e0, e1, s.env_color.w );
+	return e * e;
+}
+
 // ---- the hit ---------------------------------------------------------------------------------
 
 struct RtHitSurface

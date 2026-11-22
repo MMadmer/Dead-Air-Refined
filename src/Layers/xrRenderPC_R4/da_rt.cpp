@@ -28,6 +28,7 @@ bool da_rt_setting(RtEffect effect)
     case RtEffect::Reflections: return ps_r__rt_reflections != 0;
     case RtEffect::Shadows: return ps_r__rt_shadows != 0;
     case RtEffect::AO: return ps_r__rtao != 0;
+    case RtEffect::GI: return ps_r__rt_gi != 0;
     default: return false;
     }
 }
@@ -52,7 +53,7 @@ void da_rt_frame_begin()
 {
     DaRtLatch latch;
 #if defined(DA_RT_LANE)
-    latch.quality = std::min(ps_r__rt_quality, 2u);
+    latch.quality = std::min(ps_r__rt_quality, 3u);
     const bool traceable = da_rt_available() && da_rt_scene_ready();
     for (u32 i = 0; i < u32(RtEffect::Count); ++i)
     {
@@ -92,12 +93,21 @@ Fvector4 da_rt_constants()
 #endif
 }
 
+Fvector4 da_rt_gi_constants()
+{
+#if defined(DA_RT_LANE)
+    return {da_rt_live(RtEffect::GI) && da_rt_gi_ran() ? 1.f : 0.f, 0.f, 0.f, 0.f};
+#else
+    return {0.f, 0.f, 0.f, 0.f};
+#endif
+}
+
 bool da_rt_wants_scene_grab() { return da_rt_live(RtEffect::Reflections); }
 
 bool da_rt_skip_static_casters() { return da_rt_live(RtEffect::Shadows); }
 
 // The denoisers reproject with the motion vectors.
-bool da_rt_wants_motion() { return da_rt_live(RtEffect::Shadows) || da_rt_live(RtEffect::AO); }
+bool da_rt_wants_motion() { return da_rt_live(RtEffect::Shadows) || da_rt_live(RtEffect::AO) || da_rt_live(RtEffect::GI); }
 
 // Asked when the targets are created (renderer start, vid_restart), where the RTAO setting changes.
 bool da_rt_needs_ao_targets()

@@ -1,17 +1,18 @@
-// Ray traced sun shadow (dxr.md 3.5): one ray per render pixel toward the sun against the static
-// world only (RT_RAYS_SHADOW: vegetation and moving objects keep their swaying shadow maps). The
-// near and middle cascades leave the static casters out while this runs; the accumulation
+// Ray traced sun shadow (dxr.md 3.5, 3.10): rays per render pixel toward the sun against the static world, the
+// moving objects and characters near the camera and the player's shadow model (RT_RAYS_SHADOW); vegetation keeps its
+// swaying shadow maps. The near and middle cascades leave the traced casters out while this runs; the accumulation
 // multiplies the two.
 //
-// RT_SUN_DIRECT (quality Low): a hard shadow straight into the mask the sun passes read, no
-// jitter, no filter. Otherwise (visibility, hit distance) for the temporal pass and the filter.
+// RT_SUN_DIRECT (quality Low): a hard shadow straight into the mask the sun passes read, no jitter, no filter.
+// Otherwise (visibility, hit distance) for the temporal pass and the filter; the hit distance is negative where a moving
+// object casts, so the temporal pass follows it instead of trailing its shadow.
 
 #include "rt_geometry.hlsli"
 
 cbuffer rt_sun_constants : register( b0 )
 {
 	RtView	view;
-	float4	sun_params;	// x TMax, y jitter inside the sun disc (0/1), z normal offset base, w normal offset per metre
+	float4	sun_params;	// x TMax, y rays a pixel (0 = one, unjittered), z normal offset base, w normal offset per metre
 };
 
 Texture2D<float>	sun_depth		: register( t0 );
@@ -31,6 +32,23 @@ void sun_write( uint2 pixel, float visibility, float hit_distance )
 #else
 	sun_out[ pixel ] = float2( visibility, hit_distance );
 #endif
+}
+
+// One shadow ray: (blocked 0/1, hit distance, a moving object blocked it 0/1).
+float3 sun_ray( RayDesc ray, float cone, uint mask )
+{
+	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+	q.TraceRayInline( rt_scene, RAY_FLAG_NONE, mask, ray );
+	while ( q.Proceed() )
+	{
+		if ( q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
+			q.CommitNonOpaqueTriangleHit();
+	}
+	[branch] if ( q.CommittedStatus() != COMMITTED_TRIANGLE_HIT )
+		return 0.0f;
+	return float3( 1.0f, q.CommittedRayT(), ( q.CommittedInstanceID() & RT_INSTANCE_DYNAMIC ) ? 1.0f : 0.0f );
 }
 
 [numthreads( 8, 8, 1 )]
@@ -56,46 +74,41 @@ void main( uint3 id : SV_DispatchThreadID )
 		eye_ray.Direction = view.sun.xyz;
 		eye_ray.TMin = 0.05f;
 		eye_ray.TMax = sun_params.x;
-		RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> eye;
-		eye.TraceRayInline( rt_scene, RAY_FLAG_NONE, RT_RAYS_SHADOW, eye_ray );
-		while ( eye.Proceed() )
-		{
-			if ( eye.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-				rt_alpha_solid( eye.CandidateInstanceID(), eye.CandidateInstanceIndex(), eye.CandidateGeometryIndex(),
-					eye.CandidatePrimitiveIndex(), eye.CandidateTriangleBarycentrics(), eye.CandidateObjectToWorld3x4(),
-					rt_pixel_size( 1.0f, view ), view ) )
-				eye.CommitNonOpaqueTriangleHit();
-		}
-		sun_write( id.xy, eye.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f, 0.0f );
+		// From the eye, which sits inside the player's own shadow model.
+		const float3 h = sun_ray( eye_ray, rt_pixel_size( 1.0f, view ), RT_RAYS_SHADOW_EYE );
+		sun_write( id.xy, 1.0f - h.x, 0.0f );
 		return;
 	}
 
 	const float3 p_world = rt_to_world( rt_view_pos( float2( id.xy ) + 0.5f, z, view ), view );
 	float3 n_world = normalize( rt_dir_to_world( s.n_view, view ) );
-	float3 L = view.sun.xyz;
-	[branch] if ( sun_params.y > 0.5f )
-		L = rt_cone_dir( L, view.sun.w, rt_noise2( id.xy, view.scene.w ) );
 	// The offset leaves the surface on the sun's side: leaf cards and grass are lit through from
 	// behind, and their static shadow still comes from these rays.
 	if ( dot( n_world, view.sun.xyz ) < 0.0f )
 		n_world = -n_world;
-
-	RayDesc ray;
-	ray.Origin = p_world + n_world * ( sun_params.z + sun_params.w * z ) + L * ( 0.0005f * z );
-	ray.Direction = L;
-	ray.TMin = 0.02f;
-	ray.TMax = sun_params.x;
-
-	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-	q.TraceRayInline( rt_scene, RAY_FLAG_NONE, RT_RAYS_SHADOW, ray );
 	const float cone = rt_pixel_size( z, view );
-	while ( q.Proceed() )
+	const uint rays = max( uint( sun_params.y + 0.5f ), 1u );
+	const float2 noise = rt_noise2( id.xy, view.scene.w );
+
+	float blocked = 0.0f, hit_min = 1e9f, moving = 0.0f;
+	[loop] for ( uint i = 0u; i < rays; ++i )
 	{
-		if ( q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
-			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
-				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
-			q.CommitNonOpaqueTriangleHit();
+		float3 L = view.sun.xyz;
+		// Points of the sun's disc, a golden-ratio step apart from the pixel's noise.
+		[branch] if ( sun_params.y > 0.5f )
+			L = rt_cone_dir( L, view.sun.w, frac( noise + float2( 0.7548776662f, 0.5698402910f ) * float( i ) ) );
+		RayDesc ray;
+		ray.Origin = p_world + n_world * ( sun_params.z + sun_params.w * z ) + L * ( 0.0005f * z );
+		ray.Direction = L;
+		ray.TMin = 0.02f;
+		ray.TMax = sun_params.x;
+		const float3 h = sun_ray( ray, cone, RT_RAYS_SHADOW );
+		blocked += h.x;
+		[flatten] if ( h.x > 0.5f )
+			hit_min = min( hit_min, h.y );
+		moving = max( moving, h.z );
 	}
-	const bool hit = q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
-	sun_write( id.xy, hit ? 0.0f : 1.0f, hit ? q.CommittedRayT() : 0.0f );
+	const float visibility = 1.0f - blocked / float( rays );
+	const float hit = blocked > 0.0f ? hit_min : 0.0f;
+	sun_write( id.xy, visibility, moving > 0.5f ? -max( hit, 0.001f ) : hit );
 }

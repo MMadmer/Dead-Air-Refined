@@ -57,7 +57,23 @@ struct DaRtTier
     u32 blas_per_frame; // new moving-object structures built per frame
     u32 refl_steps; // screen-space steps of a reflection ray before its traced hit, at most
     bool gloss; // glossy surfaces reflect the traced world (dxr.md 3.9), else the sky's cube
+    // dxr.md 3.10-3.12
+    u32 sun_rays; // shadow rays a pixel toward the sun's disc
+    float sun_disc; // tangent of the sun disc's radius (the penumbra per metre of occluder distance)
+    bool gloss_full; // every pixel of the glossy reflections traced every frame (else one of each 2x2)
+    bool gloss_foliage; // the glossy rays see the crowns
+    bool gi_half; // global illumination traced at half resolution
+    u32 gi_rays; // its rays a traced pixel
+    float gi_tmax; // their reach, metres
+    float gi_frames; // its temporal cap
+    u32 gi_filter; // a-trous passes over it
+    bool gi_foliage; // its rays see the crowns
+    u32 lamps_max; // shadowed lamps the rays shade instead of their maps (0: none), at most kRtLampSlots
+    u32 lamp_rays; // their rays a pixel
+    float lamp_bulb; // the bulb's radius their rays are spread over, metres
 };
+// The lamps' masks (rt/rt_light_shadow.hlsl): four lamps a mask, as many masks as the light volumes have slots for.
+constexpr u32 kRtLampMasks = 3, kRtLampSlots = kRtLampMasks * 4;
 const DaRtTier& da_rt_tier(); // this frame's (latched)
 const DaRtTier& da_rt_tier_of(u32 quality);
 
@@ -139,6 +155,16 @@ struct DaRtTargets
     u32 gloss_current{}, gloss_frame{u32(-2)}, gloss_scene_frame{u32(-2)};
     // The frame the glossy reflections ran in (combine_1 then reads them).
     u32 gloss_ran{u32(-2)};
+    // Global illumination (dxr.md 3.11): the trace (radiance, sky share) and its view z at the trace size, the
+    // history pairs (colour; frames and view z), the filter's spare, the result combine_1 reads.
+    ref_rt gi_raw, gi_z, gi_hist[2], gi_aux[2], gi_tmp, gi;
+    bool gi_half{};
+    u32 gi_width{}, gi_height{};
+    u32 gi_current{}, gi_frame{u32(-2)}, gi_ran{u32(-2)};
+    ref_texture t_clouds;
+    // The lamps' traced visibility, four lamps a mask (dxr.md 3.12); the frame they were traced in.
+    ref_rt lamps[kRtLampMasks];
+    u32 lamps_frame{u32(-2)};
     ref_shader s_puddle_req, s_water_req, s_water_req_b;
     // r__rt_debug, made on first use.
     ref_rt debug;
@@ -186,6 +212,8 @@ void da_rt_require_geometry(DaRtSection& section);
 DaRtPipeline da_rt_skin_pipeline();
 // The glossy reflections ran this frame (combine_1 reads them; the `da_rt` constant says so).
 bool da_rt_gloss_ran();
+// The global illumination ran this frame (combine_1 reads it; the `da_rt_gi` constant says so).
+bool da_rt_gi_ran();
 
 // ---- the lane's GPU objects (da_rt_native.cpp) --------------------------------------------------
 

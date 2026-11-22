@@ -23,8 +23,11 @@ DirectX 11, DirectX 12 and Vulkan (`xrRender_R4/R5/R6`). The OpenGL renderer kee
   is the shader's reach test, and the spot's cone and the point lamp's face are tested exactly there, which the
   tessellated meshes only approximate. No stencil masks.
 - One pixel shader for every kind of lamp, as `accum_base.ps` shaded them: the light model with the GGX lobe and the
-  falloff, the 9-tap shadow, the projector (14 textures a batch, t18..t31), the contact shadow, the first-person
+  falloff, the 9-tap shadow, the projector (11 textures a batch, t18..t28), the contact shadow, the first-person
   position. 14 registers against the stock's 10; the light pass costs the GPU what the stock one did.
+- With the ray traced shadows on (DirectX 12 and Vulkan, quality Medium and up) the nearest lamps leave the atlas: their
+  visibility comes from the traced masks at t29..t31 (`DA_LV_SHADOW_RT`, the record's third word the slot; dxr.md
+  3.12), and their faces light after the batches.
 - The unshadowed lamps light with the last batch; a shadowed face whose map had no casters lights nothing, as before.
   `lmodel.h`'s light model reads its one-mip LUT without gradients so the shader can call it after its early outs.
 

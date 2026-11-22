@@ -452,7 +452,8 @@ batch at build and again whenever the layer's texture-write generation changed.
   existing distance fade `s = min(s, rt)` (no double penumbra) - and past the fade RT keeps static
   shadows at every distance. `s_rt_sun` = `$user$rt_sun`, bound in every sun element of
   `blender_light_direct.cpp`; on DX11 the name has no surface and the branch is off.
-- Local lights, HUD self-shadow, actor shadow, rain map: unchanged.
+- Local lights, HUD self-shadow, actor shadow, rain map: unchanged. (Since 22.11.2026 the moving objects, the
+  characters and the player cast traced sun shadows too, and the nearest lamps trace theirs: 3.10, 3.12.)
 
 ### 3.6 RTAO
 - AO slot of `phase_combine`: when `da_rt_live(AO)`, `phase_rtao()` replaces GTAO/HDAO/SSAO.
@@ -518,6 +519,7 @@ No denoiser; TAA/DLSS resolve aliasing; water is already high in the reactive ma
   palette = `LL_GetTransform_R` as `SkeletonX.cpp:93-102` uploads it, the vertex decode of
   `FSkinnedTypes.h`) into a per-instance position buffer, BLAS `PREFER_FAST_BUILD|ALLOW_UPDATE`,
   refit every frame, rebuild every 30 frames; mask `SKINNED`, reflections and AO only.
+- Superseded for the shadows on 22.11.2026: 3.10 (radii and counts by tier, 3.14).
 
 ### 3.9 RT reflections of glossy surfaces (17.10.2026, after DOOM Eternal)
 DOOM Eternal traces a mirror ray for every glossy pixel its screen-space reflections cannot answer
@@ -534,7 +536,8 @@ place of the probes in the specular term. Here the engine's opaque surfaces refl
   water's rays (`rt/rt_reflect.hlsli`, shared): a screen-space march short of the traced hit, the hit from the
   screen where the frame shows it, else shaded off screen with the sun ray of High - but linear: the frame's
   colour is the previous frame's linear `combine_1` output (its third target, `$user$rt_gloss_scene`, bound
-  only while the pass runs), reprojected, and the off-screen shading skips the tonemap. Output premultiplied
+  only while the pass runs, before the fog), reprojected, and the off-screen shading skips the tonemap; the haze
+  along the reflected path is applied to both (3.13). Output premultiplied
   by the confidence, with the hit distance.
 - **Temporal upscale** (`rt/rt_gloss_temporal.hlsl`, full resolution): the 3x3 blocks around a pixel weighted
   by distance (Gaussian), depth and normal, in a tonemapped space (x / (1 + max x)); their mean and spread clip
@@ -546,6 +549,92 @@ place of the probes in the specular term. Here the engine's opaque surfaces refl
   cube. A miss keeps the cube.
 - **Cost** (RTX 3070 Laptop, DLSS Balanced, rain): 0.5 ms on DirectX 12, 0.7 ms on Vulkan on a wet road
   outdoors, 0.26 ms in an interior. `r__rt_debug 5` shows the result (dark blue: the cube stays).
+
+### 3.10 Moving casters everywhere: the traced sun shadow of everything but the vegetation (22.11.2026)
+Players read 3.5 and 3.8 as "RT shadows only from buildings": the characters, the player and every moving object
+still cast through the cascades. Now the moving objects are in every effect, the sun's rays included:
+- **Selection** (`da_rt_select_moving`, `da_rt_scene.cpp`, on the main thread before the frame's job): the
+  renderables around the camera (`q_sphere`, the tier's rigid radius), supported visual types only; characters
+  within the skinned radius, the nearest `skinned_max`; the player's first-person shadow model
+  (`CCustomHUD::Actor_Shadow_Casters` -> `CActor::shadow_casters`, mirrored when the left-handed mode mirrors the
+  HUD) as instances of their own with mask `ACTOR` (0x80). A root whose casting part could not be taken (a BLAS
+  not built yet) is left to the cascades whole for that frame.
+- **Handover**: `R_dsgraph_structure::o.rt_skip_moving` (set with `rt_skip_static` for the near and middle
+  cascades) skips a renderable only when the previous frame's TLAS traced it (`g_rt_traced_last`); the actor's
+  shadow model likewise (`da_rt_traces_actor`). No frame without a shadow while a BLAS builds.
+- **Masks**: `RT_RAYS_SHADOW` = static | static alpha | dynamic | skinned | actor; the eye ray and a lamp the player
+  carries leave out `ACTOR` (the body would shadow its own view and torch). Parts that cast no shadow (the stock
+  `NOSHADOW` flags) carry mask 0x40 and are seen only by reflections, AO and GI.
+- **Sun rays** (`rt_sun_shadow.hlsl`): rays spread over the sun's real disc (tan 0.0046542), `sun_rays` of them
+  per pixel (2 on Ultra); a pixel shadowed by a moving caster writes its hit distance negative, and the temporal
+  pass then takes at least half the new frame there (no ghost trailing a walking character).
+- Vegetation stays in the cascades: the drawn crowns, shrubs and grass are procedural, sway with the wind service,
+  and are not what the RT scene holds (stock stand-ins for AO, GI and reflections).
+
+### 3.11 Diffuse global illumination (22.11.2026, `r__rt_gi`)
+The combine's ambient was the baked hemisphere times the sky's cube (`hmodel.h`): rooms with windows lit as
+evenly as the open field, no bounce from a sunlit wall, no colour from a lamp. With GI on:
+- **Trace** (`rt/rt_gi.hlsl`): cosine rays around the G-buffer normal (`gi_rays`), `gi_tmax` metres, mask 0x7B
+  (the world without the crowns' cards and the player's shadow model). Half resolution traces one pixel of each 2x2
+  block a frame (the gloss pass's pattern), Ultra every pixel.
+  - Miss: the open sky's light for the receiver's normal (`rt_sky_diffuse(n)`, exactly the stock `env_d`: the
+    cube is the sky already summed over a hemisphere, and sampled along every ray it was summed twice and dimmed
+    the open field), times the canopy test: one opaque any-hit query against the crowns (mask `FOLIAGE`, 40 m)
+    lets 30 % through. In the open the result is the stock ambient; the difference is what blocks the sky and what
+    the light bounces off. The full alpha test of the crowns along every ray cost 31 ms on Ultra; the card test
+    costs 1.
+  - Hit on screen (the previous frame shows the point, depth agrees): the frame's linear light there, everything
+    included (lamps, fires, the torch, their own bounces) - the copy is taken before the fog (`combine_1`,
+    third target).
+  - Hit off screen: the albedo under the sun (its own shadow ray, the crowns' card test and the clouds' shadow,
+    3.13) plus the sky over its vertex hemisphere at 0.35 of its weight, emissive materials glowing.
+  Output: radiance and the share of rays that reached the sky.
+- **Temporal** (`rt/rt_gi_temporal.hlsl`): rebuilds full resolution from the 2x2 pattern, reprojects the history
+  with the velocity, clips it against the 3x3 neighbourhood (2.5 sigmas), `gi_frames` frames of history, a pixel
+  next to its own fresh sample takes 0.35 of it.
+- **Filter** (`rt/rt_gi_filter.hlsl`): `gi_filter` a-trous passes (steps 1, 2, 4), weighted by the depth plane,
+  the normal and the luminance.
+- **Consumer** (`combine_1.ps`, `hmodel_gi_diffuse`): the traced radiance replaces `env_d x hemi` as the diffuse
+  ambient (foliage keeps its baked hemisphere as its occlusion: the blades are not in the scene); the sky share
+  replaces the baked hemisphere in the sky's specular (`spec_w = spec_e x sky_seen`) and in the glossy pass's
+  dimming; the screen-space AO counts half (the rays already found the contact). The HUD keeps the stock ambient.
+- The fog and the haze come after, in the combine, as for every surface.
+
+### 3.12 Ray traced lamp shadows (22.11.2026)
+The nearest shadowed lamps take their shadow from rays instead of the atlas (`da_rt_lamps_select`,
+`r2_R_lights.cpp`, before the atlas packing):
+- **Choice**: the owners (a point lamp's six faces go together) sorted by the distance from the camera to their
+  sphere, `lamps_max` of them (Medium 4, High 8, Ultra 12). A lamp keeps its map when the procedural shrubs cast
+  into it (`da_veg_light_casts`). A face with a volumetric beam (the torch's, with the volumetric lights on) stays in
+  the atlas for the beam's march, its surfaces lit through the traced mask all the same.
+- **Trace** (`rt/rt_light_shadow.hlsl`, render resolution, after the G-buffer, four lamps a dispatch into one
+  RGBA8 mask, `$user$rt_lamps0..2`): a ray from every pixel inside a lamp's reach toward a point of its bulb (radius
+  3 cm, jittered frame by frame; `lamp_rays` rays, 2 on Ultra) that stops 15 cm short of the fixture. Mask
+  `RT_RAYS_SHADOW`; a lamp the player carries (`bNeverDemote`) is not shadowed by his own body.
+- **Consumer**: the light volumes (`da_light_volume.ps`): flag `DA_LV_SHADOW_RT`, the record's third word is the
+  slot; the masks at t29..t31 (the projectors now t18..t28, 11 per batch). A traced spot projects its texture
+  through its own frame as an unshadowed spot does. The traced faces light after the atlas batches, with the
+  unshadowed lamps when there was no batch. A frame whose dispatch failed lights them unshadowed (masks cleared to 1).
+- Timer `rt_lamps`.
+
+### 3.13 Clouds and fog in the traced light
+- `rt_cloud_transmittance` (`rt_material.hlsli`): the cloud deck's map (`$user$cloud_map`, its alpha) sampled
+  where the sun's ray crosses the deck base; every traced sun term off screen (reflections, glossy surfaces, GI
+  hits) multiplies it in (`RF_CLOUDS`), as the sun accumulation does for the screen.
+- Fog: the traced passes' frame copy is the light before the camera's fog; a glossy reflection takes the haze along
+  its own path (surface to hit, `rt_fog_apply`), the combine the camera's on the surface. The water's reflections
+  stay in the tonemapped, fogged space of `rt_SSR` (3.7).
+
+### 3.14 Quality tiers (`kTiers`, `da_rt_passes.cpp`; latched per frame)
+| | Low | Medium | High | Ultra |
+|---|---|---|---|---|
+| Sun: jitter, denoise, rays a pixel | no, no, 1 hard | yes, yes, 1 | yes, yes, 1 | yes, yes, 2 |
+| AO: resolution, reach, history | half, 1 m, 16 | half, 1.5 m, 32 | full, 2 m, 32 | full, 2.5 m, 48 |
+| Reflections: reach, crowns, sun rays | 250 m, no, no | 400 m, yes, yes | 1000 m, yes, yes | 1500 m, yes, yes |
+| Glossy surfaces | off | half resolution | half resolution | full resolution, the crowns too |
+| Moving objects: rigid / characters | 40 m / 20 m, 6 | 60 m / 30 m, 12 | 80 m / 40 m, 16 | 120 m / 60 m, 24 |
+| GI: resolution, reach, history, filter, canopy | half, 25 m, 24, 2, no | half, 35 m, 32, 2, yes | half, 50 m, 32, 3, yes | full, 60 m, 48, 3, yes |
+| Lamps traced, rays | 0 | 4, 1 | 8, 1 | 12, 2 |
 
 ## 4. Integration points (edits in existing files)
 
@@ -581,7 +670,8 @@ place of the probes in the specular term. Here the engine's opaque surfaces refl
 | `r__rt_reflections` | integer 0/1 | default 0 | `depend="vid"` |
 | `r__rt_shadows` | integer 0/1 | default 0 | `depend="vid"` |
 | `r__rtao` | integer 0/1 | default 0 | `depend="vid"` |
-| `r__rt_quality` | token | `st_rt_low` 0, `st_rt_medium` 1, `st_rt_high` 2; default medium | `depend="vid"` |
+| `r__rt_gi` | integer 0/1 | default 0 | `depend="vid"`, global illumination (3.11) |
+| `r__rt_quality` | token | `st_rt_low` 0, `st_rt_medium` 1, `st_rt_high` 2, `st_rt_ultra` 3; default medium | `depend="vid"` |
 | `r__rt_debug` | runtime integer 0..5 | 0 off, 1 sun mask, 2 AO, 3 reflections, 4 primary-ray albedo vs G-buffer, 5 glossy reflections | QA diagnostic, not saved |
 | `r__caps` | + `rt=` (RT usable this session), `rt_tier=` (device/adapter DXR tier, PLAN C7) | | |
 `-dx12_no_rt` on the command line masks the capability and skips RT initialisation (troubleshooting;

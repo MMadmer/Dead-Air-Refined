@@ -16,9 +16,15 @@
 #define RT_MASK_SKINNED			0x20
 // Static geometry whose shader has no shadow pass: the cascades never saw it cast.
 #define RT_MASK_NOSHADOW		0x40
-// Shadow rays never see vegetation nor anything that moves: plant shadows stay in the swaying
-// cascades, moving objects keep their shadow maps.
-#define RT_RAYS_SHADOW			( RT_MASK_STATIC | RT_MASK_STATIC_ALPHA )
+// The player's first-person shadow model and what it carries: it casts the sun's shadow and the shadows of the lamps
+// around him, never of a lamp he carries; the light gathering rays pass it (the eye sits inside it).
+#define RT_MASK_ACTOR			0x80
+// Shadow rays see the static world, the moving objects and characters near the camera and the player's first-person
+// shadow model (the near and middle cascades leave all of those to them); never vegetation, whose drawn crowns and
+// blades are not the scene's stand-ins and keep their swaying cascades.
+#define RT_RAYS_SHADOW			( RT_MASK_STATIC | RT_MASK_STATIC_ALPHA | RT_MASK_DYNAMIC | RT_MASK_SKINNED | RT_MASK_ACTOR )
+#define RT_RAYS_SHADOW_LAMP_CARRIED	( RT_RAYS_SHADOW & ~RT_MASK_ACTOR )
+#define RT_RAYS_SHADOW_EYE		( RT_RAYS_SHADOW & ~RT_MASK_ACTOR )
 #define RT_RAYS_AO				( RT_MASK_STATIC | RT_MASK_STATIC_ALPHA | RT_MASK_TRUNK | RT_MASK_DYNAMIC | RT_MASK_SKINNED | RT_MASK_NOSHADOW )
 #define RT_RAYS_REFLECTION		0xFF
 

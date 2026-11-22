@@ -62,6 +62,8 @@ public:
         RtAO, // ray traced ambient occlusion
         RtRefl, // ray traced reflections
         RtGloss, // ray traced reflections of glossy surfaces (trace and temporal)
+        RtGI, // ray traced global illumination (trace, temporal, filter)
+        RtLamps, // ray traced shadows of the local lamps
         Fire, // the fluid fires' volumes drawn, every one of the frame
         FireSim, // the fluid fires' simulation steps, every grid of the frame
         Ssr, // the screen-space reflections of glossy surfaces (trace and temporal)

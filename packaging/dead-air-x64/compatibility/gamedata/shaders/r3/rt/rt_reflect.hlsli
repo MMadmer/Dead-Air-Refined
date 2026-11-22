@@ -1,18 +1,23 @@
 #ifndef	rt_reflect_hlsli_included
 #define	rt_reflect_hlsli_included
 
-// What the reflection passes share (rt_reflections.hlsl, rt_gloss.hlsl): the mirror ray with its alpha-tested
-// candidates, the hit seen from behind, where the frame shows a point and the screen-space march along a ray. The
-// includer declares `view` (RtView), `refl` (x TMax, y cone spread per metre, z screen-edge margin in pixels, w
-// off-screen sun rays), `refl_mask` (x instance mask, y most screen-space steps) and `rf_depth` (the depth buffer).
+// What the reflection passes share (rt_reflections.hlsl, rt_gloss.hlsl, rt_gi.hlsl): the mirror ray with its
+// alpha-tested candidates, the hit seen from behind, where the frame shows a point and the screen-space march along a
+// ray. The includer declares `view` (RtView), `refl` (x TMax, y cone spread per metre, z screen-edge margin in pixels,
+// w off-screen sun rays), `refl_mask` (x instance mask, y most screen-space steps) and `rf_depth` (the depth buffer),
+// and with RF_CLOUDS `clouds` (RtClouds) and `rf_clouds` (the cloud map): the sun at a hit then passes the deck.
 
 #include "rt_material.hlsli"
 
-// The static world between the hit and the sun (the off-screen hit's only shadow).
+// The world between the hit and the sun (the off-screen hit's shadow), and the clouds' shadow over it.
 float rf_sun_visibility( float3 p, float3 n, float cone )
 {
+	float clouds_t = 1.0f;
+#ifdef RF_CLOUDS
+	clouds_t = rt_cloud_transmittance( p, view.sun.xyz, clouds, rf_clouds );
+#endif
 	[branch] if ( refl.w < 0.5f || dot( n, view.sun.xyz ) <= 0.0f )
-		return 1.0f;
+		return clouds_t;
 	RayDesc ray;
 	ray.Origin = p + n * 0.03f;
 	ray.Direction = view.sun.xyz;
@@ -27,7 +32,7 @@ float rf_sun_visibility( float3 p, float3 n, float cone )
 				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
 			q.CommitNonOpaqueTriangleHit();
 	}
-	return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
+	return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : clouds_t;
 }
 
 // ---- the traced ray ----------------------------------------------------------------------------
@@ -44,10 +49,10 @@ struct RfHit
 	float3x4	o2w;
 };
 
-RfHit rf_trace( RayDesc ray, float cone0 )
+RfHit rf_trace_masked( RayDesc ray, float cone0, uint mask )
 {
 	RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-	q.TraceRayInline( rt_scene, RAY_FLAG_NONE, refl_mask.x, ray );
+	q.TraceRayInline( rt_scene, RAY_FLAG_NONE, mask, ray );
 	while ( q.Proceed() )
 	{
 		if ( q.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE )
@@ -71,6 +76,8 @@ RfHit rf_trace( RayDesc ray, float cone0 )
 	}
 	return h;
 }
+
+RfHit rf_trace( RayDesc ray, float cone0 ) { return rf_trace_masked( ray, cone0, refl_mask.x ); }
 
 // A hit on the back of a solid surface (the ray runs the way its vertex normal faces). Cut-out cards
 // are two-sided and never count.

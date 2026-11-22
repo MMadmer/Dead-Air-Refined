@@ -543,6 +543,27 @@ extern float g_da_cloud_map_center_x;
 extern float g_da_cloud_map_center_z;
 extern float g_da_cloud_map_extent;
 
+#if RENDER == R_R4
+// The clouds' shadow constants (da_cloud_params, da_cloud_params2, da_cloud_map) for the ray traced passes.
+void da_rt_cloud_constants(Fvector4& params, Fvector4& params2, Fvector4& map)
+{
+    const auto& env = g_pGamePersistent->Environment();
+    const float run = env.eff_cloud_run;
+    const float a = env.eff_wind_dir_aloft;
+    const float cover = da_cloud_cover_from_weather(env.CurrentEnv);
+    params.set(cover, env.eff_cloud_altitude, _sin(a) * run, _cos(a) * run);
+    const int quality = ps_r__clouds_quality_override >= 0 ? ps_r__clouds_quality_override : ps_r__clouds_quality;
+    params2.set(float(quality), env.eff_cloud_thickness, env.eff_wind_time, cover > 0.02f ? 1.f : 0.f);
+    map.set(g_da_cloud_map_center_x, g_da_cloud_map_center_z, g_da_cloud_map_extent, 1.f / g_da_cloud_map_extent);
+}
+
+// The traced global illumination this frame (da_rt.h): x live.
+static class cl_da_rt_gi : public R_constant_setup
+{
+    void setup(CBackend& cmd_list, R_constant* C) override { cmd_list.set_c(C, da_rt_gi_constants()); }
+} binder_da_rt_gi;
+#endif
+
 // First-person pixels under local lights (da_hud_light.h): the HUD field of view for the
 // lateral rebuild of their position, in the deferred decompression layout.
 static class cl_da_hud_light : public R_constant_setup
@@ -1433,6 +1454,7 @@ void CBlender_Compile::SetMapping()
     r_Constant("da_wm_par1_prev", &binder_da_wm_par1_prev);
     r_Constant("da_wm_info_prev", &binder_da_wm_info_prev);
     r_Constant("da_rt", &binder_da_rt);
+    r_Constant("da_rt_gi", &binder_da_rt_gi);
 #endif
     r_Constant("da_wh_pos0", &binder_da_wh_pos0);
     r_Constant("da_wh_pos1", &binder_da_wh_pos1);

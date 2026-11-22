@@ -202,6 +202,15 @@ void CHUDManager::Render_Actor_Shadow(u32 context_id, const Fvector& source, boo
     A->render_shadow_caster(context_id, A->H_Root(), source, carried_light);
 }
 
+void CHUDManager::Actor_Shadow_Casters(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out)
+{
+    out.clear();
+    if (!g_pGameLevel)
+        return;
+    if (CActor* A = smart_cast<CActor*>(g_pGameLevel->CurrentViewEntity()))
+        A->shadow_casters(out);
+}
+
 bool CHUDManager::RenderActiveItemUIQuery()
 {
     if (!psHUD_Flags.is(HUD_DRAW_RT2))

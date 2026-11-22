@@ -11,6 +11,7 @@
 #include "LightTrack.h"
 #include "ParticleGroup.h"
 #include "FTreeVisual.h"
+#include "Layers/xrRenderPC_R4/da_rt.h"
 #ifdef XR_NATIVE
 #include "Layers/xrRenderPC_R4/da_gpu_trees.h"
 #endif
@@ -1339,6 +1340,9 @@ void R_dsgraph_structure::build_subspace_dynamic()
                     IRenderable* renderable = spatial->dcast_Renderable();
                     if (!renderable)
                         continue; // unknown, but renderable object (r1_glow???)
+                    // Traced by the sun's rays this frame: its shadow comes from them alone.
+                    if (o.rt_skip_moving && da_rt_traces_moving(renderable))
+                        break;
 
                     renderable->renderable_Render(context_id, nullptr);
                 }
@@ -1363,7 +1367,8 @@ void R_dsgraph_structure::build_subspace()
     // never find it and its shadow has to be inserted into each shadow map by hand. The main
     // pass keeps its own z-prefill on PHASE_SMAP, hence the is_main_pass guard. A light he carries takes the body
     // but not the weapon and gear around the lamp (CActor::render_shadow_caster).
-    if (o.phase == CRender::PHASE_SMAP && !o.is_main_pass && ps_r__actor_shadow && g_pGameLevel && g_pGameLevel->pHUD)
+    if (o.phase == CRender::PHASE_SMAP && !o.is_main_pass && ps_r__actor_shadow && g_pGameLevel && g_pGameLevel->pHUD &&
+        !(o.rt_skip_moving && da_rt_traces_actor()))
     {
         // The left-handed hud: he casts as a left-hander, his mirrored casters with their front faces flipped.
         o.mirror_actor = g_hud_mirror < 0.f;

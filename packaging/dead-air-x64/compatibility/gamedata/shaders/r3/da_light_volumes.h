@@ -17,7 +17,7 @@
 //  0 pos     view-space position, 1 / (0.95 range)^2
 //  1 color   colour (times the lamp's LOD), its specular share
 //  2 dir     view-space direction, cos of the half cone (spot)
-//  3 info    type | cube face << 4, flags, -, projector slot
+//  3 info    type | cube face << 4, flags, ray traced mask slot, projector slot
 //  4-7       view -> shadow map, rows
 //  8-9       view -> projector xy, rows
 //  10-12     the volume's world transform, rows (light::m_xform)
@@ -29,6 +29,7 @@
 #define DA_LV_LMAP_XFORM	2u		// the projector through its own rows
 #define DA_LV_LMAP_SHADOW	4u		// the projector at the shadow coordinates (the whole atlas, or an unshadowed spot's own projection)
 #define DA_LV_ENABLED		8u		// lights (a shadowed lamp whose map had no casters lights nothing)
+#define DA_LV_SHADOW_RT		16u		// its shadow from the ray traced masks (rt_light_shadow.hlsl): channel slot % 4 of mask slot / 4
 
 #define DA_LV_XFORM_OFFSET	160u
 

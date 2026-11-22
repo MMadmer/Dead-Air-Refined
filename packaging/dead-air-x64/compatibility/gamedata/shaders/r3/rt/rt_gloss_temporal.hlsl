@@ -36,9 +36,12 @@ void gt_write( uint2 pixel, float4 v )
 	gt_result[ pixel ] = v;
 }
 
-// The pixel of a block this frame's trace took (rt_gloss.hlsl gl_block_pixel).
+// The pixel of a block this frame's trace took (rt_gloss.hlsl gl_block_pixel): the pixel itself at full resolution.
+bool gt_full() { return temporal.x >= view.size.x; }
 uint2 gt_block_pixel( uint2 block )
 {
+	[branch] if ( gt_full() )
+		return block;
 	const uint f = view.scene.w & 3u;
 	const uint2 offset = uint2( f & 1u, ( ( f >> 1 ) ^ f ) & 1u );
 	return min( block * 2u + offset, uint2( view.size.xy ) - 1u );
@@ -62,7 +65,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	const RtSurface s = rt_surface( gt_position, gt_normal, int2( id.xy ), view );
 
 	// The neighbourhood of this frame's samples.
-	const int2 block = int2( id.xy / 2u );
+	const int2 block = gt_full() ? int2( id.xy ) : int2( id.xy / 2u );
 	const int2 blocks = int2( temporal.xy ) - 1;
 	float3 sum = 0.0f, sum2 = 0.0f;
 	float conf = 0.0f, conf_lo = 1.0f, conf_hi = 0.0f;

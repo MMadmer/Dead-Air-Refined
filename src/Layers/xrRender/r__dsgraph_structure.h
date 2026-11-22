@@ -51,6 +51,8 @@ struct R_dsgraph_structure
         // Static casters marked dxRender_Visual::rt_static stay out of this view: ray traced sun
         // shadows cover them in the near and middle cascades (dx12-features/dxr.md 3.5).
         bool rt_skip_static{ false };
+        // The sun's near and middle cascades: the moving objects the rays trace this frame cast no second shadow here.
+        bool rt_skip_moving{ false };
         // A local light's shadow face: the GPU-driven trees stay on the CPU walk there (gpudriven.md 3.13).
         bool local_light{ false };
         // A light the actor carries (his torch, a glowstick or a detector in hand: set_never_demote): his own shadow
@@ -203,6 +205,7 @@ struct R_dsgraph_structure
         o.spatial_types = STYPE_RENDERABLE;
         o.dynamic_source = nullptr;
         o.rt_skip_static = false;
+        o.rt_skip_moving = false;
         o.local_light = false;
         o.carried_light = false;
         o.rain_map = false;

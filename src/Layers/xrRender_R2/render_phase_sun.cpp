@@ -375,6 +375,7 @@ void render_sun::calculate()
 #if RENDER == R_R4
                 // Ray traced sun shadows cover the static casters of the near and middle maps.
                 dsgraph.o.rt_skip_static = cascade_ind < 2 && da_rt_skip_static_casters();
+                dsgraph.o.rt_skip_moving = dsgraph.o.rt_skip_static;
 #endif
 
                 // Fill the database

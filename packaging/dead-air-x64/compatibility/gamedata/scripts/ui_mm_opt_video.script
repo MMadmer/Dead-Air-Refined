@@ -26,9 +26,9 @@ local PRESET_IDS = { Minimum = 0, Low = 1, Default = 2, High = 3, Extreme = 4 }
 -- The DirectX 12 rows (docs\dead-air\dx12-features\PLAN.md 2.6): always shown, greyed with the reason
 -- where the running renderer or the card cannot run them, like frame generation. The RTX rows are
 -- ray tracing, a category of its own that no quality preset touches; they run on Vulkan too.
-local RT_EFFECTS = { "rt_reflections", "rt_shadows", "rtao" }
-local DX12_ROWS = { "async_compute", "rt_reflections", "rt_shadows", "rtao", "rt_quality" }
-local VULKAN_ROWS = { rt_reflections = true, rt_shadows = true, rtao = true, rt_quality = true }
+local RT_EFFECTS = { "rt_reflections", "rt_shadows", "rt_gi", "rtao" }
+local DX12_ROWS = { "async_compute", "rt_reflections", "rt_shadows", "rt_gi", "rtao", "rt_quality" }
+local VULKAN_ROWS = { rt_reflections = true, rt_shadows = true, rt_gi = true, rtao = true, rt_quality = true }
 
 -- The stock ui_mm_opt_main.script fills the numbers beside these sliders by name, every frame.
 local LEGACY_READOUTS = {

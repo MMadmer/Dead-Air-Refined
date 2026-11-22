@@ -25,6 +25,7 @@ ENGINE_API extern Flags32 psHUD_Flags;
 #define HUD_CROSSHAIR_DOT (1 << 19)
 
 class IGameObject;
+class IRenderVisual;
 
 class ENGINE_API XR_NOVTABLE CCustomHUD
     : public IEventReceiver,
@@ -42,6 +43,9 @@ public:
     virtual void Update_Actor_Shadow(bool enabled) = 0;
     // carried_light: the lamp is one the actor carries (torch, glowstick, lighter, detector)
     virtual void Render_Actor_Shadow(u32 context_id, const Fvector& source, bool carried_light) = 0;
+    // The same casters for the ray traced sun shadow: the shadow model and the items it carries, with
+    // their world matrices; nothing while there is no first-person shadow.
+    virtual void Actor_Shadow_Casters(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out) { out.clear(); }
 
     virtual void OnFrame() = 0;
     virtual void Load() = 0;

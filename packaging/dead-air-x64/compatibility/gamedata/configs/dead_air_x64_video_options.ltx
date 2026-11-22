@@ -41,6 +41,7 @@ async_compute        = list,  r__async_compute
 rt_reflections       = check, r__rt_reflections
 rt_shadows           = check, r__rt_shadows
 rtao                 = check, r__rtao
+rt_gi                = check, r__rt_gi
 rt_quality           = list,  r__rt_quality
 gamma                = track, rs_c_gamma, %.2f
 contrast             = track, rs_c_contrast, %.2f
@@ -75,7 +76,7 @@ rows = aa, fsr, dlss, framegen, upscale_sharpness
 
 ; Ray tracing: its own category, never part of a quality preset (DirectX 12, greyed elsewhere).
 [group_rtx]
-rows = rt_reflections, rt_shadows, rtao, rt_quality
+rows = rt_reflections, rt_shadows, rt_gi, rtao, rt_quality
 
 [group_image]
 rows = gamma, contrast, brightness, fov, hud_fov
@@ -99,6 +100,7 @@ async_compute     = ui_mm_da_async_compute
 rt_reflections    = ui_mm_da_rt_reflections
 rt_shadows        = ui_mm_da_rt_shadows
 rtao              = ui_mm_da_rtao
+rt_gi             = ui_mm_da_rt_gi
 rt_quality        = ui_mm_da_rt_quality
 motion_blur       = ui_mm_da_motion_blur
 sun_shafts        = ui_mm_r2_shafts_value

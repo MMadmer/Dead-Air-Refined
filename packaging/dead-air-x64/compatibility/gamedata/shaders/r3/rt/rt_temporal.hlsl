@@ -12,7 +12,8 @@ cbuffer rt_temporal_constants : register( b0 )
 {
 	RtView	view;
 	float4	temporal;	// x trace width, y trace height, z render pixels per trace texel, w frame cap
-	float4	temporal2;	// x minimum alpha, y raw.y is the view z (1) or an auxiliary value (0), z clip widening
+	float4	temporal2;	// x minimum alpha, y raw.y is the view z (1) or an auxiliary value (0), z clip widening,
+						// w the alpha where the auxiliary value is negative (a moving caster: 0 = none)
 };
 
 Texture2D<float2>	tmp_raw			: register( t0 );
@@ -41,7 +42,9 @@ void main( uint3 id : SV_DispatchThreadID )
 		const float d = tmp_depth.Load( int3( render_pixel, 0 ) );
 		z = rt_is_sky( d ) ? view.proj.w : rt_linear_z( d, view );
 	}
-	const float aux = temporal2.y > 0.5f ? 0.0f : cur.y;
+	const float aux_raw = temporal2.y > 0.5f ? 0.0f : cur.y;
+	const bool moving = aux_raw < 0.0f;
+	const float aux = abs( aux_raw );
 
 	// The neighbourhood of this frame's raw signal.
 	float lo = cur.x, hi = cur.x;
@@ -95,7 +98,10 @@ void main( uint3 id : SV_DispatchThreadID )
 		{
 			const float4 h = sum / weight;
 			const float n = min( h.y + 1.0f, temporal.w );
-			const float alpha = max( 1.0f / n, temporal2.x );
+			float alpha = max( 1.0f / n, temporal2.x );
+			// A moving caster's shadow is followed, not accumulated into a trail behind it.
+			[flatten] if ( moving )
+				alpha = max( alpha, temporal2.w );
 			history.x = lerp( clamp( h.x, lo, hi ), cur.x, alpha );
 			history.y = n;
 			history.w = lerp( h.w, aux, alpha );

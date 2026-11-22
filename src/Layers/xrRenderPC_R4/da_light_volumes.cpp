@@ -9,6 +9,7 @@
 
 #include "da_light_volumes.h"
 #include "da_vrs.h"
+#include "da_rt.h"
 #include "Layers/xrRender/da_temporal.h"
 #include "Layers/xrRender/du_cone.h"
 #include "Layers/xrRender/du_sphere.h"
@@ -21,11 +22,12 @@ namespace xray::render::RENDER_NAMESPACE
 namespace
 {
 constexpr u32 kMaxLights = 2048; // records per frame, both light packages
-constexpr u32 kProjectorSlots = 14; // t18..t31 (da_light_volume.ps)
+constexpr u32 kProjectorSlots = 11; // t18..t28 (da_light_volume.ps)
+constexpr u32 kRtMasks = 3; // t29..t31: the ray traced lamps' visibility
 constexpr u32 kFirstSlot = 16; // t16: the records
 
 constexpr u32 kPoint = 0, kSpot = 1, kFace = 2, kTypes = 3;
-constexpr u32 kShadow = 1, kLmapXform = 2, kLmapShadow = 4, kEnabled = 8;
+constexpr u32 kShadow = 1, kLmapXform = 2, kLmapShadow = 4, kEnabled = 8, kShadowRt = 16;
 
 // r3\da_light_volumes.h, float4 by float4.
 struct DaLvLight
@@ -33,7 +35,7 @@ struct DaLvLight
     Fvector4 pos;
     Fvector4 color;
     Fvector4 dir;
-    u32 info[4]; // type | face << 4, flags, -, projector slot
+    u32 info[4]; // type | face << 4, flags, ray traced mask slot, projector slot
     Fvector4 shadow[4];
     Fvector4 lmap[2];
     Fvector4 xform[3];
@@ -228,6 +230,7 @@ DaLvLight make_record(light* L, u32 type, u32 flags, bool lod)
     }
     r.info[0] = type | (face << 4);
     r.info[1] = flags | kEnabled;
+    r.info[2] = (flags & kShadowRt) ? u32(std::max(da_rt_lamp_slot(L), 0)) : 0;
     r.info[3] = (flags & (kLmapXform | kLmapShadow)) ? projector_slot(L) : 0;
 
     if (type != kPoint)
@@ -285,6 +288,12 @@ void da_lv_draw(CBackend& cmd_list, const xr_vector<light*>& shadowed, const xr_
         const bool face = L->flags.type == IRender_Light::OMNIPART;
         // The whole atlas is the projector's frame too (the stock "fullsize" shader); a point lamp's faces project
         // nothing.
+        // A ray traced lamp has no rect in the atlas: its projector goes through its own frame, as an unshadowed spot's.
+        if (da_rt_lamp_slot(L) >= 0)
+        {
+            add(L, face ? kFace : kSpot, kShadowRt | (face ? 0 : kLmapShadow), true);
+            continue;
+        }
         const u32 lmap = face ? 0 : (L->X.S.size == smapsize ? kLmapShadow : kLmapXform);
         add(L, face ? kFace : kSpot, kShadow | lmap, true);
     }
@@ -351,7 +360,8 @@ void da_lv_draw(CBackend& cmd_list, const xr_vector<light*>& shadowed, const xr_
     // The volume passes before leave their lamp's rect.
     cmd_list.set_Scissor(nullptr);
 
-    ID3D11ShaderResourceView* views[2 + kProjectorSlots]{ g.srv, nullptr };
+    ID3D11ShaderResourceView* views[2 + kProjectorSlots + kRtMasks]{ g.srv, nullptr };
+    da_rt_lamp_views(views + 2 + kProjectorSlots);
     for (u32 i = 0; i < g.projector_count; ++i)
     {
         CTexture* texture = g.projectors[i];
@@ -360,7 +370,7 @@ void da_lv_draw(CBackend& cmd_list, const xr_vector<light*>& shadowed, const xr_
             surface->Release();
         views[2 + i] = texture->get_SRView();
     }
-    ctx->PSSetShaderResources(kFirstSlot, 2 + g.projector_count, views);
+    ctx->PSSetShaderResources(kFirstSlot, 2 + kProjectorSlots + kRtMasks, views);
     ctx->VSSetShaderResources(kFirstSlot, 1, &g.srv);
 
     {
@@ -391,8 +401,8 @@ void da_lv_draw(CBackend& cmd_list, const xr_vector<light*>& shadowed, const xr_
         GpuTimers.End(dx11GpuTimers::LightVolumes);
     }
 
-    ID3D11ShaderResourceView* none[2 + kProjectorSlots]{};
-    ctx->PSSetShaderResources(kFirstSlot, 2 + kProjectorSlots, none);
+    ID3D11ShaderResourceView* none[2 + kProjectorSlots + kRtMasks]{};
+    ctx->PSSetShaderResources(kFirstSlot, 2 + kProjectorSlots + kRtMasks, none);
     ctx->VSSetShaderResources(kFirstSlot, 1, none);
 }
 

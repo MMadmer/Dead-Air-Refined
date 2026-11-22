@@ -136,6 +136,8 @@ public:
     };
     void update_shadow_caster(bool enabled);
     void render_shadow_caster(u32 context_id, IRenderable* root, const Fvector& source, bool carried_light);
+    // The first-person shadow's casters for the ray traced sun shadow (empty while it has none).
+    void shadow_casters(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out) const;
     void drop_shadow_caster();
     void feel_sound_new(IGameObject* who, int type, const CSound_UserDataPtr& user_data,
         const Fvector& position, float power) override;
@@ -797,6 +799,7 @@ protected:
     };
     IRenderVisual* m_shadow_caster{};
     shared_str m_shadow_caster_name;
+    bool m_shadow_ready{}; // the first-person shadow was prepared this frame
     xr_vector<shadow_bone> m_shadow_bones;
     xr_vector<shadow_item> m_shadow_items;
 

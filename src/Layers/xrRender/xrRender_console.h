@@ -250,6 +250,7 @@ extern ECORE_API float ps_r__offload_warmup; // seconds of a level (or of a retu
 extern ECORE_API int ps_r__rt_reflections;
 extern ECORE_API int ps_r__rt_shadows;
 extern ECORE_API int ps_r__rtao;
+extern ECORE_API int ps_r__rt_gi;
 extern ECORE_API u32 ps_r__rt_quality; // 0 low, 1 medium, 2 high
 extern ECORE_API const xr_token qrt_quality_token[];
 extern ECORE_API int ps_r__rt_debug;

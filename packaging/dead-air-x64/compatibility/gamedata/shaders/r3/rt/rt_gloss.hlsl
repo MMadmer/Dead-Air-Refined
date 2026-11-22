@@ -17,6 +17,7 @@ cbuffer rt_gloss_constants : register( b0 )
 	float4	refl;		// x TMax, y cone spread per metre, z screen-edge margin in pixels, w off-screen sun rays (0/1)
 	uint4	refl_mask;	// x instance mask of the rays, y most screen-space steps of a ray, zw trace size
 	float4	gloss;		// x lowest gloss traced, y gloss of the full weight, z roughness spread, w HDR of the frame copy
+	RtClouds clouds;
 };
 
 Texture2D<float>	rf_depth	: register( t0 );
@@ -28,15 +29,20 @@ TextureCube			gl_env0		: register( t5 );
 TextureCube			gl_env1		: register( t6 );
 TextureCube			gl_sky0		: register( t7 );
 TextureCube			gl_sky1		: register( t8 );
+Texture2D<float4>	rf_clouds	: register( t9 );
 
 RWTexture2D<float4>	gl_out		: register( u0 );
 RWTexture2D<float>	gl_dist		: register( u1 );
 
+#define RF_CLOUDS
 #include "rt_reflect.hlsli"
 
-// The pixel of a 2x2 block this frame traces (rt_gloss_temporal.hlsl takes the same).
+// The pixel of a 2x2 block this frame traces (rt_gloss_temporal.hlsl takes the same); every pixel when the trace is
+// at full resolution.
 uint2 gl_block_pixel( uint2 block )
 {
+	[branch] if ( refl_mask.z >= uint( view.size.x ) )
+		return block;
 	const uint f = view.scene.w & 3u;
 	const uint2 offset = uint2( f & 1u, ( ( f >> 1 ) ^ f ) & 1u );
 	return min( block * 2u + offset, uint2( view.size.xy ) - 1u );
@@ -137,10 +143,11 @@ void main( uint3 id : SV_DispatchThreadID )
 			const float cone = cone0 + refl.y * t;
 			const RtHitSurface hs = rt_hit_surface( geo, inst, tri, h.bary, h.o2w, dir, cone, view );
 			const float sun = rf_sun_visibility( hit, hs.normal, cone );
-			float3 lit = rt_hit_light( hs, sun, shade, gl_env0, gl_env1, view );
-			lit = rt_fog_apply( lit, hit, view.camera.xyz, shade, gl_sky0, gl_sky1 );
+			const float3 lit = rt_hit_light( hs, sun, shade, gl_env0, gl_env1, view );
 			color = lerp( lit, reused.rgb, reused.w );
 		}
+		// The haze along the reflected path; the combine adds the camera's own on the surface.
+		color = rt_fog_apply( color, hit, origin, shade, gl_sky0, gl_sky1 );
 		alpha = 1.0f;
 	}
 	[branch] if ( seen_at.z > 0.0f )
@@ -150,7 +157,7 @@ void main( uint3 id : SV_DispatchThreadID )
 		const float3 ps = rt_to_world( rt_view_pos( uv * view.size.xy, zs, view ), view );
 		const float4 seen = gl_previous( ps );
 		const float w = seen_at.z * seen.w;
-		color = lerp( color, seen.rgb, w );
+		color = lerp( color, rt_fog_apply( seen.rgb, ps, origin, shade, gl_sky0, gl_sky1 ), w );
 		alpha = lerp( alpha, 1.0f, w );
 	}
 	// The weight ramps in above the lowest gloss traced, so the threshold draws no edge.
