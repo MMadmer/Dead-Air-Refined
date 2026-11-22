@@ -1,6 +1,6 @@
 -- Several modules play scenes on the same hands: the backpack held while the inventory is open,
--- FDDA item uses, the wear scenes, the 3D PDA's own rig. This probe drives the real functions and
--- asserts that none of them ends or buries another's scene.
+-- FDDA item uses, the wear scenes. This probe drives the real functions and asserts that none of
+-- them ends or buries another's scene.
 --
 --   tools\qa\Run-WaterQa.ps1 -Name scenes -Scenario scene_owners -Save <save> -KeepShaderCache
 --        -PreCommands "dar_instant_inventory 1"      (window frames: tools\qa\Watch-QaShots.ps1)
@@ -71,13 +71,6 @@ local function on_update()
 		check("scene-survives-outfit-rig", game.hud_scene_id() == held_id and game.scene_active(),
 			string.format("scene #%d active %s", game.hud_scene_id(), tostring(game.scene_active())))
 		shot()
-		-- The 3D PDA's rig carries none of the backpack motions: the scene ends instead of standing
-		-- in the bind pose with the bag in front of the camera.
-		cmd("qa_hands_rig pda3d_actor_hud")
-		t0 = now stage = 3
-	elseif stage == 3 and after(600) then
-		check("scene-ends-on-foreign-rig", game.hud_scene_id() == 0, string.format("scene #%d", game.hud_scene_id()))
-		shot()
 		cmd("qa_hands_rig " .. rig)
 		cmd("qa_hands_state")
 		t0 = now stage = 4
@@ -87,7 +80,7 @@ local function on_update()
 		t0 = now stage = 5
 	elseif stage == 5 and after(1500) then
 		cmd("qa_hands_state")
-		check("clean-after-foreign-rig", game.hud_scene_id() == 0 and not game.only_movekeys_allowed(),
+		check("clean-after-backpack", game.hud_scene_id() == 0 and not game.only_movekeys_allowed(),
 			string.format("scene #%d movekeys %s", game.hud_scene_id(), tostring(game.only_movekeys_allowed())))
 		-- Next: an item used from the open inventory while the backpack is held.
 		local pos, lv, gv = db.actor:position(), db.actor:level_vertex_id(), db.actor:game_vertex_id()

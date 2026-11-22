@@ -1,14 +1,14 @@
--- The hands rig changes under whatever is in the hands: an outfit brings its own, the 3D PDA
--- brings its own. The rigs do not carry the same motion sets - the PDA's is trimmed - and an item
--- that kept its motion ids from the previous rig indexes a model that no longer exists. That is
--- the crash a player sent in (access violation in xrGame, right after "hands swap in").
+-- The hands rig changes under whatever is in the hands: an outfit brings its own. The rigs do not
+-- carry the same motion sets (the exo hands take their own per-model omf lists), and an item that
+-- kept its motion ids from the previous rig indexes a model that no longer exists. That is the
+-- crash a player sent in (access violation in xrGame, right after a hands swap).
 --
 -- This does the swap directly, with a weapon drawn, and asks the item to animate on the far side
--- of it: draw and holster while the trimmed rig is loaded, then swap back and do it again. A run
+-- of it: draw and holster while the other rig is loaded, then swap back and do it again. A run
 -- that reaches DONE is a run where nothing played an id the rig does not have.
 local stage, t0, frames, round = 0, 0, 0, 0
 local rounds = 3
-local other_rig = "pda3d_actor_hud"
+local other_rig = "actor_hud_exo"
 local function cmd(s) get_console():execute(s) end
 
 local function report(tag)

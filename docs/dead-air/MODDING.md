@@ -3507,10 +3507,11 @@ line of log and then the stack:
 
 **A MotionID is an index into ONE model.** It is a motion-slot number and an index inside that
 slot, resolved by name once and kept; the model it was resolved against is not part of it. So the
-moment the hands model is replaced - an outfit with its own `player_hud_section`, the 3D PDA with
-its own rig - every id anything is still holding means something else, or nothing at all. The
-ordinary rig here carries 80 motion slots (its own plus the addon OMFs `fill_player_hud_extra_omf`
-appends), the PDA's carries 44, and slot 64 is past the end of it.
+moment the hands model is replaced - an outfit with its own `player_hud_section`, and up to 1.6.7
+the 3D PDA with its own rig - every id anything is still holding means something else, or nothing
+at all. The ordinary rig here carries 80 motion slots (its own plus the addon OMFs
+`fill_player_hud_extra_omf` appends), the PDA's carried 44, and slot 64 is past the end of it.
+Since 1.6.8 the PDA plays on the outfit's own hands; an outfit swap is the case left.
 
 The guard on `LL_GetMotionDef` names the caller and refuses the read, which is the log line above.
 What it returns is null, and **`player_hud::motion_length` read `md->flags` under a `VERIFY`** -

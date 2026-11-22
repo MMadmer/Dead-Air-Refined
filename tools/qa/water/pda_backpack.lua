@@ -1,5 +1,4 @@
--- The 3D PDA and the backpack scene on the same hands (the PDA takes a rig of its own, the backpack
--- needs the ordinary one):
+-- The 3D PDA and the backpack scene on the same hands:
 --   1. the PDA up, then the inventory key at once - the device goes away first, then the bag comes
 --      out on the right hands; nothing hangs in front of the camera;
 --   2. the PDA opens again afterwards;

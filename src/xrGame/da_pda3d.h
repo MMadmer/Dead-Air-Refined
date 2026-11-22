@@ -74,12 +74,6 @@ void joystick_click();
 bool joystick_step();
 const char* joystick_suffix();
 void joystick_reset();
-
-// Hands swap for the PDA episode: the Gunslinger animation set is authored against its own
-// hands rig, so player_hud switches to the configured hands model while the device is up
-// and back on holster. Data-driven; an empty/missing hands_section keeps the current hands.
-void swap_hands_in();
-void swap_hands_out();
 }
 
 // Console: 1 = rasterize the PDA into the RT and suppress the 2D pass even with no

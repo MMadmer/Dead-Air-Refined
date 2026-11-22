@@ -25,6 +25,7 @@ the sets are used unchanged.
 | **FDDA Redone / "Anomation"** (outfits, body search) | **lizzardman** | Same permission | `liz_*` omfs, `meshes/anomaly_weapons/liz_outfit_animations`, `textures/liz_outfit_animations`, `sounds/actor/liz_*` |
 | **MFS bread and sausage anims** | **ZeburG** / MFS team, <https://www.moddb.com/members/zeburg> | Author's permission (via the DeadAir-x64 project) | `mfs_*` omfs, `meshes/dynamics/mfs`, `textures/usable_items/mfs`, `sounds/interface/item_usage/mfs_*` |
 | 3D PDA | Gunslinger team | See `README.md` | `meshes/dynamics/devices/dev_pda`, `pda_hands_animation.omf`, `textures/item/item_kpk*`, `textures/ui/ui_deadpda*`, `ui_pda_loadscreen*`, `meshes/gwr`, `textures/gwr` |
+| 3D PDA hand motions on the Dead Air hands rig | **Dead Air: Weapons Evolution** addon | Part of the addon | the show, holster and walk clips of `pda_hands_animation.omf` (the rest of the set is carried over by `tools/animation/pda_hands_da.py`, calibrated on the addon's rest pose); the device scale and its seat in the palms |
 
 ## Who has to be notified
 

@@ -508,7 +508,7 @@ attachable_hud_item::attachable_hud_item(player_hud* parent, const shared_str& s
 
 // A non-monolithic item plays cycles that belong to the HANDS model, and it binds their ids
 // once, when the pool creates it. The pool outlives the hands: an outfit with its own
-// player_hud_section and the 3D PDA's own rig both replace the model mid-game, and a set trimmed
+// player_hud_section replaces the model mid-game, and a set trimmed
 // to fewer motion slots than the one the ids came from turns every one of them into an
 // out-of-bounds index. Rebound here against the model that is actually loaded; cycles the new
 // rig does not have simply go, and come back when the old rig does.

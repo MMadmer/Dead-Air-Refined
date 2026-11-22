@@ -43,12 +43,6 @@ void CPdaAnimatorItem::detach_ui()
 
 void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
 {
-    // The hands must be the animation set's native rig BEFORE the show state resolves and
-    // plays its motions: this item's hud MotionIDs bind against the CURRENT hands model on
-    // first attach, and the previous weapon is already hidden at this point, so nothing
-    // else gets re-bound mid-life. Covers every activation path, savegame restore included.
-    if (S == eShowing)
-        da_pda3d::swap_hands_in();
     inherited::OnStateSwitch(S, oldState);
     switch (S)
     {
@@ -67,13 +61,10 @@ void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
         break;
     case eHidden:
         detach_ui();
-        // Hand the DA hands back BEFORE the previous weapon starts its show (the actor tick
-        // attaches it right after the slot switch lands). Detach self first so the hands
-        // reload touches no attached item; the weapon then binds to the restored rig, where
-        // its MotionIDs resolved originally. Without this the weapon raised on the pda rig.
+        // The holstered device leaves the hands before the previous weapon starts its show,
+        // as a detector does.
         if (g_player_hud)
             g_player_hud->detach_item(this);
-        da_pda3d::swap_hands_out();
         break;
     default: break;
     }
@@ -82,8 +73,8 @@ void CPdaAnimatorItem::OnStateSwitch(u32 S, u32 oldState)
 void CPdaAnimatorItem::net_Destroy()
 {
     // Safety net for every abrupt end - death with the device up, a script releasing the
-    // object outright. Without this the presenter flag stayed raised forever: hands stuck
-    // on the pda rig, the 2D dialog suppressed, every toggle swallowed. During level
+    // object outright. Without this the presenter flag stayed raised forever: the 2D dialog
+    // suppressed, every toggle swallowed. During level
     // teardown (net_Stop clears bReady before remove_objects) the UI widgets are already
     // half-dead - poking Show(false) into the map window crashed on quit - so only the
     // flags are cleared there; the whole UI goes down right after us anyway.

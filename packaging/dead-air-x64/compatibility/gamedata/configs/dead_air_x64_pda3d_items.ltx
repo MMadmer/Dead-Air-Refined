@@ -25,26 +25,26 @@ snd_holster                 = detectorshud\detector_draw
 sprint_allowed              = true
 ignore_slots_blocked        = true
 
-; The PDA episode swaps to the animation set's native rig (rest poses differ per hand from
-; the DA rigs, a rigid two-handed grip cannot survive a retarget); its texture is recolored
-; to the DA look.
-[pda3d_actor_hud]
-visual                      = dynamics\weapons\wpn_hand\wpn_hand_pda3d
-
 [pda_show_animator_hud]:anm_base_hud
 item_visual                 = dynamics\devices\dev_pda\dev_pda_hud.ogf
 attach_place_idx            = 0
-item_position               = 0,0,0
+; the device sits in the DA palms the way the Weapons Evolution addon seated it
+item_position               = -0.012124,0.008418,0
 item_orientation            = 0,0,0
 
-hands_position              = -0.015,-0.018,0.17
+; The hands motions are the Gunslinger scene scaled to the DA hands (tools/animation/
+; pda_hands_da.py) and the device is 0.686 of its old size. The seats below put the device, at
+; rest and raised to the face, exactly where the old one stood in front of the eye times the
+; same 0.686 (measured with qa_hands_state), so it frames on screen as it always did: the whole
+; glass and the stick under the thumb in the zoom.
+hands_position              = -0.00982,-0.00221,0.1341
 hands_orientation           = 0,0,0
-hands_position_16x9         = -0.015,-0.018,0.15
+hands_position_16x9         = -0.00982,-0.00221,0.12038
 hands_orientation_16x9      = 0,0,0
 
-aim_hud_offset_pos          = 0.0282,0.041,0.15
+aim_hud_offset_pos          = 0.01935,0.02946,0.1013
 aim_hud_offset_rot          = 0.0,0.0,0.0
-aim_hud_offset_pos_16x9     = 0.02,0.041,0.15
+aim_hud_offset_pos_16x9     = 0.01372,0.02946,0.1013
 aim_hud_offset_rot_16x9     = 0.0,0.0,0.0
 
 ; per-item hud fov: hip 0.9 -> aimed 0.29, ~3.1x linear magnification at the face - this
@@ -56,19 +56,21 @@ hud_fov_zoom_factor         = 0.29
 ; screen past the edges with its tabs out of reach (engine: CWeapon::GetHudFov)
 hud_fov_absolute            = 28.125
 
-; Hud sway. Hip values are the Gunslinger original. The AIM pair is damped to a quarter
+; Hud sway. Hip values are the Gunslinger original, scaled. The AIM pair is damped to a quarter
 ; of it: raised to the face the screen fills the view, so the rotation lag that reads as
 ; "alive" on a weapon reads as nausea on a display - walking bob rotates the camera, the
 ; lag turns that rotation into hand displacement, and both of the player's complaints
 ; (walking and turning) come out of this one number. Steady-state sway is
-; offset/tendto_speed, so 0.0075 at the same speed is exactly -75%.
+; offset/tendto_speed, so the aim offset at the same speed is exactly -75%. Both offsets, and
+; the pitch push (engine default 0.02), are lengths: scaled with the device.
 ; The blend is driven by CPdaAnimatorItem::GetInertionFactor (zoom rotation).
-inertion_origin_offset      = 0.03
-inertion_origin_aim_offset  = 0.0075
+inertion_origin_offset      = 0.02058
+inertion_origin_aim_offset  = 0.005145
 inertion_tendto_speed       = 10
 inertion_tendto_aim_speed   = 10
+pitch_offset_forward        = 0.01372
 
-; ---- hand motions (pda_hands_animation.omf, verified list) ----
+; ---- hand motions (pda_hands_animation.omf on the DA hands rig, verified list) ----
 anm_show                    = pda_draw
 anm_hide                    = pda_hide
 ; holstering straight out of the raised-to-face pose (engine: CPdaAnimatorItem::PlayAnimHide)

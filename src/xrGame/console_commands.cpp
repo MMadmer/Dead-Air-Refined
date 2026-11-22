@@ -3660,9 +3660,9 @@ public:
             da_pda3d::presenter_active() ? 1 : 0, da_pda3d::ui_focused() ? 1 : 0);
 
         // The rig, and what the items in it can actually play. An item's cycles live in the
-        // HANDS model when it is not monolithic, and the hands are replaced by an outfit and by
-        // the 3D PDA - an item left holding ids from the previous rig is how a player's crash
-        // report ended. Zero cycles here means the item has nothing to play on this rig.
+        // HANDS model when it is not monolithic, and the hands are replaced by an outfit - an
+        // item left holding ids from the previous rig is how a player's crash report ended.
+        // Zero cycles here means the item has nothing to play on this rig.
         if (g_player_hud)
         {
             IKinematicsAnimated* rig = g_player_hud->hands_model();
@@ -3677,13 +3677,56 @@ public:
                 Msg("* [qa] hands: place %u item [%s] %s, %u cycle(s) bound", u32(i),
                     it->m_sect_name.c_str(), it->m_monolithic ? "own visual" : "on the hands rig",
                     u32(it->m_hand_motions.m_anims.size()));
+                // Where the item sits in front of the eye (view space, metres), and the hands
+                // seat it was given: the framing in numbers.
+                Fvector at;
+                Device.mView.transform_tiny(at, it->m_item_transform.c);
+                const Fvector& seat = it->m_measures.m_hands_attach[0];
+                Msg("* [qa] hands: place %u item at view [%.4f, %.4f, %.4f], hands seat [%.4f, %.4f, %.4f]",
+                    u32(i), at.x, at.y, at.z, seat.x, seat.y, seat.z);
+                // The item's bounds through this frame's hud projection, unclamped: screen units
+                // 0..1 across, -1..2 when it spills past the edges.
+                if (IRenderVisual* v = it->m_model ? it->m_model->dcast_RenderVisual() : nullptr)
+                {
+                    extern ENGINE_API float psHUD_FOV;
+                    Fmatrix proj, view_proj, to_clip;
+                    proj.build_projection(deg2rad(psHUD_FOV * Device.fFOV), Device.fASPECT, 0.05f, 100.f);
+                    view_proj.mul(proj, Device.mView);
+                    to_clip.mul(view_proj, it->m_item_transform);
+                    const Fbox& box = v->getVisData().box;
+                    Fvector2 mn{9.f, 9.f}, mx{-9.f, -9.f};
+                    for (int c = 0; c < 8; ++c)
+                    {
+                        Fvector p;
+                        box.getpoint(c, p);
+                        Fvector4 clip;
+                        to_clip.transform(clip, p);
+                        if (clip.w <= 0.01f)
+                            continue;
+                        const float x = clip.x / clip.w * 0.5f + 0.5f, y = clip.y / clip.w * -0.5f + 0.5f;
+                        mn.set(std::min(mn.x, x), std::min(mn.y, y));
+                        mx.set(std::max(mx.x, x), std::max(mx.y, y));
+                    }
+                    Msg("* [qa] hands: hud fov %.4f of %.2f deg, item on screen [%.3f, %.3f] - [%.3f, %.3f]",
+                        psHUD_FOV, Device.fFOV, mn.x, mn.y, mx.x, mx.y);
+                }
+                if (IKinematicsAnimated* hands = g_player_hud->hands_model())
+                {
+                    IKinematics* k = hands->dcast_PKinematics();
+                    const u16 lead = k->LL_BoneID("lead_gun");
+                    if (lead != BI_NONE)
+                    {
+                        const Fvector& c = k->LL_GetTransform(lead).c;
+                        Msg("* [qa] hands: lead_gun in the hands model [%.4f, %.4f, %.4f]", c.x, c.y, c.z);
+                    }
+                }
             }
         }
     }
 };
 
 // qa_hands_rig <hud section>: load another hands rig under whatever is in the hands, which is
-// what an outfit change and the 3D PDA both do. The rigs do not carry the same motion sets, and
+// what an outfit change does. The rigs do not carry the same motion sets, and
 // an item left holding ids from the previous one crashed the game between two frames of the
 // swap; this is the one call that mechanism needs, without a PDA, an outfit or a save.
 class CCC_QaShells : public IConsole_Command

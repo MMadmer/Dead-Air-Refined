@@ -134,10 +134,12 @@ owns provenance for everything Refined ships.
 The 1.4.0 content set is 40 files:
 
 - **The 3D PDA** — `meshes/dynamics/devices/dev_pda/`,
-  `meshes/dynamics/weapons/` (the PDA hands rig and its `.omf`),
+  `meshes/dynamics/weapons/` (the PDA hands rig and its `.omf`; since 1.6.8
+  the rig and its texture `textures/act/act_arm_3.*` are gone and the `.omf`
+  is on the DA hands rig, see ASSET_CREDITS.md),
   `anims/camera_effects/weapon/pda_*.anm`, `sounds/items/pda/`,
   `sounds/detectorshud/detector_draw.ogg`, `textures/item/item_kpk*`,
-  `textures/act/act_arm_3.*`, and the `textures/ui/ui_deadpda*` and
+  and the `textures/ui/ui_deadpda*` and
   `textures/ui/ui_pda_loadscreen*` sequences. All from the Gunslinger mod,
   taken as assets and re-authored into this engine's shader dialect; the port
   itself is described in the 3D PDA work and its shaders are ours. Attribution

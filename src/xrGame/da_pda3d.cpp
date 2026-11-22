@@ -15,7 +15,6 @@
 #include "PdaAnimatorItem.h"
 #include "xrScriptEngine/script_engine.hpp"
 
-extern ENGINE_API shared_str current_player_hud_sect;
 
 extern ENGINE_API Fvector4 g_pda_screen_affects;
 extern ENGINE_API Fvector4 g_pda_screen_rect;
@@ -33,7 +32,6 @@ struct SCfg
     bool loaded{};
     bool available{};
     shared_str animator_section;
-    shared_str hands_section;
     float boot_time{1.2f};
     float blackout_level{0.42f};
     float power_low{0.05f};
@@ -86,8 +84,6 @@ void load_cfg()
         return;
     cfg.animator_section = ini.line_exist("pda3d", "animator_section") ?
         ini.r_string("pda3d", "animator_section") : "";
-    cfg.hands_section = ini.line_exist("pda3d", "hands_section") ?
-        ini.r_string("pda3d", "hands_section") : "";
     cfg.boot_time = ini.line_exist("pda3d", "boot_time") ? ini.r_float("pda3d", "boot_time") : 1.2f;
     cfg.blackout_level =
         ini.line_exist("pda3d", "blackout_level") ? ini.r_float("pda3d", "blackout_level") : 0.42f;
@@ -182,8 +178,6 @@ float scene_wait_until{ -1.f };
 float raise_since{ -1.f };
 // The 3D mode was given up after a raise that never came (until the next load).
 bool raise_gave_up{};
-bool hands_swapped{};
-shared_str prev_hands;
 
 bool call_toggle(pcstr fn_name)
 {
@@ -388,35 +382,6 @@ void joystick_reset()
     joy.next_step = 0;
 }
 
-void swap_hands_in()
-{
-    load_cfg();
-    if (!cfg.hands_section.size() || !pSettings->section_exist(cfg.hands_section))
-        return;
-    if (!g_player_hud || hands_swapped)
-        return;
-    // The REAL hands section lives on player_hud; current_player_hud_sect is a diagnostic
-    // global that tracks the last loaded ITEM hud section - the wrong thing to remember.
-    prev_hands = g_player_hud->section_name();
-    if (prev_hands == cfg.hands_section)
-        return;
-    hands_swapped = true;
-    Msg("* [pda3d] hands swap in: [%s] -> [%s]", prev_hands.c_str(), cfg.hands_section.c_str());
-    g_player_hud->load(cfg.hands_section);
-}
-
-void swap_hands_out()
-{
-    if (!hands_swapped)
-        return;
-    hands_swapped = false;
-    Msg("* [pda3d] hands swap out -> [%s]", prev_hands.c_str());
-    // Outfit changes only re-load hands on their own events, and opening the inventory
-    // lowers the device first - so the remembered section is always current here.
-    if (g_player_hud && prev_hands.size())
-        g_player_hud->load(prev_hands);
-}
-
 void set_presenter_active(bool active)
 {
     presenter = active;
@@ -482,8 +447,6 @@ void reset()
     presenter = false;
     focused = false;
     unzoom_request = false;
-    hands_swapped = false;
-    prev_hands = "";
     x_smooth = 0.f;
     lua_interference = 0.f;
     lua_power = 1.f;
@@ -580,15 +543,6 @@ void update()
             else if (!win && (presenter || in_slot))
                 request_deactivate();
         }
-    }
-
-    // Hands swap back only AFTER the presenter item is fully gone (released from the slot):
-    // reloading the hands while any hud item is attached dangles its resolved MotionIDs.
-    if (hands_swapped && !presenter)
-    {
-        CActor* actor = smart_cast<CActor*>(Level().CurrentEntity());
-        if (!presenter_item(actor))
-            swap_hands_out();
     }
 
     // Self-heal: the presenter flag with no item behind it for over a second means some

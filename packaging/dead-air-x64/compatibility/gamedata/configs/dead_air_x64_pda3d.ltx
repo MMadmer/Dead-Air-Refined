@@ -4,12 +4,6 @@
 [pda3d]
 ; the presenter item raised into hands instead of the fullscreen dialog
 animator_section        = pda_show_animator
-; hands model for the PDA episode: the Gunslinger hand set is authored against its own rig
-; whose REST POSE differs from the DA rigs per hand (the l/r wrist deltas diverge by ~116
-; degrees - measured, see tools/animation/retarget_omf.py) - a direct retarget cannot keep
-; a rigid two-handed device in both palms. So the episode swaps to the native rig, with
-; its texture recolored to the DA look (no camo gloves).
-hands_section           = pda3d_actor_hud
 ; Fallback boot length in seconds, used only when the show motion has no timings
 ; (savegame restore). Normally the two marks below drive the sequence.
 boot_time               = 1.4
@@ -53,6 +47,8 @@ psi_storm_curve         = 0.0:0.20, 0.50:0.32, 0.80:0.50
 jammed_level            = 0.20
 
 ; Extra hand-animation omfs appended to EVERY player hands model on load
-; (engine: SkeletonAnimated.cpp + player_hud.cpp; a missing file only logs).
+; (engine: SkeletonAnimated.cpp + player_hud.cpp; a missing file only logs). The PDA motions
+; are on the DA hands rig that every outfit's hands share, so the device comes up in the
+; outfit's own hands (tools/animation/pda_hands_da.py).
 [player_hud_extra_omf]
 pda_hands               = dynamics\weapons\hud_hands_animation\pda_hands_animation.omf
