@@ -473,7 +473,10 @@ float2 da_sn_flood(float2 xz, float hg)
 	// lower than that lies past a wall or a rim - water standing in a house or a tank, the path outside no pond's bank
 	// (it froze into a raised sheet that took no prints).
 	const float bank = (wf.y > 0.5) ? 1.0 : saturate((0.2 - (level - hg)) / 0.05);
-	return float2(level, saturate((level - hg) / 0.05) * reach * bank);
+	// On the field, ground half a metre and more under the water's own bed lies under the roof or the floor that
+	// holds the water (a flat roof's puddle), not in it: the ice lifted the street's snow to the roof along the walls.
+	const float bed = (wf.y > 0.5) ? saturate((hg - (wf.z - 0.5)) / 0.1) : 1.0;
+	return float2(level, saturate((level - hg) / 0.05) * reach * bank * bed);
 }
 
 // Ice and the snow on it at xz, where the ground window has a water surface: x ice cover, y snow depth on
@@ -562,10 +565,28 @@ float3 da_sn_shore(float2 xz, float wet)
 float3 da_sn_pond(float2 xz, float3 b)
 {
 	const float3 s = da_sn_shore(xz, b.z);
+	float3 r;
 	[branch] if (s.z >= 0.999)
-		return float3(s.x, s.y, 1.0);
-	const float2 f = da_sn_flood(xz, b.x);
-	return float3((s.x > DA_SN_NONE * 0.5) ? s.x : f.x, lerp(f.y, s.y, s.z), s.z);
+		r = float3(s.x, s.y, 1.0);
+	else
+	{
+		const float2 f = da_sn_flood(xz, b.x);
+		r = float3((s.x > DA_SN_NONE * 0.5) ? s.x : f.x, lerp(f.y, s.y, s.z), s.z);
+	}
+	// Water the baked field holds on a roof or a floor (its bed half a metre and more over the ground here) is no pond
+	// the ground lies in, whichever of the two found it; nor is the window's water level a metre and more over this
+	// point's own base (a puddle on the roof beside the wall: over real water the base is the surface, a bank lies
+	// centimetres under it). No share and no level then: the grid lifts its neighbours to the level.
+	[branch] if (r.x > DA_SN_NONE * 0.5)
+	{
+		bool flowing, inside;
+		const float4 wf = da_sn_water(xz, flowing, inside);
+		float held = (wf.y > 0.5) ? saturate((b.x - (wf.z - 0.5)) / 0.1) : 1.0;
+		held *= (r.x == s.x) ? saturate((b.x + 1.0 - r.x) / 0.1) : 1.0;
+		r.y *= held;
+		r.x = (held > 0.0) ? r.x : DA_SN_NONE;
+	}
+	return r;
 }
 
 // The snow surface of a trail texel (heights above the base): untouched texels and deformers that

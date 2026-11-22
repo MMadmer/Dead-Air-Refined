@@ -15,6 +15,7 @@
 #include "xrEngine/Environment.h"
 #include "da_snow_bake.h"
 #include "xrCore/XMS/xms_level_things.h"
+#include "xrCore/Threading/ParallelFor.hpp"
 #include "Common/LevelStructure.hpp"
 #include "xrSound/SoundRender_Environment.h"
 
@@ -571,6 +572,39 @@ void bake_water_field(CObjectSpace& space)
         }
     }
     details.close();
+
+    // Water standing on a roof or a floor (a puddle on a flat roof, a flooded storey) has its bed there, not on the
+    // terrain the detail grid knows under the building: taken as a pond fifteen metres deep, the winter's ice lifted
+    // the ground's snow to its level along the walls (white sheets behind every window of Pripyat's blocks). Where
+    // the grid makes the water deeper than a wader stands, the first solid face under the surface is its bed; a real
+    // pond's ray meets its own bottom, the bed the grid gave. The ray starts over the surface (a roof's puddle lies a
+    // centimetre over the roof) and passes the liquid faces.
+    constexpr float deep_check = 1.5f;
+    xr_parallel_for(TaskRange<size_t>(0, size_t(dim)), [&](const TaskRange<size_t>& rows) {
+        CDB::COLLIDER xrc;
+        const Fvector down{ 0.f, -1.f, 0.f };
+        for (size_t z = rows.begin(); z != rows.end(); ++z)
+        {
+            const float wz = bounds.vMin.z + (float(z) + .5f) * texel;
+            for (int x = 0; x < dim; ++x)
+            {
+                CEnvironment::SWaterTexel& t = field[z * dim + size_t(x)];
+                if (!t.mask || t.surface - t.bed <= deep_check)
+                    continue;
+                const Fvector start{ bounds.vMin.x + (float(x) + .5f) * texel, t.surface + .05f, wz };
+                xrc.ray_query(0, model, start, down, t.surface - t.bed + .55f);
+                float nearest = flt_max;
+                for (size_t r = 0; r < xrc.r_count(); ++r)
+                {
+                    const CDB::RESULT& hit = xrc.r_begin()[r];
+                    if (hit.range < nearest && !is_liquid(tris[hit.id]))
+                        nearest = hit.range;
+                }
+                if (nearest < flt_max && start.y - nearest > t.bed + .5f)
+                    t.bed = start.y - nearest;
+            }
+        }
+    });
 
     // Distance to the nearest bank, defined on both sides of it: seed zero on every texel that
     // touches the other class, then a two-pass chamfer sweep with 1 and sqrt(2) weights in

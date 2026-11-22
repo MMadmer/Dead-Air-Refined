@@ -202,12 +202,18 @@ void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID, uint gi : SV_Gro
 				m = max(m, e);
 				lo_e = min(lo_e, e);
 			}
-		const float hg = da_gr_surface(m, gs_wat[(c.y + 1) * DA_GR_S0 + c.x + 1]);
-		gs_hg[k2] = hg;
 		const int2 t = org + c + 1;
 		const uint lw = da_gr_inside(t) ? s_gr_low.Load(int3(da_gr_addr(t), 0)) : 0u;
 		const float low = (lw == 0u) ? DA_GR_NONE : da_ground_unord(~lw);
 		const bool has_floor = low > DA_GR_NONE * 0.5 && m - low > DA_GR_OVER_FLOOR;
+		// Water standing on a cover (a flat roof's puddle, a vehicle's) is held by it, not a pond on the ground: the texel
+		// is the cover's, its base the floor under it. Taken for a pond, its surface was the base and the cliff test
+		// forgave water: the street's snow rose to the roof along the walls, a white sheet behind every window.
+		const float terrain_m = (m > DA_GR_NONE * 0.5) ? da_gr_terrain(t) : DA_GR_NONE;
+		const bool held = terrain_m > DA_GR_NONE * 0.5 && m - terrain_m > DA_GR_OVER_TERRAIN &&
+			(has_floor || m - terrain_m > 1.0) && !da_gr_walked(t, m);
+		const float hg = held ? m : da_gr_surface(m, gs_wat[(c.y + 1) * DA_GR_S0 + c.x + 1]);
+		gs_hg[k2] = hg;
 		bool cover = false;
 		float under = hg;
 		const float bake = da_gr_bake_cover(t);

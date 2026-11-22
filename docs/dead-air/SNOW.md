@@ -593,6 +593,19 @@ early out takes the layer to 0.36-0.40 ms, the shadows' cascade boxes and the se
 noise of `sun`: 0.07 + 0.22-0.25 + 0.36-0.40 = some 0.7 ms. The same frames without snow (July) cost 2.7 ms more
 (the grass 0.83 ms alone): a winter frame is cheaper than a summer one.
 
+### Water held above the ground (22.11.2026)
+Puddles on flat roofs and decks are water too. In the ice months three paths took them for a pond the street lay in and
+lifted the ground's snow to the roof along the walls, a white sheet seen through every window (Pripyat's blocks):
+- the baked field's bed was the terrain under the building (`Level_load.cpp`): where the field makes water deeper than
+  1.5 m, a ray from over the surface now takes the first solid face under it as the bed (a roof's puddle: the roof);
+- `da_sn_pond` (grid, layer): no share and no level where the ground lies half a metre under the field's bed, or the
+  window's water level stands a metre over the point's own base;
+- the window's resolve: water standing on a cover (a raised solid surface over the terrain and the floor that the AI
+  does not walk) leaves the texel the cover's, its base the floor under it;
+- the grid: a step of a storey and more (`max(1.2 m, 1.2 x cell)`) is a cliff over water and inside the window too.
+QA: `tools/qa/water/snow_facade.lua` (`qa_snowpack`, `qa_ice`, `r__dbg_snow 1`: the stripes were green grid with cyan
+ice at their feet).
+
 ## Known limits
 
 - Shells come from the collision mesh: where it simplifies a roof (a single plane over corrugated sheets) the

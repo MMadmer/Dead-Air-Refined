@@ -136,7 +136,11 @@ DA_SN_GRID_OUT main(float2 ij : POSITION, uint iid : SV_InstanceID)
 	const float2 wd = abs(x - da_sn_win.xy);
 	const bool in_window = max(wd.x, wd.y) < da_sn_win.z - da_sn_win.w;
 	const bool steep = max(max(jl.x, jl.y), max(jl.z, jl.w)) > max(0.35, 1.2 * s) || (!shore && dot(slope, slope) > 3.0);
-	const bool cliff = none || (wsh < 0.5 && steep && (!in_window || b0.y < 0.999));
+	// A step of a storey and more is a wall, over water or not, in the window or not: water's "never a cliff" let a frozen
+	// puddle at a wall's foot keep its triangle to the roof the level's AI walks (a deck, the base) and hung the sheet up
+	// the wall, a white column behind the windows.
+	const bool wall = max(max(jn.x, jn.y), max(jn.z, jn.w)) > max(1.2, 1.2 * s);
+	const bool cliff = none || wall || (wsh < 0.5 && steep && (!in_window || b0.y < 0.999));
 
 	// The depth the vertex stands for is its cells', not its own point's: rings of 12.5 cm and coarser read a 4.7 cm
 	// trail at single points, so a print showed by whichever vertex fell in it and changed its shape each time the
