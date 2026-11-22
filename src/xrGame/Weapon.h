@@ -513,6 +513,10 @@ protected:
     virtual bool MovingAnimAllowedNow();
     virtual void OnStateSwitch(u32 S, u32 oldState);
     virtual void OnAnimationEnd(u32 state);
+    bool StateOutlivesMotion(u32 state) const override
+    {
+        return state == eFire || state == eFire2 || CHudItem::StateOutlivesMotion(state);
+    }
 
     //трассирование полета пули
     virtual void FireTrace(const Fvector& P, const Fvector& D);

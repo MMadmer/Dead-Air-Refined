@@ -58,6 +58,8 @@
 #include "ui/UpdateService.h"
 #include "ui/ModCatalog.h"
 #include "ui/UIModsWnd.h"
+#include "map_manager.h"
+#include "map_location.h"
 #include "xrCore/XMS/xms_catalog.h"
 #include "player_hud.h"
 #include "xrUICore/Static/UIStatic.h"
@@ -3756,6 +3758,30 @@ public:
     }
 };
 
+// qa_map_hints <spot type prefix>: the hint each map location of those types shows, as the map
+// shows it. A spot reading "no hint" lost the one it was given.
+class CCC_QaMapHints : public IConsole_Command
+{
+public:
+    CCC_QaMapHints(pcstr name) : IConsole_Command(name) { bEmptyArgsHandled = true; }
+    void Execute(pcstr args) override
+    {
+        if (!g_pGameLevel)
+            return;
+        const pcstr prefix = args ? args : "";
+        u32 count = 0;
+        for (const SLocationKey& key : Level().MapManager().Locations())
+        {
+            if (!key.location || !key.spot_type.size() || 0 != strncmp(key.spot_type.c_str(), prefix, xr_strlen(prefix)))
+                continue;
+            const pcstr hint = key.location->GetHint();
+            Msg("* [qa] map spot [%s] of %u: [%s]", key.spot_type.c_str(), u32(key.object_id), hint ? hint : "<disabled>");
+            ++count;
+        }
+        Msg("* [qa] map spots [%s*]: %u", prefix, count);
+    }
+};
+
 // qa_visor_state: what the visor effect is being driven with, which no screenshot shows.
 class CCC_QaVisorState : public IConsole_Command
 {
@@ -4632,6 +4658,7 @@ void CCC_RegisterCommands()
     CMD1(CCC_QaHandsRig, "qa_hands_rig");
     CMD1(CCC_QaShells, "qa_shells");
     CMD1(CCC_QaHudMotion, "qa_hud_motion");
+    CMD1(CCC_QaMapHints, "qa_map_hints");
     CMD1(CCC_QaVisorWet, "qa_visor_wet");
     CMD1(CCC_VisorRate, "visor_rate");
     CMD1(CCC_VisorWorn, "visor_worn");

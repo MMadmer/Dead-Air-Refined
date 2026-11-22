@@ -68,10 +68,16 @@ void CMapLocation::LoadSpot(pcstr type)
     string512 path_base, path;
     xr_strcpy(path_base, type);
     R_ASSERT3(uiXml.NavigateToNode(path_base, 0), "XML node not found in file map_spots.xml", path_base);
-    pcstr s = uiXml.ReadAttrib(path_base, 0, "hint", "no hint");
-    SetHint(s);
+    // The spot's hint is only a default. A reload of map_spots.xml (a change of resolution, language or
+    // interface style) put it over the one the location was given - a transition's destination - and
+    // a save then kept "no hint" for good, as the scripts add such a spot once.
+    if (m_hint.empty() || m_hint_from_spot)
+    {
+        SetHint(uiXml.ReadAttrib(path_base, 0, "hint", "no hint"));
+        m_hint_from_spot = true;
+    }
 
-    s = uiXml.ReadAttrib(path_base, 0, "store", nullptr);
+    pcstr s = uiXml.ReadAttrib(path_base, 0, "store", nullptr);
     if (s)
     {
         m_flags.set(eSerailizable, true);
@@ -645,7 +651,9 @@ void CMapLocation::load(IReader& stream)
 {
     xr_string str;
     stream.r_stringZ(str);
-    SetHint(str.c_str());
+    // a saved copy of map_spots.xml's own hint stays the file's, so a later reload still follows the file
+    if (!m_hint_from_spot || m_hint != str.c_str())
+        SetHint(str.c_str());
     m_flags.flags = stream.r_u32();
 
     stream.r_stringZ(str);
@@ -654,6 +662,7 @@ void CMapLocation::load(IReader& stream)
 
 void CMapLocation::SetHint(const shared_str& hint)
 {
+    m_hint_from_spot = false;
     if (hint == "disable_hint")
     {
         m_flags.set(eHintEnabled, FALSE);

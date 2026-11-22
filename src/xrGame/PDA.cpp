@@ -87,9 +87,8 @@ void CPda::feel_touch_new(IGameObject* O)
 {
     if (CInventoryOwner* pNewContactInvOwner = smart_cast<CInventoryOwner*>(O))
     {
-        CInventoryOwner* pOwner = smart_cast<CInventoryOwner*>(H_Parent());
-        VERIFY(pOwner);
-        pOwner->NewPdaContact(pNewContactInvOwner);
+        if (CInventoryOwner* pOwner = smart_cast<CInventoryOwner*>(H_Parent()))
+            pOwner->NewPdaContact(pNewContactInvOwner);
     }
 }
 
@@ -99,9 +98,8 @@ void CPda::feel_touch_delete(IGameObject* O)
         return;
     if (CInventoryOwner* pLostContactInvOwner = smart_cast<CInventoryOwner*>(O))
     {
-        CInventoryOwner* pOwner = smart_cast<CInventoryOwner*>(H_Parent());
-        VERIFY(pOwner);
-        pOwner->LostPdaContact(pLostContactInvOwner);
+        if (CInventoryOwner* pOwner = smart_cast<CInventoryOwner*>(H_Parent()))
+            pOwner->LostPdaContact(pLostContactInvOwner);
     }
 }
 
@@ -150,6 +148,20 @@ void CPda::OnH_A_Chield()
 
 void CPda::OnH_B_Independent(bool just_before_destroy)
 {
+    // The contacts are its carrier's. Put in a box (the arena keeps a fighter's things in one), the
+    // device kept the old list, and the first contact destroyed afterwards reported its loss to a
+    // parent that owns no inventory - a crash after a kill at the arena. They are lost here, while
+    // the carrier is still the parent, as if they had all walked out of range. A device about to be
+    // destroyed tells nobody, as net_Destroy never did: the level may be going down around it.
+    // (just_before_destroy is no such sign: a move to a box or a trade passes it too.)
+    if (!GetTmpPreDestroy())
+    {
+        for (IGameObject* contact : feel_touch)
+            feel_touch_delete(contact);
+    }
+    feel_touch.clear();
+    m_active_contacts.clear();
+
     inherited::OnH_B_Independent(just_before_destroy);
 
     //выключить

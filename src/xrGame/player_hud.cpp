@@ -107,9 +107,10 @@ const player_hud_motion* player_hud_motion_container::find_motion(const shared_s
     return it != m_anims.end() ? &it->second : nullptr;
 }
 
-void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_str& sect, bool lenient, u32* missing)
+void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_str& sect, u32* missing)
 {
     m_anims.clear();
+    m_missing.clear();
     const CInifile::Sect& _sect = pSettings->r_section(sect);
 
     for (const auto& [name, anm] : _sect.Data)
@@ -156,16 +157,16 @@ void player_hud_motion_container::load(IKinematicsAnimated* model, const shared_
 #endif // #ifdef DEBUG
                 }
             }
-            if (pm.m_animations.empty() && lenient)
+            if (pm.m_animations.empty())
             {
                 if (missing)
                     ++*missing;
                 else
-                    Msg("! [hud-scene] motion [%s] of [%s] is not in the hands model, skipped",
-                        pm.m_base_name.c_str(), sect.c_str());
+                    Msg("! [hud] motion [%s] of [%s] is not in the hands model, skipped", pm.m_base_name.c_str(),
+                        sect.c_str());
+                m_missing.insert(name);
                 continue;
             }
-            R_ASSERT2(!pm.m_animations.empty(), make_string("motion not found [%s]", pm.m_base_name.c_str()).c_str());
 
             m_anims.emplace(name, std::move(pm));
         }
@@ -518,10 +519,19 @@ void attachable_hud_item::rebind_hand_motions(IKinematicsAnimated* hands_model)
         return;
 
     u32 missing = 0;
-    m_hand_motions.load(hands_model, m_sect_name, true, &missing);
+    m_hand_motions.load(hands_model, m_sect_name, &missing);
     if (missing)
         Msg("* [hud] item [%s]: %u cycle(s) are not in the hands model now, %u left",
             m_sect_name.c_str(), missing, u32(m_hand_motions.m_anims.size()));
+}
+
+bool attachable_hud_item::cycle_missing(const shared_str& anm_name_b) const
+{
+    // the alias anim_play looks up
+    string256 anim_name_r;
+    const bool is_16x9 = UICore::is_widescreen();
+    xr_sprintf(anim_name_r, "%s%s", anm_name_b.c_str(), m_attach_place_idx == 1 && is_16x9 ? "_16x9" : "");
+    return m_hand_motions.m_missing.find(anim_name_r) != m_hand_motions.m_missing.end();
 }
 
 void attachable_hud_item::reload_measures()
@@ -903,6 +913,8 @@ void player_hud::render_shadow(u32 context_id, IRenderable* root)
 
 u32 player_hud::motion_length(const shared_str& anim_name, const shared_str& hud_name, const CMotionDef*& md)
 {
+    // no definition unless one is found: a stale one kept from the last motion read its marks
+    md = nullptr;
     const float speed = CalcMotionSpeed(anim_name, 1.0f);
     attachable_hud_item* pi = create_hud_item(hud_name);
     if (!pi)
@@ -1133,7 +1145,7 @@ player_hud_motion_container& player_hud::scene_motions(const shared_str& sect)
     if (it == m_scene_motions.end())
     {
         player_hud_motion_container container;
-        container.load(m_model, sect, true);
+        container.load(m_model, sect);
         it = m_scene_motions.emplace(sect, std::move(container)).first;
     }
     return it->second;

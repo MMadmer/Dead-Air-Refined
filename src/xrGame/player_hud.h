@@ -26,15 +26,18 @@ struct player_hud_motion
 struct player_hud_motion_container
 {
     xr_unordered_map<shared_str, player_hud_motion> m_anims;
+    // aliases the section names whose cycles the hands do not carry
+    xr_set<shared_str> m_missing;
 
     [[nodiscard]]
     const player_hud_motion* find_motion(const shared_str& name) const;
 
-    // lenient: a cycle missing from the hands model is logged and skipped instead of asserting -
-    // scene sections come from an addon whose motion sets may not be attached to every rig.
+    // A cycle missing from the hands model is logged and skipped, never fatal: a mod's hud section
+    // may name a motion set its author attached to other hands, and the first draw of such an
+    // item ended the game. The item then plays nothing for it.
     // missing, when given, COUNTS those instead of naming each: rebinding a whole item against
     // another rig loses its entire set at once, and the log does not need every line of it.
-    void load(IKinematicsAnimated* model, const shared_str& sect, bool lenient = false, u32* missing = nullptr);
+    void load(IKinematicsAnimated* model, const shared_str& sect, u32* missing = nullptr);
 };
 
 struct hud_item_measures
@@ -103,6 +106,9 @@ struct attachable_hud_item
     // The hands model has been replaced. A non-monolithic item's cycles live in the HANDS rig,
     // so every id this one holds indexes a model that no longer exists - see player_hud::load.
     void rebind_hand_motions(IKinematicsAnimated* hands_model);
+    // The section names this cycle, but the hands model does not carry it.
+    [[nodiscard]]
+    bool cycle_missing(const shared_str& anm_name_b) const;
 
     void update(bool bForce);
     void update_hud_additional(Fmatrix& trans) const;

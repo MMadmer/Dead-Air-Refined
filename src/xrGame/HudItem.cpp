@@ -277,43 +277,35 @@ void CHudItem::UpdateCL()
     if (m_hud_ui)
         m_hud_ui->Update();
 
-    if (m_current_motion_def)
+    // A cycle the hands do not carry has no definition and no marks, only the time it was given.
+    if (m_bStopAtEndAnimIsRunning)
     {
-        if (m_bStopAtEndAnimIsRunning)
+        if (m_current_motion_def && !m_current_motion_def->marks.empty())
         {
-            const xr_vector<motion_marks>& marks = m_current_motion_def->marks;
-            if (!marks.empty())
+            const float motion_prev_time = ((float)m_dwMotionCurrTm - (float)m_dwMotionStartTm) / 1000.0f;
+            const float motion_curr_time = ((float)Device.dwTimeGlobal - (float)m_dwMotionStartTm) / 1000.0f;
+
+            for (const motion_marks& M : m_current_motion_def->marks)
             {
-                float motion_prev_time = ((float)m_dwMotionCurrTm - (float)m_dwMotionStartTm) / 1000.0f;
-                float motion_curr_time = ((float)Device.dwTimeGlobal - (float)m_dwMotionStartTm) / 1000.0f;
+                if (M.is_empty())
+                    continue;
 
-                xr_vector<motion_marks>::const_iterator it = marks.begin();
-                xr_vector<motion_marks>::const_iterator it_e = marks.end();
-                for (; it != it_e; ++it)
-                {
-                    const motion_marks& M = (*it);
-                    if (M.is_empty())
-                        continue;
-
-                    const motion_marks::interval* Iprev = M.pick_mark(motion_prev_time);
-                    const motion_marks::interval* Icurr = M.pick_mark(motion_curr_time);
-                    if (Iprev == NULL && Icurr != NULL /* || M.is_mark_between(motion_prev_time, motion_curr_time)*/)
-                    {
-                        OnMotionMark(m_startedMotionState, M);
-                    }
-                }
+                const motion_marks::interval* Iprev = M.pick_mark(motion_prev_time);
+                const motion_marks::interval* Icurr = M.pick_mark(motion_curr_time);
+                if (!Iprev && Icurr)
+                    OnMotionMark(m_startedMotionState, M);
             }
+        }
 
-            m_dwMotionCurrTm = Device.dwTimeGlobal;
-            if (m_dwMotionCurrTm > m_dwMotionEndTm)
-            {
-                m_current_motion_def = NULL;
-                m_dwMotionStartTm = 0;
-                m_dwMotionEndTm = 0;
-                m_dwMotionCurrTm = 0;
-                m_bStopAtEndAnimIsRunning = false;
-                OnAnimationEnd(m_startedMotionState);
-            }
+        m_dwMotionCurrTm = Device.dwTimeGlobal;
+        if (m_dwMotionCurrTm > m_dwMotionEndTm)
+        {
+            m_current_motion_def = nullptr;
+            m_dwMotionStartTm = 0;
+            m_dwMotionEndTm = 0;
+            m_dwMotionCurrTm = 0;
+            m_bStopAtEndAnimIsRunning = false;
+            OnAnimationEnd(m_startedMotionState);
         }
     }
 }
@@ -392,6 +384,11 @@ void CHudItem::on_a_hud_attach()
 u32 CHudItem::PlayHUDMotion(const shared_str& M, BOOL bMixIn, CHudItem* W, u32 state)
 {
     u32 anim_time = PlayHUDMotion_noCB(M, bMixIn);
+    // A cycle the section names but the hands do not carry plays nothing (a mod's hud section, a rig
+    // swapped under the item). A draw, a holster or a reload left without its end kept the item pending
+    // for good; such a state ends after the 100 ms an item out of sight gets for a missing motion.
+    if (!anim_time && !StateOutlivesMotion(state) && HudCycleMissing(M))
+        anim_time = 100;
     if (anim_time > 0)
     {
         m_bStopAtEndAnimIsRunning = true;
@@ -414,8 +411,24 @@ u32 CHudItem::PlayHUDMotion(const shared_str& M, const shared_str& M2, BOOL bMix
         time = PlayHUDMotion(M, bMixIn, W, state);
     else if (isHUDAnimationExist(M2.c_str()))
         time = PlayHUDMotion(M2, bMixIn, W, state);
+    // named by the section, absent from the hands: played as nothing, so that the state still ends
+    else if (HudCycleMissing(M))
+        time = PlayHUDMotion(M, bMixIn, W, state);
+    else if (HudCycleMissing(M2))
+        time = PlayHUDMotion(M2, bMixIn, W, state);
 
     return time;
+}
+
+bool CHudItem::HudCycleMissing(const shared_str& anim_name) const
+{
+    if (const attachable_hud_item* data = HudItemData())
+        return data->cycle_missing(anim_name);
+    // out of sight (the draw starts before the hud item is attached) the pooled item answers
+    if (!g_player_hud || !HudSection().size())
+        return false;
+    const attachable_hud_item* pooled = g_player_hud->create_hud_item(HudSection());
+    return pooled && pooled->cycle_missing(anim_name);
 }
 
 u32 CHudItem::PlayHUDMotion_noCB(const shared_str& motion_name, BOOL bMixIn)

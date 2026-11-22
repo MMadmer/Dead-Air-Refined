@@ -286,7 +286,7 @@ void CMissile::State(u32 state, u32 oldState)
         m_throw = false;
         PlayHUDMotion("anm_throw", "anim_throw_act", TRUE, this, GetState());
         // XXX: could check it once at initialization stage (could use something like CHudItem::isHUDAnimationExist())
-        m_motion_marks_available = !m_current_motion_def->marks.empty();
+        m_motion_marks_available = m_current_motion_def && !m_current_motion_def->marks.empty();
     }
     break;
     case eThrowEnd:

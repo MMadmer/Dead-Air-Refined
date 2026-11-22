@@ -18,6 +18,8 @@ protected:
 
     virtual void OnAnimationEnd(u32 state);
     virtual void OnMotionMark(u32 state, const motion_marks&);
+    // a swing is its cycle, not a held trigger
+    bool StateOutlivesMotion(u32 state) const override { return CHudItem::StateOutlivesMotion(state); }
     void OnKnifeStrike(u32 state);
     virtual void OnStateSwitch(u32 S, u32 oldState);
 

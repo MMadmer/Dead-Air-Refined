@@ -154,10 +154,10 @@ void CMapManager::OnUIReset()
     m_uiSpotXml.Load(CONFIG_PATH, UI_PATH, UI_PATH_DEFAULT, "map_spots.xml");
     if (!m_spotPatch.empty())
         XMS::ApplyXmlPatchText(m_uiSpotXml, m_spotPatch.c_str(), m_spotPatchOwner.c_str());
+    // by the type each one shows now: a relation location reloaded as the type it was made with kept
+    // that look until its relation changed again
     for (const SLocationKey& locationKey : Locations())
-    {
-        locationKey.location->LoadSpot(locationKey.spot_type.c_str());
-    }
+        locationKey.location->LoadSpot(locationKey.location->SpotTypeNow(locationKey.spot_type.c_str()));
 }
 
 void CMapManager::RemoveMapLocation(const shared_str& spot_type, u16 id)

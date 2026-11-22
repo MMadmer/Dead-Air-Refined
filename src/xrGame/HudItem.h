@@ -124,6 +124,11 @@ public:
 
     virtual void OnAnimationEnd(u32 state);
     virtual void OnMotionMark(u32 state, const motion_marks&){};
+    // A state that goes on until something else ends it (idle, a gun's fire held by the trigger).
+    // Every other one ends with its cycle, or after a moment when its cycle is not in the hands.
+    virtual bool StateOutlivesMotion(u32 state) const { return state == eIdle; }
+    // The hud section names this cycle, but the hands model does not carry it (in sight or not).
+    bool HudCycleMissing(const shared_str& anim_name) const;
 
     virtual void PlayAnimIdle();
     virtual void PlayAnimBore();

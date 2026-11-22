@@ -30,6 +30,8 @@ public:
 protected:
     flags32 m_flags{};
     shared_str m_hint;
+    // m_hint is map_spots.xml's own, not one a script, a task or a save gave
+    bool m_hint_from_spot{};
     CMapSpot* m_level_spot{};
     CMapSpotPointer* m_level_spot_pointer{};
     CMiniMapSpot* m_minimap_spot{};
@@ -78,6 +80,8 @@ public:
     void destroy() override;
 
     void LoadSpot(pcstr type);
+    // the spot type it shows now; a relation location changes its own as the relation does
+    virtual pcstr SpotTypeNow(pcstr created_as) const { return created_as; }
 
     IC bool HintEnabled() const { return !!m_flags.test(eHintEnabled); }
     pcstr GetHint() const;
@@ -140,6 +144,10 @@ protected:
 public:
     CRelationMapLocation(const shared_str& type, u16 object_id, u16 pInvOwnerActorID);
 
+    pcstr SpotTypeNow(pcstr created_as) const override
+    {
+        return m_curr_spot_name.size() ? m_curr_spot_name.c_str() : created_as;
+    }
     virtual bool Update();
 
     virtual void UpdateMiniMap(CUICustomMap* map);
