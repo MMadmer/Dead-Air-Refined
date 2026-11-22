@@ -309,7 +309,7 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	const float2 bob = grass_stem_bob(p, true, P12.zw);
 	// (The culm's warp: a snapped culm's head hangs with its top. Its culm straightens into the far triangle over
 	// the last fifth before d2, da_grass_blade_vs.h: the head rides it there.)
-	const grass_warp Wc = grass_blade_warp(B, 0u);
+	const grass_warp Wc = grass_blade_warp(B, 0u, false);
 #ifdef GRASS_SHADOW
 	const float m_far = 0.0f;
 #else

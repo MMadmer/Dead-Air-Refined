@@ -70,11 +70,11 @@ bool	grass_is_litter	(grass_blade B)	{ return (B.flags & (GRASS_F_LITTER | GRASS
 float	grass_hash01	(grass_blade B)	{ return float(B.flags & 0xFFFFu) / 65536.0f; }
 // The blade's warp (da_grass_common.h): a leaf's by its senescence, last year's as dead. salt (the hash's 16 bits):
 // the second leaf of a folded strip takes a warp of its own - both on one, a tuft's base was pairs of twins.
-// r__dbg_grass 2048 (QA): none.
-grass_warp	grass_blade_warp	(grass_blade B, uint salt)
+// plain: the blade is drawn as one line (grass_warp_of). r__dbg_grass 2048 (QA): none.
+grass_warp	grass_blade_warp	(grass_blade B, uint salt, bool plain)
 {
 	return grass_warp_of(B.flags ^ (salt & 0xFFFFu), grass_profile(B), (B.flags & GRASS_F_THATCH) != 0u ? 1.0f : B.sen,
-		(uint(da_grass_vmisc.w + 0.5f) & 2048u) != 0u);
+		(uint(da_grass_vmisc.w + 0.5f) & 2048u) != 0u, plain);
 }
 
 // A blade ready to be evaluated (grass_frame, da_grass_common.h): its control points (grass_ctrl), yaw turning the

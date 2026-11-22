@@ -403,9 +403,10 @@ species (`SEASON_DATA.md`):
 
 A stand grown at each species' neat mean - every leaf out of one narrow range of tilts and bends, every culm within a
 few degrees of upright, one height everywhere - stood like a field of stakes. A real stand is mostly what the mean
-leaves out (1.6.7). The reference is a pack of 2651 dated iNaturalist research-grade photos of Polesia (northern
-Ukraine and southern Belarus, the East European plain where a month was short): six per species and month - April to
-November and the winter for the graminoids, six buckets of the year for the forbs -, read as contact sheets by month
+leaves out (1.6.7). The reference is a pack of 2731 dated iNaturalist photos (research grade but for 19 of the rarest
+cells' last ones) of Polesia - northern Ukraine and southern Belarus, the East European plain and then temperate
+Europe where a month was short: six per species and month - April to November and the winter for the graminoids, six
+buckets of the year for the forbs -, every one read on contact sheets by month
 (`make_species.py` `DISORDER`: what the photos show of each of the 64 species, in the fields below). Broad soft leaves
 (couch, brome, cock's-foot, the marsh grasses) arch over, fold and twist; fine ones (meadow-grass, the bents, red
 fescue, wavy hair-grass) flow one way and lie in swirls; the bristle tussocks (sheep's fescue, grey and tufted
@@ -445,6 +446,10 @@ it flowers, battered as it seeds and dies back.
   laid patch is a mat and not bare soil. The set and the patches are worked out for the lanes that survive the keep.
 - A corymb's or an umbel's disc is drawn level whatever its stem does, so such a stem leans no further than 16
   degrees, is no runt and does not snap (laid, short or snapped, its disc hung in the grass like a saucer).
+- **A tussock's sunburst**: a lodged leaf lies with its swathe by 0.8 (the combed mat of a meadow in April) - less the
+  more its tuft radiates (`clump_face_away` from 0.4 to 0.9: none of it at the top), so the dead leaves of a tufted
+  hair-grass, a rush, a sheep's fescue or a grey hair-grass lie as rays round the tussock, the new green in its heart,
+  as every winter and April photo of them shows.
 
 **The blade** (`grass_warp`, `da_grass_common.h`: by the record's 16 hash bits, its species' rows 27-31, the season's
 wear and its own senescence, in the vertex shaders - nothing of it rides in the record, and this and the previous
@@ -477,7 +482,9 @@ pass its head; the second leaf of a folded strip takes a warp of its own):
 - **Far off** a blade is one line from its root to its end: the 3-vertex blades past `d2` and the middle cascade's
   casters draw the warp without the turn and at the record's length (ending at their hanging tips, the far field lay
   at half its height), the 7-vertex blades morph onto that over the last fifth before `d2`, and a snapped stem's
-  head and leaves ride it there.
+  head and leaves ride it there. Those records - most of an open view's - are spared the turn altogether: its tables
+  and draws are not read for them (`grass_warp_of`, `plain`), and a blade's turning point, axis and limit are worked
+  out once for every evaluation of it (`grass_frame`).
 - **Litter** straws lie bowed and wavy, not ruled.
 
 **Shading**: a blade's dry tip is its own (0.2-2.6 of the season's share, the mean kept; burnt to one line across
@@ -489,8 +496,9 @@ standing one a laid patch was a dark hollow, where a real one is the palest of t
 before (the same twelve views, the grass area's linear mean): June and August x 0.95-0.98, October x 1.06-1.07.
 
 Cost (`tools/qa/water/veg_cost.lua`, the l01_escape meadow, Extreme, DX11 1080p on the rig, `r__dbg_grass 2048`
-against 0 interleaved in one run, two headings): the blades' draw 1.53 -> 1.75 ms, the generation 1.77 -> 2.06 ms
-(more records: the laid patches' litter), the frame within its noise. `r__dbg_grass 2048` is the stand without its
+against 0 interleaved in one run, two headings): the blades' draw 1.60 -> 1.72 ms, the generation 2.11 -> 2.21 ms
+(more records: the laid patches' litter), the frame within its noise (1.53 -> 1.75 and 1.77 -> 2.06 ms before the far
+blades were spared the turn and the lane its second swathe lookup). `r__dbg_grass 2048` is the stand without its
 disorder; `tools/qa/water/grass_look.lua` shoots the stand, or pinned species, through the months.
 
 ### Shading (G-buffer)

@@ -360,9 +360,11 @@ struct grass_lane
 	grass_force	f_cur, f_prev;
 	float		wv, wn, wm;
 	float		sen, hc, ao, stage, snow, head_eq, head_area, head_len, head_w, height_k, hrel, end_fade, cauline_k;
-	// The stand's lean at the lane (the set and a laid patch): the tip's displacement per unit of blade, and how laid.
-	float2		lean;
-	float		laid;
+	// The stand's lean at the lane (the set and a laid patch): the tip's displacement per unit of blade, and how laid;
+	// the way its swathe is combed (grass_comb), for the lane's basal pairs and litter too.
+	float2		lean, comb;
+	// laid: how far the lane lies in a laid patch; comb_k: how far its lodged leaves turn to the swathe's way.
+	float		laid, comb_k;
 	float2		nground;
 };
 
@@ -398,10 +400,9 @@ float	grass_patch_height	(float2 xz)
 // The stand's lean at xz, the tip's displacement per unit of blade (grass_lean): its set - a whole stretch leaning one
 // way by the last wind and rain, more as the season wears it (set: rad at the most) - and its laid patches, a few
 // metres across, pressed halfway down by a storm or an animal's bed (prone: how far the species goes down, 0..1 of 62
-// degrees; share: the season's). Both lie with the swathes a lodged mat is combed by.
-float2	grass_stand_lean	(float2 xz, float2 downhill, float set, float prone, float share, float wear, out float laid_now)
+// degrees; share: the season's). Both lie with the swathes a lodged mat is combed by (comb: grass_comb there).
+float2	grass_stand_lean	(float2 xz, float2 comb, float set, float prone, float share, float wear, out float laid_now)
 {
-	const float2 comb = grass_comb(xz, downhill);
 	const float a_set = set * lerp(0.3f, 1.0f, wear) * (0.3f + 0.7f * grass_vnoise(xz * 0.14f, 0x5E77u));
 	// (The season's share grows the patches - the odd bed in June, a third of the stand after the autumn's storms -,
 	// the species' proneness how far down they lie.)
@@ -447,7 +448,7 @@ bool	grass_basal	(grass_lane L, uint k, uint p, out grass_basal_rec R)
 	const float2 face = float2(cos(h[7] * 6.2831853f), sin(h[7] * 6.2831853f));
 	R.rest.facing = normalize(lerp(face, al > 1e-4f ? away / al : face, 0.65f) + 1e-5f);
 	if (life.lodge > 0.0f)
-		R.rest.facing = normalize(lerp(R.rest.facing, grass_comb(xz, -L.nground * 2.0f), 0.8f * life.lodge) + 1e-5f);
+		R.rest.facing = normalize(lerp(R.rest.facing, L.comb, L.comb_k * life.lodge) + 1e-5f);
 	const float tilt = lerp(P21.x, P21.y, h[8]);
 	R.rest.tilt = lerp(tilt, radians(80.0f), life.lodge);
 	R.rest.bend = lerp(lerp(P21.z, P21.w, h[9]), 0.04f, life.lodge);
@@ -496,7 +497,7 @@ void	grass_litter	(grass_lane L, uint k, out grass_shape S, out float3 root, out
 	// On the ground, under the tussock's lift.
 	root = float3(xz.x, L.root.y - L.base_raise - dot(L.nground, xz - L.root.xz) / max(ny, 0.3f) + 0.004f, xz.y);
 	const float fa = u[2] * 6.2831853f;
-	S.facing = normalize(lerp(float2(cos(fa), sin(fa)), grass_comb(xz, -L.nground * 2.0f), 0.55f) + 1e-5f);
+	S.facing = normalize(lerp(float2(cos(fa), sin(fa)), L.comb, 0.55f) + 1e-5f);
 	S.tilt = radians(lerp(79.0f, 87.0f, u[3]));
 	S.bend = lerp(0.02f, 0.08f, u[4]);
 	S.droop = 0.0f;
@@ -694,9 +695,15 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 		const float al = length(away);
 		if (al > 1e-4f)
 			face = normalize(lerp(face, away / al, P5.z) + 1e-5f);
-		// A lodged blade lies with its swathe.
-		if (life.lodge > 0.0f)
-			face = normalize(lerp(face, grass_comb(xz, -nG.xz * 2.0f), 0.8f * life.lodge) + 1e-5f);
+		// A lodged blade lies with its swathe (worked out once a lane: here for a lodged one, below for the rest) -
+		// a meadow grass's; a tussock that radiates (its leaves face away from its heart by 0.4 and more) lays its
+		// dead leaves as rays round it, the sunburst of a tufted hair-grass or a rush in winter.
+		L.comb_k = 0.8f * (1.0f - smoothstep(0.4f, 0.9f, P5.z));
+		[branch] if (life.lodge > 0.0f)
+		{
+			L.comb = grass_comb(xz, -nG.xz * 2.0f);
+			face = normalize(lerp(face, L.comb, L.comb_k * life.lodge) + 1e-5f);
+		}
 		rest.facing = face;
 		rest.tilt = lerp(tilt0, radians(80.0f), life.lodge);
 		// A lodged blade lies flat along the ground, not in an arch over it.
@@ -814,10 +821,12 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	// The stand's set and its laid patches (for the lanes that live: the snow's gate above took the blade as it
 	// stands): the culms take all of the set, the leaves the better half, a laid patch everything in it, each blade a
 	// little more or less. What was laid last year lies on, whatever the new growth's share of the day.
+	[branch] if (life.lodge <= 0.0f)
+		L.comb = grass_comb(xz, -nG.xz * 2.0f);
 	[branch] if (!neat)
 	{
 		float laid_now;
-		L.lean = grass_stand_lean(xz, -nG.xz * 2.0f, P31.w, P31.z, life.thatch ? max(laid_share, 0.75f) : laid_share,
+		L.lean = grass_stand_lean(xz, L.comb, P31.w, P31.z, life.thatch ? max(laid_share, 0.75f) : laid_share,
 			life.thatch ? 1.0f : wear, laid_now);
 		L.laid = laid_now;
 		const float2 dl = L.lean * (lerp(culm ? 1.0f : 0.6f, 1.0f, laid_now) * lerp(0.7f, 1.15f, q[5]));
@@ -937,7 +946,7 @@ void	grass_store_cauline	(uint at0, uint count, float wscale, grass_lane L, uint
 	grass_ctrl(sq, L.root, 0.0f, knee, Q0, Q1, Q2, Q3, Sq);
 	// (The stem's warp, as its vertex shader draws it: the leaves of a snapped stem hang with its top, and ride it as
 	// it straightens into the far triangle over the last fifth before d2 - the view's; the near cascade's does not.)
-	const grass_warp W = grass_warp_of(L.flags, p, 0.0f, grass_neat());
+	const grass_warp W = grass_warp_of(L.flags, p, 0.0f, grass_neat(), false);
 	const grass_warp Wp = grass_warp_plain(W);
 	const grass_frame Fc = grass_frame_of(W, C0, C1, C2, C3, Sc, L.cur.height), Fq = grass_frame_of(W, Q0, Q1, Q2, Q3, Sq, sq.height);
 	const float m_far = (with_prev && W.fold_t < 1.0f) ? smoothstep(0.8f * da_grass_lod.y, da_grass_lod.y, L.d) : 0.0f;

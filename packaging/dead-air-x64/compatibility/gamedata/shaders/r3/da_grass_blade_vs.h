@@ -77,9 +77,7 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	const float2 bob = (lod == 4u) ? float2(0.0f, 0.0f) : grass_stem_bob(p, culm, P12.zw);
 
 	// The blade's warp; the far triangle and the middle cascade's caster (one line each) draw the plain one.
-	grass_warp W = grass_blade_warp(B, (folded && which == 0u) ? 0x5A5Au : 0u);
-	if (lod == 2u || lod == 4u)
-		W = grass_warp_plain(W);
+	const grass_warp W = grass_blade_warp(B, (folded && which == 0u) ? 0x5A5Au : 0u, lod == 2u || lod == 4u);
 	const bool lo_plain = lod == 1u;
 	float3 C, dC, S;
 	grass_curve_lod(B.cur, B.root, t0, culm, rows_lo, morph, yaw, bob, da_grass_vlod.z, hash, knee, W, lo_plain, C, dC, S);

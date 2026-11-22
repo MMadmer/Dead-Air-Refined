@@ -265,15 +265,16 @@ grass_warp	grass_warp_plain	(grass_warp W)
 }
 
 // The warp of the blade of these flags (its 16 hash bits, kind and cohort) of species p; sen: a leaf's senescence
-// (a culm's is not asked: its leaves and its head are rooted on it by the flags alone). off: QA, none.
-grass_warp	grass_warp_of	(uint flags, uint p, float sen, bool off)
+// (a culm's is not asked: its leaves and its head are rooted on it by the flags alone). off: QA, none. plain: only
+// what a blade drawn as one line keeps (grass_warp_plain: the sweep, the wave, the twist) - the far triangle's and
+// the middle cascade's, most of a view's records, which spares them the turn's tables and draws.
+grass_warp	grass_warp_of	(uint flags, uint p, float sen, bool off, bool plain)
 {
 	grass_warp W = grass_warp_none();
 	const bool culm = (flags & GRASS_F_CULM) != 0u;
 	if (off)
 		return W;
 	const bool thatch = (flags & GRASS_F_THATCH) != 0u;
-	const float wear = grass_seas(p, 4, false).w;
 	const uint h1 = grass_hash((flags & 0xFFFFu) ^ 0x9E3779B9u), h2 = grass_hash(h1 + 0x7F4A7C15u);
 	const float4 u = float4(h1 & 0xFFu, (h1 >> 8) & 0xFFu, (h1 >> 16) & 0xFFu, h1 >> 24) * (1.0f / 256.0f);
 	const float4 q = float4(h2 & 0xFFu, (h2 >> 8) & 0xFFu, (h2 >> 16) & 0xFFu, h2 >> 24) * (1.0f / 256.0f);
@@ -287,9 +288,11 @@ grass_warp	grass_warp_of	(uint flags, uint p, float sen, bool off)
 	[branch] if (culm)
 	{
 		const float4 P30 = grass_prof(p, 30);
+		W.sweep = (q.z - 0.5f) * 3.0f * P30.w;
+		W.wave = float3(P30.w * lerp(0.5f, 1.5f, q.y), lerp(5.0f, 11.0f, u.w), q.w * 6.2831853f);
 		// A stem snaps as the stand wears; last year's went through all of it. (A corymb's or an umbel's stem has no
 		// share in the data: its disc is drawn level whatever the stem does, and hung to the ground on a snapped one.)
-		const float snap = P30.z * (thatch ? 1.0f : smoothstep(0.35f, 1.0f, wear));
+		const float snap = plain ? 0.0f : P30.z * (thatch ? 1.0f : smoothstep(0.35f, 1.0f, grass_seas(p, 4, false).w));
 		if (u.x < snap)
 		{
 			// At a node (da_grass_blade.ps draws them at 15, 35 and 60 % of the height).
@@ -298,11 +301,15 @@ grass_warp	grass_warp_of	(uint flags, uint p, float sen, bool off)
 			W.fold_w = 0.05f;
 			sincos((q.x - 0.5f) * 3.0f, W.fold_axis.y, W.fold_axis.x);
 		}
-		W.sweep = (q.z - 0.5f) * 3.0f * P30.w;
-		W.wave = float3(P30.w * lerp(0.5f, 1.5f, q.y), lerp(5.0f, 11.0f, u.w), q.w * 6.2831853f);
 		return W;
 	}
-	const float4 P28 = grass_prof(p, 28), P29 = grass_prof(p, 29);
+	const float4 P29 = grass_prof(p, 29);
+	W.sweep = (q.z - 0.5f) * 2.0f * P29.z;
+	W.twist = float2(q.w * 6.2831853f, P29.x * 6.2831853f * lerp(0.3f, 1.0f, u.w) * (q.x < 0.5f ? -1.0f : 1.0f));
+	if (plain)
+		return W;
+	const float4 P28 = grass_prof(p, 28);
+	const float wear = grass_seas(p, 4, false).w;
 	const bool cauline = (flags & GRASS_F_CAULINE) != 0u;
 	const float worn = thatch ? 1.0f : max(wear, sen);
 	const bool basal = (flags & GRASS_F_BASAL) != 0u;
@@ -340,8 +347,6 @@ grass_warp	grass_warp_of	(uint flags, uint p, float sen, bool off)
 	// more; a stand of October is a tenth lower).
 	if (W.fold_t < 1.5f)
 		W.grow = 1.0f + min((1.0f / (0.1f + 0.9f * W.fold_t) - 1.0f) * saturate(W.fold_a / 1.5707963f), 0.6f);
-	W.sweep = (q.z - 0.5f) * 2.0f * P29.z;
-	W.twist = float2(q.w * 6.2831853f, P29.x * 6.2831853f * lerp(0.3f, 1.0f, u.w) * (q.x < 0.5f ? -1.0f : 1.0f));
 	return W;
 }
 
