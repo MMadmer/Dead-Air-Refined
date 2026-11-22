@@ -52,7 +52,8 @@ uniform float4	da_grass_bin_d[3];	// upper distance of the 9 view bins
 uniform float4	da_grass_bin_base[4];	// first record of each bin
 uniform float4	da_grass_bin_cap[4];	// records each bin holds
 // x how far a culm rises per metre of water over its root (dead_air_x64_reeds.ltx emerge), y the most it rises (the
-// deepest reed bed's: the blades' bounds count with it)
+// deepest reed bed's: the blades' bounds count with it), z how far a tile's blades reach past it (m: the lanes' jitter
+// and clump pull, a laid culm's length)
 uniform float4	da_grass_water;
 uniform float4	da_grass_wave[4];		// wave, dir2D of the two wind groups (deffer_detail_w_flat.vs)
 uniform float4	da_grass_wave_prev[4];
@@ -359,6 +360,9 @@ struct grass_lane
 	grass_force	f_cur, f_prev;
 	float		wv, wn, wm;
 	float		sen, hc, ao, stage, snow, head_eq, head_area, head_len, head_w, height_k, hrel, end_fade, cauline_k;
+	// The stand's lean at the lane (the set and a laid patch): the tip's displacement per unit of blade, and how laid.
+	float2		lean;
+	float		laid;
 	float2		nground;
 };
 
@@ -378,6 +382,33 @@ float2	grass_comb	(float2 xz, float2 downhill)
 {
 	const float a = grass_vnoise(xz * 0.25f, 0xC0B1u) * 12.566371f;
 	return normalize(float2(cos(a), sin(a)) + downhill + 1e-5f);
+}
+
+// r__dbg_grass 2048 (QA): the stand without its disorder - every blade at its species' mean habit.
+bool	grass_neat	()	{ return (grass_dbg() & 2048u) != 0u; }
+
+// The height of the stand patch to patch (0..1, 0.5 its mean): the soil, the water and the years differ over a few
+// metres, and a stand of one height everywhere ends in a ruled line against the sky. Shared by every species: a rich
+// spot raises them all.
+float	grass_patch_height	(float2 xz)
+{
+	return 0.6f * grass_vnoise(xz * 0.31f, 0x48E1u) + 0.4f * grass_vnoise(xz * 1.05f, 0x48E2u);
+}
+
+// The stand's lean at xz, the tip's displacement per unit of blade (grass_lean): its set - a whole stretch leaning one
+// way by the last wind and rain, more as the season wears it (set: rad at the most) - and its laid patches, a few
+// metres across, pressed halfway down by a storm or an animal's bed (prone: how far the species goes down, 0..1 of 62
+// degrees; share: the season's). Both lie with the swathes a lodged mat is combed by.
+float2	grass_stand_lean	(float2 xz, float2 downhill, float set, float prone, float share, float wear, out float laid_now)
+{
+	const float2 comb = grass_comb(xz, downhill);
+	const float a_set = set * lerp(0.3f, 1.0f, wear) * (0.3f + 0.7f * grass_vnoise(xz * 0.14f, 0x5E77u));
+	// (The season's share grows the patches - the odd bed in June, a third of the stand after the autumn's storms -,
+	// the species' proneness how far down they lie.)
+	const float patch = 0.65f * grass_vnoise(xz * 0.29f, 0x1A1Du) + 0.35f * grass_vnoise(xz * 0.83f, 0x1A1Eu);
+	const float from = lerp(0.9f, 0.45f, saturate(share));
+	laid_now = saturate(prone) * smoothstep(from, from + 0.16f, patch);
+	return comb * tan(min(a_set + laid_now * radians(62.0f), 1.25f));
 }
 
 // The k-th basal leaf pair of a leaf lane (GoT's dense base of short folded leaves): a short arching
@@ -427,6 +458,10 @@ bool	grass_basal	(grass_lane L, uint k, uint p, out grass_basal_rec R)
 	R.rest_prev = R.rest;
 	R.rest_prev.tilt = lerp(tilt, radians(80.0f), life_prev.lodge);
 	R.rest_prev.height = hmax * life_prev.hrel;
+	// The stand's set and its laid patches take the base along, by half.
+	grass_lean(R.rest.facing, R.rest.tilt, 1.0f, L.lean * 0.5f);
+	grass_lean(R.rest_prev.facing, R.rest_prev.tilt, 1.0f, L.lean * 0.5f);
+	R.rest.bend = lerp(R.rest.bend, 0.06f, 0.6f * L.laid);
 	R.ws = 0.0f;
 	// Buried by snow, pressed under a patch of it like the lane's leaf, or too short to read.
 	if (R.rest.height <= 0.01f || L.base_raise + R.rest.height * cos(R.rest.tilt) - L.snow <= 0.03f
@@ -512,6 +547,19 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const float4 P4 = grass_prof(p, 4), P5 = grass_prof(p, 5), P7 = grass_prof(p, 7);
 	const float4 P8 = grass_prof(p, 8), P9 = grass_prof(p, 9), P10 = grass_prof(p, 10), P11 = grass_prof(p, 11);
 	const float4 P13 = grass_prof(p, 13), P19 = grass_prof(p, 19), P22 = grass_prof(p, 22);
+	const float4 P28 = grass_prof(p, 28), P30 = grass_prof(p, 30), P31 = grass_prof(p, 31);
+	// The stand's disorder (GRASS.md): the season's wear, the share of its laid patches, the lane's own draws.
+	const bool neat = grass_neat();
+	const float wear = grass_seas(p, 4, false).w, laid_share = grass_seas(p, 5, false).w;
+	float q[8];
+	{
+		uint s = grass_hash(seed ^ 0xD150D3A7u);
+		[unroll] for (uint i = 0; i < 8; ++i)
+		{
+			s = grass_hash(s + 0x9E3779B9u);
+			q[i] = grass_u01(s);
+		}
+	}
 	const uint form = uint(P19.z + 0.5f);
 	// A pinnate or dissected leaf: near the camera it takes the short bin, whose pixel shader cuts its lobes.
 	L.cut = !culm && uint(P19.y + 0.5f) >= GRASS_LEAF_PINNATE;
@@ -559,9 +607,13 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const float d = distance(root, cam);
 	L.d = d;
 	const float hset = da_grass_lat.w;
-	const float hbound = max(P0.y, P1.y + P10.z + 0.5f) * hset + L.emerge;
+	// (The tallest tuft of the tallest patch: the heights' spread below, the runts' share made up for; a leaf that
+	// turns over is up to 1.6 times its length, grass_warp_of. The sphere holds a blade laid flat from its root.)
+	const float hv = neat ? 0.0f : P31.x;
+	const float runts_k = neat ? 1.0f : 1.0f / (1.0f - 0.375f * P31.y);
+	const float hbound = (max(P0.y * 1.6f, P1.y + P10.z) * runts_k * (1.0f + 0.6f * hv) * (1.0f + hv) + 0.5f) * hset + L.emerge;
 	const float3 bound_c = root + float3(0.0f, 0.5f * hbound, 0.0f);
-	const float bound_r = 0.6f * hbound + 0.3f;
+	const float bound_r = 0.75f * hbound + 0.3f;
 	// Behind a wall, a fence, a barrel or a hill of this frame's depth the lane keeps only its shadow casters.
 	const bool view = (tflags & 1u) != 0u && d < da_grass_cam.w && grass_visible(bound_c, bound_r)
 		&& !hzb_sphere_hidden(bound_c, bound_r);
@@ -575,10 +627,21 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const grass_life life_prev = grass_life_at(p, culm, h[3], h[4], h[5], h[6], hc, true);
 	const float4 K0 = grass_seas(p, 0, false), K2 = grass_seas(p, 2, false), K3 = grass_seas(p, 3, false);
 	const float shade = saturate((0.6f - hemi) / 0.3f);
-	const float height_k = lerp(0.85f, 1.15f, lerp(0.5f, hc, P19.x)) * lerp(1.0f, P8.z, shade) * hset;
+	// The stand is no lawn: its height differs patch to patch (soil, water) and tuft to tuft, and among a tuft's
+	// leaves stand the short young ones (and the late, short culms).
+	const float height_k = lerp(0.85f, 1.15f, lerp(0.5f, hc, P19.x)) * lerp(1.0f, P8.z, shade) * hset
+		* lerp(1.0f - 0.6f * hv, 1.0f + 0.6f * hv, grass_u01(grass_hash(cid ^ 0x4B1Du))) * lerp(1.0f - hv, 1.0f + hv, grass_patch_height(xz));
+	// (The others are the longer for the runts among them: the stand's mean length is its species'. A corymb's or an
+	// umbel's stem is no runt: its level disc would stand in the grass like a saucer.)
+	const uint head_kind = clamp(uint(P10.x + 0.5f), 1u, 15u);
+	const bool disc = culm && (head_kind == 10u || head_kind == 13u);
+	const float runts = (neat || disc) ? 0.0f : P31.y * (culm ? 0.5f : 1.0f);
+	float h_own = (culm ? lerp(P1.x, P1.y, h[7]) : lerp(P0.x, P0.y, h[7])) / (1.0f - runts * (culm ? 0.275f : 0.375f));
+	if (q[0] < runts)
+		h_own *= culm ? lerp(0.6f, 0.85f, q[1]) : lerp(0.45f, 0.8f, q[1]);
 	// (The rise for the water is added at the blade's full height: a reed in a metre of water stands its own height
 	// over the surface, as its growth follows the water level.)
-	const float hmax = (culm ? lerp(P1.x, P1.y, h[7]) : lerp(P0.x, P0.y, h[7])) + L.emerge / max(height_k, 0.1f);
+	const float hmax = h_own + L.emerge / max(height_k, 0.1f);
 	const float end_fade = 1.0f - smoothstep(0.0f, 1.0f, saturate((d - da_grass_lod.z) * da_grass_lod.w));
 	L.thatch = life.thatch;
 	L.sen = life.sen;
@@ -587,10 +650,41 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	L.hrel = life.hrel;
 	L.end_fade = end_fade;
 
+	// The blade's own tilt and bend out of its species' range, and what the neat mean leaves out: a tuft is tight or
+	// open, its outer, older leaves splay out of it (and are the first to yellow), and some culms lean out of the stand
+	// - pushed, tangled, under their own head - arching as they go, more of them as the stand wears.
+	const float2 tilt_range = culm ? P2.zw : P2.xy;
+	const float2 bend_range = culm ? P3.zw : P3.xy;
+	float tilt0 = lerp(tilt_range.x, tilt_range.y, h[9]), bend0 = lerp(bend_range.x, bend_range.y, h[10]);
+	[branch] if (!neat)
+	{
+		if (culm)
+		{
+			// (The rest fan out a little: no two stems of a clump stand alike.)
+			if (q[2] < P30.x * lerp(0.35f, 1.0f, life.thatch ? 1.0f : wear))
+			{
+				tilt0 += P30.y * lerp(0.4f, 1.0f, q[3]);
+				bend0 += 0.04f + 0.12f * q[4];
+			}
+			else
+				tilt0 += P30.y * 0.45f * q[3];
+		}
+		else
+		{
+			tilt0 *= lerp(0.75f, 1.3f, grass_u01(grass_hash(cid ^ 0x5A1Fu)));
+			const float outer = saturate(cdist / max(0.5f * P5.x, 0.01f));
+			if (q[2] < P28.x * lerp(0.5f, 1.5f, outer) * lerp(0.7f, 1.3f, wear))
+			{
+				tilt0 = lerp(tilt0, max(P28.y, tilt0), lerp(0.5f, 1.0f, q[3]));
+				if (q[6] < 0.25f + 0.5f * wear)
+					L.sen = max(L.sen, lerp(0.5f, 1.0f, q[7]));
+			}
+		}
+		tilt0 = min(tilt0, radians(84.0f));
+	}
+
 	grass_shape rest;
 	{
-		const float2 tilt_range = culm ? P2.zw : P2.xy;
-		const float2 bend_range = culm ? P3.zw : P3.xy;
 		// Facing: random, partly the clump's, partly away from its centre (GoT).
 		const float a = h[8] * 6.2831853f;
 		float2 face = float2(cos(a), sin(a));
@@ -604,9 +698,9 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 		if (life.lodge > 0.0f)
 			face = normalize(lerp(face, grass_comb(xz, -nG.xz * 2.0f), 0.8f * life.lodge) + 1e-5f);
 		rest.facing = face;
-		rest.tilt = lerp(lerp(tilt_range.x, tilt_range.y, h[9]), radians(80.0f), life.lodge);
+		rest.tilt = lerp(tilt0, radians(80.0f), life.lodge);
 		// A lodged blade lies flat along the ground, not in an arch over it.
-		rest.bend = lerp(lerp(bend_range.x, bend_range.y, h[10]), 0.04f, life.lodge);
+		rest.bend = lerp(bend0, 0.04f, life.lodge);
 		rest.droop = culm ? 0.0f : lerp(P4.x, P4.y, h[10]) * (1.0f - life.lodge);
 		rest.wind = 0.0f;
 		rest.height = hmax * life.hrel * height_k * end_fade;
@@ -615,7 +709,7 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 		rest.width = culm ? lerp(P1.z, P1.w, h[11]) : lerp(P0.z, P0.w, h[11]);
 	}
 	grass_shape rest_prev = rest;
-	rest_prev.tilt = lerp(lerp(culm ? P2.z : P2.x, culm ? P2.w : P2.y, h[9]), radians(80.0f), life_prev.lodge);
+	rest_prev.tilt = lerp(tilt0, radians(80.0f), life_prev.lodge);
 	rest_prev.height = hmax * life_prev.hrel * height_k * end_fade;
 	if (life_prev.thatch && culm)
 		rest_prev.height *= lerp(1.0f, 0.7f, life_prev.lodge);
@@ -631,7 +725,7 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	}
 
 	// Seed head or inflorescence of a culm: the species' type and size, its share by the season.
-	const uint head_type = clamp(uint(P10.x + 0.5f), 1u, 15u);
+	const uint head_type = head_kind;
 	const bool headed = culm && h[12] < P7.x * life.heads;
 	const float head_len = headed ? lerp(P10.y, P10.z, h[13]) * hset : 0.0f;
 	const float head_w = headed ? lerp(P11.x, P11.y, h[14]) : 0.0f;
@@ -717,6 +811,27 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	if (!L.rec_v && !L.rec_n && !L.rec_m)
 		return;
 
+	// The stand's set and its laid patches (for the lanes that live: the snow's gate above took the blade as it
+	// stands): the culms take all of the set, the leaves the better half, a laid patch everything in it, each blade a
+	// little more or less. What was laid last year lies on, whatever the new growth's share of the day.
+	[branch] if (!neat)
+	{
+		float laid_now;
+		L.lean = grass_stand_lean(xz, -nG.xz * 2.0f, P31.w, P31.z, life.thatch ? max(laid_share, 0.75f) : laid_share,
+			life.thatch ? 1.0f : wear, laid_now);
+		L.laid = laid_now;
+		const float2 dl = L.lean * (lerp(culm ? 1.0f : 0.6f, 1.0f, laid_now) * lerp(0.7f, 1.15f, q[5]));
+		grass_lean(rest.facing, rest.tilt, 1.0f, dl);
+		grass_lean(rest_prev.facing, rest_prev.tilt, 1.0f, dl);
+	}
+	// A corymb's or an umbel's disc is drawn level whatever its stem does: its stem leans no further than a disc can
+	// stay level on (laid down with its stand, the disc hung in the grass like a saucer).
+	if (disc)
+	{
+		rest.tilt = min(rest.tilt, radians(16.0f));
+		rest_prev.tilt = min(rest_prev.tilt, radians(16.0f));
+	}
+
 	// Wind, push, slope: the shape of this and the previous frame.
 	const float stiff = culm ? P4.w : P4.z;
 	const float2 downhill = -nG.xz * saturate(1.0f - nG.y) * 4.0f;
@@ -754,7 +869,8 @@ void	grass_evaluate	(inout grass_lane L, int2 g, uint seed, float h[16], float2 
 	const bool grass_leaf = !culm && form == GRASS_FORM_GRAMINOID && L.rec_v;
 	L.basal = (grass_leaf && (grass_dbg() & 1u) == 0u) ? min(uint(P22.z + h[14]), GRASS_BASAL_MAX) : 0u;
 	// The litter shows where the sward is thin: all of it in spring and autumn, a fifth under the summer canopy.
-	const float litter = grass_comm(c, 4).x * lerp(1.0f, 0.2f, K0.y);
+	// (A laid patch is a mat: its straws lie on the ground between what still stands, and the soil does not show.)
+	const float litter = grass_comm(c, 4).x * lerp(1.0f, 0.2f, K0.y) * (1.0f + 2.0f * L.laid);
 	L.litter = (grass_leaf && litter > 0.0f && snow <= 0.01f && d < da_grass_lod.x && (grass_dbg() & 2u) == 0u)
 		? min(uint(litter + h[13]), GRASS_LITTER_MAX) : 0u;
 }
@@ -812,13 +928,27 @@ void	grass_store_cauline	(uint at0, uint count, float wscale, grass_lane L, uint
 {
 	const float4 P23 = grass_prof(p, 23), P24 = grass_prof(p, 24), P25 = grass_prof(p, 25), P19 = grass_prof(p, 19);
 	const float knee = grass_prof(p, 7).w;
-	float3 C0, C1, C2, C3, Q0, Q1, Q2, Q3, Sx;
-	grass_ctrl(L.cur, L.root, 0.0f, knee, C0, C1, C2, C3, Sx);
+	float3 C0, C1, C2, C3, Q0, Q1, Q2, Q3, Sc, Sq;
+	grass_ctrl(L.cur, L.root, 0.0f, knee, C0, C1, C2, C3, Sc);
 	// (HLSL picks no structure by a condition.)
 	grass_shape sq = L.cur;
 	if (with_prev)
 		sq = L.prev;
-	grass_ctrl(sq, L.root, 0.0f, knee, Q0, Q1, Q2, Q3, Sx);
+	grass_ctrl(sq, L.root, 0.0f, knee, Q0, Q1, Q2, Q3, Sq);
+	// (The stem's warp, as its vertex shader draws it: the leaves of a snapped stem hang with its top, and ride it as
+	// it straightens into the far triangle over the last fifth before d2 - the view's; the near cascade's does not.)
+	const grass_warp W = grass_warp_of(L.flags, p, 0.0f, grass_neat());
+	const grass_warp Wp = grass_warp_plain(W);
+	const grass_frame Fc = grass_frame_of(W, C0, C1, C2, C3, Sc, L.cur.height), Fq = grass_frame_of(W, Q0, Q1, Q2, Q3, Sq, sq.height);
+	const float m_far = (with_prev && W.fold_t < 1.0f) ? smoothstep(0.8f * da_grass_lod.y, da_grass_lod.y, L.d) : 0.0f;
+	// (The plain frames only for a snapped stem on its way out: a plain warp turns nothing, so the stem's own frames
+	// stand for them elsewhere.)
+	grass_frame Fcp = Fc, Fqp = Fq;
+	[branch] if (m_far > 0.0f)
+	{
+		Fcp = grass_frame_of(Wp, C0, C1, C2, C3, Sc, L.cur.height);
+		Fqp = grass_frame_of(Wp, Q0, Q1, Q2, Q3, Sq, sq.height);
+	}
 	const uint mode = uint(P25.y + 0.5f);
 	const uint nodes = mode == 2u ? (count + 1u) >> 1 : count;
 	const float phi0 = grass_u01(grass_hash(L.seed ^ 0xCA01u)) * 6.2831853f;
@@ -858,8 +988,18 @@ void	grass_store_cauline	(uint at0, uint count, float wscale, grass_lane L, uint
 		lc.bend = P25.z * lerp(0.7f, 1.3f, u[4]);
 		lc.droop = P25.w * lerp(0.6f, 1.4f, u[5]);
 		lc.wind = L.cur.wind;
-		const float3 r = grass_bez(C0, C1, C2, C3, tn);
-		const float3 dp = grass_bez(Q0, Q1, Q2, Q3, tn) - r;
+		float3 r, rq, dr, sx;
+		grass_frame_at(W, Fc, tn, r, dr, sx);
+		grass_frame_at(W, Fq, tn, rq, dr, sx);
+		[branch] if (m_far > 0.0f)
+		{
+			float3 rp, rqp;
+			grass_frame_at(Wp, Fcp, tn, rp, dr, sx);
+			grass_frame_at(Wp, Fqp, tn, rqp, dr, sx);
+			r = lerp(r, rp, m_far);
+			rq = lerp(rq, rqp, m_far);
+		}
+		const float3 dp = rq - r;
 		DA_STORE4(da_grass_blades, (at0 + k) * GRASS_REC, uint4(asuint(r.x), asuint(r.y), asuint(r.z),
 			((L.seed + k * 0x3779u) & 0xFFFFu) | grass_species_bits(p) | GRASS_F_CAULINE | (L.thatch ? GRASS_F_THATCH : 0u)));
 		DA_STORE4(da_grass_blades, (at0 + k) * GRASS_REC + 16u, grass_pack_shape(lc));
@@ -888,9 +1028,9 @@ void main(uint3 gid : SV_GroupID, uint gi : SV_GroupIndex)
 		bool hidden = false;
 		[branch] if ((tflags & 1u) != 0u)
 		{
-			const float st = da_grass_lat.x;
-			const float3 lo = float3(float(tile.x) * st - 1.0f, asfloat(G2.y), float(tile.y) * st - 1.0f);
-			const float3 hi = float3(float(tile.x + int(tsize)) * st + 1.0f, asfloat(G2.z), float(tile.y + int(tsize)) * st + 1.0f);
+			const float st = da_grass_lat.x, mg = da_grass_water.z;
+			const float3 lo = float3(float(tile.x) * st - mg, asfloat(G2.y), float(tile.y) * st - mg);
+			const float3 hi = float3(float(tile.x + int(tsize)) * st + mg, asfloat(G2.z), float(tile.y + int(tsize)) * st + mg);
 			hidden = da_grass_snow.w > 0.5f && hzb_box_hidden(lo, hi);
 		}
 		gs_hidden = hidden ? 1u : 0u;

@@ -76,10 +76,23 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	// The bob, not in the middle cascade (large-scale wind only there).
 	const float2 bob = (lod == 4u) ? float2(0.0f, 0.0f) : grass_stem_bob(p, culm, P12.zw);
 
+	// The blade's warp; the far triangle and the middle cascade's caster (one line each) draw the plain one.
+	grass_warp W = grass_blade_warp(B, (folded && which == 0u) ? 0x5A5Au : 0u);
+	if (lod == 2u || lod == 4u)
+		W = grass_warp_plain(W);
+	const bool lo_plain = lod == 1u;
 	float3 C, dC, S;
-	grass_curve_lod(B.cur, B.root, t0, culm, rows_lo, morph, yaw, bob, da_grass_vlod.z, hash, knee, C, dC, S);
+	grass_curve_lod(B.cur, B.root, t0, culm, rows_lo, morph, yaw, bob, da_grass_vlod.z, hash, knee, W, lo_plain, C, dC, S);
 	const float t = grass_t(t0, culm);
-	const float3 Tn = normalize(dC);
+	// (Under the morph two tangents are mixed, and across a sharp fold they may all but cancel.)
+	const float3 Tn = normalize(dC + float3(0.0f, 1e-5f, 0.0f));
+	// A leaf twists about its length: its face turns along it, so the ribbon shows now its flat, now its edge.
+	[branch] if (W.twist.y != 0.0f)
+	{
+		float ts, tc;
+		sincos(W.twist.x + W.twist.y * t, ts, tc);
+		S = normalize(S * tc + cross(Tn, S) * ts + float3(1e-6f, 0.0f, 0.0f));
+	}
 
 	// Litter is grass straw whatever the species' leaf; basal pairs are grass leaves. A cut leaf (pinnate,
 	// dissected) has its lobes cut out in the short bin's pixel shader; elsewhere (the leaves past d1, the
@@ -137,7 +150,7 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	[branch] if (da_grass_vmisc.y > 0.5f)
 	{
 		float3 dCp, Sp;
-		grass_curve_lod(B.prev, B.root_prev, t0, culm, rows_lo, morph, yaw, bob, da_grass_vlod.w, hash, knee, Cp, dCp, Sp);
+		grass_curve_lod(B.prev, B.root_prev, t0, culm, rows_lo, morph, yaw, bob, da_grass_vlod.w, hash, knee, W, lo_plain, Cp, dCp, Sp);
 	}
 	const float3 pos_prev = Cp + off;
 
@@ -209,7 +222,11 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	// (A stem leaf's root is its node up the stem, in the upper canopy: taken as the ground, its base sat in the
 	// dark of the stand's foot and a reed's leaves were near black.)
 	const bool cauline = (B.flags & GRASS_F_CAULINE) != 0u;
-	const float y_rel = litter ? 0.25f : (C.y - B.root.y) / grass_canopy_h(p) + (cauline ? 0.5f : 0.0f);
+	// (A blade laid down this year lies on top of what lies with it: its height counts against a canopy as low as it
+	// lies - against the standing one a laid patch was a dark hollow, where a real one is the palest of the field. Last
+	// year's lodged mat stays in the dark of the new growth's foot.)
+	const float lie = (B.flags & GRASS_F_THATCH) != 0u ? 1.0f : max(cos(B.cur.tilt), 0.4f);
+	const float y_rel = litter ? 0.25f : (C.y - B.root.y) / (grass_canopy_h(p) * lie) + (cauline ? 0.5f : 0.0f);
 	const float sky = grass_sky(B.hemi) * lerp(grass_ao(d, B.ao, y_rel), grass_ao(d, B.ao, 0.5f), culm_sub);
 	const float sun_k = grass_canopy_sun(d, lerp(y_rel, 0.5f, culm_sub));
 	O.alb_h = float4(grass_to_albedo(albedo) * sun_k, saturate(sky / max(sun_k, 1e-3f)));

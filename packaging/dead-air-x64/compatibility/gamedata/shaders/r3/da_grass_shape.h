@@ -21,7 +21,7 @@ uniform float4	da_grass_vcam;	// xyz camera, w minimum width per metre of view d
 uniform float4	da_grass_vfwd;	// xyz camera forward, w draw radius R
 uniform float4	da_grass_vlod;	// x d1, y d2, z time, w previous time
 uniform float4	da_grass_vsun;	// xyz direction toward the sun (world), w shadow texel (m)
-uniform float4	da_grass_vmisc;	// x frame & 63, y 1 = motion vectors, z r__detail_height, w unused
+uniform float4	da_grass_vmisc;	// x frame & 63, y 1 = motion vectors, z r__detail_height, w QA: r__dbg_grass
 uniform float4	da_grass_vshade;	// x how far the blades cast into the sun cascades (m), y the sun's share of the light
 
 struct grass_blade
@@ -68,27 +68,43 @@ uint	grass_profile	(grass_blade B)	{ return grass_flags_species(B.flags); }
 bool	grass_is_culm	(grass_blade B)	{ return (B.flags & GRASS_F_CULM) != 0u; }
 bool	grass_is_litter	(grass_blade B)	{ return (B.flags & (GRASS_F_LITTER | GRASS_F_CULM)) == GRASS_F_LITTER; }
 float	grass_hash01	(grass_blade B)	{ return float(B.flags & 0xFFFFu) / 65536.0f; }
-
-// The point, tangent and side of a blade at t (0 root .. 1 tip): its control points (grass_ctrl), yaw turning the
-// facing (folded pairs), bob adding the GoT sine (x amplitude, y frequency; 0 = none), time picking this or the
-// previous frame.
-void	grass_curve	(grass_shape s, float3 root, float t, float yaw, float2 bob, float time, float hash, float knee,
-	out float3 P, out float3 dP, out float3 S)
+// The blade's warp (da_grass_common.h): a leaf's by its senescence, last year's as dead. salt (the hash's 16 bits):
+// the second leaf of a folded strip takes a warp of its own - both on one, a tuft's base was pairs of twins.
+// r__dbg_grass 2048 (QA): none.
+grass_warp	grass_blade_warp	(grass_blade B, uint salt)
 {
-	float3 P0, P1, P2, P3;
-	grass_ctrl(s, root, yaw, knee, P0, P1, P2, P3, S);
+	return grass_warp_of(B.flags ^ (salt & 0xFFFFu), grass_profile(B), (B.flags & GRASS_F_THATCH) != 0u ? 1.0f : B.sen,
+		(uint(da_grass_vmisc.w + 0.5f) & 2048u) != 0u);
+}
+
+// A blade ready to be evaluated (grass_frame, da_grass_common.h): its control points (grass_ctrl), yaw turning the
+// facing (folded pairs), bob adding the GoT sine (x amplitude, y frequency; 0 = none), time picking this or the
+// previous frame, W its warp (the fold, the curl, the sweep, a culm's wave).
+grass_frame	grass_curve_frame	(grass_shape s, float3 root, float yaw, float2 bob, float time, float hash, float knee,
+	grass_warp W)
+{
+	float3 P0, P1, P2, P3, S0;
+	s.height *= W.grow;
+	grass_ctrl(s, root, yaw, knee, P0, P1, P2, P3, S0);
 	const float2 f = grass_rotate(s.facing, yaw);
 	const float3 fwd = float3(f.x, 0.0f, f.y);
 	[branch] if (bob.x > 0.0f)
 	{
 		const float ph = bob.y * time + 6.2831853f * hash;
-		const float3 bob_dir = normalize(fwd + 0.3f * S);
+		const float3 bob_dir = normalize(fwd + 0.3f * S0);
 		const float a = bob.x * s.wind * s.height;
 		P2 += bob_dir * (a * 0.5f * sin(ph + 0.7f));
 		P3 += bob_dir * (a * sin(ph + 1.4f));
 	}
-	P = grass_bez(P0, P1, P2, P3, t);
-	dP = grass_dbez(P0, P1, P2, P3, max(t, 0.02f));
+	return grass_frame_of(W, P0, P1, P2, P3, S0, s.height);
+}
+
+// The point, tangent and side of a blade at t (0 root .. 1 tip).
+void	grass_curve	(grass_shape s, float3 root, float t, float yaw, float2 bob, float time, float hash, float knee,
+	grass_warp W, out float3 P, out float3 dP, out float3 S)
+{
+	const grass_frame F = grass_curve_frame(s, root, yaw, bob, time, hash, knee, W);
+	grass_frame_at(W, F, t, P, dP, S);
 }
 
 // Vertex v of a strip of `pairs` pairs and a tip: t0 along the blade (before redistribution), side
@@ -125,18 +141,28 @@ void	grass_decode	(uint v, uint pairs, bool folded, out float t0, out float side
 float	grass_t	(float x, bool culm)	{ return culm ? 1.0f - x : pow(x, 0.8f); }
 
 // The point of a blade with the LOD morph: towards the polyline of the next coarser LOD (rows_lo rows of
-// the strip), exactly that polyline at morph 1, so the switch cannot pop.
+// the strip), exactly that polyline at morph 1, so the switch cannot pop. lo_plain: the next LOD is the far
+// triangle, which draws the blade's plain warp (grass_warp_plain) - the morph lands on that.
 void	grass_curve_lod	(grass_shape s, float3 root, float t0, bool culm, float rows_lo, float morph, float yaw, float2 bob,
-	float time, float hash, float knee, out float3 P, out float3 dP, out float3 S)
+	float time, float hash, float knee, grass_warp W, bool lo_plain, out float3 P, out float3 dP, out float3 S)
 {
-	grass_curve(s, root, grass_t(t0, culm), yaw, bob, time, hash, knee, P, dP, S);
+	const grass_frame F = grass_curve_frame(s, root, yaw, bob, time, hash, knee, W);
+	grass_frame_at(W, F, grass_t(t0, culm), P, dP, S);
 	[branch] if (morph > 0.0f)
 	{
 		const float tlo = floor(t0 * rows_lo) / rows_lo;
 		const float thi = min(tlo + 1.0f / rows_lo, 1.0f);
+		// (HLSL picks no structure by a condition.)
+		grass_warp Wl = W;
+		grass_frame Fl = F;
+		[branch] if (lo_plain)
+		{
+			Wl = grass_warp_plain(W);
+			Fl = grass_curve_frame(s, root, yaw, bob, time, hash, knee, Wl);
+		}
 		float3 Pa, Pb, dA, dB, Sx;
-		grass_curve(s, root, grass_t(tlo, culm), yaw, bob, time, hash, knee, Pa, dA, Sx);
-		grass_curve(s, root, grass_t(thi, culm), yaw, bob, time, hash, knee, Pb, dB, Sx);
+		grass_frame_at(Wl, Fl, grass_t(tlo, culm), Pa, dA, Sx);
+		grass_frame_at(Wl, Fl, grass_t(thi, culm), Pb, dB, Sx);
 		const float f = saturate((t0 - tlo) * rows_lo);
 		P = lerp(P, lerp(Pa, Pb, f), morph);
 		dP = lerp(dP, lerp(dA, dB, f), morph);
@@ -207,8 +233,10 @@ float3	grass_colour	(grass_blade B, uint p, float t, float3 n_world)
 		lit = lerp(lit, float3(0.74f, 0.76f, 0.78f), 0.3f * da_season_env.x);
 		return lit;
 	}
-	// Tips cure first; the dry share of the tip comes from the season.
-	const float sen_v = thatch ? 1.0f : saturate(B.sen * 1.6f - (1.0f - t) * 0.6f + step(1.0f - K2.x, t));
+	// Tips cure first; the dry share of the tip comes from the season, a blade's own from none of it to more than
+	// twice (the mean kept): burnt to one line across every blade, the dry tips read as a ruled band over the stand.
+	const float tip_dry = K2.x * lerp(0.2f, 2.6f, yb * yb);
+	const float sen_v = thatch ? 1.0f : saturate(B.sen * 1.6f - (1.0f - t) * 0.6f + smoothstep(-0.03f, 0.03f, t - (1.0f - tip_dry)));
 	// Live tissue: the field greens of the keys (photo measurements) come out khaki under the weathers' warm
 	// light and the colour grade; turned towards blue-green with a little more chroma at the same luminance
 	// they read on screen as the photos do (GoT pushes its summer greens the same way). Dead tissue the other
@@ -229,6 +257,13 @@ float3	grass_colour	(grass_blade B, uint p, float t, float3 n_world)
 	live_g = max(y_g + (live_g - y_g) * 1.3f, 0.0f) * (dot(live, LUMW) / max(y_g, 1e-4f));
 	const float3 live_b = lerp(live_g, yellowing, 0.25f * yb * yb);
 	float3 c = lerp(live_b, dead, saturate(sen_v * 2.0f)) * (lerp(0.88f, 1.12f, B.hc) * lerp(0.86f, 1.14f, vb));
+	// A worn blade is blotched: stretches of it browned by rust, mildew and the sun, more of them as the stand wears
+	// (the season's wear) and on dead tissue; their places are the blade's own.
+	{
+		const float worn = max(grass_seas(p, 4, false).w, 0.6f * sen_v);
+		const float n = sin(t * (9.0f + 7.0f * vb) + hb * 211.0f) * sin(t * (4.0f + 5.0f * yb) + hb * 97.0f);
+		c = lerp(c, c * float3(0.78f, 0.66f, 0.52f), 0.6f * worn * smoothstep(0.25f, 0.7f, n));
+	}
 	// Dark base, light top (GoT: colour along the blade); the occlusion darkens the base further. A stem leaf's base is
 	// its sheath up the stem, not the foot of the stand.
 	c *= lerp((B.flags & GRASS_F_CAULINE) != 0u ? 0.85f : 0.62f, 1.04f, sqrt(t));
@@ -279,10 +314,13 @@ struct v2p_grass
 float	grass_sky	(float slot_hemi)	{ return saturate(slot_hemi * 1.6f); }
 
 // The canopy of profile p now (m): its leaves at this season's growth and the height setting, at least
-// a lodged mat.
+// a lodged mat. A worn stand's leaves lean, fold and lie on one another (the season's wear): its canopy is that much
+// lower, and what lies on top of it is in the open - counted against the fresh stand's height, an autumn meadow's
+// tangle sat in the dark of its own foot.
 float	grass_canopy_h	(uint p)
 {
-	return max(grass_prof(p, 0).y * grass_seas(p, 0, false).x * da_grass_vmisc.z, 0.12f);
+	const float worn = (uint(da_grass_vmisc.w + 0.5f) & 2048u) != 0u ? 0.0f : grass_seas(p, 4, false).w;
+	return max(grass_prof(p, 0).y * grass_seas(p, 0, false).x * da_grass_vmisc.z * lerp(1.0f, 0.6f, worn), 0.12f);
 }
 
 // Ambient occlusion inside the canopy (GoT: dark root, light top), by the point's height above the

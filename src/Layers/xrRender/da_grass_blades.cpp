@@ -234,6 +234,21 @@ void parse_profile(const CInifile::Sect& s, DaGrassProfile& p)
     read_float(s, "dead_vary", p.dead_vary);
     read_float(s, "head_velvet", p.head_velvet);
     read_float(s, "water_depth", p.water_depth);
+    read_pair(s, "leaf_splay", p.leaf_splay);
+    read_pair(s, "leaf_fold", p.leaf_fold);
+    read_float(s, "leaf_twist", p.leaf_twist);
+    read_float(s, "leaf_curl", p.leaf_curl);
+    read_float(s, "leaf_sweep", p.leaf_sweep);
+    read_float(s, "leaf_arch", p.leaf_arch);
+    read_pair(s, "culm_lean", p.culm_lean);
+    read_float(s, "culm_snap", p.culm_snap);
+    read_float(s, "culm_wave", p.culm_wave);
+    read_float(s, "height_var", p.height_var);
+    p.height_var = std::clamp(p.height_var, 0.f, 0.45f);
+    read_float(s, "runts", p.runts);
+    p.runts = std::clamp(p.runts, 0.f, 0.5f);
+    read_float(s, "laid_depth", p.laid);
+    read_float(s, "stand_set", p.stand_set);
     // Seed or flower colour ramp "stage:#RRGGBB" at 0.25, 0.5, 0.75, 1.
     if (pcstr ramp = find_value(s, "seed_ramp"))
         for_each_key(ramp, [&p](float stage, pcstr colour) {
@@ -395,7 +410,7 @@ void da_season_data_reload()
         {"cohort_green", "cohort_green"}, {"thatch", "thatch_fraction"}, {"thatch_lodge", "thatch_lodging"},
         {"straw_lodge", "straw_lodging"}, {"heads", "seed_heads"}, {"seed_stage", "seed_stage"},
         {"tip_dry", "tip_dryness"}, {"wet", "wetness"}, {"frost", "frost"}, {"density", "density"}, {"flood", "flood"},
-        {"flood_ice", "flood_ice"}};
+        {"flood_ice", "flood_ice"}, {"wear", "wear"}, {"laid", "laid"}};
     static constexpr pcstr colour_names[gcCount] = {"live", "yellowing", "straw", "thatch", "seed"};
     for (u32 p = 0; p < da_grass_species; ++p)
     {
@@ -538,7 +553,7 @@ constexpr u32 kViewBins = 9;
 constexpr u32 kBinLod0 = 0, kBinLod1 = 2, kBinLod2 = 5, kBinShNear = 9, kBinShMid = 10;
 constexpr u32 kBinHead0 = 11, kBinHead1 = 12, kBinHeadSh = 14, kBinShort = 15;
 constexpr u32 kRec = 64, kHeadRec = 16;
-constexpr u32 kProfF4 = 28, kSeasF4 = 9, kCommF4 = 19, kCommRows = 16;
+constexpr u32 kProfF4 = 32, kSeasF4 = 9, kCommF4 = 19, kCommRows = 16;
 constexpr u32 kTabSeas = da_grass_species * kProfF4;
 constexpr u32 kTabSeasPrev = kTabSeas + da_grass_species * kSeasF4;
 constexpr u32 kTabComm = kTabSeasPrev + da_grass_species * kSeasF4;
@@ -1301,7 +1316,7 @@ namespace
 float curve_or(const DaSeasonCurve& c, float day, float fallback) { return c.n ? c.at(day) : fallback; }
 
 // A season key list the data does not have: a summer meadow.
-constexpr float kKeyFallback[gkCount] = {1.f, 1.f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.1f, 0.2f, 0.f, 1.f, 0.f, 0.f};
+constexpr float kKeyFallback[gkCount] = {1.f, 1.f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.1f, 0.2f, 0.f, 1.f, 0.f, 0.f, 0.4f, 0.15f};
 constexpr u32 kColourFallback[gcCount] = {0x4D5433, 0x6A6B3A, 0x968355, 0x88785F, 0xA08A64};
 
 Fvector3 linear_of(u32 srgb)
@@ -1332,7 +1347,14 @@ void fill_season(u32 p, float day, Fvector4* rows, float grass_visible)
         const Fvector3 col = k.c[c].empty() ? linear_of(kColourFallback[c]) : k.c[c].at(day);
         rows[4 + c].set(std::max(col.x, 0.f), std::max(col.y, 0.f), std::max(col.z, 0.f), 0.f);
     }
+    // The stand's disorder rides in the colour rows' spare lanes.
+    rows[4].w = std::min(v[gkWear], 1.f);
+    rows[5].w = std::min(v[gkLaid], 1.f);
 }
+
+// How far a tile's blades reach past it (m): the lanes' jitter and clump pull, and a laid blade's length (the tallest
+// of the level's, hmax, at the steepest it is laid).
+float tile_margin(float hmax) { return 1.f + 0.8f * hmax; }
 
 // Short or fine graminoid leaves fold two into one strip (GoT); r__detail_height enters, low grass folds more.
 bool species_folds(const DaGrassProfile& P, float height) { return P.form < 0.5f && P.leaf_h[1] * height < P.fold_h; }
@@ -1394,10 +1416,17 @@ void fill_profile(u32 p, Fvector4* r, float height)
     r[26].set(P.stem_tint.x, P.stem_tint.y, P.stem_tint.z, P.dead_vary);
     // The widest a lane of the species can be for the pixel rule (da_grass_gen.cs's early out): a leaf, or a stem
     // with its leaves and head over its shortest height (a head over a third of it, the stem growing in spring).
-    const float stem_h = std::max(P.culm_h[0], 0.05f);
+    // (The shortest stem: a runt of the lowest tuft of the lowest patch, da_grass_gen.cs's spread of the heights.)
+    const float stem_h = std::max(P.culm_h[0] * 0.6f * (1.f - P.height_var) * (1.f - 0.6f * P.height_var), 0.05f);
     const float stem = P.culm_w[1] + P.culm_leaves * P.cauline_h[1] * P.cauline_w[1] / stem_h +
         P.head_w[1] * 0.6f * P.head_len[1] / std::max(0.3f * stem_h, 0.05f);
-    r[27].set(1.2f * std::max(P.leaf_w[1], P.density_culm > 0.f ? stem : 0.f), std::max(P.water_depth, 0.f), 0.f, 0.f);
+    r[27].set(1.2f * std::max(P.leaf_w[1], P.density_culm > 0.f ? stem : 0.f), std::max(P.water_depth, 0.f),
+        deg2rad(P.leaf_arch), 0.f);
+    // The stand's disorder.
+    r[28].set(P.leaf_splay[0], deg2rad(P.leaf_splay[1]), P.leaf_fold[0], P.leaf_fold[1]);
+    r[29].set(P.leaf_twist, deg2rad(P.leaf_curl), P.leaf_sweep, 0.f);
+    r[30].set(P.culm_lean[0], deg2rad(P.culm_lean[1]), P.culm_snap, P.culm_wave);
+    r[31].set(P.height_var, P.runts, P.laid, deg2rad(P.stand_set));
 }
 
 // The community block c (r3\da_grass_common.h grass_comm): the species ids ride as raw bits.
@@ -1837,10 +1866,12 @@ void build_tiles()
         // The view's cover thins past d2 (the tile's nearest point bounds it); the casters keep the full stand.
         const float dmax_view = dmax * taper_cover(dn, L.d2, L.taper_inv);
         const u32 jv = dmax_view >= L.dlat ? 0u : u32(std::floor(std::log2(L.dlat / dmax_view)));
-        // Lanes leave their lattice cell by the jitter and the clump pull: the box takes them in.
+        // Lanes leave their lattice cell by the jitter and the clump pull, and a laid culm reaches out of it by most
+        // of its length: the box takes them in.
+        const float reach_out = tile_margin(hmax);
         Fbox box;
-        box.vMin.set(x0 - 1.f, ymin, z0 - 1.f);
-        box.vMax.set(x1 + 1.f, ymax + hmax, z1 + 1.f);
+        box.vMin.set(x0 - reach_out, ymin, z0 - reach_out);
+        box.vMax.set(x1 + reach_out, ymax + hmax, z1 + reach_out);
         u32 mask = L.view.getMask();
         const bool view = dn < L.R && L.view.testAABB(box.data(), mask) != fcvNone;
         const bool want_near = near_reach > 0.f && dn < near_reach;
@@ -1979,7 +2010,7 @@ void draw_bins(CBackend& cmd, const ref_shader& shader, u32 first, u32 last, flo
     cmd.set_c("da_grass_vfwd", L.fwd.x, L.fwd.y, L.fwd.z, L.R);
     cmd.set_c("da_grass_vlod", L.d1, L.d2, L.time, L.time_prev);
     cmd.set_c("da_grass_vsun", L.sun.x, L.sun.y, L.sun.z, texel);
-    cmd.set_c("da_grass_vmisc", float(L.frame_mod), L.motion ? 1.f : 0.f, L.height, 0.f);
+    cmd.set_c("da_grass_vmisc", float(L.frame_mod), L.motion ? 1.f : 0.f, L.height, float(ps_r__dbg_grass));
     cmd.set_c("da_grass_vshade", L.caster_reach, L.sun_share, 0.f, 0.f);
     cmd.SRVSManager.SetVSResource(0, g.blades_b.srv);
     cmd.SRVSManager.SetVSResource(1, g.tables_b.srv);
@@ -2442,7 +2473,10 @@ void da_grass_level_load()
         {
             const DaGrassProfile& P = g_data.profiles[i < C.count ? C.species[i] : C.forb[i - C.count]];
             g.profile_dens[c] = std::max(g.profile_dens[c], species_lanes(P, ps_r__Detail_height));
-            g.level_hmax = std::max({g.level_hmax, P.leaf_h[1], P.culm_h[1] + P.head_len[1]});
+            // (The tallest tuft of the tallest patch: da_grass_gen.cs spreads the heights by the species' height_var
+            // and makes up for its runts; a leaf that turns over is up to 1.6 times its length, grass_warp_of.)
+            const float tall = (1.f + 0.6f * P.height_var) * (1.f + P.height_var) / (1.f - 0.375f * P.runts);
+            g.level_hmax = std::max({g.level_hmax, P.leaf_h[1] * tall * 1.6f, (P.culm_h[1] + P.head_len[1]) * tall});
             g.max_area_width = std::max({g.max_area_width, P.leaf_w[1], P.culm_w[1] * 2.f});
         }
     }
@@ -2813,7 +2847,7 @@ void da_grass_generate(CBackend& cmd)
                 cmd.set_c("da_grass_pwin_prev", push_window(g.pcur ^ 1u));
                 cmd.set_c("da_grass_snow", L.snow ? 1.f : 0.f, float(g.pin), float(ps_r__dbg_grass),
                     occlusion && (ps_r__grass_occlusion & 4) ? 1.f : 0.f);
-                cmd.set_c("da_grass_water", s_reed_emerge_k, s_reed_emerge_max, 0.f, 0.f);
+                cmd.set_c("da_grass_water", s_reed_emerge_k, s_reed_emerge_max, tile_margin(g.level_hmax * L.height), 0.f);
                 for (u32 i = 0; i < 6; ++i)
                     cmd.set_ca("da_grass_planes", i, L.planes[i]);
                 for (u32 i = 0; i < 3; ++i)

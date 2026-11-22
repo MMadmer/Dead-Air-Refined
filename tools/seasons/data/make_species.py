@@ -27,7 +27,11 @@ BASE = dict(
     shade_density=1.0, shade_height=1.0, head_type=4, head_len=[0.06, 0.12], head_w=[0.03, 0.06], head_branches=4,
     head_open=[45, 25], head_grain=1.0, head_petals=0, head_share=0.35, head_nod=[0, 0], fold_h=0.2, tussock_h=[0, 0],
     tussock_share=0.0, tussock_r=0.0, stem_tint=[1.0, 1.0, 1.0], winter_stand=0.0, dead_vary=0.0, head_velvet=0.0,
-    water_depth=0.05)
+    water_depth=0.05,
+    # The stand's disorder (DISORDER below gives every species its own; these are a meadow grass's).
+    leaf_splay=[0.2, 70], leaf_arch=45, leaf_fold=[0.12, 0.45], leaf_twist=0.3, leaf_curl=70, leaf_sweep=0.1,
+    culm_lean=[0.25, 30], culm_snap=0.12, culm_wave=0.012, height_var=0.2, runts=0.2, laid_depth=0.6, stand_set=10,
+    wear_shift=None)
 FORB = dict(BASE, leaf_h=[0.08, 0.15], leaf_w=[0.02, 0.04], leaf_tilt=[30, 60], leaf_bend=[0.15, 0.3],
             leaf_droop=[0.05, 0.15], culm_tilt=[1, 6], culm_bend=[0.02, 0.05], culm_stiff=0.75, density_basal=0,
             clump_cell=0.25, clump_pull=0.15, clump_face_away=0.2, clump_lean=3, head_share=0.85, fold_h=0.0,
@@ -707,6 +711,116 @@ WATER = {'phr_aus': 1.5, 'typ_lat': 1.2, 'gly_max': 0.8, 'car_acu': 0.4, 'pha_ar
          'jun_eff': 0.2, 'agr_gig': 0.12, 'des_ces': 0.1, 'equ_arv': 0.1, 'car_hir': 0.08, 'urt_dio': 0.0, 'cal_epi': 0.0}
 LANES = {'agr_gig': dict(density_leaf=480), 'ely_rep': dict(density_leaf=440), 'car_hir': dict(density_leaf=470)}
 
+# ---- The stand's disorder (docs/dead-air/GRASS.md "Disorder") ----------------------------------------------------------
+# What the photos of a species show beside its neat mean, read off a pack of dated iNaturalist research-grade photos
+# of Polesia (northern Ukraine, southern Belarus; the East European plain where a month was short): 2651 photos, six
+# per species and month (April to November and the winter for the graminoids, six buckets for the forbs), looked
+# through as contact sheets by month. D(splay, arch, fold, twist, curl, sweep, lean, snap, wave, height_var, runts,
+# laid, stand_set, wear_shift):
+#   leaf_splay   the share of leaves that splay out of the tuft, how far from the vertical (degrees)
+#   leaf_arch    how far a leaf's upper part turns over on average (degrees): a bristle hardly, a broad soft leaf fully
+#   leaf_fold    the share of leaves folded at a kink, their end hanging, in a fresh stand and in a worn one
+#   leaf_twist   the turns a leaf makes about its length; leaf_curl a dead leaf's curl (degrees at the tip);
+#   leaf_sweep   its sideways curve (share of the length)
+#   culm_lean    the share of culms (a forb's stems) leaning out of the stand, how far (degrees more)
+#   culm_snap    the share of worn culms snapped at a node; culm_wave a culm's sinuosity (share of its length)
+#   height_var   the height's spread patch to patch (+- share); runts the share of short young leaves
+#   laid_depth   how far the stand's laid patches go down (0..1 of 62 degrees); stand_set the lean a whole stretch of
+#                the stand takes one way (degrees)
+#   wear_shift   days the season's wear and laid share run ahead (-) of the template's; without it the species' heading
+#                shift, no more than three weeks either way (a cattail's heads come seven weeks before the template's,
+#                but its stand is not battered by July)
+def D(splay, arch, fold, twist, curl, sweep, lean, snap, wave, hv, runts, laid, set_, wear_shift=None):
+    d = dict(leaf_splay=list(splay), leaf_arch=arch, leaf_fold=list(fold), leaf_twist=twist, leaf_curl=curl,
+             leaf_sweep=sweep, culm_lean=list(lean), culm_snap=snap, culm_wave=wave, height_var=hv, runts=runts,
+             laid_depth=laid, stand_set=set_)
+    if wear_shift is not None:
+        d['wear_shift'] = wear_shift
+    return d
+
+
+def F(lean, snap, wave, hv, laid, set_, fold=(0.1, 0.5), curl=70, arch=35, splay=(0.15, 70), twist=0.1):
+    """A forb: its stems' lean, snap and sinuosity, the stand; its leaves wilt (fold, curl), a rosette's splay. The
+    stems of a clump lean together and arc (its photos: a tansy's clumps lean 10-20 degrees, a vetch lies in a
+    tangle): half of the stems' own lean as the clump's, 9 degrees at least, and a bend of a twentieth to an eighth of
+    the length - at the neat 3 degrees and near-straight stems a stand of herbs was a rack of rods."""
+    d = D(splay, arch, fold, twist, curl, 0.08, lean, snap, wave, hv, 0.15, laid, set_)
+    d.update(clump_lean=round(min(max(0.5 * lean[1], 9.0), 18.0), 1), culm_bend=[0.05, round(0.09 + 0.6 * wave, 3)])
+    return d
+
+
+DISORDER = {
+    # Graminoids. Broad soft leaves (couch, brome, cock's-foot, the marsh grasses) arch over, fold and twist; fine
+    # ones (meadow-grass, bents, red fescue, wavy hair-grass) flow one way and lie in swirls; the bristle tussocks
+    # (sheep's fescue, grey hair-grass, tufted hair-grass) radiate every way with their outer leaves on the ground.
+    'cal_epi': D((.15, 65), 45, (.12, .5), .35, 70, .08, (.2, 32), .15, .012, .22, .15, .4, 12),
+    'ely_rep': D((.2, 70), 60, (.18, .5), .6, 110, .12, (.18, 30), .15, .015, .22, .2, .6, 10),
+    'dac_glo': D((.3, 75), 65, (.2, .45), .2, 60, .1, (.15, 25), .12, .01, .25, .2, .6, 8),
+    'poa_pra': D((.2, 70), 45, (.2, .5), .25, 90, .12, (.25, 35), .1, .02, .2, .25, .8, 12),
+    'poa_ang': D((.15, 65), 25, (.08, .3), .1, 60, .1, (.25, 32), .1, .02, .2, .25, .5, 10),
+    'fes_rub': D((.3, 75), 40, (.15, .4), .1, 50, .15, (.3, 35), .1, .02, .2, .25, .9, 14),
+    'fes_ovi': D((.4, 82), 12, (.05, .15), 0, 30, .1, (.35, 35), .15, .015, .25, .3, .1, 3),
+    'agr_cap': D((.2, 70), 40, (.15, .4), .15, 70, .12, (.35, 38), .12, .025, .2, .25, .8, 10),
+    'agr_gig': D((.35, 78), 60, (.2, .45), .3, 80, .12, (.35, 38), .1, .025, .22, .25, .85, 12),
+    'phl_pra': D((.2, 70), 50, (.18, .45), .5, 90, .1, (.12, 22), .1, .008, .2, .2, .45, 8),
+    'alo_pra': D((.2, 70), 50, (.18, .45), .35, 80, .1, (.25, 30), .12, .012, .2, .2, .65, 10, -30),
+    'bro_ine': D((.25, 72), 65, (.25, .55), .5, 120, .12, (.25, 35), .15, .015, .22, .2, .7, 12),
+    'des_ces': D((.4, 80), 55, (.1, .3), .1, 50, .1, (.35, 35), .1, .015, .25, .25, .3, 5),
+    'cor_can': D((.45, 82), 10, (.03, .1), 0, 20, .08, (.4, 30), .1, .01, .25, .3, .05, 2),
+    'ani_tec': D((.3, 75), 60, (.25, .6), .3, 100, .15, (.5, 45), .3, .03, .25, .3, .95, 15, -60),
+    'phr_aus': D((.15, 60), 50, (.15, .5), .3, 70, .06, (.15, 20), .12, .006, .15, .15, .25, 8),
+    'pha_aru': D((.25, 70), 55, (.25, .55), .35, 90, .1, (.25, 35), .2, .01, .2, .2, .85, 12),
+    'gly_max': D((.25, 70), 55, (.3, .6), .3, 80, .1, (.25, 35), .2, .01, .2, .2, .9, 12),
+    'car_acu': D((.25, 72), 65, (.2, .55), .15, 60, .1, (.3, 35), .15, .01, .2, .2, .7, 10),
+    'car_hir': D((.4, 80), 55, (.15, .4), .15, 50, .12, (.3, 35), .1, .01, .22, .25, .4, 6),
+    'jun_eff': D((.35, 70), 15, (.05, .25), 0, 0, .08, (.4, 40), .2, .006, .2, .25, .3, 5),
+    'typ_lat': D((.15, 45), 15, (.2, .7), .6, 40, .06, (.15, 20), .15, .004, .15, .2, .3, 6, 0),
+    'cal_aru': D((.35, 78), 65, (.15, .5), .25, 60, .1, (.2, 28), .15, .01, .22, .2, .4, 6),
+    'ave_fle': D((.35, 78), 50, (.08, .25), 0, 40, .2, (.35, 35), .08, .035, .25, .3, .7, 10),
+    # Forbs. Stiff tall herbs stand to +-10-20 degrees and keep standing dry; the wiry and the ascending lean 15-45;
+    # the scramblers (vetch, vetchling, bedstraw) lie in tangles; a rosette's leaves go from erect to flat.
+    'con_maj': F((.4, 40), .1, .015, .2, .3, 4, fold=(.05, .5), curl=40, arch=30, splay=(.3, 75), twist=.15),
+    'sol_can': F((.15, 22), .12, .008, .2, .3, 6, fold=(.1, .6), curl=100),
+    'art_vul': F((.25, 28), .15, .012, .2, .3, 6, fold=(.15, .6), curl=110, arch=40),
+    'art_abs': F((.3, 30), .12, .012, .2, .2, 5, fold=(.15, .5), curl=90, arch=40),
+    'art_cam': F((.5, 45), .1, .02, .22, .3, 5, fold=(.1, .4), curl=60, arch=25),
+    'tan_vul': F((.2, 22), .1, .008, .2, .25, 5, fold=(.15, .6), curl=100, arch=40),
+    'ach_mil': F((.35, 32), .1, .015, .2, .4, 6, curl=80, arch=45),
+    'pla_lan': F((.4, 35), .08, .02, .22, .3, 4, fold=(.08, .4), curl=60, splay=(.4, 80), twist=.15),
+    'pla_maj': F((.3, 25), .08, .015, .2, .2, 3, fold=(.08, .4), curl=50, arch=25, splay=(.6, 85)),
+    'urt_dio': F((.2, 25), .12, .01, .2, .5, 6, fold=(.2, .6), curl=80, arch=50),
+    'ant_syl': F((.3, 28), .12, .012, .22, .4, 5, arch=50),
+    'eri_can': F((.1, 15), .06, .006, .25, .15, 4, fold=(.1, .6), curl=90, arch=40),
+    'cha_ang': F((.2, 28), .15, .008, .2, .4, 6, fold=(.15, .7), curl=160, arch=45),
+    'lyt_sal': F((.2, 22), .12, .008, .2, .3, 5, fold=(.1, .6), curl=90),
+    'hyp_per': F((.3, 28), .1, .012, .2, .25, 5, fold=(.08, .5), curl=60, arch=25),
+    'gal_ver': F((.55, 45), .08, .03, .22, .7, 8, fold=(.05, .4), curl=50, arch=30),
+    'tri_pra': F((.6, 45), .06, .025, .22, .4, 5, curl=60),
+    'vic_cra': F((.7, 55), .05, .05, .25, .6, 6, curl=60),
+    'tri_rep': F((.5, 35), .05, .02, .2, .2, 3, fold=(.08, .4), curl=50, arch=30, splay=(.5, 80)),
+    'tar_off': F((.45, 35), .1, .03, .22, .2, 3, fold=(.1, .45), curl=60, splay=(.5, 82), twist=.15),
+    'lat_pra': F((.7, 55), .05, .05, .25, .6, 6, curl=60),
+    'ran_acr': F((.4, 30), .08, .03, .22, .35, 5, curl=60, arch=40),
+    'sil_lat': F((.5, 40), .08, .025, .22, .4, 5, fold=(.12, .5), curl=60, arch=40),
+    'sil_flo': F((.3, 28), .08, .02, .22, .35, 5, curl=60),
+    'cen_jac': F((.4, 32), .1, .02, .22, .3, 5, fold=(.12, .55), curl=80, arch=40),
+    'rum_acl': F((.3, 25), .1, .015, .22, .25, 4, fold=(.1, .45), curl=60, arch=30, splay=(.4, 80)),
+    'rum_acs': F((.25, 25), .12, .012, .22, .3, 4, fold=(.12, .5), arch=40, splay=(.4, 78)),
+    'oen_bie': F((.12, 18), .05, .006, .22, .15, 4, fold=(.12, .6), curl=90, arch=40),
+    'cir_arv': F((.2, 22), .12, .01, .2, .3, 5, fold=(.15, .6), curl=90, arch=45),
+    'jas_mon': F((.5, 35), .08, .03, .22, .2, 4, fold=(.08, .4), curl=50, arch=30),
+    'hel_are': F((.45, 32), .08, .02, .22, .15, 3, fold=(.06, .35), curl=40, arch=25),
+    'ber_inc': F((.3, 26), .12, .015, .22, .2, 4, curl=60, arch=30),
+    'ver_lyc': F((.1, 15), .05, .005, .22, .1, 3, fold=(.12, .6), curl=80, arch=40),
+    'sol_vir': F((.3, 26), .1, .012, .22, .25, 4, fold=(.1, .55), curl=80, arch=40),
+    'pru_vul': F((.55, 40), .05, .02, .2, .2, 3, fold=(.08, .4), curl=50, arch=30),
+    'dau_car': F((.25, 24), .12, .012, .22, .3, 5, arch=45),
+    'cam_pat': F((.5, 38), .08, .035, .22, .3, 4, fold=(.08, .45), curl=50, arch=30),
+    'equ_arv': F((.3, 28), .1, .015, .2, .5, 5, fold=(.1, .5), curl=40, arch=30),
+    'lys_vul': F((.2, 22), .1, .008, .2, .3, 5, fold=(.1, .6), curl=80, arch=40),
+    'che_maj': F((.35, 30), .12, .015, .22, .35, 5, fold=(.12, .55), arch=40),
+}
+
 
 def community(name, classes, grams, forbs, others, patch, scattered, forb_patch, litter, litter_h, litter_w,
               presence=0.4, cover=1.0):
@@ -1121,6 +1235,16 @@ def main():
         s.update(TRAITS.get(s['id'], {}))
         s.update(LANES.get(s['id'], {}))
         s['water_depth'] = WATER.get(s['id'], s['water_depth'])
+        assert s['id'] in DISORDER, s['id']
+        s.update(DISORDER[s['id']])
+        # The wear runs with the species' own calendar: its heading shift (three weeks at most), unless its photos say
+        # otherwise.
+        if s.get('wear_shift') is None:
+            s['wear_shift'] = min(max(s.get('shift', {}).get('heads', 0), -21), 21)
+        # A corymb's or an umbel's disc is drawn level whatever its stem does (da_grass_head_vs.h): hung on a snapped
+        # stem it lay in the grass like a saucer, so such a stem does not snap.
+        if s['head_type'] in (10, 13):
+            s['culm_snap'] = 0.0
         if s['id'] in FOLDS:
             s['fold_h'] = FOLDS[s['id']]
     photo = json.load(open(os.path.join(HERE, 'species_photo_colours.json'), encoding='utf-8'))['species']

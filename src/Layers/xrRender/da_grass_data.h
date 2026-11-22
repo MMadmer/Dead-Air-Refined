@@ -56,6 +56,9 @@ enum DaGrassKey : u32
     gkDensity,
     gkFlood,
     gkFloodIce,
+    // The stand's disorder: its wear (0 a fresh stand .. 1 a battered one) and the share of its laid patches.
+    gkWear,
+    gkLaid,
     gkCount
 };
 
@@ -123,6 +126,21 @@ struct DaGrassProfile
     // The deepest water (m) the species stands in (row 27 y): a reed a metre and a half, a sedge a span, a meadow grass
     // a puddle's.
     float water_depth{0.05f};
+    // The stand's disorder (GRASS.md "Disorder", rows 28-31): what the photos of a species show beside its neat mean.
+    // The defaults are a meadow grass's, so a species without the keys still stands as a stand does.
+    // Leaves: the share that splay out of the tuft and how far (degrees from the vertical); the share folded over -
+    // the midrib gave way, the rest hangs - in a fresh stand and in a worn one; the twist about the length (turns); a
+    // dead leaf's curl (degrees at the tip); the sideways sweep (share of the length); the arch below.
+    float leaf_splay[2]{0.2f, 70.f}, leaf_fold[2]{0.12f, 0.45f}, leaf_twist{0.3f}, leaf_curl{70.f}, leaf_sweep{0.1f};
+    // A leaf's arch (degrees): how far its upper part turns over on average - a leaf rises and arcs over, its tip
+    // level or hanging; a stiff bristle hardly, a broad soft leaf all the way.
+    float leaf_arch{45.f};
+    // Culms: the share that lean out of the stand and how far (degrees more), the share of worn culms snapped at a
+    // node, the sinuosity node to node (share of the length).
+    float culm_lean[2]{0.25f, 30.f}, culm_snap{0.12f}, culm_wave{0.012f};
+    // The stand: the height's spread patch to patch (+- share), the share of short young leaves, how far its laid
+    // patches go down (0..1 of 62 degrees), its set - the lean a whole stretch of it takes one way (degrees).
+    float height_var{0.2f}, runts{0.2f}, laid{0.6f}, stand_set{10.f};
 };
 
 // A plant community ([grass_community_N]): the graminoids a detail object grows and their cover shares in

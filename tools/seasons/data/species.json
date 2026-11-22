@@ -134,6 +134,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.0,
+   "leaf_splay": [
+    0.15,
+    65
+   ],
+   "leaf_arch": 45,
+   "leaf_fold": [
+    0.12,
+    0.5
+   ],
+   "leaf_twist": 0.35,
+   "leaf_curl": 70,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.2,
+    32
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.012,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.4,
+   "stand_set": 12,
+   "wear_shift": -10,
    "shift": {
     "heads": -10,
     "green": 0
@@ -337,6 +360,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.2,
+    70
+   ],
+   "leaf_arch": 60,
+   "leaf_fold": [
+    0.18,
+    0.5
+   ],
+   "leaf_twist": 0.6,
+   "leaf_curl": 110,
+   "leaf_sweep": 0.12,
+   "culm_lean": [
+    0.18,
+    30
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.015,
+   "height_var": 0.22,
+   "runts": 0.2,
+   "laid_depth": 0.6,
+   "stand_set": 10,
+   "wear_shift": 21,
    "shift": {
     "heads": 22,
     "green": 0
@@ -540,6 +586,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.3,
+    75
+   ],
+   "leaf_arch": 65,
+   "leaf_fold": [
+    0.2,
+    0.45
+   ],
+   "leaf_twist": 0.2,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.15,
+    25
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.01,
+   "height_var": 0.25,
+   "runts": 0.2,
+   "laid_depth": 0.6,
+   "stand_set": 8,
+   "wear_shift": 4,
    "shift": {
     "heads": 4,
     "green": -5
@@ -743,6 +812,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.2,
+    70
+   ],
+   "leaf_arch": 45,
+   "leaf_fold": [
+    0.2,
+    0.5
+   ],
+   "leaf_twist": 0.25,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.12,
+   "culm_lean": [
+    0.25,
+    35
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.02,
+   "height_var": 0.2,
+   "runts": 0.25,
+   "laid_depth": 0.8,
+   "stand_set": 12,
+   "wear_shift": -7,
    "shift": {
     "heads": -7,
     "green": -5
@@ -946,6 +1038,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    65
+   ],
+   "leaf_arch": 25,
+   "leaf_fold": [
+    0.08,
+    0.3
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.25,
+    32
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.02,
+   "height_var": 0.2,
+   "runts": 0.25,
+   "laid_depth": 0.5,
+   "stand_set": 10,
+   "wear_shift": -14,
    "shift": {
     "heads": -14,
     "green": -5
@@ -1149,6 +1264,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.3,
+    75
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.15,
+    0.4
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.15,
+   "culm_lean": [
+    0.3,
+    35
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.02,
+   "height_var": 0.2,
+   "runts": 0.25,
+   "laid_depth": 0.9,
+   "stand_set": 14,
+   "wear_shift": 9,
    "shift": {
     "heads": 9,
     "green": -8
@@ -1352,6 +1490,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.4,
+    82
+   ],
+   "leaf_arch": 12,
+   "leaf_fold": [
+    0.05,
+    0.15
+   ],
+   "leaf_twist": 0,
+   "leaf_curl": 30,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.35,
+    35
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.015,
+   "height_var": 0.25,
+   "runts": 0.3,
+   "laid_depth": 0.1,
+   "stand_set": 3,
+   "wear_shift": -15,
    "shift": {
     "heads": -15,
     "green": 0
@@ -1555,6 +1716,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.2,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.15,
+    0.4
+   ],
+   "leaf_twist": 0.15,
+   "leaf_curl": 70,
+   "leaf_sweep": 0.12,
+   "culm_lean": [
+    0.35,
+    38
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.025,
+   "height_var": 0.2,
+   "runts": 0.25,
+   "laid_depth": 0.8,
+   "stand_set": 10,
+   "wear_shift": 21,
    "shift": {
     "heads": 24,
     "green": 0
@@ -1758,6 +1942,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.12,
+   "leaf_splay": [
+    0.35,
+    78
+   ],
+   "leaf_arch": 60,
+   "leaf_fold": [
+    0.2,
+    0.45
+   ],
+   "leaf_twist": 0.3,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.12,
+   "culm_lean": [
+    0.35,
+    38
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.025,
+   "height_var": 0.22,
+   "runts": 0.25,
+   "laid_depth": 0.85,
+   "stand_set": 12,
+   "wear_shift": 21,
    "shift": {
     "heads": 34,
     "green": 0
@@ -1961,6 +2168,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.2,
+    70
+   ],
+   "leaf_arch": 50,
+   "leaf_fold": [
+    0.18,
+    0.45
+   ],
+   "leaf_twist": 0.5,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.12,
+    22
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.008,
+   "height_var": 0.2,
+   "runts": 0.2,
+   "laid_depth": 0.45,
+   "stand_set": 8,
+   "wear_shift": 21,
    "shift": {
     "heads": 24,
     "green": 12
@@ -2164,6 +2394,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.2,
+    70
+   ],
+   "leaf_arch": 50,
+   "leaf_fold": [
+    0.18,
+    0.45
+   ],
+   "leaf_twist": 0.35,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.25,
+    30
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.012,
+   "height_var": 0.2,
+   "runts": 0.2,
+   "laid_depth": 0.65,
+   "stand_set": 10,
+   "wear_shift": -30,
    "shift": {
     "heads": -36,
     "green": -15
@@ -2367,6 +2620,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.25,
+    72
+   ],
+   "leaf_arch": 65,
+   "leaf_fold": [
+    0.25,
+    0.55
+   ],
+   "leaf_twist": 0.5,
+   "leaf_curl": 120,
+   "leaf_sweep": 0.12,
+   "culm_lean": [
+    0.25,
+    35
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.015,
+   "height_var": 0.22,
+   "runts": 0.2,
+   "laid_depth": 0.7,
+   "stand_set": 12,
+   "wear_shift": 7,
    "shift": {
     "heads": 7,
     "green": 0
@@ -2570,6 +2846,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.1,
+   "leaf_splay": [
+    0.4,
+    80
+   ],
+   "leaf_arch": 55,
+   "leaf_fold": [
+    0.1,
+    0.3
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.35,
+    35
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.015,
+   "height_var": 0.25,
+   "runts": 0.25,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 15,
    "shift": {
     "heads": 15,
     "green": -8
@@ -2773,6 +3072,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.45,
+    82
+   ],
+   "leaf_arch": 10,
+   "leaf_fold": [
+    0.03,
+    0.1
+   ],
+   "leaf_twist": 0,
+   "leaf_curl": 20,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.4,
+    30
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.01,
+   "height_var": 0.25,
+   "runts": 0.3,
+   "laid_depth": 0.05,
+   "stand_set": 2,
+   "wear_shift": 6,
    "shift": {
     "heads": 6,
     "green": 0
@@ -2976,6 +3298,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.3,
+    75
+   ],
+   "leaf_arch": 60,
+   "leaf_fold": [
+    0.25,
+    0.6
+   ],
+   "leaf_twist": 0.3,
+   "leaf_curl": 100,
+   "leaf_sweep": 0.15,
+   "culm_lean": [
+    0.5,
+    45
+   ],
+   "culm_snap": 0.3,
+   "culm_wave": 0.03,
+   "height_var": 0.25,
+   "runts": 0.3,
+   "laid_depth": 0.95,
+   "stand_set": 15,
+   "wear_shift": -60,
    "shift": {
     "heads": -5,
     "green": -35
@@ -3179,6 +3524,29 @@
    "dead_vary": 1.0,
    "head_velvet": 0.0,
    "water_depth": 1.5,
+   "leaf_splay": [
+    0.15,
+    60
+   ],
+   "leaf_arch": 50,
+   "leaf_fold": [
+    0.15,
+    0.5
+   ],
+   "leaf_twist": 0.3,
+   "leaf_curl": 70,
+   "leaf_sweep": 0.06,
+   "culm_lean": [
+    0.15,
+    20
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.006,
+   "height_var": 0.15,
+   "runts": 0.15,
+   "laid_depth": 0.25,
+   "stand_set": 8,
+   "wear_shift": 8,
    "shift": {
     "heads": 8,
     "green": 0
@@ -3382,6 +3750,29 @@
    "dead_vary": 0.6,
    "head_velvet": 0.0,
    "water_depth": 0.3,
+   "leaf_splay": [
+    0.25,
+    70
+   ],
+   "leaf_arch": 55,
+   "leaf_fold": [
+    0.25,
+    0.55
+   ],
+   "leaf_twist": 0.35,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.25,
+    35
+   ],
+   "culm_snap": 0.2,
+   "culm_wave": 0.01,
+   "height_var": 0.2,
+   "runts": 0.2,
+   "laid_depth": 0.85,
+   "stand_set": 12,
+   "wear_shift": 21,
    "shift": {
     "heads": 40,
     "green": -5
@@ -3585,6 +3976,29 @@
    "dead_vary": 0.6,
    "head_velvet": 0.0,
    "water_depth": 0.8,
+   "leaf_splay": [
+    0.25,
+    70
+   ],
+   "leaf_arch": 55,
+   "leaf_fold": [
+    0.3,
+    0.6
+   ],
+   "leaf_twist": 0.3,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.25,
+    35
+   ],
+   "culm_snap": 0.2,
+   "culm_wave": 0.01,
+   "height_var": 0.2,
+   "runts": 0.2,
+   "laid_depth": 0.9,
+   "stand_set": 12,
+   "wear_shift": 21,
    "shift": {
     "heads": 45,
     "green": 0
@@ -3788,6 +4202,29 @@
    "dead_vary": 0.6,
    "head_velvet": 0.0,
    "water_depth": 0.4,
+   "leaf_splay": [
+    0.25,
+    72
+   ],
+   "leaf_arch": 65,
+   "leaf_fold": [
+    0.2,
+    0.55
+   ],
+   "leaf_twist": 0.15,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.3,
+    35
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.01,
+   "height_var": 0.2,
+   "runts": 0.2,
+   "laid_depth": 0.7,
+   "stand_set": 10,
+   "wear_shift": -8,
    "shift": {
     "heads": -8,
     "green": 0
@@ -3991,6 +4428,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.08,
+   "leaf_splay": [
+    0.4,
+    80
+   ],
+   "leaf_arch": 55,
+   "leaf_fold": [
+    0.15,
+    0.4
+   ],
+   "leaf_twist": 0.15,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.12,
+   "culm_lean": [
+    0.3,
+    35
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.01,
+   "height_var": 0.22,
+   "runts": 0.25,
+   "laid_depth": 0.4,
+   "stand_set": 6,
+   "wear_shift": -21,
    "shift": {
     "heads": -43,
     "green": 0
@@ -4194,6 +4654,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.2,
+   "leaf_splay": [
+    0.35,
+    70
+   ],
+   "leaf_arch": 15,
+   "leaf_fold": [
+    0.05,
+    0.25
+   ],
+   "leaf_twist": 0,
+   "leaf_curl": 0,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.4,
+    40
+   ],
+   "culm_snap": 0.2,
+   "culm_wave": 0.006,
+   "height_var": 0.2,
+   "runts": 0.25,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 21,
    "shift": {
     "heads": 55,
     "green": 0
@@ -4397,6 +4880,29 @@
    "dead_vary": 0.8,
    "head_velvet": 1.0,
    "water_depth": 1.2,
+   "leaf_splay": [
+    0.15,
+    45
+   ],
+   "leaf_arch": 15,
+   "leaf_fold": [
+    0.2,
+    0.7
+   ],
+   "leaf_twist": 0.6,
+   "leaf_curl": 40,
+   "leaf_sweep": 0.06,
+   "culm_lean": [
+    0.15,
+    20
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.004,
+   "height_var": 0.15,
+   "runts": 0.2,
+   "laid_depth": 0.3,
+   "stand_set": 6,
+   "wear_shift": 0,
    "shift": {
     "heads": -51,
     "green": 0
@@ -4600,6 +5106,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.35,
+    78
+   ],
+   "leaf_arch": 65,
+   "leaf_fold": [
+    0.15,
+    0.5
+   ],
+   "leaf_twist": 0.25,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.1,
+   "culm_lean": [
+    0.2,
+    28
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.01,
+   "height_var": 0.22,
+   "runts": 0.2,
+   "laid_depth": 0.4,
+   "stand_set": 6,
+   "wear_shift": -5,
    "shift": {
     "heads": -5,
     "green": 0
@@ -4803,6 +5332,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.35,
+    78
+   ],
+   "leaf_arch": 50,
+   "leaf_fold": [
+    0.08,
+    0.25
+   ],
+   "leaf_twist": 0,
+   "leaf_curl": 40,
+   "leaf_sweep": 0.2,
+   "culm_lean": [
+    0.35,
+    35
+   ],
+   "culm_snap": 0.08,
+   "culm_wave": 0.035,
+   "height_var": 0.25,
+   "runts": 0.3,
+   "laid_depth": 0.7,
+   "stand_set": 10,
+   "wear_shift": 0,
    "shift": {
     "heads": 0,
     "green": 5
@@ -4912,8 +5464,8 @@
     20
    ],
    "culm_bend": [
-    0.15,
-    0.3
+    0.05,
+    0.099
    ],
    "culm_stiff": 0.5,
    "culm_knee": 0.0,
@@ -4961,7 +5513,7 @@
    "clump_cell": 0.12,
    "clump_pull": 0.9,
    "clump_face_away": 0.6,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 220,
    "density_culm": 60,
    "density_basal": 0,
@@ -5006,6 +5558,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.3,
+    75
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.05,
+    0.5
+   ],
+   "leaf_twist": 0.15,
+   "leaf_curl": 40,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.4,
+    40
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.015,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "con_maj",
    "latin": "Convallaria majalis",
    "form": 2,
@@ -5125,8 +5700,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.095
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -5174,7 +5749,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 11.0,
    "density_leaf": 0,
    "density_culm": 150,
    "density_basal": 0,
@@ -5219,6 +5794,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.1,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 100,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.15,
+    22
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.008,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 6,
+   "wear_shift": 0,
    "id": "sol_can",
    "latin": "Solidago canadensis",
    "form": 1,
@@ -5338,8 +5936,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.097
    ],
    "culm_stiff": 0.8,
    "culm_knee": 0.0,
@@ -5387,7 +5985,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 14.0,
    "density_leaf": 25,
    "density_culm": 70,
    "density_basal": 0,
@@ -5432,6 +6030,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.15,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 110,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.25,
+    28
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.012,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 6,
+   "wear_shift": 0,
    "id": "art_vul",
    "latin": "Artemisia vulgaris",
    "form": 1,
@@ -5551,8 +6172,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.097
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -5600,7 +6221,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 15.0,
    "density_leaf": 40,
    "density_culm": 60,
    "density_basal": 0,
@@ -5645,6 +6266,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.15,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    30
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.012,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.2,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "art_abs",
    "latin": "Artemisia absinthium",
    "form": 1,
@@ -5765,7 +6409,7 @@
    ],
    "culm_bend": [
     0.05,
-    0.12
+    0.102
    ],
    "culm_stiff": 0.7,
    "culm_knee": 0.0,
@@ -5813,7 +6457,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 60,
    "density_culm": 70,
    "density_basal": 0,
@@ -5858,6 +6502,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 25,
+   "leaf_fold": [
+    0.1,
+    0.4
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.5,
+    45
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.02,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "art_cam",
    "latin": "Artemisia campestris",
    "form": 1,
@@ -5977,8 +6644,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.095
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -6026,7 +6693,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 11.0,
    "density_leaf": 40,
    "density_culm": 80,
    "density_basal": 0,
@@ -6071,6 +6738,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.15,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 100,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.2,
+    22
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.008,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.25,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "tan_vul",
    "latin": "Tanacetum vulgare",
    "form": 1,
@@ -6190,8 +6880,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.099
    ],
    "culm_stiff": 0.65,
    "culm_knee": 0.0,
@@ -6239,7 +6929,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 16.0,
    "density_leaf": 160,
    "density_culm": 60,
    "density_basal": 0,
@@ -6284,6 +6974,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 45,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.35,
+    32
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.015,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.4,
+   "stand_set": 6,
+   "wear_shift": 0,
    "id": "ach_mil",
    "latin": "Achillea millefolium",
    "form": 1,
@@ -6403,8 +7116,8 @@
     15
    ],
    "culm_bend": [
-    0.03,
-    0.08
+    0.05,
+    0.102
    ],
    "culm_stiff": 0.55,
    "culm_knee": 0.0,
@@ -6452,7 +7165,7 @@
    "clump_cell": 0.15,
    "clump_pull": 0.9,
    "clump_face_away": 0.95,
-   "clump_lean": 3,
+   "clump_lean": 17.5,
    "density_leaf": 280,
    "density_culm": 70,
    "density_basal": 0,
@@ -6497,6 +7210,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.4,
+    80
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.08,
+    0.4
+   ],
+   "leaf_twist": 0.15,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.4,
+    35
+   ],
+   "culm_snap": 0.08,
+   "culm_wave": 0.02,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "pla_lan",
    "latin": "Plantago lanceolata",
    "form": 2,
@@ -6616,8 +7352,8 @@
     20
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.099
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -6665,7 +7401,7 @@
    "clump_cell": 0.18,
    "clump_pull": 0.9,
    "clump_face_away": 1.0,
-   "clump_lean": 3,
+   "clump_lean": 12.5,
    "density_leaf": 220,
    "density_culm": 45,
    "density_basal": 0,
@@ -6710,6 +7446,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.6,
+    85
+   ],
+   "leaf_arch": 25,
+   "leaf_fold": [
+    0.08,
+    0.4
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    25
+   ],
+   "culm_snap": 0.08,
+   "culm_wave": 0.015,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.2,
+   "stand_set": 3,
+   "wear_shift": 0,
    "id": "pla_maj",
    "latin": "Plantago major",
    "form": 2,
@@ -6829,8 +7588,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.096
    ],
    "culm_stiff": 0.7,
    "culm_knee": 0.0,
@@ -6878,7 +7637,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 12.5,
    "density_leaf": 0,
    "density_culm": 130,
    "density_basal": 0,
@@ -6923,6 +7682,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.0,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 50,
+   "leaf_fold": [
+    0.2,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.2,
+    25
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.01,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.5,
+   "stand_set": 6,
+   "wear_shift": 0,
    "id": "urt_dio",
    "latin": "Urtica dioica",
    "form": 1,
@@ -7042,8 +7824,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.097
    ],
    "culm_stiff": 0.7,
    "culm_knee": 0.0,
@@ -7091,7 +7873,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 14.0,
    "density_leaf": 90,
    "density_culm": 40,
    "density_basal": 0,
@@ -7136,6 +7918,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 50,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 70,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    28
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.012,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.4,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "ant_syl",
    "latin": "Anthriscus sylvestris",
    "form": 1,
@@ -7255,8 +8060,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.094
    ],
    "culm_stiff": 0.7,
    "culm_knee": 0.0,
@@ -7304,7 +8109,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 9.0,
    "density_leaf": 20,
    "density_culm": 90,
    "density_basal": 0,
@@ -7349,6 +8154,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.1,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.1,
+    15
+   ],
+   "culm_snap": 0.06,
+   "culm_wave": 0.006,
+   "height_var": 0.25,
+   "runts": 0.15,
+   "laid_depth": 0.15,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "eri_can",
    "latin": "Erigeron canadensis",
    "form": 1,
@@ -7468,8 +8296,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.095
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -7517,7 +8345,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 14.0,
    "density_leaf": 0,
    "density_culm": 90,
    "density_basal": 0,
@@ -7562,6 +8390,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 45,
+   "leaf_fold": [
+    0.15,
+    0.7
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 160,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.2,
+    28
+   ],
+   "culm_snap": 0.15,
+   "culm_wave": 0.008,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.4,
+   "stand_set": 6,
+   "wear_shift": 0,
    "id": "cha_ang",
    "latin": "Chamerion angustifolium",
    "form": 1,
@@ -7681,8 +8532,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.095
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -7730,7 +8581,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 11.0,
    "density_leaf": 0,
    "density_culm": 60,
    "density_basal": 0,
@@ -7775,6 +8626,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.3,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.1,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.2,
+    22
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.008,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "lyt_sal",
    "latin": "Lythrum salicaria",
    "form": 1,
@@ -7894,8 +8768,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.097
    ],
    "culm_stiff": 0.7,
    "culm_knee": 0.0,
@@ -7943,7 +8817,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 14.0,
    "density_leaf": 0,
    "density_culm": 90,
    "density_basal": 0,
@@ -7988,6 +8862,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 25,
+   "leaf_fold": [
+    0.08,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    28
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.012,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.25,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "hyp_per",
    "latin": "Hypericum perforatum",
    "form": 1,
@@ -8108,7 +9005,7 @@
    ],
    "culm_bend": [
     0.05,
-    0.12
+    0.108
    ],
    "culm_stiff": 0.5,
    "culm_knee": 0.0,
@@ -8156,7 +9053,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 0,
    "density_culm": 160,
    "density_basal": 0,
@@ -8201,6 +9098,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.05,
+    0.4
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.55,
+    45
+   ],
+   "culm_snap": 0.08,
+   "culm_wave": 0.03,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.7,
+   "stand_set": 8,
+   "wear_shift": 0,
    "id": "gal_ver",
    "latin": "Galium verum",
    "form": 1,
@@ -8320,8 +9240,8 @@
     25
    ],
    "culm_bend": [
-    0.04,
-    0.1
+    0.05,
+    0.105
    ],
    "culm_stiff": 0.5,
    "culm_knee": 0.0,
@@ -8369,7 +9289,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 150,
    "density_culm": 50,
    "density_basal": 0,
@@ -8414,6 +9334,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.6,
+    45
+   ],
+   "culm_snap": 0.06,
+   "culm_wave": 0.025,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.4,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "tri_pra",
    "latin": "Trifolium pratense",
    "form": 1,
@@ -8533,8 +9476,8 @@
     30
    ],
    "culm_bend": [
-    0.08,
-    0.2
+    0.05,
+    0.12
    ],
    "culm_stiff": 0.4,
    "culm_knee": 0.0,
@@ -8582,7 +9525,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 0,
    "density_culm": 70,
    "density_basal": 0,
@@ -8627,6 +9570,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.7,
+    55
+   ],
+   "culm_snap": 0.05,
+   "culm_wave": 0.05,
+   "height_var": 0.25,
+   "runts": 0.15,
+   "laid_depth": 0.6,
+   "stand_set": 6,
+   "wear_shift": 0,
    "id": "vic_cra",
    "latin": "Vicia cracca",
    "form": 1,
@@ -8746,8 +9712,8 @@
     20
    ],
    "culm_bend": [
-    0.04,
-    0.1
+    0.05,
+    0.102
    ],
    "culm_stiff": 0.5,
    "culm_knee": 0.0,
@@ -8795,7 +9761,7 @@
    "clump_cell": 0.12,
    "clump_pull": 0.6,
    "clump_face_away": 0.6,
-   "clump_lean": 3,
+   "clump_lean": 17.5,
    "density_leaf": 320,
    "density_culm": 70,
    "density_basal": 0,
@@ -8840,6 +9806,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.5,
+    80
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.08,
+    0.4
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.5,
+    35
+   ],
+   "culm_snap": 0.05,
+   "culm_wave": 0.02,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.2,
+   "stand_set": 3,
+   "wear_shift": 0,
    "id": "tri_rep",
    "latin": "Trifolium repens",
    "form": 2,
@@ -8959,8 +9948,8 @@
     15
    ],
    "culm_bend": [
-    0.04,
-    0.12
+    0.05,
+    0.108
    ],
    "culm_stiff": 0.55,
    "culm_knee": 0.0,
@@ -9008,7 +9997,7 @@
    "clump_cell": 0.15,
    "clump_pull": 0.9,
    "clump_face_away": 1.0,
-   "clump_lean": 3,
+   "clump_lean": 17.5,
    "density_leaf": 110,
    "density_culm": 30,
    "density_basal": 0,
@@ -9053,6 +10042,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.5,
+    82
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.1,
+    0.45
+   ],
+   "leaf_twist": 0.15,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.45,
+    35
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.03,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.2,
+   "stand_set": 3,
+   "wear_shift": 0,
    "id": "tar_off",
    "latin": "Taraxacum officinale agg.",
    "form": 2,
@@ -9172,8 +10184,8 @@
     40
    ],
    "culm_bend": [
-    0.1,
-    0.25
+    0.05,
+    0.12
    ],
    "culm_stiff": 0.35,
    "culm_knee": 0.0,
@@ -9221,7 +10233,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 0,
    "density_culm": 55,
    "density_basal": 0,
@@ -9266,6 +10278,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.7,
+    55
+   ],
+   "culm_snap": 0.05,
+   "culm_wave": 0.05,
+   "height_var": 0.25,
+   "runts": 0.15,
+   "laid_depth": 0.6,
+   "stand_set": 6,
+   "wear_shift": 0,
    "id": "lat_pra",
    "latin": "Lathyrus pratensis",
    "form": 1,
@@ -9385,8 +10420,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.108
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -9434,7 +10469,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 15.0,
    "density_leaf": 70,
    "density_culm": 45,
    "density_basal": 0,
@@ -9479,6 +10514,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.4,
+    30
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.03,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.35,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "ran_acr",
    "latin": "Ranunculus acris",
    "form": 1,
@@ -9598,8 +10656,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.105
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -9647,7 +10705,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 25,
    "density_culm": 45,
    "density_basal": 0,
@@ -9692,6 +10750,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.12,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.5,
+    40
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.025,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.4,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "sil_lat",
    "latin": "Silene latifolia",
    "form": 1,
@@ -9811,8 +10892,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.102
    ],
    "culm_stiff": 0.55,
    "culm_knee": 0.0,
@@ -9860,7 +10941,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 14.0,
    "density_leaf": 30,
    "density_culm": 50,
    "density_basal": 0,
@@ -9905,6 +10986,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 35,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    28
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.02,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.35,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "sil_flo",
    "latin": "Silene flos-cuculi",
    "form": 1,
@@ -10024,8 +11128,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.102
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -10073,7 +11177,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 16.0,
    "density_leaf": 30,
    "density_culm": 50,
    "density_basal": 0,
@@ -10118,6 +11222,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.12,
+    0.55
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.4,
+    32
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.02,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "cen_jac",
    "latin": "Centaurea jacea",
    "form": 1,
@@ -10237,8 +11364,8 @@
     20
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.099
    ],
    "culm_stiff": 0.5,
    "culm_knee": 0.0,
@@ -10286,7 +11413,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 12.5,
    "density_leaf": 120,
    "density_culm": 70,
    "density_basal": 0,
@@ -10331,6 +11458,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.4,
+    80
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.1,
+    0.45
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    25
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.015,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.25,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "rum_acl",
    "latin": "Rumex acetosella",
    "form": 1,
@@ -10450,8 +11600,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.097
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -10499,7 +11649,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 12.5,
    "density_leaf": 50,
    "density_culm": 40,
    "density_basal": 0,
@@ -10544,6 +11694,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.4,
+    78
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.12,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 70,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.25,
+    25
+   ],
+   "culm_snap": 0.12,
+   "culm_wave": 0.012,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "rum_acs",
    "latin": "Rumex acetosa",
    "form": 1,
@@ -10663,8 +11836,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.094
    ],
    "culm_stiff": 0.8,
    "culm_knee": 0.0,
@@ -10712,7 +11885,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 9.0,
    "density_leaf": 30,
    "density_culm": 40,
    "density_basal": 0,
@@ -10757,6 +11930,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.12,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.12,
+    18
+   ],
+   "culm_snap": 0.05,
+   "culm_wave": 0.006,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.15,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "oen_bie",
    "latin": "Oenothera biennis",
    "form": 1,
@@ -10876,8 +12072,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.096
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -10925,7 +12121,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 11.0,
    "density_leaf": 15,
    "density_culm": 55,
    "density_basal": 0,
@@ -10970,6 +12166,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 45,
+   "leaf_fold": [
+    0.15,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 90,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.2,
+    22
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.01,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "cir_arv",
    "latin": "Cirsium arvense",
    "form": 1,
@@ -11089,8 +12308,8 @@
     20
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.108
    ],
    "culm_stiff": 0.5,
    "culm_knee": 0.0,
@@ -11138,7 +12357,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 17.5,
    "density_leaf": 60,
    "density_culm": 50,
    "density_basal": 0,
@@ -11183,6 +12402,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.08,
+    0.4
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.5,
+    35
+   ],
+   "culm_snap": 0.08,
+   "culm_wave": 0.03,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.2,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "jas_mon",
    "latin": "Jasione montana",
    "form": 1,
@@ -11302,8 +12544,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.102
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -11351,7 +12593,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 16.0,
    "density_leaf": 60,
    "density_culm": 50,
    "density_basal": 0,
@@ -11396,6 +12638,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 25,
+   "leaf_fold": [
+    0.06,
+    0.35
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 40,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.45,
+    32
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.02,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.15,
+   "stand_set": 3,
+   "wear_shift": 0,
    "id": "hel_are",
    "latin": "Helichrysum arenarium",
    "form": 1,
@@ -11515,8 +12780,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.099
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -11564,7 +12829,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 13.0,
    "density_leaf": 20,
    "density_culm": 60,
    "density_basal": 0,
@@ -11609,6 +12874,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 60,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    26
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.015,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.2,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "ber_inc",
    "latin": "Berteroa incana",
    "form": 1,
@@ -11728,8 +13016,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.093
    ],
    "culm_stiff": 0.85,
    "culm_knee": 0.0,
@@ -11777,7 +13065,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 9.0,
    "density_leaf": 20,
    "density_culm": 25,
    "density_basal": 0,
@@ -11822,6 +13110,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.12,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.1,
+    15
+   ],
+   "culm_snap": 0.05,
+   "culm_wave": 0.005,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.1,
+   "stand_set": 3,
+   "wear_shift": 0,
    "id": "ver_lyc",
    "latin": "Verbascum lychnitis",
    "form": 1,
@@ -11941,8 +13252,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.097
    ],
    "culm_stiff": 0.7,
    "culm_knee": 0.0,
@@ -11990,7 +13301,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 13.0,
    "density_leaf": 20,
    "density_culm": 40,
    "density_basal": 0,
@@ -12035,6 +13346,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.1,
+    0.55
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    26
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.012,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.25,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "sol_vir",
    "latin": "Solidago virgaurea",
    "form": 1,
@@ -12154,8 +13488,8 @@
     20
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.102
    ],
    "culm_stiff": 0.55,
    "culm_knee": 0.0,
@@ -12203,7 +13537,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 60,
    "density_culm": 70,
    "density_basal": 0,
@@ -12248,6 +13582,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.08,
+    0.4
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.55,
+    40
+   ],
+   "culm_snap": 0.05,
+   "culm_wave": 0.02,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.2,
+   "stand_set": 3,
+   "wear_shift": 0,
    "id": "pru_vul",
    "latin": "Prunella vulgaris",
    "form": 1,
@@ -12367,8 +13724,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.097
    ],
    "culm_stiff": 0.7,
    "culm_knee": 0.0,
@@ -12416,7 +13773,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 12.0,
    "density_leaf": 35,
    "density_culm": 35,
    "density_basal": 0,
@@ -12461,6 +13818,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 45,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 70,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.25,
+    24
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.012,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "dau_car",
    "latin": "Daucus carota",
    "form": 1,
@@ -12580,8 +13960,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.111
    ],
    "culm_stiff": 0.5,
    "culm_knee": 0.0,
@@ -12629,7 +14009,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 18.0,
    "density_leaf": 25,
    "density_culm": 50,
    "density_basal": 0,
@@ -12674,6 +14054,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.08,
+    0.45
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 50,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.5,
+    38
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.035,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 4,
+   "wear_shift": 0,
    "id": "cam_pat",
    "latin": "Campanula patula",
    "form": 1,
@@ -12793,8 +14196,8 @@
     15
    ],
    "culm_bend": [
-    0.03,
-    0.08
+    0.05,
+    0.099
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -12842,7 +14245,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 14.0,
    "density_leaf": 0,
    "density_culm": 110,
    "density_basal": 0,
@@ -12887,6 +14290,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.1,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 30,
+   "leaf_fold": [
+    0.1,
+    0.5
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 40,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.3,
+    28
+   ],
+   "culm_snap": 0.1,
+   "culm_wave": 0.015,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.5,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "equ_arv",
    "latin": "Equisetum arvense",
    "form": 1,
@@ -13006,8 +14432,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.095
    ],
    "culm_stiff": 0.75,
    "culm_knee": 0.0,
@@ -13055,7 +14481,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 11.0,
    "density_leaf": 0,
    "density_culm": 60,
    "density_basal": 0,
@@ -13100,6 +14526,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.25,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.1,
+    0.6
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 80,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.2,
+    22
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.008,
+   "height_var": 0.2,
+   "runts": 0.15,
+   "laid_depth": 0.3,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "lys_vul",
    "latin": "Lysimachia vulgaris",
    "form": 1,
@@ -13219,8 +14668,8 @@
     6
    ],
    "culm_bend": [
-    0.02,
-    0.05
+    0.05,
+    0.099
    ],
    "culm_stiff": 0.6,
    "culm_knee": 0.0,
@@ -13268,7 +14717,7 @@
    "clump_cell": 0.25,
    "clump_pull": 0.15,
    "clump_face_away": 0.2,
-   "clump_lean": 3,
+   "clump_lean": 15.0,
    "density_leaf": 25,
    "density_culm": 40,
    "density_basal": 0,
@@ -13313,6 +14762,29 @@
    "dead_vary": 0.0,
    "head_velvet": 0.0,
    "water_depth": 0.05,
+   "leaf_splay": [
+    0.15,
+    70
+   ],
+   "leaf_arch": 40,
+   "leaf_fold": [
+    0.12,
+    0.55
+   ],
+   "leaf_twist": 0.1,
+   "leaf_curl": 70,
+   "leaf_sweep": 0.08,
+   "culm_lean": [
+    0.35,
+    30
+   ],
+   "culm_snap": 0.0,
+   "culm_wave": 0.015,
+   "height_var": 0.22,
+   "runts": 0.15,
+   "laid_depth": 0.35,
+   "stand_set": 5,
+   "wear_shift": 0,
    "id": "che_maj",
    "latin": "Chelidonium majus",
    "form": 1,

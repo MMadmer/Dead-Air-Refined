@@ -307,7 +307,22 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 
 	float3 Ptop, dTop, Sx;
 	const float2 bob = grass_stem_bob(p, true, P12.zw);
-	grass_curve(B.cur, B.root, 1.0f, 0.0f, bob, da_grass_vlod.z, grass_hash01(B), P7.w, Ptop, dTop, Sx);
+	// (The culm's warp: a snapped culm's head hangs with its top. Its culm straightens into the far triangle over
+	// the last fifth before d2, da_grass_blade_vs.h: the head rides it there.)
+	const grass_warp Wc = grass_blade_warp(B, 0u);
+#ifdef GRASS_SHADOW
+	const float m_far = 0.0f;
+#else
+	const float m_far = Wc.fold_t < 1.0f ? smoothstep(0.8f * da_grass_vlod.y, da_grass_vlod.y, d) : 0.0f;
+#endif
+	grass_curve(B.cur, B.root, 1.0f, 0.0f, bob, da_grass_vlod.z, grass_hash01(B), P7.w, Wc, Ptop, dTop, Sx);
+	[branch] if (m_far > 0.0f)
+	{
+		float3 Pq, dPq, Sq;
+		grass_curve(B.cur, B.root, 1.0f, 0.0f, bob, da_grass_vlod.z, grass_hash01(B), P7.w, grass_warp_plain(Wc), Pq, dPq, Sq);
+		Ptop = lerp(Ptop, Pq, m_far);
+		dTop = lerp(dTop, dPq, m_far) + float3(0.0f, 1e-5f, 0.0f);
+	}
 	// A corymb's or an umbel's disc opens from the buds' knot to its full width by anthesis; its diameter runs
 	// level across the view (Hx), the same on the previous frame.
 	const bool rayed = grass_head_rayed(type);
@@ -353,7 +368,14 @@ GRASS_OUT	main	(uint vid : SV_VertexID, uint inst : SV_InstanceID)
 	{
 		float3 Pp, dPp, Sp, tp;
 		float wp, sdp, spp, rp;
-		grass_curve(B.prev, B.root_prev, 1.0f, 0.0f, bob, da_grass_vlod.w, grass_hash01(B), P7.w, Pp, dPp, Sp);
+		grass_curve(B.prev, B.root_prev, 1.0f, 0.0f, bob, da_grass_vlod.w, grass_hash01(B), P7.w, Wc, Pp, dPp, Sp);
+		[branch] if (m_far > 0.0f)
+		{
+			float3 Pq, dPq, Sq;
+			grass_curve(B.prev, B.root_prev, 1.0f, 0.0f, bob, da_grass_vlod.w, grass_hash01(B), P7.w, grass_warp_plain(Wc), Pq, dPq, Sq);
+			Pp = lerp(Pp, Pq, m_far);
+			dPp = lerp(dPp, dPq, m_far) + float3(0.0f, 1e-5f, 0.0f);
+		}
 		Cp = grass_head_point(v, core_pairs, branch_pairs, type, branches, open_angle, len, W, Wb, build, nod, branch_k,
 			hash, Pp, normalize(dPp), B.prev.facing, spread_h, Hx, velvet, tp, wp, sdp, spp, rp);
 	}

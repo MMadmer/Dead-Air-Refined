@@ -230,7 +230,8 @@ extern ECORE_API int ps_r__snow_shells; // r__snow_shells: the snow shells (QA, 
 extern ECORE_API int ps_r__snow_shadow; // r__snow_shadow: the snow grid in the near sun cascade (QA, 1 as built)
 // r__dbg_grass (QA, cost experiments of the blade generation): 1 no basal pairs, 2 no litter, 4 the community's first
 // graminoid only, 8 no early out, 16 no stem leaves, 32 the palette's presence near the camera too, 64 every lane
-// ends after the early out, 128 no wind forces.
+// ends after the early out, 128 no wind forces, 256 the stock reach, 512 the palette's presence from d1 on, 1024 no
+// distance boost of the gusts, 2048 the stand without its disorder (every blade at its species' neat mean).
 extern ECORE_API int ps_r__dbg_grass;
 // [dx12:offload] begin variables
 // The auto value of r__gpu_driven and r__grass_mesh (da_offload.h): its thresholds.

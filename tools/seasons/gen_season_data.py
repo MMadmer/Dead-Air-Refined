@@ -399,6 +399,17 @@ def smooth(a, b, x):
     return t * t * (3 - 2 * t)
 
 
+# The stand's disorder through the year (GRASS.md "Disorder"; the photo pack of make_species.py DISORDER, read by
+# month), a graminoid's by the 15th of each month, of the year's own growth: its wear - new shoots stand neat until
+# May, the leaves fold and the culms lean and snap from heading on, what is left by November went through everything -
+# and how far its patches are laid: the odd bed in June, more after every storm of August and September, most under
+# the first wet snow. Last year's thatch is worn and laid whatever the month (the engine: da_grass_gen.cs,
+# grass_warp_of), so the keys start the year fresh: the first shoots of a late species are as neat as an early one's.
+# A species runs ahead or behind by its wear_shift (days).
+WEAR_MONTHS = [0.12, 0.12, 0.12, 0.12, 0.12, 0.22, 0.4, 0.6, 0.75, 0.9, 1.0, 1.0]
+LAID_MONTHS = [0.06, 0.06, 0.06, 0.06, 0.06, 0.15, 0.35, 0.5, 0.6, 0.72, 0.8, 0.8]
+
+
 def forb_keys(s, mon):
     """Season keys of a forb from its phenology (make_species.py phen): semi-monthly keys of its growth, green,
     thatch, heads and stage, the climate keys (wetness, frost, density, flood) of its climate template."""
@@ -408,7 +419,7 @@ def forb_keys(s, mon):
     base = 0.3 if wg > 0 else 0.0
     keys = OrderedDict()
     for k in ('new_growth_h', 'green', 'cohort_green', 'thatch', 'thatch_lodge', 'straw_lodge', 'heads', 'seed_stage',
-              'tip_dry'):
+              'tip_dry', 'wear', 'laid'):
         keys[k] = []
     for D in HALF_MONTH_KEYS:
         dormant = D < ph['up'] - 30                  # until a month before emergence: last year's stems only
@@ -444,6 +455,13 @@ def forb_keys(s, mon):
         keys['heads'].append((D, round(heads, 4)))
         keys['seed_stage'].append((D, round(stage, 4)))
         keys['tip_dry'].append((D, round(0.03 + 0.3 * smooth(ph['sen0'], ph['sen1'], D), 4)))
+        # A forb's wear and laid share by its own phenology: neat until it flowers, battered as it seeds and dies
+        # back, to the year's end (what stands before the new shoots is last year's: worn and laid by the engine).
+        late = D >= 334
+        keys['wear'].append((D, 1.0 if late else round(0.12 + 0.5 * smooth(ph['flower'], ph['end'], D)
+                                                       + 0.38 * smooth(ph['sen0'], ph['sen1'], D), 4)))
+        keys['laid'].append((D, 0.75 if late else round(0.05 + 0.3 * smooth(ph['flower'], ph['end'], D)
+                                                        + 0.4 * smooth(ph['sen0'], ph['sen1'] + 30, D), 4)))
     keys['wet'] = months([m['wetness'] for m in clim])
     keys['frost'] = months([m['frost'] for m in clim])
     keys['density'] = months([1.0] * 12)
@@ -459,12 +477,14 @@ def species_sections(ltx, kf, sp_data, comm_data, still):
     fields3 = ['leaf_h', 'culm_h', 'cauline_h', 'basal_h', 'head_len', 'head_w']
     pairs = ['leaf_h', 'leaf_w', 'leaf_tilt', 'leaf_bend', 'leaf_droop', 'culm_h', 'culm_w', 'culm_tilt', 'culm_bend',
              'cauline_h', 'cauline_w', 'cauline_tilt', 'cauline_span', 'basal_h', 'basal_w', 'basal_tilt', 'basal_bend',
-             'basal_droop', 'head_len', 'head_w', 'head_open', 'head_nod', 'tussock_h']
+             'basal_droop', 'head_len', 'head_w', 'head_open', 'head_nod', 'tussock_h', 'leaf_splay', 'leaf_fold',
+             'culm_lean']
     scalars = ['form', 'outline', 'leaf_stiff', 'culm_stiff', 'culm_knee', 'culm_leaves', 'cauline_taper',
                'cauline_arrange', 'cauline_bend', 'cauline_droop', 'clump_cell', 'clump_pull', 'clump_face_away',
                'clump_lean', 'density_leaf', 'density_culm', 'density_basal', 'density_cal', 'cover', 'shade_density',
                'shade_height', 'head_type', 'head_branches', 'head_grain', 'head_petals', 'head_share', 'fold_h', 'tussock_share',
-               'tussock_r']
+               'tussock_r', 'leaf_arch', 'leaf_twist', 'leaf_curl', 'leaf_sweep', 'culm_snap', 'culm_wave',
+               'height_var', 'runts', 'laid_depth', 'stand_set']
     for i, s in enumerate(species):
         n = i + 1
         note = ['Species %d %s (%s): form %d (0 graminoid, 1 forb, 2 rosette, 3 rush), %s' % (
@@ -515,6 +535,8 @@ def species_sections(ltx, kf, sp_data, comm_data, still):
             kp['wet'] = months([r['wetness'] for r in rows])
             kp['frost'] = months([r['frost'] for r in rows])
             kp['density'] = months([r['density'] for r in rows])
+            kp['wear'] = months(shifted(WEAR_MONTHS, s.get('wear_shift', 0)))
+            kp['laid'] = months(shifted(LAID_MONTHS, s.get('wear_shift', 0)))
             flood = gp[s['template']]['floodplain']
         else:
             kp, rows = forb_keys(s, mon)

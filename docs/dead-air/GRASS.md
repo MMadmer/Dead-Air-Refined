@@ -264,6 +264,9 @@ Per frame:
    short bin's pixel shader (`da_grass_blade_cut.ps`) cuts the lobes of pinnate and dissected leaves, and the
    seed heads (a few thousand small ribbons) cut their fluffy rim and their grains in their own pixel shader.
 
+(The curve is the blade's neat habit; what it does beside it - the arch, the fold, the curl, the twist, a culm's
+sinuosity and snap - is "Disorder" below.)
+
 Bins: 13-vertex blades in 2 distance bins, 7-vertex in 3, 3-vertex in 4, the near and middle sun cascades,
 43-vertex near seed heads, 13-vertex middle heads in 2 bins, the near cascade's heads, and the 7-vertex
 short bin: the short leaves of the lanes inside `d1` (basal pairs, litter, a stem's leaves, the pinnate and
@@ -395,6 +398,100 @@ species (`SEASON_DATA.md`):
   top, which carries the folded head, takes the same colour and is never lighter than the culm or its head).
 - **Fresh greens**: the live colours of May-July carry more chroma (P1 #4F5E32 / #4A5A2F, P2 #4E6230 /
   #45572A) at the same brightness; the canopy colours of the ground tint follow (`ground_tint.json`).
+
+### Disorder
+
+A stand grown at each species' neat mean - every leaf out of one narrow range of tilts and bends, every culm within a
+few degrees of upright, one height everywhere - stood like a field of stakes. A real stand is mostly what the mean
+leaves out (1.6.7). The reference is a pack of 2651 dated iNaturalist research-grade photos of Polesia (northern
+Ukraine and southern Belarus, the East European plain where a month was short): six per species and month - April to
+November and the winter for the graminoids, six buckets of the year for the forbs -, read as contact sheets by month
+(`make_species.py` `DISORDER`: what the photos show of each of the 64 species, in the fields below). Broad soft leaves
+(couch, brome, cock's-foot, the marsh grasses) arch over, fold and twist; fine ones (meadow-grass, the bents, red
+fescue, wavy hair-grass) flow one way and lie in swirls; the bristle tussocks (sheep's fescue, grey and tufted
+hair-grass) radiate every way with their outer leaves on the ground; a reed bed leans as one, its leaves blown to one
+side; stiff herbs stand in clumps that lean 10-20 degrees and keep standing dry, the wiry and the ascending lean
+15-45, the scramblers (vetch, vetchling, bedstraw) lie in tangles.
+
+**The season** (`[grass_keys_N]`, in the spare lanes of the colour rows 4 and 5), of the year's own growth - last
+year's thatch is worn and laid whatever the month: `wear`, 0 a fresh stand to 1 a battered one - the new shoots stand
+neat until May (0.12), the leaves fold and the culms lean from heading on (July 0.4, September 0.75), what is left by
+November went through everything - and `laid`, how far the stand's laid patches reach: the odd animal's bed in June
+(0.15), more after every storm of August and September (0.5-0.6: a sixth of the stand laid at all), two fifths of it
+under the first wet snow (0.8). A graminoid's run with its heading shift, three weeks at most (meadow foxtail a month
+ahead and drooping brome two by their photos: dry and collapsed by July), a forb's by its own phenology - neat until
+it flowers, battered as it seeds and dies back.
+
+**The stand** (`da_grass_gen.cs`):
+
+- **Height**: patch to patch by a noise of 3 and 1 m and tuft to tuft by 0.6 of it (`height_var` 0.15-0.25: about
+  +-11 % of the height between the 5th and the 95th percentile), and among a tuft's leaves the short young ones
+  (`runts`, 15-30 % of the leaves at 0.45-0.8 of their length; half as many late, short culms), the others the longer
+  for them, so the stand's mean length is its species'.
+- **Leaves**: a tuft is tight or open (its tilts x 0.75-1.3); its outer, older leaves splay out of it (`leaf_splay`:
+  the share - half of it at the tuft's heart, half again at its rim - and how far from the vertical, 45-85 degrees)
+  and are the first to yellow.
+- **Culms**: every one fans out of its tuft a little (up to 0.45 of the lean), and `culm_lean` of them - a third of
+  that in a fresh stand, all of it in a worn one and in last year's - lean out of the stand by up to as much, arching
+  as they go: pushed, tangled, under their own head. A forb's stems lean with their clump (`clump_lean` 9-18 degrees,
+  half the stems' own lean) and arc (`culm_bend` 0.05-0.12): at the neat 3 degrees and near-straight stems a stand of
+  tansy was a rack of rods.
+- **The set**: a whole stretch of the stand leans one way by the last wind and rain (`stand_set`, 2-15 degrees, a
+  third of it fresh, a noise of 7 m), the culms fully, the leaves by 0.6.
+- **Laid patches**: a noise of 3.5 and 1.2 m against a threshold the season's `laid` lowers (last year's thatch at
+  0.75 at least: what was laid lies on); inside, everything goes down by the species' `laid_depth` (0.05 a grey
+  hair-grass tussock .. 0.95 drooping brome, of 62 degrees), combed with the swathes a lodged mat lies in
+  (`grass_comb`), the basal pairs by half, and up to three times the litter lies between what still stands, so a
+  laid patch is a mat and not bare soil. The set and the patches are worked out for the lanes that survive the keep.
+- A corymb's or an umbel's disc is drawn level whatever its stem does, so such a stem leans no further than 16
+  degrees, is no runt and does not snap (laid, short or snapped, its disc hung in the grass like a saucer).
+
+**The blade** (`grass_warp`, `da_grass_common.h`: by the record's 16 hash bits, its species' rows 27-31, the season's
+wear and its own senescence, in the vertex shaders - nothing of it rides in the record, and this and the previous
+frame take the same one, so the motion vectors hold; the generation roots a stem's leaves on the warped stem, the head
+pass its head; the second leaf of a folded strip takes a warp of its own):
+
+- **The arch** (`leaf_arch`, 10 degrees a bristle .. 65 a broad soft leaf): a leaf rises over 0.55-0.85 of its length
+  and turns over in the rest, most a little and a few all the way (x 0.15-2.7, the mean kept), more as it ages
+  (x 0.65 fresh .. 1.4 worn); a stem leaf's as it wilts. (Turned over from 0.3-0.6 of its length, a stand of arching
+  leaves stood at two thirds of its height.)
+- **The fold** (`leaf_fold`, the share fresh and worn, x 0.6, last year's x 0.8; a stem leaf's by its senescence):
+  where the midrib gave way, 0.35-0.8 along, the rest hangs by 45-150 degrees, the axis a little aside; one in six is
+  a crease, the others a tight bend (creased, the stand read as broken sticks).
+- **The length**: a leaf that turns over is the longer for it, by what the part past the turn would have risen (up to
+  x 1.6 for a leaf turned a right angle from its middle; a stand's mean x 1.2-1.3): a species' leaf height is its
+  stand's, and its leaves reach it and then arc over and hang. By the numbers (`_work` `tools/calib.py`, a replica of
+  the warp) the canopy keeps 0.94-0.98 of the neat stand's height in summer and nine tenths in October.
+- **The ground**: what hangs ends above it - the turn, the curl with it, is no more than swings the blade's end, on
+  the chord from the turning point, down to its root's level; one limit for every vertex of the blade. (Clamped to
+  the ground instead, or limited by the tangent at the fold - the blade goes on curving past it -, a quarter of an
+  autumn stand's leaves lay ruled along the ground, L-shaped.)
+- **The curl** of dead tissue (`leaf_curl`, 20 degrees a bristle .. 160 fireweed's corkscrews, x 0.3-1.7), growing
+  to the tip, the tangent turning with it; **the twist** about the length (`leaf_twist`, up to 0.6 of a turn: couch,
+  cattail, timothy), which turns the leaf's face along it - the ribbon shows now its flat, now its edge, and its
+  shading follows; **the sweep**, a sideways curve (`leaf_sweep`).
+- **Culms** are sinuous node to node (`culm_wave`, 0.4 % of the length a cattail .. 5 % a vetch), and `culm_snap` of
+  them - none in a fresh stand, all of the share from a wear of 0.35 to 1 and of last year's - snap at a node (35, 60
+  or 15 % up), the top hanging by 50-165 degrees with its head. The stiff herbs that stand dry through the winter
+  (fleabane, mullein, evening primrose) and the reed snap least (0.05-0.12).
+- **Far off** a blade is one line from its root to its end: the 3-vertex blades past `d2` and the middle cascade's
+  casters draw the warp without the turn and at the record's length (ending at their hanging tips, the far field lay
+  at half its height), the 7-vertex blades morph onto that over the last fifth before `d2`, and a snapped stem's
+  head and leaves ride it there.
+- **Litter** straws lie bowed and wavy, not ruled.
+
+**Shading**: a blade's dry tip is its own (0.2-2.6 of the season's share, the mean kept; burnt to one line across
+every blade the tips read as a ruled band), and a worn blade is blotched - stretches browned by rust, mildew and the
+sun, by the wear and on dead tissue. The canopy the occlusion counts against is lower in a worn stand (x 1 fresh ..
+0.6): its leaves lean, fold and lie on one another, and what lies on top of that is in the open; and a blade laid
+down this year counts against a canopy as low as it lies (the cosine of its tilt, 0.4 at least) - against the
+standing one a laid patch was a dark hollow, where a real one is the palest of the field. Measured against the build
+before (the same twelve views, the grass area's linear mean): June and August x 0.95-0.98, October x 1.06-1.07.
+
+Cost (`tools/qa/water/veg_cost.lua`, the l01_escape meadow, Extreme, DX11 1080p on the rig, `r__dbg_grass 2048`
+against 0 interleaved in one run, two headings): the blades' draw 1.53 -> 1.75 ms, the generation 1.77 -> 2.06 ms
+(more records: the laid patches' litter), the frame within its noise. `r__dbg_grass 2048` is the stand without its
+disorder; `tools/qa/water/grass_look.lua` shoots the stand, or pinned species, through the months.
 
 ### Shading (G-buffer)
 
@@ -659,7 +756,11 @@ the look pass): from 1 % lower (DX12, turning) to 23 % higher (DX11).
 - `r__dbg_grass <bits>` (runtime): 1 no basal pairs, 2 no litter, 4 each community's first graminoid only,
   8 no early out, 16 no stem leaves, 32 presence by the palette near the camera too, 64 end every lane after
   the early out, 128 no wind, 256 the stock reach (no thinning, the detail radius), 512 presence back to the
-  palette's weight from `d1` to `d2` (1.6.1), 1024 no distance boost of the gusts (1.6.3).
+  palette's weight from `d1` to `d2` (1.6.1), 1024 no distance boost of the gusts (1.6.3), 2048 the stand without
+  its disorder: every blade at its species' neat mean (1.6.7).
+- `tools/qa/water/grass_look.lua`: the stand at rest through the months (`qa_look_months`), from the eye, a
+  photographer's metre, the ground and afar (`qa_look_views`), the meadow's own stand or pinned species in turn
+  (`qa_look_species`), under a frozen light wind: two builds compare blade for blade.
 - `qa_season_pin <month>` / `qa_season_year 60` (`SEASONS.md`) drive `D`; grass, stock cards, the ground
   tint and the snow follow it continuously.
 - Log: `* [details] N models: K known by content key, B grown as blades`, `* [grass] season data: N detail

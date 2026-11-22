@@ -195,6 +195,14 @@ Lengths in m at `r__detail_height` 1, angles in degrees from vertical, pairs = m
 | `basal_h`, `basal_w`, `basal_tilt`, `basal_bend`, `basal_droop` | the dense base of short arching leaves, drawn as folded pairs at the leaves' roots near the camera (GRASS.md "The look") |
 | `clump_cell`, `clump_pull`, `clump_face_away` | Voronoi clump cell size, pull towards the clump centre, facing away from it 0..1 |
 | `clump_lean` | deg: the largest lean a clump shares (its culms fully, its leaves half) |
+| `leaf_splay` | the stand's disorder (GRASS.md "Disorder"): the share of leaves that splay out of the tuft, deg from the vertical |
+| `leaf_arch` | deg: how far a leaf's upper part turns over on average |
+| `leaf_fold` | the share of leaves folded over (the end hangs) in a fresh stand, in a worn one |
+| `leaf_twist`, `leaf_curl`, `leaf_sweep` | turns about the length; a dead leaf's curl (deg at the tip); the sideways curve (share of the length) |
+| `culm_lean` | the share of culms leaning out of the stand, deg more |
+| `culm_snap`, `culm_wave` | the share of worn culms snapped at a node; the sinuosity (share of the length) |
+| `height_var`, `runts` | the height's spread patch to patch (+- share, at most 0.45); the share of short young leaves (at most 0.5) |
+| `laid_depth`, `stand_set` | how far a laid patch goes down (0..1 of 62 deg); deg: the lean a whole stretch of the stand takes one way |
 | `density_leaf`, `density_culm` | blades per m2 at density 1 |
 | `density_basal` | leaves of the basal pairs per m2 at density 1 (carried by the leaf blades: 0 without `density_leaf`) |
 | `density_cal` | calibration: render density = `density_*` x `density_cal` x `S(r__detail_density)` x key `density`, S = clamp(0.25 / d, 0.25, 1.6) (D4); 0.85, the lawn 0.60 (raised from 0.55 / 0.40 after the first in-game look: the blade meadow read thinner than the stock tufts it replaces) |
@@ -222,6 +230,8 @@ Key lists on the 15th of each month (keyframes T1/T2).
 | `heads` | share of the profile's head density with current-year heads |
 | `seed_stage` | 0 none, 0.25 heading, 0.5 anthesis, 0.75 ripe, 1 weathered |
 | `tip_dry` | dry share of a live blade from its tip |
+| `wear` | the wear of the year's growth: 0 a fresh stand .. 1 a battered one (folded leaves, leaning and snapped culms; last year's thatch is worn whatever the key); 0.4 without the key |
+| `laid` | how far the stand's laid patches reach, 0..1: the threshold of the patch noise falls from 0.9 to 0.45 with it (0.5 lays a sixth of the stand at all, 0.8 two fifths; last year's thatch at 0.75 at least); 0.15 without the key |
 | `wet` | baseline wetness of blades and litter before live rain |
 | `frost` | probability of a frosted-grass morning |
 | `density` | blade count relative to July |
@@ -366,7 +376,7 @@ and members included.
 - D3 max depth open / trees / road / drift (m): 0.220 / 0.140 / 0.120 / 0.536.
 - folders: trees winter days, min open cover: 63 days, 0.9998.
 - folders: decal winter days, min open cover: 63 days, 0.9998.
-- curves checked / samples: 1293 / 2858578.
+- curves checked / samples: 1421 / 3047954.
 - Overshoot, negative and range errors: none.
 
 ### Month summary
