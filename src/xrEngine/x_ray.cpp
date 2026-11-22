@@ -255,6 +255,35 @@ void InitSettings()
         }
     }
 
+    // Refined compat: keys of the game's own sections (the aim zoom). Each one is set on its section
+    // as the game's own line and reaches what inherits it; a section the game does not have is
+    // skipped, the data may name more than is installed. Before the module stage, like the above.
+    for (pcstr patch : {"dead_air_x64_aim_zoom.ltx"})
+    {
+        if (!FS.exist("$game_config$", patch))
+            continue;
+        string_path path;
+        FS.update_path(path, "$game_config$", patch);
+        const CInifile keys(path, TRUE, TRUE, FALSE);
+        u32 set = 0, skipped = 0;
+        for (const CInifile::Sect* section : keys.sections())
+        {
+            if (!pSettings->section_exist(section->Name))
+            {
+                ++skipped;
+                continue;
+            }
+            for (const auto& [key, value] : section->Data)
+                if (key.size())
+                {
+                    const_cast<CInifile*>(pSettings)->xms_set_line(
+                        section->Name.c_str(), key.c_str(), value.c_str(), nullptr, 0);
+                    ++set;
+                }
+        }
+        Msg("* [config] %s: %u key(s) set, %u section(s) the game does not have", patch, set, skipped);
+    }
+
     // module items, config overlays + .ltxp directive patches on top of system.ltx
     XMS::ApplyConfigStage(const_cast<CInifile*>(pSettings));
     // the two configs read before the stage take what modules patch of their files like any later one
