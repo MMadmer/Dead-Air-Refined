@@ -14,8 +14,9 @@ param(
     [switch]$PatchOnly,
     # The content manifest for this release, produced by dead_air_x64_content_bundles.ps1. It
     # ships inside the Setup payload and is the trust root every later check measures against,
-    # so there is no default: content is never optional.
-    [Parameter(Mandatory)][string]$ContentManifest,
+    # so there is no default: content is never optional. (Only a release needs it: the
+    # compatibility archive alone and a patch rebuild end before it is read.)
+    [string]$ContentManifest,
     # Where the installer, the archives and the payload trees land. A QA build against a
     # synthetic content set points this elsewhere, so it can never overwrite the release
     # build of the same version.
@@ -487,6 +488,9 @@ Build-MaintenanceInstaller
 # The content manifest is the trust root: it ships inside every payload and everything afterwards
 # measures the installation against it. No default and no fallback - a build that cannot find it
 # must fail here rather than produce a release that installs no content.
+if (-not $ContentManifest) {
+    throw "ContentManifest is required for a release build (dead_air_x64_content_bundles.ps1 produces it)."
+}
 if (-not (Test-Path -LiteralPath $ContentManifest -PathType Leaf)) {
     throw "The content manifest was not found: $ContentManifest. Build the content bundles first."
 }
