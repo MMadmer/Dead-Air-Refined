@@ -35,6 +35,7 @@ grass_distance       = list,  r__grass_distance
 aa                   = list,  r__aa
 fsr                  = list,  r__fsr
 dlss                 = list,  r__dlss
+xess                 = list,  r__xess
 framegen             = list,  r__framegen
 upscale_sharpness    = track, r__upscale_sharpness, %.2f
 async_compute        = list,  r__async_compute
@@ -72,7 +73,7 @@ rows = renderer, async_compute, resolution, window_mode, fps_limit, vsync
 rows = preset, grass_distance
 
 [group_aa]
-rows = aa, fsr, dlss, framegen, upscale_sharpness
+rows = aa, fsr, dlss, xess, framegen, upscale_sharpness
 
 ; Ray tracing: its own category, never part of a quality preset (DirectX 12, greyed elsewhere).
 [group_rtx]
@@ -94,6 +95,7 @@ grass_distance    = ui_mm_da_grass_distance
 aa                = ui_mm_da_aa
 fsr               = ui_mm_da_fsr
 dlss              = ui_mm_da_dlss
+xess              = ui_mm_da_xess
 framegen          = ui_mm_da_framegen
 upscale_sharpness = ui_mm_da_upscale_sharpness
 async_compute     = ui_mm_da_async_compute

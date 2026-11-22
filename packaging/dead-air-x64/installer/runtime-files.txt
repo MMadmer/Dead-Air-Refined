@@ -1,8 +1,10 @@
 amd_ags_x64.dll
 amd_fidelityfx_framegeneration_dx12.dll
+amd_fidelityfx_framegeneration_vk.dll
 amd_fidelityfx_loader_dx12.dll
+amd_fidelityfx_loader_vk.dll
 amd_fidelityfx_upscaler_dx12.dll
-amd_fidelityfx_vk.dll
+amd_fidelityfx_upscaler_vk.dll
 AnselSDK64.dll
 concrt140.dll
 d3dcompiler_47.dll
@@ -12,6 +14,8 @@ dstoragecore.dll
 dxcompiler.dll
 dxil.dll
 libcrypto-4-x64.dll
+libxess.dll
+libxess_dx11.dll
 luabind.dll
 LuaJIT.dll
 msvcp140_1.dll

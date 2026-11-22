@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
-// The AMD FSR SDK 2.3 loader (amd_fidelityfx_loader_dx12.dll, ffx-api), shared by FSR upscaling
+// The AMD FSR SDK 2.4 loader (amd_fidelityfx_loader_dx12.dll, ffx-api), shared by FSR upscaling
 // and FSR frame generation on the DirectX 12 module: loaded once by its absolute path next to the
-// executable, never unloaded. The loader picks the provider per adapter (FSR 4 on RX 7000/9000,
+// executable, never unloaded. The loader picks the provider per adapter (FSR 4.1 on RX 6000 and newer,
 // FSR 3.1 elsewhere) from the DLLs next to it. See Externals/fidelityfx-sdk/README.md.
 #pragma once
 

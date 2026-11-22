@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
-// AMD FSR 3.1 upscaling on Vulkan through the signed amd_fidelityfx_vk.dll of FidelityFX SDK 1.1.4 (ffx-api;
-// Externals/fidelityfx-vk/README.md). Vulkan module only: the AMD FSR SDK 2.3 the DX12 module uses has no Vulkan
-// runtime. The work is recorded on the immediate context's command buffer between xrvk::BeginNative and
-// xrvk::EndNative; FSR transitions what it touches and returns every image to the layout it was given.
+// AMD FSR upscaling on Vulkan through the AMD FSR SDK 2.4 signed DLLs (ffx-api; Externals/fidelityfx-sdk/README.md):
+// the loader picks FSR 4.1 on RX 6000 and newer and FSR 3.1.6 elsewhere. Vulkan module only. The work is recorded on
+// the immediate context's command buffer between xrvk::BeginNative and xrvk::EndNative; FSR transitions what it
+// touches and returns every image to the layout it was given.
 
 #include "stdafx.h"
 
@@ -14,8 +14,8 @@
 
 #include "da_ffx_vk.h"
 
-#include <ffx_api/ffx_upscale.h>
-#include <ffx_api/vk/ffx_api_vk.h>
+#include <ffx_upscale.h>
+#include <vk/ffx_api_vk.h>
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -61,6 +61,7 @@ class fsr_vk_upscaler final : public IUpscaler
     ffxContext m_context{};
     u32 m_displayW{}, m_displayH{};
     bool m_warnedVelocity{};
+    string64 m_name{ "FSR (Vulkan)" };
 
 public:
     ~fsr_vk_upscaler() override { Shutdown(); }
@@ -76,15 +77,21 @@ public:
 
         ffxCreateBackendVKDesc backend{};
         backend.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK;
-        backend.vkDevice = static_cast<VkDevice>(device.device);
-        backend.vkPhysicalDevice = static_cast<VkPhysicalDevice>(device.physicalDevice);
-        backend.vkDeviceProcAddr = deviceProc;
+        backend.deviceContext.vkDevice = static_cast<VkDevice>(device.device);
+        backend.deviceContext.vkPhysicalDevice = static_cast<VkPhysicalDevice>(device.physicalDevice);
+        backend.deviceContext.vkDeviceProcAddr = deviceProc;
+
+        // Mandatory since SDK 2.1: the API version this code was written against.
+        ffxCreateContextDescUpscaleVersion version{};
+        version.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE_VERSION;
+        version.header.pNext = &backend.header;
+        version.version = FFX_UPSCALER_VERSION;
 
         // Tonemapped LDR input with standard, finite depth; the maximum render size is the display, so the quality
         // can change without a new context.
         ffxCreateContextDescUpscale desc{};
         desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
-        desc.header.pNext = &backend.header;
+        desc.header.pNext = &version.header;
         desc.flags = strstr(Core.Params, "-vkdebug") ? FFX_UPSCALE_ENABLE_DEBUG_CHECKING : 0u;
         desc.maxRenderSize = { displayW, displayH };
         desc.maxUpscaleSize = { displayW, displayH };
@@ -100,7 +107,12 @@ public:
         m_displayW = displayW;
         m_displayH = displayH;
         m_warnedVelocity = false;
-        Msg("* [FSR] ready through [FSR 3.1 (Vulkan)]: %ux%u -> %ux%u", Device.dwRenderWidth, Device.dwRenderHeight,
+        // Which provider the loader chose: FSR 4.1 or FSR 3.1 is only known from here.
+        ffxQueryGetProviderVersion provider{};
+        provider.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
+        if (ffx->Query(&m_context, &provider.header) == FFX_API_RETURN_OK && provider.versionName)
+            xr_sprintf(m_name, "FSR %s (Vulkan)", provider.versionName);
+        Msg("* [FSR] ready through [%s]: %ux%u -> %ux%u", m_name, Device.dwRenderWidth, Device.dwRenderHeight,
             displayW, displayH);
         return true;
     }
@@ -119,6 +131,7 @@ public:
                 Msg("! [FSR] Vulkan context destruction failed (%u)", u32(code));
         }
         m_context = nullptr;
+        xr_strcpy(m_name, "FSR (Vulkan)");
     }
 
     bool Dispatch(const UpscaleFrame& frame) override
@@ -225,7 +238,7 @@ public:
         da_upscaler_default_render_size(UpscalerKind::FSR, quality, displayW, displayH, renderW, renderH);
     }
 
-    pcstr Name() override { return "FSR 3.1 (Vulkan)"; }
+    pcstr Name() override { return m_name; }
 };
 
 IUpscaler* fsr_vk_create() { return xr_new<fsr_vk_upscaler>(); }

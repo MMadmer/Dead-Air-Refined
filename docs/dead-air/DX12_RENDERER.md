@@ -22,11 +22,15 @@ test phase on 28.09.2026; designs and measurements in `dx12-features/`).
   saved DX12 falls back to DX11 with a log line.
 - **Anti-aliasing leaves the quality presets.** `r__aa` (Выкл / FXAA / SMAA / TAA) is saved and never
   written by `_preset`. Upscalers replace it while active.
-- **Upscalers**: AMD FSR and NVIDIA DLSS, each its own row, mutually exclusive.
+- **Upscalers**: AMD FSR, NVIDIA DLSS and Intel XeSS, each its own row, mutually exclusive.
   - DX11: FSR 3.1.2 upscaler through the MSVC-built `optiscaler/FidelityFX-SDK-DX11` port
-    (static libs); DLSS Super Resolution / DLAA through NVIDIA Streamline (`sl.dlss`, D3D11).
-  - DX12: FSR 3.1.5 (FSR 4 on RX 7000/9000, chosen by the AMD loader) through AMD FSR SDK 2.3.0
-    signed DLLs (ffx-api); DLSS through Streamline (`sl.dlss`, D3D12).
+    (static libs); DLSS Super Resolution / DLAA through NVIDIA Streamline (`sl.dlss`, D3D11); XeSS Super
+    Resolution through `libxess_dx11.dll` on Intel Arc (greyed elsewhere, with the reason).
+  - DX12: FSR 3.1.6 (FSR 4.1 on RX 6000 and newer, chosen by the AMD loader) through AMD FSR SDK 2.4.0
+    signed DLLs (ffx-api); DLSS through Streamline (`sl.dlss`, D3D12); XeSS Super Resolution 2.0.2 through
+    `libxess.dll` (Intel XeSS SDK 3.0.2, `da_upscaler_xess.cpp`) on any GPU with Shader Model 6.4 and DP4a:
+    seven qualities from Native AA to Ultra Performance, the reactive mask as its responsive pixel mask,
+    a mip bias of log2(render / display).
   - The DLSS row is hidden when the adapter does not support DLSS (Streamline
     `slIsFeatureSupported`), and a saved DLSS choice is switched off at start.
   - Streamline starts with the renderer on every NVIDIA adapter, so DLSS can be switched on without

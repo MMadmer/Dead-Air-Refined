@@ -2,7 +2,7 @@
 // Released under the MIT licence, see License.txt
 //
 // AMD FSR frame generation on DirectX 12 (docs/dead-air/DX12_RENDERER.md, 1) through the AMD FSR
-// SDK 2.3 signed DLLs (ffx-api): FSR's frame interpolation swap chain presents a generated frame
+// SDK 2.4 signed DLLs (ffx-api): FSR's frame interpolation swap chain presents a generated frame
 // between every two rendered ones (2x), and the frame generation context prepares it from the
 // scene depth and the motion vectors. The UI is told apart from the scene by the difference
 // between the back buffer and its hudless copy, so it is composed onto the generated frames too.
@@ -524,8 +524,9 @@ public:
         m_warned = false;
 
         // The runtime's own messages: errors, and warnings under -dxdebug.
-        ffxConfigureDescGlobalDebug1 messages{};
-        messages.header.type = FFX_API_CONFIGURE_DESC_TYPE_GLOBALDEBUG1;
+        ffxConfigureDescGlobalDebug messages{};
+        messages.header.type = FFX_API_CONFIGURE_DESC_TYPE_GLOBALDEBUG;
+        messages.effectId = FFX_API_EFFECT_ID_FRAMEGENERATION;
         messages.fpMessage = &fsr_fg_message;
         messages.debugLevel = debug ? FFX_API_CONFIGURE_GLOBALDEBUG_LEVEL_WARNINGS : FFX_API_CONFIGURE_GLOBALDEBUG_LEVEL_ERRORS;
         ffx->Configure(&m_context, &messages.header);

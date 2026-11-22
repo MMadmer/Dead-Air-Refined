@@ -35,6 +35,9 @@
 	<string id="ui_mm_da_dlss">
 		<text>NVIDIA DLSS</text>
 	</string>
+	<string id="ui_mm_da_xess">
+		<text>Intel XeSS</text>
+	</string>
 	<string id="ui_mm_da_framegen">
 		<text>Frame generation</text>
 	</string>
@@ -148,6 +151,30 @@
 	<string id="st_opt_st_dlss_ultra_performance">
 		<text>Ultra Performance</text>
 	</string>
+	<string id="st_opt_st_xess_off">
+		<text>Off</text>
+	</string>
+	<string id="st_opt_st_xess_native">
+		<text>Native AA</text>
+	</string>
+	<string id="st_opt_st_xess_ultra_quality_plus">
+		<text>Ultra Quality Plus</text>
+	</string>
+	<string id="st_opt_st_xess_ultra_quality">
+		<text>Ultra Quality</text>
+	</string>
+	<string id="st_opt_st_xess_quality">
+		<text>Quality</text>
+	</string>
+	<string id="st_opt_st_xess_balanced">
+		<text>Balanced</text>
+	</string>
+	<string id="st_opt_st_xess_performance">
+		<text>Performance</text>
+	</string>
+	<string id="st_opt_st_xess_ultra_performance">
+		<text>Ultra Performance</text>
+	</string>
 	<string id="st_opt_st_fg_off">
 		<text>Off</text>
 	</string>
@@ -222,13 +249,22 @@
 		<text>Smooths jagged edges. FXAA is the lightest and softest, SMAA is sharper, TAA is the smoothest: it builds the picture from several frames and is slightly softer in motion.</text>
 	</string>
 	<string id="st_da_x64_video_hint_aa_upscaler">
-		<text>AMD FSR or NVIDIA DLSS does the anti-aliasing now. Turn them off to choose it here.</text>
+		<text>AMD FSR, NVIDIA DLSS or Intel XeSS does the anti-aliasing now. Turn them off to choose it here.</text>
 	</string>
 	<string id="st_da_x64_video_hint_fsr">
-		<text>AMD FSR renders at a lower resolution and reconstructs the screen resolution: more FPS for a little sharpness. Native AA keeps the resolution and only anti-aliases. Works on any GPU. Replaces NVIDIA DLSS.</text>
+		<text>AMD FSR renders at a lower resolution and reconstructs the screen resolution: more FPS for a little sharpness. Native AA keeps the resolution and only anti-aliases. Works on any GPU. Replaces NVIDIA DLSS and Intel XeSS.</text>
 	</string>
 	<string id="st_da_x64_video_hint_dlss">
-		<text>NVIDIA DLSS does what AMD FSR does, with the neural network of GeForce RTX cards. DLAA keeps the resolution and only anti-aliases. Replaces AMD FSR.</text>
+		<text>NVIDIA DLSS does what AMD FSR does, with the neural network of GeForce RTX cards. DLAA keeps the resolution and only anti-aliases. Replaces AMD FSR and Intel XeSS.</text>
+	</string>
+	<string id="st_da_x64_video_hint_xess">
+		<text>Intel XeSS does what AMD FSR does, with a neural network: its own fast model on Intel Arc cards, a universal one on the others. Native AA keeps the resolution and only anti-aliases. Replaces AMD FSR and NVIDIA DLSS.</text>
+	</string>
+	<string id="st_da_x64_video_hint_xess_dx11">
+		<text>On DirectX 11 Intel XeSS runs only on Intel Arc cards. Choose DirectX 12 or Vulkan under Renderer and restart the game.</text>
+	</string>
+	<string id="st_da_x64_video_hint_xess_unsupported">
+		<text>The GPU or its driver cannot run Intel XeSS: it needs Shader Model 6.4 with DP4a (most GPUs since 2018).</text>
 	</string>
 	<string id="st_da_x64_video_hint_framegen">
 		<text>The GPU draws extra frames between the real ones: smoother motion, slightly more input lag. Works best from 60 FPS up. DirectX 12 and Vulkan only; the list holds what the GPU supports.</text>

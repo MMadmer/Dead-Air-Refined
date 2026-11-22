@@ -26,6 +26,9 @@ local PRESET_IDS = { Minimum = 0, Low = 1, Default = 2, High = 3, Extreme = 4 }
 -- The DirectX 12 rows (docs\dead-air\dx12-features\PLAN.md 2.6): always shown, greyed with the reason
 -- where the running renderer or the card cannot run them, like frame generation. The RTX rows are
 -- ray tracing, a category of its own that no quality preset touches; they run on Vulkan too.
+-- The upscalers, one at a time.
+local UPSCALERS = { "fsr", "dlss", "xess" }
+local UPSCALER_IDS = { fsr = true, dlss = true, xess = true }
 local RT_EFFECTS = { "rt_reflections", "rt_shadows", "rt_gi", "rtao" }
 local DX12_ROWS = { "async_compute", "rt_reflections", "rt_shadows", "rt_gi", "rtao", "rt_quality" }
 local VULKAN_ROWS = { rt_reflections = true, rt_shadows = true, rt_gi = true, rtao = true, rt_quality = true }
@@ -76,7 +79,7 @@ function opt_video:InitControls(x, y, xml, handler)
 		elseif (id == "preset") then
 			handler.combo_preset = row.ctrl
 			handler:Register(row.ctrl, "combo_preset")
-		elseif (id == "fsr" or id == "dlss") then
+		elseif (UPSCALER_IDS[id]) then
 			handler:Register(row.ctrl, "video_" .. id)
 			handler:AddCallback("video_" .. id, ui_events.LIST_ITEM_SELECT, function() self:OnUpscalerSelected(id) end)
 		end
@@ -161,9 +164,15 @@ function opt_video:InitStates()
 		end
 	end
 
+	-- XeSS runs on DirectX 12 and Vulkan on any recent GPU, on DirectX 11 on Intel Arc alone.
+	local xess = self.rows.xess
+	if (xess and caps.xess ~= 1) then
+		xess.off_hint = (caps.api == 11) and "st_da_x64_video_hint_xess_dx11" or "st_da_x64_video_hint_xess_unsupported"
+	end
+
 	-- The combos the rules read hold no value until the dialog reads its groups; read these now,
 	-- so the first state is right with any ui_mm_opt_main (the stock one never calls Refresh).
-	for _, id in ipairs({ "renderer", "fsr", "dlss" }) do
+	for _, id in ipairs({ "renderer", "fsr", "dlss", "xess" }) do
 		if (self.rows[id]) then
 			self.rows[id].ctrl:SetCurrentOptValue()
 		end
@@ -190,10 +199,10 @@ function opt_video:AnyRtEffect()
 	return false
 end
 
--- AMD FSR and NVIDIA DLSS take turns: picking one switches the other off.
+-- AMD FSR, NVIDIA DLSS and Intel XeSS take turns: picking one switches the others off.
 function opt_video:OnUpscalerSelected(id)
 	if (self:IsOn(id)) then
-		for _, other in ipairs({ "fsr", "dlss" }) do
+		for _, other in ipairs(UPSCALERS) do
 			if (other ~= id and self:IsOn(other)) then
 				-- "Off" is token 0, the first entry of the list.
 				self.rows[other].ctrl:SetCurrentID(0)
@@ -217,9 +226,9 @@ end
 -- other rows' current (not yet accepted) values.
 function opt_video:Refresh()
 	-- A combo moved by the keyboard, the stick or a right click sends no selection event: the
-	-- turn-taking of FSR and DLSS is checked here too, against the values seen last time.
+	-- turn-taking of the upscalers is checked here too, against the values seen last time.
 	local changed
-	for _, id in ipairs({ "fsr", "dlss" }) do
+	for _, id in ipairs(UPSCALERS) do
 		local row = self.rows[id]
 		if (row) then
 			local current = row.ctrl:CurrentID()
@@ -229,12 +238,13 @@ function opt_video:Refresh()
 		end
 	end
 	if (changed) then
-		local other = (changed == "fsr") and "dlss" or "fsr"
-		if (self:IsOn(other)) then
-			self.rows[other].ctrl:SetCurrentID(0)
+		for _, other in ipairs(UPSCALERS) do
+			if (other ~= changed and self:IsOn(other)) then
+				self.rows[other].ctrl:SetCurrentID(0)
+			end
 		end
 	end
-	for _, id in ipairs({ "fsr", "dlss" }) do
+	for _, id in ipairs(UPSCALERS) do
 		local row = self.rows[id]
 		if (row) then
 			row.seen_id = row.ctrl:CurrentID()
@@ -256,10 +266,10 @@ function opt_video:Refresh()
 
 	dead_air_x64_option_list.refresh(self)
 
-	-- While an upscaler is on it does the antialiasing, and the sharpening is its own.
-	local upscaling = self:IsOn("fsr") or self:IsOn("dlss")
-	self:SetState("aa", not upscaling, "st_da_x64_video_hint_aa_upscaler")
-	self:SetState("upscale_sharpness", upscaling, "st_da_x64_video_hint_upscale_sharpness_off")
+	-- While an upscaler is on it does the antialiasing; FSR and DLSS sharpen on their own, XeSS has no sharpening.
+	local sharpening = self:IsOn("fsr") or self:IsOn("dlss")
+	self:SetState("aa", not (sharpening or self:IsOn("xess")), "st_da_x64_video_hint_aa_upscaler")
+	self:SetState("upscale_sharpness", sharpening, "st_da_x64_video_hint_upscale_sharpness_off")
 
 	local renderer = self.rows.renderer
 	local chosen = (renderer ~= nil) and renderer.ctrl:CurrentID() or nil

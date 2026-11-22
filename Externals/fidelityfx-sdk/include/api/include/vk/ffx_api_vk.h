@@ -1,6 +1,6 @@
 // This file is part of the FidelityFX SDK.
 //
-// Copyright (C) 2024 Advanced Micro Devices, Inc.
+// Copyright (C) 2026 Advanced Micro Devices, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
@@ -26,7 +26,7 @@
 #include <vulkan/vulkan.h>
 
 /// FFX specific callback type when submitting a command buffer to a queue.
-typedef VkResult (*PFN_vkQueueSubmitFFXAPI)(uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence);
+typedef VkResult(*PFN_vkQueueSubmitFFXAPI)(uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence);
 
 /// Helper stucture
 struct VkQueueInfoFFXAPI
@@ -36,8 +36,10 @@ struct VkQueueInfoFFXAPI
     PFN_vkQueueSubmitFFXAPI submitFunc;   ///< an optional submit function in case there might be some concurrent submissions
 };
 
-#define FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK 0x0000003u
-struct ffxCreateBackendVKDesc
+// We need to keep this one alive because of VK verison of FSR3.1.4
+// Deprecated version of the VK backend create context descriptor, please use the non-deprecated version below.
+#define FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK_DEPRECATED 0x0000003u
+struct ffxCreateBackendVKDesc_DEPRECATED
 {
     ffxCreateContextDescHeader header;
     VkDevice                   vkDevice;          ///< the logical device used by the program.
@@ -45,100 +47,42 @@ struct ffxCreateBackendVKDesc
     PFN_vkGetDeviceProcAddr    vkDeviceProcAddr;  ///< function pointer to get device procedure addresses
 };
 
-#define FFX_API_EFFECT_ID_FGSC_VK 0x00040000u
+/// Convenience structure to hold all VK-related device information.
+typedef struct VkDeviceContext {
+    VkDevice                vkDevice;           ///< The Vulkan device
+    VkPhysicalDevice        vkPhysicalDevice;   ///< The Vulkan physical device
+    PFN_vkGetDeviceProcAddr vkDeviceProcAddr;   ///< The device's function address table
+} VkDeviceContext;
 
-#define FFX_API_CREATE_CONTEXT_DESC_TYPE_FGSWAPCHAIN_VK 0x40001u
-struct ffxCreateContextDescFrameGenerationSwapChainVK
+#define FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK FFX_API_MAKE_BACKEND_SUB_ID(FFX_API_BACKEND_ID_VK, 0x03)
+struct ffxCreateBackendVKDesc
 {
     ffxCreateContextDescHeader header;
-    VkPhysicalDevice           physicalDevice;     ///< the physicak device used by the program.
-    VkDevice                   device;             ///< the logical device used by the program.
-    VkSwapchainKHR*            swapchain;          ///< the current swapchain to be replaced. Will be destroyed when the context is created. This can be VK_NULL_HANDLE. Will contain the new swapchain on return.
-    VkAllocationCallbacks*     allocator;          ///< optional allocation callbacks.
-    VkSwapchainCreateInfoKHR   createInfo;         ///< the description of the desired swapchain. If its VkSwapchainCreateInfoKHR::oldSwapchain field isn't VK_NULL_HANDLE, it should be the same as the ffxCreateContextDescFrameGenerationSwapChainVK::swapchain field above.
-    VkQueueInfoFFXAPI          gameQueue;          ///< the main graphics queue, where Present is called.
-    VkQueueInfoFFXAPI          asyncComputeQueue;  ///< A queue with Compute capability.
-    VkQueueInfoFFXAPI          presentQueue;       ///< A queue with Transfer and Present capabilities.
-    VkQueueInfoFFXAPI          imageAcquireQueue;  ///< A queue with no capability required.
+    VkDeviceContext            deviceContext;     ///< the VK device information used by the program.
 };
 
-#define FFX_API_CONFIGURE_DESC_TYPE_FGSWAPCHAIN_REGISTERUIRESOURCE_VK 0x40002u
-struct ffxConfigureDescFrameGenerationSwapChainRegisterUiResourceVK
+/// Resource allocation callback function. (TODO)
+typedef ffxReturnCode_t(*PfnFfxResourceAllocatorFunc)(uint32_t effectId/*,
+    D3D12_RESOURCE_STATES            initialState,
+    const D3D12_HEAP_PROPERTIES* pHeapProps,
+    const D3D12_RESOURCE_DESC* pD3DDesc,
+    const FfxApiResourceDescription* pFfxDesc,
+    const D3D12_CLEAR_VALUE* pOptimizedClear,
+    ID3D12Resource** ppD3DResource*/);
+
+/// Resource destruction callback function. (TODO)
+typedef ffxReturnCode_t(*PfnFfxResourceDeallocatorFunc)(uint32_t effectId/*, ID3D12Resource* pResource*/);
+
+#define FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK_ALLOCATION_CALLBACKS FFX_API_MAKE_BACKEND_SUB_ID(FFX_API_BACKEND_ID_VK, 0x04)
+struct ffxCreateBackendVKAllocationCallbacksDesc
 {
-    ffxConfigureDescHeader header;
-    struct FfxApiResource  uiResource;  ///< Resource containing user interface for composition. May be empty.
-    uint32_t               flags;       ///< Zero or combination of values from FfxApiUiCompositionFlags.
+	ffxCreateContextDescHeader    header;
+    PfnFfxResourceAllocatorFunc   pfnFfxResourceAllocator;        ///< Resource allocation function (can be null)      <------- NOT IMPL YET, SEE DX12/XBOX IMPL
+    PfnFfxResourceDeallocatorFunc pfnFfxResourceDeallocator;      ///< Resource deallocation function (can be null)     <------- NOT IMPL YET, SEE DX12/XBOX IMPL
+    FfxApiConstantBufferAllocator pfnFfxConstantBufferAllocator;  ///< Constant buffer allocation function (can be null)
 };
 
-#define FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_INTERPOLATIONCOMMANDLIST_VK 0x40003u
-struct ffxQueryDescFrameGenerationSwapChainInterpolationCommandListVK
-{
-    ffxQueryDescHeader header;
-    void**             pOutCommandList;  ///< Output command nuffer (VkCommandBuffer) to be used for frame generation dispatch.
-};
-
-#define FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_INTERPOLATIONTEXTURE_VK 0x40004u
-struct ffxQueryDescFrameGenerationSwapChainInterpolationTextureVK
-{
-    ffxQueryDescHeader     header;
-    struct FfxApiResource* pOutTexture;  ///< Output resource in which the frame interpolation result should be placed.
-};
-
-#define FFX_API_DISPATCH_DESC_TYPE_FGSWAPCHAIN_WAIT_FOR_PRESENTS_VK 0x40007u
-struct ffxDispatchDescFrameGenerationSwapChainWaitForPresentsVK
-{
-    ffxDispatchDescHeader header;
-};
-
-#define FFX_API_CONFIGURE_DESC_TYPE_FRAMEGENERATIONSWAPCHAIN_KEYVALUE_VK 0x40008u
-struct ffxConfigureDescFrameGenerationSwapChainKeyValueVK
-{
-    ffxConfigureDescHeader header;
-    uint64_t               key;        ///< Configuration key, member of the FfxApiConfigureFrameGenerationSwapChainKeyVK enumeration.
-    uint64_t               u64;        ///< Integer value or enum value to set.
-    void*                  ptr;        ///< Pointer to set or pointer to value to set.
-};
-
-//enum value matches enum FfxFrameInterpolationSwapchainConfigureKey
-enum FfxApiConfigureFrameGenerationSwapChainKeyVK
-{
-    FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_WAITCALLBACK = 0,                     ///< Sets FfxWaitCallbackFunc
-    FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_FRAMEPACINGTUNING = 2,                ///< Sets FfxApiSwapchainFramePacingTuning casted from ptr
-};
-
-#define FFX_API_QUERY_DESC_TYPE_FRAMEGENERATIONSWAPCHAIN_GPU_MEMORY_USAGE_VK 0x00040009u
-struct ffxQueryFrameGenerationSwapChainGetGPUMemoryUsageVK
-{
-    ffxQueryDescHeader header;
-    struct FfxApiEffectMemoryUsage* gpuMemoryUsageFrameGenerationSwapchain;
-};
-
-/// Function to get the number of presents. This is useful when using frame interpolation
-typedef uint64_t (*PFN_getLastPresentCountFFXAPI)(VkSwapchainKHR);
-
-/// FFX API specific functions to create and destroy a swapchain
-typedef VkResult(*PFN_vkCreateSwapchainFFXAPI)(VkDevice device, const VkSwapchainCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchain, void* pContext);
-typedef void(*PFN_vkDestroySwapchainFFXAPI)(VkDevice device, VkSwapchainKHR swapchain, const VkAllocationCallbacks* pAllocator, void* pContext);
-
-#define FFX_API_QUERY_DESC_TYPE_FGSWAPCHAIN_FUNCTIONS_VK 0x40005u
-struct ffxQueryDescSwapchainReplacementFunctionsVK
-{
-    ffxQueryDescHeader header;
-    PFN_vkCreateSwapchainFFXAPI   pOutCreateSwapchainFFXAPI;      ///< Replacement of vkCreateSwapchainKHR. Can be called when swapchain is recreated but swapchain context isn't (for example when toggling vsync).
-    PFN_vkDestroySwapchainFFXAPI  pOutDestroySwapchainFFXAPI;     ///< Replacement of vkDestroySwapchainKHR. Can be called when swapchain is destroyed but swapchain context isn't.
-    PFN_vkGetSwapchainImagesKHR   pOutGetSwapchainImagesKHR;      ///< Replacement of vkGetSwapchainImagesKHR.
-    PFN_vkAcquireNextImageKHR     pOutAcquireNextImageKHR;        ///< Replacement of vkAcquireNextImageKHR.
-    PFN_vkQueuePresentKHR         pOutQueuePresentKHR;            ///< Replacement of vkQueuePresentKHR.
-    PFN_vkSetHdrMetadataEXT       pOutSetHdrMetadataEXT;          ///< Replacement of vkSetHdrMetadataEXT.
-    PFN_getLastPresentCountFFXAPI pOutGetLastPresentCountFFXAPI;  ///< Additional function to get the number of times present has been called since the swapchain creation.
-};
-
-#define FFX_API_CREATE_CONTEXT_DESC_TYPE_FGSWAPCHAIN_MODE_VK 0x40010u
-struct ffxCreateContextDescFrameGenerationSwapChainModeVK
-{
-    ffxCreateContextDescHeader header;
-    bool                       composeOnPresentQueue;  ///< flags indicating that composition will happen on the present queue
-};
+#if defined(__cplusplus)
 
 static inline uint32_t ffxApiGetSurfaceFormatVK(VkFormat fmt)
 {
@@ -190,6 +134,8 @@ static inline uint32_t ffxApiGetSurfaceFormatVK(VkFormat fmt)
         return FFX_API_SURFACE_FORMAT_R16_SNORM;
     case VK_FORMAT_R8_UNORM:
         return FFX_API_SURFACE_FORMAT_R8_UNORM;
+    case VK_FORMAT_R8_SNORM:
+        return FFX_API_SURFACE_FORMAT_R8_SNORM;
     case VK_FORMAT_R8_UINT:
     case VK_FORMAT_S8_UINT:
         return FFX_API_SURFACE_FORMAT_R8_UINT;
@@ -259,8 +205,8 @@ static inline bool ffxApiIsStencilFormat(VkFormat fmt)
 }
 
 static inline FfxApiResourceDescription ffxApiGetBufferResourceDescriptionVK(const VkBuffer           buffer,
-                                                                             const VkBufferCreateInfo createInfo,
-                                                                             uint32_t                 additionalUsages)
+    const VkBufferCreateInfo createInfo,
+    uint32_t                 additionalUsages)
 {
     FfxApiResourceDescription resourceDescription = {};
 
@@ -268,9 +214,9 @@ static inline FfxApiResourceDescription ffxApiGetBufferResourceDescriptionVK(con
     if (buffer == VK_NULL_HANDLE)
         return resourceDescription;
 
-    resourceDescription.flags  = FFX_API_RESOURCE_FLAGS_NONE;
-    resourceDescription.usage  = additionalUsages;
-    resourceDescription.size   = (uint32_t)createInfo.size;
+    resourceDescription.flags = FFX_API_RESOURCE_FLAGS_NONE;
+    resourceDescription.usage = additionalUsages;
+    resourceDescription.size = (uint32_t)createInfo.size;
     resourceDescription.stride = 0;
     resourceDescription.format = FFX_API_SURFACE_FORMAT_UNKNOWN;
 
@@ -280,7 +226,7 @@ static inline FfxApiResourceDescription ffxApiGetBufferResourceDescriptionVK(con
         resourceDescription.usage |= FFX_API_RESOURCE_USAGE_INDIRECT;
 
     // What should we initialize this to?? No case for this yet
-    resourceDescription.depth    = 0;
+    resourceDescription.depth = 0;
     resourceDescription.mipCount = 0;
 
     // Set the type
@@ -314,10 +260,10 @@ static inline FfxApiResourceDescription ffxApiGetImageResourceDescriptionVK(cons
     // Resource-specific supplemental use flags
     resourceDescription.usage |= additionalUsages;
 
-    resourceDescription.width    = createInfo.extent.width;
-    resourceDescription.height   = createInfo.extent.height;
+    resourceDescription.width = createInfo.extent.width;
+    resourceDescription.height = createInfo.extent.height;
     resourceDescription.mipCount = createInfo.mipLevels;
-    resourceDescription.format   = ffxApiGetSurfaceFormatVK(createInfo.format);
+    resourceDescription.format = ffxApiGetSurfaceFormatVK(createInfo.format);
 
     // if the mutable flag is present, assume that the real format is sRGB
     if ((createInfo.flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) != 0)
@@ -339,7 +285,7 @@ static inline FfxApiResourceDescription ffxApiGetImageResourceDescriptionVK(cons
         break;
     case VK_IMAGE_TYPE_3D:
         resourceDescription.depth = createInfo.extent.depth;
-        resourceDescription.type  = FFX_API_RESOURCE_TYPE_TEXTURE3D;
+        resourceDescription.type = FFX_API_RESOURCE_TYPE_TEXTURE3D;
         break;
     default:
         //FFX_ASSERT_MESSAGE(false, "FFXInterface: VK: Unsupported texture dimension requested. Please implement.");
@@ -352,9 +298,11 @@ static inline FfxApiResourceDescription ffxApiGetImageResourceDescriptionVK(cons
 static inline FfxApiResource ffxApiGetResourceVK(void* vkResource, FfxApiResourceDescription ffxResDescription, uint32_t state)
 {
     FfxApiResource resource = {};
-    resource.resource       = vkResource;
-    resource.state          = state;
-    resource.description    = ffxResDescription;
+    resource.resource = vkResource;
+    resource.state = state;
+    resource.description = ffxResDescription;
 
     return resource;
 }
+
+#endif

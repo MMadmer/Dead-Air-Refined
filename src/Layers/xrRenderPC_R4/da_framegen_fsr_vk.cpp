@@ -1,12 +1,12 @@
 // Copyright (c) 2026 Grizzly
 // Released under the MIT licence, see License.txt
 //
-// AMD FSR frame generation on Vulkan (docs/dead-air/VULKAN_RENDERER.md, 7) through the signed amd_fidelityfx_vk.dll
-// of FidelityFX SDK 1.1.4: FFX's frame interpolation swap chain takes the place of the layer's VkSwapchainKHR
+// AMD FSR frame generation on Vulkan (docs/dead-air/VULKAN_RENDERER.md, 7) through the AMD FSR SDK 2.4 signed DLLs
+// (amd_fidelityfx_framegeneration_vk.dll behind the loader): FFX's frame interpolation swap chain takes the place of the layer's VkSwapchainKHR
 // (xrvk::SwapChainProvider) and presents a generated frame between every two rendered ones from its own presenter
 // thread, on two graphics-family queues the device keeps for it. The frame generation context prepares from the
 // scene depth and the motion vectors on the immediate command buffer; the UI is told apart from the scene by the
-// difference between the back buffer and its hudless copy. Per frame: ffxConfigure -> Prepare (here) -> the
+// difference between the back buffer and its hudless copy. Per frame: ffxConfigure -> PrepareV2 (here) -> the
 // generation inside Present, through the swap chain's callback. The DirectX 12 twin is da_framegen_fsr.cpp.
 
 #include "stdafx.h"
@@ -15,8 +15,9 @@
 #include "da_framegen.h"
 #include "da_ffx_vk.h"
 
-#include <ffx_api/ffx_framegeneration.h>
-#include <ffx_api/vk/ffx_api_vk.h>
+#include <ffx_framegeneration.h>
+#include <vk/ffx_api_vk.h>
+#include <vk/ffx_api_framegeneration_vk.h>
 
 namespace xray::render::RENDER_NAMESPACE
 {
@@ -66,8 +67,9 @@ FfxApiResource fsr_fg_resource(const xrvk::NativeImage& image, uint32_t state)
 }
 
 // FSR's frame interpolation swap chain in place of the layer's. A static object: the layer keeps it until the
-// chain goes (da_framegen.h). One context for the life of the provider's chains: a resize or a vsync change
-// makes a new chain of the same context, only the last chain takes the context with it.
+// chain goes (da_framegen.h). One context and one chain for the life of the provider: a resize or a vsync change
+// remakes the chain in place (SDK 2.4: the replacement create takes the existing chain), only the last Destroy
+// takes the context and then the chain with it.
 class fsr_vk_swapchain_provider final : public xrvk::SwapChainProvider
 {
     ffxContext m_context{};
@@ -89,12 +91,17 @@ class fsr_vk_swapchain_provider final : public xrvk::SwapChainProvider
 
     void DestroyContext()
     {
+        // SDK 2.4: the chain outlives its context and goes right after it, through the replacement destroy.
+        const PFN_vkDestroySwapchainFFXAPI destroyChain = m_fn.pOutDestroySwapchainFFXAPI;
+        const VkSwapchainKHR chain = m_chain;
         if (const ffxFunctions* ffx = da_ffx_vk(); ffx && m_context)
         {
             const ffxReturnCode_t code = ffx->DestroyContext(&m_context, nullptr);
             if (code != FFX_API_RETURN_OK)
                 Msg("! [FSR FG] swap chain context destruction failed (%u)", u32(code));
         }
+        if (destroyChain && chain)
+            destroyChain(m_device, chain, nullptr, chain);
         m_context = nullptr;
         m_chain = VK_NULL_HANDLE;
         m_fn = {};
@@ -115,10 +122,13 @@ public:
 
         if (m_context)
         {
-            const VkResult result = m_fn.pOutCreateSwapchainFFXAPI(m_device, &info, nullptr, &out, m_context);
-            if (result == VK_SUCCESS)
+            // The chain remade in place: the existing one goes in and comes back.
+            VkSwapchainKHR chain = m_chain;
+            const VkResult result = chain ? m_fn.pOutCreateSwapchainFFXAPI(m_device, &info, nullptr, &chain, chain) :
+                VK_ERROR_INITIALIZATION_FAILED;
+            if (result == VK_SUCCESS && chain)
             {
-                m_chain = out;
+                m_chain = out = chain;
                 m_format = info.imageFormat;
             }
             else
@@ -158,6 +168,11 @@ public:
         mode.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FGSWAPCHAIN_MODE_VK;
         mode.composeOnPresentQueue = true;
         create.header.pNext = &mode.header;
+        // Mandatory since SDK 2.1: the API version this code was written against.
+        ffxCreateContextDescFrameGenerationSwapChainVersionVK version{};
+        version.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATIONSWAPCHAIN_VERSION_VK;
+        version.version = FFX_FRAMEGENERATION_SWAPCHAIN_VK_VERSION;
+        mode.header.pNext = &version.header;
 
         const ffxReturnCode_t code = ffx->CreateContext(&m_context, &create.header, nullptr);
         if (code != FFX_API_RETURN_OK || !m_context || !chain)
@@ -176,6 +191,15 @@ public:
             DestroyContext();
             return VK_ERROR_INITIALIZATION_FAILED;
         }
+        // By default the presenter paces the generated frame by spinning a whole core: the hybrid wait sleeps and spins
+        // only the last two timer ticks, and the fence waits block (the DirectX 12 twin's tuning).
+        static FfxApiSwapchainFramePacingTuning pacing{0.1f, 0.1f, true, 2, true};
+        ffxConfigureDescFrameGenerationSwapChainKeyValueVK tuning{};
+        tuning.header.type = FFX_API_CONFIGURE_DESC_TYPE_FRAMEGENERATIONSWAPCHAIN_KEYVALUE_VK;
+        tuning.key = FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_FRAMEPACINGTUNING;
+        tuning.ptr = &pacing;
+        if (const ffxReturnCode_t tuned = ffx->Configure(&m_context, &tuning.header); tuned != FFX_API_RETURN_OK)
+            Msg("! [FSR FG] the presenter's pacing cannot be tuned (%u): it spins a core", u32(tuned));
         m_chain = out = chain;
         m_format = info.imageFormat;
         return VK_SUCCESS;
@@ -188,12 +212,8 @@ public:
             return;
         WaitForPresents();
         if (last)
-        {
             DestroyContext();
-            return;
-        }
-        m_fn.pOutDestroySwapchainFFXAPI(m_device, chain, nullptr, m_context);
-        m_chain = VK_NULL_HANDLE;
+        // Otherwise the chain stays for the next Create to remake in place.
     }
 
     int GetImages(void* swapchain, UINT* count, void* images) override
@@ -246,7 +266,6 @@ class fsr_vk_framegen final : public IFrameGen
     ffxContext m_context{};
     u32 m_displayW{}, m_displayH{};
     u64 m_frameID{};
-    u64 m_idOffset{}; // SDK 1.1.4 resets on a frame id that does not step by one: a reset skips one
     static constexpr u32 kReportFrames = 600;
     u64 m_prepared{}, m_presentsAtInit{}; // the log line that shows the generation reached the display
     bool m_active{};
@@ -326,9 +345,9 @@ public:
 
         ffxCreateBackendVKDesc backend{};
         backend.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK;
-        backend.vkDevice = static_cast<VkDevice>(device.device);
-        backend.vkPhysicalDevice = static_cast<VkPhysicalDevice>(device.physicalDevice);
-        backend.vkDeviceProcAddr = proc;
+        backend.deviceContext.vkDevice = static_cast<VkDevice>(device.device);
+        backend.deviceContext.vkPhysicalDevice = static_cast<VkPhysicalDevice>(device.physicalDevice);
+        backend.deviceContext.vkDeviceProcAddr = proc;
 
         // The hudless copy has the back buffer's format; the swap chain's may order the channels otherwise.
         const VkFormat hudlessFormat = fsr_fg_backbuffer_format();
@@ -344,7 +363,12 @@ public:
         const bool debug = !!strstr(Core.Params, "-vkdebug");
         ffxCreateContextDescFrameGeneration desc{};
         desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION;
-        desc.header.pNext = &backend.header;
+        // Mandatory since SDK 2.1: the API version this code was written against.
+        ffxCreateContextDescFrameGenerationVersion version{};
+        version.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION_VERSION;
+        version.header.pNext = &backend.header;
+        version.version = FFX_FRAMEGENERATION_VERSION;
+        desc.header.pNext = &version.header;
         desc.flags = debug ? FFX_FRAMEGENERATION_ENABLE_DEBUG_CHECKING : 0u;
         desc.displaySize = { displayW, displayH };
         desc.maxRenderSize = { displayW, displayH };
@@ -364,8 +388,9 @@ public:
         m_warned = false;
 
         // The runtime's own messages: errors, and warnings under -vkdebug.
-        ffxConfigureDescGlobalDebug1 messages{};
-        messages.header.type = FFX_API_CONFIGURE_DESC_TYPE_GLOBALDEBUG1;
+        ffxConfigureDescGlobalDebug messages{};
+        messages.header.type = FFX_API_CONFIGURE_DESC_TYPE_GLOBALDEBUG;
+        messages.effectId = FFX_API_EFFECT_ID_FRAMEGENERATION;
         messages.fpMessage = &fsr_fg_message;
         messages.debugLevel = debug ? FFX_API_CONFIGURE_GLOBALDEBUG_LEVEL_WARNINGS : FFX_API_CONFIGURE_GLOBALDEBUG_LEVEL_ERRORS;
         ffx->Configure(&m_context, &messages.header);
@@ -445,11 +470,9 @@ public:
             return;
         }
 
-        // Configure first, then prepare. The id steps by exactly one per frame; anything else resets the
-        // generation, which is how this SDK takes a reset.
-        if (frame.reset || m_resetNext)
-            ++m_idOffset;
-        m_frameID = frame.frameIndex + m_idOffset;
+        // Configure first, then prepare: the order FSR 4 requires. The id steps by exactly one per frame; anything
+        // else resets the generation.
+        m_frameID = frame.frameIndex;
         if (!Configure(true, &hudless))
         {
             Fail("configure failed");
@@ -462,8 +485,8 @@ public:
             return;
         }
 
-        ffxDispatchDescFrameGenerationPrepare prepare{};
-        prepare.header.type = FFX_API_DISPATCH_DESC_TYPE_FRAMEGENERATION_PREPARE;
+        ffxDispatchDescFrameGenerationPrepareV2 prepare{};
+        prepare.header.type = FFX_API_DISPATCH_DESC_TYPE_FRAMEGENERATION_PREPARE_V2;
         prepare.frameID = m_frameID;
         prepare.flags = 0;
         prepare.commandList = command;
@@ -473,6 +496,7 @@ public:
         // Stored NDC(cur) - NDC(prev), y up; FSR wants prev - cur in render pixels, y down.
         prepare.motionVectorScale = { -0.5f * float(frame.renderW), 0.5f * float(frame.renderH) };
         prepare.frameTimeDelta = std::max(frame.frameTimeMs, 0.1f);
+        prepare.reset = frame.reset || m_resetNext;
         prepare.cameraNear = frame.nearZ;
         prepare.cameraFar = frame.farZ;
         prepare.cameraFovAngleVertical = frame.fovY;
@@ -480,20 +504,16 @@ public:
         prepare.depth = fsr_fg_resource(depth, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         prepare.motionVectors = fsr_fg_resource(velocity, FFX_API_RESOURCE_STATE_COMPUTE_READ);
 
-        // FSR 3.1.4 and later want the camera for their best quality.
-        ffxDispatchDescFrameGenerationPrepareCameraInfo camera{};
-        camera.header.type = FFX_API_DISPATCH_DESC_TYPE_FRAMEGENERATION_PREPARE_CAMERAINFO;
         const auto put = [](float (&to)[3], const Fvector& from)
         {
             to[0] = from.x;
             to[1] = from.y;
             to[2] = from.z;
         };
-        put(camera.cameraPosition, frame.cameraPosition);
-        put(camera.cameraUp, frame.cameraUp);
-        put(camera.cameraRight, frame.cameraRight);
-        put(camera.cameraForward, frame.cameraForward);
-        prepare.header.pNext = &camera.header;
+        put(prepare.cameraPosition, frame.cameraPosition);
+        put(prepare.cameraUp, frame.cameraUp);
+        put(prepare.cameraRight, frame.cameraRight);
+        put(prepare.cameraForward, frame.cameraForward);
 
         const ffxReturnCode_t code = ffx->Dispatch(&m_context, &prepare.header);
         // FSR bound its own pipelines and descriptor sets: the layer applies the engine's again.

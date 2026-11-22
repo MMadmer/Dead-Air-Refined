@@ -477,6 +477,26 @@ const xr_token qdlss_off_token[] =
     { "st_dlss_off", 0 },
     { nullptr, 0 }
 };
+// Intel XeSS Super Resolution: every quality Intel names, native anti-aliasing first.
+u32 ps_r__xess = 0;
+const xr_token qxess_token[] =
+{
+    { "st_xess_off", 0 },
+    { "st_xess_native", 1 },
+    { "st_xess_ultra_quality_plus", 2 },
+    { "st_xess_ultra_quality", 3 },
+    { "st_xess_quality", 4 },
+    { "st_xess_balanced", 5 },
+    { "st_xess_performance", 6 },
+    { "st_xess_ultra_performance", 7 },
+    { nullptr, 0 }
+};
+// What an XeSS row offers on an adapter or renderer that cannot run it: nothing but off.
+const xr_token qxess_off_token[] =
+{
+    { "st_xess_off", 0 },
+    { nullptr, 0 }
+};
 // Frame generation (DX12). Stored here; the frame generation stage reads it.
 u32 ps_r__framegen = 0;
 const xr_token qframegen_token[] =
@@ -1016,33 +1036,38 @@ public:
     }
 };
 
-// r__fsr / r__dlss: choosing one switches the other off. The new render size and SDK context
+// r__fsr / r__dlss / r__xess: choosing one switches the others off. The new render size and SDK context
 // arrive with the renderer reset (vid_restart).
 class CCC_Upscaler final : public CCC_Token
 {
-    u32* other;
-    const bool dlss;
+    u32* others[2];
+    const UpscalerKind kind;
+    const xr_token* off_tokens;
 
 public:
-    CCC_Upscaler(pcstr name, u32* target, const xr_token* tokens, u32* other_upscaler, bool is_dlss)
-        : CCC_Token(name, target, tokens), other(other_upscaler), dlss(is_dlss) {}
+    CCC_Upscaler(pcstr name, u32* target, const xr_token* tokens, u32* other1, u32* other2, UpscalerKind upscaler,
+        const xr_token* off = nullptr)
+        : CCC_Token(name, target, tokens), others{ other1, other2 }, kind(upscaler), off_tokens(off) {}
 
     void Execute(pcstr args) override
     {
         const u32 before = *value;
         CCC_Token::Execute(args);
         if (*value)
-            *other = 0;
+        {
+            for (u32* other : others)
+                *other = 0;
+        }
         if (*value != before)
             da_upscaler_settings_changed();
     }
 
     const xr_token* GetToken() noexcept override
     {
-        // An adapter known not to run DLSS gets a row with off alone, so neither the menu nor a
-        // user.ltx line can select it.
-        if (dlss && da_upscaler_support(UpscalerKind::DLSS) == 0)
-            return qdlss_off_token;
+        // An adapter known not to run it gets a row with off alone, so neither the menu nor a user.ltx line can
+        // select it.
+        if (off_tokens && da_upscaler_support(kind) == 0)
+            return off_tokens;
         return tokens;
     }
 };
@@ -1081,10 +1106,10 @@ public:
         const UpscalerCaps caps = da_upscaler_caps();
         // snprintf: a status that grew past TStatus is cut and reported once, never a crash.
         const int length = std::snprintf(S, sizeof(TStatus),
-            "api=%u;dx12=%d;vk=%d;dlss=%d;dlssg=%d;dlssg_max=%u;fsr=%d;fsrfg=%d;hags=%d;rt=%d;rt_tier=%u;vrs_tier=%u;"
-            "vrs_tile=%u;vrs=%d;ms=%d;sm=%u;wave=%u;fp16=%d;eb=%d;acq=%d;dxc=%d;gd=%d;dstorage=%d",
+            "api=%u;dx12=%d;vk=%d;dlss=%d;dlssg=%d;dlssg_max=%u;fsr=%d;fsrfg=%d;xess=%d;hags=%d;rt=%d;rt_tier=%u;"
+            "vrs_tier=%u;vrs_tile=%u;vrs=%d;ms=%d;sm=%u;wave=%u;fp16=%d;eb=%d;acq=%d;dxc=%d;gd=%d;dstorage=%d",
             caps.api, caps.dx12 ? 1 : 0, caps.vk ? 1 : 0, caps.dlss ? 1 : 0, caps.dlssg ? 1 : 0, caps.dlssg_max, caps.fsr ? 1 : 0,
-            caps.fsrfg ? 1 : 0, caps.hags ? 1 : 0, caps.rt ? 1 : 0, caps.rt_tier, caps.vrs_tier, caps.vrs_tile,
+            caps.fsrfg ? 1 : 0, caps.xess ? 1 : 0, caps.hags ? 1 : 0, caps.rt ? 1 : 0, caps.rt_tier, caps.vrs_tier, caps.vrs_tile,
             caps.vrs ? 1 : 0, caps.ms ? 1 : 0, caps.sm, caps.wave, caps.fp16 ? 1 : 0, caps.eb ? 1 : 0,
             caps.acq ? 1 : 0, caps.dxc ? 1 : 0, caps.gd ? 1 : 0, caps.dstorage ? 1 : 0);
         static bool reported = false;
@@ -2384,10 +2409,14 @@ void xrRender_initconsole()
     // lacks asserts, and user.ltx would drop the line at the next save.
     CMD3(CCC_AA, "r__aa", &ps_r__aa, qaa_token);
     {
-        static CCC_Upscaler fsr("r__fsr", &ps_r__fsr, qfsr_token, &ps_r__dlss, false);
+        static CCC_Upscaler fsr("r__fsr", &ps_r__fsr, qfsr_token, &ps_r__dlss, &ps_r__xess, UpscalerKind::FSR);
         Console->AddCommand(&fsr);
-        static CCC_Upscaler dlss("r__dlss", &ps_r__dlss, qdlss_token, &ps_r__fsr, true);
+        static CCC_Upscaler dlss("r__dlss", &ps_r__dlss, qdlss_token, &ps_r__fsr, &ps_r__xess, UpscalerKind::DLSS,
+            qdlss_off_token);
         Console->AddCommand(&dlss);
+        static CCC_Upscaler xess("r__xess", &ps_r__xess, qxess_token, &ps_r__fsr, &ps_r__dlss, UpscalerKind::XeSS,
+            qxess_off_token);
+        Console->AddCommand(&xess);
     }
     CMD3(CCC_Token, "r__framegen", &ps_r__framegen, qframegen_token);
     CMD4(CCC_Float, "r__upscale_sharpness", &ps_r__upscale_sharpness, 0.f, 1.f);

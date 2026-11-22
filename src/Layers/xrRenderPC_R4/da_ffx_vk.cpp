@@ -14,33 +14,37 @@ namespace xray::render::RENDER_NAMESPACE
 {
 namespace
 {
-HMODULE g_module{};
+// A DLL next to the executable, by its absolute path (null when the name does not fit or it cannot be loaded).
+HMODULE load_beside_exe(const wchar_t* name)
+{
+    wchar_t path[MAX_PATH]{};
+    const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    wchar_t* slash = length && length < MAX_PATH ? wcsrchr(path, L'\\') : nullptr;
+    if (!slash || wcscpy_s(slash + 1, MAX_PATH - size_t(slash + 1 - path), name))
+        return nullptr;
+    return LoadLibraryW(path);
+}
 
-// The runtime, loaded once by its absolute path next to the executable and never unloaded (contexts and its
-// threads may outlive any owner). Null when it is missing or incomplete: FSR is off then.
+// The loader, loaded once and never unloaded (contexts and their threads may outlive any owner). Null when it is
+// missing or incomplete: FSR is off then.
 const ffxFunctions* load_runtime()
 {
     static ffxFunctions functions{};
     static const ffxFunctions* loaded = []() -> const ffxFunctions* {
-        wchar_t path[MAX_PATH]{};
-        const DWORD length = GetModuleFileNameW(nullptr, path, MAX_PATH);
-        wchar_t* slash = length && length < MAX_PATH ? wcsrchr(path, L'\\') : nullptr;
-        if (!slash || wcscpy_s(slash + 1, MAX_PATH - size_t(slash + 1 - path), L"amd_fidelityfx_vk.dll"))
-            return nullptr;
-        const HMODULE module = LoadLibraryW(path);
-        g_module = module;
+        const HMODULE module = load_beside_exe(L"amd_fidelityfx_loader_vk.dll");
         if (!module)
         {
-            Msg("~ [FFX] amd_fidelityfx_vk.dll cannot be loaded (error %u): AMD FSR is off on Vulkan", u32(GetLastError()));
+            Msg("~ [FFX] amd_fidelityfx_loader_vk.dll cannot be loaded (error %u): AMD FSR is off on Vulkan",
+                u32(GetLastError()));
             return nullptr;
         }
         ffxLoadFunctions(&functions, module);
         if (!functions.CreateContext || !functions.DestroyContext || !functions.Query || !functions.Dispatch)
         {
-            Msg("! [FFX] amd_fidelityfx_vk.dll lacks ffx-api entry points: AMD FSR is off on Vulkan");
+            Msg("! [FFX] amd_fidelityfx_loader_vk.dll lacks ffx-api entry points: AMD FSR is off on Vulkan");
             return nullptr;
         }
-        Msg("* [FFX] AMD FidelityFX Vulkan runtime ready");
+        Msg("* [FFX] AMD FSR SDK Vulkan loader ready");
         return &functions;
     }();
     return loaded;
@@ -84,13 +88,17 @@ const ffxFunctions* da_ffx_vk() { return load_runtime(); }
 void da_ffx_vk_route_swapchain()
 {
     static bool routed = false;
-    if (routed || !load_runtime() || !g_module)
+    if (routed || !load_runtime())
         return;
     routed = true;
+    // The loader loads the same file by the same name later and gets this module.
+    const HMODULE fg = load_beside_exe(L"amd_fidelityfx_framegeneration_vk.dll");
+    if (!fg)
+        return;
     static constexpr pcstr names[] = { "vkCreateSwapchainKHR", "vkDestroySwapchainKHR", "vkGetSwapchainImagesKHR",
         "vkAcquireNextImageKHR", "vkQueuePresentKHR" };
     u32 patched = 0;
-    BYTE* base = reinterpret_cast<BYTE*>(g_module);
+    BYTE* base = reinterpret_cast<BYTE*>(fg);
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
     const IMAGE_DATA_DIRECTORY& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];

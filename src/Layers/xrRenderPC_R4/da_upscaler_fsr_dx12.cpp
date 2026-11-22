@@ -2,7 +2,7 @@
 // Released under the MIT licence, see License.txt
 //
 // AMD FSR upscaling on DirectX 12 (docs/dead-air/DX12_RENDERER.md, 1 and 3) through the AMD FSR
-// SDK 2.3 signed DLLs (ffx-api): the loader picks FSR 4 on RX 7000/9000 and FSR 3.1.5 elsewhere.
+// SDK 2.4 signed DLLs (ffx-api): the loader picks FSR 4.1 on RX 6000 and newer and FSR 3.1.6 elsewhere.
 // DX12 module only; the DX11 module runs the FSR 3.1.2 port (da_upscaler_fsr_dx11.cpp). The work is
 // recorded into the immediate context's native command list inside an xrD3D12 native section.
 

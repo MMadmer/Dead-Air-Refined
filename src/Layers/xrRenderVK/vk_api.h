@@ -85,6 +85,11 @@ struct DeviceCreateInfo
     // Graphics-family queues nobody else submits to, for a presenter thread (AMD FSR frame generation presents
     // and acquires on its own queues). As many as the family has.
     UINT presentQueues = 0;
+    // An SDK that asks more of the device once the physical device is chosen (Intel XeSS): the extensions it adds
+    // to the list and the features it writes into the chain (VkPhysicalDeviceFeatures2, structures appended where
+    // the chain lacks them), right before vkCreateDevice. Its names and structures outlive the call.
+    void (*deviceRequirements)(void* instance, void* physicalDevice, void* features2,
+        std::vector<const char*>& deviceExtensions) = nullptr;
 };
 
 // Creates the Vulkan device and returns it behind ID3D11Device / ID3D11DeviceContext (immediate). The

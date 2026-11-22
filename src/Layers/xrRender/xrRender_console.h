@@ -160,11 +160,12 @@ extern ECORE_API int ps_r__aref_quality;
 extern ECORE_API int ps_r__smaa;
 extern ECORE_API int ps_r__taa;
 extern ECORE_API int ps_r__motion_vectors; // QA view of the motion vectors (phase_velocity_debug)
-// Anti-aliasing (r__aa), the upscalers (r__fsr / r__dlss, token value = quality, 0 = off), frame
+// Anti-aliasing (r__aa), the upscalers (r__fsr / r__dlss / r__xess, token value = quality, 0 = off), frame
 // generation (r__framegen) and the upscaler's sharpening - docs/dead-air/DX12_RENDERER.md, 2.
 extern ECORE_API u32 ps_r__aa;
 extern ECORE_API u32 ps_r__fsr;
 extern ECORE_API u32 ps_r__dlss;
+extern ECORE_API u32 ps_r__xess;
 extern ECORE_API u32 ps_r__framegen;
 extern ECORE_API float ps_r__upscale_sharpness;
 

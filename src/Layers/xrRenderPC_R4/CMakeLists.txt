@@ -31,6 +31,7 @@ target_link_libraries(xrRenderPC_R4
     NVIDIA::NvAPI
     AMD::AGS
     AMD::FidelityFXDX11
+    Intel::XeSS
     NVIDIA::Streamline
     d3dcompiler
     dxguid

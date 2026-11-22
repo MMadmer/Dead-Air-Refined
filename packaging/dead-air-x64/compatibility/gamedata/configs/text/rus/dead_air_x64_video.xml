@@ -35,6 +35,9 @@
 	<string id="ui_mm_da_dlss">
 		<text>NVIDIA DLSS</text>
 	</string>
+	<string id="ui_mm_da_xess">
+		<text>Intel XeSS</text>
+	</string>
 	<string id="ui_mm_da_framegen">
 		<text>Генерация кадров</text>
 	</string>
@@ -148,6 +151,30 @@
 	<string id="st_opt_st_dlss_ultra_performance">
 		<text>Ультрапроизводительность</text>
 	</string>
+	<string id="st_opt_st_xess_off">
+		<text>Отключено</text>
+	</string>
+	<string id="st_opt_st_xess_native">
+		<text>Нативное (AA)</text>
+	</string>
+	<string id="st_opt_st_xess_ultra_quality_plus">
+		<text>Ультракачество+</text>
+	</string>
+	<string id="st_opt_st_xess_ultra_quality">
+		<text>Ультракачество</text>
+	</string>
+	<string id="st_opt_st_xess_quality">
+		<text>Качество</text>
+	</string>
+	<string id="st_opt_st_xess_balanced">
+		<text>Баланс</text>
+	</string>
+	<string id="st_opt_st_xess_performance">
+		<text>Производительность</text>
+	</string>
+	<string id="st_opt_st_xess_ultra_performance">
+		<text>Ультрапроизводительность</text>
+	</string>
 	<string id="st_opt_st_fg_off">
 		<text>Отключено</text>
 	</string>
@@ -222,13 +249,22 @@
 		<text>Сглаживание лесенок на краях. FXAA - самое лёгкое и мягкое, SMAA - чётче, TAA - самое гладкое: собирает картинку из нескольких кадров, в движении чуть мягче.</text>
 	</string>
 	<string id="st_da_x64_video_hint_aa_upscaler">
-		<text>Сглаживание сейчас делает AMD FSR или NVIDIA DLSS. Чтобы выбрать его здесь, отключите их.</text>
+		<text>Сглаживание сейчас делает AMD FSR, NVIDIA DLSS или Intel XeSS. Чтобы выбрать его здесь, отключите их.</text>
 	</string>
 	<string id="st_da_x64_video_hint_fsr">
-		<text>AMD FSR рисует кадр в меньшем разрешении и восстанавливает его до экранного: больше кадров в секунду ценой части чёткости. «Нативное (AA)» - без уменьшения, только сглаживание. Работает на любой видеокарте. Включается вместо NVIDIA DLSS.</text>
+		<text>AMD FSR рисует кадр в меньшем разрешении и восстанавливает его до экранного: больше кадров в секунду ценой части чёткости. «Нативное (AA)» - без уменьшения, только сглаживание. Работает на любой видеокарте. Включается вместо NVIDIA DLSS и Intel XeSS.</text>
 	</string>
 	<string id="st_da_x64_video_hint_dlss">
-		<text>NVIDIA DLSS делает то же, что AMD FSR, но нейросетью видеокарт GeForce RTX. DLAA - без уменьшения, только сглаживание. Включается вместо AMD FSR.</text>
+		<text>NVIDIA DLSS делает то же, что AMD FSR, но нейросетью видеокарт GeForce RTX. DLAA - без уменьшения, только сглаживание. Включается вместо AMD FSR и Intel XeSS.</text>
+	</string>
+	<string id="st_da_x64_video_hint_xess">
+		<text>Intel XeSS делает то же, что AMD FSR, но нейросетью: на видеокартах Intel Arc - своей быстрой моделью, на остальных - универсальной. «Нативное (AA)» - без уменьшения, только сглаживание. Включается вместо AMD FSR и NVIDIA DLSS.</text>
+	</string>
+	<string id="st_da_x64_video_hint_xess_dx11">
+		<text>На DirectX 11 Intel XeSS работает только на видеокартах Intel Arc. Выберите DirectX 12 или Vulkan в строке «Рендер» и перезапустите игру.</text>
+	</string>
+	<string id="st_da_x64_video_hint_xess_unsupported">
+		<text>Видеокарта или драйвер не поддерживают Intel XeSS: нужны Shader Model 6.4 и DP4a (большинство видеокарт с 2018 года).</text>
 	</string>
 	<string id="st_da_x64_video_hint_framegen">
 		<text>Видеокарта дорисовывает промежуточные кадры между настоящими: движение плавнее, но управление чуть запаздывает. Лучше всего работает от 60 кадров в секунду. Только на DirectX 12 и Vulkan; в списке то, что умеет видеокарта.</text>

@@ -84,7 +84,7 @@ if (WIN32)
         "${XRAY_STREAMLINE_DIR}/bin/x64/nvngx_dlssg.dll"
     )
 
-    # AMD FSR SDK 2.3.0 (ffx-api): FSR upscaling and frame generation on DX12
+    # AMD FSR SDK 2.4.0 (ffx-api): FSR upscaling and frame generation on DX12 and Vulkan
     # (Externals/fidelityfx-sdk/README.md). AMD::FidelityFXAPI is headers only: the module loads
     # amd_fidelityfx_loader_dx12.dll by its absolute path and takes the five entry points through
     # ffxLoadFunctions() (ffx_api_loader.h, which needs _WINDOWS, part of the default MSVC flags).
@@ -105,9 +105,21 @@ if (WIN32)
         "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_loader_dx12.dll"
         "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_upscaler_dx12.dll"
         "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_framegeneration_dx12.dll"
-        # FSR 3.1 on Vulkan: the signed ffx-api runtime of FidelityFX SDK 1.1.4 (Externals/fidelityfx-vk/README.md),
-        # loaded by its absolute path by the Vulkan module only; its headers are on that module's include path.
-        "${CMAKE_SOURCE_DIR}/Externals/fidelityfx-vk/bin/amd_fidelityfx_vk.dll"
+        # The Vulkan module's: its loader by the absolute path, the providers by the loader.
+        "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_loader_vk.dll"
+        "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_upscaler_vk.dll"
+        "${XRAY_FIDELITYFX_SDK_DIR}/bin/amd_fidelityfx_framegeneration_vk.dll"
+    )
+
+    # Intel XeSS SDK 3.0.2: XeSS Super Resolution (Externals/xess/README.md). Headers only: every module loads its
+    # DLL by the absolute path and takes the entry points by name (da_xess.cpp); libxess.dll serves DX12 and Vulkan,
+    # libxess_dx11.dll DX11.
+    set(XRAY_XESS_DIR "${CMAKE_SOURCE_DIR}/Externals/xess")
+    add_library(Intel::XeSS INTERFACE IMPORTED GLOBAL)
+    set_target_properties(Intel::XeSS PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${XRAY_XESS_DIR}/include")
+    set(XRAY_XESS_RUNTIME_FILES
+        "${XRAY_XESS_DIR}/bin/libxess.dll"
+        "${XRAY_XESS_DIR}/bin/libxess_dx11.dll"
     )
 
     # FSR 3.1.2 upscaler with a DX11 backend, static libraries built with MSVC from
@@ -168,6 +180,7 @@ if (WIN32)
             "${XRAY_SDK_BINARY_DIR}/soft_oal.dll"
             ${XRAY_STREAMLINE_RUNTIME_FILES}
             ${XRAY_FIDELITYFX_RUNTIME_FILES}
+            ${XRAY_XESS_RUNTIME_FILES}
             ${XRAY_DXC_RUNTIME_FILES}
             ${XRAY_DSTORAGE_RUNTIME_FILES}
         )

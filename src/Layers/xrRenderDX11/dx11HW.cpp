@@ -15,6 +15,7 @@
 #endif
 #ifdef XR_VULKAN
 #include "Layers/xrRenderVK/vk_api.h"
+#include "Layers/xrRenderPC_R4/da_xess.h"
 #endif
 #include "Layers/xrRenderPC_R4/da_streamline.h"
 #include "Layers/xrRenderPC_R4/da_native_caps.h"
@@ -90,6 +91,18 @@ void dx11_debug_drain_messages(pcstr tag)
 
 namespace xray::render::RENDER_NAMESPACE
 {
+#ifdef XR_VULKAN
+namespace
+{
+// What the SDKs sharing the Vulkan device need of the instance: Streamline's, then XeSS's.
+void da_vk_requirements(xrvk::ExternalRequirements& out)
+{
+    da_streamline_vk_requirements(out);
+    da_xess_vk_instance_extensions(out.instanceExtensions);
+}
+} // namespace
+#endif
+
 #ifdef XR_D3D12
 void xrRender_d3d12_failed(); // r2_test_hw.cpp
 #endif
@@ -300,7 +313,8 @@ void CHW::CreateDevice(SDL_Window* sdlWnd)
         // DLSS through Streamline: its extensions and features go into the device, then it gets the device.
         if (ThisInstanceIsGlobal())
         {
-            info.externalRequirements = &da_streamline_vk_requirements;
+            info.externalRequirements = &da_vk_requirements;
+            info.deviceRequirements = &da_xess_vk_device_requirements;
             info.deviceCreated = &da_streamline_vk_device_created;
             info.deviceProc = &da_streamline_vk_device_proc;
             // AMD FSR frame generation presents and acquires on queues of its own.

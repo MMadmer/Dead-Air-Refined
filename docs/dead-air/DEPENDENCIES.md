@@ -128,11 +128,11 @@ so the installer ships them and the uninstaller removes them.
 | NVIDIA Streamline | 2.14.1 (release zip, SHA-256 `92c4d954631a1710da86ca3fa8d5034f2b9503838c95fc4ae977ae149319781b`) | `Externals/streamline` | MIT (`license.txt`, `3rd-party-licenses.md`) | `sl.interposer.dll`, `sl.common.dll`, `sl.pcl.dll`, `sl.reflex.dll`, `sl.dlss.dll`, `sl.dlss_g.dll`: 3,303,168 bytes |
 | NVIDIA DLSS Super Resolution and Frame Generation (NGX) | 310.9.1, as bundled with Streamline 2.14.1 | `Externals/streamline/bin/x64` | NVIDIA RTX SDKs licence (`nvngx_dlss.license.txt`) | `nvngx_dlss.dll` 58,956,912 bytes, `nvngx_dlssg.dll` 7,460,976 bytes |
 | NVIDIA Reflex | through `sl.reflex` / `sl.pcl` of Streamline 2.14.1 | `Externals/streamline` | Streamline MIT; Reflex SDK licence (`reflex.license.txt`) | included above |
-| AMD FSR SDK (ffx-api) | 2.3.0: upscaler 4.1.1 (FSR 3.1.5 / FSR 4 providers), frame generation 3.1.6 / swap chain 3.1.7 | `Externals/fidelityfx-sdk` | MIT section of `license.md` (every file taken is in its MIT list), `3rdpartynotice.md` | `amd_fidelityfx_loader_dx12.dll`, `amd_fidelityfx_upscaler_dx12.dll`, `amd_fidelityfx_framegeneration_dx12.dll`: 68,874,016 bytes |
+| AMD FSR SDK (ffx-api) | 2.4.0: upscaler 4.1.2 (FSR 4.1 / FSR 3.1.6 providers), frame generation 4.0.2 / swap chain 4.0.0, DX12 and Vulkan | `Externals/fidelityfx-sdk` | MIT section of `license.md` (every file taken is in its MIT list), `3rdpartynotice.md` | `amd_fidelityfx_loader_dx12.dll`, `amd_fidelityfx_upscaler_dx12.dll`, `amd_fidelityfx_framegeneration_dx12.dll`, `amd_fidelityfx_loader_vk.dll`, `amd_fidelityfx_upscaler_vk.dll`, `amd_fidelityfx_framegeneration_vk.dll`: 160,364,640 bytes |
 | FidelityFX-SDK-DX11 (FSR 3.1.2 upscaler, DX11 backend) | optiscaler fork, commit `9b04fa49a` + `fidelityfx-sdk-dx11-msvc.patch` | `Externals/fidelityfx-dx11` | MIT (AMD, `LICENSE.txt`); `md5.c` under the RSA Data Security MD5 licence | none: static libraries, about 3.4 MB inside the module that links them |
-| FidelityFX SDK 1.1.4 ffx-api for Vulkan (FSR 3.1 upscaler and frame generation) | tag `v1.1.4`, prebuilt signed DLL | `Externals/fidelityfx-vk` | MIT (AMD, `LICENSE.txt`) | `amd_fidelityfx_vk.dll` 9,332,432 bytes |
+| Intel XeSS SDK (XeSS Super Resolution) | 3.0.2 (release zip, SHA-256 `88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990`), XeSS-SR 2.0.2 | `Externals/xess` | Intel Simplified Software License (`LICENSE.txt`: binary redistribution unmodified), `third-party-programs.txt` | `libxess.dll` 77,795,704 bytes, `libxess_dx11.dll` 156,016 bytes |
 
-The package grows by 147,927,504 bytes (141.1 MiB) of SDK DLLs, uncompressed, plus
+The package grows by 308,037,416 bytes (293.8 MiB) of SDK DLLs, uncompressed, plus
 `xrRender_R5.dll`, `xrRender_R6.dll` and the FSR 3.1 DX11 code inside `xrRender_R4.dll`.
 
 CMake targets: `NVIDIA::Streamline` (headers, `sl.interposer.lib` delay-loaded),
@@ -164,7 +164,7 @@ third-party notices; the SDK's `Kits/FidelityFX/docs/getting-started/naming-guid
 reference for how the menu names FSR. The FSR 3.1 DX11
 libraries carry the AMD MIT notice and the RSA MD5 attribution (`Externals/fidelityfx-dx11/README.md`).
 
-Two build facts other code relies on: `ffx_framegeneration.h` (FSR SDK 2.3.0) and the FSR 3.1 DX11
+Two build facts other code relies on: `ffx_framegeneration.h` (FSR SDK 2.4.0) and the FSR 3.1 DX11
 host headers both define `FfxFrameGenerationConfig`, so they never share a translation unit; and
 Streamline's `sl_security.h` defines non-inline functions, so exactly one translation unit per
 module includes it.

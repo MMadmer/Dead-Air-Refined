@@ -17,8 +17,10 @@ DirectX 12 (R5, `DX12_RENDERER.md`); same render code, same shaders, same look.
   level 11_1 core features). A device that fails at start falls back to DirectX 11 for the next start
   (`xrRender_vulkan_failed`).
 - **Upscalers** as on the other renderers: NVIDIA DLSS / DLAA through Streamline's Vulkan path, AMD FSR
-  3.1 through the signed Vulkan runtime of FidelityFX SDK 1.1.4 (`Externals/fidelityfx-vk`), the
-  engine's TAA otherwise. **AMD FSR frame generation** through the same runtime (section 7).
+  through the signed Vulkan DLLs of the AMD FSR SDK 2.4.0 (`Externals/fidelityfx-sdk`: FSR 4.1 on RX 6000 and
+  newer, FSR 3.1.6 elsewhere), Intel XeSS Super Resolution through `libxess.dll` (the device is made with the
+  extensions and features XeSS asks for, `DeviceCreateInfo::deviceRequirements`), the engine's TAA otherwise.
+  **AMD FSR frame generation** through the same SDK (section 7).
 - **Ray tracing** (the RTX section: reflections, sun shadows, occlusion) as on DirectX 12, from the same scene
   and pass code (section 8).
 - **NVIDIA Reflex** and its PC latency stats through Streamline's Vulkan path (`VK_NV_low_latency2`, section 9).
@@ -156,14 +158,13 @@ AMD FSR frame generation (`r__framegen st_fg_fsr`, `da_framegen_fsr_vk.cpp`), th
   Streamline's factory).
 - **Per frame:** configure, then prepare on the immediate command buffer (depth, motion vectors, the camera); the
   generation dispatch runs inside the present, through the swap chain's callback. The UI is told apart from the
-  scene by the hudless copy. SDK 1.1.4 takes a reset as a frame id that does not step by one.
+  scene by the hudless copy (PrepareV2 of the AMD FSR SDK 2.4, with the reset flag and the camera).
 - Measured (RTX 3070 Laptop, DLSS Balanced, vsync): 1213 presents for the first 600 generating frames; 52-53
   rendered frames per second with the generation against 61.6 without it, so about 105 on the screen.
-- **The presenter spins a core.** SDK 1.1.4's Vulkan presenter waits out its pacing on the performance counter
-  (62-72 % of a core on the stand), and its pacing tuning has no hybrid wait: the key-value configure even
-  reports an error (its switch breaks before `return FFX_OK`). The DirectX 12 runtime (FSR SDK 2.x) takes the
-  hybrid wait and the fence waits (`da_framegen_fsr.cpp`): its presenter and interpolation threads went from
-  2.46 to 1.50 cores busy.
+- **The presenter's pacing.** By default it waits out its pacing on the performance counter, a core spinning
+  (62-72 % of a core with FidelityFX SDK 1.1.4). The AMD FSR SDK 2.4 runtime takes the hybrid wait and the fence
+  waits on Vulkan as on DirectX 12 (`FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_FRAMEPACINGTUNING`; on DirectX 12 the
+  presenter and interpolation threads went from 2.46 to 1.50 cores busy).
 
 ## 8. Ray tracing
 

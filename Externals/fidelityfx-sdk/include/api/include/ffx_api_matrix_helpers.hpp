@@ -1,6 +1,6 @@
 // This file is part of the FidelityFX SDK.
 //
-// Copyright (C) 2024 Advanced Micro Devices, Inc.
+// Copyright (C) 2026 Advanced Micro Devices, Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
@@ -22,22 +22,17 @@
 
 #pragma once
 
-#include "ffx_api.h"
-#include <windows.h>
+#include "ffx_api_matrix_helpers.h"
 
-typedef struct ffxFunctions {
-    PfnFfxCreateContext CreateContext;
-    PfnFfxDestroyContext DestroyContext;
-    PfnFfxConfigure Configure;
-    PfnFfxQuery Query;
-    PfnFfxDispatch Dispatch;
-} ffxFunctions;
-
-static inline void ffxLoadFunctions(ffxFunctions* pOutFunctions, HMODULE module)
+/// Converts a matrix from any layout/convention to the FFX canonical format.
+/// The FFX canonical format is row-major layout with row-vector convention.
+///
+/// @param srcMatrix     Pointer to 16 floats representing the source matrix
+/// @param srcLayout     Memory layout of the source matrix
+/// @param srcVectorConv Vector convention of the source matrix
+/// @return              Matrix converted to FFX canonical format
+template<FfxApiMatrixLayout SrcMatrixLayout, FfxApiMatrixVectorConvention SrcMatrixVectorConvention>
+static inline FfxApiMatrix4x4 ffxConvertToMatrix4x4(const float* srcMatrix)
 {
-    pOutFunctions->CreateContext  = (PfnFfxCreateContext )GetProcAddress(module, "ffxCreateContext");
-    pOutFunctions->DestroyContext = (PfnFfxDestroyContext)GetProcAddress(module, "ffxDestroyContext");
-    pOutFunctions->Configure      = (PfnFfxConfigure     )GetProcAddress(module, "ffxConfigure");
-    pOutFunctions->Query          = (PfnFfxQuery         )GetProcAddress(module, "ffxQuery");
-    pOutFunctions->Dispatch       = (PfnFfxDispatch      )GetProcAddress(module, "ffxDispatch");
+    return ffxConvertToMatrix4x4(srcMatrix, SrcMatrixLayout, SrcMatrixVectorConvention);
 }

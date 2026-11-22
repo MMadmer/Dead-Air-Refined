@@ -4,7 +4,7 @@
 // AMD FSR 3.1.2 upscaler on DirectX 11 (docs/dead-air/DX12_RENDERER.md, 1 and 3): the MSVC build
 // of the optiscaler/FidelityFX-SDK-DX11 port, static libraries (Externals/fidelityfx-dx11). DX11
 // module only; the DX12 module runs FSR through AMD's signed DLLs. Kept in its own translation
-// unit: these headers and the FSR SDK 2.3.0 ones both define FfxFrameGenerationConfig.
+// unit: these headers and the FSR SDK 2.4.0 ones both define FfxFrameGenerationConfig.
 
 #include "stdafx.h"
 

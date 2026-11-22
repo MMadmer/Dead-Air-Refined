@@ -2086,6 +2086,8 @@ HRESULT Device::Init(const DeviceCreateInfo& info)
     if (transferFamily != ~0u)
         addQueue(transferFamily, 1, &transferPriority);
 
+    if (info.deviceRequirements)
+        info.deviceRequirements(instance, physical, &features2, dext);
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &features2};
     dci.queueCreateInfoCount = u32(queues.size());
     dci.pQueueCreateInfos = queues.data();

@@ -40,6 +40,7 @@ pcstr da_kind_name(UpscalerKind kind)
     {
     case UpscalerKind::FSR: return "FSR";
     case UpscalerKind::DLSS: return "DLSS";
+    case UpscalerKind::XeSS: return "XeSS";
     default: return "none";
     }
 }
@@ -158,11 +159,13 @@ UpscalerCaps da_upscaler_caps()
 void da_upscaler_default_render_size(UpscalerKind kind, int quality, u32 displayW, u32 displayH, u32& renderW,
     u32& renderH)
 {
-    // Index = the token value: off/native (or DLAA), quality, balanced, performance, ultra performance.
+    // Index = the token value: off/native (or DLAA), quality, balanced, performance, ultra performance; XeSS has ultra
+    // quality plus and ultra quality before its quality (XeSS 1.3 and later).
     static constexpr float fsr_ratio[] = { 1.f, 1.f, 1.5f, 1.7f, 2.f, 3.f };
     static constexpr float dlss_ratio[] = { 1.f, 1.f, 1.5f, 1.72f, 2.f, 3.f };
-    const int q = std::clamp(quality, 0, 5);
-    const float ratio = kind == UpscalerKind::DLSS ? dlss_ratio[q] : fsr_ratio[q];
+    static constexpr float xess_ratio[] = { 1.f, 1.f, 1.3f, 1.5f, 1.7f, 2.f, 2.3f, 3.f };
+    const float ratio = kind == UpscalerKind::XeSS ? xess_ratio[std::clamp(quality, 0, 7)] :
+        kind == UpscalerKind::DLSS ? dlss_ratio[std::clamp(quality, 0, 5)] : fsr_ratio[std::clamp(quality, 0, 5)];
 
     // Even: the half-resolution passes (AO, clouds) halve it.
     const auto scaled = [ratio](u32 display)
@@ -179,11 +182,16 @@ void da_update_render_size()
     da_release_backend();
     da_render_size_native();
 
-    // A DLSS choice on an adapter known not to run it is switched off, once, in the open.
+    // A DLSS or XeSS choice on an adapter known not to run it is switched off, once, in the open.
     if (ps_r__dlss && da_upscaler_support(UpscalerKind::DLSS) == 0)
     {
         Msg("! [upscaler] DLSS is not supported by this adapter: r__dlss is switched off");
         ps_r__dlss = 0;
+    }
+    if (ps_r__xess && da_upscaler_support(UpscalerKind::XeSS) == 0)
+    {
+        Msg("! [upscaler] XeSS is not supported by this adapter and renderer: r__xess is switched off");
+        ps_r__xess = 0;
     }
 
     UpscalerKind kind = UpscalerKind::None;
@@ -197,6 +205,11 @@ void da_update_render_size()
     {
         kind = UpscalerKind::FSR;
         quality = int(ps_r__fsr);
+    }
+    else if (ps_r__xess)
+    {
+        kind = UpscalerKind::XeSS;
+        quality = int(ps_r__xess);
     }
 
     // MSAA is a different deferred path (per-sample G-buffer): nothing temporal runs under it.
@@ -257,8 +270,9 @@ bool da_upscaler_create()
     pcstr why = nullptr;
     if (!RImplementation.Target || !RImplementation.Target->upscale_ready())
         why = "its targets or shaders are missing (a content archive older than the binaries?)";
-    else if (up.kind == UpscalerKind::DLSS && !up.identity && !RImplementation.Target->rt_Velocity)
-        why = "DLSS needs motion vectors, which only the packed G-buffer draws (r3_gbuffer_opt on)";
+    else if ((up.kind == UpscalerKind::DLSS || up.kind == UpscalerKind::XeSS) && !up.identity &&
+        !RImplementation.Target->rt_Velocity)
+        why = "DLSS and XeSS need motion vectors, which only the packed G-buffer draws (r3_gbuffer_opt on)";
     else if (!up.backend->Init(Device.dwWidth, Device.dwHeight, up.quality))
         why = "the backend did not initialise";
 
@@ -326,6 +340,8 @@ float da_upscaler_mip_bias()
     const upscaler_state& up = g_da_upscaler;
     if (!up.backend || up.identity || !Device.dwWidth)
         return 0.f;
-    return std::log2(float(Device.dwRenderWidth) / float(Device.dwWidth)) - 1.f;
+    // XeSS asks for log2(render / display) itself; AMD and NVIDIA for one step more.
+    const float scale = std::log2(float(Device.dwRenderWidth) / float(Device.dwWidth));
+    return up.kind == UpscalerKind::XeSS ? scale : scale - 1.f;
 }
 } // namespace xray::render::RENDER_NAMESPACE

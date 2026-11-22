@@ -2,7 +2,7 @@
 // Released under the MIT licence, see License.txt
 //
 // The upscale slot of the frame (docs/dead-air/DX12_RENDERER.md, 3.1-3.2): the interface the SDK
-// backends (FSR on DX11 and DX12, DLSS through Streamline) implement, their registry, and the
+// backends (FSR, DLSS through Streamline, XeSS) implement, their registry, and the
 // lifetime of the running one. Without an SDK the identity backend (a bilinear stretch) fills
 // the slot, which proves the plumbing: render size, reactive mask, depth upscale, display-size
 // post-processing.
@@ -33,7 +33,7 @@ class IUpscaler
 {
 public:
     virtual ~IUpscaler() = default;
-    // Creates the SDK context for this display size and quality (the r__fsr / r__dlss token value).
+    // Creates the SDK context for this display size and quality (the r__fsr / r__dlss / r__xess token value).
     virtual bool Init(u32 displayW, u32 displayH, int quality) = 0;
     virtual void Shutdown() = 0;
     // Records the upscale on the immediate context. false = the backend failed: the frame falls
@@ -52,6 +52,7 @@ enum class UpscalerKind : u32
     None = 0,
     FSR = 1,
     DLSS = 2,
+    XeSS = 3,
 };
 
 // One SDK backend. The SDK stage registers them from its own translation units:
@@ -83,6 +84,7 @@ struct UpscalerCaps
     u32 dlssg_max{};   // frames DLSS can generate per rendered frame (1 = 2x, 3 = 4x)
     bool fsr{};        // FSR upscaling (every adapter)
     bool fsrfg{};      // FSR frame generation
+    bool xess{};       // XeSS Super Resolution (DX11: Intel Arc only)
     bool hags{};       // hardware-accelerated GPU scheduling is on
     // DirectX 12 features (docs/dead-air/dx12-features/PLAN.md 2.6), filled by da_native_caps.cpp.
     bool rt{};         // ray tracing usable this session
@@ -111,7 +113,8 @@ int da_upscaler_support(UpscalerKind kind);
 u32 da_render_api();
 
 // The ratios of the quality tokens when a backend does not answer itself (FSR 1.0/1.5/1.7/2.0/3.0,
-// DLSS DLAA 1.0 and 1.5/1.72/2.0/3.0), even-rounded, at least 64, never above the display size.
+// DLSS DLAA 1.0 and 1.5/1.72/2.0/3.0, XeSS 1.0/1.3/1.5/1.7/2.0/2.3/3.0), even-rounded, at least 64, never above the
+// display size.
 void da_upscaler_default_render_size(UpscalerKind kind, int quality, u32 displayW, u32 displayH, u32& renderW,
     u32& renderH);
 
@@ -128,7 +131,7 @@ void da_upscaler_destroy();
 // The running backend (null when none), and its runtime failure.
 IUpscaler* da_upscaler_current();
 void da_upscaler_fail(pcstr why);
-// The r__fsr / r__dlss / r__aa settings changed: a failed backend gets another try.
+// The r__fsr / r__dlss / r__xess / r__aa settings changed: a failed backend gets another try.
 void da_upscaler_settings_changed();
 // The negative LOD bias the scene samplers get while the upscaler runs (0 without one).
 float da_upscaler_mip_bias();

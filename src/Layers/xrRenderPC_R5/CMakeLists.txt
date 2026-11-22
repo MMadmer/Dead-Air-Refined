@@ -40,6 +40,7 @@ target_link_libraries(xrRenderPC_R5
     NVIDIA::NvAPI
     AMD::AGS
     AMD::FidelityFXAPI
+    Intel::XeSS
     NVIDIA::Streamline
     xrD3D12
     d3dcompiler
