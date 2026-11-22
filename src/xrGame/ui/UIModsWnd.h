@@ -200,7 +200,8 @@ private:
     size_t m_selected{size_t(-1)};
     xr_string m_selectedIds[2];
     size_t m_detailsFor{size_t(-1)};
-    bool m_detailsShown{};
+    // whether the card's parts are shown: they are made visible, so the first refresh without a selection hides them
+    bool m_detailsShown{true};
     std::shared_ptr<const ModCatalog::Snapshot> m_catalog;
     u32 m_catalogGeneration{u32(-1)};
     std::shared_ptr<const ModCatalog::Reviews> m_reviewsShown;

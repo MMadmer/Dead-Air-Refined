@@ -1764,6 +1764,14 @@ void CUIModsWnd::LogState()
             row->badgeShown.empty() ? "-" : row->badgeShown.c_str(), row->rating->IsShown() ? row->rating->GetText() : "-",
             row->thumb->IsShown() ? "yes" : "no", row->selected ? " selected" : "");
     }
+    if (!Selected())
+    {
+        // no selection: the card shows its hint and its back, nothing of a module
+        u32 shown = 0;
+        for (CUIWindow* child : m_details->GetChildWndList())
+            shown += child->IsShown() && child != m_detailsHint && child != m_details->GetChildWndList().front() ? 1 : 0;
+        Msg("* [mods-ui] card none: hint %s, %u other part(s) shown", m_detailsHint->IsShown() ? "shown" : "hidden", shown);
+    }
     if (const Item* item = Selected())
     {
         Msg("* [mods-ui] card %s: status \"%s\", primary \"%s\"%s, vt \"%s\", rating \"%s\", reviews %u, review button %s",
