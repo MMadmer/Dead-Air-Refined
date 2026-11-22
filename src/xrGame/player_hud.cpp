@@ -106,11 +106,16 @@ CBlend* PlayHudCycle(IKinematicsAnimated& model, const u16 part, const MotionID 
 void hud_pose_trail::capture(IKinematics& model)
 {
     const u16 n = model.LL_BoneCount();
-    now.swap(before);
+    // twice in a frame (the fire points update the item again) only refreshes the frame's pose
+    if (frame != Device.dwFrame)
+    {
+        now.swap(before);
+        dt = Device.fTimeDelta;
+        frame = Device.dwFrame;
+    }
     now.resize(n);
     for (u16 i = 0; i < n; ++i)
         now[i] = model.LL_GetTransform(i).c;
-    dt = Device.fTimeDelta;
 }
 
 namespace
@@ -211,8 +216,12 @@ float match_cycle_start(IKinematicsAnimated& ka, const MotionID& M, float speed,
     if (!leading.blend || leading.blend->stop_at_end || leading.blend->motionID == M)
         return 0.f;
 
-    motion_pose fk(ka, M);
+    // a motion set built for another rig may have no track for some bones of this one
     const u16 n = ka.dcast_PKinematics()->LL_BoneCount();
+    for (u16 b = 0; b < n; ++b)
+        if (!ka.LL_GetMotion(M, b))
+            return 0.f;
+    motion_pose fk(ka, M);
     const u32 count = fk.frames();
     if (count < 4)
         return 0.f;
@@ -816,10 +825,17 @@ u32 attachable_hud_item::anim_play(const shared_str& anm_name_b, BOOL bMixIn, co
             root_binst.mTransform.identity();
         }
 
-        // the item model keeps in step with the hands; a monolithic one is its own hands
-        const float start = !m_monolithic ? m_parent->cycle_start() :
-            bMixIn                        ? match_cycle_start(*ka, M2, speed, {{m_model, &m_trail}}) :
-                                            0.f;
+        // the item model keeps in step with the hands, a cycle of its own only, wrapped over its own
+        // length; a monolithic one is its own hands
+        float start = 0.f;
+        if (m_monolithic)
+            start = bMixIn ? match_cycle_start(*ka, M2, speed, {{m_model, &m_trail}}) : 0.f;
+        else if (const CMotionDef* def2 = ka->LL_GetMotionDef(M2); def2 && !(def2->flags & esmStopAtEnd))
+        {
+            const CMotion* root2 = ka->LL_GetRootMotion(M2);
+            const float period = root2 && root2->get_count() > 1 ? float(root2->get_count() - 1) / SAMPLE_FPS : 0.f;
+            start = period > EPS_S ? std::fmod(m_parent->cycle_start(), period) : 0.f;
+        }
         const u16 pc = ka->partitions().count();
         for (u16 pid = 0; pid < pc; ++pid)
         {
@@ -1166,7 +1182,10 @@ u32 player_hud::motion_length(const MotionID& M, const CMotionDef*& md, float sp
 void player_hud::update(const Fmatrix& cam_trans)
 {
     Fmatrix trans = cam_trans;
-    g_hud_mirror = psHUD_Flags.test(HUD_LEFT_HANDED) ? -1.f : 1.f;
+    // only while the first-person hud is what is seen: in third person or a vehicle the actor's
+    // shadow and everything else stay as they are
+    CActor* viewer = smart_cast<CActor*>(Level().CurrentViewEntity());
+    g_hud_mirror = psHUD_Flags.test(HUD_LEFT_HANDED) && viewer && viewer->HUDview() ? -1.f : 1.f;
     if (g_hud_mirror < 0.f)
     {
         // faster than multiplication by flip matrix
@@ -1991,7 +2010,11 @@ void player_hud::detach_item_idx(u16 idx)
     }
     else if (idx == 0 && attached_item(1))
     {
-        OnMovementChanged(mcAnyMove);
+        // the item left takes both hands now: its idle goes on both again, past the guard that keeps
+        // a cycle already playing
+        CHudItem* left = attached_item(1)->m_parent_hud_item;
+        if (left && left->GetState() == CHUDState::eIdle && !left->HudCycleRunsToEnd())
+            left->PlayAnimIdle();
     }
 }
 

@@ -1728,6 +1728,8 @@ void CActor::UpdateCL()
 
     if (IsFocused())
         g_player_hud->update(trans);
+    else
+        g_hud_mirror = 1.f; // no first-person hud while the view is elsewhere
 
     if (psActorFlags.test(AF_MULTI_ITEM_PICKUP))
         m_bPickupMode = false;

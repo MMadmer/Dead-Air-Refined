@@ -111,6 +111,7 @@ public:
     virtual bool Action(u16 cmd, u32 flags) { return false; }
     void OnMovementChanged(ACTOR_DEFS::EMoveCommand cmd);
     bool TransitionRunning() const { return m_transition_running; }
+    bool HudCycleRunsToEnd() const { return m_bStopAtEndAnimIsRunning; }
 
     virtual void TransformPosFromWorldToHud(Fvector& worldPos);
     virtual void TransformDirFromWorldToHud(Fvector& worldDir);

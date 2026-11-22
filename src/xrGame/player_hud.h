@@ -31,6 +31,7 @@ struct hud_pose_trail
 {
     xr_vector<Fvector> now, before;
     float dt{};
+    u32 frame{u32(-1)};
     void capture(IKinematics& model);
 };
 

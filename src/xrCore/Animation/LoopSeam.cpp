@@ -298,7 +298,7 @@ void continuations(const xr_vector<double>& y, u32 W, double* fwd, double* bwd)
 
 // A one-shot marked as a cycle rests at one end and moves at the other; a loop moves on both
 // sides of its seam, a hold there (an export plateau) aside. Speeds are taken where the motion
-// leaves the hold on either side.
+// leaves the hold on either side; the seam step itself (the jump being judged) counts for neither.
 bool rests_on_one_side(const Series& y, double floor)
 {
     const u32 P = u32(y.size());
@@ -307,7 +307,7 @@ bool rests_on_one_side(const Series& y, double floor)
         const V3& b = y[(i + 1) % P];
         return norm({b[0] - a[0], b[1] - a[1], b[2] - a[2]});
     };
-    u32 back = P - 1, fwd = 0;
+    u32 back = P - 2, fwd = 0;
     while (back > P / 2 && step(back) <= floor)
         --back;
     while (fwd < P / 2 && step(fwd) <= floor)
@@ -409,12 +409,14 @@ Series smooth_window(const Series& z, u32 W, double lambda)
     return out;
 }
 
-double window_peak(const Series& y, u32 W)
+// The window's worst curvature; with `inner`, away from the two seam frames.
+double window_peak(const Series& y, u32 W, bool inner = false)
 {
     const u32 P = u32(y.size());
     double peak = 0.0;
     for (int s = -int(W) - 1; s <= int(W); ++s)
-        peak = std::max(peak, norm(second_diff(y, u32((int(P) + s) % int(P)))));
+        if (!inner || (s != -1 && s != 0))
+            peak = std::max(peak, norm(second_diff(y, u32((int(P) + s) % int(P)))));
     return peak;
 }
 
@@ -454,9 +456,11 @@ bool rebuild(Series& y, double floor, Kink& before, Kink& after)
             break;
         best = smooth_window(z, W, lambda);
     }
-    // better at the seam and no new hump inside the window
+    // Better at the seam, and no new hump inside the window: its worst curvature no more than the
+    // clip's own allowance, what the window already had away from the seam, or half the seam kink.
     after = kink(best, floor);
-    if (after.seam >= before.seam || window_peak(best, W) >= window_peak(y, W))
+    const double allowed = std::max({window_curve_limit * before.own, window_peak(y, W, true), 0.5 * before.seam});
+    if (after.seam >= before.seam || window_peak(best, W) > allowed)
         return false;
     y.swap(best);
     return true;

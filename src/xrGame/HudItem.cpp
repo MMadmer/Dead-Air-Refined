@@ -602,6 +602,11 @@ shared_str CHudItem::SprintTransition(const shared_str& motion)
     if (transition || !name.starts_with("anm_idle") || sprinting == m_sprint_latched)
         return {};
     m_sprint_latched = sprinting;
+    // Raised to aim, or into a clip of its own, the sprint is over without its end clip: that would
+    // hold the aim back, and a clip that stops at its end has its own way out.
+    const CMotionDef* target = nullptr;
+    if (!sprinting && (name.starts_with("anm_idle_aim") || g_player_hud->motion_length(motion, HudSection(), target)))
+        return {};
     if (sprinting)
         m_sprint_suffix = name.substr(sprint.size());
     string256 clip;
