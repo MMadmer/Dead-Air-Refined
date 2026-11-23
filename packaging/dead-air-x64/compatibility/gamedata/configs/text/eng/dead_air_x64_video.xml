@@ -297,7 +297,7 @@
 		<text>Water and rain puddles reflect the world traced by the GPU's ray tracing cores: also what is off screen or hidden, out to the far shore. From Medium quality, wet and glossy surfaces, the weapon in hand included, reflect what surrounds them instead of the sky.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_shadows">
-		<text>Shadows of the sun and of the nearest lamps and flashlights are traced, also of the lamps that cast none before, so their light no longer passes through walls: buildings, terrain, objects, characters with their weapons and gear and the player himself cast them exactly at any distance, sharp at contact and softening with distance. Trees, bushes and grass keep their shadow maps, so their shadows sway with the wind.</text>
+		<text>Shadows of the sun and of the nearest lamps and flashlights are traced, the lamps without a shadow of their own included, so their light stops at walls: buildings, terrain, objects, characters with their weapons and gear and the player himself cast them exactly at any distance, sharp at contact and softening with distance. Trees, bushes and grass keep their shadow maps, so their shadows sway with the wind.</text>
 	</string>
 	<string id="st_da_x64_video_hint_rt_gi">
 		<text>Light bounces off what the sun, lamps, fires and flashlights lit: a flashlight lights the whole room around its spot, a lamp tints its surroundings with its colour, a sunlit wall lights what stands next to it. Corners, the space under a roof and behind objects are darker where the sky's light does not reach. The weapon in hand is lit the same way.</text>

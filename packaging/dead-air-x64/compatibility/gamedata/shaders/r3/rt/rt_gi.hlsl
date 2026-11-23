@@ -104,7 +104,11 @@ float4 gi_ray( float3 origin, float3 dir, float cone0, bool foliage, float u )
 	const RtHitSurface hs = rt_hit_surface( geo, inst, tri, h.bary, h.o2w, dir, cone, view );
 	const float4 around = rf_hit_around( hit, hs.normal );
 
-	// Where the screen shows the point this frame: its albedo and the lights the accumulator gathered on it.
+	// Where the screen shows the point this frame: its albedo and the lights the accumulator gathered on it, faded toward
+	// the off-screen estimate over the band at the screen's border (no seam moving along it as the camera turns). The
+	// albedo is kept below 0.9: the detail pass doubles it past 1, and through the cache every bounce feeds the next.
+	float3 seen_lit = 0.0f;
+	float seen_w = 0.0f;
 	[branch] if ( gi.y > 0.5f )
 	{
 		const float3 fp = rf_frame_pos( hit );
@@ -112,9 +116,12 @@ float4 gi_ray( float3 origin, float3 dir, float cone0, bool foliage, float u )
 			abs( rf_frame_z( fp.xy ) - fp.z ) < max( 0.05f, 0.01f * fp.z ) )
 		{
 			const int3 px = int3( fp.xy * view.size.xy, 0 );
-			const float3 albedo = gi_albedo.Load( px ).rgb;
+			const float3 albedo = min( saturate( gi_albedo.Load( px ).rgb ), 0.9f );
 			const float3 direct = max( gi_accum.Load( px ).rgb, 0.0f );
-			return float4( albedo * ( direct + around.rgb ), 0.0f );
+			seen_lit = albedo * ( direct + around.rgb );
+			seen_w = rf_edge_fade( fp.xy );
+			[branch] if ( seen_w >= 0.999f )
+				return float4( seen_lit, 0.0f );
 		}
 	}
 
@@ -128,10 +135,11 @@ float4 gi_ray( float3 origin, float3 dir, float cone0, bool foliage, float u )
 	}
 	const float3 direct = shade.sun_color.rgb * ( 0.7f * saturate( dot( hs.normal, view.sun.xyz ) ) * sun ) +
 		rf_hit_lamps( hit, hs.normal, cone, u );
-	float3 lit = hs.albedo * ( direct + around.rgb );
+	const float3 albedo = min( saturate( hs.albedo ), 0.9f );
+	float3 lit = albedo * ( direct + around.rgb );
 	[flatten] if ( hs.emissive )
 		lit += hs.albedo * gi.w;
-	return float4( lit, 0.0f );
+	return float4( lerp( lit, seen_lit, seen_w ), 0.0f );
 }
 
 [numthreads( 8, 8, 1 )]
@@ -149,9 +157,10 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( gi_position, gi_normal, int2( pixel ), view );
-	gi_z[ id.xy ] = z;
-	// The first-person hands are not where the main projection puts them: their rays leave where they are in the world.
-	const bool hud = rt_is_hud( z, s );
+	// The first-person hands are not where the main projection puts them: their rays leave where they are in the world,
+	// and the temporal pass weighs them by their own z.
+	const bool hud = rt_is_hud( depth, view );
+	gi_z[ id.xy ] = hud ? s.z : z;
 
 	const float w_mtl = gi_position.Load( int3( pixel, 0 ) ).w;
 	const bool foliage = !hud && da_is_foliage( ( view.scene.z & RT_VIEW_GBUFFER_PACKED ) ? gbuf_unpack_mtl( w_mtl ) : abs( w_mtl ) );

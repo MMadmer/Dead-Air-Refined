@@ -268,9 +268,10 @@ DaRtView da_rt_view(u32 flags)
     v.scene[1] = scene.static_texture_base;
     v.scene[2] = flags | (RImplementation.o.gbuffer_opt ? kViewGbufferPacked : 0u) | (t.velocity_ready() ? kViewVelocity : 0u);
     v.scene[3] = Device.dwFrame;
-    // The frame's textures are jittered; the alpha test clips where the G-buffer does (da_aref_u).
+    // The frame's textures are jittered; the alpha test clips where the G-buffer does (da_aref_u); the first-person HUD
+    // is drawn into the depth range's top slice (rt_is_hud).
     const Fvector2 jitter = da_jitter_px();
-    v.frame.set(jitter.x, jitter.y, float(ps_r__aref_quality) / 255.f, 0.f);
+    v.frame.set(jitter.x, jitter.y, float(ps_r__aref_quality) / 255.f, r2_hud_depth_limit);
     // The stand-ins' crowns by their species' day (rt_geometry.hlsli rt_veg_*), the snow on the branches.
     ID3D11Buffer* veg = nullptr;
     u32 prof = 0, seas_first = 0, seas = 0;
@@ -356,6 +357,21 @@ void da_rt_gtao_filter(CBackend& cmd_list, CRenderTarget& t)
 void da_rt_debug_pass(CBackend& cmd_list, CRenderTarget& t, DaRtTargets& rt)
 {
     if (!ps_r__rt_debug || !g_rt_passes.debug || !da_rt_scene_ready())
+        return;
+    // A view whose target this renderer lacks shows nothing (a null input is no descriptor at all on DirectX 12).
+    const ref_rt* source = nullptr;
+    switch (ps_r__rt_debug)
+    {
+    case 1: source = &rt.sun; break;
+    case 3: source = &rt.refl; break;
+    case 5: source = &rt.gloss; break;
+    case 6:
+    case 7:
+    case 9: source = &rt.gi; break;
+    case 8: source = &rt.lamps; break;
+    default: break;
+    }
+    if ((source && !*source) || (ps_r__rt_debug == 2 && !DaRtAccess::ao_target(t)))
         return;
     if (!rt.debug)
         rt.debug.create("$user$rt_debug", rt.width, rt.height, D3DFMT_A16B16G16R16F, 1, {CRT::CreateUAV});
@@ -765,7 +781,10 @@ void da_rt_gi_pass(CBackend& cmd_list)
     // The world cache of the traced light (dxr.md 3.15): cleared when made and for every new scene, else written by
     // this pass's pixels and resolved after it.
     const bool cache = rt->gi_cache && tier.gi_cache && g_rt_passes.gi_cache;
-    const bool cache_clear = cache && (rt->gi_cache_clear || rt->gi_cache_epoch != da_rt_scene_epoch());
+    // A pause of the global illumination (switched off, a quality without the cache, a cut) leaves cells of another
+    // light: they go too.
+    const bool cache_clear = cache && (rt->gi_cache_clear || rt->gi_cache_epoch != da_rt_scene_epoch() || rt->gi_ran + 1 != frame ||
+        da_history_reset());
     if (cache_clear)
         rt->gi_cache_clear = true;
     da_rt_light_block(c.lights, rt);
@@ -977,7 +996,8 @@ void da_rt_lamps_select(xr_vector<light*>& shadowed, const xr_vector<light*>& un
     const DaRtTargets* rt = da_rt_targets();
     if (!rt || !rt->lamps || !g_rt_passes.lamps || !da_rt_live(RtEffect::Shadows))
         return;
-    const u32 wanted = std::min(da_rt_tier().lamps_max, kRtLampSlots);
+    // The array holds the lamps of the quality the renderer started with (a higher one waits for the restart).
+    const u32 wanted = std::min(da_rt_tier().lamps_max, rt->lamp_slices * 4);
     if (!wanted)
         return;
     owners.erase(std::remove_if(owners.begin(), owners.end(), [](const Owner& o) { return o.keep; }), owners.end());
@@ -1067,7 +1087,7 @@ void da_rt_lamps_pass(CBackend& cmd_list)
     }
     c.count[0] = g_rt_lamps.count;
     c.count[1] = tier.lamp_rays;
-    c.count[2] = kRtLampMasks;
+    c.count[2] = (g_rt_lamps.count + 3) / 4;
     bool done = false;
     {
         dx11GpuTimerScope gpu(dx11GpuTimers::RtLamps);

@@ -1155,31 +1155,40 @@ Fvector CGameObject::get_last_local_point_on_mesh(Fvector const& local_point, u1
 }
 
 // What CInventoryOwner::renderable_Render draws for a carrier besides itself: the item in its hands unless hidden
-// (CHudItem::renderable_Render), then every attached item where it hangs (CAttachmentOwner::renderable_Render).
+// (CHudItem::renderable_Render), then every attached item where it hangs (CAttachmentOwner::renderable_Render). Their
+// transforms are brought up to this frame first, as renderable_Render does (an NPC behind the camera is drawn by no
+// pass, and its rifle would stay where it was last seen): the item in the hands by its own update, the attached items
+// by the carrier's bones, whose calculation runs the attachment callback (once a frame, whoever asks first).
 void CGameObject::renderable_Attachments(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out)
 {
     out.clear();
     if (IsGhost())
         return;
-    const auto add = [&](CGameObject& item) {
+    const auto add = [&](IGameObject& item) {
         if (IRenderVisual* visual = item.Visual())
         {
             if (std::none_of(out.begin(), out.end(), [visual](const auto& v) { return v.first == visual; }))
                 out.emplace_back(visual, item.XFORM());
         }
     };
-    if (CInventoryOwner* owner = smart_cast<CInventoryOwner*>(this))
+    if (CInventoryOwner* owner = cast_inventory_owner())
     {
-        if (CInventoryItem* active = owner->inventory().ActiveItem())
+        if (PIItem active = owner->inventory().ActiveItem())
         {
-            const CHudItem* hud = smart_cast<CHudItem*>(active);
+            CHudItem* hud = active->cast_hud_item();
             if (!hud || !hud->IsHidden())
+            {
+                if (hud)
+                    hud->UpdateXForm();
                 add(active->object());
+            }
         }
     }
-    if (const CAttachmentOwner* owner = smart_cast<CAttachmentOwner*>(this))
+    if (const CAttachmentOwner* owner = cast_attachment_owner(); owner && !owner->attached_objects().empty())
     {
-        for (CAttachableItem* attached : owner->attached_objects())
+        if (IKinematics* bones = Visual() ? Visual()->dcast_PKinematics() : nullptr)
+            bones->CalculateBones();
+        for (const CAttachableItem* attached : owner->attached_objects())
             add(attached->item().object());
     }
 }

@@ -517,7 +517,7 @@ struct DaRtScene
 
     // Built.
     bool ready{};
-    bool refused{}; // over the memory budget or failed: effects stay off for this level
+    bool refused{}; // over the memory budget (tried again later, g_rt_retry) or failed: effects stay off for this level
     xr_vector<DaRtMesh> meshes; // one geometry record each
     xr_vector<DaRtBlas> blases;
     xr_vector<DaRtInstanceDesc> instances; // static + multiple-use, CPU copy
@@ -555,6 +555,19 @@ struct DaRtScene
     u64 memory{}; // bytes of structures and tables, for the log
 };
 DaRtScene g_scene;
+
+// A scene refused for the video memory it would take: the frame of the next try (0: none) and the tries so far. A restart
+// of the renderer frees the old targets over the frames that follow it, and a level's textures settle after its load:
+// what does not fit at once often fits seconds later. A try walks the level again (a hitch): two more at most, then the
+// level goes without.
+struct DaRtRetry
+{
+    bool memory_short{}; // set by the build that refused
+    u32 frame{};
+    u32 tries{};
+} g_rt_retry;
+constexpr u32 kRetryFrames[2] = {120, 900};
+constexpr u32 kRetryLogged = 3;
 #endif
 } // namespace
 
@@ -726,7 +739,8 @@ void da_rt_collect()
     g_scene.collected = true;
     // GD's shadow-map cull honours the flags of the static casters it draws.
     da_gpu_trees_refresh_flags();
-    Msg("* [rt] level: %u static meshes, %u multiple-use models collected (%.1f ms)", u32(g_scene.statics.size()),
+    if (g_rt_retry.tries < kRetryLogged)
+        Msg("* [rt] level: %u static meshes, %u multiple-use models collected (%.1f ms)", u32(g_scene.statics.size()),
         u32(g_scene.trees.size()), timer.GetElapsed_sec() * 1000.f);
 }
 } // namespace
@@ -736,6 +750,7 @@ void da_rt_level_load()
 {
 #if defined(DA_RT_LANE)
     da_rt_scene_release();
+    g_rt_retry = {};
     g_scene = {};
     g_scene.level = true;
     // An effect on at load walks the level inside the loading time.
@@ -748,6 +763,7 @@ void da_rt_level_unload()
 {
     da_rt_scene_release();
 #if defined(DA_RT_LANE)
+    g_rt_retry = {};
     // The level's visuals go with it: nothing collected may outlive them.
     g_scene = {};
 #endif
@@ -995,8 +1011,11 @@ bool da_rt_scene_build()
             drop_foliage = free >= kept + kVramReserve;
             if (!drop_foliage)
             {
-                Msg("! [rt] scene refused: %.0f MB would leave less than %.0f MB of the %.0f MB video memory budget free",
-                    estimate / 1048576.0, kVramReserve / 1048576.0, budget / 1048576.0);
+                if (g_rt_retry.tries < kRetryLogged)
+                    Msg("! [rt] scene refused: %.0f MB would leave less than %.0f MB of the %.0f MB video memory budget free "
+                        "(%.0f MB in use)",
+                        estimate / 1048576.0, kVramReserve / 1048576.0, budget / 1048576.0, usage / 1048576.0);
+                g_rt_retry.memory_short = true;
                 return false;
             }
             Msg("~ [rt] scene: trees left out of the reflections to stay within the video memory budget");
@@ -1222,10 +1241,12 @@ bool da_rt_scene_build()
     u64 triangles = 0;
     for (const DaRtMesh& m : g_scene.meshes)
         triangles += m.index_count / 3;
+    u64 vram_budget = 0, vram_usage = 0;
+    da_rt_video_memory(vram_budget, vram_usage);
     Msg("* [rt] scene: %u BLAS, %llu tris, %.1f MB compacted (%.1f before), TLAS %u instances, %u textures, "
-        "%.1f ms GPU wait, %.1f ms total",
+        "%.1f ms GPU wait, %.1f ms total; video memory %.0f of %.0f MB in use",
         count, triangles, after / 1048576.0, before / 1048576.0, u32(g_scene.instances.size()), u32(g_scene.textures.size()),
-        wait_ms, timer.GetElapsed_sec() * 1000.f);
+        wait_ms, timer.GetElapsed_sec() * 1000.f, vram_usage / 1048576.0, vram_budget / 1048576.0);
     return true;
 }
 
@@ -1317,6 +1338,9 @@ struct DaRtSelection
     xr_vector<Root> roots;
     u32 actor_first{}; // roots from here on are the player's
     xr_vector<IRenderable*> skip; // sorted
+    // The visuals of the skipped objects the last top level traced (sorted): the cascades' task reads this frame's copy,
+    // the structures' update rewrites the source while that task runs.
+    xr_vector<IRenderVisual*> skip_visuals;
     bool actor_skip{};
     bool shadows{}; // the sun's rays take the moving objects this frame
 };
@@ -1656,6 +1680,7 @@ void da_rt_select_moving(const DaRtTier& tier, bool shadows)
     DaRtSelection& sel = g_rt_sel;
     sel.roots.clear();
     sel.skip.clear();
+    sel.skip_visuals.clear();
     sel.actor_skip = false;
     sel.shadows = shadows;
     const Fvector& camera = Device.vCameraPosition;
@@ -1739,6 +1764,7 @@ void da_rt_select_moving(const DaRtTier& tier, bool shadows)
     }
     std::sort(sel.skip.begin(), sel.skip.end());
     sel.skip.erase(std::unique(sel.skip.begin(), sel.skip.end()), sel.skip.end());
+    sel.skip_visuals = g_rt_traced_visuals_last;
     sel.actor_skip = sel.actor_first < sel.roots.size() && g_rt_actor_traced_last;
 }
 
@@ -2236,7 +2262,7 @@ bool da_rt_moving_wanted()
 bool da_rt_traced_visual(IRenderVisual* visual)
 {
 #if defined(DA_RT_LANE)
-    return visual && std::binary_search(g_rt_traced_visuals_last.begin(), g_rt_traced_visuals_last.end(), visual);
+    return visual && std::binary_search(g_rt_sel.skip_visuals.begin(), g_rt_sel.skip_visuals.end(), visual);
 #else
     UNUSED(visual);
     return false;
@@ -2268,6 +2294,7 @@ void da_rt_frame_collect()
     // Nothing chosen: the cascades draw every moving object.
     g_rt_sel.roots.clear();
     g_rt_sel.skip.clear();
+    g_rt_sel.skip_visuals.clear();
     g_rt_sel.actor_skip = false;
     g_rt_sel.actor_first = 0;
     if (!da_rt_available() || !g_scene.level || !g_scene.ready || !da_rt_wanted())
@@ -2316,16 +2343,28 @@ void da_rt_frame_scene(CBackend& cmd_list)
     }
     if (!g_scene.ready)
     {
-        if (g_scene.refused)
+        // Refused for the memory: another try once its frame comes; failed: none on this level.
+        if (g_scene.refused && (!g_rt_retry.frame || Device.dwFrame < g_rt_retry.frame))
             return;
         if (!g_scene.collected)
             da_rt_collect();
+        g_rt_retry.memory_short = false;
         g_scene.ready = da_rt_scene_build();
         if (!g_scene.ready)
         {
+            const bool memory = g_rt_retry.memory_short;
             da_rt_scene_release();
             g_scene.refused = true;
-            Msg("! [rt] no ray traced effects on this level");
+            const bool again = memory && g_rt_retry.tries < 2;
+            g_rt_retry.frame = again ? Device.dwFrame + kRetryFrames[g_rt_retry.tries] : 0;
+            Msg(again ? "~ [rt] no ray traced effects until the video memory allows" : "! [rt] no ray traced effects on this level");
+            ++g_rt_retry.tries;
+        }
+        else
+        {
+            if (g_rt_retry.tries)
+                Msg("* [rt] scene built at try %u", g_rt_retry.tries + 1);
+            g_rt_retry = {};
         }
         return;
     }

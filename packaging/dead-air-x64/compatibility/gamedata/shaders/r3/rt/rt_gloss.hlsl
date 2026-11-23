@@ -107,7 +107,7 @@ void main( uint3 id : SV_DispatchThreadID )
 		return;
 	// The hands are where the first-person projection puts them: their rays leave there, traced only (the screen's march
 	// would find the hands themselves).
-	const bool hud = rt_is_hud( z, s );
+	const bool hud = rt_is_hud( depth, view );
 	const float3 surface = hud ? rt_hud_world( float2( pixel ) + 0.5f, s.z, view ) :
 		rt_to_world( rt_view_pos( float2( pixel ) + 0.5f, z, view ), view );
 	const float3 n = normalize( rt_dir_to_world( s.n_view, view ) );
@@ -128,7 +128,9 @@ void main( uint3 id : SV_DispatchThreadID )
 	ray.Direction = dir;
 	ray.TMin = 0.01f;
 	ray.TMax = refl.x;
-	RfHit h = rf_trace( ray, cone0 );
+	// The hands sit inside the player's own shadow model: their rays pass it.
+	const uint mask = hud ? ( refl_mask.x & ~RT_MASK_ACTOR ) : refl_mask.x;
+	RfHit h = rf_trace_masked( ray, cone0, mask );
 	// The raster's surface lower than the traced mesh: the ray left it through its back (rt_reflections.hlsl).
 	float skipped = 0.0f;
 	[branch] if ( !hud && h.t >= 0.0f && h.t < 0.5f + 0.05f * z && rf_from_behind( h, dir ) )
@@ -136,7 +138,7 @@ void main( uint3 id : SV_DispatchThreadID )
 		skipped = h.t + 0.02f;
 		ray.Origin = origin + dir * skipped;
 		ray.TMax = max( refl.x - skipped, 0.02f );
-		h = rf_trace( ray, cone0 + refl.y * skipped );
+		h = rf_trace_masked( ray, cone0 + refl.y * skipped, mask );
 	}
 	const bool traced = h.t >= 0.0f;
 	const float t = traced ? skipped + h.t : refl.x;

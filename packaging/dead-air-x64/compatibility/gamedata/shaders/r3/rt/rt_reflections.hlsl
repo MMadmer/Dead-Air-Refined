@@ -109,7 +109,7 @@ void main( uint3 id : SV_DispatchThreadID )
 			const float cone = cone0 + refl.y * t;
 			const RtHitSurface hs = rt_hit_surface( g, inst, tri, h.bary, h.o2w, dir, cone, view );
 			const float sun = rf_sun_visibility( hit, hs.normal, cone );
-			const float3 lamps = rf_hit_lamps( hit, hs.normal, cone, rt_noise2( id.xy + 47u, view.scene.w ).x );
+			const float3 lamps = rf_hit_lamps_each( hit, hs.normal, cone, 4u );
 			const float4 around = rf_hit_around( hit, hs.normal );
 			float3 lit = rt_hit_light( hs, sun, lamps, around, shade, rf_env0, rf_env1, view );
 			lit = rt_fog_apply( lit, hit, view.camera.xyz, shade, rf_sky0, rf_sky1 );

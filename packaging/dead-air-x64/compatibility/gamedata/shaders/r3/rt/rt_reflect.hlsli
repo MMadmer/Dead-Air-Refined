@@ -104,6 +104,27 @@ float3 rf_hit_lamps( float3 p, float3 n, float cone, float u )
 	return visible * chosen_c * ( total / max( chosen_w, 1e-6f ) );
 }
 
+// The lamps' light at an off-screen hit for a pass with no temporal accumulation (the water's mirror): the first
+// `traced` lamps that light it (the list is the brightest first) each by its own shadow ray, the rest unshadowed - no
+// frame-to-frame noise.
+float3 rf_hit_lamps_each( float3 p, float3 n, float cone, uint traced )
+{
+	const uint count = min( lights.count.x, 32u );
+	float3 sum = 0.0f;
+	uint rays = 0u;
+	[loop] for ( uint i = 0u; i < count; ++i )
+	{
+		float3 c = rt_lamp_light( lights.light[ i ], p, n, lights.falloff );
+		[branch] if ( any( c > 0.0f ) && rays < traced )
+		{
+			c *= rf_lamp_visible( p, n, lights.light[ i ], cone );
+			++rays;
+		}
+		sum += c;
+	}
+	return sum;
+}
+
 // The light around an off-screen hit the world cache holds (a 0: none, or the cache is not live).
 float4 rf_hit_around( float3 p, float3 n )
 {

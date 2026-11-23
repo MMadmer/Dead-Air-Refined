@@ -74,7 +74,8 @@ struct DaRtTier
     // dxr.md 3.15
     bool gi_cache; // the world cache of the traced light (the light of the light: further bounces)
 };
-// The lamps' masks (rt/rt_light_shadow.hlsl): four lamps a slice of one array, one slot of the light volumes.
+// The lamps' masks (rt/rt_light_shadow.hlsl): four lamps a slice of one array (two slices at least, an array view), one
+// slot of the light volumes.
 constexpr u32 kRtLampMasks = 8, kRtLampSlots = kRtLampMasks * 4;
 // The world cache of the traced light (rt/rt_cache.hlsli): cells of 32 bytes.
 constexpr u32 kRtGiCacheCells = 1u << 19;
@@ -174,8 +175,10 @@ struct DaRtTargets
     u32 gi_width{}, gi_height{};
     u32 gi_current{}, gi_frame{u32(-2)}, gi_ran{u32(-2)};
     ref_texture t_clouds;
-    // The lamps' traced visibility, four lamps a slice (dxr.md 3.12); the frame they were traced in.
+    // The lamps' traced visibility, four lamps a slice (dxr.md 3.12), as many slices as the quality the renderer started
+    // with traces lamps; the frame they were traced in.
     ref_rt lamps;
+    u32 lamp_slices{};
     u32 lamps_frame{u32(-2)};
     // The world cache of the traced light (dxr.md 3.15): cells of irradiance by position and facing, written by the
     // global illumination's pixels, read by the rays' off-screen hits; whether it holds anything yet.

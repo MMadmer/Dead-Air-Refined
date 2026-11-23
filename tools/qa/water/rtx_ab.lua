@@ -53,6 +53,7 @@ for _, d in ipairs(qa_ab_debug or {}) do
 end
 
 local ci, phase, t0, frames, armed, fps_frames = 1, "start", 0, 0, false, 0
+local heading = 0
 local last_cmds
 
 local function on_update()
@@ -88,7 +89,8 @@ local function on_update()
 			end
 			printf("[qa] torch %s", t and "on" or "missing")
 		end
-		db.actor:set_actor_direction(-(db.actor:direction():getH() + math.rad(qa_ab_heading or 0)))
+		heading = db.actor:direction():getH() + math.rad(qa_ab_heading or 0)
+		db.actor:set_actor_direction(-heading)
 		cmd("r__gpu_log 60")
 		phase, t0 = "config", now
 	elseif phase == "config" then
@@ -107,8 +109,9 @@ local function on_update()
 		if not cfg.keep then cmd("vid_restart") end
 		phase, t0, armed = "settle", now, false
 	elseif phase == "settle" and not armed and now - t0 > 1500 then
-		-- The restart lowers the weapon: up again before the shot.
+		-- The restart lowers the weapon, and on Vulkan the hidden desktop's cursor turns the view: both back before the shot.
 		armed = true
+		db.actor:set_actor_direction(-heading)
 		if (qa_ab_hands or "rifle") == "rifle" then db.actor:activate_slot(3) end
 	elseif phase == "settle" and now - t0 > 7000 then
 		printf(string.format("[qa] SHOT %s", configs[ci].name))

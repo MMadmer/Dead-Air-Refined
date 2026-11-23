@@ -654,37 +654,52 @@ that the bake never resolved. Now:
 - **The stock ambient stays and the traced light goes over it** (`combine_1.ps`): where the rays saw less of the sky than
   the baked hemisphere says (`seen = (sky share + 0.1) / (hemi + 0.1)`), `kRtGiOcclusion` (0.7) of the shortfall comes
   off, to `kRtGiFloor` (0.4) of the stock at least (the procedural foliage keeps its own baked occlusion); then the
-  bounced light is added at `kRtGiGain` (1).
+  bounced light is added at `kRtGiGain` (1). The contact occlusion keeps half its share where the GI ran (its rays saw
+  the occluders a metre off too).
 - **The bounced light is the direct light's** (`rt/rt_gi.hlsl`): a ray's hit sends back its albedo times the direct light
   on it - where the screen shows it, this frame's accumulator (every lamp with its shadow and projector, the sun with its
   cascades) and the G-buffer's albedo, exactly; off screen, the sun by its own shadow ray (cosine, LIGHT_MUL1, the clouds'
-  shadow, the crowns' card test) and the frame's lamps - plus the bounced light the world cache holds at the hit. Misses
+  shadow, the crowns' card test) and the frame's lamps - plus the bounced light the world cache holds at the hit; the
+  two blend over the band at the screen's border, and the albedo is kept below 0.9 (the detail pass doubles it past 1,
+  and through the cache every bounce feeds the next). Misses
   count toward the sky share only. The previous frame's colour copy is no longer read (combine_1 writes it for the
   glossy reflections alone). A torch at night lights the room around its spot; a lamp, its walls and ceiling.
 - **Every lamp is a light the rays' hits take** (`da_rt_lamps_select`, both light packages of the frame merged): the
   `kRtHitLights` (32) brightest lamps around the camera, shadowed or not, in the constants of the global illumination, the
   glossy and the water reflections (`RtLights`, `rt_material.hlsli`). An off-screen hit sums their unshadowed light
   (`rt_lamp_light`: the volumes' falloff, cosine and LIGHT_MUL1, a spot's cone with a soft rim) and traces one shadow ray
-  toward a lamp chosen by its share, scaled by the inverse of that share (`rf_hit_lamps`).
+  toward a lamp chosen by its share, scaled by the inverse of that share (`rf_hit_lamps`); the water's reflections, which
+  have no temporal pass, trace the first four lamps each and leave the rest unshadowed (`rf_hit_lamps_each`).
 - **The world cache of the traced light** (`rt/rt_cache.hlsli`, `rt/rt_gi_cache.hlsl`, 16 MB, every tier but Low): cells of 25 cm within 16 m of the camera, doubling with each doubling of the distance, by the axis the normal
-  faces; the GI temporal pass writes every settled world pixel's bounced light as its cell's sample (no atomics: the last
-  pixel wins, the resolve averages over the frames, 15 % new a frame, a cell unwritten for 300 frames is let go); a hit of
-  the GI and of the reflections adds the cell's light (further bounces, and the light behind the camera). Cleared when made
-  and for every new scene (`da_rt_scene_epoch`).
+  faces, two cells a key (its own and the one beside it); the GI temporal pass writes every settled world pixel's bounced
+  light as its key's sample (no atomics: the last pixel wins, the resolve averages over the frames, 15 % new a frame); a
+  key keeps its cell while it is written, another takes only a free cell or one unwritten for 60 frames, and a cell
+  unwritten for 300 is let go; a hit of the GI and of the reflections adds the cell's light (further bounces, and the
+  light behind the camera). Cleared when made, for every new scene (`da_rt_scene_epoch`), after a pause of the GI and on
+  a cut (`da_history_reset`).
 - **Every lamp casts a traced shadow**, the ones the stock lit unshadowed too (they lit through walls): the nearest
-  `lamps_max` of all lamps (Medium 8, High 16, Ultra 32) into one RGBA8 array of 8 slices (`$user$rt_lamps`, t29 of the
-  light volumes); one dispatch traces them all; a surface facing away from a lamp traces nothing; bulb 5 cm. A formerly
+  `lamps_max` of all lamps (Medium 8, High 16, Ultra 32) into one RGBA8 array, a slice per four lamps of the quality the
+  renderer started with (`$user$rt_lamps`, t29 of the light volumes); one dispatch traces them all; a surface facing
+  away from a lamp traces nothing (but leaves and blades lit through and snow, whose light wraps); bulb 5 cm. A formerly
   unshadowed lamp's rays stop 6 % of its range short of it (15-60 cm): such lamps are often sunk into their ceiling.
 - **The first-person hands and what they hold** are in the traced light (`rt_hud_world`: the G-buffer's z through the
   HUD projection, `RtView.hud`): their GI, their glossy reflections (traced only, no screen march), their sun shadow per
-  pixel and the traced lamps' shadows leave where they are in the world. Their histories stay on their pixels.
+  pixel and the traced lamps' shadows leave where they are in the world, past the player's own shadow model they sit in.
+  A first-person pixel is one drawn below the HUD's depth slice (`rt_is_hud`, `RtView.frame.w` = r2_hud_depth_limit, the
+  light volumes' own test); its histories stay on its pixel, its temporal and filter passes take hand samples only, and
+  its GI's z is its own.
 - **NPCs whole**: what a character carries (`IRenderable::renderable_Attachments`, `CGameObject`: the active item of a
-  `CInventoryOwner` unless hidden, the attached items of a `CAttachmentOwner`) enters the scene with it as roots of its
-  own; the cascades leave every visual of an object traced whole (`da_rt_traced_visual`) to the rays.
+  `CInventoryOwner` unless hidden, its transform updated, the attached items of a `CAttachmentOwner` after the carrier's
+  bones) enters the scene with it as roots of its own; the cascades leave every visual of an object traced whole
+  (`da_rt_traced_visual`, a copy the selection takes before the cascades' task starts) to the rays.
 - The glossy reflections no longer dim by the sky seen (that hid every reflection indoors); below Ultra their rays pass
   the crowns and a card test dims what lies beyond one (`gl_canopy`).
 - Debug views (`r__rt_debug`): 6 the bounced light, 7 the sky share, 8 the first lamps' visibility, 9 the sky the rays saw
   (red) against the baked hemisphere (green).
+- A scene refused for the video memory it would take (the 512 MB reserve) is tried again after 120 and 900 frames before
+  the level goes without (`g_rt_retry`): a restart's old targets and a load's textures settle over seconds. The scene's
+  log line gives the memory in use: an 8 GB card at Extreme on a large level (light_test) runs 6.6 GB on DirectX 12
+  after the build and some 100 MB more on Vulkan, which stays refused there.
 - Cost (RTX 3070 Laptop, the stand at 1920x1080, a house at night with the torch; frame / RT passes, ms): off 8.7; Low
   12.4 (sun 0.9, AO 0.7, GI 2.6); Medium 14.2 (sun 1.6, AO 0.7, glossy 0.2, GI 2.8, lamps 0.8); High 15.8 (AO 1.7, GI 3.5,
   lamps 0.7); Ultra 20.4 (sun 2.4, AO 1.6, glossy 1.5, GI 5.1, lamps 0.6). Vulkan within 10 % of DirectX 12.

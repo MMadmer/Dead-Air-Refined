@@ -64,6 +64,8 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( gt_position, gt_normal, int2( id.xy ), view );
+	// The first-person hands take samples of the hands only, the world of the world.
+	const bool hud = rt_is_hud( depth, view );
 
 	// The neighbourhood of this frame's samples.
 	const int2 block = gt_full() ? int2( id.xy ) : int2( id.xy / 2u );
@@ -86,6 +88,8 @@ void main( uint3 id : SV_DispatchThreadID )
 			const float facing = saturate( dot( ss.n_view, s.n_view ) );
 			coplanar = coplanar && facing > 0.98f;
 			w *= saturate( 1.0f - abs( zs - z ) / ( 0.02f * z + 0.05f ) ) * pow( facing, 16.0f );
+			[flatten] if ( rt_is_hud( ds, view ) != hud )
+				w = 0.0f;
 			const float4 r = gt_raw.Load( int3( b, 0 ) );
 			const float3 c = gt_tm( r.rgb );
 			sum += c * w;
@@ -117,7 +121,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	// reflector's distance plus the hit's; elsewhere the surface itself.
 	float4 history = 0.0f;
 	bool valid = false;
-	[branch] if ( ( view.scene.z & RT_VIEW_HISTORY_VALID ) && rt_is_hud( z, s ) )
+	[branch] if ( ( view.scene.z & RT_VIEW_HISTORY_VALID ) && hud )
 	{
 		history = gt_history.Load( int3( id.xy, 0 ) );
 		valid = true;

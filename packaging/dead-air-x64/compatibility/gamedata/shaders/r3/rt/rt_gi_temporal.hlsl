@@ -58,9 +58,11 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( gt_position, gt_normal, int2( id.xy ), view );
-	const bool hud = rt_is_hud( z, s );
+	const bool hud = rt_is_hud( depth, view );
+	// The z the trace wrote (rt_gi.hlsl): a first-person pixel's own.
+	const float zc = hud ? s.z : z;
 
-	// This frame's samples around the pixel.
+	// This frame's samples around the pixel, the hands' only from the hands and the world's only from the world.
 	const bool half_res = temporal.z > 0.5f;
 	const int2 centre = half_res ? int2( id.xy / 2u ) : int2( id.xy );
 	const int2 last = int2( temporal.xy ) - 1;
@@ -79,8 +81,8 @@ void main( uint3 id : SV_DispatchThreadID )
 			const RtSurface ss = rt_surface( gt_position, gt_normal, int2( sp ), view );
 			const float facing = saturate( dot( ss.n_view, s.n_view ) );
 			const float4 r = gt_raw.Load( int3( t, 0 ) );
-			float wl = exp( -0.35f * dot( d, d ) ) * saturate( 1.0f - abs( zs - z ) / ( 0.03f * z + 0.05f ) );
-			[flatten] if ( r.a < 0.0f )
+			float wl = exp( -0.35f * dot( d, d ) ) * saturate( 1.0f - abs( zs - zc ) / ( 0.03f * zc + 0.05f ) );
+			[flatten] if ( r.a < 0.0f || rt_is_hud( gt_depth.Load( int3( sp, 0 ) ), view ) != hud )
 				wl = 0.0f;
 			const float w = wl * pow( facing, 8.0f );
 			const float3 c = gt_tm( r.rgb );
@@ -121,7 +123,7 @@ void main( uint3 id : SV_DispatchThreadID )
 		[branch] if ( hud )
 		{
 			prev_uv = pixel_center * view.size.zw;
-			prev.z = z;
+			prev.z = zc;
 		}
 		else [branch] if ( view.scene.z & RT_VIEW_VELOCITY )
 		{
@@ -179,7 +181,7 @@ void main( uint3 id : SV_DispatchThreadID )
 		result = float4( gt_tm_inv( lerp( h, mean, alpha ) ), lerp( history.a, mean_sky, alpha ) );
 	}
 	gt_out[ id.xy ] = result;
-	gt_out_aux[ id.xy ] = float2( n, z );
+	gt_out_aux[ id.xy ] = float2( n, zc );
 	// The world's settled light is its cell's sample of the frame.
 	[branch] if ( temporal2.w > 0.5f && !hud && n >= 2.0f && result.a >= 0.0f )
 	{

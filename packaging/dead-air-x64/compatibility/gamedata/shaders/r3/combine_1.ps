@@ -219,6 +219,8 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 					hdiffuse *= max( lerp( 1.0f, seen, da_rt_gi.y ), da_rt_gi.z );
 				}
 				hdiffuse += max( gi.rgb, 0.0f ) * da_rt_gi.w;
+				// The rays saw the occluders a metre off too: the contact occlusion keeps half its share.
+				occ = lerp( 1.0f, occ, 0.5f );
 				sky_seen = saturate( gi.a );
 				[flatten] if ( da_spec_ggx_on( mtl ) )
 					spec_w = spec_e * sky_seen;

@@ -76,7 +76,8 @@ struct RtView
 	float4				sun;			// xyz world direction toward the sun; w tan of the sun disc's radius
 	uint4				scene;			// x static instances, y static texture base, z RT_VIEW_*, w frame index
 	float4				frame;			// xy the projection jitter in render pixels (this frame's textures show a
-										// point that far from its unjittered projection), z the alpha-test reference
+										// point that far from its unjittered projection), z the alpha-test reference,
+										// w the depth below which the first-person HUD is drawn (r2_hud_depth_limit)
 	uint4				veg;			// the vegetation tables (da_veg_rt_tables): x bindless slot (~0 none), y the
 										// season block's first float4, z a species' season rows | its profile rows << 16,
 										// w the snow on the branches (float bits)
@@ -162,12 +163,12 @@ RtSurface rt_surface( Texture2D<float4> position, Texture2D<float4> normal, int2
 	return s;
 }
 
-// First-person hands and items are drawn with their own projection: their depth does not sit on
-// the view ray the main projection describes. The G-buffer's own z and the depth buffer's then
-// disagree, and such a pixel gets neither shadow nor occlusion from the scene.
-bool rt_is_hud( float z_depth, RtSurface s )
+// First-person hands and items are drawn with their own projection into the top slice of the depth range (the HUD
+// viewport ends at r2_hud_depth_limit): their depth does not sit on the view ray the main projection describes, their
+// G-buffer z is the true one. The same test the light volumes make (da_hud_light.h da_hud_pixel).
+bool rt_is_hud( float depth, RtView v )
 {
-	return s.z < 2.0f && abs( z_depth - s.z ) > 0.05f + 0.1f * s.z;
+	return depth < v.frame.w;
 }
 
 // Where a first-person pixel is in the world: the G-buffer's view z through the first-person projection (da_hud_light.h

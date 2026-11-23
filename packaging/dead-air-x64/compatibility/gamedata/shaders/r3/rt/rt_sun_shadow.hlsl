@@ -68,7 +68,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	// The hands are not in the scene: they take the sun where they are in the world (a barrel out of a doorway's shadow
 	// is lit). Written as lit, they shone in full sun under any roof, since the cascades leave the static casters to
 	// these rays. The rays pass the player's own shadow model, which the hands sit inside.
-	[branch] if ( rt_is_hud( z, s ) )
+	[branch] if ( rt_is_hud( depth, view ) )
 	{
 		float3 n_hud = normalize( rt_dir_to_world( s.n_view, view ) );
 		if ( dot( n_hud, view.sun.xyz ) < 0.0f )

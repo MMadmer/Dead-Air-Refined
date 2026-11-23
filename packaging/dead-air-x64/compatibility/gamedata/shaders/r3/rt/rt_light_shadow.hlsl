@@ -5,7 +5,7 @@
 // short of the lamp's own fixture. The scene's static world, moving objects and characters cast; a lamp the player
 // carries (the torch above all) is not shadowed by his own body, as its map was not. The first-person hands and what they
 // hold trace from where they are in the world. A surface facing away from a lamp is dark to it already and traces nothing
-// (leaf cards and blades are lit through from behind and do).
+// (leaf cards and blades lit through from behind, and snow, whose light wraps past the terminator, do).
 
 #include "rt_geometry.hlsli"
 #include "da_material_codes.h"
@@ -63,13 +63,15 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( ls_position, ls_normal, int2( id.xy ), view );
-	const bool hud = rt_is_hud( z, s );
+	const bool hud = rt_is_hud( depth, view );
 	const float3 p = hud ? rt_hud_world( float2( id.xy ) + 0.5f, s.z, view ) :
 		rt_to_world( rt_view_pos( float2( id.xy ) + 0.5f, z, view ), view );
 	const float z_ray = hud ? s.z : z;
 	const float3 n = normalize( rt_dir_to_world( s.n_view, view ) );
 	const float w_mtl = ls_position.Load( int3( id.xy, 0 ) ).w;
-	const bool through = !hud && da_is_foliage( ( view.scene.z & RT_VIEW_GBUFFER_PACKED ) ? gbuf_unpack_mtl( w_mtl ) : abs( w_mtl ) );
+	const float mtl = ( view.scene.z & RT_VIEW_GBUFFER_PACKED ) ? gbuf_unpack_mtl( w_mtl ) : abs( w_mtl );
+	// Leaves and blades are lit through from behind, snow wraps its light past the terminator (da_snow_light).
+	const bool through = !hud && ( da_is_foliage( mtl ) || da_is_snowy( mtl ) );
 	const float cone = rt_pixel_size( z_ray, view );
 	const uint rays = max( lamp_count.y, 1u );
 	const uint count = min( lamp_count.x, 32u );
@@ -98,7 +100,8 @@ void main( uint3 id : SV_DispatchThreadID )
 			// Off the surface on the lamp's side; leaf cards lit from behind keep their shadow.
 			const float3 side = facing >= 0.0f ? n : -n;
 			const float3 origin = p + side * ( ( hud ? 0.004f : 0.01f ) + 0.0015f * z_ray );
-			const uint mask = lamp_info[ i ].z > 0.5f ? RT_RAYS_SHADOW_LAMP_CARRIED : RT_RAYS_SHADOW;
+			// The hands sit inside the player's own shadow model, which shadows no lamp they are lit by.
+			const uint mask = ( hud || lamp_info[ i ].z > 0.5f ) ? RT_RAYS_SHADOW_LAMP_CARRIED : RT_RAYS_SHADOW;
 			const float tmax = max( dist - lamp_info[ i ].y, 0.02f );
 			float lit = 0.0f;
 			[loop] for ( uint r = 0u; r < rays; ++r )

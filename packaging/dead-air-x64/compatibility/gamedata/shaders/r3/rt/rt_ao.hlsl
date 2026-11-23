@@ -51,7 +51,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( ao_position, ao_normal, int2( pixel ), view );
-	[branch] if ( rt_is_hud( z, s ) )
+	[branch] if ( rt_is_hud( depth, view ) )
 	{
 		ao_out[ id.xy ] = float2( 1.0f, z );
 		return;

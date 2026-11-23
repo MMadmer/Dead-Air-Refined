@@ -35,6 +35,8 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( gf_position, gf_normal, int2( id.xy ), view );
+	// The first-person hands filter among themselves, the world among itself.
+	const bool hud = rt_is_hud( depth, view );
 	const float3 p = rt_view_pos( float2( id.xy ) + 0.5f, z, view );
 	const float frames = gf_aux.Load( int3( id.xy, 0 ) ).x;
 	const float l = gf_luma( centre.rgb );
@@ -54,7 +56,7 @@ void main( uint3 id : SV_DispatchThreadID )
 			const int2 q = clamp( int2( id.xy ) + int2( x, y ) * step, int2( 0, 0 ), size - 1 );
 			const float4 v = gf_source.Load( int3( q, 0 ) );
 			const float dq = gf_depth.Load( int3( q, 0 ) );
-			[branch] if ( rt_is_sky( dq ) || v.a < 0.0f )
+			[branch] if ( rt_is_sky( dq ) || v.a < 0.0f || rt_is_hud( dq, view ) != hud )
 				continue;
 			const float zq = rt_linear_z( dq, view );
 			const RtSurface sq = rt_surface( gf_position, gf_normal, q, view );

@@ -207,8 +207,11 @@ void da_rt_targets_create(CRenderTarget& target)
     // The clouds' shadow over the hits of the reflections and the global illumination.
     rt->t_clouds.create(r2_RT_cloud_map);
     // The lamps' traced visibility, for the quality the renderer started with.
-    if (ps_r__rt_shadows && da_rt_tier_of(ps_r__rt_quality).lamps_max)
-        rt->lamps.create(r2_RT_rt_lamps, w, h, D3DFMT_A8B8G8R8, 1, kRtLampMasks, uav);
+    if (const u32 lamps = da_rt_tier_of(ps_r__rt_quality).lamps_max; ps_r__rt_shadows && lamps)
+    {
+        rt->lamp_slices = std::clamp((lamps + 3) / 4, 2u, kRtLampMasks);
+        rt->lamps.create(r2_RT_rt_lamps, w, h, D3DFMT_A8B8G8R8, 1, rt->lamp_slices, uav);
+    }
     rt->t_env0.create(r2_T_envs0);
     rt->t_env1.create(r2_T_envs1);
     rt->t_sky0.create(r2_T_sky0);
