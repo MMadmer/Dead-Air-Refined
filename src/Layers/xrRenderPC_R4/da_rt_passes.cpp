@@ -54,6 +54,7 @@ struct DaRtPasses
     DaRtPipeline gi_temporal{};
     DaRtPipeline gi_filter{};
     DaRtPipeline lamps{};
+    DaRtPipeline gi_cache{};
     DaRtPipeline skin{};
     DaRtPipeline debug{};
 #endif
@@ -74,14 +75,28 @@ struct DaRtView
     u32 scene[4];
     Fvector4 frame;
     u32 veg[4]; // the vegetation tables: slot, season block, rows | profile rows << 16, snow (float bits)
+    Fvector4 hud; // the first-person projection's pos_decompress (its own field of view)
 };
-static_assert(sizeof(DaRtView) == 384);
+static_assert(sizeof(DaRtView) == 400);
 
 struct DaRtShade
 {
     Fvector4 sun_color, env_color, ambient, fog_params, fog_color, fog, fog2, sky_tint, rain2, tonemap, grade;
 };
 static_assert(sizeof(DaRtShade) == 176);
+
+// A lamp the rays' hits take (rt/rt_material.hlsli RtLight): world position and 1 / range^2, colour and kind (1 a spot,
+// 2 carried by the player), the spot's world direction and the cosine of its half cone.
+struct DaRtLight
+{
+    Fvector4 pos, color, dir;
+};
+struct DaRtLightBlock
+{
+    Fvector4 falloff; // da_light_falloff: the inverse-square shape's share, core, gain
+    u32 count[4]; // x lamps, y the world cache of the traced light is live (0/1)
+    DaRtLight lights[kRtHitLights];
+};
 
 struct DaRtSunConstants
 {
@@ -115,6 +130,7 @@ struct DaRtReflectionConstants
     Fvector4 refl;
     u32 mask[4];
     Fvector4 clouds, clouds2, cloud_map;
+    DaRtLightBlock lights;
 };
 struct DaRtDebugConstants
 {
@@ -129,6 +145,7 @@ struct DaRtGlossConstants
     u32 mask[4];
     Fvector4 gloss;
     Fvector4 clouds, clouds2, cloud_map;
+    DaRtLightBlock lights;
 };
 struct DaRtGlossTemporalConstants
 {
@@ -143,6 +160,12 @@ struct DaRtGiConstants
     u32 mask[4];
     Fvector4 gi, gi2;
     Fvector4 clouds, clouds2, cloud_map;
+    DaRtLightBlock lights;
+};
+struct DaRtCacheConstants
+{
+    u32 cache[4]; // x cells, y clear them all (0/1)
+    Fvector4 blend; // x the new frame's share of a written cell, y frames an unwritten cell lives
 };
 struct DaRtGiTemporalConstants
 {
@@ -157,9 +180,11 @@ struct DaRtGiFilterConstants
 struct DaRtLampConstants
 {
     DaRtView view;
-    Fvector4 lamps[4], info[4];
+    Fvector4 lamps[kRtLampSlots], info[kRtLampSlots];
     u32 count[4];
 };
+static_assert(sizeof(DaRtLampConstants) <= da_rt_max_constants && sizeof(DaRtGiConstants) <= da_rt_max_constants &&
+    sizeof(DaRtGlossConstants) <= da_rt_max_constants && sizeof(DaRtReflectionConstants) <= da_rt_max_constants);
 
 // The lamps the rays shade this frame (da_rt_lamps_select): the owners (a point lamp's, for its faces) by mask slot.
 struct DaRtLampFrame
@@ -167,15 +192,29 @@ struct DaRtLampFrame
     u32 frame{u32(-1)};
     u32 count{};
     light* owners[kRtLampSlots]{};
+    // The stock lit it without a shadow: its fixture may sink into the ceiling it hangs from.
+    bool unshadowed[kRtLampSlots]{};
     bool traced{};
 } g_rt_lamps;
-// The reach of a lamp's own fixture its shadow rays stop short of, metres.
-constexpr float kLampFixture = 0.15f;
+// The reach of a lamp's own fixture its shadow rays stop short of, metres; for a lamp the stock lit unshadowed (placed
+// knowing nothing would shadow it, often sunk into its ceiling or wall) a share of its range, to a ceiling.
+constexpr float kLampFixture = 0.15f, kLampFixtureUnshadowed = 0.06f, kLampFixtureMax = 0.6f;
+// The lamps the rays' hits take this frame (da_rt_lamps_select): the frame's most important lit lamps.
+struct DaRtHitLights
+{
+    u32 frame{u32(-1)};
+    u32 count{};
+    DaRtLight lights[kRtHitLights]{};
+    // Each one's lamp and weight: the frame's second light package (the occlusion's) merges into the first's.
+    const light* who[kRtHitLights]{};
+    float weight[kRtHitLights]{};
+} g_rt_hit_lights;
+// The world cache of the traced light (dxr.md 3.15): a written cell's new share, the frames an unwritten one lives.
+constexpr float kCacheBlend = 0.15f, kCacheLife = 300.f;
 
-// The global illumination (dxr.md 3.11): the share of a hit's own light that is its sky (its vertex hemisphere), the
-// glow of an emissive hit, the history clip in sigmas, the least alpha, the least share of a pixel's own fresh sample,
+// The global illumination (dxr.md 3.11): the glow of an emissive hit, the history clip in sigmas, the least alpha, the least share of a pixel's own fresh sample,
 // the filter's plane tolerance per metre, normal power and luminance sigma.
-constexpr float kGiHitSky = 1.f, kGiGlow = 1.f, kGiClip = 2.5f, kGiAlpha = 0.02f, kGiOwn = 0.35f;
+constexpr float kGiGlow = 1.f, kGiClip = 2.5f, kGiAlpha = 0.02f, kGiOwn = 0.35f;
 // The light a crown lets through to what lies under it, and the reach of the crowns' test.
 constexpr float kGiCanopy = 0.3f, kGiCanopyReach = 40.f;
 constexpr float kGiPlane = 0.02f, kGiNormal = 32.f, kGiLuma = 4.f;
@@ -187,13 +226,14 @@ constexpr float kGlossMin = 0.03f, kGlossFull = 0.12f, kGlossSpread = 0.35f, kGl
 constexpr float kGlossReach = 250.f;
 constexpr u32 kGlossSteps = 16u;
 
-// The tiers of r__rt_quality (dxr.md 10): Low, Medium, High, Ultra. The sun disc is the real one.
+// The tiers of r__rt_quality (dxr.md 10): Low, Medium, High, Ultra. The sun disc is the real one; a bulb's radius.
 constexpr float kSunDisc = kSunDiscTan;
+constexpr float kLampBulb = 0.05f;
 constexpr DaRtTier kTiers[4] = {
-    {false, false, true, 1.0f, 16.f, 250.f, false, false, 40.f, 20.f, 6u, 4u, 16u, false, 1u, 0.f, false, false, true, 1u, 25.f, 24.f, 2u, false, 0u, 1u, 0.f},
-    {true, true, true, 1.5f, 32.f, 400.f, true, true, 60.f, 30.f, 12u, 8u, 24u, true, 1u, kSunDisc, false, false, true, 1u, 35.f, 32.f, 2u, true, 4u, 1u, 0.03f},
-    {true, true, false, 2.0f, 32.f, 1000.f, true, true, 80.f, 40.f, 16u, 12u, 32u, true, 1u, kSunDisc, false, false, true, 1u, 50.f, 32.f, 3u, true, 8u, 1u, 0.03f},
-    {true, true, false, 2.5f, 48.f, 1500.f, true, true, 120.f, 60.f, 24u, 16u, 48u, true, 2u, kSunDisc, true, true, false, 1u, 60.f, 48.f, 3u, true, 12u, 2u, 0.03f},
+    {false, false, true, 1.0f, 16.f, 250.f, false, false, 40.f, 20.f, 6u, 4u, 16u, false, 1u, 0.f, false, false, true, 1u, 25.f, 24.f, 2u, false, 0u, 1u, 0.f, false},
+    {true, true, true, 1.5f, 32.f, 400.f, true, true, 60.f, 30.f, 12u, 8u, 24u, true, 1u, kSunDisc, false, false, true, 1u, 35.f, 32.f, 2u, true, 8u, 1u, kLampBulb, true},
+    {true, true, false, 2.0f, 32.f, 1000.f, true, true, 80.f, 40.f, 16u, 12u, 32u, true, 1u, kSunDisc, false, false, true, 1u, 50.f, 32.f, 3u, true, 16u, 1u, kLampBulb, true},
+    {true, true, false, 2.5f, 48.f, 1500.f, true, true, 120.f, 60.f, 24u, 16u, 48u, true, 2u, kSunDisc, true, true, false, 1u, 60.f, 48.f, 3u, true, 32u, 2u, kLampBulb, true},
 };
 
 ID3D11ShaderResourceView* da_rt_srv(const ref_rt& rt) { return rt && rt->pTexture ? rt->pTexture->get_SRView() : nullptr; }
@@ -241,6 +281,7 @@ DaRtView da_rt_view(u32 flags)
     v.veg[1] = scene.veg_seas;
     v.veg[2] = scene.veg_rows | (scene.veg_prof << 16);
     v.veg[3] = std::bit_cast<u32>(snow);
+    v.hud = da_pos_decompress(psHUD_FOV * Device.fFOV);
     return v;
 }
 
@@ -273,6 +314,20 @@ DaRtShade da_rt_shade()
     s.grade.set(ps_r__grade_sat, ps_r__grade_green, ps_r__grade_olive, ps_r__grade_contrast);
     return s;
 }
+
+// The lamps the rays' hits take this frame and whether the world cache of the traced light holds anything, for a pass's
+// constants; the pass binds the cache (da_rt_cache_address).
+void da_rt_light_block(DaRtLightBlock& b, const DaRtTargets* rt)
+{
+    b.falloff.set(ps_r__light_falloff, ps_r__light_falloff_core, ps_r__light_falloff_gain, 0.f);
+    b.count[0] = g_rt_hit_lights.frame == Device.dwFrame ? g_rt_hit_lights.count : 0u;
+    // Live while the global illumination keeps it (it ran this frame, before the reflections).
+    b.count[1] = rt && rt->gi_cache && !rt->gi_cache_clear && da_rt_tier().gi_cache && rt->gi_ran == Device.dwFrame ? 1u : 0u;
+    for (u32 i = 0; i < b.count[0]; ++i)
+        b.lights[i] = g_rt_hit_lights.lights[i];
+}
+
+DaRtAddress da_rt_cache_address(const DaRtTargets* rt) { return rt && rt->gi_cache ? da_rt_address(rt->gi_cache) : 0; }
 
 // The GTAO guided filter (s_gtao element 1) from rt_gtao into rt_ssao_temp, as phase_gtao runs it.
 void da_rt_gtao_filter(CBackend& cmd_list, CRenderTarget& t)
@@ -309,8 +364,9 @@ void da_rt_debug_pass(CBackend& cmd_list, CRenderTarget& t, DaRtTargets& rt)
     DaRtDebugConstants c{};
     c.view = da_rt_view(0);
     c.debug[0] = u32(ps_r__rt_debug);
-    ID3D11ShaderResourceView* inputs[6] = {da_rt_srv(rt.sun), da_rt_srv(DaRtAccess::ao_target(t)), da_rt_srv(rt.refl),
-        da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_Color), da_rt_srv(rt.gloss)};
+    ID3D11ShaderResourceView* inputs[10] = {da_rt_srv(rt.sun), da_rt_srv(DaRtAccess::ao_target(t)), da_rt_srv(rt.refl),
+        da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_Color), da_rt_srv(rt.gloss), da_rt_srv(rt.gi), da_rt_srv(rt.lamps),
+        da_rt_srv(t.rt_Position), RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal)};
     ID3D11UnorderedAccessView* output = rt.debug->pUAView;
     const DaRtSceneBinding& scene = da_rt_scene_binding();
     DaRtDispatch d;
@@ -319,7 +375,7 @@ void da_rt_debug_pass(CBackend& cmd_list, CRenderTarget& t, DaRtTargets& rt)
     d.constants_size = sizeof(c);
     d.scene = scene.tlas;
     d.inputs = inputs;
-    d.input_count = 6;
+    d.input_count = 10;
     d.outputs = &output;
     d.output_count = 1;
     for (u32 i = 0; i < da_rt_max_tables; ++i)
@@ -382,6 +438,7 @@ void da_rt_passes_create()
     p.gi_temporal = da_rt_pipeline("rt/rt_gi_temporal.hlsl", "main");
     p.gi_filter = da_rt_pipeline("rt/rt_gi_filter.hlsl", "main");
     p.lamps = da_rt_pipeline("rt/rt_light_shadow.hlsl", "main");
+    p.gi_cache = da_rt_pipeline("rt/rt_gi_cache.hlsl", "main");
     p.skin = da_rt_pipeline("rt/rt_skin.hlsl", "main");
     p.debug = da_rt_pipeline("rt/rt_debug.hlsl", "main");
     p.ready[u32(RtEffect::Shadows)] = p.sun && p.sun_direct && p.temporal && p.atrous_first && p.atrous_last;
@@ -569,20 +626,19 @@ bool da_rt_gloss_wanted(const DaRtTargets* rt)
 }
 
 // The global illumination runs this frame.
-bool da_rt_gi_wanted(const DaRtTargets* rt) { return rt && rt->gloss_scene && da_rt_live(RtEffect::GI); }
+bool da_rt_gi_wanted(const DaRtTargets* rt) { return rt && rt->gi && da_rt_live(RtEffect::GI); }
 } // namespace
 #endif
 
-const ref_rt* da_rt_gloss_scene_target(bool gi)
+const ref_rt* da_rt_gloss_scene_target()
 {
 #if defined(DA_RT_LANE)
     DaRtTargets* rt = da_rt_targets();
-    if (gi ? !da_rt_gi_wanted(rt) : !da_rt_gloss_wanted(rt))
+    if (!da_rt_gloss_wanted(rt))
         return nullptr;
     rt->gloss_scene_frame = Device.dwFrame;
     return &rt->gloss_scene;
 #else
-    UNUSED(gi);
     return nullptr;
 #endif
 }
@@ -617,6 +673,7 @@ void da_rt_gloss_pass(CBackend& cmd_list)
     c.mask[3] = rt->gloss_height;
     c.gloss.set(kGlossMin, kGlossFull, kGlossSpread, 1.f);
     da_rt_cloud_constants(c.clouds, c.clouds2, c.cloud_map);
+    da_rt_light_block(c.lights, rt);
     ID3D11ShaderResourceView* normal = RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal);
     ID3D11ShaderResourceView* trace_in[10] = {da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_Position), normal, da_rt_srv(t.rt_Color),
         da_rt_srv(rt->gloss_scene), da_rt_srv(rt->t_env0), da_rt_srv(rt->t_env1), da_rt_srv(rt->t_sky0), da_rt_srv(rt->t_sky1),
@@ -649,6 +706,7 @@ void da_rt_gloss_pass(CBackend& cmd_list)
         d.output_count = 2;
         for (u32 i = 0; i < da_rt_max_tables; ++i)
             d.tables[i] = scene.tables[i];
+        d.raw_output = da_rt_cache_address(rt);
         d.groups_x = da_rt_groups(rt->gloss_width);
         d.groups_y = da_rt_groups(rt->gloss_height);
         done = section.dispatch(d);
@@ -685,10 +743,9 @@ void da_rt_gi_pass(CBackend& cmd_list)
     const DaRtSceneBinding& scene = da_rt_scene_binding();
     const bool history = rt->gi_frame + 1 == frame && !da_history_reset();
     const u32 cur = rt->gi_current, prev = cur ^ 1u;
-    // The previous frame's colour: the copy the glossy pass or the screen-space reflections had the combine write, or
-    // the traced passes' own; without one (the first frame, a restart) the rays shade every hit themselves.
-    const ref_rt* copy = rt->gloss_scene_frame + 1 == frame ? &rt->gloss_scene : t.ssr_scene_last();
-    const bool scene_copy = copy != nullptr;
+    // The lights this frame gathered (the sun's and the lamps' diffuse, before the combine) and the albedo: what leaves a
+    // hit the screen shows.
+    const bool accumulated = t.rt_Accumulator && t.rt_Color;
 
     DaRtGiConstants c{};
     c.view = da_rt_view(0);
@@ -702,20 +759,32 @@ void da_rt_gi_pass(CBackend& cmd_list)
     c.mask[1] = tier.gi_rays;
     c.mask[2] = rt->gi_width;
     c.mask[3] = rt->gi_height;
-    c.gi.set(rt->gi_half ? 1.f : 0.f, scene_copy ? 1.f : 0.f, kGiHitSky, kGiGlow);
+    c.gi.set(rt->gi_half ? 1.f : 0.f, accumulated ? 1.f : 0.f, 0.f, kGiGlow);
     c.gi2.set(tier.gi_foliage ? kGiCanopy : 1.f, kGiCanopyReach, 0.f, 0.f);
     da_rt_cloud_constants(c.clouds, c.clouds2, c.cloud_map);
+    // The world cache of the traced light (dxr.md 3.15): cleared when made and for every new scene, else written by
+    // this pass's pixels and resolved after it.
+    const bool cache = rt->gi_cache && tier.gi_cache && g_rt_passes.gi_cache;
+    const bool cache_clear = cache && (rt->gi_cache_clear || rt->gi_cache_epoch != da_rt_scene_epoch());
+    if (cache_clear)
+        rt->gi_cache_clear = true;
+    da_rt_light_block(c.lights, rt);
+    c.lights.count[1] = cache && !cache_clear ? 1u : 0u;
+    // z: the pass writes the cache.
+    c.gi2.z = cache ? 1.f : 0.f;
     ID3D11ShaderResourceView* depth = da_rt_srv(da_rt_depth(t));
     ID3D11ShaderResourceView* position = da_rt_srv(t.rt_Position);
     ID3D11ShaderResourceView* normal = RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal);
-    ID3D11ShaderResourceView* trace_in[9] = {depth, position, normal, scene_copy ? da_rt_srv(*copy) : nullptr,
-        da_rt_srv(rt->t_env0), da_rt_srv(rt->t_env1), da_rt_srv(rt->t_clouds), da_rt_srv(rt->t_sky0), da_rt_srv(rt->t_sky1)};
+    ID3D11ShaderResourceView* trace_in[10] = {depth, position, normal, accumulated ? da_rt_srv(t.rt_Accumulator) : nullptr,
+        da_rt_srv(rt->t_env0), da_rt_srv(rt->t_env1), da_rt_srv(rt->t_clouds), da_rt_srv(rt->t_sky0), da_rt_srv(rt->t_sky1),
+        accumulated ? da_rt_srv(t.rt_Color) : nullptr};
     ID3D11UnorderedAccessView* trace_out[2] = {rt->gi_raw->pUAView, rt->gi_z->pUAView};
 
     DaRtGiTemporalConstants tc{};
     tc.view = da_rt_view(history ? kViewHistoryValid : 0u);
     tc.temporal.set(float(rt->gi_width), float(rt->gi_height), rt->gi_half ? 1.f : 0.f, tier.gi_frames);
-    tc.temporal2.set(kGiAlpha, kGiClip, kGiOwn, 0.f);
+    // w: the filtered light of the pixels goes to the world cache of the traced light.
+    tc.temporal2.set(kGiAlpha, kGiClip, kGiOwn, cache && !cache_clear ? 1.f : 0.f);
     ID3D11ShaderResourceView* temporal_in[8] = {da_rt_srv(rt->gi_raw), da_rt_srv(rt->gi_z), da_rt_srv(rt->gi_hist[prev]),
         da_rt_srv(rt->gi_aux[prev]), depth, position, normal, da_rt_srv(t.rt_Velocity)};
     ID3D11UnorderedAccessView* temporal_out[2] = {rt->gi_hist[cur]->pUAView, rt->gi_aux[cur]->pUAView};
@@ -727,20 +796,44 @@ void da_rt_gi_pass(CBackend& cmd_list)
         if (!section)
             return;
         da_rt_require_geometry(section);
+        DaRtCacheConstants cc{};
+        cc.cache[0] = kRtGiCacheCells;
+        cc.blend.set(kCacheBlend, kCacheLife, 0.f, 0.f);
+        const auto cache_pass = [&](bool clear) {
+            cc.cache[1] = clear ? 1u : 0u;
+            DaRtDispatch k;
+            k.pipeline = g_rt_passes.gi_cache;
+            k.constants = &cc;
+            k.constants_size = sizeof(cc);
+            k.raw_output = da_rt_cache_address(rt);
+            k.groups_x = (kRtGiCacheCells + 63) / 64;
+            const bool ok = section.dispatch(k);
+            section.uav_barrier();
+            return ok;
+        };
+        if (cache_clear && cache_pass(true))
+        {
+            rt->gi_cache_clear = false;
+            rt->gi_cache_epoch = da_rt_scene_epoch();
+        }
         DaRtDispatch d;
         d.pipeline = g_rt_passes.gi;
         d.constants = &c;
         d.constants_size = sizeof(c);
         d.scene = scene.tlas;
         d.inputs = trace_in;
-        d.input_count = 9;
+        d.input_count = 10;
         d.outputs = trace_out;
         d.output_count = 2;
         for (u32 i = 0; i < da_rt_max_tables; ++i)
             d.tables[i] = scene.tables[i];
+        d.raw_output = cache ? da_rt_cache_address(rt) : 0;
         d.groups_x = da_rt_groups(rt->gi_width);
         d.groups_y = da_rt_groups(rt->gi_height);
         done = section.dispatch(d);
+        // The trace read the cache; the temporal pass writes the frame's samples into it.
+        if (cache)
+            section.uav_barrier();
         DaRtDispatch u;
         u.pipeline = g_rt_passes.gi_temporal;
         u.constants = &tc;
@@ -749,9 +842,16 @@ void da_rt_gi_pass(CBackend& cmd_list)
         u.input_count = 8;
         u.outputs = temporal_out;
         u.output_count = 2;
+        u.raw_output = cache && !rt->gi_cache_clear ? da_rt_cache_address(rt) : 0;
         u.groups_x = da_rt_groups(Device.dwRenderWidth);
         u.groups_y = da_rt_groups(Device.dwRenderHeight);
         done = done && section.dispatch(u);
+        // The frame's samples into the cache's light, before the reflections and the next frame read it.
+        if (done && cache && !rt->gi_cache_clear)
+        {
+            section.uav_barrier();
+            cache_pass(false);
+        }
         // The a-trous passes, steps 1, 2, 4 (the tier's count): the history into the result, through the spare.
         const u32 passes = std::max(tier.gi_filter, 1u);
         ID3D11ShaderResourceView* source = da_rt_srv(rt->gi_hist[cur]);
@@ -787,54 +887,114 @@ void da_rt_gi_pass(CBackend& cmd_list)
 #endif
 }
 
-void da_rt_lamps_select(xr_vector<light*>& shadowed, xr_vector<light*>& traced, bool volumetric)
+void da_rt_lamps_select(xr_vector<light*>& shadowed, const xr_vector<light*>& unshadowed, xr_vector<light*>& traced, bool volumetric)
 {
     traced.clear();
 #if defined(DA_RT_LANE)
     g_rt_lamps.count = 0;
     g_rt_lamps.traced = false;
     g_rt_lamps.frame = Device.dwFrame;
-    const DaRtTargets* rt = da_rt_targets();
-    if (!rt || !rt->lamps[0] || !g_rt_passes.lamps || !da_rt_live(RtEffect::Shadows))
+    if (g_rt_hit_lights.frame != Device.dwFrame)
+    {
+        g_rt_hit_lights.count = 0;
+        g_rt_hit_lights.frame = Device.dwFrame;
+    }
+    if (!da_rt_scene_ready())
         return;
-    const u32 wanted = std::min(da_rt_tier().lamps_max, kRtLampSlots);
-    if (!wanted)
-        return;
-    // The owners, each once, with what keeps one on its map: the procedural shrubs cast into it and are no part of the
-    // scene; a sphere reaching past the characters the scene traces round the camera (they would cast into it no
-    // more).
+    // The owners, each once (a point lamp's faces go together), shadowed or not, with what keeps a shadowed one on its
+    // map: the procedural shrubs cast into it and are no part of the scene; a sphere reaching past the characters the
+    // scene traces round the camera (they would cast into it no more). An unshadowed lamp had no shadow at all: the
+    // rays only add one.
     struct Owner
     {
         light* L;
         float score;
         bool keep;
+        bool unshadowed;
     };
-    xr_vector<Owner> owners;
+    static xr_vector<Owner> owners;
+    owners.clear();
     const Fvector& eye = Device.vCameraPosition;
     const float reach = da_rt_tier().skinned_radius;
+    const auto owner_of = [](light* f) { return f->omnipart_owner ? f->omnipart_owner : f; };
+    const auto entry = [&](light* L, bool shadowed_lamp) -> Owner& {
+        auto it = std::find_if(owners.begin(), owners.end(), [L](const Owner& o) { return o.L == L; });
+        if (it != owners.end())
+            return *it;
+        const float d = L->position.distance_to(eye);
+        owners.push_back({L, std::max(d - L->range, 0.f), shadowed_lamp && d + L->range > reach, !shadowed_lamp});
+        return owners.back();
+    };
     for (light* f : shadowed)
     {
-        light* L = f->omnipart_owner ? f->omnipart_owner : f;
-        auto it = std::find_if(owners.begin(), owners.end(), [L](const Owner& o) { return o.L == L; });
-        if (it == owners.end())
-        {
-            const float d = L->position.distance_to(eye);
-            owners.push_back({L, std::max(d - L->range, 0.f), d + L->range > reach});
-            it = owners.end() - 1;
-        }
+        Owner& o = entry(owner_of(f), true);
         if (da_veg_light_casts(f))
-            it->keep = true;
+            o.keep = true;
     }
+    for (light* f : unshadowed)
+        entry(owner_of(f), false);
+
+    // The lights the rays' hits take: every lamp lit this frame by its light at the camera's surroundings (its
+    // brightness over the distance to its sphere), the brightest kRtHitLights of both light packages.
+    {
+        static xr_vector<std::pair<float, const light*>> by_weight;
+        by_weight.clear();
+        for (u32 i = 0; i < g_rt_hit_lights.count; ++i)
+            by_weight.push_back({g_rt_hit_lights.weight[i], g_rt_hit_lights.who[i]});
+        for (const Owner& o : owners)
+        {
+            const light* L = o.L;
+            const float lum = 0.2126f * L->color.r + 0.7152f * L->color.g + 0.0722f * L->color.b;
+            const float d = std::max(o.score, 0.5f * L->range);
+            const bool known = std::any_of(by_weight.begin(), by_weight.end(), [L](const auto& w) { return w.second == L; });
+            if (!known && lum > 1e-3f && L->range > 0.05f)
+                by_weight.push_back({lum * L->range * L->range / (d * d), L});
+        }
+        std::sort(by_weight.begin(), by_weight.end(), [](const auto& a, const auto& b) {
+            return a.first != b.first ? a.first > b.first : std::less<const light*>()(a.second, b.second);
+        });
+        const u32 n = std::min(u32(by_weight.size()), kRtHitLights);
+        for (u32 i = 0; i < n; ++i)
+        {
+            const light* L = by_weight[i].second;
+            g_rt_hit_lights.who[i] = L;
+            g_rt_hit_lights.weight[i] = by_weight[i].first;
+            const float R = std::max(L->range * .95f, 0.01f);
+            DaRtLight& out = g_rt_hit_lights.lights[i];
+            out.pos.set(L->position.x, L->position.y, L->position.z, 1.f / (R * R));
+            // A spot by its cone (the faces of a point lamp light every way); a spot fades out as its volume does.
+            const bool spot = L->flags.type == IRender_Light::SPOT;
+            const float lod = spot ? L->get_LOD() : 1.f;
+            out.color.set(L->color.r * lod, L->color.g * lod, L->color.b * lod,
+                (spot ? 1.f : 0.f) + (L->flags.bNeverDemote ? 2.f : 0.f));
+            Fvector d = L->direction;
+            d.normalize_safe();
+            out.dir.set(d.x, d.y, d.z, spot ? _cos(L->cone * .5f) : -2.f);
+        }
+        g_rt_hit_lights.count = n;
+    }
+
+    const DaRtTargets* rt = da_rt_targets();
+    if (!rt || !rt->lamps || !g_rt_passes.lamps || !da_rt_live(RtEffect::Shadows))
+        return;
+    const u32 wanted = std::min(da_rt_tier().lamps_max, kRtLampSlots);
+    if (!wanted)
+        return;
     owners.erase(std::remove_if(owners.begin(), owners.end(), [](const Owner& o) { return o.keep; }), owners.end());
-    std::sort(owners.begin(), owners.end(), [](const Owner& a, const Owner& b) { return a.score < b.score; });
+    std::sort(owners.begin(), owners.end(), [](const Owner& a, const Owner& b) {
+        return a.score != b.score ? a.score < b.score : std::less<light*>()(a.L, b.L);
+    });
     if (owners.size() > wanted)
         owners.resize(wanted);
     if (owners.empty())
         return;
     for (const Owner& o : owners)
+    {
+        g_rt_lamps.unshadowed[g_rt_lamps.count] = o.unshadowed;
         g_rt_lamps.owners[g_rt_lamps.count++] = o.L;
-    // The chosen faces out of the atlas's list (its order kept: the batches read it back to front). A face with a
-    // volumetric beam keeps its map for the beam's march; its surfaces still take the rays' shadow (da_lv_draw).
+    }
+    // The chosen shadowed faces out of the atlas's list (its order kept: the batches read it back to front). A face with
+    // a volumetric beam keeps its map for the beam's march; its surfaces still take the rays' shadow (da_lv_draw).
     const auto chosen = [volumetric](const light* f) {
         const light* L = f->omnipart_owner ? f->omnipart_owner : f;
         return da_rt_lamp_slot(f) >= 0 && !(volumetric && (f->flags.bVolumetric || L->flags.bVolumetric));
@@ -847,6 +1007,7 @@ void da_rt_lamps_select(xr_vector<light*>& shadowed, xr_vector<light*>& traced, 
     shadowed.erase(std::remove_if(shadowed.begin(), shadowed.end(), chosen), shadowed.end());
 #else
     UNUSED(shadowed);
+    UNUSED(unshadowed);
     UNUSED(volumetric);
 #endif
 }
@@ -868,17 +1029,14 @@ int da_rt_lamp_slot(const light* L)
     return -1;
 }
 
-void da_rt_lamp_views(ID3D11ShaderResourceView* out[3])
+ID3D11ShaderResourceView* da_rt_lamp_view()
 {
-    for (u32 i = 0; i < 3; ++i)
-        out[i] = nullptr;
 #if defined(DA_RT_LANE)
     const DaRtTargets* rt = da_rt_targets();
-    if (!rt || !g_rt_lamps.traced || g_rt_lamps.frame != Device.dwFrame)
-        return;
-    for (u32 i = 0; i < kRtLampMasks; ++i)
-        out[i] = da_rt_srv(rt->lamps[i]);
+    if (rt && g_rt_lamps.traced && g_rt_lamps.frame == Device.dwFrame)
+        return da_rt_srv(rt->lamps);
 #endif
+    return nullptr;
 }
 
 void da_rt_lamps_pass(CBackend& cmd_list)
@@ -886,7 +1044,7 @@ void da_rt_lamps_pass(CBackend& cmd_list)
     UNUSED(cmd_list);
 #if defined(DA_RT_LANE)
     DaRtTargets* rt = da_rt_targets();
-    if (!rt || !g_rt_lamps.count || g_rt_lamps.frame != Device.dwFrame)
+    if (!rt || !rt->lamps || !g_rt_lamps.count || g_rt_lamps.frame != Device.dwFrame)
         return;
     CRenderTarget& t = *RImplementation.Target;
     const DaRtTier& tier = da_rt_tier();
@@ -895,29 +1053,29 @@ void da_rt_lamps_pass(CBackend& cmd_list)
     ID3D11ShaderResourceView* position = da_rt_srv(t.rt_Position);
     ID3D11ShaderResourceView* normal = RImplementation.o.gbuffer_opt ? nullptr : da_rt_srv(t.rt_Normal);
     ID3D11ShaderResourceView* inputs[3] = {depth, position, normal};
+    // Every lamp in one dispatch: a pixel loops over the lamps whose reach it is in, the slices of the lamps beyond the
+    // count left lit.
+    DaRtLampConstants c{};
+    c.view = da_rt_view(0);
+    for (u32 i = 0; i < g_rt_lamps.count; ++i)
+    {
+        const light* L = g_rt_lamps.owners[i];
+        const float R = std::max(L->range * .95f, 0.01f);
+        c.lamps[i].set(L->position.x, L->position.y, L->position.z, 1.f / (R * R));
+        const float fixture = g_rt_lamps.unshadowed[i] ? std::clamp(kLampFixtureUnshadowed * L->range, kLampFixture, kLampFixtureMax) : kLampFixture;
+        c.info[i].set(tier.lamp_bulb, fixture, L->flags.bNeverDemote ? 1.f : 0.f, 0.f);
+    }
+    c.count[0] = g_rt_lamps.count;
+    c.count[1] = tier.lamp_rays;
+    c.count[2] = kRtLampMasks;
     bool done = false;
     {
         dx11GpuTimerScope gpu(dx11GpuTimers::RtLamps);
         DaRtSection section;
-        done = !!section;
-        if (done)
-            da_rt_require_geometry(section);
-        const u32 masks = done ? (g_rt_lamps.count + 3) / 4 : 0u;
-        for (u32 m = 0; m < masks && done; ++m)
+        if (section)
         {
-            DaRtLampConstants c{};
-            c.view = da_rt_view(0);
-            const u32 first = m * 4, n = std::min(g_rt_lamps.count - first, 4u);
-            for (u32 i = 0; i < n; ++i)
-            {
-                const light* L = g_rt_lamps.owners[first + i];
-                const float R = std::max(L->range * .95f, 0.01f);
-                c.lamps[i].set(L->position.x, L->position.y, L->position.z, 1.f / (R * R));
-                c.info[i].set(tier.lamp_bulb, kLampFixture, L->flags.bNeverDemote ? 1.f : 0.f, 0.f);
-            }
-            c.count[0] = n;
-            c.count[1] = tier.lamp_rays;
-            ID3D11UnorderedAccessView* output = rt->lamps[m]->pUAView;
+            da_rt_require_geometry(section);
+            ID3D11UnorderedAccessView* output = rt->lamps->pUAView;
             DaRtDispatch d;
             d.pipeline = g_rt_passes.lamps;
             d.constants = &c;
@@ -934,17 +1092,12 @@ void da_rt_lamps_pass(CBackend& cmd_list)
             done = section.dispatch(d);
         }
     }
-    g_rt_lamps.traced = done;
+    g_rt_lamps.traced = true;
     // Not traced: the lamps light unshadowed rather than through a stale mask.
-    if (!done)
+    if (!done && rt->lamps->pUAView)
     {
         const float lit[4] = {1.f, 1.f, 1.f, 1.f};
-        for (u32 i = 0; i < kRtLampMasks; ++i)
-        {
-            if (rt->lamps[i] && rt->lamps[i]->pUAView)
-                HW.get_context(CHW::IMM_CTX_ID)->ClearUnorderedAccessViewFloat(rt->lamps[i]->pUAView, lit);
-        }
-        g_rt_lamps.traced = true;
+        HW.get_context(CHW::IMM_CTX_ID)->ClearUnorderedAccessViewFloat(rt->lamps->pUAView, lit);
     }
     rt->lamps_frame = Device.dwFrame;
 #endif
@@ -974,6 +1127,7 @@ void da_rt_reflections_pass(CBackend& cmd_list)
             c.mask[0] = tier.refl_foliage ? 0xFFu : 0xFBu;
             c.mask[1] = tier.refl_steps;
             da_rt_cloud_constants(c.clouds, c.clouds2, c.cloud_map);
+            da_rt_light_block(c.lights, rt);
             const u32 gpu_id = Device.dwFrame % HW.Caps.iGPUNum;
             ID3D11ShaderResourceView* inputs[9] = {da_rt_srv(rt->refl_req), da_rt_srv(da_rt_depth(t)), da_rt_srv(t.rt_SSR),
                 da_rt_srv(t.rt_LUM_pool[gpu_id * 2 + 1]), da_rt_srv(rt->t_env0), da_rt_srv(rt->t_env1), da_rt_srv(rt->t_sky0),
@@ -990,6 +1144,7 @@ void da_rt_reflections_pass(CBackend& cmd_list)
             d.output_count = 1;
             for (u32 i = 0; i < da_rt_max_tables; ++i)
                 d.tables[i] = scene.tables[i];
+            d.raw_output = da_rt_cache_address(rt);
             d.groups_x = da_rt_groups(Device.dwRenderWidth);
             d.groups_y = da_rt_groups(Device.dwRenderHeight);
             bool traced;

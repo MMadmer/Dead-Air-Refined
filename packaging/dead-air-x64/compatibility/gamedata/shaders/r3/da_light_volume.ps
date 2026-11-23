@@ -32,10 +32,8 @@ Texture2D s_proj7 : register(t25);
 Texture2D s_proj8 : register(t26);
 Texture2D s_proj9 : register(t27);
 Texture2D s_proj10 : register(t28);
-// The ray traced lamps' visibility, four lamps a mask (da_rt_lamps_pass).
-Texture2D<float4> s_rt_lamp0 : register(t29);
-Texture2D<float4> s_rt_lamp1 : register(t30);
-Texture2D<float4> s_rt_lamp2 : register(t31);
+// The ray traced lamps' visibility, four lamps a slice (da_rt_lamps_pass).
+Texture2DArray<float4> s_rt_lamps : register(t29);
 
 uniform float4 da_lv_axes[3];	// the world's x, y and z in view space: the cube faces of the point lamps
 
@@ -60,15 +58,7 @@ float4 da_lv_projector(uint slot, float2 uv, float2 dx, float2 dy)
 // A ray traced lamp's visibility at the pixel.
 float da_lv_rt_shadow(uint slot, float2 pos)
 {
-	const int3 p = int3(pos, 0);
-	float4 v;
-	[branch] if (slot < 4u)
-		v = s_rt_lamp0.Load(p);
-	else if (slot < 8u)
-		v = s_rt_lamp1.Load(p);
-	else
-		v = s_rt_lamp2.Load(p);
-	return v[slot & 3u];
+	return s_rt_lamps.Load(int4(pos, slot >> 2, 0))[slot & 3u];
 }
 
 // The cube face (0..5: +x, -x, +y, -y, +z, -z) a view-space vector from a point lamp falls in.
@@ -160,9 +150,10 @@ float4 main(float4 pos2d : SV_Position, nointerpolation uint light : TEXCOORD1) 
 	const float4 lit = plight_local(m, _P.xyz, _N.xyz, lpos.xyz, lpos.w, rsqr, gbd.gloss);
 
 	float s = 1.0f;
+	// The hands take a traced lamp's shadow too: its rays left from where they are in the world (rt_light_shadow.hlsl).
 	[branch] if ((info.y & DA_LV_SHADOW) != 0u && !hud)
 		s = shadow(PS);
-	else if ((info.y & DA_LV_SHADOW_RT) != 0u && !hud)
+	else if ((info.y & DA_LV_SHADOW_RT) != 0u)
 		s = da_lv_rt_shadow(info.z, pos2d.xy);
 	[branch] if (!hud)
 		s *= da_local_contact_shadow(_P.xyz, lpos.xyz, pos2d.xy);

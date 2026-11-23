@@ -65,7 +65,7 @@ bool da_rt_targets_ready(RtEffect effect)
     case RtEffect::GI:
         return rt->gi_raw && rt->gi_raw->pUAView && rt->gi_z && rt->gi_z->pUAView && rt->gi_hist[0] && rt->gi_hist[0]->pUAView &&
             rt->gi_hist[1] && rt->gi_hist[1]->pUAView && rt->gi_aux[0] && rt->gi_aux[0]->pUAView && rt->gi_aux[1] &&
-            rt->gi_aux[1]->pUAView && rt->gi_tmp && rt->gi_tmp->pUAView && rt->gi && rt->gi->pUAView && rt->gloss_scene;
+            rt->gi_aux[1]->pUAView && rt->gi_tmp && rt->gi_tmp->pUAView && rt->gi && rt->gi->pUAView;
     default: return false;
     }
 }
@@ -199,20 +199,16 @@ void da_rt_targets_create(CRenderTarget& target)
         rt->gi_aux[1].create(r2_RT_rt_gi_aux1, w, h, D3DFMT_G16R16F, 1, uav);
         rt->gi_tmp.create(r2_RT_rt_gi_tmp, w, h, D3DFMT_A16B16G16R16F, 1, uav);
         rt->gi.create(r2_RT_rt_gi, w, h, D3DFMT_A16B16G16R16F, 1, uav);
-        // The previous frame's linear colour the rays reuse where the screen shows their hit (shared with the glossy
-        // reflections).
-        if (!rt->gloss_scene)
-            rt->gloss_scene.create(r2_RT_rt_gloss_scene, w, h, D3DFMT_A16B16G16R16F, 1);
+        // The world cache of the traced light (dxr.md 3.15), cleared by its first pass.
+        if (da_rt_tier_of(ps_r__rt_quality).gi_cache)
+            rt->gi_cache = da_rt_buffer_create(kRtGiCacheBytes, "rt light cache");
+        rt->gi_cache_clear = true;
     }
     // The clouds' shadow over the hits of the reflections and the global illumination.
     rt->t_clouds.create(r2_RT_cloud_map);
     // The lamps' traced visibility, for the quality the renderer started with.
     if (ps_r__rt_shadows && da_rt_tier_of(ps_r__rt_quality).lamps_max)
-    {
-        static constexpr pcstr names[kRtLampMasks] = {r2_RT_rt_lamps0, r2_RT_rt_lamps1, r2_RT_rt_lamps2};
-        for (u32 i = 0; i < kRtLampMasks; ++i)
-            rt->lamps[i].create(names[i], w, h, D3DFMT_A8B8G8R8, 1, uav);
-    }
+        rt->lamps.create(r2_RT_rt_lamps, w, h, D3DFMT_A8B8G8R8, 1, kRtLampMasks, uav);
     rt->t_env0.create(r2_T_envs0);
     rt->t_env1.create(r2_T_envs1);
     rt->t_sky0.create(r2_T_sky0);
@@ -226,6 +222,8 @@ void da_rt_targets_create(CRenderTarget& target)
 void da_rt_targets_destroy(CRenderTarget& target)
 {
 #if defined(DA_RT_LANE)
+    if (target.m_da_rt)
+        da_rt_release(target.m_da_rt->gi_cache);
     xr_delete(target.m_da_rt);
 #else
     UNUSED(target);

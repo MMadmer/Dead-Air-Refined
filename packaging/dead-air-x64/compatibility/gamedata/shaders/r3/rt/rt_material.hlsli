@@ -160,6 +160,53 @@ float3 rt_sky_diffuse( float3 dir, RtShade s, TextureCube env0, TextureCube env1
 	return e * e;
 }
 
+// ---- the lamps (dxr.md 3.15) -----------------------------------------------------------------------
+
+// A lamp the rays' hits take (DaRtLight, da_rt_passes.cpp): world position and 1 / range^2, colour and kind (+1 a spot,
+// +2 carried by the player), the spot's world direction and the cosine of its half cone.
+struct RtLight
+{
+	float4	pos;
+	float4	color;
+	float4	dir;
+};
+// The frame's most important lamps (da_rt_lamps_select) and whether the world cache of the traced light holds anything.
+struct RtLights
+{
+	float4	falloff;	// da_light_falloff: the inverse-square shape's share, core, gain
+	uint4	count;		// x lamps, y the cache is live (0/1)
+	RtLight	light[ 32 ];
+};
+
+// The lamps' falloff (da_light_falloff.h da_light_att).
+float rt_lamp_att( float x2, float4 falloff )
+{
+	const float stock = saturate( 1.0f - x2 );
+	[branch] if ( falloff.x <= 0.0f )
+		return stock;
+	const float w = saturate( 1.0f - x2 * x2 );
+	return lerp( stock, falloff.z * w * w / ( 1.0f + falloff.y * x2 ), falloff.x );
+}
+
+// The diffuse light a lamp gives a point with no shadow, as the light volumes give it (lmodel.h plight_local: the
+// falloff, the cosine, LIGHT_MUL1; a spot's cone with a soft rim in place of its projector).
+float3 rt_lamp_light( RtLight L, float3 p, float3 n, float4 falloff )
+{
+	const float3 to_lamp = L.pos.xyz - p;
+	const float d2 = dot( to_lamp, to_lamp );
+	const float x2 = d2 * L.pos.w;
+	[branch] if ( x2 >= 1.0f )
+		return 0.0f;
+	const float3 dir = to_lamp * rsqrt( max( d2, 1e-6f ) );
+	float k = saturate( dot( n, dir ) ) * rt_lamp_att( x2, falloff ) * 0.7f;
+	[branch] if ( frac( L.color.w * 0.5f ) > 0.25f )
+	{
+		const float c = dot( -dir, L.dir.xyz );
+		k *= saturate( ( c - L.dir.w ) / max( 0.15f * ( 1.0f - L.dir.w ), 1e-3f ) );
+	}
+	return L.color.rgb * k;
+}
+
 // ---- the hit ---------------------------------------------------------------------------------
 
 struct RtHitSurface
@@ -211,20 +258,27 @@ RtHitSurface rt_hit_surface( RtGeometry g, RtInstance inst, RtTriangle t, float2
 	return h;
 }
 
-// The lit, unfogged colour of the hit: sun by the static shadow ray, the combine's hemisphere
-// model (hmodel.h without the material table) and ambient.
-float3 rt_hit_light( RtHitSurface h, float sun_visibility, RtShade s, TextureCube env0, TextureCube env1, RtView v )
+// The lit, unfogged colour of the hit: sun by its shadow ray, the lamps by theirs, the combine's hemisphere model
+// (hmodel.h without the material table) and ambient, and the bounced light the world cache holds there (rgb; a 1 where
+// it holds the hit's cell).
+float3 rt_hit_light( RtHitSurface h, float sun_visibility, float3 lamps, float4 cached, RtShade s, TextureCube env0,
+	TextureCube env1, RtView v )
 {
 	const float3 sun = s.sun_color.rgb * saturate( dot( h.normal, v.sun.xyz ) ) * sun_visibility;
 	const float3 e0 = env0.SampleLevel( rt_linear_clamp, h.normal, 0 ).rgb;
 	const float3 e1 = env1.SampleLevel( rt_linear_clamp, h.normal, 0 ).rgb;
 	float3 env_d = s.env_color.rgb * lerp( e0, e1, s.env_color.w );
 	env_d *= env_d;
-	const float3 hdiffuse = env_d * h.hemi + s.ambient.rgb;
-	float3 color = h.albedo * ( sun + hdiffuse );
+	const float3 around = env_d * h.hemi + ( cached.a > 0.5f ? cached.rgb : 0.0f );
+	float3 color = h.albedo * ( sun + lamps + around + s.ambient.rgb );
 	if ( h.emissive )
 		color += h.albedo;
 	return color;
+}
+
+float3 rt_hit_light( RtHitSurface h, float sun_visibility, RtShade s, TextureCube env0, TextureCube env1, RtView v )
+{
+	return rt_hit_light( h, sun_visibility, 0.0f, 0.0f, s, env0, env1, v );
 }
 
 #endif	//	rt_material_hlsli_included

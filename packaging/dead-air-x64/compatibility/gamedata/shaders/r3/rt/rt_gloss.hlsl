@@ -5,7 +5,9 @@
 // cube in its specular term, so everything here is linear: what the screen shows comes from the previous frame's
 // HDR colour (combine_1's high target, copied at the scene grab), an off-screen hit is shaded as the water's are,
 // without the tonemap. A rough surface spreads its rays by its roughness; the temporal pass averages them.
-// Output premultiplied by its confidence (0 = the ray missed: the cube stays).
+// Output premultiplied by its confidence (0 = the ray missed: the cube stays). An off-screen hit takes the frame's lamps
+// and the light the world cache holds around it (dxr.md 3.15); the first-person hands and what they hold reflect the
+// world from where they are in it.
 
 #include "rt_material.hlsli"
 #include "da_material_codes.h"
@@ -18,6 +20,7 @@ cbuffer rt_gloss_constants : register( b0 )
 	uint4	refl_mask;	// x instance mask of the rays, y most screen-space steps of a ray, zw trace size
 	float4	gloss;		// x lowest gloss traced, y gloss of the full weight, z roughness spread, w HDR of the frame copy
 	RtClouds clouds;
+	RtLights lights;
 };
 
 Texture2D<float>	rf_depth	: register( t0 );
@@ -35,6 +38,7 @@ RWTexture2D<float4>	gl_out		: register( u0 );
 RWTexture2D<float>	gl_dist		: register( u1 );
 
 #define RF_CLOUDS
+#define RF_LIGHTS
 #include "rt_reflect.hlsli"
 
 // The pixel of a 2x2 block this frame traces (rt_gloss_temporal.hlsl takes the same); every pixel when the trace is
@@ -65,6 +69,24 @@ float4 gl_previous( float3 p )
 	return float4( c, rf_edge_fade( prev.xy ) );
 }
 
+// The crowns' cards between the surface and what its ray found, where the rays proper pass the crowns (below Ultra): the
+// light a canopy lets through, as the global illumination takes it. Without it the rays under a tree came back with the
+// sunlit world beyond, a glare on every wet stone.
+float gl_canopy( float3 origin, float3 dir, float tmax )
+{
+	[branch] if ( refl_mask.x & RT_MASK_FOLIAGE )
+		return 1.0f;
+	RayDesc ray;
+	ray.Origin = origin;
+	ray.Direction = dir;
+	ray.TMin = 0.05f;
+	ray.TMax = tmax;
+	RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+	q.TraceRayInline( rt_scene, RAY_FLAG_NONE, RT_MASK_FOLIAGE, ray );
+	q.Proceed();
+	return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.3f : 1.0f;
+}
+
 [numthreads( 8, 8, 1 )]
 void main( uint3 id : SV_DispatchThreadID )
 {
@@ -81,10 +103,13 @@ void main( uint3 id : SV_DispatchThreadID )
 	const float g = gl_albedo.Load( int3( pixel, 0 ) ).w;
 	const float mtl = gl_material( int2( pixel ) );
 	// Leaves, blades and snow keep the cube: their gloss is a sheen, not a mirror.
-	[branch] if ( rt_is_hud( z, s ) || g < gloss.x || da_is_foliage( mtl ) || da_is_snowy( mtl ) )
+	[branch] if ( g < gloss.x || da_is_foliage( mtl ) || da_is_snowy( mtl ) )
 		return;
-
-	const float3 surface = rt_to_world( rt_view_pos( float2( pixel ) + 0.5f, z, view ), view );
+	// The hands are where the first-person projection puts them: their rays leave there, traced only (the screen's march
+	// would find the hands themselves).
+	const bool hud = rt_is_hud( z, s );
+	const float3 surface = hud ? rt_hud_world( float2( pixel ) + 0.5f, s.z, view ) :
+		rt_to_world( rt_view_pos( float2( pixel ) + 0.5f, z, view ), view );
 	const float3 n = normalize( rt_dir_to_world( s.n_view, view ) );
 	const float3 v = normalize( surface - view.camera.xyz );
 	float3 dir = reflect( v, n );
@@ -95,8 +120,9 @@ void main( uint3 id : SV_DispatchThreadID )
 	[flatten] if ( rise < 0.02f )
 		dir = normalize( dir + n * ( 0.02f - rise ) );
 
-	const float cone0 = rt_pixel_size( z, view );
-	const float3 origin = surface + n * ( 0.02f + 0.001f * z );
+	const float z_ray = hud ? s.z : z;
+	const float cone0 = rt_pixel_size( z_ray, view );
+	const float3 origin = surface + n * ( ( hud ? 0.005f : 0.02f ) + 0.001f * z_ray );
 	RayDesc ray;
 	ray.Origin = origin;
 	ray.Direction = dir;
@@ -105,7 +131,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	RfHit h = rf_trace( ray, cone0 );
 	// The raster's surface lower than the traced mesh: the ray left it through its back (rt_reflections.hlsl).
 	float skipped = 0.0f;
-	[branch] if ( h.t >= 0.0f && h.t < 0.5f + 0.05f * z && rf_from_behind( h, dir ) )
+	[branch] if ( !hud && h.t >= 0.0f && h.t < 0.5f + 0.05f * z && rf_from_behind( h, dir ) )
 	{
 		skipped = h.t + 0.02f;
 		ray.Origin = origin + dir * skipped;
@@ -117,7 +143,7 @@ void main( uint3 id : SV_DispatchThreadID )
 
 	// What this frame shows in the ray's way short of the traced hit: grass and swaying crowns, which the scene
 	// lacks or holds at rest; their colour is the previous frame's at the same point.
-	const float3 seen_at = rf_march( origin, dir, traced ? t - max( 0.05f, 0.01f * t ) : t, pixel );
+	const float3 seen_at = hud ? 0.0f : rf_march( origin, dir, traced ? t - max( 0.05f, 0.01f * t ) : t, pixel );
 
 	float3 color = 0.0f;
 	float alpha = 0.0f;
@@ -143,11 +169,15 @@ void main( uint3 id : SV_DispatchThreadID )
 			const float cone = cone0 + refl.y * t;
 			const RtHitSurface hs = rt_hit_surface( geo, inst, tri, h.bary, h.o2w, dir, cone, view );
 			const float sun = rf_sun_visibility( hit, hs.normal, cone );
-			float3 lit = rt_hit_light( hs, sun, shade, gl_env0, gl_env1, view );
+			const float2 u = rt_noise2( pixel + 31u, view.scene.w );
+			const float3 lamps = rf_hit_lamps( hit, hs.normal, cone, u.x );
+			const float4 around = rf_hit_around( hit, hs.normal );
+			float3 lit = rt_hit_light( hs, sun, lamps, around, shade, gl_env0, gl_env1, view );
 			// as the frame copy has it (fogged from the camera), so the two blend without a seam
 			lit = rt_fog_apply( lit, hit, view.camera.xyz, shade, gl_sky0, gl_sky1 );
 			color = lerp( lit, reused.rgb, reused.w );
 		}
+		color *= gl_canopy( origin, dir, t );
 		alpha = 1.0f;
 	}
 	[branch] if ( seen_at.z > 0.0f )

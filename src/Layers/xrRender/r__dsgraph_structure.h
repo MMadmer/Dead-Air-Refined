@@ -53,8 +53,8 @@ struct R_dsgraph_structure
         bool rt_skip_static{ false };
         // The sun's near and middle cascades: the moving objects the rays trace this frame cast no second shadow here.
         bool rt_skip_moving{ false };
-        // The traced renderable's own model while its renderable_Render adds it (what it carries still casts).
-        IRenderVisual* rt_skip_visual{ nullptr };
+        // A traced renderable's renderable_Render is adding its visuals: those the rays traced cast no second shadow.
+        bool rt_skip_traced{ false };
         // A local light's shadow face: the GPU-driven trees stay on the CPU walk there (gpudriven.md 3.13).
         bool local_light{ false };
         // A light the actor carries (his torch, a glowstick or a detector in hand: set_never_demote): his own shadow
@@ -208,7 +208,7 @@ struct R_dsgraph_structure
         o.dynamic_source = nullptr;
         o.rt_skip_static = false;
         o.rt_skip_moving = false;
-        o.rt_skip_visual = nullptr;
+        o.rt_skip_traced = false;
         o.local_light = false;
         o.carried_light = false;
         o.rain_map = false;

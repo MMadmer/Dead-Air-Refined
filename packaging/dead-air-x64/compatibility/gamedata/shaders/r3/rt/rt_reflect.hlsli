@@ -5,9 +5,14 @@
 // alpha-tested candidates, the hit seen from behind, where the frame shows a point and the screen-space march along a
 // ray. The includer declares `view` (RtView), `refl` (x TMax, y cone spread per metre, z screen-edge margin in pixels,
 // w off-screen sun rays), `refl_mask` (x instance mask, y most screen-space steps) and `rf_depth` (the depth buffer),
-// and with RF_CLOUDS `clouds` (RtClouds) and `rf_clouds` (the cloud map): the sun at a hit then passes the deck.
+// and with RF_CLOUDS `clouds` (RtClouds) and `rf_clouds` (the cloud map): the sun at a hit then passes the deck; with
+// RF_LIGHTS `lights` (RtLights) and the world cache of the traced light as the raw output: an off-screen hit then takes
+// the lamps' light (one shadow ray) and the light the cache holds around it.
 
 #include "rt_material.hlsli"
+#ifdef RF_LIGHTS
+#include "rt_cache.hlsli"
+#endif
 
 // The world between the hit and the sun (the off-screen hit's shadow), and the clouds' shadow over it.
 float rf_sun_visibility( float3 p, float3 n, float cone )
@@ -34,6 +39,79 @@ float rf_sun_visibility( float3 p, float3 n, float cone )
 	}
 	return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : clouds_t;
 }
+
+#ifdef RF_LIGHTS
+// One shadow ray toward a lamp: 1 where it reaches it (its own fixture is not in the way).
+float rf_lamp_visible( float3 p, float3 n, RtLight L, float cone )
+{
+	const float3 to_lamp = L.pos.xyz - p;
+	const float dist = length( to_lamp );
+	RayDesc ray;
+	ray.Direction = to_lamp / max( dist, 1e-4f );
+	ray.Origin = p + n * 0.03f;
+	ray.TMin = 0.02f;
+	ray.TMax = max( dist - 0.15f, 0.03f );
+	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
+	q.TraceRayInline( rt_scene, RAY_FLAG_NONE, L.color.w >= 1.5f ? RT_RAYS_SHADOW_LAMP_CARRIED : RT_RAYS_SHADOW, ray );
+	while ( q.Proceed() )
+	{
+		if ( q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE &&
+			rt_alpha_solid( q.CandidateInstanceID(), q.CandidateInstanceIndex(), q.CandidateGeometryIndex(),
+				q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), q.CandidateObjectToWorld3x4(), cone, view ) )
+			q.CommitNonOpaqueTriangleHit();
+	}
+	return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
+}
+
+// The lamps' light at an off-screen hit: every lamp's unshadowed light, one of them chosen by its share (u in [0, 1))
+// for a shadow ray that stands for all - unbiased over the frames the temporal passes average.
+float3 rf_hit_lamps( float3 p, float3 n, float cone, float u )
+{
+	const uint count = min( lights.count.x, 32u );
+	[branch] if ( count == 0u )
+		return 0.0f;
+	float total = 0.0f;
+	float3 sum = 0.0f;
+	[loop] for ( uint i = 0u; i < count; ++i )
+	{
+		const float3 c = rt_lamp_light( lights.light[ i ], p, n, lights.falloff );
+		sum += c;
+		total += dot( c, float3( 0.2126f, 0.7152f, 0.0722f ) );
+	}
+	[branch] if ( total <= 1e-5f )
+		return 0.0f;
+	const float pick = u * total;
+	float run = 0.0f;
+	uint chosen = 0u;
+	float3 chosen_c = 0.0f;
+	float chosen_w = 0.0f;
+	[loop] for ( uint j = 0u; j < count; ++j )
+	{
+		const float3 c = rt_lamp_light( lights.light[ j ], p, n, lights.falloff );
+		const float w = dot( c, float3( 0.2126f, 0.7152f, 0.0722f ) );
+		[branch] if ( w > 0.0f )
+		{
+			chosen = j;
+			chosen_c = c;
+			chosen_w = w;
+			run += w;
+			[branch] if ( run >= pick )
+				break;
+		}
+	}
+	const float visible = rf_lamp_visible( p, n, lights.light[ chosen ], cone );
+	// The chosen lamp's light over its probability (its share of the total).
+	return visible * chosen_c * ( total / max( chosen_w, 1e-6f ) );
+}
+
+// The light around an off-screen hit the world cache holds (a 0: none, or the cache is not live).
+float4 rf_hit_around( float3 p, float3 n )
+{
+	[branch] if ( lights.count.y == 0u )
+		return 0.0f;
+	return rt_cache_read( p, n, view.camera.xyz );
+}
+#endif
 
 // ---- the traced ray ----------------------------------------------------------------------------
 

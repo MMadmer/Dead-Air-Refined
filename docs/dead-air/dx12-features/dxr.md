@@ -570,7 +570,7 @@ still cast through the cascades. Now the moving objects are in every effect, the
 - Vegetation stays in the cascades: the drawn crowns, shrubs and grass are procedural, sway with the wind service,
   and are not what the RT scene holds (stock stand-ins for AO, GI and reflections).
 
-### 3.11 Diffuse global illumination (22.11.2026, `r__rt_gi`)
+### 3.11 Diffuse global illumination (22.11.2026, `r__rt_gi`; superseded by 3.15: the stock ambient stays, the rays add the bounce)
 The combine's ambient was the baked hemisphere times the sky's cube (`hmodel.h`): rooms with windows lit as
 evenly as the open field, no bounce from a sunlit wall, no colour from a lamp. With GI on:
 - **Trace** (`rt/rt_gi.hlsl`): cosine rays around the G-buffer normal (`gi_rays`), `gi_tmax` metres, mask 0x7B
@@ -605,16 +605,16 @@ evenly as the open field, no bounce from a sunlit wall, no colour from a lamp. W
 The nearest shadowed lamps take their shadow from rays instead of the atlas (`da_rt_lamps_select`,
 `r2_R_lights.cpp`, before the atlas packing):
 - **Choice**: the owners (a point lamp's six faces go together) sorted by the distance from the camera to their
-  sphere, `lamps_max` of them (Medium 4, High 8, Ultra 12). A lamp keeps its map when the procedural shrubs cast
+  sphere, `lamps_max` of them (since 3.15: Medium 8, High 16, Ultra 32, the unshadowed lamps among them). A lamp keeps its map when the procedural shrubs cast
   into it (`da_veg_light_casts`) or its sphere reaches past the characters the scene traces round the camera
   (`skinned_radius`). A face with a volumetric beam (the torch's, with the volumetric lights on) stays in
   the atlas for the beam's march, its surfaces lit through the traced mask all the same.
-- **Trace** (`rt/rt_light_shadow.hlsl`, render resolution, after the G-buffer, four lamps a dispatch into one
-  RGBA8 mask, `$user$rt_lamps0..2`): a ray from every pixel inside a lamp's reach toward a point of its bulb (radius
-  3 cm, jittered frame by frame; `lamp_rays` rays, 2 on Ultra) that stops 15 cm short of the fixture. Mask
+- **Trace** (`rt/rt_light_shadow.hlsl`, render resolution, after the G-buffer; since 3.15 every lamp in one dispatch,
+  four lamps a slice of the RGBA8 array `$user$rt_lamps`): a ray from every pixel inside a lamp's reach toward a point
+  of its bulb (radius 5 cm, jittered frame by frame; `lamp_rays` rays, 2 on Ultra) that stops 15 cm short of the fixture. Mask
   `RT_RAYS_SHADOW`; a lamp the player carries (`bNeverDemote`) is not shadowed by his own body.
 - **Consumer**: the light volumes (`da_light_volume.ps`): flag `DA_LV_SHADOW_RT`, the record's third word is the
-  slot; the masks at t29..t31 (the projectors now t18..t28, 11 per batch). A traced spot projects its texture
+  slot; the mask array at t29 (the projectors t18..t28, 11 per batch). A traced spot projects its texture
   through its own frame as an unshadowed spot does. The traced faces light after the atlas batches, with the
   unshadowed lamps when there was no batch. A frame whose dispatch failed lights them unshadowed (masks cleared to 1).
 - Timer `rt_lamps`.
@@ -637,7 +637,57 @@ The nearest shadowed lamps take their shadow from rays instead of the atlas (`da
 | Glossy surfaces | off | half resolution | half resolution | full resolution, the crowns too |
 | Moving objects: rigid / characters | 40 m / 20 m, 6 | 60 m / 30 m, 12 | 80 m / 40 m, 16 | 120 m / 60 m, 24 |
 | GI: resolution, reach, history, filter, canopy | half, 25 m, 24, 2, no | half, 35 m, 32, 2, yes | half, 50 m, 32, 3, yes | full, 60 m, 48, 3, yes |
-| Lamps traced, rays | 0 | 4, 1 | 8, 1 | 12, 2 |
+| Lamps traced, rays | 0 | 8, 1 | 16, 1 | 32, 2 |
+| World cache of the traced light (3.15) | no | yes | yes | yes |
+
+### 3.15 The light really bounces (23.11.2026)
+Players toggled every effect on and off in houses and cellars and saw no difference. A run of each effect alone in a
+house (`tools/qa/water/rtx_ab.lua`, one heading, every effect alone, debug views) showed why: shadows, occlusion and
+reflections changed nothing there (no sun, no lamp, nothing glossy), and the global illumination of 3.11 only halved the
+room's brightness. It replaced the stock ambient with the traced sky light, and the level's art is a generous bake: the
+lightmap's hemisphere says 0.2-0.6 deep in rooms where the rays see no sky at all, the stock material table lifts it
+further (h^0.75) and `L_ambient` fills the rest. Measured: a traced linear sky light leaves an overcast room at a tenth
+of the stock's; a lift through the table and an ambient floor (both tried) only made it less dark. And in Dead Air the sun
+is weak most of the time (the cloud deck), so what the rays could add over the bake - the sun's bounce - rarely showed.
+What a bake cannot know is the light of the lamps, the fires and the player's torch bouncing, and what blocks the sky
+that the bake never resolved. Now:
+- **The stock ambient stays and the traced light goes over it** (`combine_1.ps`): where the rays saw less of the sky than
+  the baked hemisphere says (`seen = (sky share + 0.1) / (hemi + 0.1)`), `kRtGiOcclusion` (0.7) of the shortfall comes
+  off, to `kRtGiFloor` (0.4) of the stock at least (the procedural foliage keeps its own baked occlusion); then the
+  bounced light is added at `kRtGiGain` (1).
+- **The bounced light is the direct light's** (`rt/rt_gi.hlsl`): a ray's hit sends back its albedo times the direct light
+  on it - where the screen shows it, this frame's accumulator (every lamp with its shadow and projector, the sun with its
+  cascades) and the G-buffer's albedo, exactly; off screen, the sun by its own shadow ray (cosine, LIGHT_MUL1, the clouds'
+  shadow, the crowns' card test) and the frame's lamps - plus the bounced light the world cache holds at the hit. Misses
+  count toward the sky share only. The previous frame's colour copy is no longer read (combine_1 writes it for the
+  glossy reflections alone). A torch at night lights the room around its spot; a lamp, its walls and ceiling.
+- **Every lamp is a light the rays' hits take** (`da_rt_lamps_select`, both light packages of the frame merged): the
+  `kRtHitLights` (32) brightest lamps around the camera, shadowed or not, in the constants of the global illumination, the
+  glossy and the water reflections (`RtLights`, `rt_material.hlsli`). An off-screen hit sums their unshadowed light
+  (`rt_lamp_light`: the volumes' falloff, cosine and LIGHT_MUL1, a spot's cone with a soft rim) and traces one shadow ray
+  toward a lamp chosen by its share, scaled by the inverse of that share (`rf_hit_lamps`).
+- **The world cache of the traced light** (`rt/rt_cache.hlsli`, `rt/rt_gi_cache.hlsl`, 16 MB, every tier but Low): cells of 25 cm within 16 m of the camera, doubling with each doubling of the distance, by the axis the normal
+  faces; the GI temporal pass writes every settled world pixel's bounced light as its cell's sample (no atomics: the last
+  pixel wins, the resolve averages over the frames, 15 % new a frame, a cell unwritten for 300 frames is let go); a hit of
+  the GI and of the reflections adds the cell's light (further bounces, and the light behind the camera). Cleared when made
+  and for every new scene (`da_rt_scene_epoch`).
+- **Every lamp casts a traced shadow**, the ones the stock lit unshadowed too (they lit through walls): the nearest
+  `lamps_max` of all lamps (Medium 8, High 16, Ultra 32) into one RGBA8 array of 8 slices (`$user$rt_lamps`, t29 of the
+  light volumes); one dispatch traces them all; a surface facing away from a lamp traces nothing; bulb 5 cm. A formerly
+  unshadowed lamp's rays stop 6 % of its range short of it (15-60 cm): such lamps are often sunk into their ceiling.
+- **The first-person hands and what they hold** are in the traced light (`rt_hud_world`: the G-buffer's z through the
+  HUD projection, `RtView.hud`): their GI, their glossy reflections (traced only, no screen march), their sun shadow per
+  pixel and the traced lamps' shadows leave where they are in the world. Their histories stay on their pixels.
+- **NPCs whole**: what a character carries (`IRenderable::renderable_Attachments`, `CGameObject`: the active item of a
+  `CInventoryOwner` unless hidden, the attached items of a `CAttachmentOwner`) enters the scene with it as roots of its
+  own; the cascades leave every visual of an object traced whole (`da_rt_traced_visual`) to the rays.
+- The glossy reflections no longer dim by the sky seen (that hid every reflection indoors); below Ultra their rays pass
+  the crowns and a card test dims what lies beyond one (`gl_canopy`).
+- Debug views (`r__rt_debug`): 6 the bounced light, 7 the sky share, 8 the first lamps' visibility, 9 the sky the rays saw
+  (red) against the baked hemisphere (green).
+- Cost (RTX 3070 Laptop, the stand at 1920x1080, a house at night with the torch; frame / RT passes, ms): off 8.7; Low
+  12.4 (sun 0.9, AO 0.7, GI 2.6); Medium 14.2 (sun 1.6, AO 0.7, glossy 0.2, GI 2.8, lamps 0.8); High 15.8 (AO 1.7, GI 3.5,
+  lamps 0.7); Ultra 20.4 (sun 2.4, AO 1.6, glossy 1.5, GI 5.1, lamps 0.6). Vulkan within 10 % of DirectX 12.
 
 ## 4. Integration points (edits in existing files)
 

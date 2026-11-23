@@ -17,6 +17,7 @@ cbuffer rt_reflection_constants : register( b0 )
 	float4	refl;		// x TMax, y cone spread per metre, z screen-edge margin in pixels, w off-screen sun rays (0/1)
 	uint4	refl_mask;	// x instance mask of the rays, y most screen-space steps of a ray
 	RtClouds clouds;
+	RtLights lights;
 };
 
 Texture2D<float4>	rf_request	: register( t0 );
@@ -32,6 +33,7 @@ Texture2D<float4>	rf_clouds	: register( t8 );
 RWTexture2D<float4>	rf_out		: register( u0 );
 
 #define RF_CLOUDS
+#define RF_LIGHTS
 #include "rt_reflect.hlsli"
 
 [numthreads( 8, 8, 1 )]
@@ -107,7 +109,9 @@ void main( uint3 id : SV_DispatchThreadID )
 			const float cone = cone0 + refl.y * t;
 			const RtHitSurface hs = rt_hit_surface( g, inst, tri, h.bary, h.o2w, dir, cone, view );
 			const float sun = rf_sun_visibility( hit, hs.normal, cone );
-			float3 lit = rt_hit_light( hs, sun, shade, rf_env0, rf_env1, view );
+			const float3 lamps = rf_hit_lamps( hit, hs.normal, cone, rt_noise2( id.xy + 47u, view.scene.w ).x );
+			const float4 around = rf_hit_around( hit, hs.normal );
+			float3 lit = rt_hit_light( hs, sun, lamps, around, shade, rf_env0, rf_env1, view );
 			lit = rt_fog_apply( lit, hit, view.camera.xyz, shade, rf_sky0, rf_sky1 );
 			const float exposure = rf_tonemap.Load( int3( 0, 0, 0 ) );
 			lit = rt_tonemap( lit, exposure, shade );

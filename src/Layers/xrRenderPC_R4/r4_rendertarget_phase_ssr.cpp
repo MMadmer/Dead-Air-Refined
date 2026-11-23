@@ -106,11 +106,6 @@ const ref_rt* CRenderTarget::ssr_scene_target()
     return &m_ssr->scene;
 }
 
-const ref_rt* CRenderTarget::ssr_scene_last() const
-{
-    return m_ssr && m_ssr->scene && m_ssr->scene_frame && m_ssr->scene_frame + 1 == Device.dwFrame ? &m_ssr->scene : nullptr;
-}
-
 void CRenderTarget::phase_ssr(CBackend& cmd_list)
 {
     // The traced reflections answer instead when they ran; without last frame's colour there is nothing to show.

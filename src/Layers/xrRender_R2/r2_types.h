@@ -158,10 +158,8 @@ static constexpr float r2_hud_depth_limit = 0.02f;
 #define r2_RT_rt_gi_aux1 "$user$rt_gi_aux1"
 #define r2_RT_rt_gi_tmp "$user$rt_gi_tmp"
 #define r2_RT_rt_gi "$user$rt_gi"
-// The lamps' traced visibility (dxr.md 3.12), four lamps a mask.
-#define r2_RT_rt_lamps0 "$user$rt_lamps0"
-#define r2_RT_rt_lamps1 "$user$rt_lamps1"
-#define r2_RT_rt_lamps2 "$user$rt_lamps2"
+// The lamps' traced visibility (dxr.md 3.12), four lamps a slice of one array.
+#define r2_RT_rt_lamps "$user$rt_lamps"
 // [dx12:rt] end names
 
 #define     r2_base             "$user$base"

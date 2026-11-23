@@ -255,6 +255,7 @@ public:
     void OnOwnedCameraMove(CCameraBase* pCam, float fOldYaw, float fOldPitch) override  {} //--#SM+#--
     virtual bool Ready() override { return getReady(); } // update only if active and fully initialized by/for network
     void renderable_Render(u32 context_id, IRenderable* root) override;
+    void renderable_Attachments(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out) override;
     virtual void OnEvent(NET_Packet& P, u16 type) override;
     virtual void Hit(SHit* pHDS) override {}
     virtual void SetHitInfo(IGameObject* who, IGameObject* weapon, s16 element, Fvector Pos, Fvector Dir) override {}

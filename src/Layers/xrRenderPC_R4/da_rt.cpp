@@ -96,7 +96,9 @@ Fvector4 da_rt_constants()
 Fvector4 da_rt_gi_constants()
 {
 #if defined(DA_RT_LANE)
-    return {da_rt_live(RtEffect::GI) && da_rt_gi_ran() ? 1.f : 0.f, 0.f, 0.f, 0.f};
+    if (!da_rt_live(RtEffect::GI) || !da_rt_gi_ran())
+        return {0.f, 0.f, 0.f, 0.f};
+    return {1.f, kRtGiOcclusion, kRtGiFloor, kRtGiGain};
 #else
     return {0.f, 0.f, 0.f, 0.f};
 #endif

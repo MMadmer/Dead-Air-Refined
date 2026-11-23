@@ -33,6 +33,9 @@ public:
     virtual void renderable_Invisible(bool value) = 0;
     virtual bool renderable_HUD() = 0;
     virtual void renderable_HUD(bool value) = 0;
+    // What renderable_Render draws besides the object's own visual, with its world transform: the weapon in a
+    // character's hands, its gear (the ray traced scene takes them with their carrier, dxr.md 3.15).
+    virtual void renderable_Attachments(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out) { out.clear(); }
 };
 
 inline IRenderable::~IRenderable() = default;

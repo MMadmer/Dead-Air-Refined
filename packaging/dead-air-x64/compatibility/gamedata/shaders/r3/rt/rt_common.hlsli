@@ -80,6 +80,7 @@ struct RtView
 	uint4				veg;			// the vegetation tables (da_veg_rt_tables): x bindless slot (~0 none), y the
 										// season block's first float4, z a species' season rows | its profile rows << 16,
 										// w the snow on the branches (float bits)
+	float4				hud;			// the first-person projection's pos_decompress (its own field of view)
 };
 
 // ---- depth and positions ---------------------------------------------------------------------
@@ -167,6 +168,14 @@ RtSurface rt_surface( Texture2D<float4> position, Texture2D<float4> normal, int2
 bool rt_is_hud( float z_depth, RtSurface s )
 {
 	return s.z < 2.0f && abs( z_depth - s.z ) > 0.05f + 0.1f * s.z;
+}
+
+// Where a first-person pixel is in the world: the G-buffer's view z through the first-person projection (da_hud_light.h
+// da_hud_position) and the camera's frame. The hands and what they hold are not in the rays' scene; rays leave them
+// from here into the world around the player.
+float3 rt_hud_world( float2 pixel_center, float z_gbuffer, RtView v )
+{
+	return rt_to_world( float3( z_gbuffer * ( pixel_center * v.hud.zw - v.hud.xy ), z_gbuffer ), v );
 }
 
 // ---- directions and noise --------------------------------------------------------------------

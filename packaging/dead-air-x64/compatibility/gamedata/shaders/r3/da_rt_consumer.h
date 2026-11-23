@@ -12,9 +12,10 @@ uniform float4		da_rt;
 // the confidence (0 = the sky's cube).
 Texture2D			s_rt_gloss;
 
-// The traced global illumination (dxr.md 3.11): da_rt_gi.x = 1 while it ran this frame; s_rt_gi rgb the light of the
-// surroundings (the combine's diffuse ambient in place of the sky's cube times the baked hemisphere), a the share of
-// it that came from the sky (< 0: a first-person pixel, which keeps its stock ambient).
+// The traced global illumination (dxr.md 3.11, 3.15): da_rt_gi.x = 1 while it ran this frame, y the share of the stock
+// ambient's shortfall of sky it takes away, z the least share of the stock ambient it leaves, w the gain of its bounced
+// light; s_rt_gi rgb the light that bounced off what the sun and the lamps lit (added to the stock ambient), a the share
+// of the sky the rays saw (< 0: nothing traced there yet).
 uniform float4		da_rt_gi;
 Texture2D			s_rt_gi;
 

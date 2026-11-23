@@ -464,7 +464,6 @@ public:
     void ssr_destroy();
     void phase_ssr(CBackend& cmd_list);
     const ref_rt* ssr_scene_target(); // combine_1's third target this frame, or null
-    const ref_rt* ssr_scene_last() const; // that target when combine_1 wrote it last frame, or null
     bool ssr_ran() const; // combine_1 reads them this frame
     struct DaSsr* m_ssr{};
     void accum_reflected(CBackend& cmd_list, light* L);

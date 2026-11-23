@@ -1340,12 +1340,11 @@ void R_dsgraph_structure::build_subspace_dynamic()
                     IRenderable* renderable = spatial->dcast_Renderable();
                     if (!renderable)
                         continue; // unknown, but renderable object (r1_glow???)
-                    // Traced by the sun's rays this frame: its own model's shadow comes from them; what it carries (the
-                    // weapon in its hands, its gear: in no ray's scene) still casts here.
-                    o.rt_skip_visual = (o.rt_skip_moving && da_rt_traces_moving(renderable)) ?
-                        renderable->GetRenderData().visual : nullptr;
+                    // Traced by the sun's rays this frame: the shadow of its own model and of what it carries (the weapon in
+                    // its hands, its gear) comes from them; anything else it draws still casts here.
+                    o.rt_skip_traced = o.rt_skip_moving && da_rt_traces_moving(renderable);
                     renderable->renderable_Render(context_id, nullptr);
-                    o.rt_skip_visual = nullptr;
+                    o.rt_skip_traced = false;
                 }
             }
         }

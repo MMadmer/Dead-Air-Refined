@@ -4,7 +4,8 @@
 // point (the mirror image behind a coplanar surface moves with the hit's parallax, a curved one with the surface).
 // A pixel that holds this frame's sample takes most of it; the others live on the history. Colours blend in a
 // tonemapped space (x / (1 + max x)), so a bright highlight cannot outweigh its neighbourhood. The result goes to
-// the history and to the target combine_1 reads, premultiplied by its confidence.
+// the history and to the target combine_1 reads, premultiplied by its confidence. The first-person hands, which move
+// with the camera, keep their history where they are on the screen.
 
 #include "rt_common.hlsli"
 #include "da_material_codes.h"
@@ -116,7 +117,12 @@ void main( uint3 id : SV_DispatchThreadID )
 	// reflector's distance plus the hit's; elsewhere the surface itself.
 	float4 history = 0.0f;
 	bool valid = false;
-	[branch] if ( view.scene.z & RT_VIEW_HISTORY_VALID )
+	[branch] if ( ( view.scene.z & RT_VIEW_HISTORY_VALID ) && rt_is_hud( z, s ) )
+	{
+		history = gt_history.Load( int3( id.xy, 0 ) );
+		valid = true;
+	}
+	else [branch] if ( view.scene.z & RT_VIEW_HISTORY_VALID )
 	{
 		const float3 eye = view.camera.xyz;
 		const float hit = dist_w > 1e-3f ? dist / dist_w : 0.0f;

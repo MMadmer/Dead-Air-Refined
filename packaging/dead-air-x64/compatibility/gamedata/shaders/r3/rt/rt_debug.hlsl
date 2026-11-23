@@ -1,7 +1,9 @@
 // r__rt_debug views (dxr.md 4.1): 1 the sun mask, 2 the occlusion, 3 the reflections, 4 the albedo a
 // primary ray finds against the G-buffer's own (left half traced, right half G-buffer), which is
 // what proves the vertex and texture decode of the hit shading, 5 the glossy surfaces' reflections
-// (tonemapped; where the sky's cube stays, dark blue).
+// (tonemapped; where the sky's cube stays, dark blue), 6 the global illumination's light (tonemapped), 7 its share
+// of the sky (red: nothing traced), 8 the first traced lamps' visibility (slice 0: lamps 0-2 as red, green, blue), 9 the
+// sky the rays saw (red) against the lightmap's baked hemisphere (green).
 
 #include "rt_geometry.hlsli"
 
@@ -17,6 +19,10 @@ Texture2D<float4>	dbg_refl	: register( t2 );
 Texture2D<float>	dbg_depth	: register( t3 );
 Texture2D<float4>	dbg_albedo	: register( t4 );
 Texture2D<float4>	dbg_gloss	: register( t5 );
+Texture2D<float4>	dbg_gi		: register( t6 );
+Texture2DArray<float4>	dbg_lamps	: register( t7 );
+Texture2D<float4>	dbg_position	: register( t8 );
+Texture2D<float4>	dbg_normal	: register( t9 );
 
 RWTexture2D<float4>	dbg_out		: register( u0 );
 
@@ -86,6 +92,27 @@ void main( uint3 id : SV_DispatchThreadID )
 	{
 		const float4 r = dbg_gloss.Load( int3( id.xy, 0 ) );
 		c = r.rgb / ( 1.0f + r.rgb ) + ( 1.0f - r.a ) * float3( 0.0f, 0.0f, 0.15f );
+		break;
+	}
+	case 6u:
+	{
+		const float3 g = dbg_gi.Load( int3( id.xy, 0 ) ).rgb;
+		c = g / ( 1.0f + g );
+		break;
+	}
+	case 7u:
+	{
+		const float a = dbg_gi.Load( int3( id.xy, 0 ) ).a;
+		c = a < 0.0f ? float3( 1.0f, 0.0f, 0.0f ) : a.xxx;
+		break;
+	}
+	case 8u:
+		c = dbg_lamps.Load( int4( id.xy, 0, 0 ) ).rgb;
+		break;
+	case 9u:
+	{
+		const RtSurface s = rt_surface( dbg_position, dbg_normal, int2( id.xy ), view );
+		c = float3( max( dbg_gi.Load( int3( id.xy, 0 ) ).a, 0.0f ), s.hemi, 0.0f );
 		break;
 	}
 	default:

@@ -202,30 +202,36 @@ _out main ( _input I, uint iSample : SV_SAMPLEINDEX )
 		// The sky the point sees: the baked hemisphere, or the share of the traced light that came from the sky.
 		float sky_seen = N.w;
 #ifdef SM_5
-		// Ray traced global illumination (dxr.md 3.11): the light of the surroundings in place of the sky's cube times
-		// the baked hemisphere. The procedural foliage keeps its baked occlusion (the blades are not in the rays' scene);
-		// the sky's specular of the GGX materials is weighted by the sky the rays found instead of the hemisphere.
+		// Ray traced global illumination (dxr.md 3.11, 3.15), the first-person hands' included. The stock ambient (the
+		// level's baked sky light and fill) is taken down where the rays saw less of the sky than the lightmap's
+		// hemisphere says - deep in a room, under a car, behind a character, in a corner the bake never resolved - by
+		// da_rt_gi.y of the shortfall, to da_rt_gi.z at least (the procedural foliage keeps its baked occlusion); then the
+		// light the sun, the lamps, the fires and the torch send back off what they lit is added. The sky's specular of
+		// the GGX materials is weighted by the sky the rays found instead of the baked hemisphere.
 		[branch] if ( da_rt_gi.x > 0.5f )
 		{
 			const float4 gi = s_rt_gi.Load( int3( I.pos2d.xy, 0 ) );
 			[branch] if ( gi.a >= 0.0f )
 			{
-				hdiffuse = hmodel_gi_diffuse( gi.rgb, mtl, da_is_foliage( mtl ) ? N.w : 1.0f, P.xyz, N.xyz );
+				[branch] if ( !da_is_foliage( mtl ) )
+				{
+					const float seen = saturate( ( gi.a + 0.1f ) / ( saturate( N.w ) + 0.1f ) );
+					hdiffuse *= max( lerp( 1.0f, seen, da_rt_gi.y ), da_rt_gi.z );
+				}
+				hdiffuse += max( gi.rgb, 0.0f ) * da_rt_gi.w;
 				sky_seen = saturate( gi.a );
 				[flatten] if ( da_spec_ggx_on( mtl ) )
 					spec_w = spec_e * sky_seen;
-				// The rays saw the occluders a metre off too: the contact occlusion keeps half its share.
-				occ = lerp( 1.0f, occ, 0.5f );
 			}
 		}
 #endif // SM_5
 		// The traced mirror image of a glossy surface in place of the sky's cube (rt_gloss*.hlsl), else what the screen
 		// shows (da_ssr.h): premultiplied by its confidence, at the weight without the sky's visibility (hmodel.h).
 		float4 mirror = 0.0f;
-		// The traced rays pass the crowns off the screen: under trees they came back with the sunlit world beyond, a
-		// glare on every wet stone. Where the sky is mostly hidden the image is taken down by it, as the cube is.
+		// The traced image is what the surface really faces, a room's walls and lamps included (the rays dim what passes the
+		// crowns themselves, rt_gloss.hlsl).
 		[branch] if ( da_rt.x > 1.5f )
-			mirror = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) ) * lerp( saturate( sky_seen * 2.0f ), 1.0f, 0.35f );
+			mirror = s_rt_gloss.Load( int3( I.pos2d.xy, 0 ) );
 		else [branch] if ( da_ssr.x > 0.5f )
 			mirror = s_ssr.Load( int3( I.pos2d.xy, 0 ) );
 		hspecular = env_s * ( ( 1.0f - mirror.a ) * spec_w ) + mirror.rgb * spec_e;

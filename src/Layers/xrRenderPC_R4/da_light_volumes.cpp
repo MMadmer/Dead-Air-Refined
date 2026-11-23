@@ -23,7 +23,7 @@ namespace
 {
 constexpr u32 kMaxLights = 2048; // records per frame, both light packages
 constexpr u32 kProjectorSlots = 11; // t18..t28 (da_light_volume.ps)
-constexpr u32 kRtMasks = 3; // t29..t31: the ray traced lamps' visibility
+constexpr u32 kRtMasks = 1; // t29: the ray traced lamps' visibility (an array, four lamps a slice)
 constexpr u32 kFirstSlot = 16; // t16: the records
 
 constexpr u32 kPoint = 0, kSpot = 1, kFace = 2, kTypes = 3;
@@ -301,12 +301,14 @@ void da_lv_draw(CBackend& cmd_list, const xr_vector<light*>& shadowed, const xr_
     {
         for (light* L : *unshadowed)
         {
+            // A lamp the stock lit without a shadow takes the rays' when they shade it (dxr.md 3.15).
+            const u32 traced = da_rt_lamp_slot(L) >= 0 ? kShadowRt : 0u;
             if (L->flags.type == IRender_Light::POINT)
-                add(L, kPoint, 0, false);
+                add(L, kPoint, traced, false);
             else
             {
                 const bool face = L->flags.type == IRender_Light::OMNIPART;
-                add(L, face ? kFace : kSpot, face ? 0 : kLmapShadow, true);
+                add(L, face ? kFace : kSpot, traced | (face ? 0 : kLmapShadow), true);
             }
         }
     }
@@ -361,7 +363,7 @@ void da_lv_draw(CBackend& cmd_list, const xr_vector<light*>& shadowed, const xr_
     cmd_list.set_Scissor(nullptr);
 
     ID3D11ShaderResourceView* views[2 + kProjectorSlots + kRtMasks]{ g.srv, nullptr };
-    da_rt_lamp_views(views + 2 + kProjectorSlots);
+    views[2 + kProjectorSlots] = da_rt_lamp_view();
     for (u32 i = 0; i < g.projector_count; ++i)
     {
         CTexture* texture = g.projectors[i];

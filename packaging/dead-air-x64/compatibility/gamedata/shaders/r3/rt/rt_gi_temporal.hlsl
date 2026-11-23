@@ -5,15 +5,18 @@
 // neighbourhood, so a light switched on or a door opened shows within a few frames while the noise of one ray a pixel
 // averages away over many. Colours compare in a tonemapped space (x / (1 + max x)).
 //
-// History: colour (rgb, the sky's share) and aux (frames accumulated, view z).
+// History: colour (rgb, the sky's share) and aux (frames accumulated, view z). The first-person hands keep their history
+// where they are on the screen (they move with the camera) over fewer frames. With the world cache of the traced light
+// (dxr.md 3.15), every world pixel's accumulated light is its cell's sample of the frame (rt_cache.hlsli).
 
-#include "rt_common.hlsli"
+#include "rt_cache.hlsli"
 
 cbuffer rt_gi_temporal_constants : register( b0 )
 {
 	RtView	view;
 	float4	temporal;	// x trace width, y trace height, z half resolution (1) or full (0), w frame cap
-	float4	temporal2;	// x least alpha, y clip width (sigmas), z least share of a pixel's own fresh sample
+	float4	temporal2;	// x least alpha, y clip width (sigmas), z least share of a pixel's own fresh sample, w write the
+						// world cache (0/1)
 };
 
 Texture2D<float4>	gt_raw			: register( t0 );
@@ -55,12 +58,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( gt_position, gt_normal, int2( id.xy ), view );
-	[branch] if ( rt_is_hud( z, s ) )
-	{
-		gt_out[ id.xy ] = float4( 0.0f, 0.0f, 0.0f, -1.0f );
-		gt_out_aux[ id.xy ] = float2( 0.0f, z );
-		return;
-	}
+	const bool hud = rt_is_hud( z, s );
 
 	// This frame's samples around the pixel.
 	const bool half_res = temporal.z > 0.5f;
@@ -118,9 +116,14 @@ void main( uint3 id : SV_DispatchThreadID )
 	{
 		const float2 pixel_center = float2( id.xy ) + 0.5f;
 		const float3 p_world = rt_to_world( rt_view_pos( pixel_center, z, view ), view );
-		const float3 prev = rt_project( p_world, view.vp_prev );
+		float3 prev = rt_project( p_world, view.vp_prev );
 		float2 prev_uv = prev.xy;
-		[branch] if ( view.scene.z & RT_VIEW_VELOCITY )
+		[branch] if ( hud )
+		{
+			prev_uv = pixel_center * view.size.zw;
+			prev.z = z;
+		}
+		else [branch] if ( view.scene.z & RT_VIEW_VELOCITY )
 		{
 			const float2 v = gt_velocity.Load( int3( id.xy, 0 ) );
 			prev_uv = pixel_center * view.size.zw - float2( v.x, -v.y ) * 0.5f;
@@ -168,7 +171,7 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	else
 	{
-		n = min( frames + 1.0f, temporal.w );
+		n = min( frames + 1.0f, hud ? min( temporal.w, 12.0f ) : temporal.w );
 		// The history clipped to what the fresh neighbourhood allows: a change of light gets through.
 		float3 h = gt_tm( history.rgb );
 		h = clamp( h, mean - temporal2.y * sigma, mean + temporal2.y * sigma );
@@ -177,4 +180,10 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	gt_out[ id.xy ] = result;
 	gt_out_aux[ id.xy ] = float2( n, z );
+	// The world's settled light is its cell's sample of the frame.
+	[branch] if ( temporal2.w > 0.5f && !hud && n >= 2.0f && result.a >= 0.0f )
+	{
+		const float3 p = rt_to_world( rt_view_pos( float2( id.xy ) + 0.5f, z, view ), view );
+		rt_cache_write( p, normalize( rt_dir_to_world( s.n_view, view ) ), view.camera.xyz, result.rgb );
+	}
 }

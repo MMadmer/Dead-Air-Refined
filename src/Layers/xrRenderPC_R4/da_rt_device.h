@@ -68,12 +68,22 @@ struct DaRtTier
     float gi_frames; // its temporal cap
     u32 gi_filter; // a-trous passes over it
     bool gi_foliage; // its rays see the crowns
-    u32 lamps_max; // shadowed lamps the rays shade instead of their maps (0: none), at most kRtLampSlots
+    u32 lamps_max; // lamps the rays shade (their maps, or no shadow at all, before), at most kRtLampSlots
     u32 lamp_rays; // their rays a pixel
     float lamp_bulb; // the bulb's radius their rays are spread over, metres
+    // dxr.md 3.15
+    bool gi_cache; // the world cache of the traced light (the light of the light: further bounces)
 };
-// The lamps' masks (rt/rt_light_shadow.hlsl): four lamps a mask, as many masks as the light volumes have slots for.
-constexpr u32 kRtLampMasks = 3, kRtLampSlots = kRtLampMasks * 4;
+// The lamps' masks (rt/rt_light_shadow.hlsl): four lamps a slice of one array, one slot of the light volumes.
+constexpr u32 kRtLampMasks = 8, kRtLampSlots = kRtLampMasks * 4;
+// The world cache of the traced light (rt/rt_cache.hlsli): cells of 32 bytes.
+constexpr u32 kRtGiCacheCells = 1u << 19;
+constexpr u64 kRtGiCacheBytes = u64(kRtGiCacheCells) * 32u;
+// The global illumination over the stock ambient (combine_1): the share of its shortfall of sky taken away, the least
+// share of it left, the gain of the bounced light (1: as the lights lit the hits).
+constexpr float kRtGiOcclusion = 0.7f, kRtGiFloor = 0.4f, kRtGiGain = 1.f;
+// The lamps whose light the rays' hits take (the global illumination's and the reflections' off-screen hits).
+constexpr u32 kRtHitLights = 32;
 const DaRtTier& da_rt_tier(); // this frame's (latched)
 const DaRtTier& da_rt_tier_of(u32 quality);
 
@@ -135,6 +145,8 @@ struct DaRtDispatch
     u32 groups_x{1}, groups_y{1}, groups_z{1};
 };
 
+struct DaRtBuffer;
+
 // The RT targets behind CRenderTarget::m_da_rt (r4_rendertarget_phase_rt.cpp), created with the render
 // targets for the effects switched on (the rows restart the renderer, dxr.md 4.1).
 struct DaRtTargets
@@ -162,9 +174,14 @@ struct DaRtTargets
     u32 gi_width{}, gi_height{};
     u32 gi_current{}, gi_frame{u32(-2)}, gi_ran{u32(-2)};
     ref_texture t_clouds;
-    // The lamps' traced visibility, four lamps a mask (dxr.md 3.12); the frame they were traced in.
-    ref_rt lamps[kRtLampMasks];
+    // The lamps' traced visibility, four lamps a slice (dxr.md 3.12); the frame they were traced in.
+    ref_rt lamps;
     u32 lamps_frame{u32(-2)};
+    // The world cache of the traced light (dxr.md 3.15): cells of irradiance by position and facing, written by the
+    // global illumination's pixels, read by the rays' off-screen hits; whether it holds anything yet.
+    DaRtBuffer* gi_cache{};
+    bool gi_cache_clear{true};
+    u32 gi_cache_epoch{};
     ref_shader s_puddle_req, s_water_req, s_water_req_b;
     // r__rt_debug, made on first use.
     ref_rt debug;
@@ -204,6 +221,8 @@ struct DaRtSceneBinding
     u32 veg_tables{~0u}, veg_prof{}, veg_seas{}, veg_rows{};
 };
 const DaRtSceneBinding& da_rt_scene_binding();
+// Grows with every scene released (a new level, every effect off): what was cached of the old one is gone.
+u32 da_rt_scene_epoch();
 class DaRtSection;
 // Engine vertex and index buffers the layer tracks (DirectStorage writes the level's own) into the read
 // state before a native pass reads them: BLAS builds, the alpha test, hit shading.

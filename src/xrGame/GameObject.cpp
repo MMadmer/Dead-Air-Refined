@@ -37,6 +37,12 @@
 #include "game_object_space.h"
 #include "doors_door.h"
 #include "doors.h"
+#include "attachment_owner.h"
+#include "attachable_item.h"
+#include "inventory_item.h"
+#include "InventoryOwner.h"
+#include "Inventory.h"
+#include "HudItem.h"
 #include "xrNetServer/NET_Messages.h"
 #include "xrCommon/xr_hash_map.h"
 
@@ -1146,6 +1152,36 @@ Fvector CGameObject::get_last_local_point_on_mesh(Fvector const& local_point, u1
     mE.mul_43(mR, mS);
     mE.transform_tiny(result, local_point);
     return result;
+}
+
+// What CInventoryOwner::renderable_Render draws for a carrier besides itself: the item in its hands unless hidden
+// (CHudItem::renderable_Render), then every attached item where it hangs (CAttachmentOwner::renderable_Render).
+void CGameObject::renderable_Attachments(xr_vector<std::pair<IRenderVisual*, Fmatrix>>& out)
+{
+    out.clear();
+    if (IsGhost())
+        return;
+    const auto add = [&](CGameObject& item) {
+        if (IRenderVisual* visual = item.Visual())
+        {
+            if (std::none_of(out.begin(), out.end(), [visual](const auto& v) { return v.first == visual; }))
+                out.emplace_back(visual, item.XFORM());
+        }
+    };
+    if (CInventoryOwner* owner = smart_cast<CInventoryOwner*>(this))
+    {
+        if (CInventoryItem* active = owner->inventory().ActiveItem())
+        {
+            const CHudItem* hud = smart_cast<CHudItem*>(active);
+            if (!hud || !hud->IsHidden())
+                add(active->object());
+        }
+    }
+    if (const CAttachmentOwner* owner = smart_cast<CAttachmentOwner*>(this))
+    {
+        for (CAttachableItem* attached : owner->attached_objects())
+            add(attached->item().object());
+    }
 }
 
 void CGameObject::renderable_Render(u32 context_id, IRenderable* root)

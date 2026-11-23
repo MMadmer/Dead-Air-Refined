@@ -29,7 +29,7 @@
 #define DA_LV_LMAP_XFORM	2u		// the projector through its own rows
 #define DA_LV_LMAP_SHADOW	4u		// the projector at the shadow coordinates (the whole atlas, or an unshadowed spot's own projection)
 #define DA_LV_ENABLED		8u		// lights (a shadowed lamp whose map had no casters lights nothing)
-#define DA_LV_SHADOW_RT		16u		// its shadow from the ray traced masks (rt_light_shadow.hlsl): channel slot % 4 of mask slot / 4
+#define DA_LV_SHADOW_RT		16u		// its shadow from the ray traced masks (rt_light_shadow.hlsl): channel slot % 4 of slice slot / 4
 
 #define DA_LV_XFORM_OFFSET	160u
 

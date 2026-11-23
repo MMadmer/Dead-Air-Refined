@@ -65,17 +65,20 @@ void main( uint3 id : SV_DispatchThreadID )
 	}
 	const float z = rt_linear_z( depth, view );
 	const RtSurface s = rt_surface( sun_position, sun_normal, int2( id.xy ), view );
-	// The hands are not in the scene: they take the sun the eye sees. Written as lit, they shone in full sun under
-	// any roof, since the cascades leave the static casters to these rays.
+	// The hands are not in the scene: they take the sun where they are in the world (a barrel out of a doorway's shadow
+	// is lit). Written as lit, they shone in full sun under any roof, since the cascades leave the static casters to
+	// these rays. The rays pass the player's own shadow model, which the hands sit inside.
 	[branch] if ( rt_is_hud( z, s ) )
 	{
-		RayDesc eye_ray;
-		eye_ray.Origin = view.camera.xyz;
-		eye_ray.Direction = view.sun.xyz;
-		eye_ray.TMin = 0.05f;
-		eye_ray.TMax = sun_params.x;
-		// From the eye, which sits inside the player's own shadow model.
-		const float3 h = sun_ray( eye_ray, rt_pixel_size( 1.0f, view ), RT_RAYS_SHADOW_EYE );
+		float3 n_hud = normalize( rt_dir_to_world( s.n_view, view ) );
+		if ( dot( n_hud, view.sun.xyz ) < 0.0f )
+			n_hud = -n_hud;
+		RayDesc hud_ray;
+		hud_ray.Origin = rt_hud_world( float2( id.xy ) + 0.5f, s.z, view ) + n_hud * 0.01f;
+		hud_ray.Direction = view.sun.xyz;
+		hud_ray.TMin = 0.02f;
+		hud_ray.TMax = sun_params.x;
+		const float3 h = sun_ray( hud_ray, rt_pixel_size( 1.0f, view ), RT_RAYS_SHADOW_EYE );
 		sun_write( id.xy, 1.0f - h.x, 0.0f );
 		return;
 	}

@@ -77,10 +77,40 @@ void CRender::render_lights(light_Package& LP)
     const bool volumetricLightsEnabled = RImplementation.o.advancedpp &&
         ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS) && ps_r_lighting_quality > 1;
 #if RENDER == R_R4
-    // The nearest shadowed lamps take their shadow from rays (dxr.md 3.12): their faces leave the atlas, and the pass
-    // traces their masks now, the G-buffer done.
+    // The instanced light volumes (da_light_volumes.h): each atlas batch below lights its lamps in a draw per volume
+    // type. The visible unshadowed lamps go with the last batch, the faces of a point lamp that only carry its fog with
+    // nothing.
+    static xr_vector<light*> lit_unshadowed, fog_spots;
+    lit_unshadowed.clear();
+    fog_spots.clear();
+    for (light* L : LP.v_point)
+    {
+        L->vis_update();
+        if (L->vis.visible)
+            lit_unshadowed.push_back(L);
+    }
+    for (light* L : LP.v_spot)
+    {
+        L->vis_update();
+        if (!L->vis.visible)
+            continue;
+        const bool volumeOnlyPointFace =
+            L->flags.type == IRender_Light::OMNIPART && L->flags.bVolumetric && !L->flags.bShadow &&
+            L->omnipart_owner && !L->omnipart_owner->flags.bShadow;
+        LR.compute_xf_spot(L);
+        if (!volumeOnlyPointFace)
+            lit_unshadowed.push_back(L);
+        if (volumetricLightsEnabled && L->flags.bVolumetric)
+            fog_spots.push_back(L);
+    }
+    LP.v_point.clear();
+    LP.v_spot.clear();
+
+    // The nearest lamps take their shadow from rays (dxr.md 3.12, 3.15), the shadowed ones and the ones that had none:
+    // the shadowed faces chosen leave the atlas, the unshadowed lamps chosen light through the masks, and the pass
+    // traces the masks now, the G-buffer done. Every lamp lit this frame is a light the rays' hits take.
     static xr_vector<light*> rt_faces;
-    da_rt_lamps_select(LP.v_shadowed, rt_faces, volumetricLightsEnabled);
+    da_rt_lamps_select(LP.v_shadowed, lit_unshadowed, rt_faces, volumetricLightsEnabled);
     da_rt_lamps_pass(get_imm_context().cmd_list);
 #endif
 
@@ -188,34 +218,6 @@ void CRender::render_lights(light_Package& LP)
     Target->rt_smap_depth->set_slice_read(0);
 
 #if RENDER == R_R4
-    // The instanced light volumes (da_light_volumes.h): each atlas batch below lights its lamps in a draw per volume
-    // type. The visible unshadowed lamps go with the last batch, the faces of a point lamp that only carry its fog with
-    // nothing.
-    static xr_vector<light*> lit_unshadowed, fog_spots;
-    lit_unshadowed.clear();
-    fog_spots.clear();
-    for (light* L : LP.v_point)
-    {
-        L->vis_update();
-        if (L->vis.visible)
-            lit_unshadowed.push_back(L);
-    }
-    for (light* L : LP.v_spot)
-    {
-        L->vis_update();
-        if (!L->vis.visible)
-            continue;
-        const bool volumeOnlyPointFace =
-            L->flags.type == IRender_Light::OMNIPART && L->flags.bVolumetric && !L->flags.bShadow &&
-            L->omnipart_owner && !L->omnipart_owner->flags.bShadow;
-        LR.compute_xf_spot(L);
-        if (!volumeOnlyPointFace)
-            lit_unshadowed.push_back(L);
-        if (volumetricLightsEnabled && L->flags.bVolumetric)
-            fog_spots.push_back(L);
-    }
-    LP.v_point.clear();
-    LP.v_spot.clear();
     const bool shadowed_batches = !LP.v_shadowed.empty();
 #endif
 

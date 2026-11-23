@@ -1321,8 +1321,10 @@ struct DaRtSelection
     bool shadows{}; // the sun's rays take the moving objects this frame
 };
 DaRtSelection g_rt_sel;
-// Traced whole by the last top level that held moving objects (sorted), and the player's casters.
+// Traced whole by the last top level that held moving objects (sorted), the visuals they were traced with - their own and
+// what they carry (sorted) - and the player's casters.
 xr_vector<IRenderable*> g_rt_traced_last;
+xr_vector<IRenderVisual*> g_rt_traced_visuals_last;
 bool g_rt_actor_traced_last{};
 
 u32 da_rt_dynamic_texture(const ref_texture& t)
@@ -1686,14 +1688,32 @@ void da_rt_select_moving(const DaRtTier& tier, bool shadows)
         if (data.pROS)
             hemi = 0.75f * static_cast<CROS_impl*>(data.pROS)->peek_hemi();
         sel.roots.push_back({renderable, data.visual, data.xform, distance, hemi, character});
+        // What it carries, as roots of its own with its distance: the weapon in its hands and its gear cast with it.
+        static xr_vector<std::pair<IRenderVisual*, Fmatrix>> carried;
+        renderable->renderable_Attachments(carried);
+        for (const auto& [visual, xform] : carried)
+        {
+            if (visual && visual != data.visual)
+                sel.roots.push_back({renderable, visual, xform, distance, hemi, false});
+        }
     }
     std::sort(sel.roots.begin(), sel.roots.end(), [](const DaRtSelection::Root& a, const DaRtSelection::Root& b) {
         return a.distance != b.distance ? a.distance < b.distance : std::less<IRenderable*>()(a.renderable, b.renderable);
     });
-    // The nearest skinned_max characters; the others are left to their shadow maps whole.
+    // The nearest skinned_max characters, with what they carry; the others are left to their shadow maps whole.
     u32 characters = 0;
+    static xr_vector<IRenderable*> dropped;
+    dropped.clear();
+    for (const DaRtSelection::Root& r : sel.roots)
+    {
+        if (r.character && ++characters > tier.skinned_max)
+            dropped.push_back(r.renderable);
+    }
+    std::sort(dropped.begin(), dropped.end());
     sel.roots.erase(std::remove_if(sel.roots.begin(), sel.roots.end(),
-                        [&](const DaRtSelection::Root& r) { return r.character && ++characters > tier.skinned_max; }),
+                        [&](const DaRtSelection::Root& r) {
+                            return std::binary_search(dropped.begin(), dropped.end(), r.renderable);
+                        }),
         sel.roots.end());
     sel.actor_first = u32(sel.roots.size());
     // The player's first-person shadow model, which the spatial database does not hold.
@@ -1718,6 +1738,7 @@ void da_rt_select_moving(const DaRtTier& tier, bool shadows)
             sel.skip.push_back(sel.roots[i].renderable);
     }
     std::sort(sel.skip.begin(), sel.skip.end());
+    sel.skip.erase(std::unique(sel.skip.begin(), sel.skip.end()), sel.skip.end());
     sel.actor_skip = sel.actor_first < sel.roots.size() && g_rt_actor_traced_last;
 }
 
@@ -2023,22 +2044,42 @@ void da_rt_update_dynamic(DaRtSection& section)
     section.accel_barrier();
     const bool built = da_rt_build_tlas(section, frame.instances.data(), dynamic_count, true);
 
-    // What the next frame's cascades may leave to the rays: the roots every part of which is in this top level.
+    // What the next frame's cascades may leave to the rays: the objects every part of which - their own model's and what
+    // they carry - is in this top level, and something of which casts.
     g_rt_traced_last.clear();
+    g_rt_traced_visuals_last.clear();
     const bool traced = built && dynamic_count && g_rt_collect.complete.size() == roots;
     bool actor = traced && g_rt_sel.actor_first < roots;
+    static xr_vector<std::pair<IRenderable*, u8>> objects; // 1 every root reached, 2 something casts
+    objects.clear();
     for (u32 i = 0; i < roots; ++i)
     {
         const bool reached = traced && g_rt_collect.complete[i] && added[i] == expected[i];
         if (i < g_rt_sel.actor_first)
-        {
-            if (reached && expected[i])
-                g_rt_traced_last.push_back(g_rt_sel.roots[i].renderable);
-        }
+            objects.push_back({g_rt_sel.roots[i].renderable, u8((reached ? 1 : 0) | (expected[i] ? 2 : 0))});
         else if (!reached)
             actor = false;
     }
-    std::sort(g_rt_traced_last.begin(), g_rt_traced_last.end());
+    std::sort(objects.begin(), objects.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (size_t i = 0; i < objects.size();)
+    {
+        size_t j = i;
+        bool whole = true, casts = false;
+        for (; j < objects.size() && objects[j].first == objects[i].first; ++j)
+        {
+            whole = whole && (objects[j].second & 1);
+            casts = casts || (objects[j].second & 2);
+        }
+        if (whole && casts)
+            g_rt_traced_last.push_back(objects[i].first);
+        i = j;
+    }
+    for (u32 i = 0; i < g_rt_sel.actor_first; ++i)
+    {
+        if (std::binary_search(g_rt_traced_last.begin(), g_rt_traced_last.end(), g_rt_sel.roots[i].renderable))
+            g_rt_traced_visuals_last.push_back(g_rt_sel.roots[i].visual);
+    }
+    std::sort(g_rt_traced_visuals_last.begin(), g_rt_traced_visuals_last.end());
     g_rt_actor_traced_last = actor;
 }
 
@@ -2109,11 +2150,22 @@ void da_rt_evict_dynamic()
 } // namespace
 #endif
 
+#if defined(DA_RT_LANE)
+namespace
+{
+u32 g_rt_scene_epoch{};
+} // namespace
+
+u32 da_rt_scene_epoch() { return g_rt_scene_epoch; }
+#endif
+
 void da_rt_scene_release()
 {
 #if defined(DA_RT_LANE)
+    ++g_rt_scene_epoch;
     // What the last scene traced names objects of a scene that is gone (their addresses come back as others').
     g_rt_traced_last.clear();
+    g_rt_traced_visuals_last.clear();
     g_rt_actor_traced_last = false;
     // The level stays: its walk is made again when an effect comes back on.
     const bool level = g_scene.level;
@@ -2179,6 +2231,16 @@ void da_rt_textures_replaced()
 bool da_rt_moving_wanted()
 {
     return da_rt_live(RtEffect::AO) || da_rt_live(RtEffect::Reflections) || da_rt_live(RtEffect::Shadows) || da_rt_live(RtEffect::GI);
+}
+
+bool da_rt_traced_visual(IRenderVisual* visual)
+{
+#if defined(DA_RT_LANE)
+    return visual && std::binary_search(g_rt_traced_visuals_last.begin(), g_rt_traced_visuals_last.end(), visual);
+#else
+    UNUSED(visual);
+    return false;
+#endif
 }
 
 bool da_rt_traces_moving(IRenderable* root)
