@@ -7,7 +7,7 @@
 
 local util = xms_nq_util
 
-local NQ_VERSION = 1
+local NQ_VERSION = 2
 local ID_PATTERN = "^[a-z0-9_]+$"
 
 -- ============================================================================ catalog
@@ -448,10 +448,12 @@ local function valid_squad_ref(v)
 end
 
 -- One concrete world object (item, container, squad, a character): the alternatives of
--- squad_ref plus a character - one person, so one object - kept as its own type because the
--- docs describe it as "this object", not "this squad".
+-- squad_ref plus a character - one person, so one object - and an object of the level or of
+-- the module's own scene by its name, kept as its own type because the docs describe it as
+-- "this object", not "this squad".
 local function valid_object_ref(v)
 	if (type(v) == "table" and type(v.character) == "string" and v.character ~= "") then return true end
+	if (type(v) == "table" and type(v.name) == "string" and v.name ~= "") then return true end
 	return valid_squad_ref(v)
 end
 
@@ -675,7 +677,7 @@ local function canon_param(st, node, slot, p, v, kind)
 		end
 		return v, true
 	elseif (t == "object_ref") then
-		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=} | {character=}" end
+		if not (valid_object_ref(v)) then return nil, false, "must be {story=} | {ref=} | {character=} | {name=}" end
 		return util.copy(v), true
 	elseif (t == "item_list") then
 		local state_ok = (kind == "item.spawn")
@@ -1772,6 +1774,25 @@ end
 -- reader still understands needs no entry. The game supports every released `nq` version, so this
 -- chain (not an equality test) is what makes an older module keep working after a game update.
 local ASSET_MIGRATE = {}
+
+-- 1 -> 2: a signal's plain name is the graph's own module's from version 2 on; in version 1 a
+-- plain name heard every module's signal of that name. A listener of an older graph keeps
+-- hearing them all: its plain name becomes "*.<name>". What it sends does not change.
+local function signals_heard_from_all(t, seen)
+	if (type(t) ~= "table" or seen[t]) then return end
+	seen[t] = true
+	if (t.kind == "event.signal" and type(t.params) == "table") then
+		local name = t.params.name
+		if (type(name) == "string" and name ~= "" and not string.find(name, ".", 1, true)) then
+			t.params.name = "*." .. name
+		end
+	end
+	for _, v in pairs(t) do signals_heard_from_all(v, seen) end
+end
+ASSET_MIGRATE[1] = function(raw)
+	signals_heard_from_all(raw, {})
+	return raw
+end
 
 function migrate(raw)
 	if (type(raw) ~= "table") then return raw end

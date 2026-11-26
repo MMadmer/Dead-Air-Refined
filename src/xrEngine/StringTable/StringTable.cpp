@@ -3,8 +3,10 @@
 
 #include "xr_level_controller.h"
 
+#include "xrCommon/xr_hash_map.h"
 #include "xrCore/XML/XMLDocument.hpp"
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_names.h"
 
 // The engine's own string file, under the name it has now and the one it had as OpenXRay.
 constexpr pcstr ENGINE_XML[] = { "grizzly.xml", "openxray.xml" };
@@ -23,20 +25,73 @@ constexpr u32 STRING_TABLE_CACHE_MAGIC = 0x31435453;
 // The bump itself matters - it drops every cache built by the racy parallel path,
 // which is how a one-time parse glitch became permanent mojibake for a player.
 // Version 4: the engine's own file folds in first, as defaults.
+// Version 5, with modules only: the ids a module defines again over another module's ride after the
+// table, so a start that reads the cache says them too; a file the game makes for a module folds in with
+// that module. A game without modules keeps version 4, and its cache, byte for byte.
 constexpr u32 STRING_TABLE_CACHE_VERSION = 4;
+constexpr u32 STRING_TABLE_CACHE_VERSION_MODULES = 5;
+u32 CacheVersion() { return XMS::Active() ? STRING_TABLE_CACHE_VERSION_MODULES : STRING_TABLE_CACHE_VERSION; }
 constexpr u32 MAX_CACHED_STRINGS = 1'000'000;
 constexpr size_t MAX_CACHED_STRING_LENGTH = 1024 * 1024;
 constexpr size_t STRING_TABLE_CACHE_HEADER_SIZE = sizeof(u32) * 5;
+// log lines per pair of modules; the ledger and xms_report.json carry every id
+constexpr u32 STRING_CLASH_LINES = 16;
 
 struct LocalizationFile
 {
     xr_string name;
     STRING_TABLE_MAP strings;
+    u16 layer{0}; // the module that serves the file; 0 for the game's
 };
+
+// One name, two modules: the ledger row and a log line, each said once per start however often the table
+// is read (a language switch reads it again).
+void ReportClashes(const STRING_TABLE_CLASHES& clashes)
+{
+    if (clashes.empty())
+        return;
+    static xr_set<xr_string> said;
+    struct Pair
+    {
+        shared_str loser, winner;
+        u32 count{0};
+    };
+    xr_vector<Pair> pairs;
+    bool added = false;
+    for (const STRING_TABLE_CLASH& clash : clashes)
+    {
+        xr_string key = xr_string(clash.id.c_str()) + '\n' + clash.loser.c_str() + '\n' + clash.winner.c_str();
+        if (!said.insert(std::move(key)).second)
+            continue;
+        const xr_string loser = xr_string(clash.loser.c_str()) + " (" + clash.loser_file.c_str() + ")";
+        const xr_string winner = xr_string(clash.winner.c_str()) + " (" + clash.winner_file.c_str() + ")";
+        XMS::AddConflict(XMS::ConflictKind::Name, (xr_string("string ") + clash.id.c_str()).c_str(), loser.c_str(),
+            winner.c_str());
+        added = true;
+        auto pair = std::find_if(pairs.begin(), pairs.end(),
+            [&clash](const Pair& p) { return p.loser == clash.loser && p.winner == clash.winner; });
+        if (pair == pairs.end())
+        {
+            pairs.push_back(Pair{clash.loser, clash.winner});
+            pair = pairs.end() - 1;
+        }
+        if (++pair->count <= STRING_CLASH_LINES)
+            Msg("! XMS: string [%s] of module [%s] (%s) is defined again by module [%s] (%s), later in the load order"
+                " - its text is the one shown", clash.id.c_str(), clash.loser.c_str(), clash.loser_file.c_str(),
+                clash.winner.c_str(), clash.winner_file.c_str());
+    }
+    for (const Pair& pair : pairs)
+        if (pair.count > STRING_CLASH_LINES)
+            Msg("! XMS: ... and %u more string id(s) of module [%s] defined again by module [%s] (xms_conflicts)",
+                pair.count - STRING_CLASH_LINES, pair.loser.c_str(), pair.winner.c_str());
+    if (added)
+        XMS::WriteReport();
+}
 
 u32 CalculateCacheSignature(const FS_FileSet& files, pcstr language)
 {
-    u32 signature = crc32(&STRING_TABLE_CACHE_VERSION, sizeof(STRING_TABLE_CACHE_VERSION));
+    const u32 version = CacheVersion();
+    u32 signature = crc32(&version, sizeof(version));
     signature = crc32(language, xr_strlen(language), signature);
     for (const FS_File& file : files)
     {
@@ -124,7 +179,8 @@ void CStringTable::Init()
     // module order = different merged table
     const u32 signature = CalculateCacheSignature(fset, pData->m_sLanguage.c_str()) ^ XMS::CompositionHash();
 
-    if (!LoadCache(cachePath, signature, pData->m_StringTable))
+    STRING_TABLE_CLASHES clashes;
+    if (!LoadCache(cachePath, signature, pData->m_StringTable, clashes))
     {
         xr_vector<LocalizationFile> files;
         files.reserve(fset.size());
@@ -144,11 +200,11 @@ void CStringTable::Init()
         });
 
         // fold order: base layer first, then modules by load order; overrides
-        // land by layer priority instead of bare filename alphabetics
+        // land by layer priority instead of bare filename alphabetics. A file the
+        // game makes for a module (its characters', its items' strings) is that module's.
         if (XMS::Active())
         {
-            // pData is a class static - no capture needed
-            const auto layer_of = [](const LocalizationFile& f) -> u16
+            for (LocalizationFile& f : files)
             {
                 string_path full;
                 xr_sprintf(full, "text" DELIMITER "%s" DELIMITER "%s", pData->m_sLanguage.c_str(), f.name.c_str());
@@ -156,12 +212,10 @@ void CStringTable::Init()
                 FS.update_path(resolved, "$game_config$", full);
                 xr_strlwr(resolved);
                 if (const auto* desc = FS.GetFileDesc(resolved))
-                    if (pcstr phys = XMS::ResolvePhysical(desc->name))
-                        return XMS::LayerOfPath(phys);
-                return 0;
-            };
+                    f.layer = XMS::OwnerLayer(desc->name);
+            }
             std::stable_sort(files.begin(), files.end(),
-                [&layer_of](const LocalizationFile& a, const LocalizationFile& b) { return layer_of(a) < layer_of(b); });
+                [](const LocalizationFile& a, const LocalizationFile& b) { return a.layer < b.layer; });
         }
 
         // Serial on purpose: this path runs only on a cache miss, and whatever it
@@ -170,10 +224,20 @@ void CStringTable::Init()
         for (LocalizationFile& file : files)
             Load(file.name.c_str(), file.strings);
 
-        for (LocalizationFile& file : files)
+        // the file of a module that defined an id last, for the ids modules define: one module's id that a
+        // module later in the load order defines again is one name taken by two
+        xr_flat_hash_map<shared_str, std::pair<size_t, unsigned>> module_owner;
+        for (size_t f = 0; f < files.size(); ++f)
         {
+            const LocalizationFile& file = files[f];
             for (const auto& [id, value] : file.strings)
             {
+                if (const size_t over = XMS::Names::Redefines(module_owner, id, f, file.layer); over != XMS::Names::None)
+                {
+                    const LocalizationFile& was = files[over];
+                    clashes.push_back({id, XMS::OwnerName(XMS::ModuleOfLayer(was.layer)), was.name.c_str(),
+                        XMS::OwnerName(XMS::ModuleOfLayer(file.layer)), file.name.c_str()});
+                }
 #ifndef MASTER_GOLD
                 if (pData->m_StringTable.find(id) != pData->m_StringTable.end())
                     Msg("* String table override [%s]", id.c_str());
@@ -181,8 +245,9 @@ void CStringTable::Init()
                 pData->m_StringTable[id] = value;
             }
         }
-        SaveCache(cachePath, signature, pData->m_StringTable);
+        SaveCache(cachePath, signature, pData->m_StringTable, clashes);
     }
+    ReportClashes(clashes);
 
     if (!translate("st_currency", pData->m_sCurrency) &&
         !translate("ui_st_money_descr", pData->m_sCurrency) && // OGSR
@@ -357,20 +422,22 @@ void CStringTable::Load(LPCSTR xml_file_full, STRING_TABLE_MAP& strings)
     }
 }
 
-bool CStringTable::LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& strings)
+bool CStringTable::LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& strings, STRING_TABLE_CLASHES& clashes)
 {
     IReader* reader = FS.r_open(cachePath);
     if (!reader)
         return false;
 
+    const u32 version = CacheVersion();
     STRING_TABLE_MAP cachedStrings;
+    STRING_TABLE_CLASHES cachedClashes;
     bool valid = reader->elapsed() >= static_cast<intptr_t>(STRING_TABLE_CACHE_HEADER_SIZE);
     u32 count = 0;
     u32 contentCrc = 0;
     if (valid)
     {
         valid = reader->r_u32() == STRING_TABLE_CACHE_MAGIC;
-        valid = valid && reader->r_u32() == STRING_TABLE_CACHE_VERSION;
+        valid = valid && reader->r_u32() == version;
         valid = valid && reader->r_u32() == signature;
         contentCrc = reader->r_u32();
         // The header signature only proves the source files did not change; the CRC
@@ -389,6 +456,20 @@ bool CStringTable::LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& s
         if (valid)
             valid = cachedStrings.emplace(id.c_str(), value.c_str()).second;
     }
+    if (valid && version == STRING_TABLE_CACHE_VERSION_MODULES)
+    {
+        const u32 clashCount = reader->elapsed() >= static_cast<intptr_t>(sizeof(u32)) ? reader->r_u32() : u32(-1);
+        valid = clashCount <= MAX_CACHED_STRINGS;
+        for (u32 i = 0; valid && i < clashCount; ++i)
+        {
+            xr_string fields[5];
+            for (xr_string& field : fields)
+                valid = valid && ReadCachedString(*reader, field);
+            if (valid)
+                cachedClashes.push_back({fields[0].c_str(), fields[1].c_str(), fields[2].c_str(), fields[3].c_str(),
+                    fields[4].c_str()});
+        }
+    }
     valid = valid && reader->eof();
     FS.r_close(reader);
 
@@ -396,14 +477,17 @@ bool CStringTable::LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& s
         return false;
 
     strings.swap(cachedStrings);
+    clashes.swap(cachedClashes);
     // Content CRC in the line on purpose: a "symbols instead of letters" report can be
     // matched against a clean rebuild of the same content by this value alone.
     Msg("StringTable: loaded cache with %u strings, content crc[%08X]", count, contentCrc);
     return true;
 }
 
-void CStringTable::SaveCache(pcstr cachePath, u32 signature, const STRING_TABLE_MAP& strings)
+void CStringTable::SaveCache(pcstr cachePath, u32 signature, const STRING_TABLE_MAP& strings,
+    const STRING_TABLE_CLASHES& clashes)
 {
+    const u32 version = CacheVersion();
     CMemoryWriter payload;
     payload.w_u32(static_cast<u32>(strings.size()));
     for (const auto& [id, value] : strings)
@@ -411,12 +495,19 @@ void CStringTable::SaveCache(pcstr cachePath, u32 signature, const STRING_TABLE_
         payload.w_stringZ(id);
         payload.w_stringZ(value);
     }
+    if (version == STRING_TABLE_CACHE_VERSION_MODULES)
+    {
+        payload.w_u32(static_cast<u32>(clashes.size()));
+        for (const STRING_TABLE_CLASH& clash : clashes)
+            for (const shared_str& field : {clash.id, clash.loser, clash.loser_file, clash.winner, clash.winner_file})
+                payload.w_stringZ(field);
+    }
     const u32 contentCrc = crc32(payload.pointer(), payload.size());
     Msg("StringTable: rebuilt %zu strings, content crc[%08X]", strings.size(), contentCrc);
 
     CMemoryWriter writer;
     writer.w_u32(STRING_TABLE_CACHE_MAGIC);
-    writer.w_u32(STRING_TABLE_CACHE_VERSION);
+    writer.w_u32(version);
     writer.w_u32(signature);
     writer.w_u32(contentCrc);
     writer.w(payload.pointer(), payload.size());

@@ -35,8 +35,8 @@ void FinishCharacters();
 
 // What the game makes for its own loaders from a module's descriptions (the characters', the
 // items'): written under $app_data_root$\xms_generated\<relative> when it changed and mounted at
-// <relative> under $game_data$.
-void PublishGenerated(const xr_string& relative, const xr_string& text);
+// <relative> under $game_data$ as a file of the module at `layer`.
+void PublishGenerated(const xr_string& relative, const xr_string& text, u16 layer);
 // Text a module wrote - UTF-8 when a tool wrote it, Windows-1251 when a person did - as the game
 // reads it, and as the text of an XML element.
 xr_string GameText(const xr_string& text);

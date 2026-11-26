@@ -2853,7 +2853,8 @@ void xms_native_set_modes(pcstr csv) { XMS::SetActiveModes(csv); }
 pcstr xms_native_active_modes() { return XMS::ActiveModesCsv(); }
 bool xms_native_mode_active(pcstr id) { return XMS::ModeActive(id); }
 
-// every mode any installed module declares: {id, title, caption, provider}
+// every mode any installed module declares: {id, title, caption, provider}, once per id - the first
+// module in load order that brings it (XMS::ModeOffered; the later ones are reported at mount)
 luabind::object xms_native_known_modes(lua_State* L)
 {
     luabind::object result = luabind::newtable(L);
@@ -2862,8 +2863,11 @@ luabind::object xms_native_known_modes(lua_State* L)
     {
         if (m.disabled)
             continue;
-        for (const XMS::ProvidedMode& mode : m.provides_modes)
+        for (size_t n = 0; n < m.provides_modes.size(); ++n)
         {
+            if (!XMS::ModeOffered(m, n))
+                continue;
+            const XMS::ProvidedMode& mode = m.provides_modes[n];
             luabind::object entry = luabind::newtable(L);
             entry["id"] = mode.id.c_str();
             entry["title"] = mode.title.c_str();
@@ -3598,6 +3602,7 @@ void RegisterModuleCommands()
     if (!Console)
         return;
     xr_vector<CCC_ModuleCommand*>& registered = module_commands();
+    bool ledger = false;
     for (const XMS::Module& m : XMS::Modules())
     {
         if (m.disabled)
@@ -3619,6 +3624,9 @@ void RegisterModuleCommands()
                     if (own == taken)
                         first = own->Owner();
                 why = first.empty() ? "the game has a console command of that name" : "a module earlier in the load order has it";
+                XMS::AddConflict(XMS::ConflictKind::Name, ("console command " + c.name).c_str(), m.id.c_str(),
+                    first.empty() ? "game" : first.c_str());
+                ledger = true;
             }
             if (why)
             {
@@ -3634,6 +3642,8 @@ void RegisterModuleCommands()
         if (!added.empty())
             Msg("* XMS: module [%s] adds console command(s): %s", m.id.c_str(), added.c_str());
     }
+    if (ledger)
+        XMS::WriteReport();
 }
 
 void UnregisterModuleCommands()

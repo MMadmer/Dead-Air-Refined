@@ -832,7 +832,7 @@ EXPORTS
     ?Load@ELightAnimLibrary@@QEAAXXZ @830
     ?Load@IGame_Level@@UEAA_NI@Z @831
     ?LoadBegin@IGame_Persistent@@QEAAXXZ @832
-    ?LoadCache@CStringTable@@AEAA_NPEBDIAEAV?$map@Vshared_str@@V1@U?$less@Vshared_str@@@std@@V?$xalloc@U?$pair@$$CBVshared_str@@V1@@std@@@@@std@@@Z @833
+    ?LoadCache@CStringTable@@AEAA_NPEBDIAEAV?$map@Vshared_str@@V1@U?$less@Vshared_str@@@std@@V?$xalloc@U?$pair@$$CBVshared_str@@V1@@std@@@@@std@@AEAV?$vector@USTRING_TABLE_CLASH@@V?$xalloc@USTRING_TABLE_CLASH@@@@@3@@Z @833
     ?LoadDraw@IGame_Persistent@@QEBAXXZ @834
     ?LoadEnd@IGame_Persistent@@QEAAXXZ @835
     ?LoadMotions@CObjectAnimator@@IEAAXPEBD@Z @836
@@ -1015,7 +1015,7 @@ EXPORTS
     ?Save@CLAItem@@QEAAXAEAVIWriter@@@Z @1013
     ?Save@ELightAnimLibrary@@QEAAXXZ @1014
     ?Save@IConsole_Command@@UEAAXPEAVIWriter@@@Z @1015
-    ?SaveCache@CStringTable@@AEAAXPEBDIAEBV?$map@Vshared_str@@V1@U?$less@Vshared_str@@@std@@V?$xalloc@U?$pair@$$CBVshared_str@@V1@@std@@@@@std@@@Z @1016
+    ?SaveCache@CStringTable@@AEAAXPEBDIAEBV?$map@Vshared_str@@V1@U?$less@Vshared_str@@@std@@V?$xalloc@U?$pair@$$CBVshared_str@@V1@@std@@@@@std@@AEBV?$vector@USTRING_TABLE_CLASH@@V?$xalloc@USTRING_TABLE_CLASH@@@@@3@@Z @1016
     ?SaveCamVec@CCameraBase@@UEAAXXZ @1017
     ?SelectCommand@CConsole@@QEAAXXZ @1018
     ?SelectEnv@CEnvironment@@AEAAXPEAUEnvVec@1@AEAPEAVCEnvDescriptor@@M@Z @1019

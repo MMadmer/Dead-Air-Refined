@@ -1754,6 +1754,7 @@ private:
         case XMS::ConflictKind::LtxKey: return "ltx key";
         case XMS::ConflictKind::XmlPatch: return "xml patch";
         case XMS::ConflictKind::Script: return "script";
+        case XMS::ConflictKind::Name: return "name";
         default: return "other";
         }
     }

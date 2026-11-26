@@ -6,6 +6,7 @@
 #include "xms_core.h"
 #include "xms_assets.h"
 #include "xms_catalog.h"
+#include "xms_names.h"
 #include "xrCore/LocatorAPI.h"
 
 #include <io.h>
@@ -1563,6 +1564,22 @@ void apply_staged_updates(pcstr game_root)
     // fails while anything is left inside, which is the point
     RemoveDirectoryA(root.substr(0, root.size() - 1).c_str());
 }
+
+// The modes the enabled modules bring, in load order, with the declaration of each id that counts.
+std::vector<std::vector<Names::Declaration>> mode_declarations(xr_vector<const Module*>& owners)
+{
+    xr_vector<xr_vector<xr_string>> ids;
+    for (const Module& m : st().modules)
+    {
+        if (m.disabled)
+            continue;
+        owners.push_back(&m);
+        xr_vector<xr_string>& own = ids.emplace_back();
+        for (const ProvidedMode& p : m.provides_modes)
+            own.push_back(p.id);
+    }
+    return Names::FirstDeclarations(ids);
+}
 } // namespace
 
 // ---- public API ------------------------------------------------------------
@@ -1658,6 +1675,27 @@ void InitializeAndMount()
         }
     }
     s.active = enabled != 0;
+    // a mode id is one for the whole game: the first module in load order that brings it is the one the
+    // new-game screen offers (ModeOffered)
+    {
+        xr_vector<const Module*> owners;
+        const auto declared = mode_declarations(owners);
+        for (size_t i = 0; i < owners.size(); ++i)
+            for (size_t n = 0; n < declared[i].size(); ++n)
+            {
+                if (declared[i][n].counts)
+                    continue;
+                const Module& m = *owners[i];
+                const Module& first = *owners[declared[i][n].keeper];
+                const xr_string& id = m.provides_modes[n].id;
+                if (&first == &m)
+                    Msg("! XMS: module [%s] brings mode [%s] twice - the first declaration stays", m.id.c_str(), id.c_str());
+                else
+                    Msg("! XMS: module [%s] brings mode [%s], which module [%s] brings earlier in the load order - the "
+                        "new-game screen offers [%s]'s", m.id.c_str(), id.c_str(), first.id.c_str(), first.id.c_str());
+                AddConflict(ConflictKind::Name, ("mode " + id).c_str(), m.id.c_str(), first.id.c_str());
+            }
+    }
     Msg("* XMS: %u module(s) enabled, %zu overlay file(s), %zu conflict(s)", enabled, s.overlays.size(),
         s.conflicts.size());
     Assets::Build();
@@ -1848,7 +1886,7 @@ bool MarkStagedInstall(pcstr module_id, pcstr version, xr_string& err)
     return write_ready(module_id, version, "modules", module_id, "install", err);
 }
 
-bool MountFile(pcstr relative_path, pcstr physical_path)
+bool MountFile(pcstr relative_path, pcstr physical_path, u16 layer)
 {
     State& s = st();
     FS_Path* gamedata = nullptr;
@@ -1867,6 +1905,7 @@ bool MountFile(pcstr relative_path, pcstr physical_path)
         overlay.phys = physical_path;
         overlay.size = u32(info.st_size);
         overlay.modif = u32(info.st_mtime);
+        overlay.layer = layer;
         FS.xms_register(vpath.c_str(), overlay.size, overlay.modif);
         return true;
     }
@@ -1875,6 +1914,7 @@ bool MountFile(pcstr relative_path, pcstr physical_path)
     overlay.phys = physical_path;
     overlay.size = u32(info.st_size);
     overlay.modif = u32(info.st_mtime);
+    overlay.layer = layer;
     const CLocatorAPI::file* registered = FS.xms_register(overlay.vpath.c_str(), overlay.size, overlay.modif);
     if (!registered)
         return false;
@@ -2002,6 +2042,26 @@ u16 LayerOfPath(pcstr physical_path)
             return m.layer;
     }
     return 0;
+}
+
+u16 OwnerLayer(pcstr registered_name)
+{
+    const State& s = st();
+    if (!registered_name || s.redirect.empty())
+        return 0;
+    const auto it = s.redirect.find(registered_name);
+    return it != s.redirect.end() ? s.overlays[it->second].layer : 0;
+}
+
+const Module* FileOwner(pcstr path_alias, pcstr relative_path)
+{
+    if (!st().active || !path_alias || !relative_path)
+        return nullptr;
+    string_path full;
+    FS.update_path(full, path_alias, relative_path);
+    xr_strlwr(full);
+    const CLocatorAPI::file* desc = FS.GetFileDesc(full);
+    return desc ? ModuleOfLayer(OwnerLayer(desc->name)) : nullptr;
 }
 
 bool SetModuleEnabled(pcstr id, bool enabled, xr_string& err)
@@ -2165,6 +2225,7 @@ pcstr kind_name(ConflictKind kind)
     case ConflictKind::LtxKey: return "ltx_key";
     case ConflictKind::XmlPatch: return "xml_patch";
     case ConflictKind::Script: return "script";
+    case ConflictKind::Name: return "name";
     default: return "other";
     }
 }
@@ -2422,6 +2483,29 @@ bool ModuleRunsIn(const Module& m, pcstr mode_id)
     for (const xr_string& id : m.modes)
         if (id == PlainMode ? wanted.empty() : id == wanted)
             return true;
+    return false;
+}
+
+const Module* ModeProvider(pcstr mode_id)
+{
+    if (!mode_id || !mode_id[0])
+        return nullptr;
+    const xr_string wanted = lower_copy(mode_id);
+    for (const Module& m : st().modules)
+        if (!m.disabled)
+            for (const ProvidedMode& p : m.provides_modes)
+                if (p.id == wanted)
+                    return &m;
+    return nullptr;
+}
+
+bool ModeOffered(const Module& m, size_t index)
+{
+    xr_vector<const Module*> owners;
+    const auto declared = mode_declarations(owners);
+    for (size_t i = 0; i < owners.size(); ++i)
+        if (owners[i] == &m)
+            return index < declared[i].size() && declared[i][index].counts;
     return false;
 }
 

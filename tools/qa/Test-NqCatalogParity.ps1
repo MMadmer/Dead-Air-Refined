@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
     Every kind the NQ catalog declares has an implementation, and every
-    implementation is declared.
+    implementation is declared; the format the catalog says the game reads is
+    the loader's.
 
 .DESCRIPTION
     The catalog is the contract the editor reads and the runtime executes. A
@@ -50,7 +51,19 @@ if ($orphan.Count) {
     $orphan | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
 }
 
-if ($missing.Count -or $orphan.Count) {
+# the editor refuses a graph newer than [nq.catalog] format: it has to be what the loader reads
+$format = $null
+foreach ($line in Get-Content -LiteralPath $catalogPath) {
+    if ($line -match '^\s*format\s*=\s*(\d+)') { $format = [int]$Matches[1]; break }
+}
+$loader = Get-Content -LiteralPath (Join-Path $stage 'scripts\xms_nq_load.script') -Raw
+$reads = if ($loader -match '(?m)^(?:local\s+)?NQ_VERSION\s*=\s*(\d+)') { [int]$Matches[1] } else { $null }
+$formatBad = ($null -eq $format) -or ($format -ne $reads)
+if ($formatBad) {
+    Write-Host ("catalog format {0} is not the loader's NQ_VERSION {1}" -f $format, $reads) -ForegroundColor Red
+}
+
+if ($missing.Count -or $orphan.Count -or $formatBad) {
     Write-Host 'NQ CATALOG PARITY: FAILED' -ForegroundColor Red
     exit 1
 }

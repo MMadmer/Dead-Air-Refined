@@ -138,6 +138,42 @@ local function patrol_exists(path)
 	return ok and r == true
 end
 
+-- A path a module drew is in the level as "<module>.<name>", and under its plain name while
+-- nobody else holds it (xms_world.cpp): a name a graph or an order of a module writes reaches
+-- that module's own path first, so two modules that both draw patrol_1 walk their own. A copy
+-- of the parameters with route, look and place.path so resolved.
+local function own(ctx, p)
+	local mod = ctx and ctx.def and ctx.def.module
+	if (type(p) ~= "table" or type(mod) ~= "string" or mod == "") then return p end
+	local function one(name)
+		if (type(name) ~= "string" or name == "") then return name end
+		local q = mod .. "." .. name
+		return patrol_exists(q) and q or name
+	end
+	local c = {}
+	for k, v in pairs(p) do c[k] = v end
+	c.route = one(p.route)
+	if (type(p.look) == "string") then c.look = one(p.look) end
+	if (type(p.place) == "table" and p.place.path) then
+		local place = {}
+		for k, v in pairs(p.place) do place[k] = v end
+		place.path = one(p.place.path)
+		c.place = place
+	end
+	return c
+end
+
+-- The module a placed NPC came with: the engine's answer, else the name the spawn composed
+-- ("<module>.<name>"; a module id may hold dots, so the part before the first dot is a guess).
+local function module_of_object(go)
+	if (xms and type(xms.object_owner) == "function") then
+		local ok, m = pcall(xms.object_owner, go:id())
+		if (ok and type(m) == "string" and m ~= "") then return m end
+	end
+	local name = go:name()
+	return type(name) == "string" and string.match(name, "^([^%.]+)%.") or nil
+end
+
 -- the last point of a path: where "has arrived" is measured against
 local function path_end(path)
 	if not (patrol_exists(path)) then return nil end
@@ -697,7 +733,7 @@ end
 -- The path a step walks: the author's own, or the slot of a runtime one. The
 -- second value is the destination when there is no drawn path to walk.
 local function step_path(ctx, p, kind, tag)
-	local dest = p.place
+	local dest = own(ctx, p).place
 	if (type(dest) ~= "table") then error(kind .. ": no destination") end
 	if (dest.path) then
 		if not (patrol_exists(dest.path)) then
@@ -713,7 +749,7 @@ end
 
 K["npc.goto"] = {
 	begin = function(ctx)
-		local p = ctx.params
+		local p = own(ctx, ctx.params)
 		if (p.look and p.look ~= "" and not patrol_exists(p.look)) then
 			error("npc.goto: there is no waypoint path '" .. tostring(p.look) .. "'")
 		end
@@ -770,7 +806,8 @@ K["npc.goto"] = {
 			-- case on a table is reached at the foot of the table
 			pos = path_end(step.path) or now
 		else
-			pos = path_end(p.place and p.place.path)
+			local op = own(ctx, p)
+			pos = path_end(op.place and op.place.path)
 			if not (pos) then return "done" end
 		end
 		for _, id in ipairs(targets(ctx, p)) do
@@ -784,6 +821,7 @@ K["npc.goto"] = {
 
 K["npc.hold"] = {
 	run = function(ctx, p)
+		p = own(ctx, p)
 		local tag = tag_of(ctx)
 		local path, dest = step_path(ctx, p, "npc.hold", tag)
 		local look = (p.look and p.look ~= "" and p.look ~= path and patrol_exists(p.look)) and p.look or nil
@@ -1062,6 +1100,7 @@ end
 -- place. Instant, like every other posting: the role patrols until the next step.
 K["npc.patrol"] = {
 	run = function(ctx, p)
+		p = own(ctx, p)
 		local tag = tag_of(ctx)
 		if (p.route and p.route ~= "") then
 			if not (patrol_exists(p.route)) then
@@ -1227,6 +1266,7 @@ end
 
 -- ---- what each order hands to the schemes ($PATH is the NPC's runtime path)
 local function guard_spec(ctx, p, id)
+	p = own(ctx, p)
 	local look = (p.look and p.look ~= "" and patrol_exists(p.look)) and p.look or nil
 	local dest = p.place
 	if (type(dest) == "table" and dest.path) then
@@ -1249,6 +1289,7 @@ local function guard_spec(ctx, p, id)
 end
 
 local function patrol_spec(ctx, p, id)
+	p = own(ctx, p)
 	if (p.route and p.route ~= "") then
 		if not (patrol_exists(p.route)) then error("order.patrol: there is no waypoint path '" .. tostring(p.route) .. "'") end
 		return { kind = "patrol", text = walker_text("$TAG", p.route, p.move) }
@@ -1390,7 +1431,7 @@ local function adopt(id, go)
 	local p = { route = r("route"), look = r("look"), move = r("move"),
 				radius = tonumber(r("radius") or ""), distance = tonumber(r("distance") or ""),
 				cover = r("cover"), camp = r("camp") == "true" }
-	local ctx = { uid = "spawn", qs = { refs = {} }, refs = {} }
+	local ctx = { uid = "spawn", qs = { refs = {} }, refs = {}, def = { module = module_of_object(go) } }
 	local kind, build = r("order"), nil
 	if (kind == "guard") then build = guard_spec
 	elseif (kind == "animpoint") then build = animpoint_spec
@@ -1490,7 +1531,8 @@ end
 -- ============================================================================ behaviour conditions
 K["npc_at_place"] = {
 	test = function(ctx, p)
-		local dest = p.place
+		-- the path a step of the module walks: its own first, as npc.goto reads it
+		local dest = own(ctx, p).place
 		local pos
 		if (type(dest) == "table" and dest.path) then pos = path_end(dest.path)
 		else pos = destination_pos(ctx, dest) end

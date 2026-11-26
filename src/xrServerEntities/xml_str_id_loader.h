@@ -3,6 +3,7 @@
 #include "Common/object_broker.h"
 
 #include "xrCommon/xr_hash_map.h"
+#include "xrCore/XMS/xms_core.h"
 #include "xrUICore/XML/xrUIXmlParser.h"
 
 // T_INIT -  класс где определена статическая InitXmlIdToIndex
@@ -20,6 +21,32 @@ struct ITEM_DATA
 typedef xr_vector<ITEM_DATA> T_VECTOR;
 
 void _destroy_item_data_vector_cont(T_VECTOR* vec);
+
+// XMS: an id of one of these lists is one name for the whole game. When a module's file is one side of a
+// duplicate, both owners are said - the first file read keeps the id, as it always did. False when no
+// module is involved: the caller says it the old way.
+inline bool xms_duplicate_id(pcstr tag, pcstr id, pcstr kept_file, pcstr dropped_file)
+{
+    if (!XMS::Active())
+        return false;
+    // what a module wrote has no length limit: no fixed buffer
+    const auto owner = [](pcstr file)
+    {
+        const xr_string relative = xr_string("gameplay" DELIMITER) + file;
+        return XMS::FileOwner(CONFIG_PATH, relative.c_str());
+    };
+    const XMS::Module* kept = owner(kept_file);
+    const XMS::Module* dropped = owner(dropped_file);
+    if (!kept && !dropped)
+        return false;
+    Msg("! XMS: %s [%s] of %s (%s) is defined again by %s (%s) - the first one keeps the id", tag, id,
+        XMS::OwnerName(kept), kept_file, XMS::OwnerName(dropped), dropped_file);
+    const xr_string subject = xr_string(tag) + " " + id;
+    const xr_string loser = xr_string(XMS::OwnerName(dropped)) + " (" + dropped_file + ")";
+    const xr_string winner = xr_string(XMS::OwnerName(kept)) + " (" + kept_file + ")";
+    XMS::AddConflict(XMS::ConflictKind::Name, subject.c_str(), loser.c_str(), winner.c_str());
+    return true;
+}
 
 #define TEMPLATE_SPECIALIZATION template <typename T_INIT>
 #define CSXML_IdToIndex CXML_IdToIndex<T_INIT>
@@ -129,13 +156,16 @@ void CSXML_IdToIndex::InitInternal(bool crashOnFail /*= true*/, bool ignoreMissi
     string_path xml_file;
     int count = _GetItemCount(file_str);
     int index = 0;
-    xr_flat_hash_map<shared_str, u8> knownIds;
+    // an id -> the file that gave it, to name both files of a duplicate
+    xr_flat_hash_map<shared_str, u32> knownIds;
+    xr_vector<xr_string> files_read(size_t(std::max(count, 0)));
+    bool reported = false;
     for (int it = 0; it < count; ++it)
     {
         _GetItem(file_str, it, xml_file);
 
         CUIXml* uiXml = xr_new<CUIXml>();
-        xr_string xml_file_full;
+        xr_string& xml_file_full = files_read[it];
         xml_file_full = xml_file;
         xml_file_full += ".xml";
 
@@ -159,11 +189,17 @@ void CSXML_IdToIndex::InitInternal(bool crashOnFail /*= true*/, bool ignoreMissi
             }
 
             const shared_str itemId = item_name;
-            if (!knownIds.emplace(itemId, 0).second)
+            const auto [known, fresh] = knownIds.emplace(itemId, u32(it));
+            if (!fresh)
             {
+                if (xms_duplicate_id(tag_name, item_name, files_read[known->second].c_str(), xml_file_full.c_str()))
+                    reported = true;
+                else
+                {
 #ifndef MASTER_GOLD
-                Msg("! duplicate %s with id[%s] in %s", tag_name, item_name, xml_file_full);
+                    Msg("! duplicate %s with id[%s] in %s", tag_name, item_name, xml_file_full.c_str());
 #endif
+                }
                 continue;
             }
 
@@ -180,6 +216,9 @@ void CSXML_IdToIndex::InitInternal(bool crashOnFail /*= true*/, bool ignoreMissi
         if (0 == items_num)
             delete_data(uiXml);
     }
+    // the lists are read when the game first asks for one, after the report was written
+    if (reported)
+        XMS::WriteReport();
 }
 
 #undef TEMPLATE_SPECIALIZATION

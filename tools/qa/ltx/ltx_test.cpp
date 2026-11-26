@@ -1,10 +1,12 @@
 // What a module's config patches and items say, without the game: tools\qa\ltx\Run-LtxQa.ps1.
 // The .ltxp reader with #file (src/xrCore/XMS/xms_ltxp.cpp), the rule a change follows into the
 // sections that inherit it (xms_inherit.h) and what an .itemasset asks of the configs (xms_items.cpp).
+// Who keeps a name of the whole game two owners take (xms_names.h, XMS_ARCHITECTURE.md 13.1).
 
 #include "xrCore/XMS/xms_inherit.h"
 #include "xrCore/XMS/xms_items.h"
 #include "xrCore/XMS/xms_ltxp.h"
+#include "xrCore/XMS/xms_names.h"
 #include "xrCore/XMS/xms_netrule.h"
 #include "xrCore/XMS/xms_tables.h"
 
@@ -213,6 +215,84 @@ static int network_rule_cases()
                 c.line);
             ++failed;
         }
+    }
+    return failed;
+}
+
+// Names of the whole game (XMS_ARCHITECTURE.md 13.1): who keeps one two owners take.
+static int name_cases()
+{
+    int failed = 0;
+    const auto check = [&failed](bool ok, const char* what)
+    {
+        std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
+        failed += ok ? 0 : 1;
+    };
+    using XMS::Names::None;
+
+    // the string table's fold: files in order, the game's (owner 0) first
+    {
+        std::map<std::string, std::pair<size_t, unsigned>> owners;
+        check(XMS::Names::Redefines(owners, std::string("st_a"), 0, 0) == None, "a string of the game is no module's");
+        check(XMS::Names::Redefines(owners, std::string("st_a"), 1, 1) == None,
+            "a module that defines a string of the game again is what the fold is for");
+        check(XMS::Names::Redefines(owners, std::string("st_a"), 2, 1) == None,
+            "a module that defines its own string twice is no clash");
+        check(XMS::Names::Redefines(owners, std::string("st_a"), 3, 2) == 2,
+            "a module that defines another module's string again names that module's last file");
+        check(XMS::Names::Redefines(owners, std::string("st_a"), 4, 3) == 3, "and the next one names the one before it");
+        check(XMS::Names::Redefines(owners, std::string("st_b"), 5, 2) == None, "a string nobody else defines is no clash");
+    }
+
+    // the modes the modules bring, in load order
+    {
+        const std::vector<std::vector<std::string>> ids = {{"night", "day", "night"}, {"day", "dusk"}, {"dusk"}, {}};
+        const auto d = XMS::Names::FirstDeclarations(ids);
+        check(d.size() == 4 && d[0].size() == 3 && d[1].size() == 2 && d[2].size() == 1 && d[3].empty(),
+            "every declaration is answered");
+        check(d[0][0].counts && d[0][0].keeper == 0 && d[0][1].counts, "the first module's modes count");
+        check(!d[0][2].counts && d[0][2].keeper == 0, "a mode a module declares twice counts once");
+        check(!d[1][0].counts && d[1][0].keeper == 0, "a mode an earlier module brings stays that module's");
+        check(d[1][1].counts && d[1][1].keeper == 1, "a mode nobody brought before counts");
+        check(!d[2][0].counts && d[2][0].keeper == 1, "the keeper is the first module that brought it, not the first one");
+    }
+
+    // a level name several modules bring: the level the game opens goes first
+    {
+        using Entry = std::pair<std::string, std::string>;
+        std::vector<Entry> levels = {{"swamp", "m\\a\\gamedata\\levels\\swamp\\level.ai"}, {"farm", "m\\a\\farm"},
+            {"swamp", "M\\B\\gamedata\\levels\\SWAMP\\Level.ai"}, {"pier", "m\\b\\pier"}, {"pier", "m\\c\\pier"}};
+        const auto name = [](const Entry& e) -> const std::string& { return e.first; };
+        const auto path = [](const Entry& e) -> const std::string& { return e.second; };
+        XMS::Names::ServedFirst(levels, name, path, [](const std::string& level)
+        {
+            return level == "swamp" ? std::string("m\\b\\gamedata\\levels\\swamp\\level.ai") :
+                                      std::string(level == "pier" ? "m\\x\\pier" : "");
+        });
+        check(levels[0].second[2] == 'B' && levels[1].first == "swamp" && levels[2].first == "farm",
+            "the level whose files the game opens goes first, whatever the case of its path");
+        check(levels[3].second == "m\\b\\pier" && levels[4].second == "m\\c\\pier",
+            "when none of them is the one the game opens, the order stays");
+    }
+
+    // the story name of an object's custom data, as the scripts read it
+    {
+        bool has = false;
+        check(XMS::Names::StoryNameIn("[logic]\nactive = walker\n[story_object]\nstory_id = mod_trader\n", has) ==
+                  "mod_trader" && has, "story_id = <name>");
+        check(XMS::Names::StoryNameIn("[story_object]\nmod_guard\n", has) == "mod_guard" && has, "a bare name");
+        check(XMS::Names::StoryNameIn("[story_object]\n; who\n\n  story_id =  spaced  ; note\n", has) == "spaced",
+            "comments and blanks before the line, spaces around it");
+        check(XMS::Names::StoryNameIn("[Story_Object]\r\nstory_id = x\r\n", has) == "x", "the section in any case, CRLF");
+        check(XMS::Names::StoryNameIn("[story_object]\n[logic]\nstory_id = y\n", has).empty() && has,
+            "an empty section names nothing, and the config section is not asked");
+        check(XMS::Names::StoryNameIn("[logic]\nstory_object = 1\n", has).empty() && !has, "no section, no name");
+        check(XMS::Names::StoryNameIn("[story_object]\nstory_id =\n", has) == "story_id",
+            "story_id with no value is the name story_id, as the scripts take it");
+        check(XMS::Names::WithoutStorySection("[logic]\r\nactive = a\r\n[story_object]\r\nstory_id = x\r\n[spawner]\r\n"
+                                              "cond = 1\r\n") == "[logic]\r\nactive = a\r\n[spawner]\r\ncond = 1\r\n",
+            "the custom data loses its [story_object] and nothing else");
+        check(XMS::Names::WithoutStorySection("[story_object]\nstory_id = x").empty(), "a last line without its end");
     }
     return failed;
 }
@@ -526,6 +606,7 @@ int main()
     expect(XMS::ItemValueText(n, text) && text == "-3", "a whole number is written whole");
 
     failures += network_rule_cases();
+    failures += name_cases();
 
     std::printf("%d failure(s)\n", failures);
     return failures ? 1 : 0;

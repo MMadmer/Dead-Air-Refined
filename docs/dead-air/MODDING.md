@@ -248,6 +248,23 @@ Runtime facts:
   section, key or xml node — matching overlay files plus the ledger rows.
 - Same-path files in two modules collide at the VFS level (last layer wins,
   ledger row); prefer `patch/` directives over shipping whole config files.
+- Some names are one for the whole game, whoever brings them: config sections,
+  string ids, dialog ids, info portions, character and specific character ids,
+  story names, smart terrains, level names, mode ids, console commands and new
+  files under `gamedata`. Give yours a name that carries the module id as a whole
+  word - bounded by the start or the end of the name or by `_`, `.` or `-`:
+  `<module>_rifle`, `wpn_<module>_ak74` and `st_<module>_items.xml` all count,
+  `<module>x` does not. `<module>_<name>` is the simple way; a prefix the game's
+  scripts tell things apart by (`wpn_` and the like) stays in front of it. When two
+  modules take one name anyway, the game neither stops nor refuses to start: one
+  keeps it - the first one read for an id of an xml list, an item's section, a
+  story name, a smart terrain, a mode and a console command; the later one for a
+  string id and a file, as the fold and the file system always had it (a config
+  section two modules write is merged key by key); for a level, the one whose
+  files the game loads - and the other is left out or loses the name. The log says
+  so in a `! XMS:` line naming the name and both modules, and `xms_conflicts`,
+  `xms_why <name>` and `appdata/xms_report.json` list it (`XMS_ARCHITECTURE.md`
+  13.1).
 - Lua API: `xms.modules()`, `xms.require`, `xms.hook(path, fn, {mode, priority})`
   (pre/post/around), `game_object:add_callback(type, id, fn[, priority])` /
   `remove_callback(type, id)`, `xms.registry.get(name)`,
@@ -690,8 +707,12 @@ links  = 0-1:1, 1-2:1, 2-0:1   ; from-to:probability
 mode   = my_campaign      ; optional, as on any op
 ```
 
-A point more than 15 m from the navmesh, or a name the level already has, is
-refused - a module path never replaces the game's.
+A module's path is registered as `<module>.<name>`, so two modules that both
+draw `patrol_1` walk their own; the plain name points at it too while nobody
+holds it - the level, or a module registered before. A graph of the module
+names its path plainly and reaches its own first; another module's is named in
+full. A point more than 15 m from the navmesh refuses the path - a module path
+never replaces the game's.
 
 **A placed stalker's standing order** rides in its custom data, and the orders
 runtime adopts it once, the first time the NPC comes online:
@@ -707,6 +728,23 @@ target   = actor           ; follow: actor or a story id
 distance = 3               ; follow
 hostile  = true            ; an enemy of the player from the start
 ```
+
+**A placed stash** is an `inventory_box` (the visible box is level geometry,
+the stash its invisible case at the same place). Every inventory box of the
+world is one the game may fill with a random stash's loot, and one the
+stalkers who search stashes walk to; a box says otherwise in its custom data:
+
+```ini
+[xms_stash]
+random = false   ; no random stash's loot is ever put in it
+loot   = false   ; no NPC searches it or takes what is in it
+```
+
+A key left out, or a box without the section, is `true`: it is a box like
+any other, as before the section existed. A quest finds a placed stash by the
+name its object has in the module's scene (`{ name = "<object>" }`): the spawn
+composer names it `<module>.<object>`, and the module's own is found first.
+A stash needs no story id.
 
 While the game runs, quests change all of this: `world.transition`,
 `world.area`, `world.rule`, the condition `transition_open`, and the `order.*`

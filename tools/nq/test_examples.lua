@@ -4633,6 +4633,157 @@ do
 end
 if (failed > 0) then fail_dump() end
 
+-- What a quest lays out for the player is no NPC's to take while the quest runs
+-- (keep_from_npcs); a restrictor spawned with a radius is a zone; an object of the level or
+-- of the module's scene is named by its name. Its own function: the main chunk is at Lua's
+-- 200-local ceiling.
+do
+local function z32_run()
+section("(z32) keep_from_npcs, a spawned restrictor's sphere, an object by its name")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+mock.move_actor(0, 0, 0)
+mock.add_container("inventory_box", "z32_box", false)
+-- the engine's restrictor methods, on the mock's server entities
+local se_mt = getmetatable(mock.new_se("probe"))
+se_mt.clear_shapes = function(self) self._shapes = {} end
+se_mt.add_sphere = function(self, offset, r) self._shapes = self._shapes or {} table.insert(self._shapes, r) end
+local placed = mock.new_se("space_restrictor")
+placed._name = "mod_a.z32_zone"
+-- an object of the level of the same plain name: the module's own is found first
+local level_own = mock.new_se("space_restrictor")
+level_own._name = "z32_zone"
+mock.overrides["mod_a/kp.nqasset"] = [[return { nq = 1, id = "kp", nodes = {
+	{ id = "start", kind = "trigger.start", out = { next = "make" } },
+	{ id = "make", kind = "flow.step", on_enter = {
+		{ kind = "item.spawn", params = { where = { into = { story = "z32_box" } }, section = "wpn_ak74", ref = "kept" } },
+		{ kind = "item.spawn", params = { where = { into = { story = "z32_box" } }, section = "medkit", keep_from_npcs = false, ref = "free" } },
+		{ kind = "spawn.object", params = { section = "space_restrictor", place = { level = "l01_escape", pos = { 5, 0, 5 } }, radius = 4, ref = "zone" } },
+		{ kind = "object.remove", params = { target = { name = "z32_zone" } } },
+	}, out = { next = "wait" } },
+	{ id = "wait", kind = "wait.when", cond = { { kind = "has_info", params = { info = "z32_end" } } }, out = { done = "fin" } },
+	{ id = "fin", kind = "flow.end" },
+} }]]
+mock.first_update()
+local core = xms_nq
+local qs = core.quest_state("mod_a.kp")
+check(qs ~= nil and qs.status == "active", "the quest waits")
+local kept_id = qs and qs.refs.kept and qs.refs.kept.id
+local free_id = qs and qs.refs.free and qs.refs.free.id
+check(kept_id ~= nil and core.kept_from_npcs(kept_id), "an item spawned with the default is kept from NPCs")
+check(free_id ~= nil and not core.kept_from_npcs(free_id), "keep_from_npcs = false leaves it to anyone")
+local zone = qs and qs.refs.zone and mock.se[qs.refs.zone.id]
+check(zone ~= nil and zone._shapes ~= nil and zone._shapes[1] == 4, "a restrictor spawned with a radius is that sphere")
+check(mock.se[placed.id] == nil, "object.remove takes away an object named by its name in the module's scene")
+check(mock.se[level_own.id] ~= nil, "the level's object of the same plain name is left alone")
+-- the kept instances outlive a save and a load
+mock.ticks(1)
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+check(core.kept_from_npcs(kept_id), "kept after a save and a load")
+-- an id the simulator hands to something else is no quest item
+local se = mock.se[kept_id]
+se._section = "bread"
+check(not core.kept_from_npcs(kept_id), "an id now worn by another section is not kept")
+se._section = "wpn_ak74"
+-- the quest ends: what it kept is anyone's
+db.actor:give_info_portion("z32_end")
+mock.ticks(3)
+check(core.quest_state("mod_a.kp").status == "completed", "the quest ran to its end")
+check(not core.kept_from_npcs(kept_id), "a quest that ended keeps nothing")
+se_mt.clear_shapes, se_mt.add_sphere = nil, nil
+mock.overrides["mod_a/kp.nqasset"] = nil
+end
+z32_run()
+end
+if (failed > 0) then fail_dump() end
+
+-- A signal's plain name is its own module's from version 2 of the format: two modules that
+-- both send "done" no longer start each other's quests. "<module>.<name>" listens to one other
+-- module, "*.<name>" to every module; a version 1 graph keeps hearing every module (its plain
+-- names are lifted to "*.<name>"). Its own function: the main chunk is at the 200-local ceiling.
+do
+local function z33_run()
+section("(z33) signals: a plain name is the own module's from nq 2; nq 1 graphs keep hearing all")
+setup()
+for _, f in ipairs({ "linear_fetch", "dialog_branching", "parallel_triggers" }) do
+	mock.deleted["mod_a/" .. f .. ".nqasset"] = true
+end
+local function listener(id, nq, name)
+	return "return { nq = " .. nq .. ", id = \"" .. id .. "\", vars = { n = 0 }, nodes = {\n" ..
+		"{ id = \"t\", kind = \"trigger.when\", params = { [\"repeat\"] = true }, cond = { { kind = \"event.signal\", params = { name = \"" .. name .. "\" } } }, out = { next = \"s\" } },\n" ..
+		"{ id = \"s\", kind = \"flow.step\", on_enter = { { kind = \"var.add\", params = { name = \"n\", delta = 1 } } } },\n} }"
+end
+mock.overrides["mod_a/own2.nqasset"] = listener("own2", 2, "done")
+mock.overrides["mod_a/any2.nqasset"] = listener("any2", 2, "*.done")
+mock.overrides["mod_a/b2.nqasset"] = listener("b2", 2, "mod_b.done")
+mock.overrides["mod_a/old1.nqasset"] = listener("old1", 1, "done")
+mock.first_update()
+local core = xms_nq
+local function hits(id) local q = core.quest_state("mod_a." .. id) return q and q.vars.n or 0 end
+core.emit({ name = "signal", signal = "done", module = "mod_b" })
+mock.ticks(2)
+check(hits("own2") == 0, "nq 2: another module's 'done' is not the own module's")
+check(hits("any2") == 1 and hits("b2") == 1 and hits("old1") == 1, "nq 2: *.done and mod_b.done hear it, so does the nq 1 graph")
+core.emit({ name = "signal", signal = "done", module = "mod_a" })
+mock.ticks(2)
+check(hits("own2") == 1, "nq 2: the own module's 'done' is heard")
+check(hits("b2") == 1, "nq 2: mod_b.done does not hear mod_a")
+check(hits("any2") == 2 and hits("old1") == 2, "every module's signal is heard by *.done and by the nq 1 graph")
+-- a dotted name sent as it is (a script's, or a graph of before version 2) is heard by that name
+mock.overrides["mod_a/dot1.nqasset"] = listener("dot1", 1, "phase.two")
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+core.emit({ name = "signal", signal = "phase.two", module = "mod_c" })
+mock.ticks(2)
+core.emit({ name = "signal", signal = "phase.two" })
+mock.ticks(2)
+check(hits("dot1") == 2, "a dotted listener of version 1 hears the signal of that very name")
+-- and a listener of version 1 that names a module and a dotted signal (`mod_c.x.go`) hears it
+mock.overrides["mod_a/dot2.nqasset"] = listener("dot2", 1, "mod_c.x.go")
+mock.rebuild()
+mock.first_update()
+core = xms_nq
+core.emit({ name = "signal", signal = "x.go", module = "mod_c" })
+mock.ticks(2)
+check(hits("dot2") == 1, "a listener of version 1 hears <module>.<dotted signal>")
+for _, f in ipairs({ "own2", "any2", "b2", "old1", "dot1", "dot2" }) do mock.overrides["mod_a/" .. f .. ".nqasset"] = nil end
+end
+z33_run()
+end
+if (failed > 0) then fail_dump() end
+
+-- A module's waypoint path is "<module>.<name>" in the level, and its plain name too while
+-- nobody else holds it: a graph of the module reaches its own path first, so two modules that
+-- both draw patrol_1 walk their own; a name nobody of the module drew is the level's.
+section("(z34) a module's own path is reached first by its plain name")
+setup()
+mock.first_update()
+do
+	local BK = xms_nq_behaviour.kinds()
+	mock.add_path("patrol_1")
+	mock.add_path("mod_b.patrol_1")
+	mock.add_path("mod_x.patrol_1")
+	local ictx = { uid = "mod_b.pat#1", node_id = "p", def = { module = "mod_b" },
+		qs = { roles = { a = { ids = { wolf:id() } } }, steps = {}, refs = {} } }
+	BK["npc.patrol"].run(ictx, { who = "a", route = "patrol_1" })
+	local rec = mock.applied[wolf:id()]
+	check(rec and string.find(rec.text, "path_walk = mod_b.patrol_1", 1, true) ~= nil, "the graph's module walks its own patrol_1")
+	ictx.def.module = "mod_c"
+	BK["npc.patrol"].run(ictx, { who = "a", route = "patrol_1" })
+	rec = mock.applied[wolf:id()]
+	check(rec and string.find(rec.text, "path_walk = patrol_1\n", 1, true) ~= nil, "a module that drew none walks the path of that name the level has")
+	BK["npc.patrol"].run(ictx, { who = "a", route = "mod_x.patrol_1" })
+	rec = mock.applied[wolf:id()]
+	check(rec and string.find(rec.text, "path_walk = mod_x.patrol_1", 1, true) ~= nil, "another module's path named in full")
+	mock.paths["patrol_1"], mock.paths["mod_b.patrol_1"], mock.paths["mod_x.patrol_1"] = nil, nil, nil
+end
+if (failed > 0) then fail_dump() end
+
 -- ============================================================================ summary
 io.write(string.format("\n%d passed, %d failed\n", passed, failed))
 if (failed > 0) then

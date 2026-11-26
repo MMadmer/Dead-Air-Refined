@@ -24,8 +24,9 @@
 ; register implementations from scripts\register.script.
 
 [nq.catalog]
-version = 22
+version = 23
 api     = 1
+format  = 2       ; the newest nq / beh format version the game reads
 
 ; ============================================================ triggers
 [nq.trigger.start]
@@ -156,14 +157,15 @@ since  = 2
 group  = objective
 docs   = quest
 title  = Fetch items
-desc   = Waits until the player holds the items. items rows: a section with a count, or one concrete object (ref or story id), mixed freely. section+count is the one-row shorthand. from credits only items taken from that container. spawn creates the loot on entry and credits only those instances. spot_task (spot_objective: its objective) points the bound marker at the nearest pending source. spot_done completes the bound task or objective on close. count is in items (ammo: boxes).
+desc   = Waits until the player holds the items. items rows: a section with a count, or one concrete object (ref or story id), mixed freely. section+count is the one-row shorthand. from credits only items taken from that container. spawn creates the loot on entry and credits only those instances - keep_from_npcs (on by default) keeps every NPC from picking them up while the quest runs. spot_task (spot_objective: its objective) points the bound marker at the nearest pending source. spot_done completes the bound task or objective on close. count is in items (ammo: boxes).
 use    = main
-params    = section, count, items, from, spawn, spot_task, spot_objective, spot_done
+params    = section, count, items, from, spawn, keep_from_npcs, spot_task, spot_objective, spot_done
 section   = item_section
 count     = int, default=1, min=1
 items     = item_list
 from      = object_ref
 spawn     = loot_spawn
+keep_from_npcs = bool, default=true
 spot_task      = task_id
 spot_objective = objective_id
 spot_done      = bool, default=true
@@ -349,13 +351,14 @@ since  = 1
 [nq.item.spawn]
 group  = items
 title  = Spawn items
-desc   = Creates items where you say - the same destination forms as fetch. Every row carries its own state, full by default.
+desc   = Creates items where you say - the same destination forms as fetch. Every row carries its own state, full by default. keep_from_npcs (on by default) keeps every NPC from picking them up - off the ground, out of a stash or a body - while the quest runs.
 use    = extra
-params  = section, count, items, where, condition, ammo, ammo_kind, upgrades, ref
+params  = section, count, items, where, keep_from_npcs, condition, ammo, ammo_kind, upgrades, ref
 section = item_section
 count   = int, default=1, min=1
 items   = item_list
 where   = loot_spawn, required
+keep_from_npcs = bool, default=true
 condition = float, default=1, min=0, max=1
 ammo    = int, min=0
 ammo_kind = item_section
@@ -471,7 +474,7 @@ since  = 19
 [nq.signal.send]
 group  = vars
 title  = Send signal
-desc   = Emits a signal for event.signal triggers and waits, including other quests.
+desc   = Emits a signal for event.signal triggers and waits, including other quests. The signal is the module's - another module hears it as <module>.<name> or *.<name>.
 use    = extra
 params = name
 name   = signal_name, required
@@ -657,13 +660,14 @@ since  = 1
 [nq.spawn.object]
 group  = spawn
 title  = Spawn object
-desc   = Creates an object of any spawn section at a place. yaw turns it (degrees), dead lays a creature down as a corpse. ref saves it.
+desc   = Creates an object of any spawn section at a place. yaw turns it (degrees), dead lays a creature down as a corpse. radius makes a restrictor section (space_restrictor) a sphere of that many metres around the place - a zone the player can be inside. ref saves it, object.remove takes it away.
 use    = extra
-params  = section, place, yaw, dead, ref
+params  = section, place, yaw, dead, radius, ref
 section = spawn_section, required
 place   = place, required
 yaw     = float, default=0, min=-360, max=360
 dead    = bool, default=false
+radius  = float, min=0.1, max=500
 ref     = ref_name
 summary = section, place
 impl   = core
@@ -716,7 +720,7 @@ since  = 1
 [nq.object.remove]
 group  = spawn
 title  = Remove object
-desc   = Removes an object created by this quest (spawn.object) or one by story id. The ref is cleared afterwards.
+desc   = Removes an object created by this quest (spawn.object), one by story id, or one placed in the level or the module's scene by its name (target = { name = ... }) - a restrictor that served as a spawn point or a trigger, say. The ref is cleared afterwards.
 use    = extra
 params = target
 target = object_ref, required
@@ -1288,7 +1292,7 @@ since  = 1
 [nq.event.signal]
 group  = cond_event
 title  = Event: signal
-desc   = A signal.send signal was received.
+desc   = A signal.send signal was received. A plain name is a signal of the graph's own module, <module>.<name> that module's, *.<name> every module's.
 use    = cond
 params = name
 name   = signal_name, required

@@ -15,6 +15,7 @@
 #include "xms_game.h"
 #include "xms_world.h"
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_names.h"
 
 namespace
 {
@@ -118,6 +119,37 @@ bool resolve_custom_data(const XMS::Module& m, pcstr value, shared_str& out)
     return true;
 }
 
+// A name of the whole game two owners took: said once per start, though the spawn is composed again for
+// every game started or loaded.
+void name_taken(pcstr subject, pcstr loser, pcstr winner, pcstr line)
+{
+    static xr_set<xr_string> said;
+    if (!said.insert(xr_string(subject) + '\n' + loser).second)
+        return;
+    Msg("! XMS: %s", line);
+    XMS::AddConflict(XMS::ConflictKind::Name, subject, loser, winner);
+}
+
+// The story name the scripts register an object under (story_objects.check_spawn_ini_for_story_id): the
+// first line of [story_object] in its custom data, else the story_id of its section. `in_custom` says the
+// custom data has the section; empty for no name.
+xr_string story_name(const CSE_ALifeObject& object, bool& in_custom)
+{
+    in_custom = false;
+    const pcstr custom = object.m_ini_string.c_str();
+    if (custom && strstr(custom, "story_object"))
+    {
+        const std::string name = XMS::Names::StoryNameIn(custom, in_custom);
+        if (in_custom)
+            return xr_string(name.c_str());
+    }
+    pcstr section = object.s_name.c_str();
+    if (section && pSettings->line_exist(section, "story_id"))
+        if (pcstr name = pSettings->r_string(section, "story_id"); name && name[0])
+            return name;
+    return xr_string();
+}
+
 // "a,b" -> a and b; either may be empty
 void split_pair(pcstr text, xr_string& first, xr_string& second)
 {
@@ -201,6 +233,10 @@ void CALifeSpawnRegistry::xms_compose()
     // ledger attribution: who touched a base object last
     xr_map<xr_string, xr_string> last_toucher;
     u32 added = 0, modified = 0, removed = 0, failed = 0;
+    // what the modules add, in load order: the names of the whole game they take are told apart below
+    xr_unordered_map<ALife::_SPAWN_ID, const XMS::Module*> added_by;
+    xr_vector<ALife::_SPAWN_ID> added_order;
+    xr_map<xr_string, xr_string> base_smarts; // smart terrain name -> "game" or the module that has it
 
     // ---- world rules: the original population this mode does not keep ---------------
     // Base objects only, and before any module op: a module's own NPCs are never "the
@@ -496,9 +532,9 @@ void CALifeSpawnRegistry::xms_compose()
                 continue;
             }
 
-            string256 full_name;
-            xr_sprintf(full_name, "%s.%s", m.id.c_str(), op.name.c_str());
-            abstract->set_name_replace(full_name);
+            // a name of any length: a module's text is no reason for the game to stop
+            const xr_string full_name = m.id + "." + op.name;
+            abstract->set_name_replace(full_name.c_str());
             abstract->o_Position = position;
             Fvector direction;
             if (parse_fvector(op.value("direction"), direction))
@@ -605,7 +641,35 @@ void CALifeSpawnRegistry::xms_compose()
                 }
             }
 
+            // A smart terrain is found by its name (the simulation's index, the configs that name it): a name
+            // two modules give one stays with the first. Every module object is "<module>.<name>", so only
+            // ids that run into each other at a dot can meet, and never a smart terrain of the game. What one
+            // module brings twice is its own business, kept as it was.
+            if (smart_cast<CSE_ALifeSmartZone*>(abstract))
+            {
+                if (base_smarts.empty())
+                    for (const auto& [vertex_id, vertex] : m_spawns.vertices())
+                        if (!added_by.count(vertex_id) && smart_cast<CSE_ALifeSmartZone*>(&vertex->data()->object()))
+                            base_smarts.emplace(vertex->data()->object().name_replace(), "game");
+                const auto [holder, fresh] = base_smarts.emplace(full_name, m.id);
+                // one module's own smart terrains of one name (on two of its levels, say) all spawn, as they
+                // always did: only the game's or another module's takes the name away
+                if (!fresh && holder->second != m.id)
+                {
+                    const xr_string subject = xr_string("smart terrain ") + full_name;
+                    const xr_string line = "smart terrain [" + full_name + "] of module [" + m.id +
+                        "] is left out - " + (holder->second == "game" ? xr_string("the game") :
+                        "module [" + holder->second + "]") + " has a smart terrain of that name, earlier in the load order";
+                    name_taken(subject.c_str(), m.id.c_str(), holder->second.c_str(), line.c_str());
+                    F_entity_Destroy(abstract);
+                    ++failed;
+                    continue;
+                }
+            }
+
             m_spawns.add_vertex(xr_new<CServerEntityWrapper>(abstract), ALife::_SPAWN_ID(spawn_id));
+            added_by.emplace(ALife::_SPAWN_ID(spawn_id), &m);
+            added_order.push_back(ALife::_SPAWN_ID(spawn_id));
             ++added;
         }
         // the game's own objects stay in .scop: what the module did to them is what the base game reads
@@ -613,6 +677,54 @@ void CALifeSpawnRegistry::xms_compose()
             Msg("! XMS: [%s] changes %u and removes %u of the game's own objects in place - the saves keep those "
                 "objects as the module left them, also for a game without it",
                 m.id.c_str(), changed_in_place, removed_in_place);
+    }
+
+    // ---- story names: one name for the whole game ------------------------------------
+    // The scripts register a story name once and refuse it to any later object, which is the one with the
+    // higher id: the game's objects come first, the modules' by the order their id ranges were handed out.
+    // Of a name a module object takes, the game's object or the module earlier in the load order keeps it;
+    // the later one's custom data loses its [story_object], so no installation decides it otherwise.
+    if (!added_order.empty())
+    {
+        xr_vector<std::pair<ALife::_SPAWN_ID, xr_string>> claims;
+        for (const ALife::_SPAWN_ID id : added_order)
+            if (const CSE_ALifeObject* object = smart_cast<CSE_ALifeObject*>(&m_spawns.vertex(id)->data()->object()))
+            {
+                bool in_custom = false;
+                if (xr_string name = story_name(*object, in_custom); !name.empty())
+                    claims.emplace_back(id, std::move(name));
+            }
+        if (!claims.empty())
+        {
+            xr_unordered_map<xr_string, xr_string> holder; // story name -> who has it, as the ledger says
+            for (const auto& [vertex_id, vertex] : m_spawns.vertices())
+            {
+                if (added_by.count(vertex_id))
+                    continue;
+                const CSE_ALifeObject* object = smart_cast<CSE_ALifeObject*>(&vertex->data()->object());
+                bool in_custom = false;
+                if (const xr_string name = object ? story_name(*object, in_custom) : xr_string(); !name.empty())
+                    holder.emplace(name, xr_string("game (") + object->name_replace() + ")");
+            }
+            for (const auto& [id, name] : claims)
+            {
+                CSE_ALifeObject* object = smart_cast<CSE_ALifeObject*>(&m_spawns.vertex(id)->data()->object());
+                const XMS::Module& owner = *added_by[id];
+                const xr_string who = owner.id + " (" + object->name_replace() + ")";
+                const auto [held, fresh] = holder.emplace(name, who);
+                if (fresh)
+                    continue;
+                bool in_custom = false;
+                story_name(*object, in_custom);
+                if (in_custom)
+                    object->m_ini_string = XMS::Names::WithoutStorySection(object->m_ini_string.c_str()).c_str();
+                const xr_string line = "story name [" + name + "] of " + who + " is taken by " + held->second +
+                    (in_custom ? xr_string(" - the first keeps it") :
+                                 xr_string(" - it comes from the section [") + object->s_name.c_str() +
+                                     "], and the object registered first keeps it");
+                name_taken(("story name " + name).c_str(), who.c_str(), held->second.c_str(), line.c_str());
+            }
+        }
     }
 
     if (added || modified || removed || failed || culled)

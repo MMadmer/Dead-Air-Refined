@@ -624,8 +624,9 @@ end
 -- Creates the items of `rows` at a loot_spawn destination. A row is a section, a count and
 -- its OWN state - two rifles and a medkit in one list do not share a condition. Returns the
 -- flat id list and, alongside it, the ids each row produced (a ref names one row's object).
+-- `keep` keeps the items from every NPC while the quest runs (keep_from_npcs).
 -- fetch keeps its own plan: it also has to remember hosts and heal losses.
-function spawn_items(ctx, where, rows)
+function spawn_items(ctx, where, rows, keep)
 	if (type(where) ~= "table") then error("spawn: 'where' is required") end
 	for _, r in ipairs(rows) do
 		if (r.item) then error("spawn: a concrete-object row cannot be spawned") end
@@ -688,7 +689,10 @@ function spawn_items(ctx, where, rows)
 		if (se) then
 			local id = se.id
 			-- laid out in the world for the quest; one put into the player's own pockets is his
-			if (e.host == nil or e.host ~= actor_id()) then util.own_object(ctx, id) end
+			if (e.host == nil or e.host ~= actor_id()) then
+				util.own_object(ctx, id)
+				if (keep) then core.keep_item(ctx, id, e.section) end
+			end
 			ids[#ids + 1] = id
 			by_row[e.ri] = by_row[e.ri] or {}
 			table.insert(by_row[e.ri], id)
@@ -738,6 +742,7 @@ local function fetch_make_loot(ctx)
 		end
 		if (se) then
 			util.own_object(ctx, se.id)
+			if (p.keep_from_npcs ~= false) then core.keep_item(ctx, se.id, e.section) end
 			w.ids[se.id] = e.ri
 			if (e.host) then
 				w.host_of[se.id] = e.host
@@ -773,6 +778,7 @@ local function fetch_heal(ctx)
 		end
 		if (nse) then
 			util.own_object(ctx, nse.id)
+			if (ctx.params.keep_from_npcs ~= false) then core.keep_item(ctx, nse.id, section) end
 			w.ids[nse.id] = e.ri
 			if (hse) then w.host_of[nse.id] = host end
 			util.warn("%s/%s: quest item %s was destroyed, a replacement was made", ctx.uid, ctx.node_id, tostring(section))
@@ -1089,7 +1095,7 @@ K["item.spawn"] = {
 		if not (p.where) then error("item.spawn: 'where' is required") end
 		local rows = spawn_rows(p)
 		if not (rows) then error("item.spawn: section or items is required") end
-		local _, by_row = spawn_items(ctx, p.where, rows)
+		local _, by_row = spawn_items(ctx, p.where, rows, p.keep_from_npcs ~= false)
 		for ri, r in ipairs(rows) do
 			local made = r.ref and by_row[ri] or nil
 			if (made and made[1]) then
@@ -1468,11 +1474,22 @@ K["event.talk_started"] = { test = talk_event }
 K["event.talk_ended"] = { test = talk_event }
 K["event.trade_done"] = { test = talk_event }
 
+-- A plain name is the graph's own module's signal (and a script's, which names no module);
+-- "<module>.<name>" is that module's, "*.<name>" every module's. A module id may hold dots, a
+-- signal's name does not: the module is everything before the last dot.
 K["event.signal"] = {
 	test = function(ctx, p, evt)
-		if (evt.signal == p.name) then return true end
-		if (evt.module and (evt.module .. "." .. tostring(evt.signal)) == p.name) then return true end
-		return false
+		local name = tostring(p.name or "")
+		local mod, sig = string.match(name, "^(.+)%.([^%.]+)$")
+		if (mod == "*") then return evt.signal == sig end
+		-- a signal sent under a dotted name (a script's, or one of before version 2) is heard by
+		-- that very name too
+		if (mod) then
+			return (evt.module == mod and evt.signal == sig) or evt.signal == name
+				or (evt.module ~= nil and (evt.module .. "." .. evt.signal) == name)
+		end
+		local own = ctx.def and ctx.def.module
+		return evt.signal == name and (evt.module == nil or evt.module == own)
 	end,
 }
 

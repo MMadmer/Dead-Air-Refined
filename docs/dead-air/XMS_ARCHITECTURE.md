@@ -17,7 +17,7 @@ Status: **P0–P4 implemented in the engine** (2026-08-11), P5–P6 are design. 
 | P2 xms Lua core | implemented | `src/xrGame/xms_game.cpp`: `xms_native_*` natives + the embedded bootstrap (`xms.require`, `xms.hook` pre/post/around, `xms.registry`, `xms.save_data/load_data`, `xms.story_id`); loose override via `gamedata\scripts\xms.script` |
 | P3 saves | implemented | the `XMS1` manifest + per-mod chunks `0x584D0000|ns` in `.scov` (`xms_game.cpp`, hooks in `save_extension_gameplay.cpp` and `alife_storage_manager.cpp`), unknown-section skip in `alife_object_registry.cpp::get_object`, dangling-children pruning in `alife_storage_manager.cpp::load`. A module's objects and what the game's objects carry of its data in `.scov` (`0x584F|ns`, `0x5845|ns`, `XMK1`), placeholders and the lineage in `.scop`, absent modules kept (`XmsSaves`, §9 item 7). QA: `tools/qa/saves/Run-ModuleSavesQa.ps1` |
 | P4 spawn composer | implemented | `src/xrGame/xms_spawn_composer.cpp` (`CALifeSpawnRegistry::xms_compose`, invoked before `build_story_spawns`), persistent ns/ranges in `xms_registry.ltx` |
-| Console/report | implemented | `xms_list`, `xms_conflicts`, `xms_why <fragment>` (who supplied a file/section/key: the overlay map + the ledger) in `console_commands.cpp`; `$app_data_root$\xms_report.json` |
+| Console/report | implemented | `xms_list`, `xms_conflicts`, `xms_why <fragment>` (who supplied a file/section/key/name: the overlay map + the ledger) in `console_commands.cpp`; `$app_data_root$\xms_report.json`. The ledger (`XMS::AddConflict`) holds files, config sections and keys, xml patches, the PDA layout, the Player Start and spawn ops, and the names of the whole game two owners took (kind `name`, each with a `! XMS:` line naming both): ids of the xml lists (`xml_str_id_loader.h`: dialogs, info portions, articles, characters, specific characters), string ids one module defines again over another module's (`StringTable.cpp`, kept beside the cache), mode ids (`xms_core.cpp`, `ModeProvider`), console commands (`xms_game.cpp`), item sections (`xms_items.cpp`), level names (`xms_graph_composer.cpp`), story names and smart terrain names of module objects (`xms_spawn_composer.cpp`). See §13.1 |
 | Module console commands | implemented | `[commands]` `name = <script>.<function>` + `[command.<name>]` help/args/cheat, parsed into `Module::commands` (`xms_core.cpp`); `XmsGame::RegisterModuleCommands` (`xms_game.cpp`, called last in `xrGameModule::initialize`) adds a `CCC_ModuleCommand` per command - a name the game or an earlier module has is refused with a log line - which calls the function under `lua_pcall` with a traceback handler as `(args, module, command)`, prints a returned string (UTF-8 converted to cp1251), refuses a `cheat` outside `DEV_DEBUG`, runs it under the Script origin of protected mode and stops self-nesting at 8; `xms.command_args` splits the text. QA: `Run-NqQa.ps1 -Scenario Commands`. Contract: MODDING.md, "Console commands" |
 | Composed pSettings cache | deferred | an optimization, the format does not block it |
 | Game modes | implemented | `Module::mode` gates the module's spawn/graph contribution, `mode=` on individual .xspawn ops; `[provides_mode]` declares a new mode; Lua `xms.set_modes/active_modes/mode_active/known_modes`; console `xms_modes`; active modes persist in the `.scov` manifest and are restored on load BEFORE composition. Config patches are not mode-gated (they are composed before the mode is chosen) — documented. `ModuleApplies` semantics: `mode=<id>, <id>...` — one of them is active, `plain` among them being the plain game (an empty active-mode set); **no `mode=` — the plain game only**; a module with `[provides_mode]` is gated by its own mode and by the ones its `mode=` names; `mode=*` — everywhere. `ModuleRunsIn(m, mode)` asks the same of a game not started yet (the new-game screen's world choices). Ability `mode-lists` |
@@ -468,8 +468,10 @@ while a new game's spawn is composed (`XmsWorld`, `xms_world.cpp`):
   jump of the new-game screen is dropped once; the first module's start wins,
   a second is a conflict.
 - `[path:<name>]` - module patrol paths, registered with
-  `CPatrolPathStorage::set_runtime_path` when the level loads; the level's own
-  names are refused.
+  `CPatrolPathStorage::set_runtime_path` when the level loads as
+  `<module>.<name>`, with the plain name as an alias while nobody holds it (the
+  level's own names stay the level's); a graph of the module reaches its own
+  path first by the plain name.
 
 Level changers read the world on spawn and on load (`XmsWorld::Apply`), and
 `CALifeUpdateManager::change_level` refuses a destination outside the playable
@@ -1013,6 +1015,30 @@ The game-vertex ceiling (65535 for the whole game, a typical level is 1–3k) is
 * `xms_report.json` on every start: the load order, the conflict ledger (files, keys, sections,
   strings, scripts, callbacks), spent budgets, skipped save objects, missing dependencies.
 * Console: `xms_list`, `xms_conflicts`, `xms_why <path|section>` — who won and why.
+
+### 13.1 Names of the whole game
+
+A module may bring names that are one for the whole game. When two owners take one - two modules, or a
+module and the game - the game neither stops nor refuses to start over it: one keeps the name by a fixed
+rule, the other is left out or loses the name, and the game says so - a `! XMS:` line naming the name and
+both owners, and a ledger row of kind `name` (subject `<what> <name>`, loser, winner) that `xms_conflicts`,
+`xms_why <name>` and `xms_report.json` show. A game without modules does none of it, and all of it happens
+while the game is composed or a list is first read, never per frame.
+
+| Name | Where | Who keeps it |
+|---|---|---|
+| an id of an xml list: dialog, info portion, article, character, specific character | `xml_str_id_loader.h` (`CXML_IdToIndex::InitInternal`) | the file read first (the order of the config's `files` list), as always; a row only when a module's file is one side - a file's owner is the module whose overlay serves it (`XMS::FileOwner`), a file the game makes of a module's characters included |
+| a string id | `StringTable.cpp` | the later module in the load order: the fold order of §5.4, unchanged, with a file the game makes of a module's characters or items folded in as that module's. A row only when the earlier owner is another module - a module replacing the game's text is what the fold is for. The rows ride beside the cached table (cache version 5, with modules only; a game without modules keeps version 4), so a start that reads the cache says them too |
+| a mode id (`[provides_mode]`) | `xms_core.cpp` (`ModeProvider`), `xms.known_modes` | the first module in load order: the new-game screen offers the mode once, with its title; a later module bringing the id still runs in that mode (`ModuleApplies`), like a module whose `mode` line names it |
+| a console command | `xms_game.cpp` (`RegisterModuleCommands`) | the game, then the first module in load order; a later one is refused |
+| an item section (an item, its `_hud`, a row of its `sections`) | `xms_items.cpp` | whoever made it first; a new item over it is refused, and a row names both modules when another module made it (`ModuleOfSection`) |
+| a level name | `xms_graph_composer.cpp` | a level of the game stays the game's. Of a name several applying modules bring, the level whose `level.ai` the game opens (the later module's files win the file system) joins the graph, else the first in load order; the others are left out - a graph made of another AI map than the one the game opens stops the game when the level loads. A level that joins while the `level.ai` the game opens by its name is another module's (one that applies to no game of this mode still mounts its files) is said too |
+| a story name (`[story_object]` of an object's custom data, or its section's `story_id`) | `xms_spawn_composer.cpp` | the game's object, then the module object earlier in the load order: a later module object loses the `[story_object]` of its custom data in the composed spawn. A name its section gives is said only: the object registered first keeps it |
+| a smart terrain name | `xms_spawn_composer.cpp` | the game's, then the first module's; a later module's smart terrain of that name is left out (one module's own smart terrains of one name, on two of its levels, all spawn, as before). A module object is named `<module>.<name>`, so only module ids that run into each other at a dot can meet |
+
+Not reported: a string id or a list entry a module's `.xmlp` patch adds into a file of the game (the
+file's owner is the game; the patch itself is a ledger row of kind `xml_patch`), and a story name a script
+registers at run time.
 
 ---
 

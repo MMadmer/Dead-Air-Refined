@@ -246,6 +246,7 @@ enum class ConflictKind : u8
     LtxKey,     // key overridden inside a merged section
     XmlPatch,   // xml node touched by more than one module
     Script,     // script/module level collision
+    Name,       // one name of the whole game (an id, a mode, a level, a command) taken by two owners
     Other,
 };
 
@@ -290,6 +291,12 @@ XRCORE_API void OnRescanPath(pcstr full_path);
 // Layer of a physical path: module layer when the path is inside a module
 // root, 0 otherwise.
 XRCORE_API u16 LayerOfPath(pcstr physical_path);
+
+// Layer of the module whose overlay serves a registered entry (CLocatorAPI::file::name), a file the
+// game makes for a module (MountFile with its layer) included; 0 for a file of the game.
+XRCORE_API u16 OwnerLayer(pcstr registered_name);
+// The module that serves a virtual file ("$game_config$", "gameplay\\dialogs.xml"); null for the game's.
+XRCORE_API const Module* FileOwner(pcstr path_alias, pcstr relative_path);
 
 // Switch a module off (or back on) for the next start. This is XMS's own
 // answer to "activate / deactivate a mod": it writes the id to disabled.ltx
@@ -342,10 +349,11 @@ XRCORE_API bool MarkStagedReady(pcstr module_id, pcstr version, xr_string& err);
 // StagedAction says which of update / install / remove waits for a module, empty for none.
 XRCORE_API bool MarkStagedInstall(pcstr module_id, pcstr version, xr_string& err);
 
-// Publishes a file that belongs to no module at a path under $game_data$ ("textures\\a\\b.dds"),
-// so the engine opens it like game data - the Mod Browser's thumbnails. Main thread only. A path
-// published again points at the new file.
-XRCORE_API bool MountFile(pcstr relative_path, pcstr physical_path);
+// Publishes a file at a path under $game_data$ ("textures\\a\\b.dds"), so the engine opens it like
+// game data - the Mod Browser's thumbnails (layer 0: no module's), the files the game makes of a
+// module's assets (that module's layer, so they are told apart and ordered as its own). Main thread
+// only. A path published again points at the new file.
+XRCORE_API bool MountFile(pcstr relative_path, pcstr physical_path, u16 layer = 0);
 XRCORE_API bool StageRemoval(pcstr module_id, xr_string& err);
 XRCORE_API xr_string StagedAction(pcstr module_id);
 
@@ -363,6 +371,8 @@ XRCORE_API void DiscardUnarmedStaged();
 
 XRCORE_API void AddConflict(ConflictKind kind, pcstr subject, pcstr loser, pcstr winner);
 XRCORE_API const xr_vector<ConflictRow>& Conflicts();
+// How a Name row and its log line call an owner: the module's id, or "game".
+inline pcstr OwnerName(const Module* m) { return m ? m->id.c_str() : "game"; }
 
 struct OwnedFile
 {
@@ -433,6 +443,13 @@ XRCORE_API bool ModuleApplies(const Module& m);
 // The same for a game started in `mode_id` alone ("" = the ordinary game): what the new-game screen offers
 // of a module before the game exists.
 XRCORE_API bool ModuleRunsIn(const Module& m, pcstr mode_id);
+// The enabled module, first in load order, that brings the mode ([provides_mode]); null when none does.
+// Its declaration is the one offered: a later module bringing the same id is reported at mount and
+// still runs in that mode (ModuleApplies), like a module whose `mode` line names it.
+XRCORE_API const Module* ModeProvider(pcstr mode_id);
+// Whether the module's index-th [provides_mode] declaration is the one offered: the first module's first one of
+// that id (XMS::Names::FirstDeclarations).
+XRCORE_API bool ModeOffered(const Module& m, size_t index);
 
 // ---- material resolution (set by the game once GMLib is alive) --------------
 

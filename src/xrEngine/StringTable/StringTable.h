@@ -13,6 +13,16 @@ using STRING_VALUE = shared_str;
 
 using STRING_TABLE_MAP = xr_map<STRING_ID, STRING_VALUE>;
 
+// A string id one module defines and a module later in the load order defines again: the later text is the
+// one shown (the fold order), and both owners are said.
+struct STRING_TABLE_CLASH
+{
+    shared_str id;
+    shared_str loser, loser_file;
+    shared_str winner, winner_file;
+};
+using STRING_TABLE_CLASHES = xr_vector<STRING_TABLE_CLASH>;
+
 struct STRING_TABLE_DATA
 {
     shared_str m_fontPrefix;
@@ -52,8 +62,8 @@ public:
 
 private:
     void Load(LPCSTR xml_file, STRING_TABLE_MAP& strings);
-    bool LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& strings);
-    void SaveCache(pcstr cachePath, u32 signature, const STRING_TABLE_MAP& strings);
+    bool LoadCache(pcstr cachePath, u32 signature, STRING_TABLE_MAP& strings, STRING_TABLE_CLASHES& clashes);
+    void SaveCache(pcstr cachePath, u32 signature, const STRING_TABLE_MAP& strings, const STRING_TABLE_CLASHES& clashes);
     void FillLanguageToken();
     void SetLanguage();
     static STRING_VALUE ParseLine(pcstr str);

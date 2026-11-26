@@ -27,6 +27,12 @@ local anim_high = {
 -----------------------------------------------------------------------------------------
 
 class "evaluator_npc_steal_box" (property_evaluator)
+-- an item a quest keeps for the player is no NPC's to take (keep_from_npcs of its spawn)
+local function kept(item)
+	local nq = xms_nq
+	return (item and nq and nq.kept_from_npcs and nq.kept_from_npcs(item:id())) and true or false
+end
+
 function evaluator_npc_steal_box:__init(npc,name,storage) super (nil, name)
 	self.st = storage
 end
@@ -90,7 +96,7 @@ function evaluator_npc_steal_box:evaluate()
 		local se_obj = obj and alife():object(obj:id())
 		
 		-- A saved id can outlive its stash and name anything by now; a treasure spawned into that crashes.
-		if (se_obj and IsInvbox(obj) and looting[obj:id()] ~= true) then
+		if (se_obj and IsInvbox(obj) and looting[obj:id()] ~= true and coc_treasure_manager.stash_allows(obj:id(), "loot")) then
 		
 			local name = obj:name()
 		
@@ -131,7 +137,7 @@ function evaluator_npc_steal_box:evaluate()
 				coc_treasure_manager.try_spawn_treasure(obj)
 				local found = false
 				local function inv_box_has_items(inv_box, item)
-					if not (item == nil or xr_corpse_detection.lootable_table[item:section()] == nil) then
+					if not (item == nil or xr_corpse_detection.lootable_table[item:section()] == nil or kept(item)) then
 						self.st.box_id = obj:id()
 						self.st.box_vid = vid
 						self.st.state = "patrol"
@@ -235,7 +241,7 @@ function action_npc_steal_box:execute()
 		level.map_remove_object_spot(box:id(), "treasure")
 		
 		local function transfer(inv_box,item)
-			if not (item == nil or xr_corpse_detection.lootable_table[item:section()] == nil) then
+			if not (item == nil or xr_corpse_detection.lootable_table[item:section()] == nil or kept(item)) then
 			
 				if (dynamic_news_manager and axr_main.config:r_value("mm_options","enable_dynamic_news",1)) then 
 					if (IsArtefact(item)) then

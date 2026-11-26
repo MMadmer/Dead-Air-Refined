@@ -513,6 +513,58 @@ end
 
 function globals() return state and state.globals or {} end
 
+-- ---------------------------------------------------------------------------- items kept from NPCs
+-- What a quest puts in the world for the player (item.spawn, objective.fetch's spawn, with
+-- keep_from_npcs on) is no NPC's to pick up - off the ground, out of a stash or a body - while
+-- that quest is active. An instance is named by its id AND its section: the simulator hands a
+-- released id to the next object it makes, which is nobody's quest item.
+local kept_index, kept_of = nil, nil	-- id -> { uid, section }, for the state it was made of
+
+function keep_item(ctx, id, section)
+	local qs, uid = ctx and ctx.qs, ctx and ctx.uid
+	if not (qs and uid and id) then return end
+	qs.kept = qs.kept or {}
+	qs.kept[id] = section or true
+	if (kept_index and kept_of == state) then kept_index[id] = { uid = uid, section = section } end
+	dirty = true
+end
+
+local function kept_build()
+	kept_index, kept_of = {}, state
+	for uid, qs in pairs((state and state.quests) or {}) do
+		if (type(qs.kept) == "table") then
+			for id, sec in pairs(qs.kept) do
+				kept_index[id] = { uid = uid, section = type(sec) == "string" and sec or nil }
+			end
+		end
+	end
+end
+
+-- true while an active quest keeps this object from every NPC
+function kept_from_npcs(id)
+	if not (state and id) then return false end
+	if (kept_of ~= state or not kept_index) then kept_build() end
+	local e = kept_index[id]
+	if not (e) then return false end
+	local qs = state.quests[e.uid]
+	-- a quest started again keeps what its new run spawned, not what an earlier run did
+	if not (qs and qs.status == "active" and type(qs.kept) == "table" and qs.kept[id]) then return false end
+	local se = alife() and alife():object(id)
+	local name
+	if (se) then
+		local ok, n = pcall(se.section_name, se)
+		name = ok and n or nil
+	end
+	if not (se) or (e.section and name ~= e.section) then
+		-- gone, or its id went to something else: the quest keeps it no more
+		kept_index[id] = nil
+		if (type(qs.kept) == "table") then qs.kept[id] = nil end
+		dirty = true
+		return false
+	end
+	return true
+end
+
 -- ---------------------------------------------------------------------------- context
 function make_ctx(uid, node_id, npc)
 	local q, qs = Q[uid], quest_state(uid)

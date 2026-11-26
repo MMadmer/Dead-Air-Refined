@@ -1,0 +1,11 @@
+-- What this module puts on the shelf of a trader of the game. The trader is its config's name:
+-- `trade_military` is misc\trade\trade_military.ltx. A character of the module keeps its shop in
+-- its own .npcasset. `Grizzly-Cmd.exe reference trader` lists every key.
+return {
+  trade = 1,
+  trader = "trade_military",
+  stock = {
+    -- supplies = "supplies_1" unless a row says otherwise; count = 0 takes an item off the shelf
+    { item = "bread", count = 2, chance = 1 },
+  },
+}

@@ -724,7 +724,18 @@ enum class Ready
     Refuse,
 };
 
-Ready ready(const CInifile& ini, const ItemPlan& p, xr_string& why)
+// A section that exists already keeps its maker. When that is another module, one name was taken by two:
+// said with both owners, and a ledger row.
+void taken_by(const Module& m, const xr_string& section, xr_string& why)
+{
+    const Module* owner = ModuleOfSection(shared_str(section.c_str()));
+    if (!owner || owner == &m)
+        return;
+    why += " - module [" + owner->id + "] made it, earlier in the load order, and keeps the name";
+    AddConflict(ConflictKind::Name, ("section " + section).c_str(), m.id.c_str(), owner->id.c_str());
+}
+
+Ready ready(const CInifile& ini, const Module& m, const ItemPlan& p, xr_string& why)
 {
     const auto missing_base = [&](const xr_string& parents, pcstr of) -> bool
     {
@@ -741,11 +752,13 @@ Ready ready(const CInifile& ini, const ItemPlan& p, xr_string& why)
         if (ini.section_exist(p.section.c_str()))
         {
             why = "the section [" + p.section + "] exists already: write it as a change, with edit";
+            taken_by(m, p.section, why);
             return Ready::Refuse;
         }
         if (p.hud && ini.section_exist((p.section + "_hud").c_str()))
         {
             why = "the section [" + p.section + "_hud] exists already";
+            taken_by(m, p.section + "_hud", why);
             return Ready::Refuse;
         }
     }
@@ -768,6 +781,8 @@ Ready ready(const CInifile& ini, const ItemPlan& p, xr_string& why)
         if (s.make && (ini.section_exist(s.name.c_str()) || s.name == p.section))
         {
             why = "the section [" + s.name + "] exists already: change it with { edit = \"" + s.name + "\" }";
+            if (s.name != p.section)
+                taken_by(m, s.name, why);
             return Ready::Refuse;
         }
         if (!s.make && !ini.section_exist(s.name.c_str()))
@@ -854,7 +869,7 @@ void publish_texts(const Module& m, const xr_vector<ItemText>& texts)
             st += "\t<string id=\"" + XmlText(t.id) + "\">\r\n\t\t<text>" + XmlText(TextIn(t.text, lang.c_str())) +
                 "</text>\r\n\t</string>\r\n";
         st += "</string_table>\r\n";
-        PublishGenerated("configs\\text\\" + lang + "\\" + m.id + "_items.xml", st);
+        PublishGenerated("configs\\text\\" + lang + "\\" + m.id + "_items.xml", st, m.layer);
     }
 }
 } // namespace
@@ -935,7 +950,7 @@ bool BuildItems(const Module& m, CInifile& settings, xr_vector<LtxDirective>& li
         progress = false;
         for (size_t i = 0; i < fresh.size();)
         {
-            const Ready state = ready(settings, fresh[i], why);
+            const Ready state = ready(settings, m, fresh[i], why);
             if (state == Ready::Wait)
             {
                 ++i;
@@ -951,13 +966,13 @@ bool BuildItems(const Module& m, CInifile& settings, xr_vector<LtxDirective>& li
     }
     for (const ItemPlan& p : fresh)
     {
-        ready(settings, p, why);
+        ready(settings, m, p, why);
         Msg("! XMS: [%s] %s: left out - %s", m.id.c_str(), p.file.c_str(), why.c_str());
     }
     // then the changes, in the order of their paths
     for (const ItemPlan& p : changes)
     {
-        if (ready(settings, p, why) == Ready::Go)
+        if (ready(settings, m, p, why) == Ready::Go)
             finish(p);
         else
             Msg("! XMS: [%s] %s: left out - %s", m.id.c_str(), p.file.c_str(), why.c_str());

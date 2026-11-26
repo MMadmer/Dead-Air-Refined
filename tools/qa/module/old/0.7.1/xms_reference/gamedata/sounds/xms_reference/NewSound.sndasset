@@ -1,0 +1,5 @@
+-- A sound: put its .wav beside this file.
+return {
+  snd = 1,
+  source = "NewSound.wav",
+}

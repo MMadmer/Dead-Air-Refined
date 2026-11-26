@@ -103,10 +103,25 @@ void CSE_ALifeSpaceRestrictor::script_register(lua_State* luaState)
 {
     using namespace luabind;
 
+    // A restrictor a script spawns has no shape, and a zone without one is a place nothing is
+    // ever inside: the script gives it its shape before it goes online.
     module(luaState)
     [
         luabind_class_dynamic_alife2(
             CSE_ALifeSpaceRestrictor, "cse_alife_space_restrictor", CSE_ALifeDynamicObject, CSE_Shape)
+        .def("clear_shapes", +[](CSE_ALifeSpaceRestrictor* self) {
+            if (script_object_usable(self, "clear_shapes"))
+                self->shapes.clear();
+        })
+        .def("add_sphere", +[](CSE_ALifeSpaceRestrictor* self, const Fvector& offset, float radius) {
+            if (!script_object_usable(self, "add_sphere") || !(radius > 0.f))
+                return;
+            CShapeData::shape_def def{};
+            def.type = CShapeData::cfSphere;
+            def.data.sphere.P = offset;
+            def.data.sphere.R = radius;
+            self->shapes.push_back(def);
+        })
     ];
 }
 

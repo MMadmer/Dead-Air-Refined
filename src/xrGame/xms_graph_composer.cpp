@@ -11,6 +11,7 @@
 
 #include "xms_game.h"
 #include "xrCore/XMS/xms_core.h"
+#include "xrCore/XMS/xms_names.h"
 #include "xrAICore/Navigation/game_graph.h"
 #include "Common/LevelStructure.hpp"
 
@@ -378,6 +379,40 @@ IReader* XmsGame::ComposeGameGraph(IReader* base_chunk)
     if (candidates.empty())
         return base_chunk;
 
+    // A level name is one for the whole game, and the game opens a level's files by that name: of two
+    // modules that bring one, the later one's files win the file system. A graph made of another level.ai
+    // than the one the game opens stops the game when the level loads (the cross table is not that AI
+    // map's), so of a name several applying modules bring, the level the game loads goes first and joins;
+    // the others are left out below with both owners said. When none of them is the one the game opens,
+    // the first in load order stays first, as it always was.
+    // the module file the game opens as a level's level.ai; empty when it is none of a module's
+    const auto served_ai = [](const xr_string& name)
+    {
+        string_path served;
+        FS.update_path(served, "$game_levels$", (name + DELIMITER "level.ai").c_str());
+        xr_strlwr(served);
+        const CLocatorAPI::file* desc = FS.GetFileDesc(served);
+        pcstr physical = desc ? XMS::ResolvePhysical(desc->name) : nullptr;
+        return std::string(physical ? physical : "");
+    };
+    XMS::Names::ServedFirst(candidates, [](const Candidate& c) -> const xr_string& { return c.name; },
+        [](const Candidate& c) -> const xr_string& { return c.ai_path; }, served_ai);
+    // said once per start: the graph is composed again for every game started or loaded
+    static xr_set<xr_string> said;
+    const auto name_taken = [](const xr_string& level, const xr_string& module, pcstr keeper)
+    {
+        if (!said.insert(level + '\n' + module).second)
+            return;
+        if (0 == xr_strcmp(keeper, "game"))
+            Msg("! XMS: module [%s] brings level [%s], which is a level of the game - the game's level stays in the "
+                "game graph, and the module's files of that name are laid over the game's", module.c_str(),
+                level.c_str());
+        else
+            Msg("! XMS: level [%s] of module [%s] is left out of the game graph - module [%s] brings a level of that "
+                "name too, and that one joins", level.c_str(), module.c_str(), keeper);
+        XMS::AddConflict(XMS::ConflictKind::Name, ("level " + level).c_str(), module.c_str(), keeper);
+    };
+
     // ---- decode the base blob ------------------------------------------------
     GameGraph::CHeader base_header;
     base_header.load(base_chunk);
@@ -427,15 +462,32 @@ IReader* XmsGame::ComposeGameGraph(IReader* base_chunk)
     u32 ordinal = 0;
     for (const Candidate& candidate : candidates)
     {
+        // a level of the base game - nothing to add
         if (base_header.level_exist(candidate.name.c_str()))
-            continue; // level of the base game - nothing to add
-        bool duplicate = false;
-        for (const NewLevel& existing : new_levels)
-            duplicate |= existing.name == candidate.name;
-        if (duplicate)
         {
-            Msg("! XMS: level [%s] provided by two modules, first wins", candidate.name.c_str());
+            name_taken(candidate.name, candidate.module_id, "game");
             continue;
+        }
+        const auto joined = std::find_if(new_levels.begin(), new_levels.end(),
+            [&candidate](const NewLevel& existing) { return existing.name == candidate.name; });
+        if (joined != new_levels.end())
+        {
+            name_taken(candidate.name, candidate.module_id, joined->module_id.c_str());
+            continue;
+        }
+        // a module that does not apply in this game still serves its files: the graph cannot be made of them
+        if (const std::string served = served_ai(candidate.name);
+            !served.empty() && 0 != _stricmp(served.c_str(), candidate.ai_path.c_str()))
+        {
+            const XMS::Module* owner = XMS::ModuleOfLayer(XMS::LayerOfPath(served.c_str()));
+            if (said.insert(candidate.name + '\n' + candidate.module_id + "\nfiles").second)
+            {
+                Msg("! XMS: level [%s] of module [%s] joins the game graph, but the level.ai the game opens by that "
+                    "name is module [%s]'s - unless the two are one AI map, the level stops the game when it loads",
+                    candidate.name.c_str(), candidate.module_id.c_str(), XMS::OwnerName(owner));
+                XMS::AddConflict(XMS::ConflictKind::Name, ("level " + candidate.name).c_str(),
+                    candidate.module_id.c_str(), XMS::OwnerName(owner));
+            }
         }
 
         RawAiHeader ai;

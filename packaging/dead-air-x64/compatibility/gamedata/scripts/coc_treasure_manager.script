@@ -43,6 +43,33 @@ caches_exclude = {
 }
 local caches_count = 0
 
+-- A box may say in its custom data what it lets happen to it:
+--   [xms_stash] random = false   no random stash's loot is put in it
+--               loot = false     no NPC searches it or takes what is in it
+-- A key left out, or a box without the section, is true: a box like any other.
+local stash_rules = {}
+function stash_allows(id, key)
+	local se = id and alife():object(id)
+	if not (se) then return true end
+	-- an id the simulator gave to another object since is read again
+	local name = se:name()
+	local r = stash_rules[id]
+	if not (r and r.name == name) then
+		r = { name = name, random = true, loot = true }
+		local ok, ini = pcall(function() return se:spawn_ini() end)
+		if (ok and ini and ini:section_exist("xms_stash")) then
+			for _, k in ipairs({ "random", "loot" }) do
+				if (ini:line_exist("xms_stash", k)) then
+					local ok2, v = pcall(ini.r_bool, ini, "xms_stash", k)
+					if (ok2) then r[k] = v and true or false end
+				end
+			end
+		end
+		stash_rules[id] = r
+	end
+	return r[key] ~= false
+end
+
 local ltx_base = ini_file("plugins\\coc_treasure_manager.ltx")
 local ltx_laststand = ini_file("plugins\\coc_treasure_manager_laststand.ltx")
 local valid_item_list = nil
@@ -276,8 +303,8 @@ function create_random_stash(no_spot,hint,bonus_items)
 	-- create a temporary table to use math.random
 	local t = {}
 	for id,v in pairs(caches) do
-		-- false means box is available
-		if (v == false) then
+		-- false means box is available; a box that says random = false never is
+		if (v == false and stash_allows(id, "random")) then
 			table.insert(t,id)
 		end
 	end
@@ -426,7 +453,7 @@ function drx_create_random_stash( no_spot, hint, bonus_items, bonus_lottery )
 
 			-- This feature only works with inventory boxes:
 			local se_box = id and sim:object( id )
-			if ( se_box and se_box:clsid( ) == clsid.inventory_box_s ) then
+			if ( se_box and se_box:clsid( ) == clsid.inventory_box_s and stash_allows( id, "random" ) ) then
 				local level_name = sim:level_name(game_graph():vertex(se_box.m_game_vertex_id):level_id())
 
 				if (utils.levels_linked(level.name(),level_name)) then

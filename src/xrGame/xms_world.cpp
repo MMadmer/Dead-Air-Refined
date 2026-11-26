@@ -556,14 +556,24 @@ void RegisterModulePaths(pcstr level_name)
                             links.push_back({from, to, got == 3 ? weight : 1.f});
                     }
                 }
-                if (storage->set_runtime_path(p.name.c_str(), points, links, kPathSnap, ai().get_level_graph(),
+                // A module's path is its own under "<module>.<name>", so two modules that both name a
+                // path patrol_1 walk their own; the plain name points at it too while nobody holds it -
+                // the level, or a module registered before - which is all a module made before paths
+                // had their module's name ever asked for.
+                const xr_string qualified = m.id + "." + p.name;
+                if (storage->set_runtime_path(qualified.c_str(), points, links, kPathSnap, ai().get_level_graph(),
                         ai().get_cross_table(), ai().get_game_graph()))
+                {
                     ++registered;
+                    // an alias over a name that is taken would replace that name's path
+                    if (!storage->path(p.name.c_str(), true))
+                        storage->add_alias_if_exist(qualified.c_str(), p.name.c_str());
+                }
                 else
                 {
-                    Msg("! XMS: [%s] path %s on %s not registered - the name is the level's own, or a point "
-                        "is more than %.0f m from the navmesh",
-                        m.id.c_str(), p.name.c_str(), level_name, kPathSnap);
+                    Msg("! XMS: [%s] path %s on %s not registered - a point is more than %.0f m from the navmesh, "
+                        "or a path is named %s already",
+                        m.id.c_str(), p.name.c_str(), level_name, kPathSnap, qualified.c_str());
                     ++refused;
                 }
             }

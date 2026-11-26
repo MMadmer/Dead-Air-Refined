@@ -26,6 +26,12 @@ local LootTable
 ------------------------------------------
 -- Localized Functions
 ------------------------------------------
+-- an item a quest keeps for the player is no NPC's to take (keep_from_npcs of its spawn)
+local function kept(item)
+	local nq = xms_nq
+	return (item and nq and nq.kept_from_npcs and nq.kept_from_npcs(item:id())) and true or false
+end
+
 local function npc_on_item_take(npc,item)
 	if not (npc:alive()) then
 		return
@@ -134,7 +140,7 @@ function gather_item(npc)
 
 	local itm = selected_id and selected_id ~= 0 and selected_id ~=65535 and level.object_by_id(selected_id)
 	local loot_table = UseCorpseLootTable ~= true and LootTable or xr_corpse_detection.lootable_table
-	if (itm == nil or loot_table[itm:section()] == nil) then
+	if (itm == nil or loot_table[itm:section()] == nil or kept(itm)) then
 		--printf("nooooo!  itm=%s lootable=%s",itm and itm:name(), itm and loot_table[itm:section()])
 		return
 	end
@@ -241,7 +247,7 @@ function eva_gather_itm:find_valid_item()
 			local obj = o and o:object()
 			if (obj) then
 				obj_id = obj:id()
-				if (loot_table[obj:section()] ~= nil) then
+				if (loot_table[obj:section()] ~= nil and not kept(obj)) then
 					size = size + 1
 					table.insert(self.st.memory,obj_id)
 				end
@@ -296,7 +302,7 @@ function eva_gather_itm:find_valid_item()
 	self.st.index = self.st.index + 1
 
 	local itm = itm_id and itm_id ~= 0 and itm_id ~= 65535 and level.object_by_id(itm_id)
-	local se_itm = itm and loot_table[itm:section()] and Items[itm_id] == nil and alife_object(itm_id)
+	local se_itm = itm and loot_table[itm:section()] and Items[itm_id] == nil and not kept(itm) and alife_object(itm_id)
 
 	if not (se_itm and se_itm.parent_id == 65535) then
 		return false

@@ -451,7 +451,7 @@ xr_string lowered(xr_string text)
     return text;
 }
 
-void publish(const xr_string& relative, const xr_string& text)
+void publish(const xr_string& relative, const xr_string& text, u16 layer)
 {
     Published& state = published();
     const xr_string path = state.root + relative;
@@ -470,7 +470,7 @@ void publish(const xr_string& relative, const xr_string& text)
         fclose(f);
     }
     state.wanted.insert(lowered(path));
-    if (!MountFile(relative.c_str(), path.c_str()))
+    if (!MountFile(relative.c_str(), path.c_str(), layer))
         Msg("! XMS: cannot publish %s", relative.c_str());
 }
 
@@ -745,7 +745,7 @@ bool BuildCharacters(const Module& m, const CInifile& settings, CharacterConfigs
         {
             const xr_string config = "misc\\trade\\" + mod + "\\" + c.id + ".ltx";
             ltx += "xms_trade             = " + config + "\r\n";
-            publish("configs\\" + config, trade_config(gid, c.trade, buy_factor));
+            publish("configs\\" + config, trade_config(gid, c.trade, buy_factor), m.layer);
         }
         ltx += "\r\n";
         if (c.squad)
@@ -760,8 +760,8 @@ bool BuildCharacters(const Module& m, const CInifile& settings, CharacterConfigs
 
     out.profiles = "npc_profile_" + mod;
     out.characters = "character_desc_" + mod;
-    publish("configs\\gameplay\\" + out.characters + ".xml", desc);
-    publish("configs\\gameplay\\" + out.profiles + ".xml", prof);
+    publish("configs\\gameplay\\" + out.characters + ".xml", desc, m.layer);
+    publish("configs\\gameplay\\" + out.profiles + ".xml", prof, m.layer);
 
     // one table per language anything is named in, and always the game's two: a language a
     // character says nothing in falls back to its Russian, so no string is ever missing
@@ -784,7 +784,7 @@ bool BuildCharacters(const Module& m, const CInifile& settings, CharacterConfigs
                     "</text>\r\n\t</string>\r\n";
         }
         st += "</string_table>\r\n";
-        publish("configs\\text\\" + lang + "\\" + mod + "_npc.xml", st);
+        publish("configs\\text\\" + lang + "\\" + mod + "_npc.xml", st, m.layer);
     }
 
     out.count = u32(all.size());
@@ -792,7 +792,7 @@ bool BuildCharacters(const Module& m, const CInifile& settings, CharacterConfigs
     return true;
 }
 
-void PublishGenerated(const xr_string& relative, const xr_string& text) { publish(relative, text); }
+void PublishGenerated(const xr_string& relative, const xr_string& text, u16 layer) { publish(relative, text, layer); }
 xr_string GameText(const xr_string& text) { return game_text(text); }
 xr_string XmlText(const xr_string& text) { return xml(text); }
 xr_string TextIn(const LuaValue& text, pcstr lang) { return text_in(text, lang); }

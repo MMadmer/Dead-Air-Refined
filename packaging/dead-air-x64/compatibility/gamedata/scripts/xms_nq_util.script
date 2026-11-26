@@ -469,6 +469,11 @@ function ref_object_id(ctx, ref)
 	end
 	if (ref.story) then return id_by_story(ref.story) end
 	if (ref.character) then return character_id(ctx, ref.character) end
+	-- an object of the level, or of the module's own scene, by the name it was placed under
+	if (ref.name) then
+		local se = restrictor_se(ctx, ref.name)
+		return se and se.id or nil
+	end
 	if (ref.id) then return ref.id end
 	return nil
 end
@@ -580,11 +585,14 @@ end
 local restrictor_ids = {}
 local restrictor_level = nil
 
+-- The module a context runs for: its graph's, else the uid's part before the last dot (a module
+-- id may hold dots, a graph id never does).
 local function module_of(ctx)
+	local mod = ctx and ctx.def and ctx.def.module
+	if (type(mod) == "string" and mod ~= "") then return mod end
 	local uid = ctx and ctx.uid
 	if (type(uid) ~= "string") then return nil end
-	local dot = string.find(uid, ".", 1, true)
-	return dot and string.sub(uid, 1, dot - 1) or nil
+	return string.match(uid, "^(.+)%.[^%.]+$")
 end
 
 local function restrictor_cache()
@@ -596,29 +604,32 @@ local function restrictor_cache()
 	return restrictor_ids
 end
 
--- The server object, online or not.
+-- The server object, online or not: a restrictor or any other object by its name.
+-- The module's own object of that name ("<module>.<name>", as the spawn composer names it) is
+-- found before one of the level's: two modules that both place "box" reach their own.
 function restrictor_se(ctx, name)
 	if not (name) then return nil end
+	local mod = module_of(ctx)
+	local key = (mod or "") .. "\0" .. name
 	local cache = restrictor_cache()
-	local id = cache[name]
+	local id = cache[key]
 	if (id) then
+		-- an id the simulator gave to another object since is no hit
 		local se = se_by_id(id)
-		if (se) then return se end
-		cache[name] = nil
+		local nm = se and se:name()
+		if (se and (nm == name or (mod and nm == mod .. "." .. name) or id_by_story(name) == id)) then return se end
+		cache[key] = nil
 	end
 	local sim = alife()
 	if not (sim) then return nil end
 	local se
-	pcall(function() se = sim:object(name) end)
-	if not (se) then
-		local mod = module_of(ctx)
-		if (mod) then pcall(function() se = sim:object(mod .. "." .. name) end) end
-	end
+	if (mod) then pcall(function() se = sim:object(mod .. "." .. name) end) end
+	if not (se) then pcall(function() se = sim:object(name) end) end
 	if not (se) then
 		local sid = id_by_story(name)
 		se = sid and se_by_id(sid) or nil
 	end
-	if (se) then cache[name] = se.id end
+	if (se) then cache[key] = se.id end
 	return se
 end
 
@@ -627,9 +638,10 @@ end
 function smart_cover_name(ctx, name)
 	local reg = se_smart_cover and se_smart_cover.registered_smartcovers
 	if not (reg and type(name) == "string" and name ~= "") then return nil end
-	if (reg[name]) then return name end
+	-- the module's own first, as every lookup by a name does
 	local mod = module_of(ctx)
 	if (mod and reg[mod .. "." .. name]) then return mod .. "." .. name end
+	if (reg[name]) then return name end
 	return nil
 end
 
@@ -638,10 +650,11 @@ function restrictor_zone(ctx, name)
 	if not (name) then return nil end
 	local by_name = db and db.zone_by_name
 	if not (by_name) then return nil end
-	local z = by_name[name]
-	if (z) then return z end
+	-- the module's own first, as restrictor_se finds it
 	local mod = module_of(ctx)
-	return mod and by_name[mod .. "." .. name] or nil
+	local z = mod and by_name[mod .. "." .. name]
+	if (z) then return z end
+	return by_name[name]
 end
 
 -- ============================================================================ places (§8)
